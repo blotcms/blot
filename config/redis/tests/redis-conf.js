@@ -25,7 +25,7 @@ describe("redis.conf", function () {
   it("persists with RDB at most every five minutes", function () {
     expect(config.save).toEqual(["3600 1", "300 100"]);
     expect(only("appendonly")).toBe("no");
-    expect(only("stop-writes-on-bgsave-error")).toBe("yes");
+    expect(only("stop-writes-on-bgsave-error")).toBe("no");
   });
 
   it("errors on writes at maxmemory instead of evicting", function () {
@@ -70,6 +70,8 @@ describe("redis.conf", function () {
     expect(only("oom-score-adj")).toBe("relative");
     expect(only("oom-score-adj-values")).toBe("0 0 1900");
     expect(setup).toContain("OOMScoreAdjust=-900");
+    // Without this systemd stops Redis when the kernel kills the child.
+    expect(setup).toContain("OOMPolicy=continue");
     expect(setup).toContain("CPUWeight=1000");
   });
 

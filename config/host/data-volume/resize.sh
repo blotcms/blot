@@ -85,6 +85,7 @@ TO=""; EXISTING=""; NO_PREWARM_CHECK=""
 
 REMOTE=/tmp/blot-data-volume/host.sh
 DATA_NAME="Blot /var/www/blot/data" # the Name tag the DLM snapshot policy targets
+INIT_RATE=300                       # MiB/s, EBS's highest provisioned rate for loading a snapshot; billed per GiB
 FREEZE_REASON="data volume resize"  # what read-only.js on shows; a move says so in its own
 PASS_LIMIT=5                        # live passes before we ask
 STALE_PASS_SECONDS=1800             # a finished pass older than this does not count on a resume
@@ -940,12 +941,14 @@ move_create_and_attach() {
     [ "$DRILL" != yes ] || name=drill-data-volume # never the production Name: DLM would snapshot it
     tags='{"Key":"Name","Value":"'"$name"'"},{"Key":"BlotDataVolumeMoveFrom","Value":"'$CUR_VOL'"}'
     [ "$DRILL" != yes ] || tags="$tags"',{"Key":"BlotDrill","Value":"true"}'
-    opts="--snapshot-id $SNAP --availability-zone $T_AZ --size $CUR_SIZE --volume-type $VTYPE"
+    # Without a rate, blocks load from S3 only as they are read, far too slowly for
+    # the pre-warm's dd, and move freeze waits for it.
+    opts="--snapshot-id $SNAP --availability-zone $T_AZ --size $CUR_SIZE --volume-type $VTYPE --volume-initialization-rate $INIT_RATE"
     [ -z "$IOPS" ] || opts="$opts --iops $IOPS"
     [ -z "$THROUGHPUT" ] || opts="$opts --throughput $THROUGHPUT"
     [ "$CUR_ENC" != True ] || opts="$opts --encrypted"
     [ "$CUR_ENC" != True ] || [ "$CUR_KMS" = None ] || opts="$opts --kms-key-id $CUR_KMS"
-    confirm "Create a $CUR_SIZE GiB $VTYPE volume from $SNAP in $T_AZ (encrypted: $CUR_ENC) and attach it to $T_INSTANCE?"
+    confirm "Create a $CUR_SIZE GiB $VTYPE volume from $SNAP in $T_AZ (encrypted: $CUR_ENC, loading at $INIT_RATE MiB/s) and attach it to $T_INSTANCE?"
     # shellcheck disable=SC2086
     NEW_VOL=$(aws_mut ec2 create-volume $opts --tag-specifications '[{"ResourceType":"volume","Tags":['"$tags"']}]' --query VolumeId --output text)
     if [ -n "$DRY_RUN" ]; then
@@ -1174,6 +1177,11 @@ cmd_move_freeze() {
     [ "$(field "$MS" target_mounted_volume)" = "$NEW_VOL" ] && [ "$(field "$MS" target_mounted_marker)" = "$NEW_VOL" ] ||
       die "the volume mounted at /var/www/blot/data on the target is '$(field "$MS" target_mounted_volume)', not $NEW_VOL"
     pw=$(field "$MS" target_prewarm)
+    # EBS says when a volume has finished loading, long before the dd gets there.
+    if [ "$pw" != ok ] && [ "$(aws_cli ec2 describe-volume-status --volume-ids "$NEW_VOL" --query 'VolumeStatuses[0].InitializationStatusDetails.Progress' --output text 2> /dev/null || true)" = 100 ]; then
+      echo "EBS reports $NEW_VOL fully loaded, so the pre-warm ('$pw') has nothing left to do"
+      pw=ok
+    fi
     if [ "$R_EXIST" != yes ] && [ "$pw" != ok ]; then
       if [ -n "$NO_PREWARM_CHECK" ]; then echo "WARNING: the pre-warm is '$pw' (--no-prewarm-check given): the first reads on the new volume will be slow"
       else die "the pre-warm on the target is '${pw:-unknown}' ($(field "$MS" target_prewarm_percent)%): wait for it (move status), or pass --no-prewarm-check"; fi

@@ -575,13 +575,35 @@ check "the profile is Docker's default plus exactly clone, mount, umount2, pivot
     const first = p.syscalls[0];
     if (p.defaultAction !== \"SCMP_ACT_ERRNO\" || first.action !== \"SCMP_ACT_ALLOW\" || first.args || first.includes || first.excludes) process.exit(1);
     const names = first.names.slice().sort().join();
-    if (names !== \"clone,mount,pivot_root,sethostname,umount2\") process.exit(1);
+    if (names !== \"clone,mount,pivot_root,sethostname,setns,umount2,unshare\") process.exit(1);
   " "$SECCOMP"'
 
 reset units; rmdir "$T/sandbox-cgroup/green"; bluegreen
 check "BLOT_SANDBOX=1 without a unit's cgroup subtree: refused before anything is touched" \
   '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create" && mentions "green does not exist"'
-sed -i.bak '/^BLOT_SANDBOX=1$/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
+
+mkdir -p "$T/sandbox-cgroup/green"
+reset units; bluegreen
+check "BLOT_SANDBOX=1 alone gives a unit no browser flags" \
+  '[ $RC = 0 ] && called "create .*--name blot-blue" && ! called "/dev/net/tun" && ! called "sandbox-browser-cgroup"'
+
+echo "BLOT_SANDBOX_BROWSER=1" >> "$T/proxy.env"
+reset units; bluegreen
+check "BLOT_SANDBOX_BROWSER=1 without a unit's browser cgroup: refused before anything is touched" \
+  '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create" && mentions "blue-browser does not exist"'
+mkdir -p "$T/sandbox-cgroup/blue-browser" "$T/sandbox-cgroup/green-browser"
+reset units; bluegreen
+check "BLOT_SANDBOX_BROWSER=1 gives a unit the device and its own browser cgroup" \
+  '[ $RC = 0 ] && called "create .*--name blot-blue .*--device /dev/net/tun --mount type=bind,source=$T/sandbox-cgroup/blue-browser,target=/sandbox-browser-cgroup"'
+check "without BLOT_SANDBOX_PROXY the app's fetches stay on the airlock's proxy" \
+  'called "create .*--name blot-blue .*BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:18888"'
+
+sed -i.bak -e '/^BLOT_SANDBOX_BROWSER=1$/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
+echo "BLOT_SANDBOX_PROXY=1" >> "$T/proxy.env"
+reset units; bluegreen
+check "BLOT_SANDBOX_PROXY=1 gives a unit the device, and points its fetches at its own jail" \
+  '[ $RC = 0 ] && called "create .*--name blot-blue .*BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:18988" && called "create .*--name blot-green .*BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:18989" && called "create .*--name blot-blue .*--device /dev/net/tun" && ! called "sandbox-browser-cgroup"'
+sed -i.bak -e '/^BLOT_SANDBOX=1$/d' -e '/^BLOT_SANDBOX_PROXY=1$/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
 unset PROXY_SANDBOX_CGROUP_DIR
 
 reset units; FAKE_NODE_B_UNHEALTHY=blot-blue bluegreen

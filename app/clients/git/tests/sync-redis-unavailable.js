@@ -90,7 +90,8 @@ describe("Git sync when Redis is unavailable", function () {
         "./checkGitRepoExists": (path, cb) => cb(null),
         "./repo": {
           directory: (handle) => "/not-used/" + handle + ".git",
-          pointOriginAtBareRepo: (git, handle, cb) => cb(null),
+          followLiveClone: (git, handle, commit, cb) =>
+            git.raw(["reset", "--mixed", "--quiet", commit], cb),
         },
         "./materialize": Object.assign(
           (directory, folder, base, commit, cb) => {

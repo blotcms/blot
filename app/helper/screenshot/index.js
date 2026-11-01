@@ -8,6 +8,7 @@ const folderLock = require("sync/lock");
 const retry = require("./retry");
 const clfdate = require("helper/clfdate");
 const airlock = require("helper/airlock");
+const sandbox = require("sandbox");
 
 // When set, screenshots run in the shared "airlock" container (config/airlock)
 // instead of a Chromium we launch ourselves: we attach to its DevTools
@@ -52,7 +53,7 @@ const PERMANENT_NAVIGATION_ERROR =
 // Per-screenshot budgets, sized for one screenshot at a time. See configure().
 const CLOSE_PAGE_TIMEOUT = 2000;
 const SCREENSHOT_TIMEOUT = 2000;
-const BROWSER_ARGS = require("./args");
+const BROWSER_ARGS = require("sandbox/jobs/screenshot-args");
 
 const DEFAULT_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36";
@@ -485,6 +486,48 @@ async function takeScreenshotLocked(site, path, options) {
   }
 }
 
+const PNG_SIGNATURE = Buffer.from("89504e470d0a1a0a", "hex");
+
+// In a jail of its own, with its own Chromium: nothing here is shared, so none
+// of the pooling above applies. The bytes come from a process that ran the
+// page, so only write them if they at least claim to be a PNG.
+async function takeScreenshotInSandbox(site, path, options) {
+  const { width, height, mobile } = validateOptions(options);
+  console.log(prefix(), "Taking screenshot of", site, "in the sandbox");
+
+  let result;
+  try {
+    result = await sandbox.run(
+      "screenshot",
+      { url: site, width, height, mobile: !!mobile },
+      Buffer.alloc(0)
+    );
+  } catch (error) {
+    // The job ran out of time or memory, which is the page's doing. Trying
+    // again would hold the unit's one browser for as long again.
+    if (error.code === "SANDBOX_TIMEOUT" || error.code === "SANDBOX_KILLED") {
+      error.retryable = false;
+    }
+    throw error;
+  }
+
+  if (result.meta && result.meta.error) {
+    const error = new Error(result.meta.error);
+    error.retryable = result.meta.retryable === true;
+    throw error;
+  }
+
+  const png = result.outputs[0];
+  if (!png || !png.subarray(0, 8).equals(PNG_SIGNATURE)) {
+    const error = new Error("The sandbox did not return a PNG");
+    error.retryable = false;
+    throw error;
+  }
+
+  await fs.ensureDir(dirname(path));
+  await fs.writeFile(path, png);
+}
+
 // Shutdown handler
 async function shutdown() {
   await limiter.stop();
@@ -495,17 +538,19 @@ async function shutdown() {
 const screenshot = async (site, path, options = {}) => {
   // Fail closed: a user-controlled URL (options.untrusted, set by
   // build/plugins/linkScreenshot) must be screenshotted inside the airlock
-  // container, never a Chromium we launch ourselves. In production, refuse
-  // rather than fall back to puppeteer.launch(). Trusted callers
-  // (app/templates/screenshots.js - URLs built from config.host, no user
-  // input) don't set the flag and are unaffected.
-  if (options.untrusted && !REMOTE_BROWSER_URL) {
+  // container or the sandbox, never a Chromium we launch ourselves. In
+  // production, refuse rather than fall back to puppeteer.launch(). Trusted
+  // callers (app/templates/screenshots.js - URLs built from config.host, no
+  // user input) don't set the flag and are unaffected.
+  if (options.untrusted && !REMOTE_BROWSER_URL && !config.sandbox.browser) {
     airlock.assertBrowserReady("build/plugins/linkScreenshot");
   }
 
+  const take = config.sandbox.browser ? takeScreenshotInSandbox : takeScreenshot;
+
   try {
     return await retry(() =>
-      limiter.schedule(() => takeScreenshot(site, path, options))
+      limiter.schedule(() => take(site, path, options))
     );
   } catch (error) {
     console.error(prefix(), "Screenshot failed after retries:", error);

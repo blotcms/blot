@@ -48,8 +48,9 @@ samples 15 seconds apart. Per sample there is one line per container
 biggest node process) and `top=comm:bytes` (the biggest non-node process, i.e. a
 pandoc/git/exiftool spike), `peak` (the cgroup's high-water mark, v2 only), and
 one `name=host` line with `mem_available`. Where the host has a sandbox subtree
-(#2257) there is also a `name=blot-sandbox-<unit>` line: jobs last under a
-second, so read its `peak` and `oom_kill`.
+(#2257) there are also `name=blot-sandbox-<unit>` and
+`name=blot-sandbox-<unit>-browser` lines: jobs are short, so read their `peak`
+and `oom_kill`.
 `anon+shmem` is the memory that can't be reclaimed; the cgroup limit also counts
 page cache. Summarise it with:
 
@@ -145,7 +146,10 @@ upgrades a package. It:
   `/sys/fs/cgroup/blot-sandbox/{blue,green}` for the units' nsjail sandbox
   (`app/sandbox`). Each is capped at 512M of memory (no swap), 256 pids and a
   `cpu.weight` of 25. Nothing uses them until `BLOT_SANDBOX=1` is set in the
-  proxy env file (`proxy/deploy/proxy.env.example`);
+  proxy env file (`proxy/deploy/proxy.env.example`). It also makes
+  `{blue,green}-browser` for the browser job, one Chromium at a time, capped at
+  1G (no swap, the whole job killed at the limit), 512 pids, a `cpu.weight` of
+  25 and 1.5 CPUs. Those wait for `BLOT_SANDBOX_BROWSER=1`;
 - creates the `deploy` user (`scripts/deploy/setup-deploy-user.sh`);
 - with `BLOT_SSH_PORT`, sets sshd's port in `/etc/ssh/sshd_config.d/11-blot-port.conf`
   (sshd then listens on that port only);
@@ -315,9 +319,16 @@ the short path is only for a switch that has accepted no writes (the new host
 was frozen the whole time, so nothing on it is newer than the old volume):
 
 1. `config/redis/promote.sh <new> <old-redis>`.
-2. Move the Elastic IP back to the old instance with `aws ec2 associate-address`.
-3. On the old host: `docker start` the airlocks and the units, then
-   `resize.sh --host <old> move thaw`.
+2. On the old host: `docker start` the airlocks and the units, and wait until
+   they are healthy. Nothing listens there until then, so moving the address
+   first fails every read for that long (about 20 seconds in the rehearsal).
+3. Move the Elastic IP back to the old instance with `aws ec2 associate-address`.
+4. `resize.sh --host <old> move thaw`.
+
+After a move the address can reach the previous host for several seconds, and
+an alias of it reports a changed host key until it has settled: wait and retry,
+checking the key is the one you expect. `<new>` gets a new public address when
+it loses the Elastic IP, so its alias needs that address before you next use it.
 
 Once the new host has accepted writes, the old volume is behind, so promoting
 Redis or moving the Elastic IP first would send traffic to stale files. Follow
@@ -333,11 +344,22 @@ quickly:
    `freeze` (this needs `settle` not to have retagged yet). The freeze stops
    writes on the new host once the final copy is done; leave it frozen.
 3. Then `config/redis/promote.sh <new> <old-redis>`.
-4. Then the Elastic IP back to the old instance.
-5. On the old host: `docker start` the airlocks and the units, then lift the
-   app freeze with `read-only.js off` in `blot-blue`. Its disk was thawed in
-   step 1, so there is no second thaw; do not thaw the new host either, and
-   stop its units.
+4. On the old host: `docker start` the airlocks and the units, and wait until
+   they are healthy.
+5. Then the Elastic IP back to the old instance.
+6. Lift the app freeze with `read-only.js off` in `blot-blue` on the old host.
+   Its disk was thawed in step 1, so there is no second thaw; do not thaw the
+   new host either, and stop its units.
+
+The rehearsal took about 4.5 minutes from thaw to writes back, with writes
+down for about 3 of them: the final copy, the promotion and the units' start.
+
+To go forward again after that, `resize.sh --host <new> move thaw`, then remove
+what the reverse move left, or `move prepare` refuses: on `<new>`
+`/etc/blot/data-volume-resize.state` and `/etc/blot/data-move-key*` and
+`data-move-known-hosts`, and on the old host the `blot-data-move` line in
+`ec2-user`'s `authorized_keys`. Then run `data`, `app` and `switch` as before.
+The `data` copy finds only the difference, seconds on the rehearsal's volume.
 
 ### The wildcard certificate
 

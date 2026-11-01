@@ -12,7 +12,6 @@ const { minifyCSS, minifyJS } = require("helper/minify");
 const purgeCdnUrls = require("helper/purgeCdnUrls");
 const path = require("path");
 const fs = require("fs-extra");
-const config = require("config");
 const pathNormalizer = require("helper/pathNormalizer");
 const blogHosts = require("blog/lib/blogHosts");
 const {
@@ -207,7 +206,7 @@ function normalizeDependency(filePath) {
 // Looks up one target ("images/a.png?x=1") in the folder. Returns
 // { requested, entry }: the path asked for (a dependency whether or not it
 // exists) and its manifest entry, or null if there is no such file.
-async function resolveFolderCandidate(blogFolder, candidate) {
+async function resolveFolderCandidate(blogID, candidate) {
   const cut = candidate.search(/[?#]/);
   let filePath = cut === -1 ? candidate : candidate.slice(0, cut);
 
@@ -230,7 +229,7 @@ async function resolveFolderCandidate(blogFolder, candidate) {
     }
   }
 
-  const file = await hashFolderFile(blogFolder, requested);
+  const file = await hashFolderFile(blogID, requested);
 
   return {
     requested,
@@ -239,14 +238,13 @@ async function resolveFolderCandidate(blogFolder, candidate) {
 }
 
 async function resolveFolderTargets(blogID, targets) {
-  const blogFolder = path.join(config.blog_folder_dir, blogID);
   const entries = {};
   const dependencies = new Set();
 
   for (const target of targets) {
     try {
       const { requested, entry } = await resolveFolderCandidate(
-        blogFolder,
+        blogID,
         target
       );
 

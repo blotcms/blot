@@ -1,7 +1,7 @@
-const fs = require("fs");
 const Entries = require("models/entries");
 const Entry = require("models/entry");
-const localPath = require("helper/localPath");
+const storage = require("storage/folder");
+const { callbackify } = require("util");
 const async = require("async");
 
 // A folder post is synthesized at a "+"-stripped path with no file behind it
@@ -10,6 +10,35 @@ const async = require("async");
 // these entries are checked against their source "+" folder instead.
 const folderPostFolder = require("sync/update/folderPostSourceFolder");
 
+// Whether a path is on disk, for deciding that an entry has lost its file.
+// Only a missing path is a no. Any other error (the disk failing, say) is
+// thrown and stops the check, because a wrong "gone" drops a live entry.
+// A symlink at the path counts as there: it used to be followed, and the
+// entry of a file which has become a link is not ours to drop.
+async function present (blogID, path) {
+  try {
+    await storage.stat(blogID, path);
+    return true;
+  } catch (err) {
+    if (err.code === "ELOOP") return true;
+    if (err.code === "ENOENT") return false;
+    throw err;
+  }
+}
+
+// As present, but the path must be a directory
+async function presentDirectory (blogID, path) {
+  try {
+    return (await storage.stat(blogID, path)).isDirectory;
+  } catch (err) {
+    if (err.code === "ELOOP") return true;
+    if (err.code === "ENOENT") return false;
+    throw err;
+  }
+}
+
+// Calls back with the first candidate which is on disk, or with nothing if
+// none is. An error checking a candidate is passed on.
 function resolvePath (blogID, path, callback) {
   var candidates = [];
 
@@ -33,18 +62,13 @@ function resolvePath (blogID, path, callback) {
     }
   }
 
-  async.detect(
+  async.detectSeries(
     candidates,
     function (filePath, callback) {
-      fs.access(localPath(blogID, filePath), function (err) {
-        callback(null, !err);
-      });
+      callbackify(present)(blogID, filePath, callback);
     },
     function (err, match) {
-      if (err || !match) {
-        return callback(err || new Error("ENOENT: " + path));
-      }
-      callback(null, match);
+      callback(err, match);
     }
   );
 }
@@ -87,8 +111,9 @@ function main (blog, callback) {
       // meant to repair.
       var multiFolder = folderPostFolder(_entry);
       if (multiFolder) {
-        return fs.stat(localPath(blog.id, multiFolder), function (err, stat) {
-          if (err || !stat.isDirectory()) {
+        return callbackify(presentDirectory)(blog.id, multiFolder, function (err, isDirectory) {
+          if (err) return next(err);
+          if (!isDirectory) {
             missing.push({ id: _entry.id, path: _entry.path });
           }
           done(next);
@@ -96,9 +121,11 @@ function main (blog, callback) {
       }
 
       resolvePath(blog.id, _entry.path, function (err, path) {
+        if (err) return next(err);
+
         if (path && path !== _entry.path) {
           edit.push({ oldPath: _entry.path, path: path });
-        } else if (err) {
+        } else if (!path) {
           missing.push({ id: _entry.id, path: _entry.path });
         }
         done(next);

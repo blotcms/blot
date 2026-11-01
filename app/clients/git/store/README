@@ -1,0 +1,54 @@
+## Git store
+
+A git object store that keeps repositories in S3 and reads them by byte range, written to be lifted into a project of its own. It is the foundation layer of the plan in https://github.com/blotcms/blot/issues/2259: this directory holds the pieces the rest builds on. **Blot does not use it yet.**
+
+Nothing in this directory may require anything outside it except Node built-ins and declared npm packages (`tests/standalone.js` checks). There is no `config`, no `models`, no Redis. Whatever is specific to a host (an S3 client, the bucket and prefix, the cache directory and size, the per-repository lock) is passed in.
+
+## What is here
+
+A repository is a set of immutable packs, each with its `.idx`, and a small manifest for each push. The packs and the manifests sit in an object store, keyed under a prefix the host chooses (`git/{blogID}/`):
+
+```
+manifests/<seq>.json     (seq zero-padded to 10 digits, so keys sort in order)
+manifests/latest.json    (a hint at the newest seq, nothing more)
+packs/pack-<40 hex>.pack
+packs/pack-<40 hex>.idx
+```
+
+- **`objectStore/memory.js`, `objectStore/s3.js`**: the object store interface (`head`, `read`, `get`, `stream`, `put`, `putIfAbsent`, `delete`, `list`, `id`; the contract is written at the top of `memory.js`). The S3 store uses only what Backblaze B2 also supports: plain and multipart PUT, ranged GET, HEAD, DELETE and LIST, plus one conditional write: `putIfAbsent(key, buffer)` resolves true if it created the key and false if the key already existed, and of several racing writers exactly one gets true. On S3 it is a PUT with `If-None-Match: *`; a 412 is false, a 409 (concurrent writers) is retried a few times and then thrown. Nothing else is conditional. A stream of any size is uploaded in parts, read only when an upload slot is free, so memory is about `partSize * concurrency`. The memory store is for specs and counts what it is asked.
+
+- **`ranges.js`**: `readRanges(store, key, ranges)` merges ranges that are close together into one read and runs the reads in parallel with a limit.
+
+- **`cache.js`**: one LRU cache on local disk across all repositories, capped by bytes. Nothing is pinned and nothing is required to be in it: an entry can vanish at any moment, `put` may decline to store something, and a miss costs round trips, never correctness. A damaged or half-written entry (each file has a CRC and length, and is written to a temporary file then renamed) is a miss. It works at any cap, including one too small to hold anything. It also hands out **scratch reservations**: `reserve(bytes)` takes bytes out of the same budget (evicting cached data), gives a directory to write into, fails with `NoRoomError` when the rest of the budget is already reserved, can be `extend`ed, and is `release`d when the push ends. One cache instance should own its directory.
+
+- **`idx.js`**: finds an object in a pack by reading the version 2 `.idx` by range: the 1 KB fanout, then the slice of sorted object IDs and offsets sharing the first byte, both cached. Cold, that is two or three small reads; warm, none.
+
+- **`pack.js`, `inflate.js`, `delta.js`**: read one pack entry by range (its header, then its zlib stream in growing reads), and apply deltas.
+
+- **`reader.js`**: `createReader({ store, cache, packs })` reads objects by ID from the repository's live packs: whole (`read`) or as a stream of chunks (`stream`, for objects stored whole). Delta chains are resolved across packs (`OFS_DELTA` within a pack, `REF_DELTA` to an object in any pack, which is how packs completed by `index-pack --fix-thin` refer to what a push did not send). An object found in several packs is read from the newest. Concurrent lookups which need the same part of an index share one fetch. An index is checked once against the size in the manifest (a HEAD alongside its first fetch), and so is a pack (alongside its first read). Every object read by ID is hashed and compared with the ID asked for, so a flipped bit, a bad offset, a truncated pack or the wrong base is a `CorruptError`, never wrong bytes.
+
+- **`manifest.js`**: the per-repository document: format version, sequence number, refs, the live pack list, a ref snapshot per push, and a pointer to the history pack. `read`, `parse`, `serialize`, `validate`, `advance` (the manifest after a push) and `swap`. Each push writes a new manifest to `manifests/<seq>.json`, which is never overwritten, and the repository is whatever its newest manifest says. **The conditional create of that object is what makes a swap safe**: `swap` calls `putIfAbsent` for `seq + 1`, and if it is false someone swapped first and `swap` throws `StaleManifestError`, writing nothing. A create which lands but loses its response is not mistaken for that: every manifest `advance` makes carries a random `writer` nonce, and when the create answers false or fails in a way which may have applied it (a network error, a timeout, a 5xx; not a 4xx), `swap` reads the manifest at that seq. Its own nonce means the swap landed and it resolves as a success (so does calling it again with the same `next`); another's means the race was lost; no manifest after an error means it did not land and the error is rethrown; and if the read fails too it throws `OutcomeUnknownError` (code `OUTCOME_UNKNOWN`), which a host must not turn into either a success or a failed push. The AWS SDK itself retries a PutObject that fails with a dropped connection, a timeout or a 5xx (three attempts by default), which is exactly how a retry can find the key already created and get a 412. However long a process stalls, it cannot replace a newer manifest, and no single object holds the only copy of a repository's refs. The host's lock (a function passed in) is **not** what makes it safe, because a lock can expire under a process that has stalled. `swap` still takes it, since it stops two pushes from the same base doing wasted work, and checks under it that the base is still the newest so the loser finds out early. It also checks that every pack the new manifest adds is already uploaded, so packs always go up before the manifest that names them. `manifests/latest.json` (`{ "seq": N }`) is written after a swap, best-effort and overwritten each time; a failure to write it does not fail the swap. It is only a hint. `read` GETs it, HEADs `seq + 1`, `seq + 2` and so on until one is missing, and GETs that manifest; if the hint is missing, corrupt, names a manifest which doesn't exist or is more than a few behind, it LISTs `manifests/` instead, and with no manifests at all it reads as empty with seq 0. A numbered manifest never changes, so its bytes are kept in memory by key (a few per store) and only the question of which number is newest goes to the store: the usual read is a GET of the hint, a HEAD, and a GET of the manifest unless this process wrote or already read it; a swap is two HEADs, the conditional PUT and the hint PUT. Old manifests are not deleted; that belongs with compaction. Every push adds a snapshot of the refs to the manifest, so an untrimmed manifest only grows; trimming snapshots belongs with compaction too. Until then the 64 MiB limit `read` applies is what stops a manifest becoming unreadable: `swap` checks the serialised size first and throws `ManifestTooLargeError` (code `MANIFEST_TOO_LARGE`), writing nothing, because a numbered manifest is immutable and one that `read` refused could never be replaced. The manifest is always read from the object store, never the pack cache, because only the store knows which manifest is newest.
+
+- **`layout.js`, `errors.js`, `limit.js`**: key names, error classes (each with a `code`), and a concurrency limiter.
+
+## Where an entry ends
+
+The `.idx` gives where an entry starts, not where it ends. There are two ways to find the end: a `.rev` file (the pack's offsets in order), or inflating the entry and seeing where its zlib stream stops. This store inflates.
+
+- Reading an object means inflating its entry anyway, so the end costs nothing extra. A `.rev` lookup would be a binary search of extra ranged reads per object, since it maps pack order to index order and not the other way round.
+- Inflating checks the entry as it goes: zlib verifies the stream's checksum, and the output must match the size in the entry header exactly. That is how truncated and damaged data is caught.
+- It needs nothing but the `.pack` and `.idx`. A `.rev` is only written by newer git, or by an option of `index-pack`, and Blot's own commits would have to write one too.
+
+The cost is that finding an entry's end without wanting its data (to copy its compressed bytes verbatim into a clone, say) means inflating it and discarding the output. A pass over a whole pack for that is CPU, not memory or round trips, and a `.rev` can be added later for that case alone.
+
+## Memory
+
+Reads are bounded. Ranged reads are at most the caller's range (merged reads are capped at 8 MB). An entry is inflated in pieces and the input is only fetched as zlib asks for it. Objects stored whole can be streamed in chunks of about 16 KB. An object that is a delta is resolved in memory, so `maxSize` (default 64 MB, per call or per reader) caps the base, the deltas and the result, and a bigger object is a `TooLargeError`.
+
+## Specs
+
+`tests/` builds repositories with real `git` (delta chains, `OFS_DELTA` and `REF_DELTA` packs, a thin pack completed with `index-pack --fix-thin`, objects in several packs, a tag) and compares every object read through the store with `git cat-file`. `tests/helpers/faults.js` wraps any object store to fail on a schedule (an error after the write landed or before it, a truncated body, a delay, a stale answer), and `tests/faults.js` uses it for ambiguous swaps, cut-short reads, a push which dies between its uploads and a stale hint. `tests/s3.js` runs the S3 store against the MinIO the test runner starts (`.github/actions/start-minio`); without `BLOT_STORAGE_ENDPOINT` it is skipped and says so. The cache specs run at caps of a few hundred bytes.
+
+## Not here yet
+
+Streaming clone and fetch, receiving a push (`index-pack --fix-thin`, connectivity checks, the after-push hook), materializing a folder, Blot's own commits, compaction and the history pack, and the rewrite script. They build on the pieces above. Cache keys include the object store's `id`, so one cache can serve many repositories.

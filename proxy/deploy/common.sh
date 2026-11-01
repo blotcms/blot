@@ -219,7 +219,10 @@ load_unit_settings() {
     [ -d "$d" ] || die "$d does not exist on this host (a unit mounts it)"
   done
   if [ "$(env_value "$ENV_FILE" BLOT_SANDBOX)" = 1 ]; then
-    for d in $UNITS; do require_sandbox_cgroup "$d"; done
+    for d in $UNITS; do
+      require_sandbox_cgroup "$d"
+      [ "$(env_value "$ENV_FILE" BLOT_SANDBOX_BROWSER)" != 1 ] || require_sandbox_cgroup "$d-browser"
+    done
   fi
   # the longer of the two defaults: Node has to start as well
   HEALTH_TIMEOUT="${PROXY_HEALTH_TIMEOUT:-180}"
@@ -322,6 +325,11 @@ sync_static() { # sync_static <image>
 #     Docker's default plus five syscalls, and a cgroup subtree the host
 #     made for this unit (config/host/host/setup.sh). Without it, none of them;
 #     load_unit_settings has already refused if the subtree is missing.
+#   - with BLOT_SANDBOX_BROWSER=1 as well, what the browser jail needs: /dev/net/tun
+#     for pasta, and the unit's browser cgroup
+#   - with BLOT_SANDBOX_PROXY=1 as well, /dev/net/tun, and the app's fetches go to
+#     the proxy jail in this unit, on its own port (proxy/unit/sandbox/proxy.js),
+#     not the airlock's
 # The env files: secrets.env (what Node gets), then proxy.env,
 # then the -e settings below, each overriding the one before; load_unit_settings
 # refuses a key the two files set differently.
@@ -331,6 +339,9 @@ run_args() { # run_args <name>
   upper="$(printf '%s' "$unit" | tr '[:lower:]' '[:upper:]')"
   var="AIRLOCK_${upper}_BROWSER_PORT"; browser_port="${!var}"
   var="AIRLOCK_${upper}_PROXY_PORT"; proxy_port="${!var}"
+  if [ "$(env_value "$ENV_FILE" BLOT_SANDBOX)" = 1 ] && [ "$(env_value "$ENV_FILE" BLOT_SANDBOX_PROXY)" = 1 ]; then
+    var="SANDBOX_${upper}_PROXY_PORT"; proxy_port="${!var}"
+  fi
   # Node writes a diagnostic report here if it dies of a fatal error such as V8
   # running out of heap (the data directory outlives the container)
   local node_options="--max-old-space-size=$UNIT_NODE_A_MAX_OLD_SPACE_SIZE --report-on-fatalerror --report-directory=$DATA_DIRECTORY_ON_CONTAINER/$NODE_REPORT_DIRECTORY/$name --report-exclude-env --report-exclude-network"
@@ -382,6 +393,12 @@ run_args() { # run_args <name>
       --mount "type=bind,source=$SANDBOX_CGROUP_DIR/$unit,target=/sandbox-cgroup"
       -e BLOT_SANDBOX_SOCKET=/run/blot-sandbox/broker.sock
     )
+    if [ "$(env_value "$ENV_FILE" BLOT_SANDBOX_BROWSER)" = 1 ] || [ "$(env_value "$ENV_FILE" BLOT_SANDBOX_PROXY)" = 1 ]; then
+      RUN_ARGS+=(--device /dev/net/tun)
+    fi
+    if [ "$(env_value "$ENV_FILE" BLOT_SANDBOX_BROWSER)" = 1 ]; then
+      RUN_ARGS+=(--mount "type=bind,source=$SANDBOX_CGROUP_DIR/$unit-browser,target=/sandbox-browser-cgroup")
+    fi
   fi
 }
 

@@ -217,6 +217,46 @@ async function sandboxWorks() {
   return `the jail read a ${meta.width}x${meta.height} ${meta.format}`;
 }
 
+// The browser jail, only when the host turned it on: Chromium starts in it, and
+// the egress filter is really there. The metadata address must be refused: a
+// jail that reaches it, or times out on it, is not a jail to go live with.
+async function sandboxBrowserWorks() {
+  if (process.env.BLOT_SANDBOX_BROWSER !== "1") return "skipped, BLOT_SANDBOX_BROWSER is not set";
+
+  const sandbox = require("../../../app/sandbox");
+  const empty = Buffer.alloc(0);
+
+  const blank = await sandbox.run("screenshot", { url: "about:blank" }, empty);
+  if (!blank.outputs.length) throw new Error(`no screenshot: ${blank.meta.error}`);
+
+  const metadata = await sandbox.run(
+    "screenshot",
+    { url: "http://169.254.169.254/latest/meta-data/" },
+    empty
+  );
+  if (!/ERR_(CONNECTION_REFUSED|ADDRESS_UNREACHABLE|NETWORK_ACCESS_DENIED)/.test(metadata.meta.error || "")) {
+    throw new Error(`the metadata address was not refused: ${metadata.meta.error || "it answered"}`);
+  }
+  return `Chromium started and ${metadata.meta.error}`;
+}
+
+// The proxy jail, only when the host turned it on. A forward-proxy request for
+// the metadata address must not get through: tinyproxy answers 500 when the
+// filter refuses it. The airlock check proves the proxy itself answers.
+async function sandboxProxyWorks({ config }) {
+  if (process.env.BLOT_SANDBOX_PROXY !== "1") return "skipped, BLOT_SANDBOX_PROXY is not set";
+
+  const { hostname, port } = new URL(config.airlock.proxy);
+  const metadata = "http://169.254.169.254/latest/meta-data/";
+  const res = await request({
+    url: metadata,
+    host: "169.254.169.254",
+    options: { hostname, port, path: metadata },
+  });
+  if (res.status !== 500) throw new Error(`the metadata address answered ${res.status} through the proxy`);
+  return `the metadata address was refused through ${config.airlock.proxy}`;
+}
+
 async function requiredEnv() {
   const missing = REQUIRED_ENV.filter((name) => !process.env[name]);
   if (missing.length) throw new Error(`unset: ${missing.join(", ")}`);
@@ -299,8 +339,10 @@ module.exports = [
   { name: "git", run: git },
   { name: "sharp", run: sharpWorks },
   { name: "sandbox", run: sandboxWorks },
+  { name: "sandbox browser", run: sandboxBrowserWorks },
   { name: "required environment", run: requiredEnv },
   { name: "airlock", run: airlock },
+  { name: "sandbox proxy", run: sandboxProxyWorks },
   { name: "canary blog render", run: canaryBlog },
   { name: "dashboard log-in render", run: loginPage },
 ];

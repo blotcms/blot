@@ -168,7 +168,11 @@ and everything after it stay shrink-only. Every command takes `--dry-run`
    unmounts. It never formats.
 5. **Pre-warm** on the new host: a transient unit `blot-data-prewarm` reads the
    whole device once at low priority. A volume made from a snapshot loads its
-   blocks from S3 on first read, so the switch must not be the first read.
+   blocks from S3 on first read, so the switch must not be the first read. The
+   volume is created with EBS's `--volume-initialization-rate` at 300 MiB/s,
+   which is billed per GiB: a lone `dd` without it reads a tiny fraction of that,
+   and even 16 parallel readers less than a tenth, and `move freeze` waits for
+   the load. It accepts EBS's report that the load is done, or the `dd` finishing.
 6. **`host.sh move-prepare`** on the source: makes an ed25519 key
    (`/etc/blot/data-move-key`), records the new host's host key, and writes
    the state file (`phase=prepared`, the volumes, the target). The hosts have
@@ -234,10 +238,11 @@ Rollback:
 - **Before the switch**: `move thaw`. The old host never stopped being the
   primary; delete the new volume and the snapshot by hand.
 - **After the switch**: on the old host `move thaw` (its data directory goes
-  read-write), start its units, then copy what the new host has written since,
-  with the hosts swapped: `resize.sh --host <new host> move prepare --to <old
-  host> --existing`, then `copy`, `freeze` and the switch back. The old host's
-  volume then gets the production name again at that `retag`.
+  read-write), then copy what the new host has written since, with the hosts
+  swapped: `resize.sh --host <new host> move prepare --to <old host>
+  --existing`, then `copy`, `freeze` and the switch back, starting the old
+  units just before the address moves (`config/host/README.md`, "Rollback"). The
+  old host's volume then gets the production name again at that `retag`.
   This also works before `move retag`, while the old host's state still records
   its move to the new host: `--existing` accepts that, and only that.
 

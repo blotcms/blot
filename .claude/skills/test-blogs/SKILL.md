@@ -174,3 +174,8 @@ Newest last. Add one dated entry per run.
 - Blogs / content: `skilltest-1793565243/` on gittest, dbtest, drivetest and icloudtest, on `bec642fc2`: `post.md`, `photo.png`, `other.md`, `wiki.md` (a wikilink and a wrong-case image), `doc.docx`, `multi+/a.md` and `b.md`. Then `real.docx` on gittest.
 - Result: post live after gittest 13s, dbtest 20s, drivetest 27s; folder post after 15s, 21s, 36s; edit after 1s, 9s, 13s. Wikilinks resolved, and the wrong-case image reached `_image_cache`. `real.docx` went through pandoc with its image processed. `inspect.js` showed the post on all three.
 - Odd: on gittest the folder post stayed live after its files were removed, because Git reports only the files, not the folder: #2342. On drivetest the image can arrive after the post, so the first build has no `_image_cache` until the rebuild. `empty.docx` has no page, so use a fixture with text. Skipped icloudtest at the operator's request after it had not synced within about 8 minutes.
+
+### 2026-11-01 — git client after native receive (#2327) and the materializer (#2329)
+- Blogs / content: `skilltest-1793557573/post.md` and a non-ASCII name in a folder with a space, on gittest, on `f12cfad6a`.
+- Result: add, edit, rename and delete each showed within 1s of the push. A push to another branch was refused with Blot's message, not `HTTP 400`, and made no ref. Cleanup: gone after 1s. Public pages only: `inspect.js` was not run.
+- Odd: none.

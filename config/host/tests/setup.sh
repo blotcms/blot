@@ -78,6 +78,7 @@ check "redis-cli resolves to redis6-cli" \
   in_ct '[ "$(readlink -f "$(command -v redis-cli)")" = "$(readlink -f /usr/bin/redis6-cli)" ]'
 check "fail2ban-client and iptables exist" in_ct 'command -v fail2ban-client && command -v iptables'
 check "firewalld is not installed" in_ct '! rpm -q firewalld'
+check "sqlite3 is installed, for bans.sh export" in_ct 'command -v sqlite3'
 check "docker is installed and not running" in_ct 'rpm -q docker && ! grep -lx dockerd /proc/[0-9]*/comm 2> /dev/null'
 check "cron entry" in_ct '[ "$(grep -v "^#" /etc/cron.d/blot-docker-health)" = "* * * * * root /usr/local/bin/check_docker_health.sh >/dev/null 2>&1" ] &&
   [ "$(stat -c "%a %U:%G" /etc/cron.d/blot-docker-health)" = "644 root:root" ]'
@@ -97,7 +98,9 @@ check "the sandbox cgroup service runs the script before docker, and the script 
   grep -qx "ExecStart=$s" $u && [ -x $s ] && sh -n $s &&
   grep -qF "echo 512M > \"\$dir/memory.max\"" $s && grep -qF "echo 0 > \"\$dir/memory.swap.max\"" $s &&
   grep -qF "echo 256 > \"\$dir/pids.max\"" $s && grep -qF "echo 25 > \"\$dir/cpu.weight\"" $s &&
-  grep -qF "controllers=\"+memory +pids +cpu\"" $s'
+  grep -qF "controllers=\"+memory +pids +cpu\"" $s &&
+  grep -qF "dir=\$tree/\$unit-browser" $s && grep -qF "echo 1G > \"\$dir/memory.max\"" $s &&
+  grep -qF "echo 1 > \"\$dir/memory.oom.group\"" $s'
 check "sysctl file" in_ct 'grep -qx "net.ipv4.tcp_migrate_req = 1" /etc/sysctl.d/91-blot-host.conf'
 check "the deploy rsyslog rule lets lines through to /var/log/secure" in_ct '! grep -q "^& stop" /etc/rsyslog.d/30-deploy-user.conf'
 check "sshd -t passes with the port drop-in" in_ct 'sshd -t && sshd -T | grep -qx "port 2222"'

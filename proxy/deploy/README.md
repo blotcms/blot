@@ -199,9 +199,19 @@ Off unless `BLOT_SANDBOX=1` is in the proxy env file. Then a unit also gets
 host has not made those directories (`config/host/host/setup.sh`, Amazon Linux
 2023). See `app/sandbox/README.md`.
 
+`BLOT_SANDBOX_BROWSER=1` as well gives the unit `--device /dev/net/tun`, a bind
+of `/sys/fs/cgroup/blot-sandbox/<unit>-browser` at `/sandbox-browser-cgroup`, and
+runs screenshots in the browser jail, with the same check before anything is
+touched. Without it screenshots stay in the airlock.
+
+`BLOT_SANDBOX_PROXY=1` as well gives the unit `--device /dev/net/tun`, starts
+the proxy jail, and points `BLOT_AIRLOCK_PROXY_URL` at it on the unit's own port.
+Without it fetches stay on the airlock's proxy.
+
 `sandbox-seccomp.json` is moby's `profiles/seccomp/default.json` at v25.0.14
 (Docker on Amazon Linux 2023 is 25) with one entry added first in `syscalls`,
-allowing `clone`, `mount`, `umount2`, `pivot_root` and `sethostname`; the deploy
+allowing `clone`, `mount`, `pivot_root`, `setns`, `sethostname`, `umount2` and
+`unshare` (`setns` and `unshare` are for pasta, in the browser jail); the deploy
 tests check that entry and nothing else. To update it, fetch the default
 profile of the Docker version on the host from
 `https://raw.githubusercontent.com/moby/moby/<tag>/profiles/seccomp/default.json`

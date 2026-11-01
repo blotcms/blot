@@ -43,6 +43,92 @@ test("jail: an unknown job throws", () => {
   }
 });
 
+test("jail: a job with a network starts as its own uid, in its cgroup, behind the filter", () => {
+  const { file, args } = jail.command("screenshot");
+  assert.strictEqual(file, "/bin/sh");
+  assert.strictEqual(args[3], jail.BROWSER_CGROUP);
+  assert.deepStrictEqual(args.slice(4, 7), ["/sbin/su-exec", "65001:65001", jail.NSJAIL]);
+  assert(args.includes("-u") && args[args.indexOf("-u") + 1] === "65000:65001:1");
+
+  const separator = args.indexOf("--");
+  assert.strictEqual(path.basename(args[separator + 2]), "enter-network.sh");
+  assert.deepStrictEqual(args.slice(-3), jail.JOBS.screenshot.command);
+});
+
+test("jail: a job with a network never binds keys, data or /usr", () => {
+  const { args } = jail.command("screenshot");
+  const binds = args.filter((a, i) => args[i - 1] === "-R");
+  assert(binds.includes("/proc"));
+  for (const bind of binds) {
+    assert(!["/", "/usr", "/usr/src/app", "/etc", "/etc/ssl", "/run"].includes(bind), bind);
+    assert(!bind.startsWith("/etc/ssl/private"), bind);
+    assert(!bind.startsWith("/usr/src/app/data"), bind);
+  }
+  assert(!args.some((a) => /^(-B|--bindmount)/.test(a)), "no writable binds");
+});
+
+test("jail: every file a job with a network names exists", () => {
+  const { args } = jail.command("screenshot");
+  for (const flag of ["--config", "--seccomp_policy"]) {
+    assert(fs.existsSync(args[args.indexOf(flag) + 1]), flag);
+  }
+  assert(fs.existsSync(args[args.indexOf("--") + 2]));
+});
+
+test("jail: the proxy jail is its own uid, in its cgroup, behind the filter, with no time limit", () => {
+  const { file, args } = jail.proxyCommand("blue");
+  assert.strictEqual(file, "/bin/sh");
+  assert.strictEqual(args[3], jail.PROXY_CGROUP);
+  assert.deepStrictEqual(args.slice(4, 7), ["/sbin/su-exec", "65001:65001", jail.NSJAIL]);
+  assert.strictEqual(args[args.indexOf("--time_limit") + 1], "0");
+  assert.strictEqual(path.basename(args[args.indexOf("--") + 2]), "enter-network.sh");
+  assert(args.includes("BLOT_PROXY_JAIL=1"));
+});
+
+test("jail: the proxy jail binds no app, data, keys or /proc", () => {
+  const { args } = jail.proxyCommand("blue");
+  // Its own scripts are a bind. In the image they are under /usr/local/lib.
+  const own = path.dirname(require.resolve("../jail"));
+  const binds = args.filter((a, i) => args[i - 1] === "-R" && a !== own);
+  for (const bind of binds) {
+    assert(!/^\/(proc|etc\/ssl|usr\/src|usr$|$)/.test(bind), bind);
+  }
+  assert(!args.some((a) => /^(-B|--bindmount)/.test(a)), "no writable binds");
+});
+
+test("jail: the proxy jail only starts for a unit", () => {
+  for (const unit of ["red", "", undefined, "../blue"]) {
+    assert.throws(() => jail.proxyCommand(unit), /unknown unit/);
+  }
+});
+
+test("jail: each proxy config forwards the port the deploy gives that unit, on loopback only", () => {
+  const { AIRLOCK } = require("../../../../scripts/deploy/constants");
+  for (const unit of ["blue", "green"]) {
+    const { args } = jail.proxyCommand(unit);
+    const config = fs.readFileSync(args[args.indexOf("--config") + 1], "utf8");
+    assert(config.includes(`tcp_ports: "127.0.0.1/${AIRLOCK.units[unit].sandboxProxyPort}:8888"`), unit);
+  }
+});
+
+test("proxy: makes its cgroup, with limits, and clears what an old jail left", () => {
+  const { prepareCgroup } = require("../proxy");
+  const directory = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-proxy-")), "proxy");
+  prepareCgroup(directory);
+  prepareCgroup(directory);
+  assert.strictEqual(fs.readFileSync(directory + "/memory.max", "utf8"), String(128 * 1024 * 1024));
+  assert.strictEqual(fs.readFileSync(directory + "/memory.oom.group", "utf8"), "1");
+  assert.strictEqual(fs.readFileSync(directory + "/cgroup.kill", "utf8"), "1");
+});
+
+test("jail: the filter refuses what the airlock refuses", () => {
+  const filter = fs.readFileSync(path.join(__dirname, "../egress.nft"), "utf8");
+  for (const range of ["10.0.0.0/8", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7", "fe80::/10", "::ffff:0:0/96"]) {
+    assert(filter.includes(range), range);
+  }
+  assert(filter.includes('oif "lo" reject'));
+});
+
 test("jail: the policy file is the one the flags name", () => {
   const argv = jail.args("metadata");
   const policy = argv[argv.indexOf("--seccomp_policy") + 1];
@@ -67,6 +153,7 @@ async function withBroker(options, fn) {
     maxQueued: options.maxQueued,
     maxQueuedMs: options.maxQueuedMs,
     log: () => {},
+    clearCgroup: options.clearCgroup,
     spawnJail: () => {
       counter++;
       return spawn("sh", ["-c", script], { stdio: ["pipe", "pipe", "ignore"] });
@@ -226,6 +313,58 @@ test("broker: at most maxRunning jails at once, then a queue, then busy", async 
     }
     assert.strictEqual(peak, 2);
   });
+});
+
+const line = (name) => JSON.stringify({ job: name }) + "\n";
+
+test("broker: a job with its own maxRunning waits for that, and doesn't hold up others", async () => {
+  const jobs = {
+    ...JOBS(),
+    only: { ...JOBS().echo, maxRunning: 1 },
+  };
+  const { script, release } = hold();
+  await withBroker({ jobs, maxRunning: 4, script }, async (socket, broker) => {
+    const first = request(socket, line("only"), "");
+    await until(() => broker.running.size === 1);
+    const second = request(socket, line("only"), "");
+    await until(() => broker.queue.length === 1);
+    assert.strictEqual(broker.running.size, 1);
+
+    const other = request(socket, job, "");
+    await until(() => broker.running.size === 2);
+    assert.strictEqual(broker.queue.length, 1);
+
+    release();
+    for (const reply of await Promise.all([first, second, other])) {
+      assert.strictEqual(reply.header.ok, true);
+    }
+  });
+});
+
+test("broker: what a job leaves in its cgroup is cleared when it ends, and failing to is logged", async () => {
+  const cleared = [];
+  const jobs = JOBS({ cgroup: "/some/cgroup" });
+  await withBroker(
+    { jobs, clearCgroup: (directory) => cleared.push(directory) },
+    async (socket) => {
+      const { header } = await request(socket, job, "x");
+      assert.strictEqual(header.ok, true);
+    }
+  );
+  assert.deepStrictEqual(cleared, ["/some/cgroup"]);
+
+  await withBroker(
+    {
+      jobs,
+      clearCgroup: () => {
+        throw Object.assign(new Error("no"), { code: "ENOENT" });
+      },
+    },
+    async (socket) => {
+      const { header } = await request(socket, job, "x");
+      assert.strictEqual(header.ok, true);
+    }
+  );
 });
 
 test("broker: a request that queued too long is busy, not given a jail", async () => {

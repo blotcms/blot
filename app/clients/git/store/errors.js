@@ -1,0 +1,75 @@
+// The errors the store throws. Each has a `code` so a caller can tell them
+// apart without matching on messages.
+
+class StoreError extends Error {
+  constructor(message, code) {
+    super(message);
+    this.name = this.constructor.name;
+    this.code = code;
+  }
+}
+
+// A key, object or pack that isn't there
+class NotFoundError extends StoreError {
+  constructor(message) {
+    super(message, "NOT_FOUND");
+  }
+}
+
+// Bytes that cannot be what they should be: a truncated or damaged pack,
+// index, delta or manifest. Never returned as data.
+class CorruptError extends StoreError {
+  constructor(message) {
+    super(message, "CORRUPT");
+  }
+}
+
+// An object bigger than the caller allowed to be held in memory
+class TooLargeError extends StoreError {
+  constructor(message) {
+    super(message, "TOO_LARGE");
+  }
+}
+
+// The cache has no room left for a reservation (see cache.reserve)
+class NoRoomError extends StoreError {
+  constructor(message) {
+    super(message, "NO_ROOM");
+  }
+}
+
+// The manifest changed since the caller read it, or isn't fit to be written
+class StaleManifestError extends StoreError {
+  constructor(message) {
+    super(message, "STALE_MANIFEST");
+  }
+}
+
+// A manifest bigger than can be read back, so it was not written
+class ManifestTooLargeError extends StoreError {
+  constructor(message) {
+    super(message, "MANIFEST_TOO_LARGE");
+  }
+}
+
+// A write whose outcome cannot be known: the request failed in a way which
+// may or may not have applied it, and reading back to find out failed too.
+// The caller must not report either result to a client; `cause` is the error
+// which started it.
+class OutcomeUnknownError extends StoreError {
+  constructor(message, cause) {
+    super(message, "OUTCOME_UNKNOWN");
+    this.cause = cause;
+  }
+}
+
+module.exports = {
+  OutcomeUnknownError,
+  ManifestTooLargeError,
+  StoreError,
+  NotFoundError,
+  CorruptError,
+  TooLargeError,
+  NoRoomError,
+  StaleManifestError,
+};

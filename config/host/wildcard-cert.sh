@@ -23,10 +23,13 @@
 #
 # Owner and mode: root:deploy 0640. blue-green.sh runs as the deploy user and
 # checks the files are readable; the proxy container mounts the directory
-# read-only and runs as root, which reads them regardless.
+# read-only and runs as root, which reads them regardless. cycle.sh deploys as
+# ec2-user, which is not in the deploy group, so it gets an ACL, as the env
+# files do. A host without that user or setfacl is left as it is.
 #
 # Env (for tests): BLOT_CERT_DIR (default /etc/ssl/private),
-#   BLOT_CERT_OWNER (default root:deploy), REDIS_CLI (default redis-cli;
+#   BLOT_CERT_OWNER (default root:deploy), BLOT_CERT_READER (default ec2-user),
+#   REDIS_CLI (default redis-cli;
 #   a command and arguments, "redis-cli -s /run/blot/redis/redis.sock" for the socket),
 #   SSH_OPTS (extra ssh options as one string, as in bootstrap.sh)
 # Runs on a Mac when given an ssh host, so that part has to work in bash 3.2.
@@ -69,12 +72,21 @@ cert_pub=$(openssl x509 -in "$WORK/pem" -pubkey -noout 2> /dev/null) || die "can
 key_pub=$(openssl pkey -in "$WORK/key" -pubout 2> /dev/null) || die "the key in Redis does not parse; nothing written"
 [ "$cert_pub" = "$key_pub" ] || die "the key in Redis does not match the certificate; nothing written"
 
+READER=${BLOT_CERT_READER:-ec2-user}
+grant_reader() { # grant_reader <file>
+  if id "$READER" > /dev/null 2>&1 && command -v setfacl > /dev/null; then
+    setfacl -m "u:$READER:r" "$1"
+  fi
+}
+
 place() { # place <temp file> <destination>
   chown "$OWNER" "$1"
   chmod 0640 "$1"
+  grant_reader "$1"
   if [ -f "$2" ] && cmp -s "$1" "$2"; then
     chown "$OWNER" "$2"
     chmod 0640 "$2"
+    grant_reader "$2"
     log "$2 is already current"
   else
     mv -f "$1" "$2"

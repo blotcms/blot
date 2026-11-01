@@ -3,7 +3,8 @@ var fs = require("fs");
 var bplist = require("./bplist");
 var ensure = require("helper/ensure");
 var titlify = require("build/prepare/titlify");
-var LocalPath = require("helper/localPath");
+var callbackify = require("util").callbackify;
+var withLocal = callbackify(require("build/converters/folderStat").withLocal);
 var extname = require("path").extname;
 
 var INVALID = "Invalid webloc file";
@@ -96,13 +97,14 @@ function read(blog, path, callback) {
     .and(path, "string")
     .and(callback, "function");
 
-  var localPath = LocalPath(blog.id, path);
   var contents;
 
-  fs.stat(localPath, function (err, stat) {
+  withLocal(blog.id, path, function (err, file) {
     if (err) return callback(err);
 
-    extract(localPath, function (err, url) {
+    var stat = file.stat;
+
+    extract(file.localPath, function (err, url) {
       if (err) return callback(err);
 
       if (!url) return callback(new Error(INVALID));

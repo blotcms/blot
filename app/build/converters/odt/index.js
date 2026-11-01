@@ -2,7 +2,7 @@ var fs = require("fs-extra");
 var callbackify = require("util").callbackify;
 var ensure = require("helper/ensure");
 var makeUid = require("helper/makeUid");
-var LocalPath = require("helper/localPath");
+var withLocal = callbackify(require("build/converters/folderStat").withLocal);
 var extname = require("path").extname;
 var execFile = require("child_process").execFile;
 var cheerio = require("cheerio");
@@ -27,8 +27,6 @@ function read (blog, path, callback) {
     .and(path, "string")
     .and(callback, "function");
 
-  var localPath = LocalPath(blog.id, path);
-
   var outDir = TempDir();
   var outPath = outDir + "/out.html";
 
@@ -40,8 +38,12 @@ function read (blog, path, callback) {
   fs.ensureDir(outDir, function (err) {
     if (err) return callback(err);
 
-    fs.stat(localPath, function (err, stat) {
+    // pandoc needs a real file to read
+    withLocal(blog.id, path, function (err, file) {
       if (err) return callback(err);
+
+      var localPath = file.localPath;
+      var stat = file.stat;
 
       var args = [
         localPath,

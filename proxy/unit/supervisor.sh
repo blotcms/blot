@@ -15,12 +15,16 @@
 #              on): the root process that starts nsjail jails for the app
 #              (proxy/unit/sandbox/broker.js), under its own restart loop. It
 #              never stops the unit: while it is down, sandbox jobs fail closed.
+#   proxy jail only if BLOT_SANDBOX_PROXY is 1 as well: the forward proxy the app's
+#              fetches of user-supplied URLs go through, in a jail
+#              (proxy/unit/sandbox/proxy.js), under its own restart loop. While
+#              it is down those fetches fail.
 #
 # SIGTERM, SIGQUIT and SIGINT drain them, OpenResty first: `-s quit` lets it
 # finish what it has accepted (up to worker_shutdown_timeout), which may still
 # be waiting on node-a, and only once it has exited is node-a sent SIGTERM
-# (helper/drain), which stops node-b first, and then the broker. Then this
-# exits 0.
+# (helper/drain), which stops node-b first, and then the broker and the proxy
+# jail. Then this exits 0.
 #
 # Environment: BLOT_UNIT (blue or green) is required. Everything else defaults
 # from it: the sockets in /run/blot (<unit>-a.sock for node-a, <unit>-b.sock for
@@ -87,14 +91,13 @@ run_node() {
   exit 0
 }
 
-# Keeps the sandbox broker running (app/sandbox, only when the host set
-# BLOT_SANDBOX_SOCKET). It is root, and the app can't rewrite its files (they
-# are root-owned under /usr/local/lib/blot-sandbox), so it starts with nothing
-# from this environment: no secrets, no NODE_OPTIONS, and not in the app's
-# directory. A broker that dies is
-# started again after a fixed delay and never stops the unit: while it is down
-# the app's jobs fail closed.
-run_broker() {
+# Keeps a sandbox root process running: the broker, or the proxy jail (app/sandbox,
+# only when the host turned them on). It is root, and the app can't rewrite its
+# files (they are root-owned under /usr/local/lib/blot-sandbox), so it starts with
+# nothing from this environment: no secrets, no NODE_OPTIONS, and not in the app's
+# directory. One that dies is started again after a fixed delay and never stops
+# the unit: while it is down the app's jobs and fetches fail closed.
+run_sandbox() { # run_sandbox <file> <description>
   cd /
   child=
   stopping=
@@ -102,13 +105,13 @@ run_broker() {
 
   while [ -z "$stopping" ]; do
     env -i PATH=/usr/local/bin:/usr/bin:/bin BLOT_UNIT="$BLOT_UNIT" \
-      /usr/local/bin/node /usr/local/lib/blot-sandbox/broker.js &
+      /usr/local/bin/node "/usr/local/lib/blot-sandbox/$1" &
     child=$!
-    echo "supervisor: started the sandbox broker pid=$child"
+    echo "supervisor: started the $2 pid=$child"
     reap "$child"
     [ -n "$stopping" ] && break
 
-    echo "supervisor: the sandbox broker exited status=$status, restarting in ${BROKER_BACKOFF}s"
+    echo "supervisor: the $2 exited status=$status, restarting in ${BROKER_BACKOFF}s"
     sleep "$BROKER_BACKOFF" &
     child=$!
     reap "$child"
@@ -129,8 +132,14 @@ node_loop=$!
 
 broker_loop=
 if [ -n "${BLOT_SANDBOX_SOCKET:-}" ]; then
-  run_broker &
+  run_sandbox broker.js "sandbox broker" &
   broker_loop=$!
+fi
+
+proxy_loop=
+if [ -n "${BLOT_SANDBOX_SOCKET:-}" ] && [ "${BLOT_SANDBOX_PROXY:-}" = 1 ]; then
+  run_sandbox proxy.js "proxy jail" &
+  proxy_loop=$!
 fi
 
 # proxy-start (proxy/start.sh) prepares the container, then becomes OpenResty
@@ -151,8 +160,9 @@ fi
 kill -TERM "$node_loop" 2>/dev/null
 reap "$node_loop"
 # and no job is running without the app that asked for it
-if [ -n "$broker_loop" ]; then
-  kill -TERM "$broker_loop" 2>/dev/null
-  reap "$broker_loop"
-fi
+for loop in "$broker_loop" "$proxy_loop"; do
+  [ -n "$loop" ] || continue
+  kill -TERM "$loop" 2>/dev/null
+  reap "$loop"
+done
 exit "$exit_status"

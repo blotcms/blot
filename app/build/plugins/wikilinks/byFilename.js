@@ -1,7 +1,5 @@
-const fs = require("fs-extra");
+const folder = require("storage/folder");
 const { dirname, join, basename, normalize } = require("path");
-const localPath = require("helper/localPath");
-const caseSensitivePath = require("helper/caseSensitivePath");
 const debug = require("debug")("blot:entry:build:plugins:wikilinks:byFilename");
 
 module.exports = function byFilename(
@@ -26,7 +24,6 @@ module.exports = function byFilename(
     return callback(new Error("No filename"));
   }
 
-  const root = localPath(blogID, "/");
   const getEntry = require("models/entry").get;
   const startDir = normalizeDir(dirname(pathOfPost));
   const visited = new Set();
@@ -59,35 +56,28 @@ module.exports = function byFilename(
 
     if (parent && parent !== current) enqueue(parent);
 
-    const absoluteDir = localPath(blogID, current);
-
-    fs.readdir(
-      absoluteDir,
-      { withFileTypes: true },
-      function handleDir(err, entries = []) {
+    // A directory which can't be read has nothing to search
+    folder
+      .listNames(blogID, current)
+      .catch(() => [])
+      .then(function handleDir(entries) {
         debug("Searching in", current, "for", targetName, "found", entries);
 
-        if (!err) {
-          entries.forEach((dirent) => {
-            if (dirent.isDirectory()) enqueue(join(current, dirent.name));
-          });
-        }
+        entries.forEach((dirent) => {
+          if (dirent.isDirectory) enqueue(join(current, dirent.name));
+        });
 
-        caseSensitivePath(
-          root,
-          join(current, targetName),
-          async function (matchErr, matchPath) {
-            if (!matchErr && matchPath && matchPath.startsWith(root)) {
-
+        folder
+          .resolveCaseInsensitive(blogID, join(current, targetName))
+          .then(
+            async function (resolvedPath) {
               // We don't want to match directories, only files
               try {
-                const stat = await fs.stat(matchPath);
-                if (stat && stat.isDirectory()) {
+                const stat = await folder.stat(blogID, resolvedPath);
+                if (stat && stat.isDirectory) {
                   return searchNext();
                 }
               } catch (e) {}
-
-              const resolvedPath = "/" + matchPath.slice(root.length);
 
               debug("Found match at", resolvedPath);
 
@@ -104,13 +94,10 @@ module.exports = function byFilename(
                   });
                 }
               });
-            }
-
-            searchNext();
-          }
-        );
-      }
-    );
+            },
+            () => searchNext()
+          );
+      });
   }
 
   searchNext();

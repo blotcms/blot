@@ -1,6 +1,5 @@
-var assertNoSymlinks = require("helper/assertNoSymlinks");
-var fs = require("fs-extra");
-var localPath = require("helper/localPath");
+var storage = require("storage/folder");
+var { callbackify } = require("util");
 var clfdate = require("helper/clfdate");
 var drop = require("./drop");
 var set = require("./set");
@@ -26,12 +25,15 @@ function firstError(current, next) {
 // the start and end of an update, the file changed while it was processed.
 // Only regular files get one. A directory's mtime moves when a build writes
 // its .preview.html files into it, which would re-sync forever, and a missing
-// path has nothing to compare, so both are null.
-function fingerprint(path, callback) {
-  fs.stat(path, { bigint: true }, function (err, stat) {
-    if (err || !stat || !stat.isFile()) return callback(null);
-    callback(stat.size + ":" + stat.mtimeNs);
-  });
+// path has nothing to compare, so both are null. The fingerprint only lives
+// for the length of one update, in this process: nothing stores it.
+//
+// modified is the mtime in milliseconds as a float, which keeps the
+// sub-millisecond part of the time a filesystem reports (about a quarter of a
+// microsecond at today's dates), where this once compared it in nanoseconds.
+function fingerprint(stat) {
+  if (!stat || stat.isDirectory) return null;
+  return stat.size + ":" + stat.modified;
 }
 
 module.exports = function (blog, log, status) {
@@ -50,139 +52,164 @@ module.exports = function (blog, log, status) {
 
     status("Syncing " + path);
 
-    assertNoSymlinks(localPath(blog.id, "/"), localPath(blog.id, path)).then(function () {
-      fingerprint(localPath(blog.id, path), function (before) {
-        function done(err) {
-          if (err) {
-            console.error(clfdate(), blog.id, path, err);
-          }
+    // A symlink at the path or in its way rejects with ELOOP, which (like any
+    // error other than a missing path) is the caller's to handle.
+    callbackify(storage.stat)(blog.id, path, function (err, stat) {
+      if (err && err.code !== "ENOENT") return callback(err);
 
-          // Redis cannot take the write (a host cutover, a restart, an
-          // outage), so the database does not reflect the file on disk. The
-          // client must know, otherwise it marks the change as applied and
-          // nothing ever builds the entry. Skip the re-check and cache flush:
-          // both would only wait on the same Redis.
-          if (err && isRedisUnavailableError(err)) return callback(err);
+      var before = fingerprint(stat);
 
-          // Any other error is usually about this one file (a source that
-          // will not build, say) and must not stop the rest of the sync,
-          // so it is logged above and never escapes.
-          var updateError = err;
-          fingerprint(localPath(blog.id, path), function (after) {
-            if (before !== after) {
-              status("Re-syncing " + path);
-              return update(path, callback);
-            }
-
-            // the cache is flushed at the end of a sync too
-            // but if we don't do it after updating each files
-            // long syncs can produce weird cache behaviour
-            flushCache(blog.id, function () {
-              callback(null, { error: updateError || null });
-            });
-          });
+      function done(err) {
+        if (err) {
+          console.error(clfdate(), blog.id, path, err);
         }
 
-        fs.stat(localPath(blog.id, path), function (err, stat) {
-          if (err && err.code === "ENOENT") {
-            var multiInfo = build.findMultiFolder(path);
+        // Redis cannot take the write (a host cutover, a restart, an
+        // outage), so the database does not reflect the file on disk. The
+        // client must know, otherwise it marks the change as applied and
+        // nothing ever builds the entry. Skip the re-check and cache flush:
+        // both would only wait on the same Redis.
+        if (err && isRedisUnavailableError(err)) return callback(err);
 
-            resolveEnoentTargets(blog, path, multiInfo, function (targets) {
-              if (targets.error) return done(targets.error);
+        // Any other error is usually about this one file (a source that
+        // will not build, say) and must not stop the rest of the sync,
+        // so it is logged above and never escapes.
+        var updateError = err;
+        callbackify(storage.stat)(blog.id, path, function (statErr, afterStat) {
+          var after = statErr ? null : fingerprint(afterStat);
 
-              var dropTargets = targets.dropTargets;
-              var rebuildTarget = targets.rebuildTarget;
-              var dropError = null;
+          if (before !== after) {
+            status("Re-syncing " + path);
+            return update(path, callback);
+          }
 
-              function nextDrop(index) {
-                if (index >= dropTargets.length) {
-                  if (!rebuildTarget) return done(dropError);
+          // the cache is flushed at the end of a sync too
+          // but if we don't do it after updating each files
+          // long syncs can produce weird cache behaviour
+          flushCache(blog.id, function () {
+            callback(null, { error: updateError || null });
+          });
+        });
+      }
 
-                  return fs.pathExists(
-                    localPath(blog.id, rebuildTarget),
-                    function (existsErr, exists) {
-                      if (existsErr) {
-                        dropError = firstError(dropError, existsErr);
-                        return done(dropError);
-                      }
+      if (err) {
+        var multiInfo = build.findMultiFolder(path);
 
-                      if (!exists) return done(dropError);
+        resolveEnoentTargets(blog, path, multiInfo, function (targets) {
+          if (targets.error) return done(targets.error);
 
-                      log(rebuildTarget, "Rebuilding multi-folder in database");
+          var dropTargets = targets.dropTargets;
+          var rebuildTarget = targets.rebuildTarget;
+          var dropError = null;
 
-                      set(blog, rebuildTarget, function (err) {
-                        if (err) {
-                          log(
-                            rebuildTarget,
-                            "Error rebuilding multi-folder in database",
-                            err
-                          );
-                          dropError = firstError(dropError, err);
-                        } else {
-                          log(
-                            rebuildTarget,
-                            "Rebuilding multi-folder in database succeeded"
-                          );
-                        }
+          function nextDrop(index) {
+            if (index >= dropTargets.length) {
+              if (!rebuildTarget) return done(dropError);
 
-                        done(dropError);
+              return callbackify(storage.exists)(
+                blog.id,
+                rebuildTarget,
+                function (existsErr, exists) {
+                  if (existsErr) {
+                    dropError = firstError(dropError, existsErr);
+                    return done(dropError);
+                  }
+
+                  if (!exists) {
+                    // The "+" folder this file was inside is gone too (every
+                    // file was removed and the client reported only the
+                    // files, as a push to a repository does), so its
+                    // aggregate is stale. Sync the folder path: that drops
+                    // the aggregate only if it is really this folder's,
+                    // never a colliding sibling's.
+                    if (multiInfo && rebuildTarget === multiInfo.folderPath) {
+                      return update(rebuildTarget, function (folderErr, result) {
+                        // A Redis outage comes back as folderErr
+                        done(
+                          firstError(
+                            dropError,
+                            folderErr || (result && result.error)
+                          )
+                        );
                       });
                     }
-                  );
+
+                    return done(dropError);
+                  }
+
+                  log(rebuildTarget, "Rebuilding multi-folder in database");
+
+                  set(blog, rebuildTarget, function (err) {
+                    if (err) {
+                      log(
+                        rebuildTarget,
+                        "Error rebuilding multi-folder in database",
+                        err
+                      );
+                      dropError = firstError(dropError, err);
+                    } else {
+                      log(
+                        rebuildTarget,
+                        "Rebuilding multi-folder in database succeeded"
+                      );
+                    }
+
+                    done(dropError);
+                  });
                 }
+              );
+            }
 
-                var target = dropTargets[index];
-                log(target, "Dropping from database");
-                drop(blog.id, target, function (err) {
-                  if (err) {
-                    log(target, "Error dropping from database", err);
-                    dropError = firstError(dropError, err);
-                  } else {
-                    log(target, "Dropping from database succeeded");
-                  }
-
-                  nextDrop(index + 1);
-                });
-              }
-
-              nextDrop(0);
-            });
-          } else if (stat && stat.isDirectory()) {
-            maybeEnableInjectTitle(blog, path, function () {
-              var multiInfo = build.findMultiFolder(path);
-
-              if (multiInfo) {
-                var targetPath = multiInfo.folderPath;
-
-                log(path, "Saving multi-folder in database");
-
-                set(blog, targetPath, function (err) {
-                  if (err) {
-                    log(targetPath, "Error saving multi-folder in database", err);
-                  } else {
-                    log(targetPath, "Saving multi-folder in database succeeded");
-                  }
-                  done(err);
-                });
-              } else {
-                // there is nothing else to do for directories
-                done();
-              }
-            });
-          } else {
-            log(path, "Saving file in database");
-            set(blog, path, function (err) {
+            var target = dropTargets[index];
+            log(target, "Dropping from database");
+            drop(blog.id, target, function (err) {
               if (err) {
-                log(path, "Error saving file in database", err);
+                log(target, "Error dropping from database", err);
+                dropError = firstError(dropError, err);
               } else {
-                log(path, "Saving file in database succeeded");
+                log(target, "Dropping from database succeeded");
+              }
+
+              nextDrop(index + 1);
+            });
+          }
+
+          nextDrop(0);
+        });
+      } else if (stat.isDirectory) {
+        maybeEnableInjectTitle(blog, path, function () {
+          var multiInfo = build.findMultiFolder(path);
+
+          if (multiInfo) {
+            var targetPath = multiInfo.folderPath;
+
+            log(path, "Saving multi-folder in database");
+
+            set(blog, targetPath, function (err) {
+              if (err) {
+                log(targetPath, "Error saving multi-folder in database", err);
+              } else {
+                log(targetPath, "Saving multi-folder in database succeeded");
               }
               done(err);
             });
+          } else {
+            // there is nothing else to do for directories
+            done();
           }
         });
-      });
-    }, callback);
+      } else {
+        log(path, "Saving file in database");
+        set(blog, path, function (err) {
+          if (err) {
+            log(path, "Error saving file in database", err);
+          } else {
+            log(path, "Saving file in database succeeded");
+          }
+          done(err);
+        });
+      }
+    });
   };
 };
 
@@ -226,7 +253,7 @@ function resolveEnoentTargets(blog, path, multiInfo, callback) {
 
   var siblingFolder = path + "+";
 
-  fs.pathExists(localPath(blog.id, siblingFolder), function (err, exists) {
+  callbackify(storage.exists)(blog.id, siblingFolder, function (err, exists) {
     callback({
       dropTargets: [path],
       rebuildTarget: !err && exists ? siblingFolder : null,

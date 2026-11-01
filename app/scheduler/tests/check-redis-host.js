@@ -601,12 +601,12 @@ describe("scheduler check-redis-host", function () {
 
       await h.tick();
       expect(h.sent.length).toBe(1);
-      expect(h.sent[0].summary).toBe("Redis background save failing, writes will be refused");
+      expect(h.sent[0].summary).toBe("Redis background save failing");
 
       const { message } = h.sent[0].alerts[0];
       expect(message).toContain("rdb_last_bgsave_status:err");
-      expect(message).toContain("stop-writes-on-bgsave-error yes");
-      expect(message).toContain("refuses every write");
+      expect(message).toContain("stop-writes-on-bgsave-error no");
+      expect(message).toContain("nothing new reaches disk");
       expect(message).toContain("/var/lib/redis6");
       expect(message).toContain("/var/log/redis6/redis6.log");
       expect(message).toContain("vm.overcommit_memory");
@@ -619,7 +619,7 @@ describe("scheduler check-redis-host", function () {
       h.advance(CONDITION_MIN_INTERVAL);
       set(h, { rdb_last_bgsave_status: "ok" });
       await h.tick();
-      expect(h.sent[1].summary).toBe("recovered: Redis background save failing, writes will be refused");
+      expect(h.sent[1].summary).toBe("recovered: Redis background save failing");
     });
   });
 
