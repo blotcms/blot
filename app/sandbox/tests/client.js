@@ -125,6 +125,7 @@ describe("sandbox client", function () {
   });
 
   it("rejects a job name it can't send", async function () {
+    config.sandbox.socket = path.join(directory, "unused.sock");
     expect(await code(sandbox.run("../x", {}, Buffer.alloc(1)))).toEqual("SANDBOX_UNKNOWN_JOB");
   });
 });
