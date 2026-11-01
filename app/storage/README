@@ -426,7 +426,7 @@ should consolidate into one storage-layer method, exposed explicitly
     Phase 3.
 - **Phase 3 — git client repos.** Planned in
   [#2259](https://github.com/blotcms/blot/issues/2259). Bare repos live in
-  `{blot_directory}/data/git/{handle}.git` (`app/clients/git/dataDir.js`)
+  `{data_directory}/git/{handle}.git` (`app/clients/git/dataDir.js`)
   today. They move to a walgit-style store: immutable packs plus a small
   manifest under the private `git/{blogID}/` prefix, with the SSD caching
   refs, pack indexes and commits/trees, and blobs fetched on demand, so a

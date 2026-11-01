@@ -44,7 +44,7 @@ When a user pushes changes from their local repository to the bare repository, B
 
 - **`database.js`**: Redis-based token and status storage. Handles token creation, validation, refresh, and deletion. Also manages creation status tracking (e.g., `createInProgress`, `createFailed`, `createComplete`).
 
-- **`dataDir.js`**: The bare repository data directory (`<blot_directory>/data/git`). Ensures the directory exists on require. Only `repo.js` (and the quarantine sweep, which lists every repository) use it.
+- **`dataDir.js`**: The bare repository data directory (`<data_directory>/git`). Ensures the directory exists on require. Only `repo.js` (and the quarantine sweep, which lists every repository) use it.
 
 - **`checkGitRepoExists.js`**: Validates that a Git repository exists in a given directory by using `git rev-parse --show-toplevel` and comparing the repository root with the expected blog folder path. Accounts for nested Git repositories (the entire Blot codebase is itself a Git repo).
 
