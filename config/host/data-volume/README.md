@@ -236,6 +236,8 @@ Rollback:
   with the hosts swapped: `resize.sh --host <new host> move prepare --to <old
   host> --existing`, then `copy`, `freeze` and the switch back. The old host's
   volume then gets the production name again at that `retag`.
+  This also works before `move retag`, while the old host's state still records
+  its move to the new host: `--existing` accepts that, and only that.
 
 ## Drill first
 

@@ -961,7 +961,7 @@ move_create_and_attach() {
 }
 
 cmd_move_prepare() {
-  local TF T_INSTANCE T_AZ T_IP T_PORT T_KEY T_DRILL out pub resume=""
+  local TF T_INSTANCE T_AZ T_IP T_PORT T_KEY T_DRILL out pub t resume=""
   NEW_VOL=""; SNAP=""
   case "$PHASE" in
     prepared | copied)
@@ -981,7 +981,13 @@ cmd_move_prepare() {
   [ "$T_DRILL" = "$DRILL" ] || die "$HOST is $([ "$DRILL" = yes ] || echo not\ )a drill host but $TO is $([ "$T_DRILL" = yes ] || echo not\ )one; a drill and production never mix"
   [ -n "$T_KEY" ] || die "$TO has no /etc/ssh/ssh_host_ed25519_key.pub, so $HOST cannot check its identity"
   [ "$(field "$TF" rsync)" = yes ] || die "rsync is not installed on $TO"
-  case "$(field "$TF" resize_phase)" in prepared | copied) die "$TO has a resize or move in progress of its own (phase $(field "$TF" resize_phase))" ;; esac
+  # A move back before retag: the old host still records its move to this host.
+  case "$(field "$TF" resize_phase)" in
+    prepared | copied)
+      t=$(field "$TF" resize_target); t=${t#*@}
+      [ -n "$EXISTING" ] && [ "${t%:*}" = "$SRC_IP" ] ||
+        die "$TO has a resize or move in progress of its own (phase $(field "$TF" resize_phase))" ;;
+  esac
   [ "$T_AZ" = "$AZ" ] || echo "NOTE: $TO is in $T_AZ and $HOST in $AZ. The copy crosses zones; the plan keeps both in one."
   if [ -n "$resume" ]; then
     [ "$TARGET" = "ec2-user@$T_IP:$T_PORT" ] || die "the move in progress goes to $TARGET, but $TO is ec2-user@$T_IP:$T_PORT"
@@ -1057,6 +1063,9 @@ EOF
     set -- $pub
     [ "$1" = ssh-ed25519 ] && [ -n "${2:-}" ] || die "$HOST did not return a public key ($pub)"
     thost_do authorize-key "$SRC_IP" "$1" "$2" > /dev/null || die "could not let the key into $TO"
+    # move-prepare wrote the state on the host: without this TARGET is still
+    # empty on a first run and move_target_status checks nothing.
+    gather_facts
     move_target_status
     echo "$HOST reaches $TO over ssh, with passwordless sudo and rsync"
   fi
