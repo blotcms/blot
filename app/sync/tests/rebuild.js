@@ -119,7 +119,7 @@ describe("rebuild", function () {
     done();
   });
 
-  it("keeps a folder post aggregate through a full rebuild",async function (done) {
+  it("keeps a folder post aggregate through a full rebuild", async function (done) {
     const Entry = require("models/entry");
     const { promisify } = require("util");
     const getEntry = (id) =>
