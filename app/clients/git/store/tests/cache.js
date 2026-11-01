@@ -251,6 +251,34 @@ describe("git store cache", function () {
       await second.release();
     });
 
+    it("evicts nothing for a reservation which can't fit, so no file is left that the cache isn't counting", async function () {
+      const cache = createCache({ dir, maxBytes: 100 });
+      await cache.put("a", data(24)); // 40 bytes
+      const first = await cache.reserve(60);
+
+      await expectAsyncRejects(cache.reserve(50));
+      expect(cache.stats().evictions).toBe(0);
+      expect(cache.stats().entryBytes).toBe(40);
+      expect(await cache.get("a")).not.toBeNull();
+
+      await first.release();
+      expect(await cache.put("b", data(84))).toBe(true); // all 100 bytes
+      expect(diskBytes(dir)).toBeLessThanOrEqual(100);
+      expect(files(dir).length).toBe(1);
+      await cache.clear();
+      expect(diskBytes(dir)).toBe(0);
+    });
+
+    it("evicts nothing for a put which can't fit among the reservations", async function () {
+      const cache = createCache({ dir, maxBytes: 100 });
+      await cache.put("a", data(24)); // 40 bytes
+      const reservation = await cache.reserve(50);
+      expect(await cache.put("b", data(40))).toBe(false); // 56 bytes, and only 50 are free even without "a"
+      expect(await cache.get("a")).not.toBeNull();
+      expect(cache.stats().evictions).toBe(0);
+      await reservation.release();
+    });
+
     it("keeps reservations out of the cache's reach: they are not evicted", async function () {
       const cache = createCache({ dir, maxBytes: 300 });
       const reservation = await cache.reserve(250);

@@ -109,16 +109,24 @@ function createCache({ dir, maxBytes }) {
   }
 
   // Evicts least recently used entries until `needed` more bytes fit. Decides
-  // synchronously, then deletes the files; returns whether it fits.
+  // synchronously, and the caller deletes the files of the entries returned,
+  // so an entry is forgotten only if it is going to be deleted: if `needed`
+  // can't fit even with every entry gone, nothing is evicted.
   function makeRoom(needed) {
+    let short = total() + needed - maxBytes;
     const doomed = [];
-    for (const name of entries.keys()) {
-      if (total() + needed <= maxBytes) break;
+    for (const [name, size] of entries) {
+      if (short <= 0) break;
       doomed.push(name);
+      short -= size;
+    }
+    if (short > 0) return { fits: false, doomed: [] };
+
+    for (const name of doomed) {
       forget(name);
       counters.evictions++;
     }
-    return { fits: total() + needed <= maxBytes, doomed };
+    return { fits: true, doomed };
   }
 
   async function evict(needed) {
