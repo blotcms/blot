@@ -745,7 +745,7 @@ describe("scheduler check-redis-host", function () {
 
       expect(h.sent.length).toBe(1);
       const { message } = h.sent[0].alerts[0];
-      expect(message).toContain("Redis restarted or a different host/process is now serving (e.g. after a cutover)");
+      expect(message).toContain("Redis restarted or a different host/process is now serving (e.g. after a promotion)");
       expect(message).toContain("uptime went backwards");
       expect(message).toContain("the last tcpmem sample was from ip-10-0-0-1");
     });

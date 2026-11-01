@@ -26,10 +26,10 @@ echo "$line" >> "$LOG"
 # Keep about a year of 5-minute samples.
 if [ "$(wc -l < "$LOG")" -gt 110000 ]; then tail -n 100000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"; fi
 
-# active=1 once cutover has marked this as the host clients use (the marker
+# active=1 once promote.sh has marked this as the active host (the marker
 # backup.sh checks): the app only expects maxmemory to be set from then on.
 active=0
-[ -s "$ROOT/etc/blot-redis/floating-ip" ] && active=1
+[ -e "$ROOT/etc/blot-redis/active" ] && active=1
 # RAM and disk, for the daily email. A field that cannot be read is left out.
 # df -k, because busybox df has that too. Available is kept apart from
 # total - used, which counts blocks reserved for root. disk_backups only if /backups is a

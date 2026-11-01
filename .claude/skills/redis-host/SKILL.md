@@ -8,7 +8,7 @@ description: Look after Blot's production Redis host (its own EC2 instance, buil
 Production Redis is one host, built by `config/redis/` and reached by the
 app containers, the proxy and the cert scripts at a floating private IP
 (`BLOT_REDIS_HOST`). `config/redis/README.md` describes the setup and holds
-the steps for building a host, cutting over, resizing and disaster recovery.
+the steps for building a host, promoting a replica, resizing and disaster recovery.
 This skill does not repeat them: it says which README section to use, which
 read-only checks to propose for each alert, how to read them, and what must
 never be done without asking.
@@ -30,7 +30,7 @@ TCP memory background) and `investigate-slow-upstream-responses`.
    and not what other skills auto-approve. Read-only AWS `describe-*` / `ls`
    calls are fine without asking, but say what you ran.
 2. **Use `launch.sh --drill` for any throwaway host** (a rehearsal, a
-   restore test, a cutover practice). A drill host is tagged `BlotDrill=true`
+   restore test, a promotion practice). A drill host is tagged `BlotDrill=true`
    and can never upload backups, so it cannot add to the
    production ones.
 3. **Tear down by explicit instance ID only**, never with a filter-based
@@ -39,12 +39,13 @@ TCP memory background) and `investigate-slow-upstream-responses`.
    or serving `BLOT_REDIS_HOST`). Production instances have termination
    protection; if a terminate is refused for that reason, stop and ask rather
    than lifting it.
-4. **Never roll back to a host whose interface held the floating IP
-   recently.** The VPC keeps delivering to the other interface for seconds
-   (README, "Timings and rollback"), which costs `[LOCK COMPROMISED]`
-   restarts. Go forward to a fresh host instead.
-5. **No deploys or proxy restarts around a cutover.** Only cut over in the
-   windows `cutover.sh` allows, and always `--dry-run` first.
+4. **Roll back only while the old host still replicates from the new one.**
+   `promote.sh` with the hosts swapped needs that, and writes made on the new
+   host since come back too, so decide quickly. Otherwise go forward to a
+   fresh host.
+5. **No deploys or proxy restarts around a promotion.** Always `--dry-run`
+   first, and not at :00 or :30 (backups, sync validation) or 01:00 UTC
+   (wildcard certificate renewal).
 6. **Private details stay out of public issues and PRs.** Instance IDs, public
    IPs, account IDs, key names: they go in the gitignored `data/` directory
    (the repo is public). Private IPs already in the README are fine.
@@ -73,7 +74,7 @@ starts a new baseline, so a long outage does not produce a flood).
 | Redis backup stale | the time in `blot:redis-host:backup` is over 3 hours old (two missed hourly runs), or the value can't be read; a missing key is quiet |
 | Offsite Redis backup stale | the same for `blot:redis-host:offsite` at 50 hours (two missed daily runs); S3 backups may be fine. Look at `~/backup.log`, the `blot-b2` profile, B2 and `/etc/blot-redis/offsite-bucket` |
 | Redis memory nearing maxmemory | `used_memory` at 80% of `maxmemory` (clears at 75%); `noeviction`, so writes fail at the limit |
-| maxmemory not set | `maxmemory` is 0 on a host marked active by `/etc/blot-redis/floating-ip` |
+| maxmemory not set | `maxmemory` is 0 on a host marked active by `/etc/blot-redis/active` |
 | Redis background save failing, writes will be refused | `rdb_last_bgsave_status` is not `ok` (`stop-writes-on-bgsave-error yes`) |
 | Redis refused writes (OOM, MISCONF) | any new `OOM`, `MISCONF` or `NOREPLICAS` error (emailed at most hourly) |
 | Redis errors | 100 or more new errors of one other type (`READONLY`, `WRONGTYPE`, `ERR`...) within one 5-minute check |
@@ -102,7 +103,7 @@ runs inside an app container, so it is a production command (ask first).
 ## Method
 
 1. Read the alert (or the daily line) and find its row above. Note the time,
-   and whether a cutover, deploy or resize happened near it. Check the
+   and whether a promotion, deploy or resize happened near it. Check the
    incident log below for the same pattern.
 2. Propose the read-only checks for that alert (next section), one command at
    a time, and get approval for each (rule 1).
@@ -160,9 +161,9 @@ ssh redis 'redis6-cli CONFIG GET min-replicas-to-write'
 ### Other Redis errors
 
 `INFO errorstats` for the type and count. `READONLY` is expected for a moment
-during a cutover; outside one, clients are talking to a replica: check
+during a promotion; outside one, clients are talking to a replica: check
 `redis6-cli ROLE` on the host `BLOT_REDIS_HOST` points at, and which host has
-`/etc/blot-redis/floating-ip`. `WRONGTYPE` or `ERR` in bulk is an app bug:
+`/etc/blot-redis/active`. `WRONGTYPE` or `ERR` in bulk is an app bug:
 find the error text and the calling code in the containers' logs and fix it
 in the app.
 
@@ -180,7 +181,7 @@ propose, not to do.
 
 ### Restarted or switched host
 
-Expected after a cutover, a resize or a planned reboot. If none, check:
+Expected after a promotion, a resize or a planned reboot. If none, check:
 
 ```
 ssh redis 'uptime; redis6-cli INFO server | grep -E "^(run_id|uptime_in_seconds|redis_version):"'
@@ -256,10 +257,10 @@ the host is the master and accepts writes.
 
 ```
 ssh redis 'tail -n 5 ~/tcpmem.log; cat /etc/cron.d/blot-redis; systemctl is-active crond'
-ssh redis 'redis6-cli ROLE | head -n 1; cat /etc/blot-redis/floating-ip'
+ssh redis 'redis6-cli ROLE | head -n 1; ls /etc/blot-redis/active'
 ```
 
-Right after a cutover the new host needs one or two 5-minute runs. If
+Right after a promotion the new host needs one or two 5-minute runs. If
 `ROLE` is not `master` or Redis refuses the write (`OOM`, `MISCONF`,
 frozen), it is that problem, not cron. If cron is dead or the file is gone,
 `config/redis/bootstrap.sh redis` re-applies it (propose, do not run).
@@ -280,8 +281,8 @@ aws s3 ls s3://blot-redis-backups/hourly/ | tail -n 3  # hourly/ keeps 1 day, da
 ```
 
 `bin/backup.sh` exits quietly unless the host is a master that accepts
-writes, `/etc/blot-redis/floating-ip` exists and its address is on the host,
-and `/etc/blot-redis/drill` does not exist. A missing marker after a cutover
+writes, `/etc/blot-redis/active` exists, and `/etc/blot-redis/drill` does not
+exist. A missing marker after a promotion
 or restore, or a stray `drill` marker, explains a silent gap; `backup.log` and
 the newest S3 key give the last good upload. `/backups` is the NVMe instance
 store: it is wiped when the instance stops and keeps the 10 newest local
@@ -310,16 +311,17 @@ there.
 
 **README, "Increasing the Redis server size"** (launch a replica of the live
 master on a bigger type in the same family with `--from replica:<primary
-private IP>`, check it, `cutover.sh` in an allowed window). Guardrails on top
+private IP>`, check it, `promote.sh`). Guardrails on top
 of the rules:
 
-- `launch.sh --dry-run` and `cutover.sh --dry-run` first, and show the
+- `launch.sh --dry-run` and `promote.sh --dry-run` first, and show the
   operator the plan each prints.
 - The replica must follow the old host's **primary** private IP, not the
-  floating IP.
+  floating IP, which the units still use until the combined host (#2261):
+  a Redis-only replacement moves it by hand (README, Disaster recovery step 4).
 - Keep instance IDs and public IPs out of chat that will be pasted into an
   issue; put them in `data/`.
-- After the cutover, check `/redis-health`, the app containers' restart
+- After the promotion, check `/redis-health`, the app containers' restart
   counts, and that the next hourly backup arrives from the new host.
 - The old host stays up a few days, replicating from the new one, then is
   terminated by instance ID (rule 3). It is not a rollback target after the

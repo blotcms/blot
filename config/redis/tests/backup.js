@@ -5,7 +5,7 @@ const { spawnSync } = require("child_process");
 const { parseBackup, BACKUP_KEY, OFFSITE_KEY } = require("../../../app/scheduler/daily/redis-server");
 
 // Runs bin/backup.sh against a fake root and fake redis6-cli, aws, flock,
-// mountpoint, rsync and ip, and checks it records each upload in Redis for the
+// mountpoint and rsync, and checks it records each upload in Redis for the
 // app's daily email. The test image has no bash, so the script runs under sh
 // (it is written to work in both).
 describe("backup.sh", function () {
@@ -26,10 +26,8 @@ describe("backup.sh", function () {
 
     write("var/lib/redis6/dump.rdb", "x".repeat(1234));
     write("tmp/.keep", "");
-    write("etc/blot-redis/floating-ip", "10.0.0.50\n");
+    write("etc/blot-redis/active", ""); // promote.sh marked this host active
 
-    // The floating IP is on this host
-    stub("../usr/sbin/ip", "echo '2: eth0    inet 10.0.0.50/32 scope global eth0'");
     stub("flock", "exit 0");
     stub("mountpoint", "exit 1"); // no instance store unless a test changes it
     stub("rsync", 'for last; do :; done; cp "$2" "$last"');
@@ -205,7 +203,7 @@ esac
       write("etc/blot-redis/drill", "");
       expect(run("daily").status).toBe(0);
       fs.rmSync(file("etc/blot-redis/drill"));
-      fs.rmSync(file("etc/blot-redis/floating-ip"));
+      fs.rmSync(file("etc/blot-redis/active"));
       expect(run("daily").status).toBe(0);
       expect(fs.existsSync(file("aws-calls"))).toBe(false);
     });
@@ -255,7 +253,7 @@ esac
   });
 
   it("records nothing when the host is not the active one", function () {
-    fs.rmSync(file("etc/blot-redis/floating-ip"));
+    fs.rmSync(file("etc/blot-redis/active"));
     const result = run("hourly");
 
     expect(result.status).toBe(0);

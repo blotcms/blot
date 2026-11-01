@@ -8,7 +8,7 @@
 # EVAL/EVALSHA, with or without a replica attached. Script writes fail as
 # "ERR Error running script ... -NOREPLICAS ...", not "NOREPLICAS ...". It
 # only works while min-replicas-max-lag is above 0 (0 turns the check off),
-# so that is checked first. For a host switch use cutover.sh, which uses
+# so that is checked first. For a host switch use promote.sh, which uses
 # FAILOVER instead.
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"

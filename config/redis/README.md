@@ -10,10 +10,12 @@ vCPU) running Amazon Linux 2023 arm64 and `redis6` 6.2.x, with ssh on port 22,
 key-only. Its primary private IP is 172.30.0.163, but nothing connects to
 that: the app containers (`BLOT_REDIS_HOST`), the OpenResty proxy (`REDIS_IP`)
 and the certificate scripts all use the floating private IP 172.30.0.200,
-which `cutover.sh` moves between hosts. Hourly, daily and weekly RDB backups go to
+which stays on the current host (nothing moves it by script any more; the
+units stop needing it when they move to a combined host with Redis, #2261).
+Hourly, daily and weekly RDB backups go to
 `s3://blot-redis-backups` from `/etc/cron.d/blot-redis`, and only on the host
-marked by `/etc/blot-redis/floating-ip`. To resize, launch a replica of the
-live host on a new instance type and cut over to it (see "Increasing the Redis
+marked by `/etc/blot-redis/active`. To resize, launch a replica of the
+live host on a new instance type and promote it (see "Increasing the Redis
 server size"). The hand-built host that served Redis until 8 Oct 2026 is gone.
 
 ## Files
@@ -24,7 +26,7 @@ server size"). The hand-built host that served Redis until 8 Oct 2026 is gone.
 | `launch.sh` | Launch an instance, bootstrap it, load data. |
 | `bootstrap.sh <ssh-host>` | Install and configure Redis on a host (runs `host/setup.sh` via sudo). |
 | `restore.sh <ssh-host> latest\|<name>\|list` | Restore an S3 backup onto a host. |
-| `cutover.sh <old> <new>` | Move live traffic to a replica: FAILOVER, floating IP, backups (see below). |
+| `promote.sh <old> <new>` | Promote a replica to master with FAILOVER and move the `active` backup marker (see "Promotion"). |
 | `readonly.sh <ssh-host> on\|off` | Refuse or accept writes (`min-replicas-to-write` 99 / 0). |
 | `host/setup.sh` | Root-side setup: packages, config, sysctls, systemd units, cron. |
 | `host/mount-instance-store.sh` | Mounts the NVMe instance store at `/backups` (a bind mount of a directory of the app's instance store on a combined host). |
@@ -52,8 +54,8 @@ Redis host, `blot` the app host).
    throwaway host (a rehearsal, a restore test): it is named `drill-redis-*`,
    tagged `BlotDrill=true`, and gets `/etc/blot-redis/drill` before bootstrap,
    which stops `backup.sh` from ever uploading from it, even after a rehearsal
-   cutover marks it active (otherwise it would add its own copies to the
-   production backups). `cutover.sh` warns when the new host is a drill host.
+   promotion marks it active (otherwise it would add its own copies to the
+   production backups). `promote.sh` warns when the new host is a drill host.
 2. `./bootstrap.sh ec2-user@<ip>`
 3. `./restore.sh ec2-user@<ip> latest` (add `--reference <current-redis-host>`
    to compare `DBSIZE` and keyspace), or on the new host
@@ -65,44 +67,36 @@ disaster recovery. To move live traffic, always make the new host a replica of
 the live one first (after a restore is fine: the full sync replaces the data),
 so no writes made since the backup are lost.
 
-Then move traffic to it with `cutover.sh` (next section).
+Then promote it with `promote.sh` (next section).
 
-## Cutover
+## Promotion
 
 ```
-./cutover.sh --dry-run --app-host <app-ssh-host> <old-ssh-host> <new-ssh-host>
-./cutover.sh --app-host <app-ssh-host> <old-ssh-host> <new-ssh-host>
+./promote.sh --dry-run <old-ssh-host> <new-ssh-host>
+./promote.sh <old-ssh-host> <new-ssh-host>
 ```
 
+Promotes the replica on the new host with `FAILOVER` and moves the backup
+marker. It does not move any IP: clients that should follow the new master
+reach it by their own means (a combined host's units use their own Redis).
 The dry run makes every check and prints the plan and the rollback command; it
-changes nothing. The real run asks for `yes`, and only runs between :08-:25 and
-:38-:55 past the hour (backups and sync validation run at :00 and :30) and not
-between 01:00 and 01:30 UTC (the proxy's wildcard certificate renewal).
-`--any-time` skips that for rehearsals.
+changes nothing. The real run asks for `yes`. It has no time-of-day rule, since
+when to switch is the host cycle's job.
 
 What it checks first: both hosts answer over ssh with passwordless sudo and run
 Redis 6.2.x; the new host replicates from the old host's **primary private
-IP** (from the floating IP it would replicate from itself once the IP moves),
-its link is up and it is at most 16MB and 1s behind; it has
+IP**, its link is up and it is at most 16MB and 1s behind; it has
 `min-replicas-to-write 0`, uses under 80% of its `maxmemory` and its last
 background save did not fail (otherwise, with `stop-writes-on-bgsave-error yes`,
 it refuses writes the moment it is promoted); it has as many `ssl:*:latest`
 certificate keys as the old host (the proxy trusts Redis over its own copy, so
-a missing one gets re-issued); it was set up by `bootstrap.sh` (otherwise
-nothing would back it up); no backup upload
-is running; the AWS CLI works, both primary IPs are their interfaces' primary
-addresses in the same subnet, and the floating IP is on the old host's
-interface and configured on the old host.
+a missing one gets re-issued); and it was set up by `bootstrap.sh` (otherwise
+nothing would back it up). A backup upload running during the promotion is
+harmless: uploads are write-once with unique names and nothing prunes S3.
 
 What it does:
 
-1. Stops `refresh-policy-routes@<if>.timer` on both hosts and adds the floating
-   IP to the new host's interface (`ip addr add <ip>/32 ... noprefixroute`).
-   `amazon-ec2-net-utils` only notices a moved IP when that timer fires (every
-   ~60s), and an unserved IP is a black hole: a busy client's commands hang
-   until it times out. With the address already up, the new host resets the
-   clients' old connections the moment the IP moves and they reconnect at once.
-2. Waits until no folder lock (`blog:*:folder-lock`) is held, then runs
+1. Waits until no folder lock (`blog:*:folder-lock`) is held, then runs
    `FAILOVER TO <new-ip> 6379 TIMEOUT 2000` on the old host. Redis blocks
    every write there (scripts and `PUBLISH` too), waits for the new host to
    catch up, promotes it and makes the old host its replica. Blocked writes
@@ -113,77 +107,23 @@ What it does:
    the script asks the old host how it ended (waiting or aborting if it is
    still in progress) and never touches the new host until the old host says
    whether it is the master or a replica of it; if it cannot tell, it stops.
-3. Moves the IP: `aws ec2 assign-private-ip-addresses --allow-reassignment`.
-   If the call fails (its timeout is only a socket timeout, and the move is
-   asynchronous) it polls AWS for up to 10s for the IP to show up on the new
-   host's interface and carries on if it does. Writes stay unavailable while it
-   polls, which is why that is bounded. If it never shows up, the script runs
-   FAILOVER back to the old host.
-4. Deletes the app host's neighbour (ARP) entry for the IP (Docker containers
-   share the host's table; in rehearsals the flush made no measurable
-   difference either way, see "Timings and rollback" below), waits for the new host's
-   instance metadata to list it, and only then removes the IP from the old
-   host and deletes the neighbour entry again. The move is asynchronous, and
-   until the metadata lists the IP the VPC may still deliver to the old host,
-   which as a replica answers (reads work, writes get `READONLY`); with the
-   address gone those packets would be dropped. If the metadata has not listed
-   the IP after 20s the address stays on the old host, with a warning that
-   gives the `ip addr del` command to run there once AWS shows the IP on the
-   new host (the refresh timer would also drop it).
-5. Writes the IP to `/etc/blot-redis/floating-ip` on the new host (its backups
-   start) and removes it on the old host (its backups stop; `backup.sh` checks
-   the file, so no cron editing is needed).
-6. Restarts the refresh timers, waits for the clients that were connected
-   through the floating IP to reconnect on the new host, checks the new host
-   takes writes, and prints how long each step took. If none of those clients
-   arrived (Redis has switched, but traffic may be down: on a rollback AWS can
-   take a while to route the IP back, see "Timings and rollback" below), or
-   step 4 or 5 left something undone, it exits with an error listing each
-   problem and the rollback command.
+2. Writes `/etc/blot-redis/active` on the new host (its backups start) and
+   removes it on the old host (its backups stop; `backup.sh` checks the file,
+   so no cron editing is needed).
+3. Checks the new host is the master and takes a write, and that the old host
+   replicates from it with its link up. A step that fails after the FAILOVER
+   is reported with the command to run by hand, and the script exits 1.
 
-Writes are unavailable from the FAILOVER until clients reach the new host.
-That must stay well under the folder lock's 10s TTL (`app/sync/lock.js`): a
-lock is lost when its key expires 10s after its last heartbeat, so depending
-on where the window falls the limit is 6-9s. Aim for about 3s; the script warns
-above 5s. It adds up durations that each come from one clock (the old host's
-FAILOVER, this machine's wait, the new host's watcher), never subtracting
-timestamps from different hosts.
-
-### Timings and rollback
-
-The cutover of 8 Oct 2026 (18:18 UTC, from the previous host to the current
-one): writes were unavailable for 2.85s (FAILOVER 40ms,
-`assign-private-ip-addresses` 1.8s) and all clients were on the new host after
-3.9s. No folder lock was lost.
-
-Rehearsals earlier that day on throwaway instances, with probes doing a write
-every 10ms through the floating IP:
-
-- Forward (4 runs): writes unavailable for 3.5-3.9s: FAILOVER 0.1-0.7s,
-  `assign-private-ip-addresses` ~1.8s, then ~1s for the VPC to switch.
-- Rollback (4 runs): 4.8s, 6.4s, 6.5s and ~16s. Moving the IP back to an
-  interface that held it a minute earlier, the VPC kept delivering to (and its
-  proxy ARP kept answering with the MAC of) the other interface for several
-  seconds after the call returned. Gratuitous ARP from the new owner and
-  skipping the neighbour flush made no difference, so a rollback will likely
-  cost `[LOCK COMPROMISED]` restarts.
-- Adding or removing an IP makes `amazon-ec2-net-utils` (2.3.0 and 2.7.x)
-  reconfigure the interface on its next minute refresh: networkd drops and
-  re-adds the primary address for ~0.1s, one ~0.22s stall on open
-  connections. Step 1 stops the refresh timers so this happens after the
-  switch, when step 6 restarts them.
-
-**Do not deploy or restart the proxy around the cutover.** `proxy/deploy`
+**Do not deploy or restart the proxy around a promotion.** `proxy/deploy`
 rolls back if Redis is unreachable, and the proxy's stale copy of each
 certificate survives `openresty -s reload` but not a container restart.
 
-**Rollback** is `cutover.sh` with the hosts swapped; it prints the exact
+**Rollback** is `promote.sh` with the hosts swapped; it prints the exact
 command. It works because FAILOVER leaves the old host replicating from the new
-one. Do not roll back to a host whose interface held the floating IP recently
-(see the timings above): go forward to a fresh host instead.
+one.
 
-`config/redis/tests/cutover.sh` runs the whole script against Redis 6.2.12 and
-6.2 containers with ssh and the AWS CLI stubbed (`.github/workflows/redis-cutover.yml`).
+`config/redis/tests/promote.sh` runs the whole script against Redis 6.2.12 and
+6.2 containers with ssh stubbed (`.github/workflows/redis-promote.yml`).
 
 ### Why FAILOVER and not `readonly.sh`
 
@@ -213,7 +153,7 @@ it says so. `maxmemory` is about 70% of RAM, computed at bootstrap
 ## Disaster recovery
 
 For when the master is gone (instance lost, data unusable) and no replica can
-take over with `cutover.sh`. Everything written since the newest backup's
+take over with `promote.sh`. Everything written since the newest backup's
 snapshot is lost (up to an hour), and the app's sync state can then disagree
 with the clients' folders.
 
@@ -243,7 +183,7 @@ with the clients' folders.
    ```
    If the old master comes back, make sure it no longer has the address
    (stop it, or `sudo ip addr del <floating-ip>/32 dev ens5` there).
-5. Turn on its backups: `echo <floating-ip> | sudo tee /etc/blot-redis/floating-ip`,
+5. Turn on its backups: `sudo touch /etc/blot-redis/active`,
    then `sudo -u ec2-user /usr/local/bin/backup.sh hourly` for a first upload.
    A host launched with `--drill` also has `/etc/blot-redis/drill`, which
    makes `backup.sh` skip silently: remove it first if a drill host goes live.
@@ -253,9 +193,9 @@ with the clients' folders.
    validation for the blogs, since Redis lost what changed after the snapshot.
 
 To rehearse it, run steps 1-3 with `launch.sh --drill` (it never uploads
-backups). To also exercise `cutover.sh`, make the drill host a replica of the
+backups). To also exercise `promote.sh`, make the drill host a replica of the
 live master (`redis6-cli REPLICAOF <master-primary-ip> 6379` on it) and run
-`cutover.sh --dry-run`, then `REPLICAOF NO ONE`. Then write down the
+`promote.sh --dry-run`, then `REPLICAOF NO ONE`. Then write down the
 commands for 4-5 with the drill host's interface, and terminate the host by
 its instance ID, after checking it has the `BlotDrill` tag and is not a
 production instance.
@@ -264,10 +204,12 @@ production instance.
 
 Do this when the daily email says **resize now** (memory at 70% of
 `maxmemory`) or the 80% alert fires; with `noeviction`, writes fail at the
-limit. `maxmemory` is about 70% of RAM, computed when a host is bootstrapped,
-so a bigger instance gets a proportionally bigger limit with no other change.
-Resizing means a new host and a cutover; the instance is not stopped and
-resized in place.
+limit. On a host shared with the units, first try raising `maxmemory` (the
+host's RAM is shared, so check what the units and a background save's
+copy-on-write leave). Resizing means a new host and `promote.sh`; the
+instance is not stopped and resized in place. Until the move to the combined
+host (#2261) the units still use the floating IP, so a Redis-only replacement
+must also move that IP by hand, as in step 4 of Disaster recovery.
 
 1. Launch the bigger host as a replica of the current master. Give the
    master's **primary private IP**, not the floating IP:
@@ -275,18 +217,13 @@ resized in place.
    (`--dry-run` first). It keeps the arm64 architecture, so pick a bigger
    size in the same family (the current host's type is in the EC2 console).
 2. Check it: `master_link_status:up` on the new host, `DBSIZE` close to the old
-   host's, `maxmemory` about 70% of its RAM, and the sample from
+   host's, `maxmemory` what you expect for its RAM, and the sample from
    `tcpmem-log.sh` arrives (`GET blot:redis-host:tcpmem` has `ram_total`).
-3. `./cutover.sh --dry-run --app-host <app-ssh-host> <current-master> <new-host>`,
-   then the same without `--dry-run`, inside the allowed windows (see
-   Cutover). Do not deploy or restart the proxy around it.
+3. `./promote.sh --dry-run <current-master> <new-host>`, then the same without
+   `--dry-run`. Do not deploy or restart the proxy around it.
 4. Afterwards the old host replicates from the new one. Keep it for a few days,
    then terminate it (by instance ID; production instances have termination
-   protection). Do not roll back to a host whose interface held the
-   floating IP recently: the VPC kept delivering to the other interface for
-   several seconds after the move (see "Timings and rollback"), which will likely cost
-   `[LOCK COMPROMISED]` restarts. A rollback soon after a cutover is for an
-   emergency only.
+   protection).
 
 ## What gets installed
 
@@ -352,9 +289,9 @@ leaves the first copy. It runs `BGSAVE` first unless
 a save finished in the last minute, so a backup holds the data as of its
 upload and a restore loses at most the time since then. It exits quietly without uploading on a drill host
 (`/etc/blot-redis/drill`, from `launch.sh --drill`), or unless
-the host is a master that accepts writes, `/etc/blot-redis/floating-ip` exists,
-and the address in it is on the host. That file is written at cutover, so a
-new or restored host never uploads alongside the live one. It works with an instance profile or keys in `~ec2-user/.aws`.
+the host is a master that accepts writes and `/etc/blot-redis/active` exists.
+`promote.sh` writes that file, so a new or restored host never uploads
+alongside the live one. It works with an instance profile or keys in `~ec2-user/.aws`.
 
 After each upload it stores `<iso-time> <hourly|daily|weekly> <s3-key> <bytes>` in the
 Redis key `blot:redis-host:backup` (no TTL), which the daily email shows as the
@@ -419,7 +356,7 @@ the master) emails the admin address `REDIS_HOST_ALERT` when:
   pressure starts), or `TCPMemoryPressures` rises;
 - Redis's memory reaches 80% of `maxmemory` (`noeviction`, so writes fail at
   the limit);
-- `maxmemory` is 0 on a host marked active by `/etc/blot-redis/floating-ip`;
+- `maxmemory` is 0 on a host marked active by `/etc/blot-redis/active`;
 - the TCP memory sample is over 20 minutes old;
 - the last background save failed (`stop-writes-on-bgsave-error yes`, so Redis
   refuses every write until one succeeds);
@@ -430,7 +367,7 @@ the master) emails the admin address `REDIS_HOST_ALERT` when:
 It also emails what happened since its last check (it keeps Redis's counters in
 the state key below, and starts again after a restart): errors that mean Redis
 refused writes (`OOM`, `MISCONF`, `NOREPLICAS`), any other error type with 100
-or more in 5 minutes (`READONLY` during a cutover, `WRONGTYPE`...), rejected
+or more in 5 minutes (`READONLY` during a promotion, `WRONGTYPE`...), rejected
 connections, a restart or a different Redis process or host serving (a changed
 `run_id` or version, or lower uptime), and commands in the slowlog that took
 50ms or more.
@@ -479,10 +416,7 @@ For the operator running `launch.sh`: `ssm:GetParameter` on
 `/aws/service/ami-amazon-linux-latest/*`; `ec2:RunInstances` (on the launch
 template and the resources it uses), `ec2:CreateTags`, `ec2:DescribeInstances`,
 `ec2:ModifyInstanceAttribute`; `iam:PassRole` if the template has an instance
-profile. For `cutover.sh`: `sts:GetCallerIdentity`,
-`ec2:DescribeNetworkInterfaces` (needs `Resource: "*"`) and
-`ec2:AssignPrivateIpAddresses` (can be scoped to the two network interfaces'
-ARNs, or by tag). For the Redis host (instance profile, or keys in `~ec2-user/.aws`): `s3:ListBucket` on `blot-redis-backups`, `s3:GetObject`
+profile. For the Redis host (instance profile, or keys in `~ec2-user/.aws`): `s3:ListBucket` on `blot-redis-backups`, `s3:GetObject`
 on `hourly/*`, `daily/*` and `weekly/*` (restore), and `s3:PutObject` on the same
 (backups; no delete or overwrite rights are needed).
 
