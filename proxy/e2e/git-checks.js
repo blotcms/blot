@@ -14,6 +14,8 @@
 //   E2E_GIT_EMAIL    its owner's email
 //   E2E_GIT_BLOG_ID  its blog ID (for the rename step)
 //   E2E_GIT_BLOG_HOST  its vhost, e.g. e2egit.localhost
+//   GIT_BIN          the git executable to test (default: git on PATH), so the
+//                    workflow can run the same checks with an older git
 //
 // The proxy terminates TLS with the image's self-signed placeholder cert, so
 // verification is off (-c http.sslVerify=false, rejectUnauthorized: false).
@@ -32,6 +34,7 @@ const HANDLE = process.env.E2E_GIT_HANDLE;
 const TOKEN = process.env.E2E_GIT_TOKEN;
 const EMAIL = process.env.E2E_GIT_EMAIL || "e2e@example.com";
 const BLOG_ID = process.env.E2E_GIT_BLOG_ID;
+const GIT_BIN = process.env.GIT_BIN || "git";
 const BLOG_HOST = process.env.E2E_GIT_BLOG_HOST || HANDLE + "." + HOST;
 
 if (!HANDLE || !TOKEN) {
@@ -85,7 +88,7 @@ function git(args, { cwd = workRoot, env = {}, input, timeout = GIT_TIMEOUT_MS }
   return new Promise((resolve) => {
     // The remote's host is a name (blot.im when the unit image is under test)
     // that must not resolve to the real thing: send it to the local proxy.
-    const child = spawn("git", ["-c", "http.sslVerify=false", "-c", `http.curloptResolve=${HOST}:443:127.0.0.1`, ...args], {
+    const child = spawn(GIT_BIN, ["-c", "http.sslVerify=false", "-c", `http.curloptResolve=${HOST}:443:127.0.0.1`, ...args], {
       cwd,
       // Own process group, so a timeout can kill git-remote-https and friends
       // too (they inherit the pipes, which would keep `close` from firing).
@@ -267,6 +270,8 @@ async function main() {
     check("git endpoint became ready through the proxy", false, ready.detail);
     return;
   }
+
+  console.log("  git under test:", (await git(["--version"])).stdout.trim(), "(" + GIT_BIN + ")");
 
   // 1. Clone and ls-remote.
   const a = newDir("clone-a");
