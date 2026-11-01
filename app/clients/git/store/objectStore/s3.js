@@ -243,13 +243,20 @@ function createS3Store({
 
     // Iterating a Buffer would give its bytes, not a chunk
     const iterator = parts(Buffer.isBuffer(body) ? [body] : body)[Symbol.asyncIterator]();
-    const first = await iterator.next();
-    if (first.done) return putWhole(key, Buffer.alloc(0));
 
-    const second = await iterator.next();
-    if (second.done) return putWhole(key, first.value);
+    // The iterator is closed however this ends, so a source which is a
+    // generator runs its finally and a file stream closes its descriptor
+    try {
+      const first = await iterator.next();
+      if (first.done) return await putWhole(key, Buffer.alloc(0));
 
-    return putMultipart(key, [first.value, second.value], iterator);
+      const second = await iterator.next();
+      if (second.done) return await putWhole(key, first.value);
+
+      return await putMultipart(key, [first.value, second.value], iterator);
+    } finally {
+      await iterator.return().catch(() => {});
+    }
   }
 
   // Creates the key unless it exists. The condition is checked by S3 itself,

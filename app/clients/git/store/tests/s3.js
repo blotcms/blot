@@ -304,6 +304,75 @@ const hasSdk = (function () {
     expect(calls[calls.length - 1].name).toBe("CompleteMultipartUploadCommand");
   });
 
+  describe("closing the source of a stream", function () {
+    const PART = 5 * 1024 * 1024;
+
+    // Six parts' worth, so the source is not exhausted when a failure comes
+    function trackedSource() {
+      const chunk = Buffer.alloc(PART);
+      const state = { closed: false };
+      state.source = (async function* () {
+        try {
+          for (let i = 0; i < 6; i++) yield chunk;
+        } finally {
+          state.closed = true;
+        }
+      })();
+      return state;
+    }
+
+    it("closes it when an upload of a part fails", async function () {
+      const { store, calls } = storeHandling({
+        CreateMultipartUploadCommand: () => ({ UploadId: "u" }),
+        UploadPartCommand: () => {
+          throw answer(500, "InternalError");
+        },
+      });
+      const tracked = trackedSource();
+
+      let error;
+      await store.put("big", tracked.source).catch((err) => (error = err));
+      expect(error && error.name).toBe("InternalError");
+      expect(tracked.closed).toBe(true);
+      expect(calls.map((c) => c.name)).toContain("AbortMultipartUploadCommand");
+    });
+
+    it("closes it when starting the multipart upload fails after two parts were read", async function () {
+      const { store } = storeHandling({
+        CreateMultipartUploadCommand: () => {
+          throw answer(500, "InternalError");
+        },
+      });
+      const tracked = trackedSource();
+
+      let error;
+      await store.put("big", tracked.source).catch((err) => (error = err));
+      expect(error && error.name).toBe("InternalError");
+      expect(tracked.closed).toBe(true);
+    });
+
+    it("closes it when the upload succeeds, and when only one part was read", async function () {
+      const { store } = storeHandling({
+        CreateMultipartUploadCommand: () => ({ UploadId: "u" }),
+        UploadPartCommand: (input) => ({ ETag: "e" + input.PartNumber }),
+      });
+      const tracked = trackedSource();
+      await store.put("big", tracked.source);
+      expect(tracked.closed).toBe(true);
+
+      const small = trackedSource();
+      small.source = (async function* () {
+        try {
+          yield Buffer.from("tiny");
+        } finally {
+          small.closed = true;
+        }
+      })();
+      await store.put("small", small.source);
+      expect(small.closed).toBe(true);
+    });
+  });
+
   it("creates the key with If-None-Match: *", async function () {
     const { store, sentInputs } = storeReplying(null);
     expect(await store.putIfAbsent("k", body)).toBe(true);
