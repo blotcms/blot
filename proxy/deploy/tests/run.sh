@@ -595,7 +595,15 @@ mkdir -p "$T/sandbox-cgroup/blue-browser" "$T/sandbox-cgroup/green-browser"
 reset units; bluegreen
 check "BLOT_SANDBOX_BROWSER=1 gives a unit the device and its own browser cgroup" \
   '[ $RC = 0 ] && called "create .*--name blot-blue .*--device /dev/net/tun --mount type=bind,source=$T/sandbox-cgroup/blue-browser,target=/sandbox-browser-cgroup"'
-sed -i.bak -e '/^BLOT_SANDBOX=1$/d' -e '/^BLOT_SANDBOX_BROWSER=1$/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
+check "without BLOT_SANDBOX_PROXY the app's fetches stay on the airlock's proxy" \
+  'called "create .*--name blot-blue .*BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:18888"'
+
+sed -i.bak -e '/^BLOT_SANDBOX_BROWSER=1$/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
+echo "BLOT_SANDBOX_PROXY=1" >> "$T/proxy.env"
+reset units; bluegreen
+check "BLOT_SANDBOX_PROXY=1 gives a unit the device, and points its fetches at its own jail" \
+  '[ $RC = 0 ] && called "create .*--name blot-blue .*BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:18988" && called "create .*--name blot-green .*BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:18989" && called "create .*--name blot-blue .*--device /dev/net/tun" && ! called "sandbox-browser-cgroup"'
+sed -i.bak -e '/^BLOT_SANDBOX=1$/d' -e '/^BLOT_SANDBOX_PROXY=1$/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
 unset PROXY_SANDBOX_CGROUP_DIR
 
 reset units; FAKE_NODE_B_UNHEALTHY=blot-blue bluegreen
