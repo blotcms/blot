@@ -90,14 +90,16 @@ const BUILD_LOCK_OPTIONS = {
 // after it, though a restart rarely changes a template. So with skipUnchanged,
 // a pass leaves a fingerprint of its inputs beside its output in Redis, and the
 // next one stops there if they match. Worktree previews share that Redis and
-// have their own files, so whichever built last is what the fingerprint says.
+// have their own files, so build() drops the fingerprint: any other write
+// (a watcher, a pass without skipUnchanged) must not leave one that describes
+// templates which are no longer there.
 const BUILD_FINGERPRINT_KEY = "templates:build:fingerprint";
 const BUILD_INPUTS = [
   TEMPLATES_DIRECTORY,
   __filename,
   require("path").resolve(__dirname + "/../models/template"),
-  require("path").resolve(__dirname + "/../blog/static/fonts/index.js"),
-  require("path").resolve(__dirname + "/../blog/static/syntax-highlighter/index.js"),
+  require("path").resolve(__dirname + "/../blog/static/fonts/index.json"),
+  require("path").resolve(__dirname + "/../blog/static/syntax-highlighter/index.json"),
 ];
 
 async function buildIfChanged(options, callback) {
@@ -231,6 +233,10 @@ function buildAll(directory, options, callback) {
 // Path to a directory containing template files
 function build(directory, callback) {
   debug("..", require("path").basename(directory), directory);
+
+  client.del(BUILD_FINGERPRINT_KEY).catch(function (e) {
+    console.error("[templates] build fingerprint not cleared: " + e.message);
+  });
 
   var templatePackage;
   var name, template, description, id;

@@ -41,10 +41,13 @@ describe("templates skipUnchanged", function () {
     expect(await client.get(KEY)).toBe(null);
   });
 
-  it("always builds without the option", async function () {
+  it("always builds without the option, and drops the fingerprint", async function () {
     await templates({ skipUnchanged: true });
+    expect(await client.get(KEY)).toEqual(jasmine.any(String));
+
     this.pass.calls.reset();
     await templates({});
     expect(this.pass).toHaveBeenCalled();
+    expect(await client.get(KEY)).toBe(null);
   });
 });
