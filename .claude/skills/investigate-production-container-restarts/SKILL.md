@@ -305,12 +305,13 @@ For the git client, also check:
   `Git: receive-pack|upload-pack <handle> exit=… duration=… rx=… tx=…
   [stderr=…]`. A push that was cut off shows a non-zero exit, a signal or
   git's own error.
-- stuck git processes (before #2086 an aborted push left `git-receive-pack`
+- stuck git processes (fetches run as `git upload-pack`, pushes as
+  `git-receive-pack`; before #2086 an aborted push left `git-receive-pack`
   and `git index-pack` waiting forever, each `index-pack` holding hundreds of
   MB inside the container's memory limit):
 
   ```bash
-  ssh -n blot "docker exec blot-green sh -c 'ps -o pid,etime,rss,args | grep [g]it-'"
+  ssh -n blot "docker exec blot-green sh -c 'ps -o pid,etime,rss,args | grep -E \"[g]it[ -](receive|upload|index)\"'"
   ```
 
 - leftover push staging directories (`objects/tmp_objdir-incoming-*` in the
