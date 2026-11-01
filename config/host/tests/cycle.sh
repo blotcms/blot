@@ -141,6 +141,7 @@ cat > "$TMP/bin/date" << 'EOF'
 if [ "$*" = "-u +%H%M" ]; then echo "${STUB_TIME:-1200}"; else exec /bin/date "$@"; fi
 EOF
 
+printf '#!/bin/bash\nexit 0\n' > "$TMP/bin/sleep"
 printf '#!/bin/bash\nexit 0\n' > "$TMP/bin/setfacl"
 printf '#!/bin/bash\nexit 0\n' > "$TMP/bin/runuser"
 printf '#!/bin/bash\necho "$(basename "$0") $*" >> "$W/calls"\n' > "$TMP/tree/config/host/bootstrap.sh"
@@ -182,7 +183,7 @@ cat > "$TMP/tree/config/redis/promote.sh" << 'EOF'
 echo "promote.sh $*" >> "$W/calls"
 case "$*" in *--dry-run*) [ -z "${STUB_PROMOTE_PRECHECK_FAILS:-}" ]; exit ;; esac
 [ -z "${STUB_PROMOTE_FAILS:-}" ] || { echo "FAILOVER did not complete" >&2; exit 1; }
-echo master > "$W/role.new"; echo slave > "$W/role.old"; echo 100 > "$W/keys.new"
+echo master > "$W/role.new"; echo slave > "$W/role.old"; echo 10.0.0.2 > "$W/master.old"; echo 100 > "$W/keys.new"
 EOF
 cat > "$TMP/tree/scripts/deploy/units.sh" << 'EOF'
 #!/bin/bash
@@ -367,6 +368,15 @@ run --drill replicate old new
 refused "a master with data is never wiped by REPLICAOF"
 lacks "no REPLICAOF on it" "$CALLS" "REPLICAOF"
 world
+echo 3 > "$W/keys.new"
+run --drill replicate old new
+status_is "a fresh master holding its samplers' keys is replicated" 0
+has "it becomes a replica" "$CALLS" "REPLICAOF 10.0.0.1 6379"
+world
+echo 11 > "$W/keys.new"
+run --drill replicate old new
+refused "a master over the fresh limit is refused"
+world
 touch "$W/role.old"; echo slave > "$W/role.old"
 run --drill replicate old new
 refused "the old Redis has to be a master"
@@ -407,6 +417,7 @@ rm "$W/nomount.new"
 run --drill --dry-run app old new
 status_is "app dry run works" 0
 no_changes "app dry run"
+chmod 640 "$W/etc.old/secrets.env" "$W/etc.old/proxy.env"
 run --drill --verify-host blog.blot.test app old new
 status_is "app works" 0
 has "deploys pause on the old host" "$CALLS" "ssh old [old]: sudo mkdir -p /etc/blot && echo"
@@ -421,6 +432,9 @@ lacks "replacing the old value" "$(cat "$W/etc.new/proxy.env")" "PROXY_REDIS_HOS
 has "other values survive" "$(cat "$W/etc.new/secrets.env")" "export BLOT_SESSION_SECRET=s"
 lacks "the old secrets.env is untouched" "$(cat "$W/etc.old/secrets.env")" "BLOT_REDIS_SOCKET"
 has "the old proxy.env is untouched" "$(cat "$W/etc.old/proxy.env")" "PROXY_REDIS_HOST=10.0.0.200"
+mode() { ls -l "$1" | cut -c1-10; }
+[ "$(mode "$W/etc.new/secrets.env")" = -rw-r----- ] && ok "secrets.env keeps its mode" || fail "secrets.env mode is $(mode "$W/etc.new/secrets.env")"
+[ "$(mode "$W/etc.new/proxy.env")" = -rw-r----- ] && ok "proxy.env keeps its mode" || fail "proxy.env mode is $(mode "$W/etc.new/proxy.env")"
 has "the site is checked through the private IP" "$CALLS" "--resolve blot.test:443:10.0.0.2 https://blot.test/health"
 has "and --verify-host" "$CALLS" "--resolve blog.blot.test:443:10.0.0.2 https://blog.blot.test/"
 lacks "a drill copies no backup key" "$CALLS" 'tar -C "$HOME" -cf - .aws'
@@ -522,6 +536,22 @@ lacks "move thaw is for rollback" "$CALLS" "move thaw"
 lacks "retag waits for settle" "$CALLS" "move retag"
 has "the freeze TTL reaches resize.sh" "$CALLS" "--freeze-ttl 900"
 [ ! -e "$W/frozen" ] && ok "nothing is frozen at the end" || fail "still frozen"
+
+echo "# switch: a master that was not promoted by this cycle"
+ready_for_switch
+echo master > "$W/role.new"; echo 100 > "$W/keys.new"
+run "${SWITCH[@]}" --yes switch old new
+refused "a master the old Redis does not follow is refused"
+has "and says so" "$OUT" "does not follow"
+lacks "nothing frozen" "$CALLS" "move freeze"
+lacks "nothing promoted" "$CALLS" "promote.sh --yes"
+# promote.sh finished FAILOVER but died before writing its marker.
+echo slave > "$W/role.old"; echo 10.0.0.2 > "$W/master.old"
+run "${SWITCH[@]}" --yes switch old new
+status_is "a master the old Redis follows resumes" 0
+lacks "with no second freeze" "$CALLS" "move freeze"
+lacks "and no second promotion" "$CALLS" "promote.sh --yes"
+has "and moves the Elastic IP" "$CALLS" "associate-address"
 
 echo "# switch: run again"
 run "${SWITCH[@]}" --yes --old-direct direct switch eipalias new

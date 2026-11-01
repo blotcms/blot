@@ -89,6 +89,7 @@ PAUSE_FILE=/etc/blot/deploy-paused
 FREEZE_REASON="data volume move" # resize.sh move thaw recognises its freeze by this
 SYNC_TRIES=720                   # checks 10 seconds apart: two hours for the first sync
 FINISH_MIN_DAYS=3
+FRESH_REDIS_KEYS=10              # a fresh Redis holds only its samplers' keys (tcpmem-log.sh, redis-mem-log.sh)
 UNIT_NAMES="blot-blue blot-green"
 AIRLOCK_NAMES="blot-blue-airlock blot-green-airlock"
 
@@ -259,7 +260,7 @@ refuse_after_switch() {
   info=$(redis_info "$NEW")
   [ "$(info_field "$info" role)" = master ] || return 0
   keys=$(on "$NEW" "redis6-cli DBSIZE" | tr -d '\r')
-  [ "$keys" = 0 ] || die "$NEW's Redis is a master with $keys keys: it has been promoted, or was never empty. Nothing before switch runs on it"
+  [ "$keys" -le "$FRESH_REDIS_KEYS" ] || die "$NEW's Redis is a master with $keys keys, more than a fresh one holds ($FRESH_REDIS_KEYS): it has been promoted, or was never empty. Nothing before switch runs on it"
 }
 
 rs() {
@@ -430,10 +431,11 @@ phase_data() {
 # the socket. Prints "changed" for a file it replaced.
 ENV_SCRIPT=$(cat << 'EOF'
 set -eu
+umask 077
 tmp=$(mktemp -d /etc/blot/.cycle.XXXXXX)
 trap 'rm -rf "$tmp"' EXIT
 tar -C "$tmp" -xpf -
-set_value() { sed "/^\(export \)\{0,1\}$2=/d" "$1" > "$1.new"; mv -f "$1.new" "$1"; echo "$2=$3" >> "$1"; }
+set_value() { sed "/^\(export \)\{0,1\}$2=/d" "$1" > "$1.new"; cat "$1.new" > "$1"; rm -f "$1.new"; echo "$2=$3" >> "$1"; }
 set_value "$tmp/secrets.env" BLOT_REDIS_SOCKET "$1"
 set_value "$tmp/proxy.env" PROXY_REDIS_HOST "unix:$1"
 # common.sh refuses a key that the two files set differently.
@@ -582,7 +584,7 @@ explain() {
 trap explain EXIT
 
 phase_switch() {
-  local eip_line eip_on eip_address role old_address resolved problem host code t0
+  local old_info eip_line eip_on eip_address role old_address resolved problem host code t0 i
   [ -n "$EIP" ] || die "switch needs --eip"
   [ -n "$BANS_FILE" ] || die "switch needs --bans-file, in the gitignored data/ directory"
   [ -d "$(dirname "$BANS_FILE")" ] || die "no such directory: $(dirname "$BANS_FILE")"
@@ -616,6 +618,14 @@ phase_switch() {
   if [ "$role" != master ]; then
     "$ROOT/config/redis/promote.sh" --dry-run "$OLD_REDIS" "$NEW" || die "promote.sh would refuse; nothing has changed"
   fi
+  # Only a promotion by this cycle leaves a master here, and promote.sh can
+  # finish FAILOVER and die before it writes /etc/blot-redis/active, so read
+  # the roles, not the marker.
+  if [ "$role" = master ]; then
+    old_info=$(redis_info "$OLD_REDIS")
+    [ "$(info_field "$old_info" role)" = slave ] && [ "$(info_field "$old_info" master_host)" = "$(primary_ip "$NEW")" ] ||
+      need "$NEW's Redis is a master that $OLD_REDIS does not follow, so it was not promoted by this cycle"
+  fi
   # Now, while <old> still answers, so a later failure has not lost the list.
   act "$HERE/bans.sh" export "$OLD_NOW" "$BANS_FILE"
 
@@ -632,8 +642,7 @@ EOF
   YES=1 # asked once, here: a prompt must not eat into the freeze
   t0=$(date +%s)
 
-  # A master with data means the freeze was done: only a promotion makes one,
-  # and refuse_after_switch keeps anything else from getting here.
+  # A master here was promoted by this cycle (checked above), so the freeze was done.
   if [ "$role" != master ]; then
     STAGE="freeze and final copy"
     say "1. Freeze and final copy"
@@ -668,7 +677,12 @@ EOF
 
   say "6. Checking and unfreezing"
   if [ -z "$DRY_RUN" ]; then
-    code=$(probe_public "$eip_address" "$host" /health)
+    # An association takes a few seconds to reach the instance.
+    for i in $(seq 20); do
+      code=$(probe_public "$eip_address" "$host" /health)
+      [ "$code" = 200 ] && break
+      [ "$i" = 20 ] || sleep 3
+    done
     [ "$code" = 200 ] || die "https://$host/health through $eip_address answered $code"
   fi
   act unfreeze
