@@ -24,7 +24,8 @@ const TEMPORARY_GIT_GC_CONFIG = [
   ["maintenance.autoDetach", "false"],
 ];
 const setStatus = promisify(database.setStatus.bind(database));
-const createToken = promisify(database.createToken.bind(database));
+const setApplied = promisify(database.setApplied.bind(database));
+const createToken =promisify(database.createToken.bind(database));
 
 // Stops git from searching above the blog's folder for a repository, so a
 // command run before `git init` (or after the folder's .git is removed)
@@ -193,6 +194,12 @@ async function createRepository(blog, folder) {
       unsetTemporaryGitGc(liveRepo),
     ]);
   }
+
+  // Everything in the folder is already in the repository, and Blot already
+  // has the folder's entries, so the first sync starts from this commit.
+  // An old value would be from an earlier connection: this replaces it.
+  const head = await liveRepo.raw(["rev-parse", "HEAD"]).catch(() => "");
+  if (head.trim()) await setApplied(blog.id, head.trim());
 
   await setStatus(blog.owner, "createComplete");
 

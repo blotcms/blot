@@ -6,42 +6,44 @@ var checkGitRepoExists = require("./checkGitRepoExists");
 var repo = require("./repo");
 var Blog = require("models/blog");
 var validateTree = require("./validateTree");
-var fs = require("fs-extra");
+var database = require("clients/git/database");
 var isRedisUnavailableError = require("helper/redisUnavailable").isRedisUnavailableError;
 
 // The working tree is reset to the new commit before the changed paths are
-// passed to Blot, and the next sync only compares the commit it starts at
-// with the one it ends at. So if Redis cannot take the writes for some paths,
-// nothing would ever tell Blot about them. We remember them here, inside the
-// blog's .git directory (never part of the working tree), and apply them
-// along with whatever the next sync finds. Applying a path twice is harmless.
-function unappliedFile(folderPath) {
-  return folderPath + "/.git/blot-unapplied-paths.json";
-}
+// passed to Blot, so HEAD says nothing about which commit Blot has applied.
+// That is recorded in Redis (database.setApplied) once every path has been
+// processed, and each sync diffs from it. Applying a path twice is harmless.
 
-// Calls back with the paths waiting from an earlier sync. A missing file is
-// the usual case, but a file that cannot be read or parsed is an error:
-// carrying on as if nothing were waiting would lose those paths for good.
-function readUnapplied(folderPath, callback) {
-  fs.readJson(unappliedFile(folderPath), function (err, paths) {
-    if (err && err.code === "ENOENT") return callback(null, []);
-    if (err) return callback(err);
-    if (!Array.isArray(paths))
-      return callback(new Error("Unapplied paths file is not a list"));
-    callback(null, paths);
-  });
-}
+// Calls back with the commit Blot last applied (null if it has not recorded
+// one) and the commit to diff from. Normally they are the same. Without a
+// recorded commit, or when it is no longer in the clone (a force push and a
+// gc), we diff from where the clone was before this sync's fetch, as every
+// sync did before the commit was recorded.
+//
+// A failure to read it is an error: carrying on as if there were none could
+// skip the changes the last sync did not get to apply.
+function appliedBase(git, folder, blogID, headBeforePull, callback) {
+  database.getApplied(blogID, function (err, applied) {
+    if (err) {
+      folder.log("Error reading applied commit: " + err.message);
+      return callback(err);
+    }
 
-// Written to a temporary file and renamed, so a process exit part way
-// through never leaves a truncated list behind
-function writeUnapplied(folderPath, paths, callback) {
-  if (!paths.length) return fs.remove(unappliedFile(folderPath), callback);
+    if (!applied) return callback(null, null, headBeforePull);
 
-  var temporary = unappliedFile(folderPath) + ".tmp";
+    // Exits non-zero with no output if the commit does not exist
+    git.raw(
+      ["rev-parse", "--verify", "--quiet", applied + "^{commit}"],
+      function (err, found) {
+        if (!err && found && found.trim() === applied)
+          return callback(null, applied, applied);
 
-  fs.outputJson(temporary, paths, function (err) {
-    if (err) return callback(err);
-    fs.rename(temporary, unappliedFile(folderPath), callback);
+        folder.log(
+          `Applied commit ${applied} is not in the repo, comparing from ${headBeforePull}`
+        );
+        callback(null, applied, headBeforePull);
+      }
+    );
   });
 }
 
@@ -139,93 +141,86 @@ module.exports = function sync (blogID, gitHandle, callback) {
                   // Remove whitespace from stdout
                   headAfterPull = headAfterPull.trim();
 
-                  changedPaths(
+                  appliedBase(
                     git,
                     folder,
+                    blogID,
                     headBeforePull,
-                    headAfterPull,
-                    function (err, changed) {
+                    function (err, applied, base) {
                       if (err) return done(err, callback);
 
-                      readUnapplied(folder.path, function (err, unapplied) {
-                        if (err) {
-                          folder.log(
-                            "Error reading changes left for this sync: " +
-                              err.message
-                          );
-                          return done(err, callback);
-                        }
+                      // Already applied, nothing to do or write
+                      if (applied === headAfterPull) {
+                        folder.log("No changes to repo");
+                        return done(null, callback);
+                      }
 
-                        // Left over from a sync that Redis interrupted
-                        var modified = unapplied.concat(
-                          changed.filter(function (path) {
-                            return unapplied.indexOf(path) === -1;
-                          })
-                        );
+                      changedPaths(
+                        git,
+                        folder,
+                        base,
+                        headAfterPull,
+                        function (err, modified) {
+                          if (err) return done(err, callback);
 
-                        // Nothing changed, and nothing is waiting
-                        if (!modified.length) return done(null, callback);
+                          modified.forEach(function (path) {
+                            folder.log("/" + path, "changed");
+                          });
 
-                        if (unapplied.length) {
-                          folder.log(
-                            `Found ${unapplied.length} changes left over from an earlier sync`
-                          );
-                        }
-
-                        modified.forEach(function (path) {
-                          folder.log("/" + path, "changed");
-                        });
-
-                        // Tell Blot something has changed at these paths!
-                        // We must do this in series until entry.set becomes
-                        // atomic. Right now, making changes to the blog's
-                        // menu cannot be done concurrently, hence eachSeries!
-                        var applied = 0;
-
-                        async.eachSeries(
-                          modified,
-                          function (path, next) {
-                            folder.update(path, function (err) {
-                              // Redis cannot take the write, so this path
-                              // and those after it are not in the database.
-                              // Stop and remember them, see above.
-                              if (err && isRedisUnavailableError(err))
-                                return next(err);
-
-                              // We don't want any other error to stop
-                              // processing other files in the sync
-                              if (err) console.log("Git client:", err);
-                              applied++;
-                              next();
-                            });
-                          },
-                          function (err) {
+                          // Tell Blot something has changed at these paths!
+                          // We must do this in series until entry.set becomes
+                          // atomic. Right now, making changes to the blog's
+                          // menu cannot be done concurrently, hence eachSeries!
+                          function finish(err) {
                             if (err) {
                               folder.log(
-                                `Redis unavailable, kept ${modified.length - applied} changes for the next sync`
+                                "Redis unavailable, the next sync will apply these changes again"
                               );
-                              return writeUnapplied(
-                                folder.path,
-                                modified.slice(applied),
-                                function (writeErr) {
-                                  if (writeErr) {
-                                    folder.log(
-                                      "Error saving changes for the next sync: " +
-                                        writeErr.message
-                                    );
-                                  }
-                                  done(err, callback);
-                                }
-                              );
+                              return done(err, callback);
                             }
 
                             folder.log(`Processed ${modified.length} changes`);
-                            writeUnapplied(folder.path, [], function () {
-                              done(null, callback);
-                            });
+
+                            database.setApplied(
+                              blogID,
+                              headAfterPull,
+                              function (err) {
+                                if (err) {
+                                  folder.log(
+                                    "Error recording applied commit: " +
+                                      err.message
+                                  );
+                                  return done(err, callback);
+                                }
+
+                                done(null, callback);
+                              }
+                            );
                           }
-                        );
-                      });
+
+                          if (!modified.length) return finish();
+
+                          async.eachSeries(
+                            modified,
+                            function (path, next) {
+                              folder.update(path, function (err) {
+                                // Redis cannot take the write, so this path
+                                // and those after it are not in the database.
+                                // Stop before recording the commit as applied,
+                                // the next sync starts from the old one.
+                                if (err && isRedisUnavailableError(err))
+                                  return next(err);
+
+                                // We don't want any other error to stop
+                                // processing other files in the sync
+                                if (err) console.log("Git client:", err);
+                                next();
+                              });
+                            },
+                            finish
+                          );
+                        }
+                      );
                     }
                   );
                 });
