@@ -8,8 +8,7 @@ const moment = require("moment");
 const converters = require("build/converters");
 const enabledConverters = require("build/converters/enabled");
 const Build = require("build");
-const fs = require("fs-extra");
-const localPath = require("helper/localPath");
+const folder = require("storage/folder");
 const postSourceSize = require("build/converters/post-source-size");
 const Stat = require("./stat");
 
@@ -394,7 +393,7 @@ async function buildMultiEntryData({
 
   const existence = await Promise.all(
     sourcePaths.map((sourcePath) => {
-      return fs.pathExists(localPath(blogID, sourcePath)).catch(() => false);
+      return folder.exists(blogID, sourcePath).catch(() => false);
     })
   );
 
@@ -403,7 +402,7 @@ async function buildMultiEntryData({
   const stats = await Promise.all(
     sourcePaths.map((sourcePath, index) =>
       existence[index]
-        ? Stat(localPath(blogID, sourcePath), timeZone).catch(() => null)
+        ? Stat(blogID, sourcePath, timeZone).catch(() => null)
         : Promise.resolve(null)
     )
   );

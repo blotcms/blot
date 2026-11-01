@@ -1,8 +1,6 @@
-const assertNoSymlinks = require("helper/assertNoSymlinks");
-const fs = require("fs-extra");
 const path = require("path");
 const clients = require("clients");
-const localPath = require("helper/localPath");
+const storage = require("storage/folder");
 const establishSyncLock = require("sync/establishSyncLock");
 const folderMiddleware = require("./index");
 
@@ -18,21 +16,11 @@ const isAbsolutePathAttempt = (inputPath = "") => {
   );
 };
 
-const resolveDestination = (blogID, relativePath) => {
-  const root = localPath(blogID, "/");
-  const absolute = localPath(blogID, `/${relativePath}`);
+// Whether a relative path climbs out of the blog's folder
+const escapesFolder = (relativePath) => {
+  const normalized = path.posix.normalize(relativePath);
 
-  const relative = path.relative(root, absolute);
-  const outside =
-    relative === ".." ||
-    relative.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(relative);
-
-  if (outside) {
-    return { valid: false, absolute };
-  }
-
-  return { valid: true, absolute };
+  return normalized === ".." || normalized.startsWith("../");
 };
 
 const removeClientPath = (client, blogID, relativePath) =>
@@ -69,9 +57,8 @@ module.exports = async (req, res) => {
   }
 
   const normalizedPath = decodeURIComponent(rawPath.replace(/^\/+/, ""));
-  const destination = resolveDestination(req.blog.id, normalizedPath);
 
-  if (!destination.valid) {
+  if (escapesFolder(normalizedPath)) {
     return res.status(400).json({
       ok: false,
       removed: null,
@@ -79,7 +66,14 @@ module.exports = async (req, res) => {
     });
   }
 
-  const exists = await fs.pathExists(destination.absolute);
+  const blogID = req.blog.id;
+  const target = `/${normalizedPath}`;
+
+  // A symlink is left for the check inside the lock, which refuses it
+  const exists = await storage.stat(blogID, target).then(
+    () => true,
+    (err) => err.code === "ELOOP"
+  );
 
   if (!exists) {
     return res.status(404).json({
@@ -117,7 +111,11 @@ module.exports = async (req, res) => {
   };
 
   try {
-    await assertNoSymlinks(localPath(req.blog.id, "/"), destination.absolute);
+    // Throws ELOOP if the path or one of its parents is a symlink
+    await storage.stat(blogID, target).catch((err) => {
+      if (!(err instanceof storage.NotFoundError)) throw err;
+    });
+
     const connectedClient =
       (req.blog.client && typeof req.blog.client.remove === "function"
         ? req.blog.client
@@ -126,7 +124,7 @@ module.exports = async (req, res) => {
     if (connectedClient) {
       await removeClientPath(connectedClient, req.blog.id, normalizedPath);
     } else {
-      await fs.remove(destination.absolute);
+      await storage.remove(blogID, target);
     }
 
     await folder.update(`/${normalizedPath}`);

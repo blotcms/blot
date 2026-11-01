@@ -3,7 +3,8 @@ const express = require("express");
 const Export = express.Router();
 const archiver = require('archiver');
 const path = require("path");
-const fs = require('fs-extra');
+const { finished } = require("stream/promises");
+const folder = require("storage/folder");
 const assets = require("storage/assets");
 const Template = require("models/template");
 const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
@@ -41,21 +42,30 @@ Export.get("/download", async function (req, res, next) {
       // Pipe the archive data to the response.
       archive.pipe(res);
 
-      // walk the blog folder and add all the files to the archive
-      // inside a subfolder called 'folder' in a recursive, async way
-      const blogFolder = path.join(config.blog_folder_dir, req.blog.id);
-
-      // use chokidar to recursively identify all the files in the blog folder
-      // and then add them to the archive and stop the watcher
-
       // create a json file with path 'blog.json' to the archive which contains req.blog  
       const blogJSON = JSON.stringify(req.blog, null, 2);
       archive.append(blogJSON, { name: 'blog.json' });
 
       // iterate over all of the blog's templates and add them to the archive in a file called 'templates.json'
       
+      // If the client hangs up, the stream being added never finishes:
+      // destroying it makes finished() reject, into the catch below
+      let current = null;
+      const hangUp = () => { if (current) current.destroy(); };
+      res.once('close', hangUp);
+
       try {
-          await recursiveZip(blogFolder, archive, 'folder');
+          // walk the blog folder and add all the files to the archive
+          // inside a subfolder called 'folder'
+          // one file at a time, since each stream opens its file and buffers
+          // ahead as soon as it is created
+          for await (const relPath of folder.walk(req.blog.id, '/')) {
+              if (res.destroyed) break;
+              current = folder.createReadStream(req.blog.id, relPath);
+              archive.append(current, { name: path.join('folder', relPath) });
+              await finished(current);
+              current = null;
+          }
 
           // add all of the blog's generated assets to the archive
           // inside a subfolder called 'static'
@@ -68,11 +78,12 @@ Export.get("/download", async function (req, res, next) {
           console.log('error', err);
           if (res.headersSent) {
               console.log('Error while sending zip file to the user', err);
-          } else {
+          } else if (!res.destroyed) {
               res.status(400).send({error: err.message});
           }
       }
 
+      res.removeListener('close', hangUp);
 
       for (const template of templates) {
           await addTemplate(template.id, archive);
@@ -123,25 +134,6 @@ const addTemplate = async (templateID, archive) => {
     });
 };
   
-
-const recursiveZip = async (dir, archive, destinationSubdirectory) => {
-
-    const files = await fs.readdir(dir);
-
-    for (const file of files) {
-        const filePath = path.join(dir, file);
-        const stats = await fs.stat(filePath);
-
-        if (stats.isFile()) {
-            const destinationPath = path.join(destinationSubdirectory, file);
-            archive.append(fs.createReadStream(filePath), { name: destinationPath });
-        } else if (stats.isDirectory()) {
-            const subdirectory = path.join(destinationSubdirectory, file);
-            await recursiveZip(filePath, archive, subdirectory);
-        }
-    }
-};
-
 
 const Entries = require("models/entries");
 const mustache = require("mustache");

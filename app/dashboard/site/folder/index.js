@@ -1,4 +1,3 @@
-const localPath = require("helper/localPath");
 const getBreadcrumbs = require("./breadcrumbs");
 const getFile = require("./file");
 const getFolder = require("./folder");
@@ -142,8 +141,7 @@ const loadFolder = async (blog, dir, options = {}) => {
     delete folderCache[oldestCacheKey];
   }
 
-  const local = localPath(blog.id, dir);
-  const stat = await Stat(local, blog.timeZone);
+  const stat = await Stat(blog.id, dir, blog.timeZone);
 
   const folder = {
     root: dir === '/',
