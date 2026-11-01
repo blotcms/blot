@@ -308,6 +308,24 @@ var writeChangeToFolder = require("../../../dashboard/site/template/save/writeCh
     });
   });
 
+  it("leaves a file with a backslash in its name, which can't be a view", function (done) {
+    var test = this;
+
+    writeToFolder(test.blog.id, test.template.id, function (err) {
+      if (err) return done.fail(err);
+
+      var filePath = join(getTemplateDir(test), "notes\\backup.txt");
+      fs.outputFileSync(filePath, "keep");
+
+      writeToFolder(test.blog.id, test.template.id, function (err) {
+        if (err) return done.fail(err);
+
+        expect(fs.existsSync(filePath)).toEqual(true);
+        done();
+      });
+    });
+  });
+
   it("removes orphans while preserving existing files with the local client", function (done) {
     var test = this;
     var view = {

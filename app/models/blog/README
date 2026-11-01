@@ -262,7 +262,7 @@ The Redis key generator. Methods:
 | `models/user` | Used in `create` and `remove` to update the owner's blog list |
 | `helper/ensure` | Runtime type validation of all function arguments |
 | `helper/extend` | Merges objects; used in `create` to combine info and defaults |
-| `helper/localPath` | Resolves the filesystem path for a blog's content folder |
+| `storage/folder` | Creates and removes a blog's content folder |
 | `helper/punycode` | Encodes/decodes internationalized domain names |
 | `helper/flushCache` | Clears reverse-proxy cache directories for specified hostnames |
 | `config` | Provides `config.host`, `config.blog_folder_dir`, and `config.reverse_proxies` |

@@ -4,8 +4,8 @@ var async = require("async");
 var callOnce = require("helper/callOnce");
 var isOwner = require("./isOwner");
 var getAllViews = require("./getAllViews");
-var localPath = require("helper/localPath");
-var fs = require("fs-extra");
+var folder = require("storage/folder");
+var callbackify = require("util").callbackify;
 var generatePackage = require("./package").generate;
 var determineTemplateFolder = require("./determineTemplateFolder");
 var withFolderLock = require("./withFolderLock");
@@ -74,10 +74,10 @@ function makeClient (blogID, callback) {
     if (!blog.client || !client) {
       return callback(null, {
         remove: function (blogID, path, callback) {
-          fs.remove(localPath(blogID, path), callback);
+          callbackify(folder.remove)(blogID, path, callback);
         },
         write: function (blogID, path, content, callback) {
-          fs.outputFile(localPath(blogID, path), content, callback);
+          callbackify(folder.write)(blogID, path, content, callback);
         }
       });
     }
@@ -107,18 +107,16 @@ function writeFile(blogID, client, path, content, compare, callback) {
     compare = true;
   }
 
-  var absolute = localPath(blogID, path);
-
   function finish(err) {
     if (err) return callback(err);
 
-    fs.outputFile(absolute, content, callback);
+    callbackify(folder.write)(blogID, path, content, callback);
   }
 
   if (!compare) return client.write(blogID, path, content, finish);
 
-  fs.readFile(absolute, "utf-8", function (err, existing) {
-    if (!err && existing === content) return callback();
+  callbackify(folder.read)(blogID, path, function (err, existing) {
+    if (!err && existing.toString("utf-8") === content) return callback();
     client.write(blogID, path, content, finish);
   });
 }
@@ -176,65 +174,28 @@ function writeTemplateContents(
 }
 
 function listLocalFiles(blogID, dir, callback) {
-  var root = localPath(blogID, dir);
-
-  fs.readdir(root, function (err, entries) {
+  callbackify(folder.listNames)(blogID, dir, function (err, entries) {
     if (err) {
       if (err.code === "ENOENT" || err.code === "ENOTDIR") return callback(null, []);
       return callback(err);
     }
 
-    var files = [];
-
-    async.each(
-      entries.filter(function (entry) {
-        return !shouldIgnoreFile(entry);
-      }),
-      function (entry, next) {
-        walk(joinpath(root, entry), entry, next);
-      },
-      function (err) {
-        if (err) return callback(err);
-        callback(null, files.map(normalizePath));
-      }
+    // Only the files directly inside the template's folder count. A view's
+    // name can't hold a backslash, so a file with one is never an orphan.
+    callback(
+      null,
+      entries
+        .filter(function (entry) {
+          return (
+            !entry.isDirectory &&
+            !/\\/.test(entry.name) &&
+            !shouldIgnoreFile(entry.name)
+          );
+        })
+        .map(function (entry) {
+          return normalizePath(entry.name);
+        })
     );
-
-    function walk(fullPath, relativePath, next) {
-      if (shouldIgnoreFile(relativePath)) return next();
-
-      fs.lstat(fullPath, function (err, stat) {
-        if (err) {
-          if (err.code === "ENOENT") return next();
-          return next(err);
-        }
-
-        if (stat.isSymbolicLink()) return next();
-
-        if (stat.isDirectory()) {
-          fs.readdir(fullPath, function (err, children) {
-            if (err) {
-              if (err.code === "ENOENT") return next();
-              return next(err);
-            }
-
-            async.each(
-              children.filter(function (child) {
-                return !shouldIgnoreFile(joinpath(relativePath, child));
-              }),
-              function (child, childNext) {
-                walk(joinpath(fullPath, child), joinpath(relativePath, child), childNext);
-              },
-              next
-            );
-          });
-        } else {
-          if (/[\\/]/.test(relativePath)) return next();
-          if (shouldIgnoreFile(relativePath)) return next();
-          files.push(relativePath);
-          next();
-        }
-      });
-    }
   });
 }
 
@@ -247,12 +208,11 @@ function removeOrphanedFiles(blogID, client, dir, existingFiles, written, callba
     toRemove,
     function (file, next) {
       var relativePath = joinpath(dir, file);
-      var absolutePath = localPath(blogID, relativePath);
 
       client.remove(blogID, relativePath, function (err) {
         if (err && err.code !== "ENOENT") return next(err);
 
-        fs.remove(absolutePath, function (fsErr) {
+        callbackify(folder.remove)(blogID, relativePath, function (fsErr) {
           if (fsErr && fsErr.code !== "ENOENT") return next(fsErr);
           next();
         });
