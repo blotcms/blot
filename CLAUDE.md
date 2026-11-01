@@ -11,6 +11,15 @@ When opening a pull request in this repo:
 
 Commit message trailers (e.g. `Co-Authored-By`) are unrelated to this and should still be included as instructed elsewhere.
 
+# Pull request review
+
+When you open a pull request in this repo, once you have reviewed it and are happy with it:
+
+- Mark it ready for review, then comment `@codex review` on it.
+- Go through up to 3 Codex review cycles, stopping earlier once you are confident the PR is ready to merge.
+- Push back on the thread if Codex flags a nitpicky edge case, and raise anything you want the operator's view on during the cycle.
+- Never merge a PR without the operator's explicit approval.
+
 # Pull request reviews
 
 After opening a pull request in this repo:
