@@ -82,7 +82,7 @@ describe("git client branches", function () {
 
             ctx.git.push("origin", branch, function (err) {
               expect(err).not.toBeNull();
-              expect(String(err)).toContain("HTTP 400");
+              expect(String(err)).toContain("only the master branch is allowed");
 
               fs.pathExists(ctx.blogDirectory + path, function (err, exists) {
                 if (err) return done.fail(err);
