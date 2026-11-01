@@ -634,7 +634,7 @@ cmd_final_copy() {
     done
     if is_move; then plan "open one ssh connection to $XFER_HOST (ssh -M -N -f -S) for every rsync below to reuse, and close it at the end"; fi
     plan "rsync ${RSYNC_OPTS[*]} ${ex[*]}${XFER_SSH:+ -e '$XFER_SSH -S <connection>' --rsync-path='$XFER_RSYNC'} $DATA/ $COPY_DEST"
-    plan "per shard parent ($SHARD_PARENTS): rsync -dlptgoD -AXS --numeric-ids --delete"
+    plan "per shard parent ($SHARD_PARENTS): rsync -dlptgoD -HA${XATTR}S --numeric-ids --delete"
     plan "$shards rsyncs of the child directories, $FINAL_COPY_JOBS at a time, then sync; phase=copied"
     return 0
   fi
