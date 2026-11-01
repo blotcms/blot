@@ -11,6 +11,7 @@ var localPath = require("helper/localPath");
 var Git = require("./git");
 var dataDir = require("./dataDir");
 var checkGitRepoExists = require("./checkGitRepoExists");
+var smartHttp = require("./smartHttp");
 var database = require("./database");
 
 // Must come before pushover is used. Gives every Git request's duplex an
@@ -102,10 +103,13 @@ function exists(handle, callback) {
 
 // Serves a smart HTTP request (ref advertisement, fetch, push) for the blog's
 // repository. The request has been authenticated as having access to the
-// blog, and its URL names the blog's current handle: pushover finds the
-// repository from that.
+// blog, and its URL names the blog's current handle (req.gitHandle). Fetches
+// are served by smartHttp.js and anything else by pushover, which finds the
+// repository from the URL.
 function handleSmartHttp(req, res, blogID) {
   req.blogID = blogID;
+
+  if (smartHttp.handle(req, res, directory(req.gitHandle))) return;
 
   // We need to pause then resume for some strange reason. See Pushover issue #30.
   req.pause();
