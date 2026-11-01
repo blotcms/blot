@@ -5,7 +5,7 @@
 #        drill.sh setup-target [--key PATH] <ssh-target>
 #        drill.sh teardown [--yes] <instance-id>
 # Rehearses resize.sh on a throwaway instance with the same kernel and
-# userland as the app host, and a small copy of its layout, without touching
+# userland as the app host (Amazon Linux 2023 or 2), and a small copy of its layout, without touching
 # production: an 8 GiB XFS data volume mounted by mount-data-volume.sh, the
 # top-level directories filled with about 50,000 small files, two
 # "app" containers (one reading, one writing) that bind the data directory
@@ -141,8 +141,11 @@ set -euo pipefail
 DATA=/var/www/blot/data
 LINK=/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${VOLUME_ID/-/}
 
-command -v docker > /dev/null || dnf install -y docker
-for p in rsync xfsprogs lsof; do rpm -q "$p" > /dev/null || dnf install -y "$p"; done
+# Amazon Linux 2023 has dnf; Amazon Linux 2 (the production host today) has yum
+# and gets docker from amazon-linux-extras.
+if command -v dnf > /dev/null; then PKG="dnf install -y"; DOCKER_PKG="dnf install -y docker"; else PKG="yum install -y"; DOCKER_PKG="amazon-linux-extras install -y docker"; fi
+command -v docker > /dev/null || $DOCKER_PKG
+for p in rsync xfsprogs lsof; do rpm -q "$p" > /dev/null || $PKG "$p"; done
 systemctl enable --now docker
 usermod -aG docker ec2-user || true
 
@@ -260,8 +263,11 @@ EOF
 remote_setup_target() {
   cat << 'EOF'
 set -euo pipefail
-command -v docker > /dev/null || dnf install -y docker
-for p in rsync xfsprogs lsof; do rpm -q "$p" > /dev/null || dnf install -y "$p"; done
+# Amazon Linux 2023 has dnf; Amazon Linux 2 (the production host today) has yum
+# and gets docker from amazon-linux-extras.
+if command -v dnf > /dev/null; then PKG="dnf install -y"; DOCKER_PKG="dnf install -y docker"; else PKG="yum install -y"; DOCKER_PKG="amazon-linux-extras install -y docker"; fi
+command -v docker > /dev/null || $DOCKER_PKG
+for p in rsync xfsprogs lsof; do rpm -q "$p" > /dev/null || $PKG "$p"; done
 systemctl enable --now docker
 usermod -aG docker ec2-user || true
 mkdir -p /etc/blot /var/www/blot/data

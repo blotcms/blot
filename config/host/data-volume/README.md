@@ -248,6 +248,10 @@ of a new app host, without touching production:
     # then the commands setup prints: resize.sh --host ... shrink 6, finish, grow 10
     drill.sh teardown <instance-id>
 
+`launch` and `setup` also work with an Amazon Linux 2 arm64 AMI (yum, and docker from
+`amazon-linux-extras`), the OS of the current app host, to rehearse a move from it to an
+Amazon Linux 2023 target.
+
 `drill.sh launch-target ...` (same options as `launch`) makes a second instance
 with no data volume and `drill.sh setup-target ec2-user@<ip>` installs docker,
 rsync, xfsprogs and the mount unit on it, for rehearsing `move`; it prints the
