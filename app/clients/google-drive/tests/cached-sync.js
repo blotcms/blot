@@ -162,6 +162,8 @@ describe("Drive verified content cache", function() {
     }));
     h.files[1].mimeType = "application/vnd.google-apps.document";
     delete h.files[1].md5Checksum;
+    // the walk names a Google Doc <name>.gdoc, as it is on disk
+    h.local[1].name += ".gdoc";
     h.metadata.set("1", {
       modifiedTime: h.files[1].modifiedTime,
       fingerprint: "64768:99:4:1000:2000"
