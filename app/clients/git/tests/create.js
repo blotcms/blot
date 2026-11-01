@@ -8,6 +8,11 @@ describe("git client create", function () {
     clone: false,
   });
 
+  var fs = require("fs-extra");
+  var Express = require("express");
+  var promisify = require("util").promisify;
+  var Blog = require("models/blog");
+  var repo = require("clients/git/repo");
   var create = require("clients/git/create");
   var disconnect = require("clients/git/disconnect");
   var Git = require("./setup/git");
@@ -21,11 +26,55 @@ describe("git client create", function () {
     create(blog, function (err) {
       if (err) return done.fail(err);
 
-      create(blog, function (err) {
-        expect(err.code).toEqual("EEXIST");
-        done();
+      create(blog, async function (err) {
+        try {
+          expect(err.code).toEqual("EEXIST");
+          expect(await fs.pathExists(repo.directory(blog.handle) + "/HEAD")).toBe(true);
+          expect(await fs.pathExists(localPath(blog.id, "/.git"))).toBe(true);
+          done();
+        } catch (e) {
+          done.fail(e);
+        }
       });
     });
+  });
+
+  it("refuses to connect a blog to a repository left at its handle", async function () {
+    var blog = this.blog;
+    var marker = repo.directory(blog.handle) + "/left-behind";
+    var messages = [];
+
+    await fs.outputFile(marker, "someone else's history");
+
+    var server = Express()
+      .use(function (req, res, next) {
+        req.blog = blog;
+        req.body = {};
+        res.message = function (url, message) {
+          messages.push(message);
+          res.sendStatus(200);
+        };
+        next();
+      })
+      .use(require("clients/git/routes").dashboard);
+
+    await new Promise(function (resolve) {
+      server = server.listen(0, resolve);
+    });
+
+    await fetch("http://127.0.0.1:" + server.address().port + "/create", {
+      method: "POST",
+    });
+
+    await new Promise(function (resolve) {
+      server.close(resolve);
+    });
+
+    var latest = await promisify(Blog.get)({ id: blog.id });
+
+    expect(messages.length).toBe(1);
+    expect(latest.client).not.toBe("git");
+    expect(await fs.pathExists(marker)).toBe(true);
   });
 
   // this prevents an existing bare repo from being clobbered
@@ -63,6 +112,7 @@ describe("git client create", function () {
         create(blog, function (err) {
           expect(err).not.toEqual(null);
           expect(err).toEqual(jasmine.any(Error));
+          expect(fs.pathExistsSync(repo.directory(blog.handle))).toBe(false);
 
           done();
         });

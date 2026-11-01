@@ -85,8 +85,9 @@ function appliedBase(bare, folder, blogID, headBeforePull, callback) {
 // can be pushed to the bare repository. Before this the same reset --hard did
 // that and wrote the files.
 function followBareRepo(git, folder, gitHandle, commit, callback) {
-  // During a handle change the new handle is saved before its bare repository
-  // is renamed (see repo.js)
+  // During a handle change the bare repository moves just before the new
+  // handle is saved, so a sync holding the former handle can find no
+  // repository (see repo.js)
   repo.pointOriginAtBareRepo(git, gitHandle, function (err) {
     if (err) {
       folder.log("Error adding remote: " + err.message);
