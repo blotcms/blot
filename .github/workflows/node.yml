@@ -16,6 +16,10 @@ on:
   pull_request:
     branches:
       - "master"
+  # Coverage (COLLECT_COVERAGE below), and the merged test timings
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read  # To check out code
@@ -58,6 +62,10 @@ env:
     - config/redis
     - proxy
     - scripts/deploy
+
+  # The nightly run, and a manual one. It slows the specs down too much for
+  # every push; see also the node-ok job.
+  COLLECT_COVERAGE: ${{ github.event_name != 'push' && github.event_name != 'pull_request' }}
 
 jobs:
   # Static checks, folded into one job so they share a runner and checkout.
@@ -294,12 +302,14 @@ jobs:
           BLOT_STRIPE_SECRET: ${{ secrets.BLOT_STRIPE_SECRET }}
           BLOT_STRIPE_PRODUCT: ${{ secrets.BLOT_STRIPE_PRODUCT }}
           RUNNER_INDEX: ${{ matrix.runner }}
-          # Coverage is only collected on master; it slows the specs down
-          COVERAGE: ${{ github.event_name == 'push' && '1' || '' }}
+          # Coverage is only collected nightly; it slows the specs down
+          COVERAGE: ${{ env.COLLECT_COVERAGE == 'true' && '1' || '' }}
         run: bash scripts/tests/ci/run-lanes.sh
 
       - name: Upload coverage
-        if: always() && github.event_name == 'push'
+        if: always() && env.COLLECT_COVERAGE == 'true'
+        # A failed upload loses a report, not a test result
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ matrix.runner }}
@@ -316,6 +326,7 @@ jobs:
 
       - name: Upload timings
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: timings-${{ matrix.runner }}
@@ -329,11 +340,10 @@ jobs:
   # "test N" and N changes with the lane plan, so it can't be listed as a
   # required check. The last step passes only if every job it needs succeeded.
   #
-  # On master it first merges the coverage and timings the test jobs uploaded
-  # (pull requests run without coverage, and get no report, so every step
-  # until the last is skipped there). It runs even when a test job failed, as
-  # the coverage job did, and a coverage failure fails the run, as it did; the
-  # check on a master commit is red then too, which nothing reads.
+  # On the nightly run it first merges the coverage and timings the test jobs
+  # uploaded (every other run has no coverage, so every step until the last is
+  # skipped there). It runs even when a test job failed, and a coverage failure
+  # fails the nightly run.
   node-ok:
     name: node ok
     needs: [lint, test]
@@ -341,39 +351,36 @@ jobs:
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
-      actions: write # to read/write the coverage-baseline cache
-      pull-requests: write # to post/update the sticky PR comment
     env:
       HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      # nyc only needs the sources it reports on (for the HTML report) and the
-      # comment script, so skip the ~300MB of templates, images and fixtures
+      # nyc only needs the sources it reports on (for the HTML report), so skip
+      # the ~300MB of templates, images and fixtures
       - name: Checkout code
-        if: github.event_name == 'push'
+        if: env.COLLECT_COVERAGE == 'true'
         uses: actions/checkout@v4
         with:
           filter: blob:none
           sparse-checkout: |
             /package.json
             /app/**/*.js
-            /scripts/coverage/
           sparse-checkout-cone-mode: false
 
       - name: Setup Node.js
-        if: github.event_name == 'push'
+        if: env.COLLECT_COVERAGE == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 24.22.1
 
       - name: Download coverage from every job
-        if: github.event_name == 'push'
+        if: env.COLLECT_COVERAGE == 'true'
         uses: actions/download-artifact@v4
         with:
           pattern: coverage-*
           path: coverage-raw
 
       - name: Download timings from every job
-        if: github.event_name == 'push'
+        if: env.COLLECT_COVERAGE == 'true'
         uses: actions/download-artifact@v4
         with:
           pattern: timings-*
@@ -382,35 +389,23 @@ jobs:
       # Every spec file's seconds from this run, as one JSON object: the
       # input for refreshing scripts/tests/ci/timings.json
       - name: Merge timings
-        if: github.event_name == 'push'
+        if: env.COLLECT_COVERAGE == 'true'
         run: |
           mkdir -p test-timings
           jq -S -s 'add // {} | with_entries(.value |= (. * 10 | round / 10))' timings-raw/*/*.json > test-timings/timings.json || echo '{}' > test-timings/timings.json
           echo "$(jq length test-timings/timings.json) spec files timed"
 
       - name: Upload merged timings
-        if: github.event_name == 'push'
+        if: env.COLLECT_COVERAGE == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: test-timings
           path: test-timings
           overwrite: true
 
-      # Master's most recent line-coverage % (if any), so a PR run can show a
-      # delta. Keyed by run so every push to master adds a fresh entry;
-      # restore-keys picks up the most recent one.
-      - name: Restore coverage baseline
-        if: github.event_name == 'push'
-        uses: actions/cache/restore@v4
-        with:
-          path: .coverage/history
-          key: coverage-master-${{ github.run_id }}
-          restore-keys: |
-            coverage-master-
-
       - name: Merge coverage and build report
         id: merge-coverage
-        if: github.event_name == 'push'
+        if: env.COLLECT_COVERAGE == 'true'
         run: |
           mkdir -p .nyc_output coverage
 
@@ -447,7 +442,6 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload merged coverage report
-        id: upload-report
         if: steps.merge-coverage.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
@@ -463,52 +457,6 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
           overwrite: true
-
-      # master: record this run's line coverage % as the new baseline for
-      # future PRs to diff against.
-      - name: Save coverage baseline
-        if: steps.merge-coverage.outcome == 'success' && github.event_name == 'push'
-        run: |
-          mkdir -p .coverage/history
-          node -e "
-            const fs = require('fs');
-            const s = JSON.parse(fs.readFileSync('coverage/coverage-summary.json', 'utf8'));
-            fs.writeFileSync(
-              '.coverage/history/latest.json',
-              JSON.stringify({ sha: process.env.HEAD_SHA, linesPct: s.total.lines.pct })
-            );
-          "
-
-      - name: Save coverage baseline cache
-        if: steps.merge-coverage.outcome == 'success' && github.event_name == 'push'
-        uses: actions/cache/save@v4
-        with:
-          path: .coverage/history
-          key: coverage-master-${{ github.run_id }}
-
-      # pull_request: post/update the sticky coverage comment.
-      - name: Post PR coverage comment
-        if: always() && github.event_name == 'pull_request' && steps.merge-coverage.outcome == 'success'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          node scripts/coverage/pr-comment.js \
-            --pr "${{ github.event.pull_request.number }}" \
-            --sha "$HEAD_SHA" \
-            --status done \
-            --summary coverage/coverage-summary.json \
-            --baseline .coverage/history/latest.json \
-            --artifact-url "${{ steps.upload-report.outputs.artifact-url }}"
-
-      - name: Post PR coverage comment (failed)
-        if: always() && github.event_name == 'pull_request' && steps.merge-coverage.outcome == 'failure'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          node scripts/coverage/pr-comment.js \
-            --pr "${{ github.event.pull_request.number }}" \
-            --sha "$HEAD_SHA" \
-            --status failed
 
       # Always last and always run: a failed, skipped or cancelled needed job
       # fails the check, whatever the coverage steps did.

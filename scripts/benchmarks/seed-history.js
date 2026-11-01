@@ -52,7 +52,7 @@ function main() {
     const runs = JSON.parse(
       gh([
         "api",
-        `repos/${repo}/actions/workflows/${workflow}/runs?branch=master&event=push&status=success&per_page=20`,
+        `repos/${repo}/actions/workflows/${workflow}/runs?branch=master&event=schedule&status=success&per_page=20`,
         "--jq",
         "[.workflow_runs[] | .databaseId // .id]",
       ]).stdout || "[]"

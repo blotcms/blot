@@ -147,7 +147,7 @@ Open source as content marketing
 Add rebuild button to each file on dashboard
 - Add json viewer to files on dashboard
 
-Render benchmark skips with "No cached corpus": run benchmarks-corpus.yml (workflow_dispatch) once, probably needed since #2111 dropped data/static from the corpus
+benchmarks-render.yml is manual only because benchmarks-corpus.yml fails, leaving no corpus: fix the corpus build (probably needed since #2111 dropped data/static from the corpus), then give the render benchmark a daily schedule
 
 Back up blot-storage-prod off AWS (Backblaze B2, hourly, no --delete): _avatars and _template_assets can't be regenerated
 
