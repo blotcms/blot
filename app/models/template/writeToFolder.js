@@ -180,12 +180,17 @@ function listLocalFiles(blogID, dir, callback) {
       return callback(err);
     }
 
-    // Only the files directly inside the template's folder count
+    // Only the files directly inside the template's folder count. A view's
+    // name can't hold a backslash, so a file with one is never an orphan.
     callback(
       null,
       entries
         .filter(function (entry) {
-          return !entry.isDirectory && !shouldIgnoreFile(entry.name);
+          return (
+            !entry.isDirectory &&
+            !/\\/.test(entry.name) &&
+            !shouldIgnoreFile(entry.name)
+          );
         })
         .map(function (entry) {
           return normalizePath(entry.name);
