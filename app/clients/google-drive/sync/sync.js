@@ -12,6 +12,7 @@ const {
 } = require("../database/error");
 const download = require("../util/download");
 const localFingerprint = require("../util/localFingerprint");
+const { sameFingerprint } = require("../util/contentFingerprint");
 const createDriveClient = require("../serviceAccount/createDriveClient");
 const CheckWeCanContinue = require("../util/checkWeCanContinue");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
@@ -250,13 +251,13 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
 
         const isModifiedTimeCurrent = applied
           ? truncateToSecond(applied.modifiedTime) === truncateToSecond(modifiedTime) &&
-            Boolean(applied.fingerprint) && applied.fingerprint === existsLocally?.fingerprint
+            sameFingerprint(applied.fingerprint, existsLocally?.fingerprint)
           : truncateToSecond(existsLocally?.modifiedTime) === truncateToSecond(modifiedTime);
 
         const cached = verifiedById.get(id);
         const verified = cached && cached.path === path &&
-          cached.checksum === md5Checksum && cached.fingerprint &&
-          cached.fingerprint === existsLocally?.fingerprint;
+          cached.checksum === md5Checksum &&
+          sameFingerprint(cached.fingerprint, existsLocally?.fingerprint);
         const identical = isGoogleAppFile
           ? isModifiedTimeCurrent
           : md5Checksum

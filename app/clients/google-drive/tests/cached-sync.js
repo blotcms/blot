@@ -152,6 +152,50 @@ describe("Drive verified content cache", function() {
     expect(h.downloads).toEqual(["0", "1"]);
     expect(h.records.get("0").checksum).toBe("new");
   });
+  it("keeps old five-field fingerprints valid for unchanged files", async function() {
+    const h = harness(2);
+    h.local.forEach(file => file.fingerprint = "4:1000");
+    h.files.forEach(file => h.records.set(file.id, {
+      path: "/" + file.name,
+      checksum: file.md5Checksum,
+      fingerprint: "64768:99:4:1000:2000"
+    }));
+    h.files[1].mimeType = "application/vnd.google-apps.document";
+    delete h.files[1].md5Checksum;
+    // the walk names a Google Doc <name>.gdoc, as it is on disk
+    h.local[1].name += ".gdoc";
+    h.metadata.set("1", {
+      modifiedTime: h.files[1].modifiedTime,
+      fingerprint: "64768:99:4:1000:2000"
+    });
+    expect(await h.run()).toBeTruthy();
+    expect(h.downloads).toEqual([]);
+  });
+  it("rejects old five-field fingerprints when the size or mtime differs", async function() {
+    const h = harness(3);
+    h.local.forEach(file => file.fingerprint = "4:1000");
+    h.local[0].fingerprint = "4:1001";
+    h.local[1].fingerprint = "5:1000";
+    h.files.forEach(file => h.records.set(file.id, {
+      path: "/" + file.name,
+      checksum: file.md5Checksum,
+      fingerprint: "64768:99:4:1000:2000"
+    }));
+    expect(await h.run()).toBeTruthy();
+    expect(h.downloads).toEqual(["0", "1"]);
+  });
+  it("detects a change against a new-format record", async function() {
+    const h = harness(2);
+    h.local.forEach(file => file.fingerprint = "4:1000");
+    h.files.forEach(file => h.records.set(file.id, {
+      path: "/" + file.name,
+      checksum: file.md5Checksum,
+      fingerprint: "4:1000"
+    }));
+    h.local[1].fingerprint = "4:1001";
+    expect(await h.run()).toBeTruthy();
+    expect(h.downloads).toEqual(["1"]);
+  });
   it("bounds legacy migration and advances beyond a repeatedly failing prefix", async function() {
     const h = harness(70);
     h.failDownload = true;
