@@ -1,7 +1,7 @@
 // Writes a sharp pipeline to a temporary file and reads it back. toFile, not
 // toBuffer, because the format comes from the extension exactly as it did when
-// the callers wrote to the blog's folder: a .jpg holding a PNG comes out as a
-// JPEG, and an extension sharp doesn't know keeps the input's format.
+// the callers wrote it: a .jpg holding a PNG comes out as a JPEG, and an empty
+// extension, or one sharp doesn't know, keeps the input's format.
 
 const fs = require("fs/promises");
 const os = require("os");

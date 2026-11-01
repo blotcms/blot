@@ -29,7 +29,7 @@ module.exports = function (path, callback) {
 
   // The sandbox does the sharp work (app/sandbox/jobs/resize.js) and the
   // resized file is written to a temporary file here and moved over the original
-  sandbox.run("resize", { max: 3000, extension: extension }, { path: path }).then(function (result) {
+  sandbox.run("resize", { max: 3000 }, { path: path }).then(function (result) {
     var info = result.meta;
 
     if (!info || !result.outputs.length) return callback("No info");
