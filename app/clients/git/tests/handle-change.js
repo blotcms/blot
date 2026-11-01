@@ -6,15 +6,15 @@ describe("git client handle changes", function () {
   var fs = require("fs-extra");
   var http = require("http");
   var host = require("config").host;
-  var dataDir = require("clients/git/dataDir");
+  var repo = require("clients/git/repo");
   var setBlog = require("models/blog/set");
 
   it("renames repos and redirects old handles", function (done) {
     var context = this;
     var oldHandle = context.blog.handle;
     var newHandle = oldHandle + "renamed";
-    var oldRepo = dataDir + "/" + oldHandle + ".git";
-    var newRepo = dataDir + "/" + newHandle + ".git";
+    var oldRepo = repo.directory(oldHandle);
+    var newRepo = repo.directory(newHandle);
     var redirectStatus = 308;
 
     var assertRedirect = function (path, expectedLocation, headers, callback) {

@@ -10,7 +10,7 @@ describe("git client disconnect", function () {
   var fs = require("fs-extra");
   var Blog = require("models/blog");
   var database = require("clients/git/database");
-  var dataDir = require("clients/git/dataDir");
+  var repo = require("clients/git/repo");
   var disconnect = require("clients/git/disconnect");
   var promisify = require("util").promisify;
   var randomString = require("../../../../scripts/tests/util/randomString");
@@ -24,7 +24,7 @@ describe("git client disconnect", function () {
   afterEach(async function () {
     if (!otherBlog) return;
 
-    await fs.remove(dataDir + "/" + otherBlog.handle + ".git");
+    await fs.remove(repo.directory(otherBlog.handle));
     await promisify(Blog.remove)(otherBlog.id);
     otherBlog = null;
   });
