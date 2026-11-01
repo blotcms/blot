@@ -13,7 +13,7 @@
 #
 # Env: LANES (JSON from plan.js --runner: [[{suite, part, files}, ...], ...]),
 # IMAGE_TAG, and the BLOT_STRIPE_* secrets. With COVERAGE=1 the processes run
-# under nyc (master pushes; pull requests skip it for speed). Writes coverage to ./.nyc_output,
+# under nyc (the nightly run; every other run skips it for speed). Writes coverage to ./.nyc_output,
 # per-file seconds to ./.test-timings/<job>.json (for timings.json) and a
 # table to $GITHUB_STEP_SUMMARY. Exits non-zero if any process failed.
 set -uo pipefail

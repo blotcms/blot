@@ -7,12 +7,12 @@
 //
 //   node scripts/benchmarks/detect-regression.js \
 //     --history-dir .benchmarks/history --arch amd64 \
-//     --consecutive 3 --threshold 15 [--alert] [--dry-run]
+//     --consecutive 2 --threshold 15 [--alert] [--dry-run]
 //
-// A regression is only reported when the last `--consecutive` master commits
-// ALL sit outside the noise band for the same metric, measured against a
-// baseline built from the commits *before* that window. This rejects
-// single-commit runner noise by construction.
+// A regression is only reported when the last `--consecutive` master runs ALL
+// sit outside the noise band for the same metric, measured against a baseline
+// built from the runs *before* that window. This rejects single-run runner
+// noise by construction.
 
 const { spawnSync } = require("child_process");
 
@@ -123,7 +123,7 @@ function main() {
   }
 
   if (!offenders.length) {
-    console.log(`[detect] ${arch}: no sustained regression across last ${consecutive} commits.`);
+    console.log(`[detect] ${arch}: no sustained regression across last ${consecutive} runs.`);
     return;
   }
 
@@ -138,9 +138,9 @@ function main() {
   const lastGood = priorRecords[priorRecords.length - 1];
 
   const bodyLines = [
-    `A benchmark regression has held for the last **${consecutive}** master commits on \`${arch}\`.`,
+    `A benchmark regression has held for the last **${consecutive}** daily master runs on \`${arch}\`.`,
     "",
-    `Baseline: median of ${baseline.sample_count} commits ` +
+    `Baseline: median of ${baseline.sample_count} runs ` +
       `(\`${shortSha(baseline.first_sha)}\` … \`${shortSha(baseline.last_sha)}\`).`,
     "",
     "| Metric | Baseline | Latest | Δ |",
@@ -151,7 +151,7 @@ function main() {
         `${formatValue(o.current, o.unit)} | ${fmtDelta(o.deltaPercent)} |`
     ),
     "",
-    "#### Commits in the regression window",
+    "#### Runs in the regression window",
     "",
     ...windowRecords.map((rec) => {
       const url = rec.run_url ? ` — [run](${rec.run_url})` : "";
@@ -159,7 +159,7 @@ function main() {
     }),
     "",
     lastGood
-      ? `Last commit before the window: \`${shortSha(lastGood.git_sha)}\`. ` +
+      ? `Last commit benchmarked before the window: \`${shortSha(lastGood.git_sha)}\`. ` +
         `Suspect range: \`${shortSha(lastGood.git_sha)}..${shortSha(firstBad.git_sha)}\`.`
       : "",
     "",

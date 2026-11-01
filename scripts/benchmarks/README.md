@@ -7,9 +7,9 @@ that turns them into a PR comment and a master-branch regression watch.
 
 | Workflow | Trigger | Scale | What it measures |
 |---|---|---|---|
-| [`benchmarks.yml`](../../.github/workflows/benchmarks.yml) | every PR/push | small, built fresh every run (5 sites / 1000 files) | build + render + burst phases, smoke-scale |
+| [`benchmarks.yml`](../../.github/workflows/benchmarks.yml) | daily on master + PRs touching render or build code | small, built fresh every run (5 sites / 1000 files) | build + render + burst phases, smoke-scale |
 | [`benchmarks-corpus.yml`](../../.github/workflows/benchmarks-corpus.yml) | weekly + manual | large (1000 sites / ~160k posts) | nothing directly - builds and caches the corpus the next workflow reads |
-| [`benchmarks-render.yml`](../../.github/workflows/benchmarks-render.yml) | PR/push touching render-critical paths | the cached large corpus | render + burst phases only, against realistic production-shaped data |
+| [`benchmarks-render.yml`](../../.github/workflows/benchmarks-render.yml) | manual, until `benchmarks-corpus.yml` works again | the cached large corpus | render + burst phases only, against realistic production-shaped data |
 | [`benchmarks-converters.yml`](../../.github/workflows/benchmarks-converters.yml) | PR/push touching `app/build/converters/**` | tiny (a converter's own test fixtures) | per-converter conversion timing, in-process |
 
 `benchmarks.yml` is unchanged in behavior from before this document's corpus
@@ -203,7 +203,7 @@ enough that no PR should pay for it. Instead:
    cache is ever completely missing.
 
 2. **[`benchmarks-render.yml`](../../.github/workflows/benchmarks-render.yml)**
-   (PR/push touching render-critical paths) restores the newest matching
+   (manual for now) restores the newest matching
    corpus cache (read-only - it never saves back an amended corpus), loads
    the Redis dump into its job's `redis:6` service container (`docker cp` the
    dump into the container's `/data/dump.rdb`, then `redis-cli DEBUG RELOAD`
@@ -298,6 +298,9 @@ comes from trends, not single runs.
 
 ### On a pull request (once it's marked *ready for review*)
 
+- runs only if the PR touches the benchmark itself, the `Dockerfile`,
+  `package.json`, `app/blog/**`, `app/models/**`, `app/templates/**`,
+  `app/build/**`, `app/cdn/**` or `app/helper/**`
 - runs on **amd64 only**, `2` iterations, aggregated to medians
   ([`aggregate.js`](aggregate.js))
 - keeps **one** sticky comment ([`pr-comment.js`](pr-comment.js)) comparing the
@@ -310,12 +313,13 @@ comes from trends, not single runs.
   - **run failed** — set if the job errors, so the comment never sticks on `⏳`.
 - draft PRs are skipped entirely
 
-### On push to master
+### Daily on master
 
+- skipped if master hasn't moved since the last daily run
 - runs on **amd64 + arm64**, `3` iterations each
 - appends the aggregated result to a per-arch rolling history
   ([`update-history.js`](update-history.js))
-- if the **same metric regresses for the last 3 consecutive master commits**,
+- if the **same metric regresses for the last 2 consecutive daily runs**,
   opens a `benchmark-regression` issue ([`detect-regression.js`](detect-regression.js)).
   amd64 files issues; arm64 only logs until its noise profile is understood
   (flip by adding `--alert` to its matrix row).
@@ -341,9 +345,8 @@ artifact, no comment, no issue.
 
 ### `benchmarks-render.yml` (render + burst phases against the cached corpus)
 
-- triggers on PR/push to master touching `app/blog/**`, `app/models/**`,
-  `app/templates/**`, `app/build/**`, `app/cdn/**`, `app/helper/**`, plus
-  `workflow_dispatch`
+- `workflow_dispatch` only, until `benchmarks-corpus.yml` works again and the
+  workflow gets a daily schedule like `benchmarks.yml`
 - restores the newest `benchmark-corpus-v*` cache (falls back to
   [`seed-corpus.js`](seed-corpus.js) if missing entirely), loads the Redis
   dump into its job's `redis:6` service container, extracts `data/blogs`
@@ -409,7 +412,7 @@ necessarily "this specific converter grew."
 ## How results are stored
 
 The rolling history is an append-only NDJSON file per arch
-(`history-<arch>.ndjson`), one line per master commit. It is kept in the GitHub
+(`history-<arch>.ndjson`), one line per daily master run. It is kept in the GitHub
 Actions cache and mirrored to a 90-day `benchmark-history-<arch>` artifact.
 
 If the cache misses (first run, or 7 days idle),
@@ -445,7 +448,7 @@ measured):
    Actions caches, and
 2. delete the `benchmark-history-<arch>` artifacts (or let them age out).
 
-Until `minBaselineSamples` (see defaults) master commits have accumulated *at
+Until `minBaselineSamples` (see defaults) master runs have accumulated *at
 the current schema version*, the PR comment still shows deltas but marks them
 information-only, and `detect-regression.js` will not open an issue.
 
@@ -458,7 +461,7 @@ information-only, and `detect-regression.js` will not open an issue.
   a tiny absolute number won't cry wolf.
 - **Output size** is near-deterministic. A real move there almost always means a
   template / asset change and is worth a look even if timing is flat.
-- One noisy PR run is expected. Sustained movement across master commits is not.
+- One noisy PR run is expected. Sustained movement across daily master runs is not.
 
 ## File map
 
