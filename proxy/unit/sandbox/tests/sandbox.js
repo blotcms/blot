@@ -1,6 +1,5 @@
-// Specs for the sandbox broker and the nsjail command line. Plain Node, no
-// Docker and no root: the broker runs a stub (a shell snippet) in place of
-// nsjail. Run with:  node proxy/unit/sandbox/tests/run.js
+// Specs for the sandbox broker and the nsjail command line. No Docker and no
+// root: the broker runs a stub (a shell snippet) in place of nsjail.
 const assert = require("assert");
 const fs = require("fs");
 const net = require("net");
@@ -10,8 +9,9 @@ const { spawn } = require("child_process");
 const jail = require("../jail");
 const { createBroker } = require("../broker");
 
-const tests = [];
-const test = (name, fn) => tests.push({ name, fn });
+const test = (name, fn) => it(name, fn);
+
+describe("sandbox broker and jail", function () {
 
 // ---- jail.js ----------------------------------------------------------------
 
@@ -65,6 +65,7 @@ async function withBroker(options, fn) {
     jobs: options.jobs || JOBS(),
     maxRunning: options.maxRunning,
     maxQueued: options.maxQueued,
+    log: () => {},
     spawnJail: () => {
       counter++;
       return spawn("sh", ["-c", script], { stdio: ["pipe", "pipe", "ignore"] });
@@ -206,7 +207,7 @@ test("broker: the socket is 0600 and a stale one is replaced", async () => {
   const socket = path.join(directory, "sub", "broker.sock");
   fs.mkdirSync(path.dirname(socket));
   fs.writeFileSync(socket, "stale");
-  const broker = createBroker({ socket, jobs: JOBS() });
+  const broker = createBroker({ socket, jobs: JOBS(), log: () => {} });
   try {
     await broker.listen();
     assert.strictEqual(fs.statSync(socket).mode & 0o777, 0o600);
@@ -217,17 +218,4 @@ test("broker: the socket is 0600 and a stale one is replaced", async () => {
   }
 });
 
-(async () => {
-  let failed = 0;
-  for (const { name, fn } of tests) {
-    try {
-      await fn();
-      console.log("ok   " + name);
-    } catch (err) {
-      failed++;
-      console.log("FAIL " + name + "\n" + err.stack);
-    }
-  }
-  console.log(failed ? `${failed} failed` : `${tests.length} passed`);
-  process.exit(failed ? 1 : 0);
-})();
+});

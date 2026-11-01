@@ -24,12 +24,13 @@ const MAX_HEADER_BYTES = 4096;
 const KILL_GRACE_MS = 2000;
 
 // options: { socket, owner, spawnJail(name) -> child process, jobs, maxRunning,
-// maxQueued }. The defaults are the real ones; tests replace spawnJail.
+// maxQueued, log }. The defaults are the real ones; tests replace spawnJail.
 function createBroker(options = {}) {
   const socketPath = options.socket || SOCKET;
   const jobs = options.jobs || jail.JOBS;
   const maxRunning = options.maxRunning || MAX_RUNNING;
   const maxQueued = options.maxQueued === undefined ? MAX_QUEUED : options.maxQueued;
+  const log = options.log || console.error;
   const spawnJail =
     options.spawnJail ||
     ((name) =>
@@ -145,7 +146,7 @@ function createBroker(options = {}) {
         if (ms >= job.timeSeconds * 1000) error = "timeout";
       }
       if (error) {
-        console.error(`broker: job=${name} error=${error} code=${code} signal=${signal} ms=${ms}`);
+        log(`broker: job=${name} error=${error} code=${code} signal=${signal} ms=${ms}`);
         fail(socket, error);
       } else {
         const body = Buffer.concat(output, outputBytes);

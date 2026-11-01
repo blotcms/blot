@@ -77,11 +77,6 @@ jobs:
       - name: Check the proxy and app images share a base
         run: node scripts/security/check-base-image.js
 
-      # The sandbox broker and the nsjail command line, against stubs: plain
-      # Node, no Docker, no root
-      - name: Sandbox broker specs
-        run: node proxy/unit/sandbox/tests/run.js
-
       - name: Install config generator dependencies
         run: |
           mkdir -p "$RUNNER_TEMP/gendeps"
