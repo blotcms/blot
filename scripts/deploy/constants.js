@@ -17,9 +17,12 @@ const BACKGROUND_CPU_SHARES = 512;
 //   node-a   the blog container's heap (1500) plus room for dashboard reads
 //   node-b   the sync container's heap, with the same overhead it had for
 //            pandoc and esbuild (the browser moved to the airlock)
-//   memory   node-a's heap plus the blog container's overhead (378m), node-b's
-//            heap plus the sync container's overhead (615m), and room for
-//            OpenResty's workers
+//   memory   both heaps plus 750m for everything else: OpenResty's workers,
+//            V8's overhead, pandoc, git and esbuild. Sized to fit beside Redis
+//            on one host (#2261): two units, two airlocks and Redis's maxmemory
+//            and fork overhead come to under 14 GiB of 16. Page cache counts
+//            against this too, but it is reclaimed, so what matters is the
+//            memory that can't be (unit-mem-summary.sh on the host)
 // The heaps are ceilings, not reservations: V8 uses what the render caches
 // and requests need, and the unit's cgroup limit sits above both so a runaway
 // heap dies with a diagnostic report rather than to the OOM killer.
@@ -27,7 +30,7 @@ const BACKGROUND_CPU_SHARES = 512;
 // has its own airlock (AIRLOCK below), paid for separately.
 const UNIT = {
   cpus: 4,
-  memory: "3840m",
+  memory: "3300m",
   cpuShares: SERVING_CPU_SHARES,
   nodeAMaxOldSpaceSize: 1800,
   nodeBMaxOldSpaceSize: 750,
