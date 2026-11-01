@@ -33,7 +33,6 @@ Redis host follow-ups (from #2041, new host since 8 Oct):
 - Remaining dropped write errors: await set() in resetToDrive; Dropbox disconnect.js and _assign.js dropFromMenu check the wrong error; write order in Blog.create; the list-ghosts restore path; error paths for background resave and rebuild; a callback for the messenger's setStatus; make Entry.set atomic
 - Proxy: auto-ssl's lock and hook calls can reuse a timed-out Redis connection
 - Deploy log archive (scripts/deploy/units.sh, proxy/deploy/blue-green.sh): before a unit is replaced, archive its container logs with docker logs -t, outside /tmp, more than 3 files, size-capped; let config/redis/perf/fetch.sh read it
-- Let launch.sh and restore.sh restore Redis from the B2 offsite bucket, so recovery with AWS unavailable isn't manual (config/redis/README.md, Offsite backups)
 - Consider dropping Redis client-side caching (CLIENT TRACKING) in favour of the app's in-process LRU caches: the server's tracking table sat at its 1M-key cap (tracking-table-max-keys) with only 3 live tracking clients; squeezing it to 10k on 27 Oct emptied it, so it was stale keys. Check `redis_tracking_total_keys` in the [STATS] lines: if it stays low, keep client-side caching
 - Upgrade the Redis server from 6.2 to 8.4+ for native compare-and-set (SET ... IFEQ, DELEX), then drop Lua: helper/lock extend/release become plain commands; helper/alarm claim/renew/complete need per-id claim keys to go native; also the legacy scripts in sync/lock.js, models/user/set.js, helper/flushCachePending.js, clients/icloud/database.js
 
