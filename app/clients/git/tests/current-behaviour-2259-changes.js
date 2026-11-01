@@ -44,45 +44,37 @@ describe("current behaviour that #2259 changes", function () {
   });
 
   describe("branches", function () {
-    // New behaviour: a push which includes any ref other than master is
-    // rejected as a whole, whatever the order of its refs.
-    it("accepts a branch pushed together with master", async function () {
-      var local = this.local;
+    // Changed by #2259 PR 6: a push which includes any ref other than master
+    // is rejected as a whole, whatever the order of its refs. Master is not
+    // updated either, and no sync starts.
+    ["master sneaky", "sneaky master"].forEach(function (order) {
+      it("rejects a branch pushed together with master (" + order + ")", async function () {
+        var local = this.local;
+        var before = await local.remoteHead();
 
-      await local.commitFiles({ "/with-a-branch.txt": "Pushed with a branch" });
-      await local.git(["branch", "sneaky"]);
+        await local.commitFiles({ "/with-a-branch.txt": "Pushed with a branch" });
+        await local.git(["branch", "sneaky"]);
 
-      var pushed = await local.tryPush(["origin", "master", "sneaky"]);
+        var pushed = await local.tryPush(["origin"].concat(order.split(" ")));
 
-      expect(pushed.code).toBe(0);
-      await local.waitForSync();
+        expect(pushed.code).not.toBe(0);
+        expect(pushed.stderr).toContain("only the master branch is allowed");
 
-      expect(await local.remoteHead("sneaky")).toBe(await local.head());
-      expect(await helpers.blogHas(this, "/with-a-branch.txt")).toBe(true);
-    });
+        await local.waitForSync();
 
-    // New behaviour: as above.
-    it("accepts a branch pushed together with master, in the other order", async function () {
-      var local = this.local;
-
-      await local.commitFiles({ "/with-a-branch.txt": "Pushed with a branch" });
-      await local.git(["branch", "sneaky"]);
-
-      var pushed = await local.tryPush(["origin", "sneaky", "master"]);
-
-      expect(pushed.code).toBe(0);
-      await local.waitForSync();
-
-      expect(await local.remoteHead("sneaky")).toBe(await local.head());
-      expect(await helpers.blogHas(this, "/with-a-branch.txt")).toBe(true);
+        expect(await local.remoteHead("sneaky")).toBeNull();
+        expect(await local.remoteHead()).toBe(before);
+        expect(await helpers.blogHas(this, "/with-a-branch.txt")).toBe(false);
+      });
     });
   });
 
   describe("symbolic links and submodules", function () {
-    // New behaviour: the push is refused, with a message, before the client
-    // is told "ok". Nothing reaches the repository.
-    it("accepts a push with a symbolic link, then fails to sync it", async function () {
+    // Changed by #2259 PR 6: the push is refused, with a message, before the
+    // client is told "ok". Nothing reaches the repository.
+    it("refuses a push with a symbolic link, with a message", async function () {
       var local = this.local;
+      var before = await local.remoteHead();
 
       await local.write("/alongside.txt", "In the same commit as the link");
       await fs.symlink("alongside.txt", local.path("/link.txt"));
@@ -90,17 +82,18 @@ describe("current behaviour that #2259 changes", function () {
 
       var pushed = await local.tryPush();
 
-      // The client is told the push worked
-      expect(pushed.code).toBe(0);
-      expect(await local.remoteHead()).toBe(await local.head());
+      // The client is told why
+      expect(pushed.code).not.toBe(0);
+      expect(pushed.stderr).toContain("remote: refs/heads/master: Git blogs support regular files only");
+      expect(await local.remoteHead()).toBe(before);
 
       await local.waitForSync();
 
-      // The sync failed: the blog folder has nothing from the commit
+      // and the blog folder has nothing from the commit
       expect(await helpers.blogHas(this, "/alongside.txt")).toBe(false);
       expect(await helpers.blogHas(this, "/link.txt")).toBe(false);
 
-      // Replacing the link with a regular file lets the sync go through
+      // Replacing the link with a regular file lets the push go through
       await local.remove("/link.txt");
       await local.writeAndPush("/link.txt", "Now a regular file");
 
@@ -110,9 +103,10 @@ describe("current behaviour that #2259 changes", function () {
       await local.expectSynced();
     });
 
-    // New behaviour: as above.
-    it("accepts a push with a submodule, then fails to sync it", async function () {
+    // Changed by #2259 PR 6: as above.
+    it("refuses a push with a submodule, with a message", async function () {
       var local = this.local;
+      var before = await local.remoteHead();
 
       await local.write("/alongside.txt", "In the same commit as the submodule");
       await local.git(["add", "--all"]);
@@ -126,8 +120,9 @@ describe("current behaviour that #2259 changes", function () {
 
       var pushed = await local.tryPush();
 
-      expect(pushed.code).toBe(0);
-      expect(await local.remoteHead()).toBe(await local.head());
+      expect(pushed.code).not.toBe(0);
+      expect(pushed.stderr).toContain("remote: refs/heads/master: Git blogs support regular files only");
+      expect(await local.remoteHead()).toBe(before);
 
       await local.waitForSync();
 
