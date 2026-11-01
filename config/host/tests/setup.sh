@@ -43,7 +43,8 @@ sums() {
     /etc/nftables/blot-redis.nft /etc/systemd/system/blot-redis-firewall.service \
     /etc/systemd/system/redis6.service.d/zz-blot-firewall.conf /etc/blot-redis/shared-instance-store \
     /etc/redis6/redis6.conf /etc/redis6/blot-memory.conf /etc/cron.d/blot-redis /usr/local/bin/mount-instance-store.sh \
-    /etc/tmpfiles.d/blot-redis.conf
+    /etc/tmpfiles.d/blot-redis.conf /etc/systemd/journald.conf.d/zz-blot-host.conf \
+    /etc/systemd/system/fail2ban.service.d/20-memory.conf
     stat -c "%n %U:%G %a" /var/www/blot /var/www/blot/data /var/www/blot/app/blog/static /run/blot/redis
     readlink /usr/local/bin/redis-cli; id -nG ec2-user deploy
     redis6-cli INFO server | grep process_id'
@@ -67,6 +68,10 @@ sums > "$TMP/sums1"
 setup "$TMP/run3"
 sums > "$TMP/sums2"
 check "a third run leaves the managed files as they were" cmp -s "$TMP/sums1" "$TMP/sums2"
+
+check "journald is capped and fail2ban has a memory limit" in_ct '
+  grep -qx "SystemMaxUse=500M" /etc/systemd/journald.conf.d/zz-blot-host.conf &&
+  grep -qx "MemoryMax=256M" /etc/systemd/system/fail2ban.service.d/20-memory.conf'
 
 check "redis-cli resolves to redis6-cli" \
   in_ct '[ "$(readlink -f "$(command -v redis-cli)")" = "$(readlink -f /usr/bin/redis6-cli)" ]'

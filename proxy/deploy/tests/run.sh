@@ -451,7 +451,7 @@ check "failed replacement after blue was stopped: the cache directory is not emp
 
 reset none; bluegreen
 check "fresh start: the cache directory is emptied first by a container, in the background too, and mounted" \
-  '[ $RC = 0 ] && [ "$(reset_of "$T/disk-cache")" -lt "$(line "docker create")" ] && mounted "$T/disk-cache" && called "docker run -d --rm --user 0 --entrypoint sh -v $T/disk-cache:/cache"'
+  '[ $RC = 0 ] && [ "$(reset_of "$T/disk-cache")" -lt "$(line "docker create")" ] && mounted "$T/disk-cache" && called "docker run -d --rm --user 0 --entrypoint sh -v $T/disk-cache:/cache --memory 256m"'
 
 reset none; FAKE_RESET_FAILS=1 bluegreen
 check "fresh start whose cache directory cannot be emptied: refused before any unit exists" '[ $RC != 0 ] && ! called "docker create"'
