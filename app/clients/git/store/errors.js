@@ -52,7 +52,19 @@ class ManifestTooLargeError extends StoreError {
   }
 }
 
+// A write whose outcome cannot be known: the request failed in a way which
+// may or may not have applied it, and reading back to find out failed too.
+// The caller must not report either result to a client; `cause` is the error
+// which started it.
+class OutcomeUnknownError extends StoreError {
+  constructor(message, cause) {
+    super(message, "OUTCOME_UNKNOWN");
+    this.cause = cause;
+  }
+}
+
 module.exports = {
+  OutcomeUnknownError,
   ManifestTooLargeError,
   StoreError,
   NotFoundError,
