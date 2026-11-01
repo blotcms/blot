@@ -7,7 +7,7 @@
 // then only the slice of IDs and offsets sharing the object ID's first byte,
 // about N/256 entries. Both are kept in the cache, so after the first lookup
 // near an ID the next is free. On a cold cache it costs three small reads.
-const { CorruptError } = require("./errors");
+const { CorruptError, NotFoundError } = require("./errors");
 const { readRanges } = require("./ranges");
 
 const MAGIC = Buffer.from([0xff, 0x74, 0x4f, 0x63]);
@@ -58,17 +58,53 @@ function toOffset(value) {
 function openIndex({ store, key, size, cache, namespace }) {
   const cacheKey = (part) => namespace + "/" + key + "/" + part;
 
-  // A cached part of the wrong length is not trusted: it is fetched again
-  async function cached(part, length, fetch) {
-    const hit = cache && (await cache.get(cacheKey(part)));
-    if (hit && hit.length === length) return hit;
-    const fresh = await fetch();
-    if (cache) await cache.put(cacheKey(part), fresh);
-    return fresh;
+  // Parts being fetched right now, by name: concurrent lookups which need the
+  // same part wait for one fetch rather than each making their own
+  const flights = new Map();
+
+  // A cached part of the wrong length is not trusted: it is fetched again, and
+  // a fetched part of the wrong length (a body cut short) is not cached
+  function cached(part, length, fetch) {
+    const name = cacheKey(part);
+    if (flights.has(name)) return flights.get(name);
+
+    const flight = (async () => {
+      const hit = cache && (await cache.get(name));
+      if (hit && hit.length === length) return hit;
+      const fresh = await fetch();
+      if (cache && fresh.length === length) await cache.put(name, fresh);
+      return fresh;
+    })().finally(() => flights.delete(name));
+
+    flights.set(name, flight);
+    return flight;
+  }
+
+  // The index in the store must be the length the manifest says. Checked
+  // once, when a part is first fetched; a part already in the cache was
+  // checked when it went in.
+  let sized = null;
+  function checkSize() {
+    if (!sized) {
+      sized = store
+        .head(key)
+        .then((found) => {
+          if (!found) throw new NotFoundError(key + " is not in the store");
+          if (found.size !== size) throw new CorruptError(key + " is " + found.size + " bytes; the manifest says " + size);
+        })
+        .catch((err) => {
+          sized = null;
+          throw err;
+        });
+    }
+    return sized;
   }
 
   async function fanout() {
-    const buffer = await cached("fanout", FANOUT_END, () => store.read(key, 0, FANOUT_END));
+    const buffer = await cached("fanout", FANOUT_END, async () => {
+      const [fresh] = await Promise.all([store.read(key, 0, FANOUT_END), checkSize()]);
+      return fresh;
+    });
     return parseFanout(buffer, size, key);
   }
 

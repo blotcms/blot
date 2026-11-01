@@ -5,7 +5,7 @@
 // inflated size, then for a delta where its base is) followed by one zlib
 // stream. The index gives where an entry starts, not where it ends; the end
 // is wherever its zlib stream ends (see inflate.js).
-const { CorruptError, TooLargeError } = require("./errors");
+const { CorruptError, NotFoundError, TooLargeError } = require("./errors");
 const inflateStream = require("./inflate");
 
 const HEADER = 12;
@@ -80,6 +80,25 @@ function isDelta(entry) {
 function openPack({ store, key, size, name }) {
   const end = size - TRAILER;
 
+  // The pack in the store must be the length the manifest says. Checked once
+  // per pack opened, alongside the first read.
+  let sized = null;
+  function checkSize() {
+    if (!sized) {
+      sized = store
+        .head(key)
+        .then((found) => {
+          if (!found) throw new NotFoundError(name + " is not in the store");
+          if (found.size !== size) throw new CorruptError(name + " is " + found.size + " bytes; the manifest says " + size);
+        })
+        .catch((err) => {
+          sized = null;
+          throw err;
+        });
+    }
+    return sized;
+  }
+
   // Reads may run into the trailer, which is not an entry's but is always
   // there to tell the end of the last entry's stream from the end of the data
   async function readRange(offset, length) {
@@ -109,7 +128,7 @@ function openPack({ store, key, size, name }) {
       throw new CorruptError(name + " has no entry at offset " + offset);
     }
 
-    const first = await readRange(offset, FIRST_READ);
+    const [first] = await Promise.all([readRange(offset, FIRST_READ), checkSize()]);
     const entry = parseHeader(first.subarray(0, MAX_HEADER), offset);
     if (entry.size > maxSize) throw new TooLargeError("Pack entry at " + offset + " is larger than " + maxSize + " bytes");
 
