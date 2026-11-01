@@ -115,7 +115,27 @@ module.exports = function (blog, log, status) {
                     return done(dropError);
                   }
 
-                  if (!exists) return done(dropError);
+                  if (!exists) {
+                    // The "+" folder this file was inside is gone too (every
+                    // file was removed and the client reported only the
+                    // files, as a push to a repository does), so its
+                    // aggregate is stale. Sync the folder path: that drops
+                    // the aggregate only if it is really this folder's,
+                    // never a colliding sibling's.
+                    if (multiInfo && rebuildTarget === multiInfo.folderPath) {
+                      return update(rebuildTarget, function (folderErr, result) {
+                        // A Redis outage comes back as folderErr
+                        done(
+                          firstError(
+                            dropError,
+                            folderErr || (result && result.error)
+                          )
+                        );
+                      });
+                    }
+
+                    return done(dropError);
+                  }
 
                   log(rebuildTarget, "Rebuilding multi-folder in database");
 

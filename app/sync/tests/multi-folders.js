@@ -3,6 +3,7 @@ describe("sync multi-folder support", function () {
   var path = require("path");
   var async = require("async");
   var Entry = require("models/entry");
+  var Entries = require("models/entries");
   var syncFolder = require("sync");
   var localPath = require("helper/localPath");
   var drafts = require("../update/drafts");
@@ -651,6 +652,146 @@ describe("sync multi-folder support", function () {
               );
               expect(entry.html.indexOf("multi-file-post")).toBe(-1);
               done();
+            });
+          });
+        }
+      );
+    });
+  });
+
+  it("drops the aggregate when every file is removed and only the files are synced", function (done) {
+    var blogID = this.blog.id;
+    var root = this.blogDirectory;
+
+    syncFolder(blogID, function (err, folder, finish) {
+      if (err) return done.fail(err);
+
+      async.series(
+        [
+          function (next) {
+            fs.outputFileSync(path.join(root, "notes/multi+/a.md"), "# A");
+            folder.update("/notes/multi+/a.md", next);
+          },
+          function (next) {
+            fs.outputFileSync(path.join(root, "notes/multi+/b.md"), "# B");
+            folder.update("/notes/multi+/b.md", next);
+          },
+        ],
+        function (seriesErr) {
+          finish(seriesErr, function (finishErr) {
+            if (seriesErr || finishErr)
+              return done.fail(seriesErr || finishErr);
+
+            Entry.get(blogID, "/notes/multi", function (initialEntry) {
+              expect(initialEntry).toBeDefined();
+              expect(initialEntry.deleted).toBeFalsy();
+
+              // Like a push to a repository: the files and the folder are
+              // gone, and only the file paths are reported.
+              fs.removeSync(path.join(root, "notes/multi+"));
+
+              syncFolder(blogID, function (err2, folder2, finish2) {
+                if (err2) return done.fail(err2);
+
+                async.series(
+                  [
+                    function (next) {
+                      folder2.update("/notes/multi+/a.md", next);
+                    },
+                    function (next) {
+                      folder2.update("/notes/multi+/b.md", next);
+                    },
+                  ],
+                  function (seriesErr2) {
+                    finish2(seriesErr2, function (finishErr2) {
+                      if (seriesErr2 || finishErr2)
+                        return done.fail(seriesErr2 || finishErr2);
+
+                      Entry.get(blogID, "/notes/multi", function (dropped) {
+                        expect(dropped && !dropped.deleted).toBeFalsy();
+
+                        Entries.getListIDs(
+                          blogID,
+                          "entries",
+                          {},
+                          function (listErr, ids) {
+                            if (listErr) return done.fail(listErr);
+                            expect(ids).not.toContain("/notes/multi");
+                            done();
+                          }
+                        );
+                      });
+                    });
+                  }
+                );
+              });
+            });
+          });
+        }
+      );
+    });
+  });
+
+  it("keeps a sibling file's entry when every file of its colliding + folder is removed", function (done) {
+    var blogID = this.blog.id;
+    var root = this.blogDirectory;
+
+    syncFolder(blogID, function (err, folder, finish) {
+      if (err) return done.fail(err);
+
+      async.series(
+        [
+          function (next) {
+            fs.outputFileSync(
+              path.join(root, "article.md"),
+              "# The Real Article"
+            );
+            folder.update("/article.md", next);
+          },
+          function (next) {
+            fs.outputFileSync(path.join(root, "article.md+/a.md"), "# A");
+            folder.update("/article.md+/a.md", next);
+          },
+          function (next) {
+            fs.outputFileSync(path.join(root, "article.md+/b.md"), "# B");
+            folder.update("/article.md+/b.md", next);
+          },
+        ],
+        function (seriesErr) {
+          finish(seriesErr, function (finishErr) {
+            if (seriesErr || finishErr)
+              return done.fail(seriesErr || finishErr);
+
+            fs.removeSync(path.join(root, "article.md+"));
+
+            syncFolder(blogID, function (err2, folder2, finish2) {
+              if (err2) return done.fail(err2);
+
+              async.series(
+                [
+                  function (next) {
+                    folder2.update("/article.md+/a.md", next);
+                  },
+                  function (next) {
+                    folder2.update("/article.md+/b.md", next);
+                  },
+                ],
+                function (seriesErr2) {
+                  finish2(seriesErr2, function (finishErr2) {
+                    if (seriesErr2 || finishErr2)
+                      return done.fail(seriesErr2 || finishErr2);
+
+                    Entry.get(blogID, "/article.md", function (entry) {
+                      expect(entry).toBeDefined();
+                      expect(entry.deleted).toBeFalsy();
+                      expect(
+                        entry.html.indexOf("The Real Article")
+                      ).toBeGreaterThan(-1);
+                      done();
+                    });
+                  });
+                }
+              );
             });
           });
         }
