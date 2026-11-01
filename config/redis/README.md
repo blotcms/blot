@@ -345,7 +345,9 @@ restore.sh --offsite blot-b2-read s3://<bucket> <ssh-host> latest
 blot-b2-read s3://<bucket>` does the same on a new host. Only `daily/` backups
 are offsite. Your machine lists and downloads the backup, then streams it to
 the host over ssh, so it needs disk space for one backup and the host needs no
-AWS or B2 key. After that it is checked and loaded as with S3.
+AWS or B2 key. After that it is checked and loaded as with S3. The speed is
+your upload speed: the 1 Nov 2026 drill took about 33 minutes from a home
+connection, nearly all of it sending the file, against a few minutes from S3.
 
 ## Alerts
 

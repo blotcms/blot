@@ -419,3 +419,20 @@ Entry template:
 - Follow-up: the 250ms fork is ~3x the usual 60-85ms, an hour after the
   drill's full sync; under the threshold, so the 500ms alert will catch a
   trend.
+
+### 2026-11-01 — restore drill 3, from Backblaze B2
+
+- Trigger / evidence: first real restore from the offsite bucket (#2261),
+  with `launch.sh --drill --from latest --offsite`.
+- Result: passed in 33 minutes, nearly all of it streaming the file from the
+  operator's Mac, so a B2 restore's time is the operator's upload speed. The
+  dump passed the RDB check and loaded; `backup.sh` skipped on the drill
+  marker. The read key's profile also needs a `~/.aws/config` block with the B2
+  endpoint.
+- Also proved on a real host: Redis at `oom_score_adj` -900, a BGSAVE child at
+  1000, `CPUWeight` 1000, and the Unix socket bound after a systemd restart.
+- Caveat: the launch template attaches an instance profile, so the host had
+  one, but the offsite path never ran `aws` there.
+- Follow-up: `launch.sh --drill` hosts get termination protection from the
+  launch template, so a teardown is refused until it is lifted. Presigned
+  downloads are in `TODO`.
