@@ -202,6 +202,21 @@ describe("Git sync when Redis is unavailable", function () {
     expect(applied).toBe("new");
   });
 
+  it("applies the paths Redis refused again when no commit was recorded", async function () {
+    applied = null;
+    failing["b.txt"] = unavailable();
+
+    expect(isRedisUnavailableError(await run({ push: true }))).toBe(true);
+    expect(applied).toBe("old");
+
+    failing = {};
+    updates = [];
+
+    expect(await run({ push: false })).toBe(null);
+    expect(updates).toEqual(["a.txt", "b.txt"]);
+    expect(applied).toBe("new");
+  });
+
   it("records the commit when none is recorded and nothing has changed", async function () {
     applied = null;
 
