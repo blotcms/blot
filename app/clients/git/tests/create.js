@@ -30,7 +30,7 @@ describe("git client create", function () {
         try {
           expect(err.code).toEqual("EEXIST");
           expect(await fs.pathExists(repo.directory(blog.handle) + "/HEAD")).toBe(true);
-          expect(await fs.pathExists(localPath(blog.id, "/.git"))).toBe(true);
+          expect(await fs.pathExists(localPath(blog.id, "/.git"))).toBe(false);
           done();
         } catch (e) {
           done.fail(e);
@@ -113,6 +113,8 @@ describe("git client create", function () {
           expect(err).not.toEqual(null);
           expect(err).toEqual(jasmine.any(Error));
           expect(fs.pathExistsSync(repo.directory(blog.handle))).toBe(false);
+          // It isn't one this create made
+          expect(fs.pathExistsSync(localPath(blog.id, "/.git"))).toBe(true);
 
           done();
         });
@@ -141,7 +143,6 @@ describe("git client create", function () {
 
           // Verify files and folders are preserved in Blot's copy of blog folder
           expect(fs.readdirSync(blogDir)).toEqual([
-            ".git",
             "Sub Folder",
             "first.txt",
             "third",
@@ -186,7 +187,6 @@ describe("git client create", function () {
           if (err) return done.fail(err);
 
           expect(fs.readdirSync(blogDir).sort()).toEqual([
-            ".git",
             ".gitignore",
             ".verification",
             "post.txt",
@@ -249,9 +249,9 @@ describe("git client create", function () {
             "123\n"
           );
 
-          expect(fs.existsSync(blogDir + "/.git")).toBe(true);
+          expect(fs.existsSync(blogDir + "/.git")).toBe(false);
           expect(
-            await Git(blogDir).silent(true).raw(["rev-list", "--count", "HEAD"])
+            await Git(repo.directory(blog.handle)).silent(true).raw(["rev-list", "--count", "master"])
           ).not.toEqual("0\n");
 
           done();
@@ -269,8 +269,8 @@ describe("git client create", function () {
       create(blog, function (err) {
         if (err) return done.fail(err);
 
-        // Leave the blog folder without a .git, so a failed create's cleanup
-        // runs git config in a folder with no repo of its own
+        // Leave the blog folder without a .git, as a create makes none, so a
+        // failed create's cleanup finds no repo of its own
         fs.removeSync(blogDir + "/.git");
 
         create(blog, async function (err) {

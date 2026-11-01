@@ -18,10 +18,12 @@ var EMPTY_TREE = materialize.EMPTY_TREE;
 // Redis (database.setApplied) once every path has been processed, and each sync
 // diffs from it. Applying a path twice is harmless.
 //
-// The live clone in the blog folder's .git directory is not used to find
-// changes any more, but Blot's own writes still commit in it and push to the
-// bare repository (see repo.commit), so it is kept at the new commit too, by
-// followBareRepo below. Remove that when the live clones go.
+// A blog may still have a live clone in the blog folder's .git directory, and
+// a new one never does. Nothing reads it to find changes, and Blot's own
+// writes are made in the bare repository (see repo.commit), but where there is
+// one it is kept at the new commit (repo.followLiveClone) so that it is not
+// left behind if this code is rolled back. It is also where a sync starts from
+// if no applied commit is recorded. Remove that when the live clones go.
 
 // Calls back with true if the repository has the commit
 function hasCommit(bare, commit, callback) {
@@ -34,29 +36,37 @@ function hasCommit(bare, commit, callback) {
 // Calls back with the commit to diff from, the one Blot last applied. Without
 // a recorded commit, or when it is no longer in the repository (a force push
 // and a gc), that is where the live clone is now, before this sync moves it,
-// which is where the blog folder was. If the repository has lost that too, it
-// is the empty tree: every file is written, and files which should be gone are
-// not removed until a resync. It is recorded here so a sync that stops part way
+// which is where the blog folder was. If the repository has lost that too, or
+// there is no live clone (headBeforePull is null), it is the empty tree: every
+// file is written, and files which should be gone are not removed until a
+// resync. It is recorded here so a sync that stops part way
 // starts from it again, rather than from wherever the live clone is by then.
 //
 // A failure to read it is an error: carrying on as if there were none could
 // skip the changes the last sync did not get to apply.
 function appliedBase(bare, folder, blogID, headBeforePull, callback) {
   function startFromClone() {
-    hasCommit(bare, headBeforePull, function (found) {
-      var base = found ? headBeforePull : EMPTY_TREE;
+    if (!headBeforePull) {
+      folder.log("No live clone to compare from, comparing from nothing");
+      return record(EMPTY_TREE);
+    }
 
+    hasCommit(bare, headBeforePull, function (found) {
       if (!found)
         folder.log(`Commit ${headBeforePull} is not in the repo, comparing from nothing`);
 
-      database.setApplied(blogID, base, function (err) {
-        if (err) {
-          folder.log("Error recording applied commit: " + err.message);
-          return callback(err);
-        }
+      record(found ? headBeforePull : EMPTY_TREE);
+    });
+  }
 
-        callback(null, base);
-      });
+  function record(base) {
+    database.setApplied(blogID, base, function (err) {
+      if (err) {
+        folder.log("Error recording applied commit: " + err.message);
+        return callback(err);
+      }
+
+      callback(null, base);
     });
   }
 
@@ -79,38 +89,36 @@ function appliedBase(bare, folder, blogID, headBeforePull, callback) {
   });
 }
 
-// Moves the live clone's HEAD and index to the commit without touching the
-// blog folder, which materialize has already brought there (a mixed reset). It
-// is what Blot's next commit in the live clone is made on top of, so that it
-// can be pushed to the bare repository. Before this the same reset --hard did
-// that and wrote the files.
+// Calls back with the commit the live clone is at, which is where its blog
+// folder was before this sync, or null if there is no clone or it has none
+function currentHead(git, folder, callback) {
+  if (!git) return callback(null);
+
+  folder.log("Fetching current git commit hash");
+  git.raw(["rev-parse", "HEAD"], function (err, head) {
+    head = err ? "" : head.trim();
+
+    if (!head) folder.log("No commit in the live clone");
+
+    callback(head || null);
+  });
+}
+
+// Moves the live clone, if there is one, to the commit, which materialize is
+// about to bring the blog folder to. Nothing needs it to have been moved, so a
+// failure is logged and the sync goes on. During a handle change the bare
+// repository moves just before the new handle is saved, so a sync holding the
+// former handle can find no repository (see repo.js).
 function followBareRepo(git, folder, gitHandle, commit, callback) {
-  // During a handle change the bare repository moves just before the new
-  // handle is saved, so a sync holding the former handle can find no
-  // repository (see repo.js)
-  repo.pointOriginAtBareRepo(git, gitHandle, function (err) {
+  if (!git) return callback();
+
+  repo.followLiveClone(git, gitHandle, commit, function (err) {
     if (err) {
-      folder.log("Error adding remote: " + err.message);
+      folder.log("Error moving the live clone: " + err.message);
       debug(err);
-      return callback(err);
     }
 
-    git.raw(["fetch", "--all"], function (err) {
-      if (err) {
-        folder.log("Error fetching git repo: " + err.message);
-        debug(err);
-        return callback(err);
-      }
-
-      git.raw(["reset", "--mixed", "--quiet", commit], function (err) {
-        if (err) {
-          folder.log("Error resetting git repo: " + err.message);
-          debug(err);
-        }
-
-        callback(err);
-      });
-    });
+    callback();
   });
 }
 
@@ -130,39 +138,23 @@ module.exports = function sync (blogID, gitHandle, callback) {
     if (err) return callback(err);
 
     debug("beginning sync");
-    folder.log("Checking git repo exists: " + folder.path);
-    checkGitRepoExists(folder.path, function (err) {
-      if (err) {
-        folder.log("Git repo does not exist");
-        return done(err, callback);
-      } else {
-        folder.log("Git repo exists");
-      }
-
-      var git;
+    folder.log("Checking for a live clone: " + folder.path);
+    checkGitRepoExists(folder.path, function (noClone) {
+      var git = null;
       var bare;
 
-      // Throws an error if directory does not exist
+      // A blog made since Blot's writes stopped using a clone has none, and
+      // that is not an error. Throws an error if directory does not exist.
       try {
-        git = Git(folder.path);
         bare = Git(repo.directory(gitHandle));
+        if (!noClone) git = Git(folder.path);
       } catch (err) {
         return done(err, callback);
       }
 
-      folder.log("Fetching current git commit hash");
-      git.raw(["rev-parse", "HEAD"], function (err, headBeforePull) {
-        if (err) {
-          debug(err);
-          return done(err, callback);
-        }
+      folder.log(git ? "Live clone exists" : "No live clone");
 
-        if (!headBeforePull)
-          return done(new Error("No commit on repository"), callback);
-
-        // Remove whitespace from stdout
-        headBeforePull = headBeforePull.trim();
-
+      currentHead(git, folder, function (headBeforePull) {
         // Validate the commit once, then use that same ID throughout: the
         // branch may move while we work
         validateTree(bare, "refs/heads/master").then(function (commit) {
@@ -170,9 +162,7 @@ module.exports = function sync (blogID, gitHandle, callback) {
             if (err) return done(err, callback);
 
             folder.log("Syncing blog folder with git repo");
-            followBareRepo(git, folder, gitHandle, commit, function (err) {
-              if (err) return done(err, callback);
-
+            followBareRepo(git, folder, gitHandle, commit, function () {
               // Already applied, nothing to do or write
               if (base === commit) {
                 folder.log("No changes to repo");

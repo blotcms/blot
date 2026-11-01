@@ -1,7 +1,7 @@
 // The one place that knows where a blog's bare repository is and how it is
 // served, written to and watched, so the rest of the git client asks for what
-// it wants (serve this request, a push happened, commit this change) and does
-// not build paths or talk to git's protocol.
+// it wants (serve this request, a push happened, commit this change, remove
+// the repository) and does not build paths or talk to git's protocol.
 //
 // Repositories are keyed by the blog's handle for now, so the functions that
 // are not about one blog take the handle.
@@ -11,6 +11,7 @@ var localPath = require("helper/localPath");
 var lock = require("helper/lock");
 var clfdate = require("helper/clfdate");
 var Git = require("./git");
+var plumbing = require("./plumbing");
 var dataDir = require("./dataDir");
 var checkGitRepoExists = require("./checkGitRepoExists");
 var smartHttp = require("./smartHttp");
@@ -100,10 +101,34 @@ function onPush(callback, options) {
   abandon = (options && options.abandon) || null;
 }
 
-// The live checkout in the blog folder pushes to and fetches from its
-// 'origin' remote, which should be the bare repository. The stored URL can
-// go stale (for example if the data directory has moved), so we reset it
-// before talking to the remote.
+// Removes a blog's bare repository, given its git handle. Calls back whether or
+// not there was one. The handle names a directory in the data directory and
+// nothing else: a handle which could name another place is refused.
+function remove(handle, callback) {
+  // A blog without a handle has no repository
+  if (!handle) return process.nextTick(callback, null);
+
+  if (
+    typeof handle !== "string" ||
+    handle === "." ||
+    handle === ".." ||
+    /[\/\\\0]/.test(handle)
+  )
+    return process.nextTick(callback, new Error("Invalid Git handle: " + handle));
+
+  fs.remove(directory(handle), callback);
+}
+
+// Older blogs have a live clone: a second repository in the blog folder's .git
+// directory, which Blot's commits used to be made in and pushed from. Blogs
+// made since never had one, and nothing relies on it now, so all that is left
+// here is keeping it at master, so that it works again if this code is rolled
+// back (Blot's commit would otherwise be made on a stale HEAD and refused as
+// not a fast-forward). Remove it with the clones.
+//
+// It pushes to and fetches from its 'origin' remote, which should be the bare
+// repository. The stored URL can go stale (for example if the data directory
+// has moved), so we reset it before talking to the remote.
 //
 // We only do so if the bare repository exists at the path. When a blog's
 // handle changes, the bare repository is renamed just before the new handle is
@@ -129,124 +154,129 @@ function pointOriginAtBareRepo(git, handle, callback) {
   });
 }
 
-// Makes one change to the blog's repository: writes the file, or removes it
-// if contents is null, and commits and pushes it. Used by the client's write
-// and remove methods.
-//
-//   commit(blogID, { path: "/a.txt", contents: "A" }, callback)
-function commit(blogID, change, callback) {
-  var path = change.path;
-  var contents = change.contents;
-  var git;
-  var blogDirectory = localPath(blogID, "/");
-
-  // Right now local path returns a path with a trailing slash
-  // eventually I would like this function to just accept
-  // blogDirectory as a first argument...
-  if (blogDirectory.slice(-1) === "/")
-    blogDirectory = blogDirectory.slice(0, -1);
-
-  checkGitRepoExists(blogDirectory, function (err) {
+// Moves the live clone's HEAD and index to the commit without touching the
+// blog folder (a mixed reset), after fetching it from the bare repository.
+function followLiveClone(git, handle, commit, callback) {
+  pointOriginAtBareRepo(git, handle, function (err) {
     if (err) return callback(err);
 
-    // Throws an error if directory does not exist
-    try {
-      git = Git(localPath(blogID, "/"));
-    } catch (err) {
-      return callback(err);
-    }
-
-    // Make sure we push to the bare repository, even if the checkout's origin
-    // has gone stale (sync does the same). We do this before touching the
-    // blog folder, so if it fails the checkout is left as it was.
-    //
-    // Required here because models/blog requires renameRepo, which requires
-    // this module.
-    require("models/blog").get({ id: blogID }, function (err, blog) {
+    git.raw(["fetch", "--all"], function (err) {
       if (err) return callback(err);
 
-      if (!blog) return callback(new Error("No blog with ID " + blogID));
-
-      pointOriginAtBareRepo(git, blog.handle, function (err) {
-        if (err) return callback(err);
-
-        var changeFile =
-          contents === null
-            ? function (callback) {
-                fs.remove(localPath(blogID, path), callback);
-              }
-            : function (callback) {
-                fs.outputFile(localPath(blogID, path), contents, callback);
-              };
-
-        changeFile(function (err) {
-          if (err) return callback(err);
-
-          // Git does not like paths with leading slashes
-          if (path[0] === "/") path = path.slice(1);
-
-          // Could we queue these commands for better performance?
-          git.raw(["add", "--", path], function (err) {
-            // If a removed path was not tracked by git, no worries.
-            // The message has a trailing newline so we trim it and check
-            // against this template. This doesn't feel *robust* but it
-            // seems to work.
-            if (
-              contents === null &&
-              err &&
-              err.message.trim() ===
-                "fatal: pathspec '" + path + "' did not match any files"
-            ) {
-              return callback(null);
-            }
-
-            if (err) return callback(err);
-
-            var message = (contents === null ? "Removed " : "Updated ") + path;
-
-            // Blot applies this change itself, so the commit counts as
-            // applied too, see advanceApplied below. A repository with no
-            // commit yet has no parent: the recorded commit is left alone.
-            git.raw(["rev-parse", "HEAD"], function (err, parent) {
-              parent = err ? "" : parent.trim();
-
-              git.raw(["commit", "-m", message], function (err) {
-                if (err) return callback(err);
-
-                // We push changes made to the bare repository, holding the
-                // lock a user's push holds to move the refs, so the two
-                // never move them at once
-                pushUnderRefLock(git, blogID, function (err) {
-                  if (err) return callback(err);
-
-                  debug("Blog:", blogID, "Committed", path);
-                  advanceApplied(git, blogID, parent, callback);
-                });
-              });
-            });
-          });
-        });
+      git.raw(["reset", "--mixed", "--quiet", commit], function (err) {
+        callback(err || null);
       });
     });
   });
 }
 
-function pushUnderRefLock(git, blogID, callback) {
-  holdRefLock(blogID).then(function (release) {
-    git.raw(["push"], function (err) {
-      release().then(
-        function () {
-          process.nextTick(callback, err);
-        },
-        function (releaseErr) {
-          // The lock expires by itself; a push that worked still worked
-          console.error(clfdate(), "Git: could not release the ref lock of", blogID, releaseErr.message);
-          process.nextTick(callback, err);
-        }
-      );
+// Moves the blog's live clone, if it has one, to the commit. Nothing depends
+// on it, so a failure is logged and not passed on.
+function followLiveCloneIfAny(blogID, handle, commit, callback) {
+  var blogDirectory = localPath(blogID, "/");
+
+  // Right now local path returns a path with a trailing slash
+  if (blogDirectory.slice(-1) === "/")
+    blogDirectory = blogDirectory.slice(0, -1);
+
+  checkGitRepoExists(blogDirectory, function (err) {
+    if (err) return callback();
+
+    var git;
+
+    try {
+      git = Git(blogDirectory);
+    } catch (err) {
+      return callback();
+    }
+
+    followLiveClone(git, handle, commit, function (err) {
+      if (err) console.error(clfdate(), "Git: could not move the live clone of", blogID, err.message);
+      callback();
     });
-  }, function (err) {
-    process.nextTick(callback, err);
+  });
+}
+
+// Makes one change to the blog's repository: writes the file, or removes it
+// if contents is null, as a commit on master of the bare repository. Used by
+// the client's write and remove methods.
+//
+//   commit(blogID, { path: "/a.txt", contents: "A" }, callback)
+//
+// The file is changed in the blog folder too, before the commit, as it always
+// was. Only the file is, nothing else in the folder.
+//
+// The commit is made while holding the ref lock a user's push holds to move
+// master, so the two never move it at once, and it moves master only from the
+// commit it was made on (see plumbing.js). If master has moved by then the
+// change is made again on the new master, a few times, and then the write
+// fails: the push that moved it is never replaced, and the file stays in the
+// blog folder, which is where a write that failed to commit has always left it.
+//
+// A change that leaves the tree as it is (the same contents again, or a removal
+// of a file the repository doesn't have) makes no commit.
+function commit(blogID, change, callback) {
+  commitChange(blogID, change).then(
+    function () {
+      process.nextTick(callback, null);
+    },
+    function (err) {
+      process.nextTick(callback, err);
+    }
+  );
+}
+
+async function commitChange(blogID, change) {
+  var path = change.path;
+  var contents = change.contents;
+
+  // Before anything is touched
+  plumbing.treePath(path);
+
+  // Required here because models/blog requires renameRepo, which requires
+  // this module.
+  var blog = await new Promise(function (resolve, reject) {
+    require("models/blog").get({ id: blogID }, function (err, blog) {
+      if (err) return reject(err);
+      if (!blog) return reject(new Error("No blog with ID " + blogID));
+      resolve(blog);
+    });
+  });
+
+  var bareRepoDirectory = directory(blog.handle);
+
+  if (!(await fs.pathExists(bareRepoDirectory)))
+    throw new Error("The Git repository of " + blogID + " does not exist at " + bareRepoDirectory);
+
+  if (contents === null) {
+    await fs.remove(localPath(blogID, path));
+  } else {
+    await fs.outputFile(localPath(blogID, path), contents);
+  }
+
+  var release = await holdRefLock(blogID);
+  var result;
+
+  try {
+    result = await plumbing.commitFile(bareRepoDirectory, change);
+  } finally {
+    try {
+      await release();
+    } catch (err) {
+      // The lock expires by itself; a commit that worked still worked
+      console.error(clfdate(), "Git: could not release the ref lock of", blogID, err.message);
+    }
+  }
+
+  if (!result.commit) return;
+
+  debug("Blog:", blogID, "Committed", path);
+
+  plumbing.collect(bareRepoDirectory);
+
+  await advanceApplied(blogID, result.parent, result.commit);
+  await new Promise(function (resolve) {
+    followLiveCloneIfAny(blogID, blog.handle, result.commit, resolve);
   });
 }
 
@@ -254,16 +284,15 @@ function pushUnderRefLock(git, blogID, callback) {
 // if it is still the commit's parent. If it is something else, an earlier
 // push has not been applied, and Blot's change is left for the next sync to
 // apply again, which is harmless. Redis being unavailable is no reason to
-// fail a write that is already pushed, for the same reason.
-function advanceApplied(git, blogID, parent, callback) {
-  git.raw(["rev-parse", "HEAD"], function (err, head) {
-    head = err ? "" : head.trim();
+// fail a write that is already committed, for the same reason.
+function advanceApplied(blogID, parent, commit) {
+  return new Promise(function (resolve) {
+    // The repository's first commit has no parent
+    if (!parent) return resolve();
 
-    if (!parent || !head || head === parent) return callback(null);
-
-    database.advanceApplied(blogID, parent, head, function (err) {
+    database.advanceApplied(blogID, parent, commit, function (err) {
       if (err) debug("Blog:", blogID, "Could not record applied commit", err);
-      callback(null);
+      resolve();
     });
   });
 }
@@ -271,8 +300,11 @@ function advanceApplied(git, blogID, parent, callback) {
 module.exports = {
   directory: directory,
   exists: exists,
+  remove: remove,
   handleSmartHttp: handleSmartHttp,
   onPush: onPush,
   commit: commit,
+  holdRefLock: holdRefLock,
   pointOriginAtBareRepo: pointOriginAtBareRepo,
+  followLiveClone: followLiveClone,
 };

@@ -7,12 +7,12 @@ describe("git client remove", function () {
 
   var remove = require("clients/git/remove");
   var write = require("clients/git/write");
+  var repo = require("clients/git/repo");
   var Git = require("./setup/git");
   var fs = require("fs-extra");
-  var localPath = require("helper/localPath");
 
-  it("should return an error if there is no git repo in blog folder", function (done) {
-    fs.removeSync(localPath(this.blog.id, ".git"));
+  it("should return an error if there is no bare repo", function (done) {
+    fs.removeSync(repo.directory(this.blog.handle));
 
     remove(this.blog.id, "/path", function (err) {
       expect(err.message).toContain("not");
