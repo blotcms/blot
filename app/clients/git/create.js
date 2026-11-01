@@ -143,6 +143,15 @@ module.exports = function create(blog, callback) {
     const liveDirectory = localPath(blog.id, "/");
     const bareDirectory = repos.directory(blog.handle);
 
+    // Outside the try below, because its cleanup removes this directory. If
+    // it was already here it isn't ours to remove: it could be this blog's
+    // connected repository, or one another blog left at this handle.
+    try {
+      await fs.mkdir(bareDirectory);
+    } catch (err) {
+      return done(err, callback);
+    }
+
     try {
       await createRepository(blog, folder);
       done(null, callback);
@@ -157,8 +166,8 @@ async function createRepository(blog, folder) {
   const liveDirectory = localPath(blog.id, "/");
   const bareDirectory = repos.directory(blog.handle);
 
-  report(folder, "Making bare repository directory and creating token");
-  await prepareDirectoriesAndMetadata(blog, liveDirectory, bareDirectory);
+  report(folder, "Creating token");
+  await prepareMetadata(blog, liveDirectory);
 
   const bareRepo = Git(bareDirectory);
   const liveRepo = liveGit(liveDirectory);
@@ -211,9 +220,8 @@ async function createRepository(blog, folder) {
   folder.status("Repository created successfully");
 }
 
-async function prepareDirectoriesAndMetadata(blog, liveDirectory, bareDirectory) {
+async function prepareMetadata(blog, liveDirectory) {
   await Promise.all([
-    fs.mkdir(bareDirectory),
     setStatus(blog.owner, "createInProgress"),
     createToken(blog.owner),
     assertDirectoryOwnership(liveDirectory),

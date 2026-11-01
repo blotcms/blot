@@ -105,11 +105,10 @@ function onPush(callback, options) {
 // go stale (for example if the data directory has moved), so we reset it
 // before talking to the remote.
 //
-// We only do so if the bare repository exists at the new path. When a blog's
-// handle changes, the new handle is saved before the bare repository is
-// renamed (and the rename can fail), so the handle we look up may not have a
-// repository yet. In that case 'origin' is left alone, since it still points
-// at the old path, which exists during the rename.
+// We only do so if the bare repository exists at the path. When a blog's
+// handle changes, the bare repository is renamed just before the new handle is
+// saved, so for a moment the handle we look up has no repository. In that case
+// 'origin' is left alone: the next sync or commit fixes it.
 function pointOriginAtBareRepo(git, handle, callback) {
   var bareRepoDirectory = directory(handle);
 
