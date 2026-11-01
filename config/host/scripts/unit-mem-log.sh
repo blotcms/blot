@@ -17,8 +17,15 @@
 # node_max is the biggest node process (node_sum can't tell one from two; a
 # node process shows up in comm as MainThread);
 # top is the biggest process that is not node/nginx/openresty/tini/sh/su-exec
-# ("-" if none), i.e. the child-process spike. limit=0 means unlimited. Plus
-# one `name=host mem_available mem_total swap_used` line per sample.
+# ("-" if none), i.e. the child-process spike. limit=0 means unlimited. On
+# cgroup v2 a peak=B field is the cgroup's high-water mark, which catches what
+# falls between samples. Plus one `name=host mem_available mem_total swap_used`
+# line per sample.
+#
+# The units' sandbox jobs (#2257) run in cgroups outside the unit's, so each
+# unit's subtree, where the host has made one, gets a line of its own as
+# name=blot-sandbox-<unit>. Jobs last under a second, so read peak and oom_kill
+# there, not anon.
 # Works on cgroup v1 (Amazon Linux 2) and v2 (Amazon Linux 2023).
 # Read it with unit-mem-summary.sh.
 #
@@ -42,7 +49,7 @@ if command -v flock > /dev/null; then
 fi
 
 # Trim only in the first run of the hour. Keep about 30 days of samples
-# (20 lines a minute is about 860,000).
+# (28 lines a minute is about 1,200,000).
 trim=0
 [ "$(date -u +%M)" = 00 ] && trim=1
 
@@ -59,6 +66,10 @@ for name in $CONTAINERS; do
     "$CGROUP_ROOT/memory/docker/$id" "$CGROUP_ROOT/memory/system.slice/docker-$id.scope"; do
     if [ -r "$dir/memory.stat" ]; then targets="$targets $name=$dir"; break; fi
   done
+done
+for unit in blue green; do
+  dir="$CGROUP_ROOT/blot-sandbox/$unit"
+  [ -r "$dir/memory.stat" ] && targets="$targets blot-sandbox-$unit=$dir"
 done
 
 # Prints the VmRSS of a pid in bytes; nothing if it has gone.
@@ -98,8 +109,10 @@ container_fields() {
          fi ;;
     esac
   done
+  peak=""
+  [ -r "$dir/memory.peak" ] && peak=" peak=$(cat "$dir/memory.peak")"
   echo "anon=$1 file=$2 shmem=$3 limit=$limit oom_kill=${oom:-0}" \
-    "node_max=$node_max node_sum=$node_sum top=$top_comm:$top_rss"
+    "node_max=$node_max node_sum=$node_sum top=$top_comm:$top_rss$peak"
 }
 
 sample=0
@@ -121,7 +134,7 @@ while [ "$sample" -lt "$SAMPLES" ]; do
   printf %s "$out" >> "$LOG"
 done
 
-if [ "$trim" = 1 ] && [ "$(wc -l < "$LOG")" -gt 900000 ]; then
-  tail -n 860000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+if [ "$trim" = 1 ] && [ "$(wc -l < "$LOG")" -gt 1250000 ]; then
+  tail -n 1200000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
 fi
 exit 0
