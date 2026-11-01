@@ -111,6 +111,9 @@ logpath = /dev/null
 backend = polling
 port = http,https
 bantime = -1
+# With increment on (the [DEFAULT] above), a restart rewrites -1 to
+# bantime.maxtime, so a "permanent" ban would end a week after it was added.
+bantime.increment = false
 banaction = iptables-multiport
 action = %(action_)s
          iptables-multiport[name=%(__name__)s-udp, port="http,https", protocol=udp]

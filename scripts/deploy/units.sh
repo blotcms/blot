@@ -11,7 +11,8 @@
 # min, or 2 min for an explicit commit, as in deploy.yml: an older commit's
 # image should already exist, and may never have been built). Runs from the
 # operator's Mac or from .github/workflows/deploy.yml, over the `ssh blot`
-# alias (ec2-user from the Mac, deploy from the workflow).
+# alias (ec2-user from the Mac, deploy from the workflow). To deploy to another
+# host, set BLOT_DEPLOY_TARGET to an ssh alias or user@host (default: blot).
 #
 # The proxy/deploy scripts are copied from this checkout on every run, so the
 # host never runs a stale copy, together with unit-settings.env, written here
@@ -22,6 +23,15 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+# The ssh target, also read by util/sshCommand.js. Plain words only: a leading
+# - would be read as an ssh option.
+TARGET="${BLOT_DEPLOY_TARGET:-blot}"
+if [[ ! "$TARGET" =~ ^[A-Za-z0-9._@-]+$ || "$TARGET" == -* ]]; then
+  echo "Invalid BLOT_DEPLOY_TARGET '$TARGET': use an ssh alias or user@host" >&2
+  exit 1
+fi
+[ "$TARGET" = blot ] || echo "Deploying to ssh target: $TARGET"
 
 # Deploy only from master (the workflow sets SKIP_BRANCH_CHECK).
 if [ "${SKIP_BRANCH_CHECK:-}" != "true" ] && [ "$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)" != master ]; then
@@ -41,7 +51,7 @@ IMAGE="ghcr.io/blotcms/blot:$SHA"
 echo "Deploying unit image for commit: $SHA - $(git -C "$ROOT" log -1 --pretty=%s "$SHA")"
 
 # Poll from the host, which pulls the image anyway, in one ssh session.
-ssh blot "
+ssh "$TARGET" "
   deadline=\$(( \$(date +%s) + $WAIT ))
   until docker manifest inspect $IMAGE >/dev/null 2>&1; do
     [ \$(date +%s) -lt \$deadline ] || { echo 'No image $IMAGE after ${WAIT}s: is the image workflow done for this commit?' >&2; exit 1; }
@@ -53,14 +63,14 @@ ssh blot "
 
 echo "Copying proxy/deploy and unit-settings.env to the host"
 # COPYFILE_DISABLE: macOS tar would otherwise add ._* AppleDouble files.
-COPYFILE_DISABLE=1 tar -C "$ROOT/proxy" --exclude=deploy/e2e --exclude=deploy/tests -cf - deploy | ssh blot '
+COPYFILE_DISABLE=1 tar -C "$ROOT/proxy" --exclude=deploy/e2e --exclude=deploy/tests -cf - deploy | ssh "$TARGET" '
   set -e
   cd "$HOME"
   rm -rf proxy-deploy.new
   mkdir proxy-deploy.new
   tar -C proxy-deploy.new --strip-components=1 -xf -
 '
-node "$ROOT/scripts/deploy/unit-settings.js" | ssh blot '
+node "$ROOT/scripts/deploy/unit-settings.js" | ssh "$TARGET" '
   set -e
   cd "$HOME"
   cat > proxy-deploy.new/unit-settings.env
@@ -69,4 +79,4 @@ node "$ROOT/scripts/deploy/unit-settings.js" | ssh blot '
 '
 
 echo "Running blue-green.sh $SHA on the host"
-ssh blot "\$HOME/proxy-deploy/blue-green.sh $SHA"
+ssh "$TARGET" "\$HOME/proxy-deploy/blue-green.sh $SHA"

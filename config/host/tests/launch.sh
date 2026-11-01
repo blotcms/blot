@@ -14,10 +14,21 @@ FAILED=0
 ok() { echo "ok - $*"; }
 fail() { echo "FAILED - $*"; FAILED=1; }
 
-mkdir "$TMP/bin" "$TMP/host"
+mkdir -p "$TMP/bin" "$TMP/host" "$TMP/home/.ssh"
+export HOME="$TMP/home"  # so launch.sh can never read the real ~/.ssh
+unset BLOT_DEPLOY_PUBLIC_KEY
 cp "$REPO/config/host/launch.sh" "$TMP/host/launch.sh"
 touch "$TMP/key"
 echo "ssh-ed25519 AAAAtest test@example.com" > "$TMP/deploy.pub"
+
+# gh prints STUB_GH_KEY, or fails when it is empty.
+cat > "$TMP/bin/gh" << 'EOF'
+#!/bin/bash
+echo "$*" >> "$STUB_DIR/gh.log"
+[ -n "${STUB_GH_KEY:-}" ] || exit 1
+echo "$STUB_GH_KEY"
+EOF
+chmod +x "$TMP/bin/gh"
 
 # Each stub appends one line per call to its log (arguments joined by spaces).
 cat > "$TMP/bin/aws" << 'EOF'
@@ -51,7 +62,7 @@ chmod +x "$TMP/bin/aws" "$TMP/bin/ssh" "$TMP/bin/nc" "$TMP/host/bootstrap.sh" "$
 run() {
   rm -f "$TMP"/*.log
   STATUS=0
-  OUT=$(STUB_DIR="$TMP" STUB_ADDRESSES="${STUB_ADDRESSES:-None 10.0.0.5}" STUB_NC_EXIT="${STUB_NC_EXIT:-1}" PATH="$TMP/bin:$PATH" "$TMP/host/launch.sh" "$@" 2>&1) || STATUS=$?
+  OUT=$(STUB_DIR="$TMP" STUB_ADDRESSES="${STUB_ADDRESSES:-None 10.0.0.5}" STUB_NC_EXIT="${STUB_NC_EXIT:-1}" STUB_GH_KEY="${STUB_GH_KEY:-}" PATH="$TMP/bin:$PATH" "$TMP/host/launch.sh" "$@" 2>&1) || STATUS=$?
   AWS_LOG=$(cat "$TMP/aws.log" 2> /dev/null || true)
   SSH_LOG=$(cat "$TMP/ssh.log" 2> /dev/null || true)
   BOOTSTRAP_LOG=$(cat "$TMP/bootstrap.log" 2> /dev/null || true)
@@ -61,7 +72,7 @@ run() {
 has() { if printf '%s\n' "$2" | grep -qF -- "$3"; then ok "$1"; else fail "$1 (no '$3' in: $2)"; fi; }
 lacks() { if printf '%s\n' "$2" | grep -qF -- "$3"; then fail "$1 (found '$3')"; else ok "$1"; fi; }
 
-COMMON=(--type m6gd.xlarge --key-name test-key --key "$TMP/key" --redis-maxmemory 1gb)
+COMMON=(--type m6gd.xlarge --key-name test-key --key "$TMP/key" --redis-maxmemory 1gb --deploy-public-key "$TMP/deploy.pub")
 
 run --dry-run --type m6gd.xlarge --key-name test-key
 [ "$STATUS" -eq 0 ] && ok "dry run exits 0 without --key" || fail "dry run exits 0 without --key: $OUT"
@@ -123,7 +134,7 @@ run --type m6gd.xlarge --key-name test-key --redis-maxmemory 1gb
 run --type m6gd.xlarge --key-name test-key --key "$TMP/key"
 [ "$STATUS" -ne 0 ] && ok "missing --redis-maxmemory fails" || fail "missing --redis-maxmemory fails"
 lacks "and launches nothing" "$AWS_LOG" "run-instances"
-REDIS_MAXMEMORY=2gb run --type m6gd.xlarge --key-name test-key --key "$TMP/key"
+REDIS_MAXMEMORY=2gb run --type m6gd.xlarge --key-name test-key --key "$TMP/key" --deploy-public-key "$TMP/deploy.pub"
 has "REDIS_MAXMEMORY in the environment is used" "$BOOTSTRAP_LOG" "REDIS_MAXMEMORY=[2gb]"
 run "${COMMON[@]}" --ssh-port 22x
 [ "$STATUS" -ne 0 ] && ok "bad --ssh-port fails" || fail "bad --ssh-port fails"
@@ -144,6 +155,45 @@ STUB_ADDRESSES="None 10.0.0.5" STUB_NC_EXIT=0 run "${COMMON[@]}"
 [ "$STATUS" -eq 0 ] && ok "without a public address nothing is checked" || fail "without a public address nothing is checked: $OUT"
 [ -z "$NC_LOG" ] && ok "and nc is not run" || fail "and nc is not run"
 has "and launch says so" "$OUT" "port 6379 was not checked"
+
+# Finding the deploy key: flag, then environment, then ~/.ssh/blot-deploy.pub, then gh.
+NOKEY=(--type m6gd.xlarge --key-name test-key --key "$TMP/key" --redis-maxmemory 1gb)
+echo "ssh-ed25519 AAAAflag" > "$TMP/flag.pub"
+echo "ssh-ed25519 AAAAfile" > "$HOME/.ssh/blot-deploy.pub"
+BLOT_DEPLOY_PUBLIC_KEY="ssh-ed25519 AAAAenv" STUB_GH_KEY="ssh-ed25519 AAAAgh" run "${NOKEY[@]}" --deploy-public-key "$TMP/flag.pub"
+has "the flag beats the others" "$BOOTSTRAP_LOG" "BLOT_DEPLOY_PUBLIC_KEY=[ssh-ed25519 AAAAflag]"
+has "and the source is printed" "$OUT" "Deploy public key: --deploy-public-key"
+BLOT_DEPLOY_PUBLIC_KEY="ssh-ed25519 AAAAenv" STUB_GH_KEY="ssh-ed25519 AAAAgh" run "${NOKEY[@]}"
+has "the environment beats the file and gh" "$BOOTSTRAP_LOG" "BLOT_DEPLOY_PUBLIC_KEY=[ssh-ed25519 AAAAenv]"
+STUB_GH_KEY="ssh-ed25519 AAAAgh" run "${NOKEY[@]}"
+has "the file beats gh" "$BOOTSTRAP_LOG" "BLOT_DEPLOY_PUBLIC_KEY=[ssh-ed25519 AAAAfile]"
+has "and the source is printed" "$OUT" "Deploy public key: ~/.ssh/blot-deploy.pub"
+lacks "the key itself is not printed" "$OUT" "AAAAfile"
+[ ! -e "$TMP/gh.log" ] && ok "gh is not asked when the file has the key" || fail "gh is not asked when the file has the key"
+rm "$HOME/.ssh/blot-deploy.pub"
+STUB_GH_KEY="ssh-ed25519 AAAAgh" run "${NOKEY[@]}"
+has "gh is the last resort" "$BOOTSTRAP_LOG" "BLOT_DEPLOY_PUBLIC_KEY=[ssh-ed25519 AAAAgh]"
+has "gh is asked for the deploy environment variable" "$(cat "$TMP/gh.log")" "variable get BLOT_DEPLOY_PUBLIC_KEY --env deploy --repo blotcms/blot"
+has "and the source is printed" "$OUT" "Deploy public key: the GitHub deploy environment"
+lacks "the gh key is not printed" "$OUT" "AAAAgh"
+run "${NOKEY[@]}"
+[ "$STATUS" -ne 0 ] && ok "gh failing with nothing else fails on a real host" || fail "gh failing with nothing else fails on a real host"
+has "and says what to do" "$OUT" "no deploy public key"
+lacks "and launches nothing" "$AWS_LOG" "run-instances"
+run "${NOKEY[@]}" --drill
+[ "$STATUS" -eq 0 ] && ok "--drill goes on without a key" || fail "--drill goes on without a key: $OUT"
+has "and bootstrap gets an empty key" "$BOOTSTRAP_LOG" "BLOT_DEPLOY_PUBLIC_KEY=[]"
+STUB_GH_KEY="ssh-ed25519 AAAAgh" run --dry-run --type m6gd.xlarge --key-name test-key
+[ "$STATUS" -eq 0 ] && ok "--dry-run goes on without a key" || fail "--dry-run goes on without a key: $OUT"
+[ ! -e "$TMP/gh.log" ] && ok "and does not ask gh" || fail "and does not ask gh"
+STUB_GH_KEY="not a key" run "${NOKEY[@]}"
+[ "$STATUS" -ne 0 ] && ok "a malformed key fails" || fail "a malformed key fails"
+lacks "and launches nothing" "$AWS_LOG" "run-instances"
+lacks "and the value is not printed" "$OUT" "not a key"
+STUB_GH_KEY=$'ssh-ed25519 AAAA1\nssh-ed25519 AAAA2' run "${NOKEY[@]}"
+[ "$STATUS" -ne 0 ] && ok "a two-line key fails" || fail "a two-line key fails"
+BLOT_DEPLOY_PUBLIC_KEY="ecdsa-sha2-nistp256 AAAAec" run "${NOKEY[@]}"
+[ "$STATUS" -eq 0 ] && ok "an ecdsa key passes" || fail "an ecdsa key passes: $OUT"
 
 run --list
 has "--list filters on the provisioning tag" "$AWS_LOG" "tag:HostProvisionedBy,Values=config/host/launch.sh"

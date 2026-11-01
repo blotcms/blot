@@ -2,7 +2,7 @@
 
 Small collectors that log how the Redis host and its clients behave once a
 minute, and a script that compares two time windows of those logs: before and
-after a cutover, a resize or a config change, or a bad hour against a normal
+after a promotion, a resize or a config change, or a bad hour against a normal
 one. They were written for blotcms/blot#2041 (the 8 Oct 2026 move to a new
 host). Nothing here is used by the app, and Redis's config is not touched: the
 collectors only run `INFO`, `SLOWLOG`, `CONFIG GET` and `LATENCY LATEST`, plus

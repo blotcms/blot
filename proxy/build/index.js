@@ -39,6 +39,9 @@ function fetchCDNIPs() {
     "-sS",
     "--max-time",
     "15",
+    "--retry",
+    "3",
+    "--retry-all-errors",
     bunnyCDNIPURL,
   ]);
   if (result.error) throw result.error;

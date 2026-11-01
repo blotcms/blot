@@ -13,7 +13,7 @@ depends on files in the checkout - never anything fetched at run time.
 
 Refreshing timings.json, when a run's lanes finish far apart: every test job
 uploads the seconds it measured per spec file as a `timings-<n>` artifact
-(master runs also merge them into `test-timings`, in coverage-report, which
+(master runs also merge them into `test-timings`, in node.yml's node-ok job, which
 pull requests don't run). Use a pull request run, since those run without
 nyc, as CI does for most runs.
 

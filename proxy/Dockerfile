@@ -307,7 +307,7 @@ RUN openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
       -out /etc/ssl/private/letsencrypt-domain.pem
 
 # Copy the generated configuration. Run proxy/build/build.sh first to produce
-# proxy/build/data/latest (CI does this in .github/workflows/proxy.yml).
+# proxy/build/data/latest (CI does this in .github/workflows/integration.yml).
 # The generated config is a template: entrypoint.sh renders it to nginx.conf
 # (render-config.sh) so the Redis host, upstreams, resolver and server label
 # can be set with environment variables at `docker run` time. defaults.env

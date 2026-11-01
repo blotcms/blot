@@ -1,0 +1,14 @@
+# fail2ban keeps the file open, so flushlogs makes it reopen the new one.
+# /usr/local/bin is where the Amazon Linux 2 host has fail2ban-client, and cron's
+# PATH doesn't include it.
+/var/log/fail2ban.log {
+    weekly
+    rotate 4
+    missingok
+    notifempty
+    compress
+    create 0600 root root
+    postrotate
+        PATH=/usr/local/bin:$PATH fail2ban-client flushlogs > /dev/null
+    endscript
+}

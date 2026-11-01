@@ -63,7 +63,9 @@ The `manual-permaban` jail holds ranges we ban by hand and keep banned. Bans
 are dropped in the kernel (TCP and UDP 80/443), so a banned client costs no TLS
 handshake. The ranges are kept in fail2ban's database on the host
 (`/var/lib/fail2ban/fail2ban.sqlite3`), not in this repo, so they stay out of
-the public history.
+the public history. They persist across fail2ban restarts because the jail
+turns off ban-time increment: with it on, a restart rewrote the permanent
+`-1` to `bantime.maxtime` and the ban ended a week after it was added.
 
 ```
 sudo fail2ban-client set manual-permaban banip 203.0.113.0/24      # add
@@ -99,7 +101,26 @@ a new host run `deploy.sh` directly, as that prints it: `npm run deploy-host`
 sources the production host's `PUBLIC_IP` over the one you set. Run it with
 `--dry-run` first to see the `run-instances` call, `--drill` for a throwaway, `--list` for the hosts it has launched. The key pair name, key
 and port can be set as `BLOT_HOST_KEY_NAME`, `BLOT_HOST_SSH_KEY` and
-`BLOT_SSH_PORT`. To run only the OS setup on an existing host:
+`BLOT_SSH_PORT`.
+
+The `deploy` user's ssh public key is not in the repo. `launch.sh` finds it,
+first match wins, in `--deploy-public-key FILE`, `BLOT_DEPLOY_PUBLIC_KEY` (the
+key itself), `~/.ssh/blot-deploy.pub`, and the `BLOT_DEPLOY_PUBLIC_KEY`
+variable of the GitHub `deploy` environment (read with `gh`). It prints which
+one it used, never the key, and stops if the key is not one `ssh-` or `ecdsa-`
+line. With none found a real launch stops, since the Deploy workflow could not
+reach the host; `--drill` and `--dry-run` go on without. If
+`~/.ssh/blot-deploy.pub` is lost:
+
+```
+gh variable get BLOT_DEPLOY_PUBLIC_KEY --env deploy --repo blotcms/blot > ~/.ssh/blot-deploy.pub
+```
+
+If both are lost, derive it from the private key (`ssh-keygen -y -f <key>`) or
+copy it from the live host's `/home/deploy/.ssh/authorized_keys`, then store it
+in both places again (see `scripts/deploy/README.md`).
+
+To run only the OS setup on an existing host:
 
 ```
 REDIS_MAXMEMORY=... BLOT_SSH_PORT=... BLOT_DEPLOY_PUBLIC_KEY="ssh-..." config/host/bootstrap.sh <ssh-host>
@@ -139,25 +160,25 @@ On the first run Redis's `/backups` cannot be mounted yet: it is a bind mount of
 `/var/instance-ssd/redis-backups`, and `deploy.sh` mounts the instance store
 afterwards. `deploy.sh` then starts `blot-instance-store.service`, so the
 warning from the Redis setup can be ignored. A new host has no
-`/etc/blot-redis/floating-ip`, so `backup.sh` does not upload from it yet.
+`/etc/blot-redis/active`, so `backup.sh` does not upload from it yet.
 
 `config/host/tests/setup.sh` runs it in Docker, and `config/host/tests/deploy.sh`
 runs `deploy.sh` on top of it. Still by hand:
 
 - **Permanent bans** (`manual-permaban`). The only fail2ban state worth keeping;
-  the nginx jails' bans last 30-60 minutes and `recidive` a week. On the old
-  host, list them, then on the new host (after `deploy.sh`) re-add each one:
+  the nginx jails' bans last 30-60 minutes and `recidive` a week. From your
+  Mac, save the list from the old host and ban it on the new one, after
+  `deploy.sh`. The file is one address or CIDR per line and belongs in the
+  gitignored `data/` of the main checkout; the script prints counts only:
 
   ```
-  sudo fail2ban-client status manual-permaban     # old host: "Banned IP list"
-  sudo fail2ban-client set manual-permaban banip <ip-or-cidr>   # new host, each
+  config/host/bans.sh export <old-host> data/bans.txt
+  config/host/bans.sh import <new-host> data/bans.txt
   ```
 
-  Copying `/var/lib/fail2ban/fail2ban.sqlite3` also works, but fail2ban holds it
-  open: stop fail2ban on the old host first (or use `sqlite3 <db> ".backup
-  <copy>"`), put it in place on the new host before fail2ban first starts, and
-  keep the same fail2ban version. Re-running `banip` is simpler and doesn't
-  depend on either.
+  `export` also reads bans a restart dropped from fail2ban's database (needs
+  `sqlite3` on the host). `import` refuses the whole file if a line is not an
+  address or CIDR, skips what is banned, and fails if any is not listed after.
 - **The data volume.** Attach it, then run `deploy.sh` again with
   `DATA_VOLUME_ID=vol-...`, which writes `/etc/blot/data-volume`. Don't set it
   before the volume is attached: the unit waits for the device, then fails the
@@ -220,6 +241,26 @@ The install paths are load-bearing: `mount-instance-store.service` hardcodes
 `/home/ec2-user/scripts/mount-instance-store.sh` (likewise
 `mount-data-volume.service` and `mount-data-volume.sh`).
 
+### The wildcard certificate
+
+`blue-green.sh` will not start a unit in fresh mode until
+`/etc/ssl/private/letsencrypt-domain.pem` and `.key` exist and the `deploy` user
+can read them. `wildcard-cert.sh` writes both from the wildcard certificate in
+the host's own Redis (`blot:openresty:ssl:pem` and `:key`):
+
+```
+config/host/wildcard-cert.sh <ssh-host>
+```
+
+Run it after Redis on the new host has synced, since the keys come from that
+Redis; it only reads, so a read-only replica is fine, and it is safe to re-run.
+It copies itself to the host and runs there with sudo (`SSH_OPTS` works as in
+`bootstrap.sh`). It refuses, leaving any existing files alone, if either value
+is empty, the certificate has expired or the key is not the certificate's key.
+Each file is written to a temp file in the same directory, then moved into
+place as `root:deploy` mode `0640`, so the key is never world-readable. It never
+prints the key. Run it before the first `deploy-units`.
+
 ## Scripts and cron
 
 - The wildcard certificate is not renewed from the host: the app's scheduler
@@ -263,8 +304,9 @@ and what still depends on it. `deploy.sh` does not install any of it.
   rebuilt host does not need the file.
 - Wrote the wildcard certificate and key from Redis (`blot:openresty:ssl:pem`
   and `blot:openresty:ssl:key`) to `/etc/ssl/private/letsencrypt-domain.pem` and
-  `.key`, the directory the proxy container mounts read-only. On a rebuilt host
-  these must exist before `blue-green.sh` will start a container.
+  `.key`, the directory the proxy container mounts read-only. `wildcard-cert.sh`
+  now does this on a rebuilt host (see
+  [Moving to a new host](#moving-to-a-new-host)).
 - Enabled and started `mount-instance-store.service`, and installed the
   `docker.service.d` drop-in that gates docker on `/var/instance-ssd` being
   mounted. `deploy.sh` installs both.

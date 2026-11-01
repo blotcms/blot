@@ -1,0 +1,38 @@
+name: blot-proxy-e2e
+
+# The same checks against the unit image (Dockerfile target `unit`: OpenResty
+# and the app in one container), the bytes deploy.yml ships, run as
+# proxy/unit/smoke.sh runs it. Used on master pushes instead of
+# docker-compose.yml; see .github/workflows/app-e2e.yml. The service is called
+# `app` so the workflow's seed steps are the same for both files. Host
+# network, so it binds :80 and :443: a CI runner only.
+
+services:
+  redis:
+    image: redis:6.2.12-alpine
+    network_mode: host
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  app:
+    image: ${BLOT_APP_IMAGE:?set BLOT_APP_IMAGE to the unit image to test}
+    network_mode: host
+    environment:
+      BLOT_UNIT: blue
+      BLOT_HOST: ${BLOT_HOST:-localhost}
+      BLOT_REDIS_HOST: "127.0.0.1"
+      PROXY_FETCH_CDN_IPS: "false"
+      # node-a and node-b each make up a secret when this is unset, so a
+      # session started on one is not valid on the other (production sets one)
+      BLOT_SESSION_SECRET: e2e-session-secret
+      BLOT_STORAGE_BUCKET: ${BLOT_STORAGE_BUCKET}
+      BLOT_STORAGE_ENDPOINT: ${BLOT_STORAGE_ENDPOINT}
+      BLOT_STORAGE_REGION: ${BLOT_STORAGE_REGION}
+      BLOT_AWS_KEY: ${BLOT_AWS_KEY}
+      BLOT_AWS_SECRET: ${BLOT_AWS_SECRET}
+    depends_on:
+      redis:
+        condition: service_healthy

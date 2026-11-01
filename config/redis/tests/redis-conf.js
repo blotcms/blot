@@ -46,6 +46,13 @@ describe("redis.conf", function () {
     expect(only("repl-diskless-sync")).toBe("no");
   });
 
+  it("serves a Unix socket in a directory that setup.sh creates", function () {
+    expect(only("unixsocket")).toBe("/run/blot/redis/redis.sock");
+    expect(only("unixsocketperm")).toBe("777");
+    expect(only("port")).toBe("6379");
+    expect(read("host/setup.sh")).toContain("d /run/blot/redis 0755 redis6 redis6 -");
+  });
+
   it("frees memory lazily and avoids huge pages", function () {
     [
       "lazyfree-lazy-eviction",
@@ -55,6 +62,14 @@ describe("redis.conf", function () {
       "replica-lazy-flush",
       "disable-thp",
     ].forEach((name) => expect(only(name)).toBe("yes"));
+  });
+
+  it("is last in the kill order, with its BGSAVE child first", function () {
+    const setup = read("host/setup.sh");
+    expect(only("oom-score-adj")).toBe("relative");
+    expect(only("oom-score-adj-values")).toBe("0 0 1900");
+    expect(setup).toContain("OOMScoreAdjust=-900");
+    expect(setup).toContain("CPUWeight=1000");
   });
 
   it("stays consistent with the host settings", function () {

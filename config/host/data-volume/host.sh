@@ -18,7 +18,7 @@
 #   grow-fs <size-bytes>       xfs_growfs after an online EBS grow
 #
 # Every subcommand prints key=value lines on stdout (resize.sh parses them with
-# field(), like config/redis/cutover.sh's gather) and anything else on stderr.
+# field(), like config/redis/promote.sh's gather) and anything else on stderr.
 # A non-zero exit is a failure. --dry-run runs the checks that only read and
 # prints what the rest would do.
 #
@@ -235,6 +235,7 @@ cmd_facts() {
   if mountpoint -q "$DATA"; then
     echo mountpoint=yes
     echo "source=$(data_mount SOURCE | sed 's/\[.*//')"
+    echo "data_mounts=$(awk -v d="$DATA" '$5 == d' /proc/self/mountinfo | wc -l)"
     # Which EBS volume is really mounted there (the topmost mount), and the
     # marker it carries: resize.sh checks both against /etc/blot/data-volume
     # before changing anything, so a stale ID file can't point it at another
@@ -868,6 +869,8 @@ cmd_grow_fs() {
   xfs_growfs "$DATA" > /dev/null
   size_after=$(df -B1 --output=size "$DATA" | tail -n 1 | tr -d ' ')
   echo "fs_size_after=$size_after"
+  # xfs_growfs exits 0 even when it stopped short (see cmd_grow in resize.sh).
+  [ "$size_after" -ge $((want / 100 * 95)) ] || die "the filesystem is $size_after bytes after xfs_growfs, expected about $want"
 }
 
 sub=${1:-}

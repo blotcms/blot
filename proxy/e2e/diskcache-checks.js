@@ -1,6 +1,6 @@
 // Behavioural checks for the disk cache (proxy/config/diskcache.lua and
 // proxy/evict.sh) against the REAL proxy image with the generated production
-// config. Plain node, no dependencies. Run by the proxy-behaviour job in
+// config. Plain node, no dependencies. Run by the proxy-matrix job in
 // .github/workflows/integration.yml after the image is built:
 //
 //   docker build -f proxy/Dockerfile -t blot-proxy:e2e proxy/

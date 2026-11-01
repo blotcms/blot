@@ -30,6 +30,7 @@ const {
   DATA_DIRECTORY_ON_SERVER,
   DATA_DIRECTORY_ON_CONTAINER,
   AIRLOCK,
+  SOCKET_DIRECTORY,
   TMP_DIRECTORY,
 } = require("../deploy/constants");
 
@@ -242,6 +243,10 @@ async function runProbe({
     // --mount, unlike -v, fails if the source is missing rather than quietly
     // creating it on the root disk (as the unit deploy does).
     `--mount ${shellQuote(`type=bind,source=${TMP_DIRECTORY},target=${TMP_DIRECTORY}`)}`,
+    // Holds Redis's Unix socket when BLOT_REDIS_SOCKET is set: a probe is on a
+    // bridge network, which a host running Redis drops from its TCP port.
+    // Read-only still lets it connect to the socket.
+    `--mount ${shellQuote(`type=bind,source=${SOCKET_DIRECTORY},target=${SOCKET_DIRECTORY},readonly`)}`,
     `-v ${remoteDir}/out:${OUT}`,
     ...files.map((file) => `-v ${shellQuote(`${file.remote}:${file.container}:ro`)}`),
     ...mounts.map((mount) => `-v ${shellQuote(mount)}`),

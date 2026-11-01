@@ -1,10 +1,19 @@
 name: integration
 
-# End-to-end tests for the proxy container. Build-only scaffolding still -
-# nothing here is deployed.
+# Tests for the proxy container. Build-only scaffolding still - nothing here
+# is deployed.
 #
-#  proxy-behaviour : the built image vs a stub upstream (routing, caching,
-#                    gzip, hardening). Proves the generated production config.
+#  proxy-behaviour : first the image as the config generator makes it for
+#                    blot.im: it boots, the config parses, runtime settings
+#                    reach the rendered config, the deploy scripts run against
+#                    fake docker. Then the image for localhost vs a stub
+#                    upstream (routing, caching, gzip, hardening, HTTP/3 off,
+#                    the wildcard certificate from Redis). Proves the
+#                    generated production config.
+#  proxy-matrix    : the disk cache and what a client sees through the cached
+#                    locations, request kind by request kind.
+#  proxy-parity    : this tree's proxy vs origin/master's, request for request
+#                    (pull requests only).
 #  cert-issuance   : on-demand custom-domain certificate issuance through the
 #                    proxy against a Pebble ACME test server, that an issued
 #                    cert survives a container recreate (persistence), and
@@ -12,18 +21,44 @@ name: integration
 #                    stopped, READONLY or NOREPLICAS.
 #  zero-downtime   : a blue/green handover (SO_REUSEPORT + graceful drain)
 #                    serves every request while the old container is stopped.
+#                    Then host fail2ban's filters (config/host/fail2ban)
+#                    against the access log of an image that logs to a file,
+#                    as production does: each filter matches exactly the
+#                    requests meant to trigger it, on the real client IP.
+#
+# The jobs are independent (each builds its own image from the registry
+# cache) and run concurrently, so none of them gates another.
 
-# Pull requests only run it when something it covers changed (the paths
-# below); every push to master runs it. The real-app round trip through the
-# proxy is app-e2e.yml, which runs on every PR.
+# Pushes to master and pull requests alike run it only when something it
+# covers changed (the paths below; keep the two lists the same). The real-app
+# round trip through the proxy is app-e2e.yml, which runs on every PR.
+# deploy.yml treats this workflow as optional: a deploy waits for it when it
+# ran, and a push that changed none of these paths has no run.
 on:
   push:
     branches: [master]
+    paths:
+      - ".github/workflows/integration.yml"
+      - ".github/actions/build-proxy-image/**"
+      - "docker-bake.hcl"
+      - "proxy/**"
+      - "config/host/**"
+      - "package.json"
+      - "app/config.js"
+      - "config/index.js"
+      - "app/helper/drain.js"
+      - "app/helper/listen.js"
+      - "app/server.js"
+      - "app/index.js"
+      - "scripts/deploy/**"
   pull_request:
     branches: [master]
     paths:
       - ".github/workflows/integration.yml"
+      - ".github/actions/build-proxy-image/**"
+      - "docker-bake.hcl"
       - "proxy/**"
+      - "config/host/**"
       - "package.json"
       - "app/config.js"
       - "config/index.js"
@@ -33,7 +68,16 @@ on:
       - "app/index.js"
       - "scripts/deploy/**"
 
+# Superseded PR pushes are cancelled. Each master push gets its own group, so
+# a master run is never cancelled.
+concurrency:
+  group: integration-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
+  # The compiled stages of the proxy image come from here (proxy/build/image.sh);
+  # unit-image.yml writes it on master. Layers are arm64, as production.
+  PROXY_IMAGE_CACHE: ghcr.io/blotcms/blot:cache-proxy-arm64
   BLOT_HOST: localhost
   BLOT_REPO: ${{ github.workspace }}
   # Skip the BunnyCDN edge-IP fetch so image builds stay hermetic. Local and
@@ -42,7 +86,7 @@ env:
 
 jobs:
   proxy-behaviour:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
@@ -50,20 +94,88 @@ jobs:
         with:
           node-version: 24.22.1
 
-      - name: Install config generator dependencies
-        run: |
-          mkdir -p "$RUNNER_TEMP/gendeps"
-          cd "$RUNNER_TEMP/gendeps"
-          npm init -y >/dev/null
-          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
+      # Which host scripts/deploy/units.sh and util/sshCommand.js ssh to
+      # (BLOT_DEPLOY_TARGET), against a stub ssh.
+      - name: Deploy ssh target
+        run: bash scripts/deploy/tests/target.sh
 
-      - name: Generate proxy config (BLOT_HOST=localhost)
-        run: bash proxy/build/build.sh
+      # The image for the default host (blot.im), as the config generator
+      # makes it without a BLOT_HOST. The empty value overrides the job's
+      # localhost for this build only. Everything here finishes (and its
+      # container is gone) before the localhost image below is built, so the
+      # checks after it run on the same image as ever.
+      - uses: ./.github/actions/build-proxy-image
         env:
-          NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
+          BLOT_HOST: ""
+        with:
+          tag: blot-proxy:ci
 
-      - name: Build proxy image
-        run: docker build -f proxy/Dockerfile -t blot-proxy:e2e proxy/
+      - name: Check OpenResty release and record build options
+        run: |
+          docker run --rm --entrypoint openresty blot-proxy:ci -V 2>&1 | tee openresty-version.txt
+          grep -Fq 'nginx version: openresty/1.31.1.1' openresty-version.txt
+
+      - name: Validate generated OpenResty config
+        # The image holds a template; render it (as the entrypoint does) first
+        run: |
+          docker run --rm -e PROXY_FETCH_CDN_IPS=false --entrypoint bash blot-proxy:ci \
+            -c 'render-config && /usr/local/openresty/bin/openresty -t'
+
+      - name: Runtime settings reach the rendered config
+        run: |
+          docker run --rm --entrypoint bash \
+            -e PROXY_FETCH_CDN_IPS=false \
+            -e PROXY_REDIS_HOST=10.1.2.3 \
+            -e PROXY_SERVER_LABEL=eu \
+            -e PROXY_RESOLVER=127.0.0.11 \
+            -e PROXY_PRIVATE_IP=127.0.0.2 \
+            -e PROXY_UNIT_WORKER=10.0.0.1:9089 \
+            -e PROXY_PEER_WORKER=10.0.0.2:9088 \
+            -e PROXY_UNIT_MAIN=10.0.0.3:9090 \
+            -e PROXY_PEER_MAIN=10.0.0.4:9091 \
+            blot-proxy:ci -c '
+              set -e
+              render-config
+              conf=/usr/local/openresty/nginx/conf/nginx.conf
+              grep -q "host = \"10.1.2.3\"" $conf
+              grep -q "Blot-Server. .eu. always" $conf
+              grep -q "resolver 127.0.0.11;" $conf
+              grep -q "listen 127.0.0.2:8077 reuseport;" $conf
+              grep -q "server 10.0.0.1:9089 weight=100 max_fails=0;" $conf
+              grep -q "server 10.0.0.2:9088 backup max_fails=0;" $conf
+              grep -q "server 10.0.0.3:9090 weight=100 max_fails=0;" $conf
+              grep -q "server 10.0.0.4:9091 backup max_fails=0;" $conf
+              if grep -q "\${PROXY_" $conf; then echo "unsubstituted placeholder"; exit 1; fi
+              /usr/local/openresty/bin/openresty -t
+            '
+
+      - name: Deploy scripts (fake docker and systemctl)
+        env:
+          BLOT_HOST: ""
+        run: bash proxy/deploy/tests/run.sh
+
+      # Port 8080 is the e2e proxy's below, so this container goes first.
+      - name: Boot container and check health endpoint
+        run: |
+          docker run -d --name blot-proxy-ci --cap-add SYS_NICE \
+            -p 8080:80 -e BLOT_HOST=example.com blot-proxy:ci
+          ok=""
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/health || true)
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            sleep 1
+          done
+          echo "--- container logs ---"
+          docker logs blot-proxy-ci || true
+          docker rm -f blot-proxy-ci >/dev/null 2>&1 || true
+          if [ -z "$ok" ]; then
+            echo "proxy container did not serve /health with 200"
+            exit 1
+          fi
+
+      - uses: ./.github/actions/build-proxy-image
+        with:
+          tag: blot-proxy:e2e
 
       - name: Start proxy + stub upstream
         run: |
@@ -85,6 +197,11 @@ jobs:
             docker exec proxy sh -c 'wget -qO- -T1 http://127.0.0.1:8090/ >/dev/null 2>&1' && break
             sleep 1
           done
+          # The loop above only proves the stub is up. OpenResty can take longer.
+          for i in $(seq 1 30); do
+            curl -s -o /dev/null --max-time 1 http://127.0.0.1:8080/health && break
+            sleep 1
+          done
 
       - name: Run behavioural checks
         env:
@@ -97,35 +214,6 @@ jobs:
       # on every public vhost, including clearing cached Alt-Svc routes.
       - name: HTTP/3 disabled; HTTP/1.1 and HTTP/2 available
         run: node proxy/e2e/http3-disabled-checks.js
-
-      # The disk cache (proxy/config/diskcache.lua, proxy/evict.sh) against the
-      # real image: starts its own dc-* proxy containers on ports 18080-18084,
-      # two of them sharing a cache volume, and removes them afterwards.
-      - name: Disk cache checks
-        run: node proxy/e2e/diskcache-checks.js
-
-      # What a client sees through the cached locations, request kind by
-      # request kind, against the same image: starts its own rm-* containers
-      # (ports 18120-18139), each with a stub upstream, and removes them.
-      # Behaviour that looks wrong today is asserted and labelled KNOWN.
-      - name: Request matrix
-        run: node proxy/e2e/request-matrix.js
-
-      # The proxy of the base ref (origin/master) and this tree's side by side,
-      # the same ~770 requests to both (miss, hit, purge, refill, Node down,
-      # Node back): status, decoded body and headers must match unless a rule
-      # in parity-checks.js explains the difference. Builds the baseline image
-      # itself, from a worktree of origin/master. Containers pa-*, ports
-      # 18090-18093. Pull requests only: on a push to master both sides are
-      # the same code.
-      - name: Parity with origin/master
-        if: github.event_name == 'pull_request'
-        env:
-          PARITY_GENDEPS: ${{ runner.temp }}/gendeps
-          PARITY_TREE_IMAGE: blot-proxy:e2e
-        run: |
-          git fetch --no-tags --depth=1 origin '+refs/heads/master:refs/remotes/origin/master'
-          node proxy/e2e/parity-checks.js
 
       # The wildcard certificate comes from Redis when it is there, else from
       # the file. Starts a Redis in the proxy's network namespace, which the
@@ -144,12 +232,69 @@ jobs:
         if: always()
         run: docker logs proxy || true
 
+  # Both start their own containers on their own ports from the built image;
+  # they need nothing from proxy-behaviour's containers.
+  proxy-matrix:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+
+      - uses: ./.github/actions/build-proxy-image
+        with:
+          tag: blot-proxy:e2e
+
+      # The disk cache (proxy/config/diskcache.lua, proxy/evict.sh) against the
+      # real image: starts its own dc-* proxy containers on ports 18080-18084,
+      # two of them sharing a cache volume, and removes them afterwards.
+      - name: Disk cache checks
+        run: node proxy/e2e/diskcache-checks.js
+
+      # What a client sees through the cached locations, request kind by
+      # request kind, against the same image: starts its own rm-* containers
+      # (ports 18120-18139), each with a stub upstream, and removes them.
+      # Behaviour that looks wrong today is asserted and labelled KNOWN.
+      - name: Request matrix
+        run: node proxy/e2e/request-matrix.js
+
+  proxy-parity:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+
+      - uses: ./.github/actions/build-proxy-image
+        with:
+          tag: blot-proxy:e2e
+
+      # The proxy of the base ref (origin/master) and this tree's side by side,
+      # the same ~770 requests to both (miss, hit, purge, refill, Node down,
+      # Node back): status, decoded body and headers must match unless a rule
+      # in parity-checks.js explains the difference. Builds the baseline image
+      # itself, from a worktree of origin/master. Containers pa-*, ports
+      # 18090-18093. Pull requests only: on a push to master both sides are
+      # the same code.
+      - name: Parity with origin/master
+        if: github.event_name == 'pull_request'
+        env:
+          PARITY_GENDEPS: ${{ runner.temp }}/gendeps
+          PARITY_TREE_IMAGE: blot-proxy:e2e
+        run: |
+          git fetch --no-tags --depth=1 origin '+refs/heads/master:refs/remotes/origin/master'
+          node proxy/e2e/parity-checks.js
+
   # On-demand certificate issuance for custom domains, end to end, against a
   # Pebble ACME test server (no public DNS or rate limits). Also asserts the
   # issued cert survives recreating the proxy container (persistence).
   cert-issuance:
-    runs-on: ubuntu-latest
-    needs: proxy-behaviour
+    runs-on: ubuntu-24.04-arm
     env:
       TEST_DOMAIN: cert-test.example
     steps:
@@ -159,20 +304,9 @@ jobs:
         with:
           node-version: 24.22.1
 
-      - name: Install config generator dependencies
-        run: |
-          mkdir -p "$RUNNER_TEMP/gendeps"
-          cd "$RUNNER_TEMP/gendeps"
-          npm init -y >/dev/null
-          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
-
-      - name: Generate proxy config
-        run: bash proxy/build/build.sh
-        env:
-          NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
-
-      - name: Build proxy image
-        run: docker build -f proxy/Dockerfile -t blot-proxy:acme proxy/
+      - uses: ./.github/actions/build-proxy-image
+        with:
+          tag: blot-proxy:acme
 
       - name: Start Redis, challtestsrv and Pebble
         env:
@@ -407,25 +541,31 @@ jobs:
           CACHE_TTL: "5"
         run: bash proxy/e2e/expired-cert-checks.sh
 
+      # Replaces the proxy and Redis above with a pair that talk over a Unix
+      # socket (PROXY_REDIS_HOST=unix:...): keep this the last Redis check.
+      - name: Redis over a Unix socket
+        env:
+          CA_BUNDLE: pebble-ca.bundle.pem
+        run: bash proxy/e2e/redis-socket-checks.sh
+
       - name: Logs
         if: always()
         run: |
-          for c in proxy pebble challtestsrv stub redis; do
+          for c in proxy proxy-sock pebble challtestsrv stub redis redis-sock; do
             echo "=== $c ==="; docker logs --tail 100 "$c" 2>&1 || true
           done
 
       - name: Tear down
         if: always()
         run: |
-          docker rm -f proxy pebble challtestsrv stub redis 2>/dev/null || true
-          docker volume rm blot-acme-storage 2>/dev/null || true
+          docker rm -f proxy proxy-sock pebble challtestsrv stub redis redis-sock 2>/dev/null || true
+          docker volume rm blot-acme-storage blot-acme-socket 2>/dev/null || true
 
   # A blue/green handover: two proxy containers share :80/:443 via SO_REUSEPORT
   # on `--network host`; stopping the first one with a drain timeout must not
   # drop a single request.
   zero-downtime:
-    runs-on: ubuntu-latest
-    needs: proxy-behaviour
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
@@ -433,20 +573,9 @@ jobs:
         with:
           node-version: 24.22.1
 
-      - name: Install config generator dependencies
-        run: |
-          mkdir -p "$RUNNER_TEMP/gendeps"
-          cd "$RUNNER_TEMP/gendeps"
-          npm init -y >/dev/null
-          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
-
-      - name: Generate proxy config (BLOT_HOST=localhost)
-        run: bash proxy/build/build.sh
-        env:
-          NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
-
-      - name: Build proxy image
-        run: docker build -f proxy/Dockerfile -t blot-proxy:zd proxy/
+      - uses: ./.github/actions/build-proxy-image
+        with:
+          tag: blot-proxy:zd
 
       - name: Start upstream + proxy A + proxy B
         run: |
@@ -478,11 +607,14 @@ jobs:
       - name: Hammer the proxy while stopping A
         run: |
           set -eux
+          rm -f stopped
           (
             # No --retry: every attempt is recorded as-is, so a single
             # refused/dropped connection during the handover shows up as a
             # non-200 and fails the assertion below. That is the whole point.
-            for i in $(seq 1 600); do
+            # Runs until the stop has returned (plus a few seconds on B alone,
+            # past the drain), not for a fixed count.
+            while [ ! -e stopped ]; do
               curl -s -o /dev/null -w '%{http_code}\n' --max-time 5 \
                 -H 'Host: someblog.example' "http://$HOSTIP/" || echo "curl-err"
               sleep 0.05
@@ -491,13 +623,16 @@ jobs:
           loop=$!
           sleep 3
           docker stop --time 30 zd-a
+          sleep 8
+          touch stopped
           wait "$loop"
 
           total=$(wc -l < codes.txt)
           bad=$(grep -vc '^200$' codes.txt || true)
           echo "total=$total bad=$bad"
           sort codes.txt | uniq -c
-          [ "$total" -ge 100 ]
+          # ~6 req/s over at least the 3s before the stop plus the 8s after
+          [ "$total" -ge 30 ]
           [ "$bad" -eq 0 ]
 
       - name: Logs
@@ -507,6 +642,62 @@ jobs:
             echo "=== $c ==="; docker logs --tail 80 "$c" 2>&1 || true
           done
 
+      # The fail2ban checks below bind the same host ports (:80, 8088), so
+      # nothing from the handover may be left running.
+      - name: Remove the handover containers
+        run: docker rm -f zd-a zd-b stub
+
+      # Host fail2ban (config/host/fail2ban/jail.local) reads the container's
+      # access log (/var/instance-ssd/logs/access.log, the log dir bind mount,
+      # see proxy/deploy/common.sh). Proves it still bans on that log the way
+      # it did on bare metal: fail2ban-regex with every filter in
+      # config/host/fail2ban/filter.d must match exactly the requests meant to
+      # trigger it, and the <HOST> it extracts must be the real client IP, not
+      # an attacker-supplied X-Forwarded-For. Host networking and the runner's
+      # routable IP, as in the handover above and for the same reason.
+      - name: Install fail2ban (for fail2ban-regex)
+        run: sudo apt-get update && sudo apt-get install -y fail2ban
+
+      # Same as unit-image.yml: production-shaped logging (to files), so this
+      # exercises the log path host fail2ban actually reads.
+      - uses: ./.github/actions/build-proxy-image
+        env:
+          LOG_TO_STDOUT: "false"
+        with:
+          tag: blot-proxy:f2b
+
+      - name: Start proxy (host networking, as production) + stub upstream
+        run: |
+          set -eux
+          mkdir -p "$RUNNER_TEMP/proxylogs"
+          echo "ACCESS_LOG=$RUNNER_TEMP/proxylogs/access.log" >> "$GITHUB_ENV"
+
+          docker run -d --name f2b-proxy --network host --cap-add SYS_NICE \
+            -e BLOT_HOST=localhost -e PROXY_FETCH_CDN_IPS=false \
+            -e PROXY_UNIT_MAIN=127.0.0.1:8090 -e PROXY_UNIT_WORKER=127.0.0.1:8089 -e PROXY_PEER_MAIN=127.0.0.1:8088 -e PROXY_PEER_WORKER=127.0.0.1:8088 \
+            -v "$RUNNER_TEMP/proxylogs:/var/log/openresty" \
+            blot-proxy:f2b
+          docker run -d --name f2b-stub --network host \
+            -v "$PWD/proxy/e2e/stub-upstream.js:/s.js" \
+            node:24.22.1-alpine node /s.js
+          for i in $(seq 1 30); do
+            docker exec f2b-proxy sh -c 'wget -qO- -T1 http://127.0.0.1:8090/ >/dev/null 2>&1' && break
+            sleep 1
+          done
+
+      - name: Traffic + fail2ban-regex checks
+        env:
+          PROXY_HTTP: http://${{ env.HOSTIP }}
+        run: bash proxy/e2e/fail2ban-check.sh
+
+      - name: access.log (for debugging)
+        if: always()
+        run: tail -n 200 "$ACCESS_LOG" || true
+
+      - name: Proxy logs (fail2ban)
+        if: always()
+        run: docker logs f2b-proxy || true
+
       - name: Tear down
         if: always()
-        run: docker rm -f zd-a zd-b stub 2>/dev/null || true
+        run: docker rm -f zd-a zd-b stub f2b-proxy f2b-stub 2>/dev/null || true

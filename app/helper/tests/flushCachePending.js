@@ -72,6 +72,14 @@ describe("flushCachePending", function () {
     expect(entries).toEqual([{ host: "old.example", score: 1000 }]);
   });
 
+  it("removes entries whose score has a fractional part", async function () {
+    await pending.add(target, ["a.example"], 1793443313343.598);
+
+    await pending.remove(target, await pending.list(target));
+
+    expect(await pending.list(target)).toEqual([]);
+  });
+
   it("ignores an empty list of hosts", async function () {
     await pending.add(target, []);
 

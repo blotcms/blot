@@ -72,8 +72,10 @@ echo "    redis.conf parses"
 # Settings to compare with the running server. Skip ones the scratch server
 # overrides or that cannot meaningfully differ.
 SETTINGS=$(awk '!/^[ \t]*(#|$)/ {print tolower($1)}' "$TMP/test.conf" | sort -u |
-  grep -vxE 'bind|port|dir|logfile|pidfile')
+  grep -vxE 'bind|port|dir|logfile|pidfile|unixsocket')
 for s in $SETTINGS; do printf '%s\t%s\n' "$s" "$(scratch CONFIG GET "$s" | sed -n 2p)"; done > "$TMP/wanted"
+# The scratch server's socket is overridden above; compare the real path.
+printf 'unixsocket\t%s\n' "$(awk '$1 == "unixsocket" {print $2}' "$ROOT/redis.conf" | tail -n1)" >> "$TMP/wanted"
 scratch SHUTDOWN NOSAVE > /dev/null 2>&1 || true
 
 say "Config files"
@@ -93,11 +95,21 @@ put /etc/redis6/blot-memory.conf 0640 root:redis6 < "$TMP/blot-memory.conf"
 # Keep the package's stock config (or the live host's old one) the first time.
 [ -f /etc/redis6/redis6.conf.dist ] || cp -p /etc/redis6/redis6.conf /etc/redis6/redis6.conf.dist
 put /etc/redis6/redis6.conf 0640 root:redis6 < "$ROOT/redis.conf"
+# The directory of redis.conf's unixsocket. /run is a tmpfs, so tmpfiles.d
+# recreates it at boot, before redis6 starts. On a combined host
+# tmpfiles.d/blot.conf also declares /run/blot (for the app); the two files
+# name different paths and neither changes the other's, whichever runs first.
+# Not the unit's RuntimeDirectory=, which is /run/redis6.
+put /etc/tmpfiles.d/blot-redis.conf 0644 root:root <<'EOF'
+# Installed by config/redis/host/setup.sh: where redis.conf puts its Unix socket.
+d /run/blot/redis 0755 redis6 redis6 -
+EOF
+systemd-tmpfiles --create /etc/tmpfiles.d/blot-redis.conf
 
 say "Scripts"
 install -m 0755 -o root -g root -t /usr/local/bin \
   "$ROOT"/bin/*.sh "$HERE/mount-instance-store.sh"
-mkdir -p /etc/blot-redis # holds floating-ip, which marks the active host for backup.sh
+mkdir -p /etc/blot-redis # holds active, which marks the active host for backup.sh
 # Explicit config, never detected from what is mounted. It is only ever written
 # here: a re-run without the variable must not switch a host back.
 if [ "${BLOT_REDIS_SHARED_INSTANCE_STORE:-}" = 1 ]; then
@@ -121,18 +133,19 @@ SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 0 * * * * $BACKUP_USER /usr/local/bin/backup.sh hourly >> /home/$BACKUP_USER/backup.log 2>&1
 5 3 * * * $BACKUP_USER /usr/local/bin/backup.sh daily >> /home/$BACKUP_USER/backup.log 2>&1
+35 3 * * 0 $BACKUP_USER /usr/local/bin/backup.sh weekly >> /home/$BACKUP_USER/backup.log 2>&1
 0 0 1 * * $BACKUP_USER : > /home/$BACKUP_USER/backup.log
 */5 * * * * $BACKUP_USER /usr/local/bin/tcpmem-log.sh
 */5 * * * * $BACKUP_USER /usr/local/bin/redis-mem-log.sh
 EOF
 if crontab -l -u "$BACKUP_USER" 2> /dev/null | grep -E 'backup\.sh|mem-log\.sh|stats\.sh'; then
-  if [ -s /etc/blot-redis/floating-ip ]; then
+  if [ -e /etc/blot-redis/active ]; then
     echo "    WARNING: the crontab entries above are now duplicated by /etc/cron.d/blot-redis; remove them"
   else
     # backup.sh skips until the host is marked active, so the old jobs are
     # still the only ones uploading.
-    echo "    WARNING: keep the old backup entries above until /etc/blot-redis/floating-ip"
-    echo "    is written (at cutover); until then the new backup job skips. The"
+    echo "    WARNING: keep the old backup entries above until /etc/blot-redis/active"
+    echo "    is written (at promotion); until then the new backup job skips. The"
     echo "    mem-log/tcpmem entries are duplicated and can go now."
   fi
 fi
@@ -210,6 +223,13 @@ After=blot-instance-store.service blot-disable-thp.service
 
 [Service]
 LimitNOFILE=65536
+# Redis last in the kill order (redis.conf lifts its BGSAVE child to the front).
+# A unit that dies restarts in seconds; Redis dying loses writes since the last
+# save.
+OOMScoreAdjust=-900
+# Redis first when the CPU is contended. docker's --cpu-shares 2048 is weight 79
+# and airlock's 512 is about 20, so 1000 wins; it costs nothing when idle.
+CPUWeight=1000
 Restart=always
 # Loading or saving a multi-GB RDB outlasts systemd's 90s default.
 TimeoutStartSec=600
@@ -270,6 +290,11 @@ if redis_up; then
   if [ -z "$SKIP_SYSTEMD" ] && [ "$nofile" != 65536 ]; then
     echo "LimitNOFILE: running $nofile, unit 65536" >> "$TMP/restart"
   fi
+  # A running Redis only gets the unit's value at its next restart.
+  oomadj=$(cat "/proc/$pid/oom_score_adj")
+  if [ -z "$SKIP_SYSTEMD" ] && [ "$oomadj" != -900 ]; then
+    echo "OOMScoreAdjust: running $oomadj, unit -900" >> "$TMP/restart"
+  fi
   if [ -s "$TMP/restart" ]; then
     echo "    Need a restart (not done), differing from the new config:"
     sed 's/^/      /' "$TMP/restart"
@@ -298,3 +323,4 @@ for key in vm.overcommit_memory vm.swappiness net.core.somaxconn net.ipv4.tcp_ma
 done
 pid=$(redis6-cli INFO server | tr -d '\r' | awk -F: '$1 == "process_id" {print $2}')
 echo "LimitNOFILE of Redis (pid $pid): $(awk '/^Max open files/ {print $4}' "/proc/$pid/limits")"
+echo "oom_score_adj of Redis (pid $pid): $(cat "/proc/$pid/oom_score_adj")"
