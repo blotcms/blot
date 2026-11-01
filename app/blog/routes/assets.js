@@ -3,10 +3,9 @@ const config = require("config");
 const storage = require("storage/assets");
 const express = require("express");
 const contentTypeFor = require("storage/contentType");
-const { join, basename, dirname, extname } = require("path");
-const { promisify } = require("util");
+const { join, basename, dirname, extname, normalize } = require("path");
 const fs = require("fs-extra");
-const caseSensitivePath = promisify(require("helper/caseSensitivePath"));
+const caseSensitivePath = require("helper/caseSensitivePath");
 const {
   GLOBAL_STATIC_DIR,
   GLOBAL_STATIC_SUBDIRECTORIES,
@@ -149,57 +148,113 @@ assets.use(async (req, res, next) => {
     logFolderAsset(req, "origin");
   }
 
-  try {
-    await sendFolderFile(join(blogFolder, decodedPath));
-    return;
-  } catch (e) {}
+  // Resolves true once a response has been started for this path. A failure
+  // before any header is sent just means this candidate doesn't work.
+  async function trySend(path) {
+    try {
+      await sendFolderFile(path);
+      return true;
+    } catch (e) {
+      return res.headersSent;
+    }
+  }
 
-  try {
-    await sendFolderFile(join(blogFolder, decodedPath.toLowerCase()));
-    return;
-  } catch (e) {}
+  // The exact path is by far the commonest hit, so it costs no directory read
+  const exactPath = join(blogFolder, decodedPath);
+  if (await trySend(exactPath)) return;
 
-  try {
-    const pathWithCorrectCase = await caseSensitivePath(
-      blogFolder,
-      decodedPath
+  // Every other candidate is resolved from directory listings, each read at
+  // most once, rather than by probing the filesystem once per candidate.
+  // Listings are never followed through symlinks, and whatever we do send
+  // still goes through sendFile's no-symlink check.
+  const listings = new Map();
+  const list = (dir) => {
+    if (!listings.has(dir))
+      listings.set(
+        dir,
+        fs.readdir(dir, { withFileTypes: true }).catch(() => null)
+      );
+    return listings.get(dir);
+  };
+
+  // Chooses the entry of dir which segment refers to, per pick, and says what
+  // kind of entry it is: { path, kind } or undefined
+  async function lookup(dir, segment, pick) {
+    const entries = await list(dir);
+    if (!entries) return;
+    const name = pick(
+      entries.map((entry) => entry.name),
+      segment
     );
+    if (name === undefined) return;
+    const entry = entries.find((e) => e.name === name);
+    return { path: join(dir, name), kind: await kind(dir, entry) };
+  }
 
-    const stat = await fs.stat(pathWithCorrectCase);
+  // Walks down through the directories named by segments, choosing each with
+  // pick. Resolves { dir } on success, { missing: true } when nothing matches
+  // a segment (so nothing can exist below it) and {} when a match isn't a
+  // directory.
+  async function walk(segments, pick) {
+    let dir = join(blogFolder);
+    for (const segment of segments) {
+      const found = await lookup(dir, segment, pick);
+      if (!found) return { missing: true };
+      if (found.kind !== "dir") return {};
+      dir = found.path;
+    }
+    return { dir };
+  }
 
-    if (!stat.isFile()) throw new Error("Not a file");
+  // Finds a file at exactly this path relative to the blog folder. A trailing
+  // slash means the directory's index.html, as sendFile gives for the exact
+  // path.
+  async function findExact(relative) {
+    relative = normalize("/" + relative);
+    if (relative.endsWith("/")) relative += "index.html";
+    const segments = relative.split("/").filter(Boolean);
+    const name = segments.pop();
+    const { dir } = await walk(segments, exact);
+    return name && dir && (await fileIn(dir, name, exact));
+  }
 
-    await sendFolderFile(pathWithCorrectCase);
-    return;
-  } catch (e) {}
+  async function fileIn(dir, segment, pick) {
+    const found = await lookup(dir, segment, pick);
+    if (found && found.kind !== "dir" && found.kind !== "link")
+      return found.path;
+  }
 
-  try {
-    await sendFolderFile(
-      join(blogFolder, withoutTrailingSlash(decodedPath) + "/index.html")
-    );
-    return;
-  } catch (e) {}
+  const exact = (names, name) => (names.includes(name) ? name : undefined);
+  const caseInsensitive = caseSensitivePath.pick;
+  const segments = normalize(decodedPath).split("/").filter(Boolean);
+  const parent = await walk(segments.slice(0, -1), caseInsensitive);
 
-  try {
-    await sendFolderFile(
-      join(blogFolder, withoutTrailingSlash(decodedPath) + "/_index.html")
-    );
-    return;
-  } catch (e) {}
+  // Without the parent directory, under any casing, none of the candidates
+  // below can exist: this is where a scanner's request usually ends
+  if (parent.missing) return next();
 
-  try {
-    await sendFolderFile(
-      join(blogFolder, withoutTrailingSlash(decodedPath) + ".html")
-    );
-    return;
-  } catch (e) {}
+  const candidates = [
+    // the whole path lowercased
+    () => findExact(decodedPath.toLowerCase()),
+    // the path with the casing it has on disk, if that's a file
+    () =>
+      segments.length &&
+      parent.dir &&
+      fileIn(parent.dir, segments[segments.length - 1], caseInsensitive),
+    () => findExact(withoutTrailingSlash(decodedPath) + "/index.html"),
+    () => findExact(withoutTrailingSlash(decodedPath) + "/_index.html"),
+    () => findExact(withoutTrailingSlash(decodedPath) + ".html"),
+    () => findExact(addLeadingUnderscore(decodedPath) + ".html"),
+  ];
 
-  try {
-    await sendFolderFile(
-      join(blogFolder, addLeadingUnderscore(decodedPath) + ".html")
-    );
-    return;
-  } catch (e) {}
+  const tried = new Set([exactPath]);
+
+  for (const candidate of candidates) {
+    const path = await candidate();
+    if (!path || tried.has(path)) continue;
+    tried.add(path);
+    if (await trySend(path)) return;
+  }
 
   // If we get here, none of the candidates worked
   if (!res.headersSent) {
@@ -305,6 +360,21 @@ async function redirectLargeFolderFile(req, res, blogFolder, path) {
   return true;
 }
 
+// What a directory entry is, without following symlinks. Listings say so
+// already unless the filesystem doesn't report types, in which case ask about
+// just this one entry.
+async function kind(dir, entry) {
+  if (entry.isDirectory()) return "dir";
+  if (entry.isSymbolicLink()) return "link";
+  if (entry.isFile()) return "file";
+  try {
+    const stat = await fs.lstat(join(dir, entry.name));
+    return stat.isDirectory() ? "dir" : stat.isSymbolicLink() ? "link" : "file";
+  } catch (e) {
+    return "other";
+  }
+}
+
 function withoutTrailingSlash(path) {
   return path && path.slice(-1) === "/" ? path.slice(0, -1) : path;
 }
@@ -319,7 +389,8 @@ async function sendFile(path, { req, res, maxAge = 0, immutable = false } = {}) 
   // the blog's no-symlink policy, including every ancestor within that root.
   const blogRoot = req?.blog && join(config.blog_folder_dir, req.blog.id);
   if (blogRoot && (path === blogRoot || path.startsWith(blogRoot + "/"))) {
-    await assertNoSymlinks(blogRoot, path);
+    // A trailing slash makes send serve the directory's index.html itself
+    await assertNoSymlinks(blogRoot, path.endsWith("/") ? path + "index.html" : path);
   }
   const options = {
     maxAge,
