@@ -95,7 +95,7 @@ module.exports = function sync (blogID, gitHandle, callback) {
         // Update the remote to ensure it's in sync. During a handle change the
         // new handle is saved before its bare repository is renamed, so a
         // follow-up sync can see a handle with no repository yet: origin is
-        // then left at the old path (see bareRepo).
+        // then left at the old path (see repo.js).
         repo.pointOriginAtBareRepo(git, gitHandle, function (err) {
 
           if (err) {

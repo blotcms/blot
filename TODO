@@ -1,3 +1,5 @@
+scripts/git/repair.js swaps the blog folder for a fresh clone of the bare repo, so files in the folder that aren't in the repo are lost: warn or copy them over before running it again, or retire the script once live clones go (#2259 PR 9)
+
 Speed up ci / simplify proxy and e2e testing slightly
 
 - PR 8 (#2119): production proxy in local dev. Local docker-compose runs the unit image with the real OpenResty config instead of `scripts/development/proxy`.
