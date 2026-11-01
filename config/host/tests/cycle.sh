@@ -151,7 +151,7 @@ cp "$TMP/tree/config/host/bootstrap.sh" "$TMP/tree/config/host/wildcard-cert.sh"
 cat > "$TMP/tree/config/redis/restore.sh" << 'EOF'
 #!/bin/bash
 echo "restore.sh $*" >> "$W/calls"
-echo 100 > "$W/keys.new"
+[ -n "${STUB_RESTORE_NOOP:-}" ] || echo 100 > "$W/keys.new"
 EOF
 mkdir -p "$TMP/in"
 printf 'BLOT_HOST=blot.test\nexport BLOT_SESSION_SECRET=s\n' > "$TMP/in/secrets.env"
@@ -732,10 +732,25 @@ lacks "starts no units" "$CALLS" "units.sh"
 lacks "moves no address" "$CALLS" "associate-address"
 has "but prints what it would do" "$OUT" "would run: aws ec2 create-volume"
 
+echo "# restore: a fresh Redis"
+restore_world
+echo 3 > "$W/keys.new"
+export STUB_RESTORE_NOOP=1
+run --drill "${INPUTS[@]}" --yes restore new
+unset STUB_RESTORE_NOOP
+refused "a Redis still fresh after restore.sh is refused"
+has "restore.sh ran on the fresh Redis, which holds a few sampler keys" "$CALLS" "restore.sh --yes new latest"
+has "and it says so" "$OUT" "looks fresh"
+lacks "no volume is made on an unrestored Redis" "$CALLS" "create-volume"
+
 echo "# restore: a drill"
 restore_world
+echo 3 > "$W/keys.new"
+chmod 644 "$TMP/in/secrets.env" "$TMP/in/proxy.env"
 run --drill "${INPUTS[@]}" --yes restore new
 status_is "restore works" 0
+has "the env files are private on the host whatever their mode here" "$(ls -l "$W/etc.new/secrets.env" "$W/etc.new/proxy.env" | cut -c1-10 | sort -u)" "-rw-------"
+lacks "and none is world-readable" "$(ls -l "$W/etc.new/secrets.env" "$W/etc.new/proxy.env" | cut -c1-10)" "r--r--"
 before "Redis is restored first" "restore.sh --yes new latest" "create-volume"
 before "then the volume is attached" "create-volume" "attach-volume --volume-id vol-0c1 --instance-id i-06e6577"
 before "then adopted from the snapshot's volume" "attach-volume" "host.sh adopt vol-0c1 vol-0a1b"

@@ -393,7 +393,7 @@ tag on everything) is where to record both numbers.
 ### Reconcile
 
 ```
-ssh <new> sudo docker exec blot-blue node scripts/host-cycle/reconcile.js --since <snapshot start>
+ssh <new> sudo docker exec --user 1000:1000 -e HOME=/home/node blot-blue node scripts/host-cycle/reconcile.js --since <snapshot start>
 ```
 
 `restore` prints the command with the snapshot's start time. Without `--go` it

@@ -3,9 +3,10 @@
 // is at most about an hour old. Entries can point at files the volume never
 // got. This works out which blogs to resync from their source, in what order
 // and at what rate, and runs the resyncs. Run it inside a unit, so it uses the
-// unit's Redis and sync clients:
+// unit's Redis and sync clients, as the app's user: as root it would leave
+// root-owned files in the blog folders and the state file.
 //
-//   docker exec blot-blue node scripts/host-cycle/reconcile.js --since <ISO time> [options]
+//   docker exec --user 1000:1000 -e HOME=/home/node blot-blue node scripts/host-cycle/reconcile.js --since <ISO time> [options]
 //
 //   --since TIME       when the snapshot started (restore prints it). Required.
 //   --margin MINUTES   look this far before --since as well (default 15)

@@ -305,6 +305,16 @@ probe() { # probe <ip> <host> <path>: the status of that request, from the new h
 probe_public() { # probe_public <ip> <host> <path>: the same, from here
   curl -sS -o /dev/null -w '%{http_code}' --max-time 15 --resolve "$2:443:$1" "https://$2$3" 2> /dev/null || echo 000
 }
+# wait_public_health <ip> <host>: an association takes a few seconds to reach the instance.
+wait_public_health() {
+  local i code=000
+  for i in $(seq 20); do
+    code=$(probe_public "$1" "$2" /health)
+    [ "$code" = 200 ] && break
+    [ "$i" = 20 ] || sleep 3
+  done
+  [ "$code" = 200 ] || die "https://$2/health through $1 answered $code"
+}
 
 # ---- launch --------------------------------------------------------------
 
@@ -677,13 +687,7 @@ EOF
 
   say "6. Checking and unfreezing"
   if [ -z "$DRY_RUN" ]; then
-    # An association takes a few seconds to reach the instance.
-    for i in $(seq 20); do
-      code=$(probe_public "$eip_address" "$host" /health)
-      [ "$code" = 200 ] && break
-      [ "$i" = 20 ] || sleep 3
-    done
-    [ "$code" = 200 ] || die "https://$host/health through $eip_address answered $code"
+    wait_public_health "$eip_address" "$host"
   fi
   act unfreeze
   STAGE=""
@@ -875,7 +879,8 @@ restore_redis() {
   info=$(redis_info "$NEW")
   [ "$(info_field "$info" role)" = master ] || die "$NEW's Redis is not a master: restore needs a fresh one"
   keys=$(on "$NEW" "redis6-cli DBSIZE" | tr -d '\r')
-  if [ "$keys" != 0 ]; then echo "$NEW's Redis already holds $keys keys: not restoring over it"; return 0; fi
+  # A fresh Redis is not empty: its samplers (cron) have written a few keys.
+  if [ "$keys" -gt "$FRESH_REDIS_KEYS" ]; then echo "$NEW's Redis already holds $keys keys: not restoring over it"; return 0; fi
   [ -z "$YES" ] || flags="--yes"
   [ -z "$OFFSITE_BUCKET" ] || flags="$flags --offsite $OFFSITE_PROFILE $OFFSITE_BUCKET"
   # shellcheck disable=SC2086
@@ -960,6 +965,8 @@ copy_env_files() {
   local tmp out
   tmp=$(umask 077; mktemp -d)
   cp "$SECRETS_FILE" "$tmp/secrets.env"; cp "$PROXY_FILE" "$tmp/proxy.env"
+  # tar -p would carry the operator's modes to the host.
+  chmod 600 "$tmp/secrets.env" "$tmp/proxy.env"
   out=$(COPYFILE_DISABLE=1 tar -C "$tmp" -cf - secrets.env proxy.env |
     pipe_to "$NEW" "sudo bash -c $(printf %q "$ENV_SCRIPT") cycle $SOCKET") || { rm -rf "$tmp"; die "could not install the env files on $NEW"; }
   rm -rf "$tmp"
@@ -1023,7 +1030,7 @@ phase_restore() {
   restore_redis
   if [ -z "$DRY_RUN" ]; then
     keys=$(on "$NEW" "redis6-cli DBSIZE" | tr -d '\r')
-    [ "$keys" != 0 ] || die "$NEW's Redis is empty after the restore"
+    [ "$keys" -gt "$FRESH_REDIS_KEYS" ] || die "$NEW's Redis holds only $keys keys after the restore: it looks fresh, not restored"
     echo "Redis on $NEW holds $keys keys"
   fi
 
@@ -1091,8 +1098,7 @@ phase_restore() {
       [ "$(aws_cli ec2 describe-addresses --allocation-ids "$EIP" --query 'Addresses[0].InstanceId' --output text)" = "$NEW_ID" ] ||
         die "$EIP is not on $NEW_ID"
       host=$(env_value "$NEW" BLOT_HOST)
-      code=$(probe_public "$EIP_ADDRESS" "$host" /health)
-      [ "$code" = 200 ] || die "https://$host/health through $EIP_ADDRESS answered $code"
+      wait_public_health "$EIP_ADDRESS" "$host"
     fi
   fi
 
@@ -1100,7 +1106,7 @@ phase_restore() {
   # From here this host is the one that backs up, and its volume the one that is snapshotted.
   act on "$NEW" "sudo mkdir -p /etc/blot-redis && sudo touch /etc/blot-redis/active"
   [ "$MODE" != production ] ||
-    act aws_cli ec2 create-tags --resources "$NEW_VOL" --tags "Key=Name,Value=Blot /var/www/blot/data"
+    act aws_cli ec2 create-tags --resources "$NEW_VOL" --tags "Key=Name,Value=Blot /var/www/blot/data" # must match DATA_NAME in data-volume/resize.sh
   [ -z "$BANS_FILE" ] || act "$HERE/bans.sh" import "$NEW" "$BANS_FILE"
   step ""
 
@@ -1108,7 +1114,7 @@ phase_restore() {
   cat << EOF
 The data is as of $SNAP_START. Now reconcile (README.md, "Recovery"): it prints a plan first, then
 resyncs the sync-client blogs and lists the git blogs whose owners push again:
-  ssh $NEW sudo docker exec blot-blue node scripts/host-cycle/reconcile.js --since $SNAP_START
+  ssh $NEW sudo docker exec --user 1000:1000 -e HOME=/home/node blot-blue node scripts/host-cycle/reconcile.js --since $SNAP_START
 $SNAP_VOLUME was not touched. Anything newer than the snapshot is on it, so keep it until the
 reconcile is done. It still has the name the snapshot policy targets: retag it once the new
 volume has its first snapshot.
