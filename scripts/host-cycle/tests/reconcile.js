@@ -1,7 +1,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { select, run, readState, startState, parseArgs } = require("../reconcile");
+const { select, run, readState, startState, parseArgs, assertComplete } = require("../reconcile");
 
 const MINUTE = 60 * 1000;
 const SINCE = Date.parse("2026-11-01T03:00:00Z");
@@ -131,6 +131,31 @@ describe("host-cycle reconcile", function () {
       expect(peak.all).toBeGreaterThan(1);
     });
 
+    it("holds a client's slot through a rate-limit backoff, so only other clients start", async function () {
+      const started = [];
+      let release;
+      const backoff = new Promise((r) => (release = r));
+      const sleep = (ms) => (ms >= 60000 ? backoff : new Promise((r) => setImmediate(r)));
+      const running = run(
+        [blog("a", "dropbox", 3), blog("b", "dropbox", 2), blog("c", "icloud", 1)],
+        options({
+          sleep,
+          resync: async (b) => {
+            started.push(b.id);
+            if (b.id === "a") throw new Error("429 too many requests");
+          },
+          finished: () => {},
+        })
+      );
+
+      for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
+      expect(started).toEqual(["a", "c"]);
+
+      release();
+      await running;
+      expect(started).toEqual(["a", "c", "b"]);
+    });
+
     it("resumes: a second run does only what the first did not finish", async function () {
       const blogs = [blog("a", "dropbox", 3), blog("b", "dropbox", 2), blog("c", "dropbox", 1)];
       const finished = new Set();
@@ -151,6 +176,15 @@ describe("host-cycle reconcile", function () {
 
       expect(again).toEqual(["b"]);
       expect(finished.size).toBe(3);
+    });
+  });
+
+  describe("assertComplete", function () {
+    it("passes a clean summary and throws when downloads failed", function () {
+      expect(assertComplete({ failed: 0, firstError: null })).toEqual({ failed: 0, firstError: null });
+      expect(assertComplete(undefined)).toBeUndefined();
+      expect(() => assertComplete({ failed: 2, firstError: "a.txt: timeout" })).toThrowError(/2 files failed.*a\.txt: timeout/);
+      expect(() => assertComplete({ failed: 1 })).toThrowError(/1 files failed/);
     });
   });
 

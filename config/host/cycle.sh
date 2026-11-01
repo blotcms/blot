@@ -98,7 +98,7 @@ FREEZE_TTL=900; ANY_TIME=""; YES=""; DRY_RUN=""
 OLD_INSTANCES=""; OLD_VOLUME=""; ANY_AGE=""
 SNAPSHOT=""; COMMIT=""; SECRETS_FILE=""; PROXY_FILE=""; AWS_CREDS=""; REDIS_BACKUP=latest
 OFFSITE_PROFILE=""; OFFSITE_BUCKET=""; WAIT_PREWARM=""
-STAGE=""; IMAGE=""
+STAGE=""; IMAGE=""; EIP_SSH_DIR=""
 
 die() { echo "error: $*" >&2; exit 1; }
 say() { printf '\n==> %s\n' "$*"; }
@@ -234,13 +234,19 @@ check_world() {
 
 # guard: the hosts are what we think they are. OLD_ID and NEW_ID are read from
 # the hosts themselves, because an alias of the Elastic IP changes host mid-cycle.
-OLD_ID=""; NEW_ID=""
+OLD_ID=""; NEW_ID=""; REDIS_ID=""
 guard() {
   OLD_ID=$(instance_id "$OLD_NOW")
   [ -n "$OLD_ID" ] || die "cannot reach $OLD_NOW"
   check_world "$OLD_ID"
   if [ -n "$NEW" ]; then
     NEW_ID=$(instance_id "$NEW")
+    # After the move the launch address is gone, so <new> may reach nothing
+    # until the alias is edited: follow the Elastic IP, as phase_switch does.
+    if [ -z "$NEW_ID" ] && [ -n "$EIP" ] && { [ "$PHASE" = switch ] || [ "$PHASE" = settle ]; }; then
+      follow_eip "$(aws_cli ec2 describe-addresses --allocation-ids "$EIP" --query 'Addresses[0].PublicIp' --output text)"
+      NEW_ID=$(instance_id "$NEW")
+    fi
     if [ -z "$NEW_ID" ]; then
       need "cannot reach $NEW"
     else
@@ -250,6 +256,17 @@ guard() {
   fi
   if [ "$MODE" = drill ]; then
     on "$OLD_NOW" "test -e /etc/blot/drill" || die "--drill, but $OLD_NOW has no /etc/blot/drill: resize.sh would treat it as production"
+  fi
+  # --old-redis is another host that switch runs CONFIG SET and FAILOVER on, so
+  # it gets the same checks. status only reads, and finish names its instances
+  # by ID and never touches Redis, so neither needs this.
+  if [ "$OLD_REDIS" != "$OLD_NOW" ]; then
+    REDIS_ID=$(instance_id "$OLD_REDIS")
+    [ -n "$REDIS_ID" ] || die "cannot reach $OLD_REDIS"
+    check_world "$REDIS_ID"
+    if [ "$MODE" = drill ]; then
+      on "$OLD_REDIS" "test -e /etc/blot-redis/drill" || die "--drill, but $OLD_REDIS has no /etc/blot-redis/drill: promote.sh would treat it as production"
+    fi
   fi
 }
 
@@ -453,7 +470,13 @@ if grep -Eq '^(export )?PROXY_REDIS_HOST=' "$tmp/secrets.env"; then
   set_value "$tmp/secrets.env" PROXY_REDIS_HOST "unix:$1"
 fi
 for f in secrets.env proxy.env; do
-  if ! cmp -s "$tmp/$f" "/etc/blot/$f"; then mv -f "$tmp/$f" "/etc/blot/$f"; echo changed; fi
+  if ! cmp -s "$tmp/$f" "/etc/blot/$f"; then
+    mv -f "$tmp/$f" "/etc/blot/$f"
+    # On the host, not in this script's memory: if the forced deploy fails, the
+    # next run finds the files current and would skip units that hold the old env.
+    touch /etc/blot/cycle-env-pending
+    echo changed
+  fi
 done
 # setup-deploy-user.sh ran before these files existed.
 setfacl -m u:deploy:r,u:ec2-user:r /etc/blot/secrets.env /etc/blot/proxy.env
@@ -472,6 +495,8 @@ copy_env() {
     pipe_to "$NEW" "sudo bash -c $(printf %q "$ENV_SCRIPT") cycle $SOCKET") ||
     die "could not copy the env files from $OLD_NOW to $NEW, or deploy cannot read them"
   case "$out" in *changed*) ENV_CHANGED=1 ;; esac
+  # phase_app removes the marker once the units are verified.
+  ! on "$NEW" "test -e /etc/blot/cycle-env-pending" || ENV_CHANGED=1
   echo "Env files on $NEW: $([ -n "$ENV_CHANGED" ] && echo updated || echo already current), on the Redis socket"
 }
 
@@ -542,6 +567,7 @@ phase_app() {
     [ "$code" = 200 ] || die "https://$host/ through $address answered $code"
     echo "$host answers 200 through $address"
   done
+  act on "$NEW" "sudo rm -f /etc/blot/cycle-env-pending"
   echo "The units on $NEW are up. Dashboard pages may fail until the switch: sessions need writes."
 }
 
@@ -566,9 +592,31 @@ unfreeze() {
   echo "$out" | grep -q '"readOnly":null' || die "the freeze is still on: $out"
 }
 
+# follow_eip <eip address>: once the Elastic IP is on <new>, its launch-time
+# address is released and <new> (an alias of that address) reaches nothing, but
+# every child script calls plain `ssh <name>`. So put an ssh in front on PATH
+# that overrides <new>'s HostName; ssh keeps the first value it reads, and passes
+# -F on to a ProxyJump. HostKeyAlias keeps checking the host key under the
+# alias's own known_hosts entry, not the old host's key under the Elastic IP.
+follow_eip() {
+  local original real
+  [ -z "$EIP_SSH_DIR" ] || return 0
+  [ -n "$1" ] && [ "$1" != None ] || return 0
+  original=$(ssh_config "$NEW" hostname)
+  [ "$original" != "$1" ] || return 0
+  real=$(command -v ssh)
+  EIP_SSH_DIR=$(mktemp -d)
+  printf 'Host %s\n  HostName %s\n  HostKeyAlias %s\n\nHost *\n  Include %s/.ssh/config\n' "$NEW" "$1" "$original" "$HOME" > "$EIP_SSH_DIR/config"
+  printf '#!/bin/sh\nexec %s -F %s "$@"\n' "$real" "$EIP_SSH_DIR/config" > "$EIP_SSH_DIR/ssh"
+  chmod +x "$EIP_SSH_DIR/ssh"
+  export PATH="$EIP_SSH_DIR:$PATH"
+  echo "ssh to $NEW now goes to the Elastic IP $1 (its launch address is released)"
+}
+
 # The state, and the way on or back, for whatever stage switch stopped in.
 explain() {
   local status=$?
+  [ -z "$EIP_SSH_DIR" ] || rm -rf "$EIP_SSH_DIR"
   [ "$status" != 0 ] && [ -n "$STAGE" ] || return "$status"
   {
     echo
@@ -585,8 +633,9 @@ explain() {
         echo "$NEW's Redis is the master. The app stays frozen until the TTL (${FREEZE_TTL}s from the last re-arm), and"
         echo "writes that land after that fail until the switch finishes, so be quick."
         echo "On: run switch again; it skips what is done."
-        echo "Back: README.md, \"Rollback\": promote.sh $NEW $OLD_REDIS, the Elastic IP back to $OLD_ID, start the old"
-        echo "units, then resize.sh --host $OLD_NOW move thaw" ;;
+        echo "Back: README.md, \"Rollback\". Only if $NEW has accepted no writes: promote.sh $NEW $OLD_REDIS, the Elastic IP"
+        echo "back to $OLD_ID, start the old units, then resize.sh --host $OLD_NOW move thaw. After writes, keep $NEW"
+        echo "primary until the reverse copy and freeze are done (data-volume/README.md), then Redis, then the Elastic IP." ;;
     esac
   } >&2
   return "$status"
@@ -606,6 +655,8 @@ phase_switch() {
   read -r eip_on eip_address <<< "$eip_line"
   # This is what keeps a drill away from the real address: it is on neither host.
   [ "$eip_on" = "$OLD_ID" ] || [ "$eip_on" = "$NEW_ID" ] || die "$EIP is on $eip_on, which is neither $OLD_NOW ($OLD_ID) nor $NEW ($NEW_ID)"
+  # A resumed switch: the move is done and the launch address may be gone.
+  [ "$eip_on" != "$NEW_ID" ] || follow_eip "$eip_address"
 
   old_address=$(ssh_config "$OLD_NOW" hostname)
   resolved=$(perl -MSocket -e '$a = inet_aton(shift); print $a ? inet_ntoa($a) : ""' "$old_address")
@@ -666,6 +717,11 @@ EOF
   fi
   STAGE="after the promotion"
   rearm "$NEW"
+  # promote.sh can finish FAILOVER and die before it writes the markers, and
+  # backup.sh skips a host without one. Here the promotion is this cycle's
+  # (checked above or just done), so make both right, as promote.sh does.
+  act on "$NEW" "sudo touch /etc/blot-redis/active"
+  act on "$OLD_REDIS" "sudo rm -f /etc/blot-redis/active"
 
   if [ "$eip_on" != "$NEW_ID" ]; then
     say "3. Emptying the proxy cache on $NEW"
@@ -677,6 +733,7 @@ EOF
     if [ -z "$DRY_RUN" ]; then
       [ "$(aws_cli ec2 describe-addresses --allocation-ids "$EIP" --query 'Addresses[0].InstanceId' --output text)" = "$NEW_ID" ] ||
         die "$EIP is not on $NEW_ID"
+      follow_eip "$eip_address"
     fi
   fi
 
@@ -692,6 +749,7 @@ EOF
   act unfreeze
   STAGE=""
   say "Switched in $(($(date +%s) - t0))s: $NEW serves $eip_address and takes writes. Next: settle"
+  echo "Before finish, change HostName for $NEW in ~/.ssh/config to $eip_address: its launch address is released."
 }
 
 # ---- settle --------------------------------------------------------------
@@ -701,6 +759,7 @@ phase_settle() {
   [ -n "$EIP" ] || die "settle needs --eip"
   read -r eip_on eip_address <<< "$(aws_cli ec2 describe-addresses --allocation-ids "$EIP" --query 'Addresses[0].[InstanceId,PublicIp]' --output text)"
   [ "$eip_on" = "$NEW_ID" ] || need "$EIP is not on $NEW: run switch"
+  follow_eip "$eip_address"
   [ "$(info_field "$(redis_info "$NEW")" role)" = master ] || need "$NEW's Redis is not the master: run switch"
   host=$(env_value "$NEW" BLOT_HOST)
 
@@ -909,8 +968,9 @@ restore_volume() {
       echo "NOTE: $SNAP_VOLUME cannot be read, so the volume is gp3 at the default speed. Raise it with modify-volume if reads are slow"
     fi
     opts="--snapshot-id $SNAP --availability-zone $az --volume-type $vtype"
-    [ "$iops" = None ] || [ -z "$iops" ] || opts="$opts --iops $iops"
-    [ "${throughput:-None}" = None ] || opts="$opts --throughput $throughput"
+    # gp2 reports a baseline Iops (3 per GB) that create-volume rejects; only these types take one.
+    case "$vtype" in gp3 | io1 | io2) [ "${iops:-None}" = None ] || opts="$opts --iops $iops" ;; esac
+    [ "$vtype" != gp3 ] || [ "${throughput:-None}" = None ] || opts="$opts --throughput $throughput"
     tags='{"Key":"Name","Value":"Blot data (restored for '$CYCLE')"},{"Key":"BlotRestoreCycle","Value":"'$CYCLE'"},{"Key":"BlotRestoredFrom","Value":"'$SNAP_VOLUME'"}'
     [ "$MODE" != drill ] || tags='{"Key":"Name","Value":"drill-data-volume"},{"Key":"BlotRestoreCycle","Value":"'$CYCLE'"},{"Key":"BlotDrill","Value":"true"}'
     if [ -n "$DRY_RUN" ]; then
@@ -971,6 +1031,8 @@ copy_env_files() {
     pipe_to "$NEW" "sudo bash -c $(printf %q "$ENV_SCRIPT") cycle $SOCKET") || { rm -rf "$tmp"; die "could not install the env files on $NEW"; }
   rm -rf "$tmp"
   case "$out" in *changed*) ENV_CHANGED=1 ;; esac
+  # An earlier run may have written them and stopped before the units were verified.
+  ! on "$NEW" "test -e /etc/blot/cycle-env-pending" || ENV_CHANGED=1
   echo "Env files on $NEW: $([ -n "$ENV_CHANGED" ] && echo installed || echo already current), on the Redis socket"
 }
 
@@ -998,6 +1060,18 @@ EOF
   [ "$reply" = "$holder" ] || die "aborted"
 }
 
+# restore_follow_eip: a resumed restore whose Elastic IP is already on the host it
+# launched. That host's launch-time address is released, so <new> reaches nothing
+# until ssh follows the Elastic IP, before even its instance ID can be read.
+restore_follow_eip() {
+  local holder address tag
+  read -r holder address <<< "$(aws_cli ec2 describe-addresses --allocation-ids "$EIP" --query 'Addresses[0].[InstanceId,PublicIp]' --output text)"
+  [ -n "${holder:-}" ] && [ "$holder" != None ] || return 0
+  tag=$(aws_cli ec2 describe-instances --instance-ids "$holder" \
+    --query 'Reservations[0].Instances[0].Tags[?Key==`BlotCycle`]|[0].Value' --output text 2> /dev/null || true)
+  [ "$tag" != "$CYCLE" ] || follow_eip "$address"
+}
+
 phase_restore() {
   local keys problem address host code tagged t0
   restore_inputs
@@ -1008,6 +1082,7 @@ phase_restore() {
   restore_snapshot
   NEW_ID=""
   if [ -n "$NEW" ]; then
+    restore_follow_eip
     NEW_ID=$(instance_id "$NEW")
     [ -n "$NEW_ID" ] || die "cannot reach $NEW"
     check_world "$NEW_ID"
@@ -1073,6 +1148,8 @@ phase_restore() {
       echo "$host answers 200 through $address"
     done
   fi
+  # Only now: until the units are verified, a rerun must still redeploy them.
+  act on "$NEW" "sudo rm -f /etc/blot/cycle-env-pending"
 
   step "The volume's pre-warm"
   if [ -z "$DRY_RUN" ]; then
@@ -1097,6 +1174,7 @@ phase_restore() {
     if [ -z "$DRY_RUN" ]; then
       [ "$(aws_cli ec2 describe-addresses --allocation-ids "$EIP" --query 'Addresses[0].InstanceId' --output text)" = "$NEW_ID" ] ||
         die "$EIP is not on $NEW_ID"
+      follow_eip "$EIP_ADDRESS"
       host=$(env_value "$NEW" BLOT_HOST)
       wait_public_health "$EIP_ADDRESS" "$host"
     fi
@@ -1112,6 +1190,7 @@ phase_restore() {
 
   say "Restored in $(($(date +%s) - t0))s: $NEW serves $EIP_ADDRESS"
   cat << EOF
+Before the reconcile, change HostName for $NEW in ~/.ssh/config to $EIP_ADDRESS: its launch address is released.
 The data is as of $SNAP_START. Now reconcile (README.md, "Recovery"): it prints a plan first, then
 resyncs the sync-client blogs and lists the git blogs whose owners push again:
   ssh $NEW sudo docker exec --user 1000:1000 -e HOME=/home/node blot-blue node scripts/host-cycle/reconcile.js --since $SNAP_START

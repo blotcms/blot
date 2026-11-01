@@ -101,10 +101,14 @@ async function run(blogs, { concurrency, perClient, pauseMs, resync, finished, s
         result.failures.push({ id: blog.id, client: blog.client, message });
         log(`${blog.id} (${blog.client}) failed: ${message}`);
         backoff = RATE_LIMITED.test(message);
+      }
+      // The slot is held through the pause: a rate-limit backoff is for the
+      // client's API, so no other worker may start on that client meanwhile.
+      try {
+        await sleep(backoff ? BACKOFF_MS : pauseMs);
       } finally {
         inFlight[blog.client]--;
       }
-      await sleep(backoff ? BACKOFF_MS : pauseMs);
     }
   }
 
@@ -130,6 +134,14 @@ async function loadBlogs() {
   return blogs;
 }
 
+// A client's resync resolves with a summary even when downloads failed without
+// stopping the walk. Those blogs are incomplete, so they must be retried.
+function assertComplete(summary) {
+  if (!summary || !(summary.failed > 0)) return summary;
+  const sample = summary.firstError ? `, the first: ${summary.firstError}` : "";
+  throw new Error(`${summary.failed} files failed to sync${sample}`);
+}
+
 // The same resyncs as scripts/<client>/resync.js, which log and swallow their
 // errors; these throw, so a failed blog is not recorded as finished.
 async function resyncBlog(blog) {
@@ -141,16 +153,20 @@ async function resyncBlog(blog) {
   );
   const { folder, done } = await establishSyncLock(blog.id);
   try {
+    // A blog created after the snapshot has no folder on this volume, and each
+    // client counts the local files before it starts.
+    await require("fs-extra").ensureDir(require("helper/localPath")(blog.id, "/"));
     if (blog.client === "dropbox") {
-      await require("clients/dropbox/sync/reset-to-blot")(blog.id, () => {}, folder.update);
+      assertComplete(await require("clients/dropbox/sync/reset-to-blot")(blog.id, () => {}, folder.update));
       await fix(full);
     } else if (blog.client === "google-drive") {
       const summary = await require("clients/google-drive/sync/resetFromDrive")(blog.id, folder.status, folder.update);
       if (!summary) throw new Error("the walk of the Drive folder did not finish");
+      assertComplete(summary);
     } else if (blog.client === "icloud") {
       const resync = require("clients/icloud/resync");
       try {
-        await resync(blog.id, folder.status, folder.update);
+        assertComplete(await resync(blog.id, folder.status, folder.update));
         await fix(full);
       } catch (err) {
         // Nothing to resync from: not a failure to retry.
@@ -236,7 +252,7 @@ async function main() {
   return result.failed ? 1 : 0;
 }
 
-module.exports = { select, run, readState, startState, parseArgs };
+module.exports = { select, run, readState, startState, parseArgs, assertComplete };
 
 if (require.main === module) {
   main().then(

@@ -213,7 +213,9 @@ On a drill host the units are paused instead and stay paused.
 
 `move thaw` is the rollback when no switch happened: the data directory goes
 read-write and the freeze is lifted (the units unpaused on a drill). It also
-cleans up after a failed `move freeze`.
+cleans up after a failed `move freeze`. On a drill host it also lifts an app
+freeze left by `--app-freeze`, recognised by its reason, so the flag need not be
+repeated.
 
 `move retag`, after the switch: the new volume gets the production `Name` tag
 first, then the old one becomes `Blot data (replaced by <new id>)` with

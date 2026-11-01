@@ -1261,6 +1261,13 @@ cmd_move_thaw() {
       ssh_run "$HOST" "sudo docker unpause $c" < /dev/null > /dev/null 2>&1 || true
     done
     echo "Drill containers unpaused."
+    # A drill that ran real units froze with --app-freeze, and thaw does not get
+    # that flag from a later command: lift our own freeze, recognised by its
+    # reason. Stand-in containers have no read-only.js, which is not an error.
+    if out=$(ro status 2> /dev/null) && echo "$out" | grep -q '"reason":"data volume move"'; then
+      ro off > /dev/null || die "could not lift the freeze; run: ssh $HOST sudo docker exec $CONTAINER node scripts/read-only.js off"
+      echo "Freeze lifted: the app accepts writes again."
+    fi
     return 0
   fi
   if ! out=$(ro status); then
