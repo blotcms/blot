@@ -6,7 +6,7 @@ var checkGitRepoExists = require("./checkGitRepoExists");
 var repo = require("./repo");
 var Blog = require("models/blog");
 var validateTree = require("./validateTree");
-var database = require("clients/git/database");
+var database = require("./database");
 var isRedisUnavailableError = require("helper/redisUnavailable").isRedisUnavailableError;
 
 // The working tree is reset to the new commit before the changed paths are
@@ -167,10 +167,6 @@ module.exports = function sync (blogID, gitHandle, callback) {
                             folder.log("/" + path, "changed");
                           });
 
-                          // Tell Blot something has changed at these paths!
-                          // We must do this in series until entry.set becomes
-                          // atomic. Right now, making changes to the blog's
-                          // menu cannot be done concurrently, hence eachSeries!
                           function finish(err) {
                             if (err) {
                               folder.log(
@@ -200,6 +196,10 @@ module.exports = function sync (blogID, gitHandle, callback) {
 
                           if (!modified.length) return finish();
 
+                          // Tell Blot something has changed at these paths!
+                          // We must do this in series until entry.set becomes
+                          // atomic. Right now, making changes to the blog's
+                          // menu cannot be done concurrently, hence eachSeries!
                           async.eachSeries(
                             modified,
                             function (path, next) {

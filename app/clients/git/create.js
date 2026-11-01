@@ -25,7 +25,7 @@ const TEMPORARY_GIT_GC_CONFIG = [
 ];
 const setStatus = promisify(database.setStatus.bind(database));
 const setApplied = promisify(database.setApplied.bind(database));
-const createToken =promisify(database.createToken.bind(database));
+const createToken = promisify(database.createToken.bind(database));
 
 // Stops git from searching above the blog's folder for a repository, so a
 // command run before `git init` (or after the folder's .git is removed)

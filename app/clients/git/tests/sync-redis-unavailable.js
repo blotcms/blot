@@ -86,7 +86,7 @@ describe("Git sync when Redis is unavailable", function () {
           ),
         "./checkGitRepoExists": (path, cb) => cb(null),
         "./repo": { pointOriginAtBareRepo: (git, handle, cb) => cb(null) },
-        "clients/git/database": {
+        "./database": {
           getApplied: (id, cb) => cb(readError, applied),
           setApplied: (id, commit, cb) => {
             if (writeError) return cb(writeError);
