@@ -1,7 +1,7 @@
 var joinpath = require("path").join;
 var isOwner = require("./isOwner");
-var localPath = require("helper/localPath");
-var fs = require("fs-extra");
+var folder = require("storage/folder");
+var callbackify = require("util").callbackify;
 var getAllViews = require("./getAllViews");
 var determineTemplateFolder = require("./determineTemplateFolder");
 var withFolderLock = require("./withFolderLock");
@@ -45,10 +45,10 @@ function makeClient (blogID, callback) {
     if (!blog.client || !client) {
       return callback(null, {
         remove: function (blogID, path, callback) {
-          fs.remove(localPath(blogID, path), callback);
+          callbackify(folder.remove)(blogID, path, callback);
         },
         write: function (blogID, path, content, callback) {
-          fs.outputFile(localPath(blogID, path), content, callback);
+          callbackify(folder.write)(blogID, path, content, callback);
         }
       });
     }

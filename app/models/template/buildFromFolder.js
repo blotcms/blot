@@ -1,6 +1,6 @@
 var ensure = require("helper/ensure");
-var localPath = require("helper/localPath");
-var fs = require("fs-extra");
+var folder = require("storage/folder");
+var callbackify = require("util").callbackify;
 var readFromFolder = require("./readFromFolder");
 var async = require("async");
 var getTemplateList = require("./getTemplateList");
@@ -26,8 +26,8 @@ module.exports = function (blogID, callback) {
   ensure(blogID, "string").and(callback, "function");
 
   var templateDirs = [
-    localPath(blogID, "/templates"),
-    localPath(blogID, "/Templates")
+    "/templates",
+    "/Templates"
   ];
 
   const templatesInFolder = [];
@@ -44,8 +44,12 @@ module.exports = function (blogID, callback) {
   async.eachSeries(
     templateDirs,
     function (templateDir, next) {
-      fs.readdir(templateDir, function (err, templates) {
-        if (err || !templates) return next();
+      callbackify(folder.listNames)(blogID, templateDir, function (err, entries) {
+        if (err || !entries) return next();
+
+        var templates = entries.map(function (entry) {
+          return entry.name;
+        });
 
         async.eachSeries(
           templates,

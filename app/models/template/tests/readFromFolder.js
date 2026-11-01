@@ -9,11 +9,13 @@ describe("template", function () {
 
   require("./setup")({ createTemplate: true });
 
-  // Sets up a temporary tmp folder and cleans it up after
-  global.test.tmp();
-
   beforeEach(function (done) {
-    var name = require("path").basename(this.tmp);
+    var name = this.blog.handle;
+
+    // readFromFolder takes a path in the blog's folder, which is removed
+    // along with the blog
+    this.dir = "/Templates/" + name;
+    this.tmp = this.blogDirectory + this.dir;
 
     create(this.blog.id, name, { localEditing: true }, done);
   });
@@ -23,7 +25,7 @@ describe("template", function () {
       locals: { foo: "bar" }
     });
 
-    readFromFolder(this.blog.id, this.tmp, function (err, template) {
+    readFromFolder(this.blog.id, this.dir, function (err, template) {
       if (err) return done.fail(err);
 
       expect(template.locals.foo).toEqual("bar");
@@ -34,7 +36,7 @@ describe("template", function () {
   it("explains what is wrong with an invalid package.json", function (done) {
     fs.outputFileSync(this.tmp + "/package.json", '{\n  "name": "Example",\n}');
 
-    readFromFolder(this.blog.id, this.tmp, function (err, template) {
+    readFromFolder(this.blog.id, this.dir, function (err, template) {
       if (err) return done.fail(err);
 
       var message = template.errors["package.json"];
@@ -49,12 +51,12 @@ describe("template", function () {
 
   it("ignores view files which are too large", function (done) {
     // 3mb of random data should exceed the limit of 2.5mb
-    fs.writeFileSync(
+    fs.outputFileSync(
       this.tmp + "/style.css",
       require("crypto").randomBytes(3 * 1000 * 1000)
     );
 
-    readFromFolder(this.blog.id, this.tmp, function (err, template) {
+    readFromFolder(this.blog.id, this.dir, function (err, template) {
       if (err) return done.fail(err);
 
       getViewByURL(template.id, "/style.css", function (err, name) {
@@ -73,7 +75,7 @@ describe("template", function () {
       views: { "style.css": { url: "/test", locals: { baz: "bat" } } }
     });
 
-    readFromFolder(this.blog.id, this.tmp, function (err, template) {
+    readFromFolder(this.blog.id, this.dir, function (err, template) {
       if (err) return done.fail(err);
 
       getViewByURL(template.id, "/test", function (err, name) {
@@ -88,7 +90,7 @@ describe("template", function () {
   it("assigns a view a URL automatically", function (done) {
     fs.outputFileSync(this.tmp + "/style.css", "body {color:pink}");
 
-    readFromFolder(this.blog.id, this.tmp, function (err, template) {
+    readFromFolder(this.blog.id, this.dir, function (err, template) {
       if (err) return done.fail(err);
 
       getViewByURL(template.id, "/style.css", function (err, name) {
@@ -107,7 +109,7 @@ describe("template", function () {
   // from a folder in future.
   it("will not clobber the URL for a view set elsewhere", function (done) {
     fs.outputFileSync(this.tmp + "/style.css", "body {color:pink}");
-    var templateFolder = this.tmp;
+    var templateFolder = this.dir;
     var blogID = this.blog.id;
 
     readFromFolder(blogID, templateFolder, function (err, template) {
@@ -132,18 +134,19 @@ describe("template", function () {
 
   it("removes a view when you remove its file", function (done) {
     const tmp = this.tmp;
+    const dir = this.dir;
     const blogID = this.blog.id;
 
     fs.outputFileSync(tmp + "/hello.html", "Hello, world!");
     fs.outputFileSync(tmp + "/test.html", "Hello, test!");
 
-    readFromFolder(blogID, tmp, function (err, template) {
+    readFromFolder(blogID, dir, function (err, template) {
       if (err) return done.fail(err);
       get(template.id, "test.html", function (err, view) {
         expect(view.content).toEqual("Hello, test!");
 
         fs.removeSync(tmp + "/test.html");
-        readFromFolder(blogID, tmp, function (err) {
+        readFromFolder(blogID, dir, function (err) {
           if (err) return done.fail(err);
           get(template.id, "test.html", function (err, view) {
             expect(err.message.includes("No view")).toBe(true);
@@ -158,7 +161,7 @@ describe("template", function () {
   it("reads a view's content from a folder", function (done) {
     fs.outputFileSync(this.tmp + "/style.css", "body {color:pink}");
 
-    readFromFolder(this.blog.id, this.tmp, function (err, template) {
+    readFromFolder(this.blog.id, this.dir, function (err, template) {
       if (err) return done.fail(err);
 
       get(template.id, "style", function (err, view) {
@@ -217,7 +220,7 @@ describe("template", function () {
     }
 
     it("passes an error creating a new template to the callback", function (done) {
-      var dir = this.tmp + "/new-template";
+      var dir = this.dir + "/new-template";
       var error = redisError();
       var create = jasmine.createSpy("create").and.callFake(function (
         owner,
@@ -228,7 +231,7 @@ describe("template", function () {
         callback(error);
       });
 
-      fs.outputFileSync(dir + "/entries.html", "{{#entries}}{{/entries}}");
+      fs.outputFileSync(this.blogDirectory + dir + "/entries.html", "{{#entries}}{{/entries}}");
 
       readFromFolderWith({ create: create })(
         this.blog.id,
@@ -251,7 +254,7 @@ describe("template", function () {
 
       readFromFolderWith({ create: create, getMetadata: getMetadata })(
         this.blog.id,
-        this.tmp,
+        this.dir,
         once(done, function (err) {
           // Only a missing template should be created
           expect(create).not.toHaveBeenCalled();
@@ -270,7 +273,7 @@ describe("template", function () {
 
       readFromFolderWith({ setMetadata: setMetadata })(
         this.blog.id,
-        this.tmp,
+        this.dir,
         once(done, function (err) {
           expect(err).toBe(error);
         })
