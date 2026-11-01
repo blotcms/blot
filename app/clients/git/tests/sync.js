@@ -35,15 +35,16 @@ describe("git client sync", function () {
 
   it("syncs a push when the response never reports finish", async function () {
     var http = require("http");
-    var emit = http.ServerResponse.prototype.emit;
+    var on = http.ServerResponse.prototype.on;
     var path = helpers.randomPath(this.fake);
     var text = content(this);
 
-    // What a client which hangs up on reading the push's result looks like
-    spyOn(http.ServerResponse.prototype, "emit").and.callFake(function (event) {
-      var isPush = this.req && /git-receive-pack$/.test(this.req.url);
-      if (event === "finish" && isPush) return false;
-      return emit.apply(this, arguments);
+    // What a client which hangs up on reading the push's result looks like.
+    // Only repo.js misses the event: node needs it to finish the request.
+    spyOn(http.ServerResponse.prototype, "on").and.callFake(function (event) {
+      if (event === "finish" && /clients\/git\/repo\.js/.test(new Error().stack))
+        return this;
+      return on.apply(this, arguments);
     });
 
     await this.local.writeAndPush(path, text);
