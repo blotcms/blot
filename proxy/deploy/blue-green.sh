@@ -84,9 +84,15 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # A host cycle pauses deploys on both hosts (config/host/cycle.sh). The check is
 # here, not in the workflow, because npm run deploy-units and the Deploy workflow
 # both end up here, and a rehearsal then only pauses its own drill hosts.
-if [ -e "$PAUSE_FILE" ] && [ "${PROXY_DEPLOY_IGNORE_PAUSE:-}" != 1 ]; then
-  die "deploys are paused on this host ($PAUSE_FILE: $(cat "$PAUSE_FILE" 2>/dev/null))"
-fi
+# It runs before the image is pulled, so a paused deploy fails fast, and again
+# once the lock is held: a deploy that was waiting on the pull must not replace
+# units after the cycle's app phase has found the lock free.
+refuse_if_paused() {
+  if [ -e "$PAUSE_FILE" ] && [ "${PROXY_DEPLOY_IGNORE_PAUSE:-}" != 1 ]; then
+    die "deploys are paused on this host ($PAUSE_FILE: $(cat "$PAUSE_FILE" 2>/dev/null))"
+  fi
+}
+refuse_if_paused
 
 NEW_IMAGE="$(resolve_image "$NEW_IMAGE")"
 # on the host first: whether it is a unit is read from its label
@@ -97,6 +103,7 @@ RELEASE_ID="$(release_id "$NEW_IMAGE")"
 load_env
 load_unit_settings
 acquire_lock
+refuse_if_paused
 [ -r "$CERT_DIR/letsencrypt-domain.pem" ] && [ -r "$CERT_DIR/letsencrypt-domain.key" ] \
   || die "no certificate in $CERT_DIR (letsencrypt-domain.pem / .key)"
 [ -d "$LOG_DIR" ] || die "log directory $LOG_DIR does not exist"

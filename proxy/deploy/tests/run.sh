@@ -21,7 +21,8 @@ echo "docker $*" >> "$FAKE/calls"
 R="$FAKE/running"; mkdir -p "$R"
 name_arg() { while [ $# -gt 0 ]; do [ "$1" = --name ] && { echo "$2"; return; }; shift; done; }
 case "$1" in
-  image) if [[ "$*" == *Labels* ]]; then [[ "${!#}" =~ :[0-9a-f]{40}$ ]] && echo unit; exit 0; fi   # the unit images are the ones tagged with a commit
+  image) [[ "$*" == *Labels* ]] || [ -z "${FAKE_PAUSE_ON_INSPECT:-}" ] || echo raced > "$FAKE_PAUSE_ON_INSPECT"   # a pause that lands while the pull runs
+    if [[ "$*" == *Labels* ]]; then [[ "${!#}" =~ :[0-9a-f]{40}$ ]] && echo unit; exit 0; fi   # the unit images are the ones tagged with a commit
     [ -z "${FAKE_NO_AIRLOCK_IMAGE:-}" ] || [[ "${!#}" != *blot-airlock:* ]] || exit 1
     if [[ "$*" == *"{{.Id}}"* ]]; then echo "${!#}"; fi; exit 0 ;;
   images) for i in ${FAKE_IMAGES-}; do [[ "$i" == "$2":* ]] && echo "$i"; done; exit 0 ;;
@@ -336,6 +337,10 @@ echo paused-for-a-test > "$T/deploy-paused"; export PROXY_DEPLOY_PAUSE_FILE="$T/
 reset units; bluegreen
 check "deploys paused on the host: refused before anything happens, and it says why" \
   '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create" && mentions "paused-for-a-test"'
+rm -f "$T/deploy-paused"; reset units; FAKE_PAUSE_ON_INSPECT="$T/deploy-paused" bluegreen
+check "a pause that lands after the early check (during the pull) still stops it, once the lock is held" \
+  '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create" && mentions "paused"'
+echo paused-for-a-test > "$T/deploy-paused"
 reset units; PROXY_DEPLOY_IGNORE_PAUSE=1 bluegreen
 check "PROXY_DEPLOY_IGNORE_PAUSE=1 deploys anyway" '[ $RC = 0 ] && called "docker create"'
 rm -f "$T/deploy-paused"; unset PROXY_DEPLOY_PAUSE_FILE

@@ -39,9 +39,11 @@ while [ $# -gt 0 ]; do
   case "$1" in
     -n) shift ;;
     -o | -i | -p) shift 2 ;;
+    -F) cp "$2" "$W/override_cfg"; F=1; shift 2 ;;
     -G) case "$2" in
         eipalias) echo "hostname 203.0.113.9" ;;
         new) echo "hostname 192.0.2.20" ;;
+        newip) echo "hostname 203.0.113.9" ;;
         *) echo "hostname 192.0.2.10" ;;
       esac
       echo "port 2222"; exit 0 ;;
@@ -53,6 +55,7 @@ cmd=$*
 case "$name" in
   eipalias) m=$(cat "$W/eip_on") ;;
   direct) m=old ;;
+  newip) m=new ;;
   ec2-user@*) m=new ;;
   *) m=$name ;;
 esac
@@ -61,8 +64,12 @@ case "$cmd" in
   *meta-data/instance-id*) echo "i-0$(printf %s "$m" | od -An -tx1 | tr -d ' \n' | cut -c1-8)"; exit 0 ;;
 esac
 echo "ssh $name [$m]: $cmd" >> "$W/calls"
+[ -z "${F:-}" ] || echo "$name: $cmd" >> "$W/override_calls"
 case "$cmd" in
   *"test -e /etc/blot/drill"*) [ -e "$W/drillmark.$m" ] ;;
+  *"test -e /etc/blot-redis/drill"*) [ -e "$W/redisdrill.$m" ] ;;
+  *"test -e /etc/blot/cycle-env-pending"*) [ -e "$W/etc.$m/cycle-env-pending" ] ;;
+  *"rm -f /etc/blot/cycle-env-pending"*) rm -f "$W/etc.$m/cycle-env-pending" ;;
   *"INFO replication"*)
     echo "role:$(cat "$W/role.$m" 2> /dev/null || echo master)"
     echo "master_host:$(cat "$W/master.$m" 2> /dev/null)"
@@ -331,8 +338,21 @@ status_is "replicate runs again" 0
 lacks "with no second REPLICAOF" "$CALLS" "REPLICAOF"
 world
 run --drill --old-redis oldredis replicate old new
+refused "two hosts: --old-redis without /etc/blot-redis/drill is refused"
+has "and says so" "$OUT" "/etc/blot-redis/drill"
+no_changes "an unmarked --old-redis"
+touch "$W/down.oldredis"
+run --drill --old-redis oldredis replicate old new
+refused "an unreachable --old-redis is refused"
+no_changes "an unreachable --old-redis"
+rm "$W/down.oldredis"
+touch "$W/redisdrill.oldredis"
+run --production --old-redis oldredis replicate old new
+refused "--production is still refused: the tags say drill"
+run --drill --old-redis oldredis replicate old new
 status_is "two hosts: replicate from --old-redis" 0
 has "from that host's address" "$CALLS" "REPLICAOF 10.0.0.3 6379"
+has "its instance is checked against the world" "$CALLS" "describe-instances --instance-ids"
 echo 10.9.9.9 > "$W/master.new"
 run --drill replicate old new
 refused "a replica of something else is refused"
@@ -423,6 +443,14 @@ ready_for_switch
 rm "$W/units.new"
 STUB_UNITS_FAIL=1 run --drill app old new
 refused "a failed deploy stops it"
+# The env files were replaced by that run, so the next one finds them current.
+[ -e "$W/etc.new/cycle-env-pending" ] && ok "the changed env is remembered on the host" || fail "no cycle-env-pending after a failed deploy"
+run --drill app old new
+status_is "app runs again after the failed deploy" 0
+has "and still forces the replacement of the units" "$CALLS" "force=1 skip_write=1"
+[ ! -e "$W/etc.new/cycle-env-pending" ] && ok "the marker goes once the units are verified" || fail "cycle-env-pending is still there"
+run --drill app old new
+has "after that nothing is forced" "$CALLS" "force= skip_write=1"
 ready_for_switch
 echo None > "$W/tag"; rm "$W/units.new"
 run --production app old new
@@ -501,12 +529,19 @@ before "the Elastic IP, then the old units" "associate-address" "docker stop"
 before "the old units, then the bans" "docker stop" "bans.sh import new"
 before "the bans, then the check through the Elastic IP" "bans.sh import new" "--resolve blot.test:443:203.0.113.9"
 before "the check, then unfreeze" "--resolve blot.test:443:203.0.113.9" "read-only.js off"
+before "promote, then the markers" "promote.sh --yes direct new" "ssh new [new]: sudo touch /etc/blot-redis/active"
+has "the old Redis loses its active marker" "$CALLS" "ssh direct [old]: sudo rm -f /etc/blot-redis/active"
 has "the Elastic IP goes to the new instance" "$CALLS" "--allocation-id eipalloc-0a --instance-id $NEW_ID --allow-reassociation"
 has "the old units stop through --old-direct" "$CALLS" "ssh direct [old]: sudo bash -c"
 has "and the airlocks" "$CALLS" "blot-blue-airlock blot-green-airlock"
 lacks "they are only stopped" "$CALLS" "docker rm"
 has "the freeze goes through the new host" "$CALLS" "ssh new [new]: sudo docker exec blot-blue node scripts/read-only.js off"
 lacks "move thaw is for rollback" "$CALLS" "move thaw"
+has "ssh to the new host follows the Elastic IP once it moved" "$(cat "$W/override_calls")" "read-only.js off"
+lacks "and not before (the roles are read first)" "$(cat "$W/override_calls")" "INFO replication"
+has "through a config naming the Elastic IP" "$(cat "$W/override_cfg")" "HostName 203.0.113.9"
+has "and checking the key as the alias" "$(cat "$W/override_cfg")" "HostKeyAlias 192.0.2.20"
+has "over the user's own config" "$(cat "$W/override_cfg")" "Include $HOME/.ssh/config"
 lacks "retag waits for settle" "$CALLS" "move retag"
 has "the freeze TTL reaches resize.sh" "$CALLS" "--freeze-ttl 900"
 [ ! -e "$W/frozen" ] && ok "nothing is frozen at the end" || fail "still frozen"
@@ -525,11 +560,21 @@ run "${SWITCH[@]}" --yes switch old new
 status_is "a master the old Redis follows resumes" 0
 lacks "with no second freeze" "$CALLS" "move freeze"
 lacks "and no second promotion" "$CALLS" "promote.sh --yes"
+has "and writes the markers promote.sh did not" "$CALLS" "ssh new [new]: sudo touch /etc/blot-redis/active"
+has "on both sides" "$CALLS" "sudo rm -f /etc/blot-redis/active"
 has "and moves the Elastic IP" "$CALLS" "associate-address"
 
 echo "# switch: run again"
+rm -f "$W/override_cfg" "$W/override_calls"
 run "${SWITCH[@]}" --yes --old-direct direct switch eipalias new
 status_is "a finished switch runs again" 0
+has "a resumed switch follows the Elastic IP too" "$(cat "$W/override_cfg")" "HostName 203.0.113.9"
+rm -f "$W/override_cfg" "$W/override_calls"
+run "${SWITCH[@]}" --yes --old-direct direct switch eipalias newip
+status_is "with <new> already the Elastic IP it runs" 0
+[ ! -e "$W/override_cfg" ] && ok "and overrides nothing" || fail "an override for an alias that is already the Elastic IP"
+rm -f "$W/override_cfg" "$W/override_calls"
+run "${SWITCH[@]}" --yes --old-direct direct switch eipalias new
 has "and says it is done" "$OUT" "has finished"
 no_changes "a finished switch"
 
@@ -591,8 +636,10 @@ lacks "settle dry run changes nothing" "$CALLS" "units.sh"
 STUB_UNITS_FAIL=1 run --drill --eip eipalloc-0a settle old new
 refused "a failed rolling deploy stops settle"
 [ -e "$W/paused.new" ] && ok "and deploys stay paused" || fail "deploys resumed after a failed settle"
+rm -f "$W/override_cfg"
 run --drill --eip eipalloc-0a settle old new
 status_is "settle works" 0
+has "settle follows the Elastic IP without the alias being edited" "$(cat "$W/override_cfg")" "HostName 203.0.113.9"
 has "a forced rolling deploy of the same image" "$CALLS" "units.sh $OLD_SHA target=new ignore_pause=1 force=1 skip_write= "
 has "the dashboard is checked" "$CALLS" "https://blot.test/sites/log-in"
 before "deploy, then retag" "units.sh" "move retag"

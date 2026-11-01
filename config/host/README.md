@@ -269,6 +269,12 @@ looking at the hosts, so after a failure fix the cause and run it again. Check
   so from `switch` on it needs `--old-direct`: an alias of its private IP with
   `ProxyJump <new>`. `switch` refuses an alias of the Elastic IP, and tries the
   way in before it freezes anything.
+- **`<new>` after the move.** Moving the Elastic IP releases the new host's
+  launch-time address, which `<new>` is an alias of. From then on `switch` and
+  `settle` put an `ssh` in front on `PATH` that sends `<new>` to the Elastic IP
+  (keeping its host key check), so they work whether or not the alias is edited;
+  `-F` reaches `ProxyJump` too. Before `finish`, and for your own ssh, change
+  `HostName` for `<new>` in `~/.ssh/config` to the Elastic IP.
 - **Two hosts.** With a separate Redis host pass `--old-redis`, also for later
   phases that promote. Without it `<old>` is taken to run Redis too.
 - **Deploys pause** at `app` and resume at the end of `settle`: `/etc/blot/deploy-paused`
@@ -295,14 +301,26 @@ looking at the hosts, so after a failure fix the cause and run it again. Check
   hours until they end (wildcard renewal, file cleanup), unless `--any-time`.
 
 **Rollback** before the promotion: `resize.sh --host <old> move thaw`. After it,
-decide quickly, because whatever the new host has written has to come back too:
+the short path is only for a switch that has accepted no writes (the new host
+was frozen the whole time, so nothing on it is newer than the old volume):
 
 1. `config/redis/promote.sh <new> <old-redis>`.
 2. Move the Elastic IP back to the old instance with `aws ec2 associate-address`.
-3. On the old host: `resize.sh --host <old> move thaw`, then `docker start` the
-   airlocks and the units.
-4. Copy back what changed, with the hosts swapped (`data-volume/README.md`,
-   "Moving to another host"). This needs `settle` not to have retagged yet.
+3. On the old host: `docker start` the airlocks and the units, then
+   `resize.sh --host <old> move thaw`.
+
+Once the new host has accepted writes, the old volume is behind, so promoting
+Redis or moving the Elastic IP first would send traffic to stale files. Follow
+the order in `data-volume/README.md` ("Rollback", after the switch) and decide
+quickly:
+
+1. Keep the new host primary. Copy back what changed, with the hosts swapped:
+   `resize.sh --host <new> move prepare --to <old> --existing`, then `copy` and
+   `freeze` (this needs `settle` not to have retagged yet). The freeze stops
+   writes on the new host once the final copy is done.
+2. Then `config/redis/promote.sh <new> <old-redis>`.
+3. Then the Elastic IP back to the old instance.
+4. Start the old units and thaw as in `data-volume/README.md`.
 
 ### The wildcard certificate
 
