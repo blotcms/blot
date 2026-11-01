@@ -291,6 +291,25 @@ async function commitFile(directory, change) {
   }
 }
 
+// What a push does when it is done, in receivePack.js: a commit leaves loose
+// objects, and a big upload is a commit per file, so without this a repository
+// only Blot writes to would never be packed. Runs by itself, nothing waits on it.
+function collect(directory) {
+  try {
+    const child = spawn("git", ["gc", "--auto", "--quiet"], {
+      cwd: directory,
+      env: Object.assign({}, process.env, { GIT_DIR: directory }),
+      stdio: "ignore",
+      detached: true,
+    });
+
+    child.on("error", function () {});
+    child.unref();
+  } catch (err) {
+    console.error("Git: could not start gc in", directory, err.message);
+  }
+}
+
 module.exports = {
   ZERO: ZERO,
   MASTER: MASTER,
@@ -299,5 +318,6 @@ module.exports = {
   commitTree: commitTree,
   moveMaster: moveMaster,
   commitFile: commitFile,
+  collect: collect,
   treePath: treePath,
 };

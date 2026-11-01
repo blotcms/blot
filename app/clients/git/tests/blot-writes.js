@@ -15,6 +15,19 @@ describe("git client: Blot's own writes", function () {
     await this.local.expectSynced();
   });
 
+  it("keeps the repository packed after a commit, but not after no change", async function () {
+    var plumbing = require("clients/git/plumbing");
+    var repo = require("clients/git/repo");
+
+    spyOn(plumbing, "collect");
+
+    await write(this.blog.id, "/collected.txt", "Hello");
+    expect(plumbing.collect.calls.allArgs()).toEqual([[repo.directory(this.blog.handle)]]);
+
+    await write(this.blog.id, "/collected.txt", "Hello");
+    expect(plumbing.collect.calls.count()).toBe(1);
+  });
+
   it("writes a file which a pull then brings to the user", async function () {
     var path = "/How/about That name.txt";
 

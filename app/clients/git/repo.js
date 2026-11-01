@@ -272,6 +272,8 @@ async function commitChange(blogID, change) {
 
   debug("Blog:", blogID, "Committed", path);
 
+  plumbing.collect(bareRepoDirectory);
+
   await advanceApplied(blogID, result.parent, result.commit);
   await new Promise(function (resolve) {
     followLiveCloneIfAny(blogID, blog.handle, result.commit, resolve);
