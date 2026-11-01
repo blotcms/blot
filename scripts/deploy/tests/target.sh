@@ -43,6 +43,8 @@ remote() { grep -c "$1" "$SSH_LOG.full"; }
 check "units.sh passes nothing on by default" 0 "$(remote 'PROXY_')"
 : > "$SSH_LOG.full"; PROXY_DEPLOY_IGNORE_PAUSE=1 PROXY_DEPLOY_FORCE=1 PROXY_VERIFY_SKIP_REDIS_WRITE=1 PROXY_AIRLOCK_IMAGE=ghcr.io/x/y:z units > /dev/null
 check "units.sh passes the settings to blue-green.sh" 1 "$(remote 'PROXY_DEPLOY_IGNORE_PAUSE=1 PROXY_DEPLOY_FORCE=1 PROXY_VERIFY_SKIP_REDIS_WRITE=1 PROXY_AIRLOCK_IMAGE=ghcr.io/x/y:z .*blue-green.sh')"
+: > "$SSH_LOG.full"; PROXY_ALLOW_ACME_CA=1 units > /dev/null
+check "units.sh passes PROXY_ALLOW_ACME_CA, which common.sh reads from the shell" 1 "$(remote 'PROXY_ALLOW_ACME_CA=1 .*blue-green.sh')"
 
 export BLOT_DEPLOY_TARGET=ec2-user@10.0.0.7
 check "units.sh custom exits 0" 0 "$(units)"

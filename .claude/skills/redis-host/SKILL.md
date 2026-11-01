@@ -75,7 +75,7 @@ starts a new baseline, so a long outage does not produce a flood).
 | Offsite Redis backup stale | the same for `blot:redis-host:offsite` at 50 hours (two missed daily runs); S3 backups may be fine. Look at `~/backup.log`, the `blot-b2` profile, B2 and `/etc/blot-redis/offsite-bucket` |
 | Redis memory nearing maxmemory | `used_memory` at 80% of `maxmemory` (clears at 75%); `noeviction`, so writes fail at the limit |
 | maxmemory not set | `maxmemory` is 0 on a host marked active by `/etc/blot-redis/active` |
-| Redis background save failing, writes will be refused | `rdb_last_bgsave_status` is not `ok` (`stop-writes-on-bgsave-error yes`) |
+| Redis background save failing | `rdb_last_bgsave_status` is not `ok` (`stop-writes-on-bgsave-error yes`) |
 | Redis refused writes (OOM, MISCONF) | any new `OOM`, `MISCONF` or `NOREPLICAS` error (emailed at most hourly) |
 | Redis errors | 100 or more new errors of one other type (`READONLY`, `WRONGTYPE`, `ERR`...) within one 5-minute check |
 | Redis rejected connections | `rejected_connections` rose: Redis was at `maxclients` |
@@ -135,7 +135,9 @@ ssh redis 'df -h / /backups; free -m; sysctl vm.overcommit_memory'
   sets it) or too little free RAM for the fork's copy-on-write: memory is too
   high for the host, so see the resize section. `No space left on device` or
   `Write error saving DB on disk` is the root disk (`/var/lib/redis6`).
-- Writes are refused (`MISCONF`) until a save succeeds, so it is urgent.
+- Redis keeps taking writes (`stop-writes-on-bgsave-error no`), but nothing new
+  reaches disk until a save succeeds, so it is urgent. A host not yet bootstrapped
+  with that setting refuses writes (`MISCONF`) instead.
   Redis retries on its own `save` schedule; a manual `BGSAVE` is a write
   to the host, so propose it separately once the cause is fixed.
 - On a disk problem, find what filled it (`sudo du -xh --max-depth=2 / | sort -h | tail`)

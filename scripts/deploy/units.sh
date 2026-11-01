@@ -81,7 +81,7 @@ node "$ROOT/scripts/deploy/unit-settings.js" | ssh "$TARGET" '
 # Settings of blue-green.sh that config/host/cycle.sh uses. It runs on the host,
 # so ssh has to carry them.
 REMOTE_ENV=""
-for name in PROXY_DEPLOY_IGNORE_PAUSE PROXY_DEPLOY_FORCE PROXY_VERIFY_SKIP_REDIS_WRITE PROXY_AIRLOCK_IMAGE; do
+for name in PROXY_DEPLOY_IGNORE_PAUSE PROXY_DEPLOY_FORCE PROXY_VERIFY_SKIP_REDIS_WRITE PROXY_AIRLOCK_IMAGE PROXY_ALLOW_ACME_CA; do
   [ -z "${!name:-}" ] || REMOTE_ENV="$REMOTE_ENV$name=$(printf %q "${!name}") "
 done
 
