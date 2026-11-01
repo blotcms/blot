@@ -28,6 +28,8 @@ When a user pushes changes from their local repository to the bare repository, B
 
 - **`repo.js`**: The one internal interface to a blog's bare repository. Everything else asks it rather than building paths or talking to pushover: `directory(handle)` (where the repository is), `exists(handle, callback)`, `handleSmartHttp(req, res, blogID)` (serves an authenticated fetch or push), `onPush(callback)` (registers the `(blogID, old, new)` function called after an accepted push, which routes.js uses to start a sync), `commit(blogID, { path, contents }, callback)` (writes or, with `contents: null`, removes a file, then commits and pushes; backs `write.js` and `remove.js`) and `pointOriginAtBareRepo` (resets the live checkout's `origin`). Repositories are keyed by handle on disk. Later steps of #2259 change what is behind this interface.
 
+- **`smartHttp.js`**: Serves ref advertisement and upload-pack (clones and fetches) by running `git upload-pack` and streaming it to the response, for `repo.handleSmartHttp`. Stays on protocol v0, answers git's `0000` probe, accepts gzipped bodies and stops git if the client goes away. Everything else, including pushes, is left to pushover.
+
 - **`git.js`**: A thin wrapper around `execFile("git", args)` for running git in one directory.`Git(directory).raw(args, [callback])`. Commands on one instance run one at a time; a command fails only if git exits non-zero and writes to stderr (so `git commit` with nothing to commit is a success); the error message is git's output.
 
 - **`authenticate.js`**: HTTP Basic Auth middleware using http-auth. Validates user credentials (email and token) against the blog and user models before allowing access to the push endpoint.
