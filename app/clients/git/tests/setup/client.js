@@ -1,7 +1,7 @@
 // A real git client for the git client's specs: it spawns the `git` binary
 // (child_process.execFile) and talks HTTP to the test server, the way a
-// user's machine does. It does not use simple-git, so specs written with it
-// keep working when the server side stops using simple-git too.
+// user's machine does. It does not use ./git (the client's own wrapper), so
+// specs written with it do not depend on how the server side runs git.
 //
 // A spec using this helper should only look at what a user can observe: the
 // output of git commands run in a clone, the files in the blog folder (not
