@@ -7,6 +7,8 @@
 //   {
 //     "version": 1,
 //     "seq": 7,                      changes by one with every swap
+//     "writer": "<32 hex>",          a random nonce, new for every manifest
+//                                    advance() makes (empty: none, at seq 0)
 //     "head": "refs/heads/master",   the branch HEAD points at, or null
 //     "refs": { "refs/heads/master": "<oid>", ... },
 //     "packs": [                     the live packs, oldest first
@@ -26,6 +28,13 @@
 // wasted work and gives the loser its answer early, but a swap which lost the
 // lock, or never had it, is stopped all the same by the create.
 //
+// A create which lands but loses its response (or whose retry, by the SDK or
+// by us, finds the key taken) looks like a lost race. So swap() does not guess:
+// when the create says "already exists", or fails in a way which may have
+// applied it, it reads the manifest at that seq. If it carries this swap's
+// nonce, the swap landed; if another's, it was lost; if the read fails too,
+// the outcome is unknown and swap() says so (OutcomeUnknownError).
+//
 // Finding the newest manifest costs no LIST in the usual case: manifests/latest.json
 // holds { "seq": N }, written after each swap and overwritten each time. It is
 // only a hint, and nothing trusts it: read() starts at the seq it names, looks
@@ -33,7 +42,16 @@
 // hint is missing, damaged or names something which doesn't exist.
 //
 // Old manifests are not deleted here; that belongs with compaction.
-const { CorruptError, NotFoundError, TooLargeError, StaleManifestError, ManifestTooLargeError } = require("./errors");
+const crypto = require("crypto");
+const {
+  CorruptError,
+  NotFoundError,
+  TooLargeError,
+  StaleManifestError,
+  ManifestTooLargeError,
+  OutcomeUnknownError,
+  StoreError,
+} = require("./errors");
 const { MANIFEST_PREFIX, LATEST_KEY, PACK_NAME, manifestKey, manifestSeq, packKey, idxKey } = require("./layout");
 
 const VERSION = 1;
@@ -54,9 +72,10 @@ const KEPT = 8;
 const kept = new WeakMap();
 
 const OID = /^[0-9a-f]{40}$/;
+const WRITER = /^[0-9a-zA-Z_-]{1,64}$/;
 
 function empty() {
-  return { version: VERSION, seq: 0, head: null, refs: {}, packs: [], snapshots: [], history: null };
+  return { version: VERSION, seq: 0, writer: "", head: null, refs: {}, packs: [], snapshots: [], history: null };
 }
 
 function fail(message) {
@@ -90,6 +109,8 @@ function validate(m) {
   if (!m || typeof m !== "object") fail("not an object");
   if (m.version !== VERSION) fail("version " + m.version + " is not supported (this reads version " + VERSION + ")");
   checkCount(m.seq, "seq");
+  if (typeof m.writer !== "string") fail("writer must be a string");
+  if (m.seq > 0 ? !WRITER.test(m.writer) : m.writer !== "") fail("writer must be a nonce (and empty only at seq 0)");
 
   if (m.head !== null && !(typeof m.head === "string" && m.head.startsWith("refs/"))) fail("head must be a ref name or null");
   checkRefs(m.refs, "refs");
@@ -239,6 +260,7 @@ function advance(base, { refs, packs = [], head = base.head, history = base.hist
   return {
     ...base,
     seq,
+    writer: crypto.randomBytes(16).toString("hex"),
     head,
     refs: { ...refs },
     packs: [...base.packs, ...packs.map((pack) => ({ ...pack, seq }))],
@@ -264,12 +286,64 @@ async function assertUploaded(store, base, next) {
   }
 }
 
+// Whether a failed create may nevertheless have been applied. A StoreError
+// is ours and says nothing was written; an HTTP answer in the 4xx range (other
+// than a timeout) is the store refusing the request; anything else (a network
+// error, a timeout, a 5xx, an error we can't classify) may have come after the
+// write. Calling an outcome unknown when it wasn't only costs a read.
+function outcomeIsUnknown(err) {
+  if (err instanceof StoreError) return false;
+  const status = err && err.$metadata && err.$metadata.httpStatusCode;
+  if (status) return status >= 500 || status === 408;
+  return true;
+}
+
+// Called when manifests/<next.seq>.json may be this swap's: reads it and says
+// whether it is. `cause` is the error which made it doubtful, or null if the
+// create answered "already exists". Resolves with the bytes found if they are
+// this swap's own; throws StaleManifestError if they are another writer's,
+// `cause` if there is no such manifest (the create did not land), and
+// OutcomeUnknownError if the read can't say.
+async function confirm(store, next, cause) {
+  const unknown = (err) =>
+    new OutcomeUnknownError("Could not tell whether the swap to seq " + next.seq + " happened: " + err.message, cause || err);
+
+  let found;
+  try {
+    found = await store.get(manifestKey(next.seq), { maxBytes: MAX_BYTES });
+  } catch (err) {
+    if (!(err instanceof NotFoundError)) throw unknown(err);
+    if (cause) throw cause;
+    throw new StaleManifestError("The manifest moved on from seq " + (next.seq - 1));
+  }
+
+  let theirs;
+  try {
+    theirs = parse(found);
+  } catch (err) {
+    throw unknown(err);
+  }
+
+  if (theirs.seq !== next.seq || theirs.writer !== next.writer) {
+    throw new StaleManifestError("The manifest moved on from seq " + (next.seq - 1));
+  }
+  return found;
+}
+
 // Replaces `base`, the manifest the caller built `next` from, with `next`.
 //
 // Creating manifests/<next.seq>.json is the commit: if it is already there
 // someone swapped first, and the caller starts again from the new manifest.
 // Throws StaleManifestError, writing nothing, if so, if next is not the
 // manifest after base, or if a pack it names isn't uploaded.
+//
+// A create which answers "already exists", or fails in a way which may have
+// applied it, is checked by reading the manifest back: if it carries `next`'s
+// writer nonce the swap landed (a response was lost, or a retry found its own
+// earlier attempt) and swap resolves as a success, so calling swap again with
+// the same `next` after an error is safe too. Throws OutcomeUnknownError if
+// the read fails as well; the caller must then report neither success nor
+// failure to its client.
 //
 // `lock(fn)` is the host's per-repository lock: it runs fn while holding the
 // lock and resolves with fn's result. It need only be held for this call. It
@@ -294,19 +368,28 @@ async function swap({ store, lock, base, next }) {
   return lock(async () => {
     // Early exit for a base which has already moved on (or never was the
     // newest): the manifest after it exists, or it doesn't. Only advice; a
-    // swap which passes this is still decided by the create below.
+    // swap which passes this is still decided by the create below. If the
+    // manifest after the base is there it may be this very swap, landed on an
+    // earlier try, so it is checked rather than assumed to be someone else's.
     const [hasBase, hasNext] = await Promise.all([
       base.seq === 0 ? true : store.head(manifestKey(base.seq)),
       store.head(manifestKey(next.seq)),
     ]);
-    if (!hasBase || hasNext) {
-      throw new StaleManifestError("The manifest moved on from seq " + base.seq);
-    }
+    if (!hasBase) throw new StaleManifestError("The manifest moved on from seq " + base.seq);
 
-    if (!(await store.putIfAbsent(manifestKey(next.seq), bytes))) {
-      throw new StaleManifestError("The manifest moved on from seq " + base.seq);
+    let landed = hasNext ? await confirm(store, next, null) : null;
+
+    if (!landed) {
+      let created;
+      try {
+        created = await store.putIfAbsent(manifestKey(next.seq), bytes);
+      } catch (err) {
+        if (!outcomeIsUnknown(err)) throw err;
+        landed = await confirm(store, next, err);
+      }
+      if (created === false) landed = await confirm(store, next, null);
     }
-    remember(store, next.seq, bytes);
+    remember(store, next.seq, landed || bytes);
 
     // The swap has happened. The hint only saves the next reader some looking,
     // so a failure to write it is not a failure to swap.

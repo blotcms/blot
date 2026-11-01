@@ -98,6 +98,10 @@ describe("git store manifest", function () {
       "no version": (m) => delete m.version,
       "a negative seq": (m) => (m.seq = -1),
       "a fractional seq": (m) => (m.seq = 1.5),
+      "no writer": (m) => delete m.writer,
+      "a writer which is not a string": (m) => (m.writer = 7),
+      "an empty writer after seq 0": (m) => (m.writer = ""),
+      "a writer with odd characters": (m) => (m.writer = "a b"),
       "a ref outside refs/": (m) => (m.refs["heads/master"] = oid(1)),
       "a ref name with a space": (m) => (m.refs["refs/heads/a b"] = oid(1)),
       "a ref name with ..": (m) => (m.refs["refs/heads/a..b"] = oid(1)),
@@ -363,7 +367,7 @@ describe("git store manifest", function () {
 
     it("refuses a manifest too big to be read back, and writes nothing", async function () {
       // One ref with a name of 64 MiB is the cheapest way to make one
-      const huge = { ...manifest.empty(), seq: 1, refs: { ["refs/heads/" + "a".repeat(64 * 1024 * 1024)]: oid(1) } };
+      const huge = manifest.advance(manifest.empty(), { refs: { ["refs/heads/" + "a".repeat(64 * 1024 * 1024)]: oid(1) } });
       const error = await fails(manifest.swap({ store, lock, base: manifest.empty(), next: huge }));
       expect(error).toEqual(jasmine.any(ManifestTooLargeError));
       expect(error.code).toBe("MANIFEST_TOO_LARGE");
