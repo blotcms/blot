@@ -95,7 +95,12 @@ plan() { echo "would: $*"; }
 # store now, so tmp/ here is only a leftover). The
 # marker is skipped so the new volume keeps its own, which prepare wrote and
 # mount-data-volume.sh checks.
-RSYNC_OPTS=(-aHAXS --numeric-ids --delete)
+# -X copies extended attributes. A move leaves it out (set_dest): between two
+# hosts the only ones are SELinux labels, which belong to the host that has
+# them, and an SELinux receiver (Amazon Linux 2023) refuses to have them
+# removed or set by a copy from one without (Amazon Linux 2).
+XATTR=X
+RSYNC_OPTS=(-aHA${XATTR}S --numeric-ids --delete)
 RSYNC_EXCLUDES=('--exclude=/.blot-data-volume' '--exclude=/logs/*' '--exclude=/tmp/*')
 
 # Small helpers
@@ -252,8 +257,10 @@ set_dest() {
     XFER_HOST=${t%:*}
     XFER_SSH="ssh -i $MOVE_KEY -p $port -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$MOVE_KNOWN_HOSTS -o HostKeyAlgorithms=ssh-ed25519 -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=6"
     XFER_RSYNC="sudo rsync"
+    XATTR=""
+    RSYNC_OPTS=(-aHAS --numeric-ids --delete)
   fi
-  export COPY_DEST XFER_HOST XFER_SSH XFER_RSYNC
+  export COPY_DEST XFER_HOST XFER_SSH XFER_RSYNC XATTR
 }
 # xfer_opts: rsync's transport options in XFER, empty for a shrink. (Callers
 # expand it as ${XFER[@]+"${XFER[@]}"}: Amazon Linux 2's bash 4.2 fails on an
@@ -660,7 +667,7 @@ cmd_final_copy() {
   if [ "$rc" = 0 ]; then
     for p in $SHARD_PARENTS; do
       [ -d "$DATA/$p" ] || continue
-      rsync -dlptgoD -HAXS --numeric-ids --delete ${XFER[@]+"${XFER[@]}"} "$DATA/$p/" "$COPY_DEST$p/" || { rc=$?; break; }
+      rsync -dlptgoD -HA${XATTR}S --numeric-ids --delete ${XFER[@]+"${XFER[@]}"} "$DATA/$p/" "$COPY_DEST$p/" || { rc=$?; break; }
       find "$DATA/$p" -mindepth 1 -maxdepth 1 -type d -printf "$p/%f\\0" >> "$work/list"
     done
   fi
@@ -715,7 +722,7 @@ close_master() {
 shard_copy() {
   local rc=0
   xfer_opts
-  rsync -aHAXS --numeric-ids --delete ${XFER[@]+"${XFER[@]}"} "$DATA/$1" "$COPY_DEST${1%/*}/" || rc=$?
+  rsync -aHA${XATTR}S --numeric-ids --delete ${XFER[@]+"${XFER[@]}"} "$DATA/$1" "$COPY_DEST${1%/*}/" || rc=$?
   [ "$rc" = 0 ] || { echo "$1 (rsync exit $rc)" >> "$work/failed"; return "$rc"; }
 }
 
