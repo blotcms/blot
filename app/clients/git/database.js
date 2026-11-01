@@ -14,6 +14,13 @@ function statusKey(user_id) {
   return "user:" + user_id + ":git:status";
 }
 
+// The commit whose changes Blot has applied to the blog's entries: the next
+// sync diffs from it. Under blog:<id>: so deleting the blog removes it, and
+// disconnecting removes it too.
+function appliedKey(blogID) {
+  return "blog:" + blogID + ":git:applied";
+}
+
 function generateToken() {
   return uuid().replace(/-/g, "");
 }
@@ -127,6 +134,69 @@ function removeStatus(blogID, callback) {
   })();
 }
 
+function getApplied(blogID, callback) {
+  (async function () {
+    try {
+      return callback(null, (await client.get(appliedKey(blogID))) || null);
+    } catch (err) {
+      return callback(err);
+    }
+  })();
+}
+
+function setApplied(blogID, commit, callback) {
+  (async function () {
+    try {
+      await client.set(appliedKey(blogID), commit);
+      return callback(null);
+    } catch (err) {
+      return callback(err);
+    }
+  })();
+}
+
+// Sets the commit only if there is none yet. Calls back with true if it did.
+function setAppliedIfMissing(blogID, commit, callback) {
+  (async function () {
+    try {
+      var created = await client.setNX(appliedKey(blogID), commit);
+      return callback(null, !!created);
+    } catch (err) {
+      return callback(err);
+    }
+  })();
+}
+
+// Moves the commit from one value to the next, unless something else has
+// moved it since. Blot's own commit does this while a sync may be applying a
+// push, and a plain read then write could set it back over the sync's newer
+// value, so this is the one compare-then-set that is a script. Calls back
+// with true if it moved.
+function advanceApplied(blogID, from, to, callback) {
+  (async function () {
+    try {
+      var moved = await client.eval(
+        "if redis.call('GET', KEYS[1]) == ARGV[1] then redis.call('SET', KEYS[1], ARGV[2]) return 1 end return 0",
+        { keys: [appliedKey(blogID)], arguments: [from, to] }
+      );
+      return callback(null, moved === 1);
+    } catch (err) {
+      return callback(err);
+    }
+  })();
+}
+
+function removeApplied(blogID, callback) {
+  (async function () {
+    try {
+      await client.del(appliedKey(blogID));
+      return callback(null);
+    } catch (err) {
+      return callback(err);
+    }
+  })();
+}
+
 database.createToken = createToken;
 database.checkToken = checkToken;
 database.getToken = getToken;
@@ -137,5 +207,11 @@ database.refreshToken = refreshToken;
 database.setStatus = setStatus;
 database.getStatus = getStatus;
 database.removeStatus = removeStatus;
+
+database.getApplied = getApplied;
+database.setApplied = setApplied;
+database.setAppliedIfMissing = setAppliedIfMissing;
+database.advanceApplied = advanceApplied;
+database.removeApplied = removeApplied;
 
 module.exports = database;
