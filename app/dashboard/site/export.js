@@ -3,7 +3,7 @@ const express = require("express");
 const Export = express.Router();
 const archiver = require('archiver');
 const path = require("path");
-const fs = require('fs-extra');
+const folder = require("storage/folder");
 const assets = require("storage/assets");
 const Template = require("models/template");
 const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
@@ -41,13 +41,6 @@ Export.get("/download", async function (req, res, next) {
       // Pipe the archive data to the response.
       archive.pipe(res);
 
-      // walk the blog folder and add all the files to the archive
-      // inside a subfolder called 'folder' in a recursive, async way
-      const blogFolder = path.join(config.blog_folder_dir, req.blog.id);
-
-      // use chokidar to recursively identify all the files in the blog folder
-      // and then add them to the archive and stop the watcher
-
       // create a json file with path 'blog.json' to the archive which contains req.blog  
       const blogJSON = JSON.stringify(req.blog, null, 2);
       archive.append(blogJSON, { name: 'blog.json' });
@@ -55,7 +48,13 @@ Export.get("/download", async function (req, res, next) {
       // iterate over all of the blog's templates and add them to the archive in a file called 'templates.json'
       
       try {
-          await recursiveZip(blogFolder, archive, 'folder');
+          // walk the blog folder and add all the files to the archive
+          // inside a subfolder called 'folder'
+          for await (const relPath of folder.walk(req.blog.id, '/')) {
+              archive.append(folder.createReadStream(req.blog.id, relPath), {
+                  name: path.join('folder', relPath)
+              });
+          }
 
           // add all of the blog's generated assets to the archive
           // inside a subfolder called 'static'
@@ -123,25 +122,6 @@ const addTemplate = async (templateID, archive) => {
     });
 };
   
-
-const recursiveZip = async (dir, archive, destinationSubdirectory) => {
-
-    const files = await fs.readdir(dir);
-
-    for (const file of files) {
-        const filePath = path.join(dir, file);
-        const stats = await fs.stat(filePath);
-
-        if (stats.isFile()) {
-            const destinationPath = path.join(destinationSubdirectory, file);
-            archive.append(fs.createReadStream(filePath), { name: destinationPath });
-        } else if (stats.isDirectory()) {
-            const subdirectory = path.join(destinationSubdirectory, file);
-            await recursiveZip(filePath, archive, subdirectory);
-        }
-    }
-};
-
 
 const Entries = require("models/entries");
 const mustache = require("mustache");

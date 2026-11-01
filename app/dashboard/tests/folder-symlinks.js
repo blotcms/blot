@@ -1,13 +1,18 @@
+const config = require("config");
 const fs = require("fs-extra");
 const os = require("os");
 const path = require("path");
 const vm = require("vm");
+const { randomUUID } = require("crypto");
 
 describe("dashboard folder symbolic links", function () {
-  let dir, blog, target, done, updated;
+  let dir, blogID, blog, target, done, updated;
   beforeEach(async function () {
     dir = await fs.mkdtemp(path.join(os.tmpdir(), "blot-folder-links-"));
-    blog = path.join(dir, "blog");
+    // storage/folder reads the real config, so the blog lives in the real
+    // blog folder directory
+    blogID = "blog_" + randomUUID();
+    blog = path.join(config.blog_folder_dir, blogID);
     target = path.join(dir, "target");
     await fs.ensureDir(blog);
     await fs.ensureDir(target);
@@ -16,12 +21,14 @@ describe("dashboard folder symbolic links", function () {
     done = jasmine.createSpy("release lock").and.returnValue(Promise.resolve());
     updated = jasmine.createSpy("update").and.returnValue(Promise.resolve());
   });
-  afterEach(async function () { await fs.remove(dir); });
+  afterEach(async function () {
+    await fs.remove(dir);
+    await fs.remove(blog);
+  });
   function load(name) {
     const module = {exports:{}};
     const stubs = {
       clients:{},
-      "helper/localPath":(_, name)=>path.join(blog, name),
       "sync/establishSyncLock":async()=>({folder:{update:updated},done}),
       "./index":{},
       "clients/util/shouldIgnoreFile":()=>false,
@@ -40,7 +47,7 @@ describe("dashboard folder symbolic links", function () {
     await fs.writeFile(uploaded,"replacement");
     const res = response();
     await load("upload")({
-      blog:{id:"test"}, query:{}, body:{overwrite:true},
+      blog:{id:blogID}, query:{}, body:{overwrite:true},
       files:{upload:[{path:uploaded,originalFilename:"ancestor/file.txt"}]},
     },res);
     expect(await fs.readFile(path.join(target,"file.txt"),"utf8")).toBe("original");
@@ -50,11 +57,19 @@ describe("dashboard folder symbolic links", function () {
   });
   it("does not delete through a symbolic-link ancestor", async function () {
     const res = response();
-    await load("remove")({blog:{id:"test"},params:{path:"ancestor/file.txt"},body:{}},res);
+    await load("remove")({blog:{id:blogID},params:{path:"ancestor/file.txt"},body:{}},res);
     expect(res.statusCode).toBe(403);
     expect(await fs.readFile(path.join(target,"file.txt"),"utf8")).toBe("original");
     expect(updated).not.toHaveBeenCalled();
     expect(done).toHaveBeenCalled();
     expect(res.body.error).toBe("Permission denied");
+  });
+  it("lists a folder without following symbolic links", async function () {
+    await fs.writeFile(path.join(blog, "real.txt"), "real");
+
+    const getContents = require("dashboard/site/folder/folder");
+    const { contents } = await getContents({ id: blogID, timeZone: "UTC" }, "/", {});
+
+    expect(contents.map((stat) => stat.name)).toEqual(["real.txt"]);
   });
 });
