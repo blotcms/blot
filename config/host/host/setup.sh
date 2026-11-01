@@ -137,6 +137,52 @@ else
   echo "    WARNING: user $APP_USER does not exist; it was not added to the docker group"
 fi
 
+say "Sandbox cgroups"
+# The units' nsjail sandbox (BLOT_SANDBOX, app/sandbox) puts each job in a
+# cgroup outside the unit's own, so a runaway job can't use the unit's memory.
+# The host makes one subtree per unit, which proxy/deploy/common.sh binds into
+# the unit when BLOT_SANDBOX=1. Inert until then. Before docker, so the
+# directories exist when a unit starts.
+put /usr/local/sbin/blot-sandbox-cgroup.sh 0755 root:root <<'EOF2'
+#!/bin/sh
+# Installed by config/host/host/setup.sh (blot-sandbox-cgroup.service).
+# Safe to run again.
+set -eu
+root=/sys/fs/cgroup
+tree=$root/blot-sandbox
+controllers="+memory +pids +cpu"
+
+echo "$controllers" > "$root/cgroup.subtree_control"
+mkdir -p "$tree/blue" "$tree/green"
+echo "$controllers" > "$tree/cgroup.subtree_control"
+for unit in blue green; do
+  dir=$tree/$unit
+  echo "$controllers" > "$dir/cgroup.subtree_control"
+  echo 512M > "$dir/memory.max"
+  echo 0 > "$dir/memory.swap.max"
+  echo 256 > "$dir/pids.max"
+  echo 25 > "$dir/cpu.weight"
+done
+EOF2
+put /etc/systemd/system/blot-sandbox-cgroup.service 0644 root:root <<'EOF2'
+[Unit]
+Description=Cgroup subtrees for the units' sandbox jobs
+Before=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/blot-sandbox-cgroup.sh
+
+[Install]
+WantedBy=multi-user.target
+EOF2
+sd daemon-reload
+sd enable blot-sandbox-cgroup.service
+# started again on a re-run, so a changed limit is applied; it only writes files.
+# Not fatal: nothing needs it until BLOT_SANDBOX=1, and the deploy refuses then
+sd restart blot-sandbox-cgroup.service || echo "    WARNING: blot-sandbox-cgroup.service failed"
+
 say "Deploy user"
 # With a key the script rewrites authorized_keys only if the key is missing;
 # without one it leaves an existing file alone.

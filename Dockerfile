@@ -275,9 +275,34 @@ CMD ["node", "/usr/src/app/app/index.js"]
 # and the proxy's files from it. CI builds it in the same build (the bake file
 # supplies it as the blot-proxy context); locally it is the image tagged
 # blot-proxy.
+## Stage (nsjail) - THROWAWAY
+# Builds nsjail, the sandbox the unit runs untrusted bytes in (#2257,
+# app/sandbox/README.md). Only the binary reaches the unit. Alpine has no
+# static protobuf, so it links the shared libraries, and they must come from
+# the same Alpine edge as the unit's runtime ones (the unit stage installs
+# them): a mix of abseil versions does not start, and `nsjail --help` in the
+# unit stage fails the build if so. The commit is checked, not just the tag.
+FROM base AS nsjail
+ARG ALPINE_EDGE
+ARG NSJAIL_VERSION=3.6
+ARG NSJAIL_COMMIT=f78475530b46d0186111a9096b30725f816b55fe
+
+RUN apk add --no-cache --upgrade $ALPINE_EDGE \
+    build-base bison flex protobuf-dev libnl3-dev linux-headers git pkgconf bsd-compat-headers
+
+# -Werror off and -D_LARGEFILE64_SOURCE for musl (its rlim_t is long long)
+RUN git clone --depth 1 --branch ${NSJAIL_VERSION} https://github.com/google/nsjail.git /nsjail \
+ && cd /nsjail \
+ && [ "$(git rev-parse HEAD)" = "${NSJAIL_COMMIT}" ] \
+ && git submodule update --init \
+ && sed -i s/-Werror// Makefile \
+ && make -j4 USER_DEFINES="-D_LARGEFILE64_SOURCE -DNDEBUG" \
+ && strip nsjail
+
 FROM blot-proxy AS proxy
 
 FROM prod AS unit
+ARG ALPINE_EDGE
 
 # proxy/deploy/blue-green.sh refuses to deploy an image without this label
 LABEL im.blot.kind=unit
@@ -310,6 +335,16 @@ RUN mkdir -p /etc/resty-auto-ssl/storage /etc/resty-auto-ssl/letsencrypt/conf \
     /var/log/openresty /var/cache/openresty /run/openresty /run/blot \
  && chmod 755 /etc/resty-auto-ssl \
  && chown -R ec2-user:ec2-user /etc/resty-auto-ssl /var/log/openresty /var/cache/openresty /run/blot
+
+# The sandbox (app/sandbox, off unless the host sets BLOT_SANDBOX). nsjail's
+# shared libraries come from the same Alpine edge it was built against.
+RUN apk add --no-cache --upgrade $ALPINE_EDGE protobuf libnl3
+COPY --from=nsjail /nsjail/nsjail /usr/local/bin/nsjail
+# The broker runs as root, so its files are root-owned and read-only to the
+# app (uid 1000 rewrites /usr/src/app, so root must never load code from there)
+COPY proxy/unit/sandbox/broker.js proxy/unit/sandbox/jail.js proxy/unit/sandbox/policy.kafel /usr/local/lib/blot-sandbox/
+RUN chmod -R go-w /usr/local/lib/blot-sandbox \
+ && nsjail --help >/dev/null
 
 COPY proxy/unit/supervisor.sh /usr/local/bin/unit-supervisor
 COPY proxy/unit/healthcheck.sh /usr/local/bin/unit-healthcheck

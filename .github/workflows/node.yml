@@ -54,6 +54,7 @@ env:
     - app/helper
     - app/models|app/models/entry
     - app/models/entry
+    - app/sandbox
     - app/scheduler
     - app/site
     - app/storage
