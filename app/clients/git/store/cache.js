@@ -198,7 +198,9 @@ function createCache({ dir, maxBytes }) {
 
     const tmp = path.join(tmpDir, name + "." + process.pid + "." + ++sequence);
     try {
-      await Promise.all(doomed.map((old) => unlink(entryPath(old))));
+      // The file this key held goes too: its budget was released above, and
+      // if the write below fails nothing else would ever delete it
+      await Promise.all([name, ...doomed].map((old) => unlink(entryPath(old))));
       await fs.mkdir(tmpDir, { recursive: true });
       await fs.mkdir(path.dirname(entryPath(name)), { recursive: true });
       await fs.writeFile(tmp, Buffer.concat(encode(data)));

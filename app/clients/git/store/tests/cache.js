@@ -40,6 +40,33 @@ describe("git store cache", function () {
   // Each entry costs its data plus a 16-byte header
   const data = (length, fill = "x") => Buffer.alloc(length, fill);
 
+  it("leaves no untracked file when replacing an entry fails", async function () {
+    const cache = createCache({ dir, maxBytes: 100 });
+    expect(await cache.put("a", data(24))).toBe(true); // 40 bytes
+
+    const fsPromises = require("fs/promises");
+    const writeFile = spyOn(fsPromises, "writeFile").and.callFake(async () => {
+      throw new Error("disk error");
+    });
+    expect(await cache.put("a", data(24, "y"))).toBe(false);
+    expect(await cache.get("a")).toBeNull();
+    writeFile.and.callThrough();
+
+    expect(await cache.put("b", data(84))).toBe(true); // all 100 bytes
+    expect(diskBytes(dir)).toBeLessThanOrEqual(100);
+    await cache.clear();
+    expect(diskBytes(dir)).toBe(0);
+  });
+
+  it("holds only the new file after replacing an entry", async function () {
+    const cache = createCache({ dir, maxBytes: 100 });
+    await cache.put("a", data(24));
+    await cache.put("a", data(34, "z"));
+    expect(files(dir).length).toBe(1);
+    expect(diskBytes(dir)).toBe(50);
+    expect(cache.stats().entryBytes).toBe(50);
+  });
+
   it("stores and returns data, and misses what it was never given", async function () {
     const cache = createCache({ dir, maxBytes: 10000 });
     expect(await cache.get("a")).toBeNull();
