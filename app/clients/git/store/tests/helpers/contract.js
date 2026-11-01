@@ -156,6 +156,15 @@ module.exports = [
     },
   ],
   [
+    "puts a Buffer larger than a part",
+    async (store) => {
+      const data = crypto.randomBytes(11 * MIB + 5);
+      await store.put("buffer", data);
+      expect(await store.head("buffer")).toEqual({ size: data.length });
+      expect(sha(await store.get("buffer"))).toBe(sha(data));
+    },
+  ],
+  [
     "puts a stream which is exactly a whole number of parts",
     async (store) => {
       const data = crypto.randomBytes(10 * MIB);

@@ -276,6 +276,34 @@ const hasSdk = (function () {
   const body = Buffer.from("{}");
   const conflict = () => answer(409, "ConditionalRequestConflict");
 
+  // A store whose client answers each command by its class name from
+  // `handlers` (a function, called with the command's input), and otherwise
+  // with an empty reply, noting every command sent
+  function storeHandling(handlers = {}) {
+    const calls = [];
+    const client = {
+      send: async (command) => {
+        const name = command.constructor.name;
+        calls.push({ name, input: command.input });
+        return handlers[name] ? handlers[name](command.input) : {};
+      },
+    };
+    const store = require("../objectStore/s3")({ client, bucket: "b", prefix: "p/", conflictDelay: 0, partSize: 5 * 1024 * 1024, partConcurrency: 2 });
+    return { store, calls };
+  }
+
+  it("uploads a Buffer larger than a part in parts", async function () {
+    const { store, calls } = storeHandling({
+      CreateMultipartUploadCommand: () => ({ UploadId: "u" }),
+      UploadPartCommand: (input) => ({ ETag: "e" + input.PartNumber }),
+    });
+    await store.put("big", Buffer.alloc(11 * 1024 * 1024));
+
+    const parts = calls.filter((c) => c.name === "UploadPartCommand");
+    expect(parts.map((c) => c.input.Body.length)).toEqual([5 * 1024 * 1024, 5 * 1024 * 1024, 1024 * 1024]);
+    expect(calls[calls.length - 1].name).toBe("CompleteMultipartUploadCommand");
+  });
+
   it("creates the key with If-None-Match: *", async function () {
     const { store, sentInputs } = storeReplying(null);
     expect(await store.putIfAbsent("k", body)).toBe(true);

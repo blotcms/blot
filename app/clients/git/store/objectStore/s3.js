@@ -241,7 +241,8 @@ function createS3Store({
   async function put(key, body) {
     if (Buffer.isBuffer(body) && body.length <= partSize) return putWhole(key, body);
 
-    const iterator = parts(body)[Symbol.asyncIterator]();
+    // Iterating a Buffer would give its bytes, not a chunk
+    const iterator = parts(Buffer.isBuffer(body) ? [body] : body)[Symbol.asyncIterator]();
     const first = await iterator.next();
     if (first.done) return putWhole(key, Buffer.alloc(0));
 
