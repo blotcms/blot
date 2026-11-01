@@ -437,6 +437,77 @@ describe("scheduler check-redis-host", function () {
     });
   });
 
+  describe("host memory", function () {
+    // What host-memory.js reads, as a fraction of 16 GB available
+    const reading = (fraction) => async () => ({ total: 16 * GB, available: fraction * 16 * GB });
+    const low = reading(0.05);
+
+    it("says nothing unless the caller passes a reader", async function () {
+      const h = harness();
+      await h.tick();
+      const { report } = await h.tick();
+      expect(h.sent).toEqual([]);
+      expect(h.state.lowMemory).toBe(0);
+      expect(view(report).readings.join("\n")).not.toContain("Host memory");
+    });
+
+    it("waits for a second low reading, so a page cache blip does not email", async function () {
+      const h = harness();
+
+      await h.tick({ hostMemory: low });
+      expect(h.sent).toEqual([]);
+      expect(h.state.lowMemory).toBe(1);
+
+      await h.tick({ hostMemory: reading(0.5) });
+      expect(h.state.lowMemory).toBe(0);
+
+      await h.tick({ hostMemory: low });
+      expect(h.sent).toEqual([]);
+    });
+
+    it("emails when it stays low, once, with the reading", async function () {
+      const h = harness();
+
+      await h.tick({ hostMemory: low });
+      await h.tick({ hostMemory: low });
+      expect(h.sent.length).toBe(1);
+      expect(titles(h.sent[0])).toEqual(["Host memory low"]);
+      expect(h.sent[0].alerts[0].message).toContain("0.80GB of 16.00GB available (5%)");
+      expect(h.sent[0].readings).toContain("Host memory (where this check ran): 0.80GB available of 16.00GB (5%)");
+
+      await h.tick({ hostMemory: low });
+      await h.tick({ hostMemory: low });
+      expect(h.sent.length).toBe(1);
+    });
+
+    it("clears only once it is back above the clear level, then emails the recovery", async function () {
+      const h = harness();
+      await h.tick({ hostMemory: low });
+      await h.tick({ hostMemory: low });
+
+      // 11% is over the alert level but under the clear level
+      h.advance(CONDITION_MIN_INTERVAL);
+      h.sample = sampleLine({ time: h.now });
+      await h.tick({ hostMemory: reading(0.11) });
+      expect(h.sent.length).toBe(1);
+
+      await h.tick({ hostMemory: reading(0.13) });
+      expect(h.sent.length).toBe(2);
+      expect(h.sent[1].summary).toBe("recovered: Host memory low");
+    });
+
+    it("leaves the condition alone when the reading is unavailable", async function () {
+      const h = harness();
+      await h.tick({ hostMemory: low });
+      await h.tick({ hostMemory: async () => null });
+      await h.tick({ hostMemory: async () => Promise.reject(new Error("EACCES")) });
+      expect(h.state.lowMemory).toBe(1);
+
+      await h.tick({ hostMemory: low });
+      expect(h.sent.length).toBe(1);
+    });
+  });
+
   describe("sending", function () {
     it("saves nothing when the email fails, so the next run retries", async function () {
       const h = harness({ memory: { used: 9 * GB, maxmemory: 10 * GB } });
@@ -473,6 +544,8 @@ describe("scheduler check-redis-host", function () {
       expect(v.thresholds).toEqual({
         tcpMem: "50%",
         maxmemory: "80%",
+        hostMemory: "10%",
+        hostMemoryMinutes: 10,
         stale: "20 minutes",
         backup: "3 hours",
         offsite: "50 hours",
