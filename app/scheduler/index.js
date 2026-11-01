@@ -19,6 +19,7 @@ const subscriptionLifecycleJob = require("./subscription-lifecycle");
 const checkSSLCertificates = require("./check-ssl-certificates");
 const renewWildcardSSL = require("./renew-wildcard-ssl");
 const checkRedisHost = require("./check-redis-host");
+const readHostMemory = require("./host-memory");
 const sweepGit = require("./sweep-git");
 const pruneTmp = require("./prune-tmp");
 
@@ -318,6 +319,7 @@ module.exports = function () {
           : Math.max(stored, redisHostCheckedAtInMemory || 0);
       const { sent, report } = await checkRedisHost({
         lastCheckAt: redisHostCheckedAt,
+        hostMemory: readHostMemory,
         sendEmail: (view) =>
           new Promise((resolve, reject) =>
             email.REDIS_HOST_ALERT(null, view, (err) =>
