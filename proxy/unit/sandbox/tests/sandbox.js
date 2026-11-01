@@ -102,6 +102,21 @@ function request(socket, header, input) {
 const job = '{"job":"echo"}\n';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function until(check) {
+  for (let i = 0; i < 1000 && !check(); i++) await sleep(5);
+  assert(check(), "timed out waiting for the broker");
+}
+
+// A stub jail that stays running until release() is called, so a spec can look
+// at the broker while jails are busy, however slow the machine is
+function hold() {
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-hold-")), "go");
+  return {
+    script: `until [ -e ${file} ]; do sleep 0.01; done; cat`,
+    release: () => fs.writeFileSync(file, ""),
+  };
+}
+
 test("broker: bytes after the job line reach the jail and its output comes back", async () => {
   await withBroker({}, async (socket) => {
     const reply = await request(socket, job, "hello world");
@@ -188,20 +203,23 @@ test("broker: close() kills the running jails and removes the socket", async () 
 });
 
 test("broker: at most maxRunning jails at once, then a queue, then busy", async () => {
-  await withBroker({ script: "sleep 0.3; cat", maxRunning: 2, maxQueued: 1 }, async (socket, broker) => {
+  const held = hold();
+  await withBroker({ script: held.script, maxRunning: 2, maxQueued: 1 }, async (socket, broker) => {
     let peak = 0;
     const watch = setInterval(() => (peak = Math.max(peak, broker.running.size)), 5);
-    const replies = [];
-    for (let i = 0; i < 4; i++) {
-      replies.push(request(socket, job, "n" + i));
-      await sleep(30);
-    }
+    const replies = [request(socket, job, "n0"), request(socket, job, "n1")];
+    await until(() => broker.running.size === 2);
+    replies.push(request(socket, job, "n2"));
+    await until(() => broker.queue.length === 1);
+
+    // over the queue's limit
+    assert.deepStrictEqual((await request(socket, job, "n3")).header, { ok: false, error: "busy" });
     assert.strictEqual(broker.running.size, 2);
     assert.strictEqual(broker.queue.length, 1);
+
+    held.release();
     const results = await Promise.all(replies);
     clearInterval(watch);
-    // the fourth was over the queue's limit
-    assert.deepStrictEqual(results[3].header, { ok: false, error: "busy" });
     for (let i = 0; i < 3; i++) {
       assert.deepStrictEqual(results[i].header, { ok: true, length: 2 });
       assert.strictEqual(results[i].body.toString(), "n" + i);
@@ -211,10 +229,14 @@ test("broker: at most maxRunning jails at once, then a queue, then busy", async 
 });
 
 test("broker: a request that queued too long is busy, not given a jail", async () => {
-  await withBroker({ script: "sleep 0.2; cat", maxRunning: 1, maxQueuedMs: 50 }, async (socket) => {
+  const held = hold();
+  await withBroker({ script: held.script, maxRunning: 1, maxQueuedMs: 50 }, async (socket, broker) => {
     const first = request(socket, job, "a");
-    await sleep(30);
+    await until(() => broker.running.size === 1);
     const second = request(socket, job, "b");
+    await until(() => broker.queue.length === 1);
+    await sleep(100);
+    held.release();
     assert.deepStrictEqual((await first).header, { ok: true, length: 1 });
     assert.deepStrictEqual((await second).header, { ok: false, error: "busy" });
   });
