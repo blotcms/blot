@@ -1,10 +1,8 @@
-const assertNoSymlinks = require("helper/assertNoSymlinks");
-const config = require("config");
 const storage = require("storage/assets");
+const folder = require("storage/folder");
 const express = require("express");
 const contentTypeFor = require("storage/contentType");
 const { join, basename, dirname, extname, normalize } = require("path");
-const fs = require("fs-extra");
 const caseSensitivePath = require("helper/caseSensitivePath");
 const {
   GLOBAL_STATIC_DIR,
@@ -113,9 +111,7 @@ assets.use(BLOG_STATIC_PATHS, async (req, res, next) => {
     // bucket-then-folder lookup instead, since the bucket may not have it.
     if (
       canRedirectToCdn(req, relPath) &&
-      !(await fs.pathExists(
-        join(config.blog_folder_dir, req.blog.id, relPath)
-      ))
+      !(await folder.exists(req.blog.id, relPath))
     ) {
       return redirectToCdn(
         req,
@@ -136,15 +132,15 @@ assets.use(BLOG_STATIC_PATHS, async (req, res, next) => {
 
 // Try to serve files from the blog folder
 assets.use(async (req, res, next) => {
-  const blogFolder = config.blog_folder_dir + "/" + req.blog.id;
+  const blogID = req.blog.id;
   const decodedPath = decodeURIComponent(req.path);
 
   async function sendFolderFile(path) {
-    if (await redirectLargeFolderFile(req, res, blogFolder, path)) {
+    if (await redirectLargeFolderFile(req, res, path)) {
       logFolderAsset(req, "cdn-redirect");
       return;
     }
-    await sendFile(path, { req, res });
+    await sendBlogFile(path, { req, res });
     logFolderAsset(req, "origin");
   }
 
@@ -160,25 +156,22 @@ assets.use(async (req, res, next) => {
   }
 
   // The exact path is by far the commonest hit, so it costs no directory read
-  const exactPath = join(blogFolder, decodedPath);
+  const exactPath = normalize(decodedPath);
   if (await trySend(exactPath)) return;
 
   // Every other candidate is resolved from directory listings, each read at
-  // most once, rather than by probing the filesystem once per candidate.
-  // Listings are never followed through symlinks, and whatever we do send
-  // still goes through sendFile's no-symlink check.
+  // most once, rather than by probing the folder once per
+  // candidate. Listings leave out symlinks, so none is ever a candidate, and
+  // whatever we do send still goes through storage/folder's symlink check.
   const listings = new Map();
   const list = (dir) => {
     if (!listings.has(dir))
-      listings.set(
-        dir,
-        fs.readdir(dir, { withFileTypes: true }).catch(() => null)
-      );
+      listings.set(dir, folder.listNames(blogID, dir).catch(() => null));
     return listings.get(dir);
   };
 
-  // Chooses the entry of dir which segment refers to, per pick, and says what
-  // kind of entry it is: { path, kind } or undefined
+  // Chooses the entry of dir which segment refers to, per pick, and says
+  // whether it is a directory: { path, isDirectory } or undefined
   async function lookup(dir, segment, pick) {
     const entries = await list(dir);
     if (!entries) return;
@@ -188,7 +181,7 @@ assets.use(async (req, res, next) => {
     );
     if (name === undefined) return;
     const entry = entries.find((e) => e.name === name);
-    return { path: join(dir, name), kind: await kind(dir, entry) };
+    return { path: join(dir, name), isDirectory: entry.isDirectory };
   }
 
   // Walks down through the directories named by segments, choosing each with
@@ -196,19 +189,18 @@ assets.use(async (req, res, next) => {
   // a segment (so nothing can exist below it) and {} when a match isn't a
   // directory.
   async function walk(segments, pick) {
-    let dir = join(blogFolder);
+    let dir = "/";
     for (const segment of segments) {
       const found = await lookup(dir, segment, pick);
       if (!found) return { missing: true };
-      if (found.kind !== "dir") return {};
+      if (!found.isDirectory) return {};
       dir = found.path;
     }
     return { dir };
   }
 
-  // Finds a file at exactly this path relative to the blog folder. A trailing
-  // slash means the directory's index.html, as sendFile gives for the exact
-  // path.
+  // Finds a file at exactly this path in the blog folder. A trailing
+  // slash means the directory's index.html, as it does for the exact path.
   async function findExact(relative) {
     relative = normalize("/" + relative);
     if (relative.endsWith("/")) relative += "index.html";
@@ -220,8 +212,7 @@ assets.use(async (req, res, next) => {
 
   async function fileIn(dir, segment, pick) {
     const found = await lookup(dir, segment, pick);
-    if (found && found.kind !== "dir" && found.kind !== "link")
-      return found.path;
+    if (found && !found.isDirectory) return found.path;
   }
 
   const exact = (names, name) => (names.includes(name) ? name : undefined);
@@ -349,40 +340,20 @@ function redirectToCdn(req, res, cdnPath) {
 // Sends a 302 to the CDN for a large file of a safe type, with a
 // size+mtime version in the URL. Resolves false when the file should be
 // served here.
-async function redirectLargeFolderFile(req, res, blogFolder, path) {
-  if (!path.startsWith(blogFolder + "/")) return false;
+async function redirectLargeFolderFile(req, res, path) {
+  // A trailing slash names a directory's index.html, never a file to redirect
+  if (path.endsWith("/") || !canRedirectToCdn(req, path)) return false;
 
-  // Only the part the CDN URL exposes, so dot directories above the blog
-  // folder (e.g. in the data directory's own path) don't matter.
-  const relPath = path.slice(blogFolder.length);
-  if (!canRedirectToCdn(req, relPath)) return false;
+  const stat = await folder.stat(req.blog.id, path);
 
-  await assertNoSymlinks(blogFolder, path);
-  const stat = await fs.stat(path);
-
-  if (!stat.isFile() || stat.size < CDN_REDIRECT_MIN_SIZE) return false;
+  if (stat.isDirectory || stat.size < CDN_REDIRECT_MIN_SIZE) return false;
 
   redirectToCdn(
     req,
     res,
-    "/folder/" + versionedFolderPath(req.blog.id, relPath, stat)
+    "/folder/" + versionedFolderPath(req.blog.id, path, stat)
   );
   return true;
-}
-
-// What a directory entry is, without following symlinks. Listings say so
-// already unless the filesystem doesn't report types, in which case ask about
-// just this one entry.
-async function kind(dir, entry) {
-  if (entry.isDirectory()) return "dir";
-  if (entry.isSymbolicLink()) return "link";
-  if (entry.isFile()) return "file";
-  try {
-    const stat = await fs.lstat(join(dir, entry.name));
-    return stat.isDirectory() ? "dir" : stat.isSymbolicLink() ? "link" : "file";
-  } catch (e) {
-    return "other";
-  }
 }
 
 function withoutTrailingSlash(path) {
@@ -394,18 +365,12 @@ function addLeadingUnderscore(path) {
   return join(dirname(path), "_" + basename(path));
 }
 
-async function sendFile(path, { req, res, maxAge = 0, immutable = false } = {}) {
-  // Static app assets also use this function; only blog-folder paths need
-  // the blog's no-symlink policy, including every ancestor within that root.
-  const blogRoot = req?.blog && join(config.blog_folder_dir, req.blog.id);
-  if (blogRoot && (path === blogRoot || path.startsWith(blogRoot + "/"))) {
-    // A trailing slash makes send serve the directory's index.html itself
-    await assertNoSymlinks(blogRoot, path.endsWith("/") ? path + "index.html" : path);
-  }
+// The headers and caching for a file: no-cache unless it has a maxAge or is
+// asked to be cached with ?cache and ?extension
+function sendOptions(path, { req, maxAge = 0, immutable = false } = {}) {
   const options = {
     maxAge,
     immutable,
-    dotfiles: "allow",
     headers: {
       "Content-Type": contentTypeFor(path),
     },
@@ -419,12 +384,26 @@ async function sendFile(path, { req, res, maxAge = 0, immutable = false } = {}) 
     options.maxAge = LARGEST_POSSIBLE_MAXAGE;
   }
 
+  return options;
+}
+
+// Sends one of Blot's own static files
+function sendFile(path, { req, res, maxAge, immutable } = {}) {
+  const options = sendOptions(path, { req, maxAge, immutable });
+  options.dotfiles = "allow";
+
   return new Promise((resolve, reject) => {
     res.sendFile(path, options, (err) => {
       if (err) reject(err);
       else resolve();
     });
   });
+}
+
+// Sends a file from the blog's folder, which refuses symlinks and allows
+// dotfiles. A trailing slash makes it serve the directory's index.html.
+function sendBlogFile(path, { req, res }) {
+  return folder.serve(req, res, req.blog.id, path, sendOptions(path, { req }));
 }
 
 module.exports = assets;

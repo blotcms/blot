@@ -427,6 +427,26 @@ async function list(blogID, relDir, options) {
   };
 }
 
+// Names and whether each is a directory, from one readdir and no stats
+async function listNames(blogID, relDir) {
+  var { root, local } = locate(blogID, relDir);
+
+  await guard(root, local);
+
+  var dirents = await attempt(fs.readdir(local, { withFileTypes: true }));
+  var entries = [];
+
+  for (var entry of dirents) {
+    var type = await kind(local, entry);
+
+    if (type === "dir" || type === "file") {
+      entries.push({ name: entry.name, isDirectory: type === "dir" });
+    }
+  }
+
+  return entries.sort(byName);
+}
+
 async function listAll(blogID, relDir) {
   var entries = [];
   var cursor = null;
@@ -524,6 +544,7 @@ module.exports = {
   stat,
   exists,
   list,
+  listNames,
   listAll,
   walk,
   resolveCaseInsensitive,
