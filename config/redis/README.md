@@ -85,7 +85,7 @@ when to switch is the host cycle's job.
 
 What it checks first: both hosts answer over ssh with passwordless sudo and run
 Redis 6.2.x; the new host replicates from the old host's **primary private
-IP**, its link is up and it is at most 16MB and 1s behind; it has
+IP**, its link is up and it is at most 16MB behind, with an ack in the last 3s; it has
 `min-replicas-to-write 0`, uses under 80% of its `maxmemory` and its last
 background save did not fail (otherwise, with `stop-writes-on-bgsave-error yes`,
 it refuses writes the moment it is promoted); it has as many `ssl:*:latest`

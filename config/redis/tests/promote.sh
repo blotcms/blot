@@ -147,6 +147,21 @@ roll_back() {
   [ -n "$cmd" ] || { fail "no rollback command in $1"; return 0; }
   # shellcheck disable=SC2086
   "${cmd%% *}" --yes ${cmd#* } < /dev/null > "$TMP/rollback-again" 2>&1 || { cat "$TMP/rollback-again"; fail "rollback of $1"; }
+  settled
+}
+# settled: wait until the new host passes promote.sh's replication checks. A
+# rollback returns once the link is up, which can be before the old host lists
+# the replica as online with a recent ack, and the next promotion would stop
+# at its checks.
+settled() {
+  for _ in $(seq 1 100); do
+    if cli "$NEW" INFO replication | grep -x master_link_status:up > /dev/null &&
+      cli "$OLD" INFO replication | grep -E "^slave0:ip=$NEW_IP,port=6379,state=online,.*,lag=[01]\$" > /dev/null; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  fail "the new host did not settle as a replica"
 }
 
 echo "# Dry run"
@@ -235,6 +250,9 @@ wait_link
 echo "# A marker that cannot be written"
 echo "$NEW" > "$STUB_HOOKS/marker"
 if promote "$OLD" "$NEW" > "$TMP/nomarker" 2>&1; then fail "a marker that cannot be written fails the promotion"; else ok "a marker that cannot be written fails the promotion"; fi
+# The hook goes once it fires. If it did not, this run stopped too early, and it
+# must not fire in a later scenario.
+if [ -f "$STUB_HOOKS/marker" ]; then cat "$TMP/nomarker"; rm -f "$STUB_HOOKS/marker"; fi
 check "it names the command to run by hand" grep -q "run there: sudo touch /etc/blot-redis/active" "$TMP/nomarker"
 check "it does not say Done" sh -c "! grep -q 'Done:' '$TMP/nomarker'"
 check "Redis did switch" [ "$(role "$NEW") $(role "$OLD")" = "master slave" ]
