@@ -94,11 +94,13 @@ describe("git client push and the sync", function () {
     var due = Date.now() + 60 * 60 * 1000;
 
     await client.zAdd(ALARM, { score: due, value: blogID });
-    await this.local.writeAndPush("/waiting.txt", "Waiting");
+    await this.local.commitFiles({ "/waiting.txt": "Waiting" });
 
+    expect((await this.local.tryPush()).code).toBe(0);
     expect(await client.zScore(ALARM, blogID)).toBe(due);
 
     await client.zRem(ALARM, blogID);
+    await this.local.waitForSync();
   });
 
   it("fails the push, and moves nothing, when the follow-up can't be written", async function () {
