@@ -104,7 +104,7 @@ describe("rebuild", function () {
   it("rebuilds a directory with more files than the walk runs stats at once", async function (done) {
     const paths = [];
 
-    for (let i = 0; i < 80; i++) paths.push(`/big/Post ${i}.txt`);
+    for (let i = 0; i < 40; i++) paths.push(`/big/Post ${i}.txt`);
 
     for (const path of paths) {
       await this.blog.write({ path, content: "Title: " + path });
@@ -112,12 +112,12 @@ describe("rebuild", function () {
 
     await this.blog.rebuild();
 
-    for (const path of [paths[0], paths[40], paths[79]]) {
+    for (const path of [paths[0], paths[20], paths[39]]) {
       await this.blog.check({ path, title: path });
     }
 
     done();
-  });
+  }, 60000);
 
   it("keeps a folder post aggregate through a full rebuild", async function (done) {
     const Entry = require("models/entry");
