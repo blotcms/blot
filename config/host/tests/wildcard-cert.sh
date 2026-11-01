@@ -74,10 +74,13 @@ if [ -s "$f" ]; then cat "$f"; fi
 echo
 EOS
 chmod +x "$TMP/bin/redis-cli"
+# Not every test machine has setfacl, and a Mac's filesystem has no such ACLs.
+printf '#!/bin/bash\necho "setfacl $*" >> "$STUB_LOG"\n' > "$TMP/bin/setfacl"
+chmod +x "$TMP/bin/setfacl"
 
 run() { # run <pem file> <key file>; output in $TMP/out
   env PATH="$TMP/bin:$PATH" STUB_PEM="$1" STUB_KEY="$2" BLOT_CERT_DIR="$TMP/certs" \
-    BLOT_CERT_OWNER="$(id -un):$(id -gn)" STUB_LOG="$TMP/stub-calls" bash "$SCRIPT" --local > "$TMP/out" 2>&1
+    BLOT_CERT_OWNER="$(id -un):$(id -gn)" BLOT_CERT_READER="$(id -un)" STUB_LOG="$TMP/stub-calls" bash "$SCRIPT" --local > "$TMP/out" 2>&1
 }
 snapshot() { cat "$TMP/certs/letsencrypt-domain.pem" "$TMP/certs/letsencrypt-domain.key" | cksum; }
 count() { ls -A "$TMP/certs" | wc -l | tr -d ' '; }
@@ -97,6 +100,13 @@ check "mismatched key leaves the old files" [ "$(snapshot)" = "$before" ]
 check "expired certificate is refused" refuses run "$TMP/expired.pem" "$TMP/expired.key"
 check "expired certificate leaves the old files" [ "$(snapshot)" = "$before" ]
 check "no temp files left after refusals" [ "$(count)" = 2 ]
+
+: > "$TMP/stub-calls"
+run "$TMP/good.pem" "$TMP/good.key"
+check "the deploying user can read both files" [ "$(grep -c "setfacl -m u:$(id -un):r" "$TMP/stub-calls")" = 2 ]
+printf 'old pem\n' > "$TMP/certs/letsencrypt-domain.pem"
+printf 'old key\n' > "$TMP/certs/letsencrypt-domain.key"
+before=$(snapshot)
 
 check "a good pair is written" run "$TMP/good.pem" "$TMP/good.key"
 check "certificate is the one in Redis" [ "$(openssl x509 -in "$TMP/certs/letsencrypt-domain.pem" -noout -fingerprint)" = "$(openssl x509 -in "$TMP/good.pem" -noout -fingerprint)" ]

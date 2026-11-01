@@ -294,8 +294,11 @@ rs() {
   "$HERE/data-volume/resize.sh" $flags "$@"
 }
 
+# Host key settings as in new_host_ssh: deploy.sh goes by address, and that
+# address is one launch.sh chose not to record. Without them it fails unattended.
 deploy_host() { # deploy_host <address> [volume]
-  SSH_KEY=$BLOT_HOST_SSH_KEY PUBLIC_IP=$1 SSH_PORT=${BLOT_SSH_PORT:-22} DATA_VOLUME_ID=${2:-} "$HERE/deploy.sh"
+  SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+    SSH_KEY=$BLOT_HOST_SSH_KEY PUBLIC_IP=$1 SSH_PORT=${BLOT_SSH_PORT:-22} DATA_VOLUME_ID=${2:-} "$HERE/deploy.sh"
 }
 
 # units_ok <host>: both units are healthy and on the socket. Prints what is not.
@@ -395,7 +398,8 @@ phase_launch() {
       die "$id is up, but redis6 is not running or the instance store is not mounted"
   fi
   say "Done: $id at $address"
-  echo "Add it to ~/.ssh/config (Host <name>, HostName $address, User ec2-user, Port, IdentityFile), then:"
+  echo "Add it to ~/.ssh/config (Host <name>, HostName $address, User ec2-user, Port, IdentityFile),"
+  echo "ssh to it once to record its host key (everything here runs with BatchMode), then:"
   if [ "$PHASE" = restore ]; then echo "  run the same restore command again, with <name> on the end"
   else echo "  $0 --$MODE replicate $OLD <name>"; fi
 }
@@ -608,19 +612,37 @@ unfreeze() {
 # that overrides <new>'s HostName; ssh keeps the first value it reads, and passes
 # -F on to a ProxyJump. HostKeyAlias keeps checking the host key under the
 # alias's own known_hosts entry, not the old host's key under the Elastic IP.
+# ssh looks the alias up word for word, and known_hosts writes a port other than
+# 22 as [address]:port, so it has to be spelled that way or the key is unknown
+# and BatchMode fails, here with the app frozen.
 follow_eip() {
-  local original real
+  local original real port key_alias
   [ -z "$EIP_SSH_DIR" ] || return 0
   [ -n "$1" ] && [ "$1" != None ] || return 0
   original=$(ssh_config "$NEW" hostname)
   [ "$original" != "$1" ] || return 0
+  port=$(ssh_config "$NEW" port)
+  key_alias=$(ssh_config "$NEW" hostkeyalias) # one the alias sets itself comes first
+  [ -n "$key_alias" ] || key_alias=$original
+  [ "$port" = 22 ] || [ "$key_alias" != "$original" ] || key_alias="[$original]:$port"
   real=$(command -v ssh)
   EIP_SSH_DIR=$(mktemp -d)
-  printf 'Host %s\n  HostName %s\n  HostKeyAlias %s\n\nHost *\n  Include %s/.ssh/config\n' "$NEW" "$1" "$original" "$HOME" > "$EIP_SSH_DIR/config"
+  printf 'Host %s\n  HostName %s\n  HostKeyAlias %s\n\nHost *\n  Include %s/.ssh/config\n' "$NEW" "$1" "$key_alias" "$HOME" > "$EIP_SSH_DIR/config"
   printf '#!/bin/sh\nexec %s -F %s "$@"\n' "$real" "$EIP_SSH_DIR/config" > "$EIP_SSH_DIR/ssh"
   chmod +x "$EIP_SSH_DIR/ssh"
   export PATH="$EIP_SSH_DIR:$PATH"
   echo "ssh to $NEW now goes to the Elastic IP $1 (its launch address is released)"
+}
+
+# An association takes a few seconds to reach the instance. Until then a
+# connection can be reset, and the next step of a switch is frozen.
+wait_ssh() {
+  local i
+  for i in $(seq 20); do
+    on "$NEW" true 2> /dev/null && return 0
+    [ "$i" = 20 ] || sleep 3
+  done
+  die "cannot ssh to $NEW through the Elastic IP"
 }
 
 # The state, and the way on or back, for whatever stage switch stopped in.
@@ -643,10 +665,10 @@ explain() {
         echo "$NEW's Redis is the master. The app stays frozen until the TTL (${FREEZE_TTL}s from the last re-arm), and"
         echo "writes that land after that fail until the switch finishes, so be quick."
         echo "On: run switch again; it skips what is done."
-        echo "Back: README.md, \"Rollback\". Only if $NEW has accepted no writes: promote.sh $NEW $OLD_REDIS, the Elastic IP"
-        echo "back to $OLD_ID, start the old units, then resize.sh --host $OLD_NOW move thaw. After writes, first thaw"
+        echo "Back: README.md, \"Rollback\". Only if $NEW has accepted no writes: promote.sh $NEW $OLD_REDIS, start the old"
+        echo "units, the Elastic IP back to $OLD_ID, then resize.sh --host $OLD_NOW move thaw. After writes, first thaw"
         echo "$OLD_NOW (resize.sh --host $OLD_NOW move thaw) and keep $NEW primary until the reverse copy and freeze are"
-        echo "done (data-volume/README.md), then Redis, then the Elastic IP, then start the old units." ;;
+        echo "done (data-volume/README.md), then Redis, then start the old units, then the Elastic IP." ;;
     esac
   } >&2
   return "$status"
@@ -747,6 +769,7 @@ EOF
       [ "$(aws_cli ec2 describe-addresses --allocation-ids "$EIP" --query 'Addresses[0].InstanceId' --output text)" = "$NEW_ID" ] ||
         die "$EIP is not on $NEW_ID"
       follow_eip "$eip_address"
+      wait_ssh
     fi
   fi
 
@@ -888,8 +911,9 @@ restore_inputs() {
   [ -n "${BLOT_HOST_SSH_KEY:-}" ] || [ -n "$DRY_RUN" ] || die "set BLOT_HOST_SSH_KEY: the private key for the new host"
   [ -f "$SECRETS_FILE" ] || need "--secrets-env FILE: secrets.env as it was on the lost host (it is not in the repo)"
   [ -f "$PROXY_FILE" ] || need "--proxy-env FILE: proxy.env as it was on the lost host (it is not in the repo)"
-  # Only a drill that restores Redis from the offsite copy goes without credentials on the host.
-  if [ -n "$AWS_CREDS" ] || [ "$MODE" = production ] || [ -z "$OFFSITE_BUCKET" ]; then
+  # Only a drill goes without credentials on the host: from the offsite copy, or
+  # with an instance profile that reads the backups (never a production key on a drill).
+  if [ -n "$AWS_CREDS" ] || [ "$MODE" = production ]; then
     { [ -f "$AWS_CREDS" ] && grep -q '^\[default\]' "$AWS_CREDS"; } ||
       need "--aws-credentials FILE: a credentials file with a [default] profile that can read the Redis backups and write new ones"
   fi
@@ -980,7 +1004,8 @@ restore_volume() {
       vtype=gp3; iops=None; throughput=None
       echo "NOTE: $SNAP_VOLUME cannot be read, so the volume is gp3 at the default speed. Raise it with modify-volume if reads are slow"
     fi
-    opts="--snapshot-id $SNAP --availability-zone $az --volume-type $vtype"
+    # As in resize.sh: unaided, a snapshot takes far too long to load.
+    opts="--snapshot-id $SNAP --availability-zone $az --volume-type $vtype --volume-initialization-rate 300"
     # gp2 reports a baseline Iops (3 per GB) that create-volume rejects; only these types take one.
     case "$vtype" in gp3 | io1 | io2) [ "${iops:-None}" = None ] || opts="$opts --iops $iops" ;; esac
     [ "$vtype" != gp3 ] || [ "${throughput:-None}" = None ] || opts="$opts --throughput $throughput"
@@ -1188,6 +1213,7 @@ phase_restore() {
       [ "$(aws_cli ec2 describe-addresses --allocation-ids "$EIP" --query 'Addresses[0].InstanceId' --output text)" = "$NEW_ID" ] ||
         die "$EIP is not on $NEW_ID"
       follow_eip "$EIP_ADDRESS"
+      wait_ssh
       host=$(env_value "$NEW" BLOT_HOST)
       wait_public_health "$EIP_ADDRESS" "$host"
     fi

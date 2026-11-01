@@ -34,6 +34,16 @@ if [ -n "$DATA_VOLUME_ID" ] && ! printf '%s\n' "$DATA_VOLUME_ID" | grep -Eq '^vo
   exit 1
 fi
 
+# Optional: extra options for every ssh and scp below, -o options only (scp's
+# -p is not ssh's). cycle.sh passes its host key settings for a new host.
+# env, not the command builtin: on a Mac this is bash 3.2 as sh, where a failing
+# `command ssh` trips set -e even as the condition of an if.
+if [ -n "${SSH_OPTS:-}" ]; then
+  # shellcheck disable=SC2086
+  ssh() { /usr/bin/env ssh $SSH_OPTS "$@"; }
+  # shellcheck disable=SC2086
+  scp() { /usr/bin/env scp $SSH_OPTS "$@"; }
+fi
 
 #upload the scripts to the proxy host
 SCRIPTS_DIRECTORY="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/scripts"

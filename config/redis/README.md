@@ -87,8 +87,8 @@ What it checks first: both hosts answer over ssh with passwordless sudo and run
 Redis 6.2.x; the new host replicates from the old host's **primary private
 IP**, its link is up and it is at most 16MB behind, with an ack in the last 3s; it has
 `min-replicas-to-write 0`, uses under 80% of its `maxmemory` and its last
-background save did not fail (otherwise, with `stop-writes-on-bgsave-error yes`,
-it refuses writes the moment it is promoted); it has as many `ssl:*:latest`
+background save did not fail (a host set to `stop-writes-on-bgsave-error yes`
+would refuse writes the moment it is promoted); it has as many `ssl:*:latest`
 certificate keys as the old host (the proxy trusts Redis over its own copy, so
 a missing one gets re-issued); and it was set up by `bootstrap.sh` (otherwise
 nothing would back it up). A backup upload running during the promotion is
@@ -246,11 +246,16 @@ must also move that IP by hand, as in step 4 of Disaster recovery.
 - `blot-disable-thp.service` (THP `never` before Redis), `blot-instance-store.service`
   (mounts `/backups`; Redis only `Wants=` it, so it starts without it), and
   the `redis6` drop-in `zz-blot.conf` (`LimitNOFILE=65536`, `Restart=always`,
-  long start/stop timeouts, `OOMScoreAdjust=-900` and `CPUWeight=1000`). On a
-  shared host the kill order under memory pressure is the BGSAVE child
-  (`oom-score-adj-values` in `redis.conf` lifts it to 1000), then the app, and
-  never Redis; Redis also wins the CPU when it is contended. A running Redis
-  only gets `OOMScoreAdjust` at its next restart. It is named `zz-` so it sorts
+  long start/stop timeouts, `OOMScoreAdjust=-900`, `OOMPolicy=continue` and
+  `CPUWeight=1000`). On a shared host the kill order under memory pressure is
+  the BGSAVE child (`oom-score-adj-values` in `redis.conf` lifts it to 1000),
+  then the app, and never Redis; Redis also wins the CPU when it is contended.
+  `OOMPolicy=continue` keeps that promise: under systemd's default a killed child
+  stops the whole service. A killed child still fails the save. That is why
+  `stop-writes-on-bgsave-error` is `no`: with `yes` the rehearsal measured over
+  3 minutes of refused writes, because `save 300 100` only tries again 5 minutes
+  after the last good one. A running Redis only gets `OOMScoreAdjust` at its next restart, but
+  `OOMPolicy` at the next `daemon-reload`. The drop-in is named `zz-` so it sorts
   after the package's `limit.conf`, which would otherwise win.
 - `/etc/cron.d/blot-redis`, as `ec2-user`: backups (hourly at :00, daily at
   03:05, weekly on Sundays at 03:35, log in `~/backup.log`, truncated monthly) and the two monitoring
@@ -364,8 +369,8 @@ the master) emails the admin address `REDIS_HOST_ALERT` when:
   the limit);
 - `maxmemory` is 0 on a host marked active by `/etc/blot-redis/active`;
 - the TCP memory sample is over 20 minutes old;
-- the last background save failed (`stop-writes-on-bgsave-error yes`, so Redis
-  refuses every write until one succeeds);
+- the last background save failed (`stop-writes-on-bgsave-error no`, so Redis
+  keeps taking writes, but nothing new reaches disk until one succeeds);
 - the last backup in `blot:redis-host:backup` is over 3 hours old, or the last
   offsite one in `blot:redis-host:offsite` over 50 hours (two missed runs). A
   missing key is quiet, an unreadable value alerts.

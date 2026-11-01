@@ -23,8 +23,9 @@
 //   so it describes the app host, which also runs Redis once they share one.
 //   A reading under the limit must hold for HOST_MEMORY_CHECKS runs in a row
 //   before it is emailed.
-// - A failed background save. With stop-writes-on-bgsave-error yes Redis
-//   refuses every write until a save succeeds.
+// - A failed background save. Redis keeps taking writes
+//   (stop-writes-on-bgsave-error no), but nothing new reaches disk until a
+//   save succeeds.
 // - Events since the last check (redis-host-events.js): errors that mean Redis
 //   refused writes, other errors in bulk, rejected connections, a restart or
 //   switch to another host, and slow commands.
@@ -135,7 +136,7 @@ const TITLES = {
   "offsite-stale": "Offsite Redis backup stale",
   maxmemory: "Redis memory nearing maxmemory",
   "maxmemory-unset": "maxmemory not set",
-  "bgsave-failed": "Redis background save failing, writes will be refused",
+  "bgsave-failed": "Redis background save failing",
   "errors-critical": "Redis refused writes (OOM, MISCONF)",
   errors: "Redis errors",
   rejected: "Redis rejected connections",
@@ -393,8 +394,8 @@ async function check(deps = {}) {
     conditions.maxmemory = false;
   }
 
-  // With stop-writes-on-bgsave-error yes (redis.conf), a failed save makes
-  // Redis refuse every write until one succeeds.
+  // Redis keeps taking writes after a failed save (redis.conf), so this is the
+  // only sign that nothing new is reaching disk.
   if (redis.saveStatus) conditions["bgsave-failed"] = redis.saveStatus !== "ok";
 
   // Conditions: start and clear, no more often than CONDITION_MIN_INTERVAL
@@ -551,8 +552,8 @@ function message(name, report) {
     case "bgsave-failed":
       return (
         `the last background save failed (\`rdb_last_bgsave_status:${redis.saveStatus}\`). ` +
-        "**Urgent:** `redis.conf` has `stop-writes-on-bgsave-error yes`, so Redis refuses every write " +
-        "(\`MISCONF\`) until a save succeeds, and the app cannot save anything. On the Redis host check " +
+        "**Urgent:** Redis keeps taking writes (`stop-writes-on-bgsave-error no`), but nothing new reaches disk " +
+        "until a save succeeds, so a restart would lose what was written since the last good save. On the Redis host check " +
         "disk space on `/var/lib/redis6` (`df -h`), the reason in `/var/log/redis6/redis6.log`, and memory " +
         "(a save that cannot fork means RAM is short or `vm.overcommit_memory` is not 1); see " +
         `[config/redis/README.md](${README_URL})`
@@ -658,8 +659,8 @@ async function run(deps = {}) {
       await client.sendCommand(["SET", STATE_KEY, JSON.stringify(report.nextState)]);
       keep.state = null;
     } catch (err) {
-      // The email is out. With a failed save (stop-writes-on-bgsave-error)
-      // Redis refuses this write, and without the new state the next run
+      // The email is out. When Redis refuses this write (OOM, or MISCONF on a
+      // host still set to stop writes), without the new state the next run
       // would send the same email again, every 5 minutes: keep it here and
       // use it until a write gets through.
       keep.state = report.nextState;

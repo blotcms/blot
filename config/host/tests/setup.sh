@@ -78,6 +78,7 @@ check "redis-cli resolves to redis6-cli" \
   in_ct '[ "$(readlink -f "$(command -v redis-cli)")" = "$(readlink -f /usr/bin/redis6-cli)" ]'
 check "fail2ban-client and iptables exist" in_ct 'command -v fail2ban-client && command -v iptables'
 check "firewalld is not installed" in_ct '! rpm -q firewalld'
+check "sqlite3 is installed, for bans.sh export" in_ct 'command -v sqlite3'
 check "docker is installed and not running" in_ct 'rpm -q docker && ! grep -lx dockerd /proc/[0-9]*/comm 2> /dev/null'
 check "cron entry" in_ct '[ "$(grep -v "^#" /etc/cron.d/blot-docker-health)" = "* * * * * root /usr/local/bin/check_docker_health.sh >/dev/null 2>&1" ] &&
   [ "$(stat -c "%a %U:%G" /etc/cron.d/blot-docker-health)" = "644 root:root" ]'
