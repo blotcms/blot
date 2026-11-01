@@ -28,7 +28,10 @@
 #                                               read the access log here
 #   PROXY_CERT_DIR         /etc/ssl/private     wildcard cert + key (read-only)
 #   PROXY_GLOBAL_STATIC_DIR /var/www/blot/app/blog/static  the app's own static
-#                                               assets, read-only (see run_args())
+#                                               assets, read-only in the units
+#                                               (see run_args()); each deploy
+#                                               copies the image's over it
+#                                               (see sync_static)
 #   PROXY_SANDBOX_CGROUP_DIR /sys/fs/cgroup/blot-sandbox  where the host made
 #                                               each unit's cgroup subtree (only
 #                                               read with BLOT_SANDBOX=1)
@@ -42,6 +45,16 @@
 #   PROXY_SKIP_CERT_SWEEP  (unset)              1 skips the custom-domain certificate
 #                                               checks (see cert_baseline and
 #                                               certs_all_served)
+#   PROXY_DEPLOY_PAUSE_FILE /etc/blot/deploy-paused  while it exists blue-green.sh
+#                                               refuses to run. config/host/cycle.sh
+#                                               creates it on both hosts
+#   PROXY_DEPLOY_IGNORE_PAUSE (unset)           1 deploys anyway: cycle.sh's own deploys
+#   PROXY_DEPLOY_FORCE     (unset)              1 replaces units that already run this
+#                                               image, to re-run what happens at boot
+#                                               or pick up edited env files (cycle.sh)
+#   PROXY_VERIFY_SKIP_REDIS_WRITE (unset)       1 leaves out verify-container's Redis
+#                                               write, which a read-only replica refuses.
+#                                               Only cycle.sh's app phase sets it
 #   PROXY_NOFILE           65536                --ulimit nofile=N:N. Each proxied
 #                                               connection holds ~2 fds (client +
 #                                               upstream), so worker_connections
@@ -63,6 +76,7 @@ DRAIN_TIMEOUT="${PROXY_DRAIN_TIMEOUT:-30}"
 AIRLOCK_HEALTH_TIMEOUT="${PROXY_AIRLOCK_HEALTH_TIMEOUT:-60}"
 HEALTH_SOCK="/run/openresty/health.sock"
 LOCK_FILE="${PROXY_DEPLOY_LOCK:-/tmp/blot-proxy-deploy.lock}"
+PAUSE_FILE="${PROXY_DEPLOY_PAUSE_FILE:-/etc/blot/deploy-paused}"
 SITE_IP="127.0.0.1"
 PRODUCTION_ACME_CA="https://acme-v02.api.letsencrypt.org/directory"
 # worker_connections is 10000 (proxy/config/initial.conf) and each
@@ -276,6 +290,21 @@ reset_cache_dir() { # reset_cache_dir <host dir> <image>
     exit 0' sh "$trash" >/dev/null || return 1
   # all of .trash, so what an interrupted earlier reset left goes too
   docker run -d --rm --user 0 --entrypoint sh -v "$dir":/cache --memory "$TRANSIENT_MEMORY" "$image" -c 'rm -rf /cache/.trash' >/dev/null || true
+}
+
+# Copy the image's own static files (the copy Node reads, at
+# /usr/src/app/app/blog/static) over the host directory the units mount
+# read-only and OpenResty serves for cdn. from disk, so a new host and every
+# deploy have what the image has. It only adds and overwrites, never deletes:
+# pages a CDN cached for a year still point at older file names. An image
+# without that directory (the e2e's stand-ins) is left alone.
+sync_static() { # sync_static <image>
+  local image="$1" out
+  log "Copying the static files of $image into $GLOBAL_STATIC_DIR"
+  out=$(docker run --rm --user 0 --entrypoint sh --memory "$TRANSIENT_MEMORY" -v "$GLOBAL_STATIC_DIR":/out "$image" -c '
+    d=/usr/src/app/app/blog/static
+    if [ -d "$d" ]; then cp -a "$d"/. /out/ && echo copied; else echo "no $d in the image"; fi') || return 1
+  log "$out"
 }
 
 # Arguments for a unit container, from the settings file. Host networking, so
@@ -499,9 +528,12 @@ wait_healthy() { # wait_healthy <name> <timeout> [check function, default health
 # user, uid 1000 (the image ends USER root, for OpenResty's master): run as
 # root the writable checks would pass on root-owned directories.
 verify_unit() { # verify_unit <name>
-  local out
+  local out skip=""
   log "Verifying $1 (scripts/deploy/verify-container)"
-  if ! out="$(timeout 90 docker exec --user 1000:1000 -e HOME=/home/node "$1" node /usr/src/app/scripts/deploy/verify-container/index.js "$RELEASE_ID" 2>&1)"; then
+  [ "${PROXY_VERIFY_SKIP_REDIS_WRITE:-}" != 1 ] || skip=--skip-redis-write
+  # $skip unquoted: empty, it must not become an empty argument
+  # shellcheck disable=SC2086
+  if ! out="$(timeout 90 docker exec --user 1000:1000 -e HOME=/home/node "$1" node /usr/src/app/scripts/deploy/verify-container/index.js "$RELEASE_ID" $skip 2>&1)"; then
     printf '%s\n' "$out" >&2
     return 1
   fi
