@@ -14,6 +14,7 @@
 const http = require("http");
 const { createCache } = require("../../../../app/clients/git/store");
 const frontMemory = require("./memcache");
+const toxiproxy = require("./toxiproxy");
 const { connect } = require("./stores");
 const createManifests = require("./manifests");
 const openRepo = require("./repoctx");
@@ -47,7 +48,16 @@ async function main() {
   const connection = connect({ blogID: config.blogID, via: config.via, options: { maxAttempts: config.retries, requestTimeout: config.requestTimeout, keepAlive: config.keepAlive } });
   const { store, counters } = connection;
   const lock = createLock();
-  const manifests = createManifests({ store, cache, lock });
+  // Failure injection at the one request which decides a swap: the toxic
+  // the run asked for goes on just before the conditional PUT, so the
+  // checks before it are unharmed and the create is what meets the fault
+  const faults = {};
+  const manifestStore = Object.create(store);
+  manifestStore.putIfAbsent = async (key, body) => {
+    if (faults.swap) await toxiproxy.add({ name: "fault-swap", ...faults.swap });
+    return store.putIfAbsent(key, body);
+  };
+  const manifests = createManifests({ store: manifestStore, lock });
   const state = { limit: Infinity, facts: [], peak: 0, base: process.memoryUsage().rss };
 
   setInterval(() => {
@@ -55,7 +65,6 @@ async function main() {
     if (rss > state.peak) state.peak = rss;
   }, 25).unref();
 
-  const faults = {};
   const ops = require("./ops").create({ store, cache, manifests, config, openRepo, faults });
 
   async function repoNow() {
@@ -75,7 +84,6 @@ async function main() {
           rssPeakMB: Math.round(state.peak / 1048576),
           rssBaseMB: Math.round(state.base / 1048576),
           cache: disk.stats(),
-          hintFailures: manifests.stats.hintFailures,
         };
         state.facts = [];
         state.peak = process.memoryUsage().rss;

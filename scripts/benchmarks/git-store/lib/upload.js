@@ -7,7 +7,6 @@ const path = require("path");
 const { manifest, layout } = require("../../../../app/clients/git/store");
 const { generate, SPECS } = require("./generate");
 const { connect, ensureBucket } = require("./stores");
-const createManifests = require("./manifests");
 
 const FREE_FLOOR = 3 * 1024 ** 3;
 
@@ -28,7 +27,6 @@ async function removeRepo(store) {
 async function generateAndUpload({ specName, blogID, workDir, metaFile, overrides = {}, log = console.log }) {
   await ensureBucket();
   const { store, counters, close } = connect({ blogID, via: "direct" });
-  const manifests = createManifests({ store });
   await removeRepo(store);
   counters.take();
 
@@ -69,8 +67,8 @@ async function generateAndUpload({ specName, blogID, workDir, metaFile, override
 
   // Only the final manifest is written: the intermediate ones would be a
   // few GB of manifests for the uncompacted blog, and nothing reads them
-  await store.putIfAbsent(manifests.key(next.seq), manifest.serialize(next));
-  await store.put(manifests.HINT_KEY, Buffer.from(JSON.stringify({ seq: next.seq })));
+  await store.putIfAbsent(layout.manifestKey(next.seq), manifest.serialize(next));
+  await store.put(layout.LATEST_KEY, Buffer.from(JSON.stringify({ seq: next.seq }) + "\n"));
 
   const meta = {
     spec: specName,

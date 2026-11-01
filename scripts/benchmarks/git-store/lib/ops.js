@@ -433,7 +433,6 @@ function create({ store, cache, manifests, config, openRepo, faults }) {
         head: current.head || (refs["refs/heads/master"] ? "refs/heads/master" : current.head),
         packs: adoptedPack ? [{ name: adoptedPack.name, size: adoptedPack.size, idxSize: adoptedPack.idxSize, objects: adoptedPack.objects }] : [],
       });
-      await inject(faults, "swap");
       await manifests.swap({ base: current, next });
       mark("swap");
       facts.seq = next.seq;

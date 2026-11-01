@@ -168,7 +168,7 @@ async function commit300({ profile, record, total = 300 }) {
     const direct = connect({ blogID: repo, via: "direct" });
     const objects = { manifests: 0, manifestBytes: 0, packs: 0, packBytes: 0 };
     for await (const item of direct.store.list("")) {
-      if (item.key.startsWith("manifests/")) {
+      if (/^manifests\/\d+\.json$/.test(item.key)) {
         objects.manifests++;
         objects.manifestBytes += item.size;
       } else if (item.key.endsWith(".pack")) {

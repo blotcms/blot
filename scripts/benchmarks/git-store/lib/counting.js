@@ -56,7 +56,8 @@ function instrumentClient(client, counters) {
       const requestBytes = Number(headers["content-length"] || 0);
       try {
         const out = await next(args);
-        const responseBytes = Number((out.response && out.response.headers && out.response.headers["content-length"]) || 0);
+        // A HEAD answer carries the object's length in content-length but no body
+        const responseBytes = context.commandName === "HeadObjectCommand" ? 0 : Number((out.response && out.response.headers && out.response.headers["content-length"]) || 0);
         counters.http(context.commandName, requestBytes, responseBytes);
         return out;
       } catch (err) {
@@ -115,6 +116,11 @@ function countStore(store, counters) {
     async put(key, body) {
       counters.op("put", 0);
       return store.put(key, counted(body, "put"));
+    },
+    async putIfAbsent(key, body) {
+      counters.op("putIfAbsent", 0);
+      counters.bytes("putIfAbsent", body.length);
+      return store.putIfAbsent(key, body);
     },
     async delete(key) {
       counters.op("delete", 0);

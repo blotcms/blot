@@ -12,7 +12,7 @@ It runs the store's foundation (`app/clients/git/store/`) against MinIO behind t
 | `lib/profiles.js` | The network profiles (`direct`, `s3-standard`, `express-one-zone`), each with its assumptions written beside it. They are estimates. |
 | `lib/generate.js`, `lib/gitobj.js` | A deterministic generator of synthetic repositories, written straight into packs and indexes. |
 | `lib/counting.js` | Counts requests and bytes, by operation, in the store wrapper and in the SDK (every attempt, retries included). |
-| `lib/manifests.js` | Immutable numbered manifests with a hint, as the foundation is about to have them (see below). |
+| `lib/manifests.js` | The foundation's `manifest.read` and `manifest.swap`, with the harness's lock. |
 | `lib/clone.js`, `lib/fetch.js`, `lib/ops.js`, `lib/prefetch.js` | The operations: ref advertisement, streaming clone and fetch, push, materialize, Blot's one-file commit. |
 | `lib/server.js` | One repository's operations over HTTP, in its own process so peak memory is the server's alone. |
 | `lib/*suites.js`, `lib/failure.js`, `lib/idxbench.js`, `lib/growth.js`, `run.js` | The measurements and their driver. |
@@ -77,4 +77,4 @@ The full-size repository is checked once with real git: clone it with `transfer.
 
 ## Manifests
 
-The harness uses the manifest layout the foundation is being changed to: `manifests/<seq>.json` written once with `If-None-Match: *`, plus a small `manifest-hint.json`. A read is the hint, a HEAD of the next number (normally a miss), then a GET of the manifest, which is immutable and so can come from the cache. A swap is one conditional PUT and one PUT of the hint. `lib/manifests.js` is that layer, written in the harness over the foundation's manifest format; when the foundation has it, this file goes.
+A read is the hint (one GET), a HEAD of the next number (normally a miss), then a GET of the manifest, which is immutable and so is kept after the first. A swap is four HEADs (the packs it names are uploaded, the base is the newest, the next number is free), one conditional PUT and one PUT of the hint, so a warm one-file commit of Blot's is 10 requests. The first numbers taken with this harness modelled the manifest layer before the foundation had it, and counted a swap as the conditional PUT and the hint PUT alone.

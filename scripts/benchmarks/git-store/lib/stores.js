@@ -1,10 +1,9 @@
 // Connects the harness to the spike's MinIO: an S3 client for the direct or
 // the proxied endpoint, and the store (counted) for one repository.
-const { S3Client, CreateBucketCommand, HeadBucketCommand, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, CreateBucketCommand, HeadBucketCommand } = require("@aws-sdk/client-s3");
 const http = require("http");
 const { createS3Store } = require("../../../../app/clients/git/store");
 const { createCounters, instrumentClient, countStore } = require("./counting");
-const { StaleManifestError } = require("../../../../app/clients/git/store").errors;
 
 const BUCKET = "git-store-spike";
 const ENDPOINTS = {
@@ -49,23 +48,6 @@ function connect({ blogID, via = "proxied", options = {} }) {
   const prefix = "git/" + blogID + "/";
   const raw = createS3Store({ client, bucket: BUCKET, prefix, ...(options.store || {}) });
   const store = countStore(raw, counters);
-
-  // The conditional write the immutable manifests need. The foundation's
-  // store has no such call (yet), so the harness makes it here.
-  store.putIfAbsent = async function putIfAbsent(key, buffer) {
-    counters.op("putIfAbsent", 0);
-    counters.bytes("putIfAbsent", buffer.length);
-    try {
-      await client.send(
-        new PutObjectCommand({ Bucket: BUCKET, Key: prefix + key, Body: buffer, IfNoneMatch: "*" })
-      );
-    } catch (err) {
-      if (err.$metadata && (err.$metadata.httpStatusCode === 412 || err.$metadata.httpStatusCode === 409)) {
-        throw new StaleManifestError("manifest object " + key + " already exists");
-      }
-      throw err;
-    }
-  };
 
   return { store, client, counters, prefix, bucket: BUCKET, close: () => client.destroy() };
 }
