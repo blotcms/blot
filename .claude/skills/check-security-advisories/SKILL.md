@@ -127,3 +127,16 @@ flagged. Public repo: no IPs, instance IDs, account IDs or infra sizes.
   behind 1.31.x, nginx 1.25.3 inside many advisory ranges (needs judgment
   against the OpenResty bundle and enabled modules). No watched-package
   critical/important bulletins in the 2-day window.
+- 2026-11-01: ACTION NEEDED, host OS (manual, not applied; no repo pin to bump).
+  Kernel advisory CVE-2026-98432 (IPv4 inet_opt/ireq_opt freed before an RCU
+  grace period, a use-after-free) in Amazon Linux 2 bulletins ALAS2KERNEL-5.15-2026-120,
+  ALAS2KERNEL-5.4-2026-135, ALAS2KERNEL-5.10-2026-137 and ALAS2-2026-4065 (app/proxy
+  host, AL2 already EOS), and ALAS2023-2026-3365 (Redis host). Verified on
+  alas.aws.amazon.com; the pages show no severity, the script rates them important.
+  Exposure: the bug is in the kernel's network path, and the app/proxy host is
+  internet-facing, so it goes in the next manual host patch window with a reboot.
+  WATCH: Node 24.22.2 (non-security, pin 24.22.1); AL2023 ALAS2023-2026-3339 (containerd)
+  and ALAS2023-2026-3354 (openssh, 18 CVEs, medium); AL2 containerd mediums
+  (ALAS2ECS-2026-152, ALAS2DOCKER-2026-156, ALAS2NITRO-ENCLAVES-2026-130). OpenResty and
+  Pandoc newest-release checks unavailable this run (GitHub 403). Standing: nginx ranges,
+  AL2 EOS.
