@@ -37,6 +37,39 @@ describe("Blog.remove", function () {
   });
 
 
+  it("removes the blog's folder and nothing beside it", function (done) {
+    var test = this;
+    var fs = require("fs-extra");
+    var localPath = require("helper/localPath");
+    var folder = localPath(test.blog.id, "/");
+    var other = localPath(test.blog.id + "0", "/");
+
+    fs.outputFileSync(folder + "/posts/a.txt", "Hello");
+    fs.outputFileSync(other + "/b.txt", "Other");
+
+    remove(test.blog.id, function (err) {
+      var otherExists = fs.existsSync(other + "/b.txt");
+
+      fs.removeSync(other);
+
+      if (err) return done.fail(err);
+
+      expect(fs.existsSync(folder)).toBe(false);
+      expect(otherExists).toBe(true);
+      done();
+    });
+  });
+
+  it("removes a blog which has no folder", function (done) {
+    var test = this;
+
+    require("fs-extra").removeSync(
+      require("helper/localPath")(test.blog.id, "/")
+    );
+
+    remove(test.blog.id, done);
+  });
+
   it("removes a blog from list of all blogs", function (done) {
     var test = this;
 

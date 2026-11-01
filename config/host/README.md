@@ -48,8 +48,9 @@ samples 15 seconds apart. Per sample there is one line per container
 biggest node process) and `top=comm:bytes` (the biggest non-node process, i.e. a
 pandoc/git/exiftool spike), `peak` (the cgroup's high-water mark, v2 only), and
 one `name=host` line with `mem_available`. Where the host has a sandbox subtree
-(#2257) there is also a `name=blot-sandbox-<unit>` line: jobs last under a
-second, so read its `peak` and `oom_kill`.
+(#2257) there are also `name=blot-sandbox-<unit>` and
+`name=blot-sandbox-<unit>-browser` lines: jobs are short, so read their `peak`
+and `oom_kill`.
 `anon+shmem` is the memory that can't be reclaimed; the cgroup limit also counts
 page cache. Summarise it with:
 
@@ -145,7 +146,10 @@ upgrades a package. It:
   `/sys/fs/cgroup/blot-sandbox/{blue,green}` for the units' nsjail sandbox
   (`app/sandbox`). Each is capped at 512M of memory (no swap), 256 pids and a
   `cpu.weight` of 25. Nothing uses them until `BLOT_SANDBOX=1` is set in the
-  proxy env file (`proxy/deploy/proxy.env.example`);
+  proxy env file (`proxy/deploy/proxy.env.example`). It also makes
+  `{blue,green}-browser` for the browser job, one Chromium at a time, capped at
+  1G (no swap, the whole job killed at the limit), 512 pids, a `cpu.weight` of
+  25 and 1.5 CPUs. Those wait for `BLOT_SANDBOX_BROWSER=1`;
 - creates the `deploy` user (`scripts/deploy/setup-deploy-user.sh`);
 - with `BLOT_SSH_PORT`, sets sshd's port in `/etc/ssh/sshd_config.d/11-blot-port.conf`
   (sshd then listens on that port only);
@@ -249,6 +253,96 @@ The install paths are load-bearing: `mount-instance-store.service` hardcodes
 `/home/ec2-user/scripts/mount-instance-store.sh` (likewise
 `mount-data-volume.service` and `mount-data-volume.sh`).
 
+## Host cycle
+
+`cycle.sh` moves everything onto a fresh host, so upgrades and resizes mean
+building a new host rather than patching one. It wraps the scripts above,
+`data-volume/resize.sh`, `config/redis/promote.sh` and `scripts/deploy/units.sh`,
+and adds little of its own (see the usage at the top of the file). Rehearse it
+with `--drill` on hosts tagged `BlotDrill=true`.
+
+```
+config/host/cycle.sh --production --type m6gd.xlarge --cycle <name> launch <old>
+config/host/cycle.sh --production [--old-redis <host>] replicate <old> <new>
+config/host/cycle.sh --production data <old> <new>
+config/host/cycle.sh --production [--old-redis <host>] app <old> <new>
+config/host/cycle.sh --production --eip <id> --bans-file data/bans.txt --old-direct <host> [--old-redis <host>] switch <old> <new>
+config/host/cycle.sh --production --eip <id> --old-direct <host> settle <old> <new>
+config/host/cycle.sh --production --eip <id> --old-volume <vol> --old-instance <id> finish <old> <new>
+config/host/cycle.sh status <old> <new>
+```
+
+Each phase takes `--dry-run`, can be run alone, and works out what is left by
+looking at the hosts, so after a failure fix the cause and run it again. Check
+`status` first if you have lost track. Things to know:
+
+- **Names.** `<old>`, `<new>` and the others are ssh names that work with plain
+  `ssh`, as `ec2-user`. The old app host's only public address is the Elastic IP,
+  so from `switch` on it needs `--old-direct`: an alias of its private IP with
+  `ProxyJump <new>`. `switch` refuses an alias of the Elastic IP, and tries the
+  way in before it freezes anything.
+- **`<new>` after the move.** Moving the Elastic IP releases the new host's
+  launch-time address, which `<new>` is an alias of. From then on `switch` and
+  `settle` put an `ssh` in front on `PATH` that sends `<new>` to the Elastic IP
+  (keeping its host key check), so they work whether or not the alias is edited;
+  `-F` reaches `ProxyJump` too. Before `finish`, and for your own ssh, change
+  `HostName` for `<new>` in `~/.ssh/config` to the Elastic IP.
+- **Two hosts.** With a separate Redis host pass `--old-redis`, also for later
+  phases that promote. Without it `<old>` is taken to run Redis too.
+- **Deploys pause** at `app` and resume at the end of `settle`: `/etc/blot/deploy-paused`
+  on both hosts stops `proxy/deploy/blue-green.sh`, however a deploy was started.
+  The cycle's own deploys pass `PROXY_DEPLOY_IGNORE_PAUSE=1`. If you abandon a
+  cycle, remove the file from both.
+- **`app`** copies `secrets.env` and `proxy.env` from the old host and writes the
+  socket settings into the new host's copy only. It deploys the image the old
+  units run, with `verify-container` skipping its Redis write, because the
+  replica refuses it. Other writes fail too until the switch: dashboard pages
+  may not work, and nothing on the new host should be judged by them yet. The
+  deploy also fills the host's static directory from the image; `app` and the
+  checks before `switch` fetch `/layout.css` from the `cdn.` host to prove it.
+- **The freeze.** `switch` re-arms the freeze's TTL (`--freeze-ttl`, default 900
+  seconds) between steps, through whichever host has the Redis master, and
+  lifts it through the new host. It keeps the old host's disk read-only, the old
+  units stopped but not removed, and its Redis a replica of the new one.
+- **`settle`** forces a rolling deploy of the same image, because a plain one
+  skips units already on it, and that restart is what runs the steps that failed
+  on the replica. It then retags the volumes: a rollback is simplest before that.
+- **`finish`** terminates only the instances named with `--old-instance`, and
+  not within 3 days of `settle` (`--any-age`). It stops at termination
+  protection and prints the command that lifts it; that is your decision. The
+  old data volume is kept, for you to delete.
+- **Hours.** Every phase refuses from 15 minutes before the 01:00 and 05:00 UTC
+  hours until they end (wildcard renewal, file cleanup), unless `--any-time`.
+
+**Rollback** before the promotion: `resize.sh --host <old> move thaw`. After it,
+the short path is only for a switch that has accepted no writes (the new host
+was frozen the whole time, so nothing on it is newer than the old volume):
+
+1. `config/redis/promote.sh <new> <old-redis>`.
+2. Move the Elastic IP back to the old instance with `aws ec2 associate-address`.
+3. On the old host: `docker start` the airlocks and the units, then
+   `resize.sh --host <old> move thaw`.
+
+Once the new host has accepted writes, the old volume is behind, so promoting
+Redis or moving the Elastic IP first would send traffic to stale files. Follow
+the order in `data-volume/README.md` ("Rollback", after the switch) and decide
+quickly:
+
+1. On the old host: `resize.sh --host <old> move thaw`. The switch left its
+   data directory read-only, and `move prepare --to <old> --existing` refuses a
+   read-only target. Its units stay stopped, so nothing writes to it yet; the
+   new host stays primary with the Elastic IP.
+2. Copy back what changed, with the hosts swapped:
+   `resize.sh --host <new> move prepare --to <old> --existing`, then `copy` and
+   `freeze` (this needs `settle` not to have retagged yet). The freeze stops
+   writes on the new host once the final copy is done; leave it frozen.
+3. Then `config/redis/promote.sh <new> <old-redis>`.
+4. Then the Elastic IP back to the old instance.
+5. On the old host: `docker start` the airlocks and the units, then lift the
+   app freeze with `read-only.js off` in `blot-blue`. Its disk was thawed in
+   step 1, so there is no second thaw; do not thaw the new host either, and
+   stop its units.
+
 ### The wildcard certificate
 
 `blue-green.sh` will not start a unit in fresh mode until
@@ -268,6 +362,108 @@ is empty, the certificate has expired or the key is not the certificate's key.
 Each file is written to a temp file in the same directory, then moved into
 place as `root:deploy` mode `0640`, so the key is never world-readable. It never
 prints the key. Run it before the first `deploy-units`.
+
+## Recovery
+
+Redis and both units share one host, so losing the host loses the app and its
+Redis together. `cycle.sh restore` rebuilds from what is in AWS, in this order:
+
+1. A new host, and Redis restored onto it from the newest backup (at most about
+   an hour old; `restore.sh`, so `--offsite` works when AWS backups are gone).
+2. A new data volume from the newest completed snapshot of the lost volume. The
+   lost volume is only named, to find its snapshots. It is never attached,
+   detached or changed, so anything newer than the snapshot can still be
+   recovered from it.
+3. The units, then the Elastic IP.
+4. Reconcile (below).
+
+The snapshot is older than Redis, so Redis can name files the volume does not
+have. Step 4 is what repairs that.
+
+```
+config/host/cycle.sh --production --type <type> --cycle <name> --eip <eipalloc-...> \
+  --old-volume <vol-...> --commit <sha> \
+  --secrets-env <file> --proxy-env <file> --aws-credentials <file> \
+  [--offsite <profile> <s3://bucket>] [--redis-backup <name>] [--snapshot <snap-...>] \
+  [--bans-file data/bans.txt] [--wait-prewarm] [--yes] restore
+```
+
+There is no old host to read from, so you supply what is not in AWS or the repo,
+all of it from your machine:
+
+- `--secrets-env` and `--proxy-env`: `secrets.env` and `proxy.env` as they were
+  on the lost host. Keep a copy of each off the host, updated whenever they
+  change; nothing else has them. The socket settings are written in for you.
+- `--aws-credentials`: a credentials file with a `[default]` profile that can
+  read the Redis backups and write new ones. It becomes `~ec2-user/.aws` on the
+  new host (a new host has no instance profile).
+- `--commit`: the commit of the image to run. Run the script from a checkout of
+  `master`, as `deploy-units` requires.
+- `--old-volume`, or `--snapshot` to pick one yourself. `--eip`, and `--type`
+  and `--cycle` as in `launch`.
+- The host key pair and key (`BLOT_HOST_KEY_NAME`, `BLOT_HOST_SSH_KEY`,
+  `BLOT_SSH_PORT`), the deploy public key, `REDIS_MAXMEMORY` and `AWS_PROFILE`
+  and `AWS_REGION`, as for `launch`. The `blot` key is not on any host, so it
+  comes from you.
+
+Run it without a host name first: it launches the host and stops, printing the
+ssh alias to add. Run the same command again with the alias on the end, and it
+does the rest. Every step looks at the host and AWS to see what is done, so after
+a failure fix the cause and run it again; `--dry-run` prints the steps. It does
+not wait for the 01:00 and 05:00 UTC hours to pass.
+
+The Elastic IP is the last step. In production the script stops and asks you to
+type the ID of the instance that holds it now, whatever `--yes` says, because a
+host may be unreachable rather than gone: stop it first if so, or two Redis
+masters will diverge. It does not stop or touch that host. Only after the
+address has moved does the new volume get the name the snapshot policy targets,
+and the host start backing up. The old volume keeps its own tags; retag it when
+the reconcile is done.
+
+**How slow it is.** A volume made from a snapshot loads from S3 as it is read, so
+reads are slow until it has been read once. The script starts the same low
+priority pre-warm `resize.sh move` uses before the units start, and prints how
+long each step took ("timing: ..."), plus three cold 256 MiB reads straight from
+the device before the pre-warm touches it. `--wait-prewarm` holds the address
+back until the pre-warm has finished; without it the site comes up on a cold
+volume. A rehearsal (`--drill`, with a drill Elastic IP and the `BlotDrill=true`
+tag on everything) is where to record both numbers.
+
+### Reconcile
+
+```
+ssh <new> sudo docker exec --user 1000:1000 -e HOME=/home/node blot-blue node scripts/host-cycle/reconcile.js --since <snapshot start>
+```
+
+`restore` prints the command with the snapshot's start time. Without `--go` it
+only prints a plan:
+
+- **Which blogs.** Dropbox, Google Drive and iCloud blogs whose `cacheID` is at
+  or after `--since` (less `--margin`, 15 minutes), plus any with no `cacheID`.
+  A blog's `cacheID` is set when a sync changes something, so it is the time
+  of the last change Redis knows about; it is also set by template and setting
+  changes, which only costs a resync that was not needed. `--all` skips the
+  filter. Blogs of the same client run at most one at a time (`--per-client`),
+  and two at once overall (`--concurrency`), with `--pause` seconds after each,
+  because the clients' APIs have limits. A resync takes the blog's normal sync
+  lock, so it cannot race a live sync; one that cannot get the lock is left for
+  the next run.
+- **Order.** Most recently changed first.
+- **Git blogs** have no source to resync from. The plan lists their IDs and
+  last change instead. Whatever was pushed after the snapshot is only on the old
+  volume, unless its author pushes again.
+- **Resuming.** Finished blogs go in `reconcile-state.txt` in the data
+  directory, tied to `--since`. Run it again after a failure and it skips them;
+  `--restart` forgets them.
+
+It prints IDs and counts only.
+
+### What `restore` does not do
+
+It does not set up the offsite backup (the `offsite-bucket` file and its B2
+profile), and the permabans only come back with `--bans-file`. It does not move
+anything off the old volume: recover newer files from it by hand, with it
+attached read-only to a scratch host.
 
 ## Scripts and cron
 

@@ -4,8 +4,8 @@ var defaults = require("./defaults");
 var client = require("models/client");
 var key = require("./key");
 var set = require("./set");
-var fs = require("fs-extra");
-var localPath = require("helper/localPath");
+var folder = require("storage/folder");
+var callbackify = require("util").callbackify;
 var User = require("../user");
 var validate = require("./validate");
 var generateID = require("./generateID");
@@ -68,7 +68,8 @@ module.exports = function create(uid, info, callback) {
             set(blogID, blog, function (err) {
               if (err) return callback(err);
 
-              fs.emptyDir(localPath(blogID, "/"), function (err) {
+              // A new blog's folder is empty, but must exist
+              callbackify(folder.mkdir)(blogID, "/", function (err) {
                 if (err) return callback(err);
 
                 return callback(err, blog);

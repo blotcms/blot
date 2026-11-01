@@ -1,10 +1,9 @@
 var debug = require("debug")("blot:build");
-var fs = require("fs");
 var crypto = require("crypto");
+var callbackify = require("util").callbackify;
 var async = require("async");
 var basename = require("path").basename;
-var localPath = require("helper/localPath");
-var hashFile = require("helper/transformer/hash");
+var folder = require("storage/folder");
 var isDraft = require("../sync/update/drafts").isDraft;
 var BuildSingle = require("./single");
 var BuildMultiple = require("./multiple");
@@ -104,6 +103,17 @@ function stripTrailingPlus(segment) {
   return segment.replace(/\+$/, "");
 }
 
+// The SHA-1 of a file's bytes, streamed, so no local copy of it is needed
+var hashSource = callbackify(async function (blogID, sourcePath) {
+  var hash = crypto.createHash("sha1");
+
+  for await (var chunk of folder.createReadStream(blogID, sourcePath)) {
+    hash.update(chunk);
+  }
+
+  return hash.digest("hex");
+});
+
 // Hashes an entry's source bytes so we can tell whether its content has
 // actually changed, independent of the file's mtime (which providers reset
 // on every reconnect/resync/upload). `sourcePaths` is one path for a plain
@@ -118,7 +128,7 @@ function hashEntrySource(blog, sourcePaths, callback) {
   async.map(
     sourcePaths,
     function (sourcePath, next) {
-      hashFile(localPath(blog.id, sourcePath), next);
+      hashSource(blog.id, sourcePath, next);
     },
     function (err, hashes) {
       if (err) return callback(err);
@@ -144,13 +154,14 @@ module.exports = function build(blog, path, callback) {
   // "+" segment is a real directory - otherwise it is just a file, and its
   // plus-stripped path (/post.md) may be a valid sibling we must not disturb.
   if (multiInfo) {
-    return fs.stat(
-      localPath(blog.id, multiInfo.folderPath),
+    return callbackify(folder.stat)(
+      blog.id,
+      multiInfo.folderPath,
       function (statErr, stat) {
         buildWith(
           blog,
           path,
-          !statErr && stat.isDirectory() ? multiInfo : null,
+          !statErr && stat.isDirectory ? multiInfo : null,
           callback
         );
       }

@@ -44,12 +44,13 @@ test("jail: an unknown job throws", () => {
 });
 
 test("jail: every job runs its own file in main.js, within its limits", () => {
-  assert.deepStrictEqual(Object.keys(jail.JOBS).sort(), ["exif", "metadata", "resize", "thumbnail", "to-png"]);
+  assert.deepStrictEqual(Object.keys(jail.JOBS).sort(), ["exif", "metadata", "resize", "screenshot", "thumbnail", "to-png"]);
   for (const [name, j] of Object.entries(jail.JOBS)) {
     assert.deepStrictEqual(j.command.slice(-2), ["/usr/src/app/app/sandbox/jobs/main.js", name]);
+    assert(fs.existsSync(path.join(__dirname, "../../../../app/sandbox/jobs", name + ".js")));
+    if (j.network) continue;
     assert.strictEqual(j.memoryBytes, 512 * 1024 * 1024);
     assert.strictEqual(j.maxInputBytes, 256 * 1024 * 1024);
-    assert(fs.existsSync(path.join(__dirname, "../../../../app/sandbox/jobs", name + ".js")));
   }
   for (const name of ["thumbnail", "resize", "to-png"]) {
     assert.strictEqual(jail.JOBS[name].timeSeconds, 60);
@@ -57,6 +58,46 @@ test("jail: every job runs its own file in main.js, within its limits", () => {
   }
   assert.strictEqual(jail.JOBS.exif.timeSeconds, 30);
   assert.strictEqual(jail.JOBS.exif.maxOutputBytes, 1024 * 1024);
+});
+
+test("jail: a job with a network starts as its own uid, in its cgroup, behind the filter", () => {
+  const { file, args } = jail.command("screenshot");
+  assert.strictEqual(file, "/bin/sh");
+  assert.strictEqual(args[3], jail.BROWSER_CGROUP);
+  assert.deepStrictEqual(args.slice(4, 7), ["/sbin/su-exec", "65001:65001", jail.NSJAIL]);
+  assert(args.includes("-u") && args[args.indexOf("-u") + 1] === "65000:65001:1");
+
+  const separator = args.indexOf("--");
+  assert.strictEqual(path.basename(args[separator + 2]), "enter-network.sh");
+  assert.deepStrictEqual(args.slice(-3), jail.JOBS.screenshot.command);
+});
+
+test("jail: a job with a network never binds keys, data or /usr", () => {
+  const { args } = jail.command("screenshot");
+  const binds = args.filter((a, i) => args[i - 1] === "-R");
+  assert(binds.includes("/proc"));
+  for (const bind of binds) {
+    assert(!["/", "/usr", "/usr/src/app", "/etc", "/etc/ssl", "/run"].includes(bind), bind);
+    assert(!bind.startsWith("/etc/ssl/private"), bind);
+    assert(!bind.startsWith("/usr/src/app/data"), bind);
+  }
+  assert(!args.some((a) => /^(-B|--bindmount)/.test(a)), "no writable binds");
+});
+
+test("jail: every file a job with a network names exists", () => {
+  const { args } = jail.command("screenshot");
+  for (const flag of ["--config", "--seccomp_policy"]) {
+    assert(fs.existsSync(args[args.indexOf(flag) + 1]), flag);
+  }
+  assert(fs.existsSync(args[args.indexOf("--") + 2]));
+});
+
+test("jail: the filter refuses what the airlock refuses", () => {
+  const filter = fs.readFileSync(path.join(__dirname, "../egress.nft"), "utf8");
+  for (const range of ["10.0.0.0/8", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7", "fe80::/10", "::ffff:0:0/96"]) {
+    assert(filter.includes(range), range);
+  }
+  assert(filter.includes('oif "lo" reject'));
 });
 
 test("jail: the policy file is the one the flags name", () => {
@@ -83,6 +124,7 @@ async function withBroker(options, fn) {
     maxQueued: options.maxQueued,
     maxQueuedMs: options.maxQueuedMs,
     log: () => {},
+    clearCgroup: options.clearCgroup,
     spawnJail: () => {
       counter++;
       return spawn("sh", ["-c", script], { stdio: ["pipe", "pipe", "ignore"] });
@@ -117,6 +159,21 @@ function request(socket, header, input) {
 
 const job = '{"job":"echo"}\n';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function until(check) {
+  for (let i = 0; i < 1000 && !check(); i++) await sleep(5);
+  assert(check(), "timed out waiting for the broker");
+}
+
+// A stub jail that stays running until release() is called, so a spec can look
+// at the broker while jails are busy, however slow the machine is
+function hold() {
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-hold-")), "go");
+  return {
+    script: `until [ -e ${file} ]; do sleep 0.01; done; cat`,
+    release: () => fs.writeFileSync(file, ""),
+  };
+}
 
 test("broker: bytes after the job line reach the jail and its output comes back", async () => {
   await withBroker({}, async (socket) => {
@@ -204,20 +261,23 @@ test("broker: close() kills the running jails and removes the socket", async () 
 });
 
 test("broker: at most maxRunning jails at once, then a queue, then busy", async () => {
-  await withBroker({ script: "sleep 0.3; cat", maxRunning: 2, maxQueued: 1 }, async (socket, broker) => {
+  const held = hold();
+  await withBroker({ script: held.script, maxRunning: 2, maxQueued: 1 }, async (socket, broker) => {
     let peak = 0;
     const watch = setInterval(() => (peak = Math.max(peak, broker.running.size)), 5);
-    const replies = [];
-    for (let i = 0; i < 4; i++) {
-      replies.push(request(socket, job, "n" + i));
-      await sleep(30);
-    }
+    const replies = [request(socket, job, "n0"), request(socket, job, "n1")];
+    await until(() => broker.running.size === 2);
+    replies.push(request(socket, job, "n2"));
+    await until(() => broker.queue.length === 1);
+
+    // over the queue's limit
+    assert.deepStrictEqual((await request(socket, job, "n3")).header, { ok: false, error: "busy" });
     assert.strictEqual(broker.running.size, 2);
     assert.strictEqual(broker.queue.length, 1);
+
+    held.release();
     const results = await Promise.all(replies);
     clearInterval(watch);
-    // the fourth was over the queue's limit
-    assert.deepStrictEqual(results[3].header, { ok: false, error: "busy" });
     for (let i = 0; i < 3; i++) {
       assert.deepStrictEqual(results[i].header, { ok: true, length: 2 });
       assert.strictEqual(results[i].body.toString(), "n" + i);
@@ -226,11 +286,67 @@ test("broker: at most maxRunning jails at once, then a queue, then busy", async 
   });
 });
 
+const line = (name) => JSON.stringify({ job: name }) + "\n";
+
+test("broker: a job with its own maxRunning waits for that, and doesn't hold up others", async () => {
+  const jobs = {
+    ...JOBS(),
+    only: { ...JOBS().echo, maxRunning: 1 },
+  };
+  const { script, release } = hold();
+  await withBroker({ jobs, maxRunning: 4, script }, async (socket, broker) => {
+    const first = request(socket, line("only"), "");
+    await until(() => broker.running.size === 1);
+    const second = request(socket, line("only"), "");
+    await until(() => broker.queue.length === 1);
+    assert.strictEqual(broker.running.size, 1);
+
+    const other = request(socket, job, "");
+    await until(() => broker.running.size === 2);
+    assert.strictEqual(broker.queue.length, 1);
+
+    release();
+    for (const reply of await Promise.all([first, second, other])) {
+      assert.strictEqual(reply.header.ok, true);
+    }
+  });
+});
+
+test("broker: what a job leaves in its cgroup is cleared when it ends, and failing to is logged", async () => {
+  const cleared = [];
+  const jobs = JOBS({ cgroup: "/some/cgroup" });
+  await withBroker(
+    { jobs, clearCgroup: (directory) => cleared.push(directory) },
+    async (socket) => {
+      const { header } = await request(socket, job, "x");
+      assert.strictEqual(header.ok, true);
+    }
+  );
+  assert.deepStrictEqual(cleared, ["/some/cgroup"]);
+
+  await withBroker(
+    {
+      jobs,
+      clearCgroup: () => {
+        throw Object.assign(new Error("no"), { code: "ENOENT" });
+      },
+    },
+    async (socket) => {
+      const { header } = await request(socket, job, "x");
+      assert.strictEqual(header.ok, true);
+    }
+  );
+});
+
 test("broker: a request that queued too long is busy, not given a jail", async () => {
-  await withBroker({ script: "sleep 0.2; cat", maxRunning: 1, maxQueuedMs: 50 }, async (socket) => {
+  const held = hold();
+  await withBroker({ script: held.script, maxRunning: 1, maxQueuedMs: 50 }, async (socket, broker) => {
     const first = request(socket, job, "a");
-    await sleep(30);
+    await until(() => broker.running.size === 1);
     const second = request(socket, job, "b");
+    await until(() => broker.queue.length === 1);
+    await sleep(100);
+    held.release();
     assert.deepStrictEqual((await first).header, { ok: true, length: 1 });
     assert.deepStrictEqual((await second).header, { ok: false, error: "busy" });
   });

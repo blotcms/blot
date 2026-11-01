@@ -1,12 +1,12 @@
-const fs = require("fs-extra");
+const folder = require("storage/folder");
 const ensure = require("helper/ensure");
-const LocalPath = require("helper/localPath");
 const extname = require("path").extname;
 const cheerio = require("cheerio");
 const Metadata = require("build/metadata");
 const extend = require("helper/extend");
 const yaml = require("yaml");
 const postSourceSize = require("build/converters/post-source-size");
+const folderStat = require("build/converters/folderStat");
 
 const blockquotes = require("./blockquotes");
 const footnotes = require("./footnotes");
@@ -77,9 +77,7 @@ async function read(blog, path, callback) {
   ensure(blog, "object").and(path, "string").and(callback, "function");
 
   try {
-    const localPath = LocalPath(blog.id, path);
-
-    const stat = await fs.stat(localPath);
+    const stat = await folderStat(blog.id, path);
 
     // Don't try and turn HTML exported from a Google Doc into posts if it's
     // over the limit — surface the same structured TOO_LARGE error the other
@@ -87,7 +85,7 @@ async function read(blog, path, callback) {
     if (stat.size > postSourceSize.GDOC.bytes)
       return callback(postSourceSize.tooLargeError(postSourceSize.GDOC));
 
-    const contents = await fs.readFile(localPath, "utf-8");
+    const contents = (await folder.read(blog.id, path)).toString("utf-8");
 
     const $ = cheerio.load(contents, { decodeEntities: false });
 

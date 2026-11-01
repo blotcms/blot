@@ -162,6 +162,17 @@ for unit in blue green; do
   echo 0 > "$dir/memory.swap.max"
   echo 256 > "$dir/pids.max"
   echo 25 > "$dir/cpu.weight"
+  # One Chromium at a time (proxy/unit/sandbox/jail.js), which lives here itself,
+  # so no subtree. oom.group: a page over the limit ends the whole job at once,
+  # rather than leaving a browser hanging until its time limit.
+  dir=$tree/$unit-browser
+  mkdir -p "$dir"
+  echo 1G > "$dir/memory.max"
+  echo 0 > "$dir/memory.swap.max"
+  echo 1 > "$dir/memory.oom.group"
+  echo 512 > "$dir/pids.max"
+  echo 25 > "$dir/cpu.weight"
+  echo "150000 100000" > "$dir/cpu.max"
 done
 EOF2
 put /etc/systemd/system/blot-sandbox-cgroup.service 0644 root:root <<'EOF2'

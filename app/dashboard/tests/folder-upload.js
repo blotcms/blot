@@ -1,5 +1,3 @@
-const path = require("path");
-
 const uploadRoutePath = require.resolve("../site/folder/upload");
 
 const setModuleMock = (moduleName, exportsValue, touched) => {
@@ -50,16 +48,19 @@ describe("dashboard folder upload sync lock", function () {
       }));
 
     const fs = {
-      pathExists: jasmine
-        .createSpy("pathExists")
-        .and.callFake(async (filePath) => filePath.endsWith("skip.txt")),
       readFile: jasmine
         .createSpy("readFile")
         .and.callFake(async (filePath) => Buffer.from(`content:${filePath}`)),
-      outputFile: jasmine.createSpy("outputFile").and.callFake(async (filePath) => {
-        if (filePath.endsWith("fail.txt")) throw new Error("write failed");
-      }),
       remove: jasmine.createSpy("remove").and.returnValue(Promise.resolve()),
+    };
+
+    const storage = {
+      NotFoundError: require("../../storage/folder/errors").NotFoundError,
+      exists: jasmine
+        .createSpy("exists")
+        .and.callFake(async (blogID, filePath) => filePath.endsWith("skip.txt")),
+      stat: jasmine.createSpy("stat").and.returnValue(Promise.resolve({})),
+      writeFrom: jasmine.createSpy("writeFrom").and.returnValue(Promise.resolve()),
     };
 
     const clients = {
@@ -74,10 +75,7 @@ describe("dashboard folder upload sync lock", function () {
     setModuleMock("sync/establishSyncLock", establishSyncLock, touched);
     setModuleMock("fs-extra", fs, touched);
     setModuleMock("clients", clients, touched);
-    setModuleMock("helper/localPath", (blogID, relPath) => {
-      const normalized = relPath.startsWith("/") ? relPath : `/${relPath}`;
-      return path.join("/blogs", String(blogID), normalized);
-    }, touched);
+    setModuleMock("storage/folder", storage, touched);
     setModuleMock("clients/util/shouldIgnoreFile", () => false, touched);
 
     const handler = require("../site/folder/upload");
@@ -129,19 +127,18 @@ describe("dashboard folder upload sync lock", function () {
       }));
 
     const fs = {
-      pathExists: jasmine.createSpy("pathExists").and.returnValue(Promise.resolve(false)),
-      readFile: jasmine.createSpy("readFile").and.returnValue(Promise.resolve(Buffer.from("ok"))),
-      outputFile: jasmine.createSpy("outputFile").and.returnValue(Promise.resolve()),
       remove: jasmine.createSpy("remove").and.returnValue(Promise.resolve()),
+    };
+
+    const storage = {
+      exists: jasmine.createSpy("exists").and.returnValue(Promise.resolve(false)),
+      writeFrom: jasmine.createSpy("writeFrom").and.returnValue(Promise.resolve()),
     };
 
     setModuleMock("sync/establishSyncLock", establishSyncLock, touched);
     setModuleMock("fs-extra", fs, touched);
     setModuleMock("clients", {}, touched);
-    setModuleMock("helper/localPath", (blogID, relPath) => {
-      const normalized = relPath.startsWith("/") ? relPath : `/${relPath}`;
-      return path.join("/blogs", String(blogID), normalized);
-    }, touched);
+    setModuleMock("storage/folder", storage, touched);
     setModuleMock("clients/util/shouldIgnoreFile", () => false, touched);
 
     const handler = require("../site/folder/upload");
@@ -186,10 +183,12 @@ describe("dashboard folder upload prefixed relative paths", function () {
 
   it("writes files into the expected subfolder when relative paths are prefixed", async function () {
     const fs = {
-      pathExists: jasmine.createSpy("pathExists").and.returnValue(Promise.resolve(false)),
-      readFile: jasmine.createSpy("readFile").and.returnValue(Promise.resolve(Buffer.from("ok"))),
-      outputFile: jasmine.createSpy("outputFile").and.returnValue(Promise.resolve()),
       remove: jasmine.createSpy("remove").and.returnValue(Promise.resolve()),
+    };
+
+    const storage = {
+      exists: jasmine.createSpy("exists").and.returnValue(Promise.resolve(false)),
+      writeFrom: jasmine.createSpy("writeFrom").and.returnValue(Promise.resolve()),
     };
 
     const establishSyncLock = jasmine
@@ -202,10 +201,7 @@ describe("dashboard folder upload prefixed relative paths", function () {
     setModuleMock("sync/establishSyncLock", establishSyncLock, touched);
     setModuleMock("fs-extra", fs, touched);
     setModuleMock("clients", {}, touched);
-    setModuleMock("helper/localPath", (blogID, relPath) => {
-      const normalized = relPath.startsWith("/") ? relPath : `/${relPath}`;
-      return path.join("/blogs", String(blogID), normalized);
-    }, touched);
+    setModuleMock("storage/folder", storage, touched);
     setModuleMock("clients/util/shouldIgnoreFile", () => false, touched);
 
     const handler = require("../site/folder/upload");
@@ -229,10 +225,10 @@ describe("dashboard folder upload prefixed relative paths", function () {
     await handler(req, res, next);
 
     expect(next).not.toHaveBeenCalled();
-    expect(fs.outputFile).toHaveBeenCalledWith(
-      "/blogs/blog-prefixed/subfolder/nested/file.md",
-      jasmine.any(Buffer),
-      { overwrite: true }
+    expect(storage.writeFrom).toHaveBeenCalledWith(
+      "blog-prefixed",
+      "/subfolder/nested/file.md",
+      "/tmp/prefixed"
     );
   });
 });

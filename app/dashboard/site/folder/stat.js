@@ -1,15 +1,15 @@
 const moment = require("moment");
-const fs = require("fs-extra");
+const folder = require("storage/folder");
 
 require("moment-timezone");
 
-module.exports = async (path, timeZone) => {
-        
-    const stat = await fs.stat(path);
+// Formats a stat of storage/folder (modified is in milliseconds) for display
+const format = (stat, timeZone) => {
+    const mtime = new Date(stat.modified);
     const result = {};
 
     result.modified = moment
-      .utc(stat.mtime)
+      .utc(mtime)
       .tz(timeZone)
       .calendar(null, {
         sameDay: "[Today], h:mm A",
@@ -18,15 +18,21 @@ module.exports = async (path, timeZone) => {
         sameElse: "LL, h:mm A",
       });
 
-      result.updated = moment.utc(stat.mtime).from(moment.utc());
-      result.unix = stat.mtime.getTime();
+      result.updated = moment.utc(mtime).from(moment.utc());
+      result.unix = mtime.getTime();
       result.bytes = stat.size;
       result.size = humanFileSize(stat.size);
-      result.directory = stat.isDirectory();
-      result.file = stat.isFile();
+      result.directory = stat.isDirectory;
+      result.file = !stat.isDirectory;
     
     return result;
 }
+
+module.exports = async (blogID, path, timeZone) => {
+    return format(await folder.stat(blogID, path), timeZone);
+};
+
+module.exports.format = format;
 
 function humanFileSize(size) {
     if (size === 0) return "0 kb";

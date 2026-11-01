@@ -1,14 +1,17 @@
 var debug = require("debug")("blot:build:multiple");
 var path = require("path");
 var async = require("async");
-var fs = require("fs-extra");
-var localPath = require("helper/localPath");
+var folder = require("storage/folder");
+var callbackify = require("util").callbackify;
 var ensure = require("helper/ensure");
 var pathNormalizer = require("helper/pathNormalizer");
 var Single = require("./single");
 var enabledConverters = require("./converters/enabled");
 var titlecase = require("helper/titlecase");
 var cheerio = require("cheerio");
+
+var statFolder = callbackify(folder.stat);
+var listNames = callbackify(folder.listNames);
 
 // Mirrors the traversal in prepare/title.js exactly: preferred tag order and
 // the "first three nodes at each nesting level" limit.
@@ -32,8 +35,8 @@ module.exports = function buildMultiple(blog, info, callback) {
   // A folder like "/article.md+" strips to "/article.md", which can also be a
   // real sibling file with its own entry. Refuse to aggregate in that case so
   // the two identities don't overwrite each other depending on sync order.
-  fs.stat(localPath(blog.id, entryPath), function (statErr, entryStat) {
-    if (!statErr && entryStat.isFile()) {
+  statFolder(blog.id, entryPath, function (statErr, entryStat) {
+    if (!statErr && !entryStat.isDirectory) {
       var collisionError = new Error(
         "Folder post path collides with a file: " + entryPath
       );
@@ -150,9 +153,7 @@ function collectConvertibleFiles(blog, folderPath, callback) {
       return done(createTooManyFilesError(folderPath));
     }
 
-    const absolute = localPath(blog.id, currentPath);
-
-    fs.readdir(absolute, { withFileTypes: true }, function (err, entries) {
+    listNames(blog.id, currentPath, function (err, entries) {
       if (err) return done(err);
 
       entries = entries.slice().sort(function (a, b) {
@@ -172,7 +173,7 @@ function collectConvertibleFiles(blog, folderPath, callback) {
 
           if (shouldIgnore(entryPath)) return next();
 
-          if (entry.isDirectory()) {
+          if (entry.isDirectory) {
             if (entry.name.endsWith("+") && entryPath !== folderPath) {
               return next();
             }

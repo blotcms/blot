@@ -4,6 +4,7 @@ const Git = require("./git");
 const database = require("./database");
 const localPath = require("helper/localPath");
 const repos = require("./repo");
+const plumbing = require("./plumbing");
 const clfdate = require("helper/clfdate");
 const sync = require("sync");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
@@ -11,10 +12,9 @@ const path = require("path");
 
 const GC_INTERVAL = 100;
 const COMMIT_BATCH_SIZE = 25;
-const PUSH_COMMIT_BATCH_SIZE = 5;
 const COMMIT_RETRY_DELAYS_MS = [1000, 2000, 3000];
 
-// We apply this configuration because there is a bug with git version 2.54.0 
+// We apply this configuration because there is a bug with git version 2.54.0
 // which allows for multiple concurrent automatic git gc operations. This caused
 // memory issues and so to resolve, we manually gc during the create process.
 const TEMPORARY_GIT_GC_CONFIG = [
@@ -26,16 +26,6 @@ const TEMPORARY_GIT_GC_CONFIG = [
 const setStatus = promisify(database.setStatus.bind(database));
 const setApplied = promisify(database.setApplied.bind(database));
 const createToken = promisify(database.createToken.bind(database));
-
-// Stops git from searching above the blog's folder for a repository, so a
-// command run before `git init` (or after the folder's .git is removed)
-// fails instead of acting on some enclosing repo, e.g. a stray .git in the
-// data directory, which once picked up this module's "Add N files" commits.
-function liveGit(liveDirectory) {
-  return Git(liveDirectory, {
-    env: { GIT_CEILING_DIRECTORIES: path.dirname(path.resolve(liveDirectory)) },
-  });
-}
 
 function delay(ms) {
   return new Promise(function (resolve) {
@@ -49,20 +39,6 @@ function isTransientCommitError(err) {
     /is not a valid object/i.test(msg) ||
     /nonexistent object [0-9a-f]{40}/i.test(msg)
   );
-}
-
-async function createEmptyCommit(repo, message) {
-  await repo.raw(["commit", "-m", message, "--allow-empty"]);
-}
-
-async function pushMaster(repo, message) {
-  console.log(
-    clfdate() +
-      " Git: create: " +
-      (message || "Pushing commits to repository")
-  );
-
-  await repo.raw(["push", "-u", "origin", "master"]);
 }
 
 async function configureTemporaryGitGc(repo) {
@@ -94,13 +70,16 @@ async function unsetTemporaryGitGc(repo) {
   });
 }
 
-async function commitBatchWithRetries(repo, label, message) {
+// Writes a commit of what has been added to the index, on top of the last one,
+// and retries if git reports an object it can't find (see the gc note above)
+async function writeCommitWithRetries(index, parent, label, message) {
   for (let attempt = 0; ; attempt++) {
     try {
       console.log(
         clfdate() + " Git: create: Committing " + label + " to repository"
       );
-      await repo.raw(["commit", "--allow-empty", "-m", message]);
+      const tree = (await index.git(["write-tree"])).trim();
+      const commit = await plumbing.commitTree(index, tree, parent, message);
       if (attempt > 0) {
         console.log(
           clfdate() +
@@ -110,7 +89,7 @@ async function commitBatchWithRetries(repo, label, message) {
             label
         );
       }
-      return;
+      return commit;
     } catch (err) {
       const delayMs = COMMIT_RETRY_DELAYS_MS[attempt];
 
@@ -140,66 +119,65 @@ module.exports = function create(blog, callback) {
   sync(blog.id, async function (err, folder, done) {
     if (err) return callback(err);
 
-    const liveDirectory = localPath(blog.id, "/");
     const bareDirectory = repos.directory(blog.handle);
+
+    // Outside the try below, because its cleanup removes this directory. If
+    // it was already here it isn't ours to remove: it could be this blog's
+    // connected repository, or one another blog left at this handle.
+    try {
+      await fs.mkdir(bareDirectory);
+    } catch (err) {
+      return done(err, callback);
+    }
 
     try {
       await createRepository(blog, folder);
       done(null, callback);
     } catch (err) {
-      await cleanupFailedRepository(blog, liveDirectory, bareDirectory);
+      await cleanupFailedRepository(blog, bareDirectory);
       done(err, callback);
     }
   });
 };
 
+// Imports the blog folder into a new bare repository. There is no clone: the
+// folder's files are added to a temporary index of the bare repository, which
+// takes the folder as its work tree, and committed from there.
 async function createRepository(blog, folder) {
-  const liveDirectory = localPath(blog.id, "/");
+  const blogDirectory = localPath(blog.id, "/");
   const bareDirectory = repos.directory(blog.handle);
 
-  report(folder, "Making bare repository directory and creating token");
-  await prepareDirectoriesAndMetadata(blog, liveDirectory, bareDirectory);
+  report(folder, "Creating token");
+  await prepareMetadata(blog, blogDirectory);
 
   const bareRepo = Git(bareDirectory);
-  const liveRepo = liveGit(liveDirectory);
 
   report(folder, "Creating bare repository", "initing bareRepo");
-  await bareRepo.raw(["init", "--bare"]);
+  await bareRepo.raw(["init", "--bare", "--initial-branch=master"]);
 
-  report(folder, "Creating live repository", "initing liveRepo");
-  await liveRepo.raw(["init"]);
+  const index = await plumbing.openIndex(bareDirectory, {
+    workTree: folder.path,
+  });
+  const progress = {
+    filesAdded: 0,
+    total: 0,
+    pendingFiles: [],
+    head: null,
+  };
 
   try {
     report(folder, "Configuring temporary Git GC settings");
     await configureTemporaryGitGc(bareRepo);
-    await configureTemporaryGitGc(liveRepo);
 
-    report(
-      folder,
-      "Adding remote to live repository",
-      "adding remote to liveRepo"
-    );
-    await liveRepo.raw(["remote", "add", "origin", bareDirectory]);
-
-    const progress = {
-      filesAdded: 0,
-      total: 0,
-      pendingFiles: [],
-      unpushedCommits: 0,
-    };
-    await addFolder(folder, liveRepo, bareRepo, progress);
+    await addFolder(blog, folder, index, bareRepo, progress);
   } finally {
-    await Promise.all([
-      unsetTemporaryGitGc(bareRepo),
-      unsetTemporaryGitGc(liveRepo),
-    ]);
+    await Promise.all([index.close(), unsetTemporaryGitGc(bareRepo)]);
   }
 
   // Everything in the folder is already in the repository, and Blot already
   // has the folder's entries, so the first sync starts from this commit.
   // An old value would be from an earlier connection: this replaces it.
-  const head = await liveRepo.raw(["rev-parse", "HEAD"]).catch(() => "");
-  if (head.trim()) await setApplied(blog.id, head.trim());
+  await setApplied(blog.id, progress.head);
 
   await setStatus(blog.owner, "createComplete");
 
@@ -211,21 +189,30 @@ async function createRepository(blog, folder) {
   folder.status("Repository created successfully");
 }
 
-async function prepareDirectoriesAndMetadata(blog, liveDirectory, bareDirectory) {
+async function prepareMetadata(blog, blogDirectory) {
   await Promise.all([
-    fs.mkdir(bareDirectory),
     setStatus(blog.owner, "createInProgress"),
     createToken(blog.owner),
-    assertDirectoryOwnership(liveDirectory),
+    assertDirectoryOwnership(blogDirectory),
+    assertNoLiveClone(blogDirectory),
   ]);
 }
 
-async function assertDirectoryOwnership(liveDirectory) {
-  const stats = await fs.stat(liveDirectory);
+// A sync takes a .git directory in the blog folder for a live clone (see
+// sync.js) and would point its remote at the new repository, so one that is
+// not ours is not left to be taken for one. Disconnecting removes ours.
+async function assertNoLiveClone(blogDirectory) {
+  if (await fs.pathExists(path.join(blogDirectory, ".git"))) {
+    throw new Error("The blog folder already has a .git directory");
+  }
+}
+
+async function assertDirectoryOwnership(blogDirectory) {
+  const stats = await fs.stat(blogDirectory);
 
   if (stats.uid !== process.getuid()) {
     throw new Error(
-      "The live repository directory is not owned by the current user. uid: " +
+      "The blog directory is not owned by the current user. uid: " +
         stats.uid +
         " process.getuid(): " +
         process.getuid() +
@@ -235,14 +222,11 @@ async function assertDirectoryOwnership(liveDirectory) {
   }
 }
 
-async function cleanupFailedRepository(blog, liveDirectory, bareDirectory) {
-  const liveRepo = liveGit(liveDirectory);
-
-  await unsetTemporaryGitGc(liveRepo);
-
+// Only the repository this create made. The blog folder is not touched: it has
+// no clone of ours to remove, and a .git directory in it is not ours to remove.
+async function cleanupFailedRepository(blog, bareDirectory) {
   await Promise.allSettled([
     fs.remove(bareDirectory),
-    fs.remove(`${liveDirectory}/.git`),
     setStatus(blog.owner, "createFailed"),
   ]);
 }
@@ -282,7 +266,7 @@ async function countFiles(dir) {
   return total;
 }
 
-async function addFolder(folder, liveRepo, bareRepo, progress) {
+async function addFolder(blog, folder, index, bareRepo, progress) {
   async function walk(dir) {
     const entries = (await fs.readdir(dir, { withFileTypes: true }))
       .filter((entry) => !shouldIgnoreFile(entry.name))
@@ -294,11 +278,10 @@ async function addFolder(folder, liveRepo, bareRepo, progress) {
       if (entry.isDirectory()) {
         await walk(filePath);
       } else if (entry.isFile()) {
-        await stageFile(folder, liveRepo, bareRepo, progress, filePath);
+        await stageFile(folder, index, bareRepo, progress, filePath);
 
         if (progress.pendingFiles.length >= COMMIT_BATCH_SIZE) {
-          await commitPendingFiles(liveRepo, progress);
-          await pushIfNeeded(liveRepo, progress);
+          await commitPendingFiles(blog, index, progress);
         }
       }
     }
@@ -312,7 +295,7 @@ async function addFolder(folder, liveRepo, bareRepo, progress) {
     );
 
     await walk(folder.path);
-    await commitPendingFiles(liveRepo, progress);
+    await commitPendingFiles(blog, index, progress);
 
     // Nothing was actually staged, either because the folder was empty or
     // because every file in it is gitignored: fall back to an initial commit
@@ -322,28 +305,49 @@ async function addFolder(folder, liveRepo, bareRepo, progress) {
         clfdate() +
           " Git: addFolder: no files added, creating initial commit"
       );
-      return handleEmptyFolder(folder, liveRepo);
-    }
-
-    if (progress.unpushedCommits > 0) {
-      await pushPendingCommits(liveRepo, progress);
+      return handleEmptyFolder(blog, folder, index, progress);
     }
   } catch (err) {
     throw new Error("Error while adding files to repository: " + err.message);
   }
 }
 
-async function handleEmptyFolder(folder, liveRepo) {
+async function handleEmptyFolder(blog, folder, index, progress) {
   folder.status("Initial commit to repository");
 
-  await createEmptyCommit(liveRepo, "Initial commit");
-  folder.status("Pushing initial commit to repository");
-  await pushMaster(liveRepo, "Pushing initial commit to repository");
+  await saveCommit(blog, index, progress, "Initial commit", "Initial commit");
 
   folder.status("Created initial commit in empty repository");
 }
 
-async function stageFile(folder, liveRepo, bareRepo, progress, filePath) {
+// Makes a commit of the index on top of the one before and moves master to it.
+// It holds the ref lock a user's push holds, so the two never move master at
+// once, and moves it only from the commit this create made last (none, for the
+// first). If a push got in meanwhile (the token exists from the start of the
+// create) master is not where it was left and the create fails, as the push
+// it used to make would have been refused, and the repository is removed.
+async function saveCommit(blog, index, progress, label, message) {
+  const commit = await writeCommitWithRetries(index, progress.head, label, message);
+  const release = await repos.holdRefLock(blog.id);
+
+  console.log(clfdate() + " Git: create: Moving master to " + label);
+
+  try {
+    await plumbing.moveMaster(repos.directory(blog.handle), commit, progress.head);
+  } catch (err) {
+    console.log("Failed to commit " + label + " to repository: " + err.message);
+    throw err;
+  } finally {
+    await release().catch(function (err) {
+      // The lock expires by itself
+      console.log(clfdate() + " Git: create: could not release the ref lock: " + err.message);
+    });
+  }
+
+  progress.head = commit;
+}
+
+async function stageFile(folder, index, bareRepo, progress, filePath) {
   const relativePath = path.relative(folder.path, filePath);
   const current = progress.filesAdded + 1;
   const untilGc =
@@ -363,7 +367,7 @@ async function stageFile(folder, liveRepo, bareRepo, progress, filePath) {
   folder.status("(" + current + "/" + progress.total + ") Adding " + relativePath);
 
   try {
-    await liveRepo.raw(["add", "--", filePath]);
+    await index.git(["add", "--", relativePath]);
   } catch (err) {
     if (isGitIgnoreAddError(err)) {
       console.log(
@@ -384,10 +388,10 @@ async function stageFile(folder, liveRepo, bareRepo, progress, filePath) {
   progress.pendingFiles.push(relativePath);
   progress.filesAdded++;
 
-  await gcIfNeeded(liveRepo, bareRepo, progress);
+  await gcIfNeeded(bareRepo, progress);
 }
 
-async function commitPendingFiles(liveRepo, progress) {
+async function commitPendingFiles(blog, index, progress) {
   const batchSize = progress.pendingFiles.length;
 
   if (!batchSize) return;
@@ -395,40 +399,12 @@ async function commitPendingFiles(liveRepo, progress) {
   const label = batchSize === 1 ? progress.pendingFiles[0] : batchSize + " files";
   const message = batchSize === 1 ? "Add files" : "Add " + batchSize + " files";
 
-  try {
-    await commitBatchWithRetries(liveRepo, label, message);
-  } catch (err) {
-    console.log("Failed to commit " + label + " to repository: " + err.message);
-    throw err;
-  }
+  await saveCommit(blog, index, progress, label, message);
 
   progress.pendingFiles = [];
-  progress.unpushedCommits++;
 }
 
-async function pushIfNeeded(liveRepo, progress) {
-  if (progress.unpushedCommits >= PUSH_COMMIT_BATCH_SIZE) {
-    await pushPendingCommits(liveRepo, progress);
-  }
-}
-
-async function pushPendingCommits(liveRepo, progress) {
-  const label =
-    progress.unpushedCommits === 1
-      ? "1 commit"
-      : progress.unpushedCommits + " commits";
-
-  try {
-    await pushMaster(liveRepo, "Pushing " + label + " to repository");
-  } catch (err) {
-    console.log("Failed to push commits to repository: " + err.message);
-    throw err;
-  }
-
-  progress.unpushedCommits = 0;
-}
-
-async function gcIfNeeded(liveRepo, bareRepo, progress) {
+async function gcIfNeeded(bareRepo, progress) {
   if (progress.filesAdded % GC_INTERVAL === 0) {
     console.log(
       clfdate() +
@@ -436,7 +412,6 @@ async function gcIfNeeded(liveRepo, bareRepo, progress) {
         progress.filesAdded +
         ")"
     );
-    await liveRepo.raw(["gc"]);
     await bareRepo.raw(["gc"]);
     console.log(
       clfdate() +

@@ -1,12 +1,14 @@
-var fs = require("fs");
+var folder = require("storage/folder");
+var callbackify = require("util").callbackify;
 var ensure = require("helper/ensure");
-var LocalPath = require("helper/localPath");
 var time = require("helper/time");
 var extname = require("path").extname;
 var Metadata = require("build/metadata");
 var cheerio = require("cheerio");
 var extend = require("helper/extend");
 var convert = require("./convert");
+var folderStat = callbackify(require("build/converters/folderStat"));
+var readFile = callbackify(folder.read);
 
 function is (path) {
   return [".rtf"].indexOf(extname(path).toLowerCase()) > -1;
@@ -17,21 +19,21 @@ function read (blog, path, callback) {
     .and(path, "string")
     .and(callback, "function");
 
-  var localPath = LocalPath(blog.id, path);
-
   time("stat");
 
-  fs.stat(localPath, function (err, stat) {
+  folderStat(blog.id, path, function (err, stat) {
     time.end("stat");
 
     if (err) return callback(err);
 
     time("readFile");
 
-    fs.readFile(localPath, "utf-8", function (err, text) {
+    readFile(blog.id, path, function (err, buffer) {
       time.end("readFile");
 
       if (err) return callback(err);
+
+      var text = buffer.toString("utf-8");
 
       convert(blog, text, function (err, html) {
         if (err) return callback(err);

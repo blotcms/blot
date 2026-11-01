@@ -109,14 +109,18 @@ describe("folder (pagination and sorting)", function () {
 
     it("backfills a page when an entry on it has vanished", async function () {
       // "p00.txt" sorts before the real files and would be the first row of
-      // page one; a dangling symlink makes it unstattable. The page should
-      // still show a full pageSize of real files by pulling the next name in.
+      // page one; it is listed but gone by the time it is stat'd (or has
+      // become a symlink). The page should still show a full pageSize of real
+      // files by pulling the next name in.
       const fs = require("fs-extra");
       const { join } = require("path");
-      await fs.symlink(
-        join(this.blogDirectory, "does-not-exist.txt"),
-        join(this.blogDirectory, "p00.txt")
-      );
+      const storage = require("storage/folder");
+      await fs.writeFile(join(this.blogDirectory, "p00.txt"), "p00");
+      const stat = storage.stat;
+      spyOn(storage, "stat").and.callFake((blogID, path, ...rest) => {
+        if (path === "/p00.txt") throw new storage.NotFoundError();
+        return stat(blogID, path, ...rest);
+      });
 
       const $ = await this.parse(
         `/sites/${this.blog.handle}?pageSize=2&page=1`

@@ -20,6 +20,9 @@ on:
       - "config/host/tests/launch.sh"
       - "config/host/tests/setup.sh"
       - "config/host/tests/deploy.sh"
+      - "config/host/cycle.sh"
+      - "config/host/tests/cycle.sh"
+      - "config/host/data-volume/resize.sh"
       - "config/host/bans.sh"
       - "config/host/tests/bans.sh"
       - "config/host/tests/wildcard-cert.sh"
@@ -47,6 +50,9 @@ on:
       - "config/host/tests/launch.sh"
       - "config/host/tests/setup.sh"
       - "config/host/tests/deploy.sh"
+      - "config/host/cycle.sh"
+      - "config/host/tests/cycle.sh"
+      - "config/host/data-volume/resize.sh"
       - "config/host/bans.sh"
       - "config/host/tests/bans.sh"
       - "config/host/tests/wildcard-cert.sh"
@@ -71,7 +77,7 @@ concurrency:
   group: host-setup-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# One job: the wildcard-cert, launch and bans tests are stubs of about ten
+# One job: the wildcard-cert, launch, bans and cycle tests are stubs of about ten
 # seconds each, less than a runner takes to start. They go first so a plain
 # script failure shows before the slow container steps.
 jobs:
@@ -86,6 +92,8 @@ jobs:
         run: config/host/tests/launch.sh
       - name: bans.sh against stub ssh and fail2ban-client
         run: config/host/tests/bans.sh
+      - name: cycle.sh against stub aws, ssh and phase scripts
+        run: config/host/tests/cycle.sh
       - name: setup.sh on Amazon Linux 2023 and 2
         run: config/host/tests/setup.sh
       - name: deploy.sh on Amazon Linux 2023

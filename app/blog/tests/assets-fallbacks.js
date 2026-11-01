@@ -1,9 +1,9 @@
 const fs = require("fs").promises;
 const fsExtra = require("fs-extra");
 const path = require("path");
-const os = require("os");
-const vm = require("vm");
 const express = require("express");
+const config = require("config");
+const { randomBytes } = require("crypto");
 const caseSensitivePath = require("util").promisify(
   require("helper/caseSensitivePath")
 );
@@ -11,7 +11,7 @@ const caseSensitivePath = require("util").promisify(
 // Covers the order the blog-folder middleware tries candidates in once the
 // exact path has missed, and that every candidate keeps the no-symlink policy.
 describe("blog asset fallbacks", function () {
-  let dir, blog, server, url, readdirs;
+  let blogID, blog, server, url, readdirs;
 
   async function write(name, content = name) {
     await fs.mkdir(path.dirname(path.join(blog, name)), { recursive: true });
@@ -24,41 +24,22 @@ describe("blog asset fallbacks", function () {
   }
 
   beforeEach(async function () {
-    dir = await fs.mkdtemp(path.join(os.tmpdir(), "blot-assets-fallbacks-"));
-    blog = path.join(dir, "blogs", "test");
+    blogID = "blog_" + randomBytes(8).toString("hex");
+    blog = path.join(config.blog_folder_dir, blogID);
     await fs.mkdir(blog, { recursive: true });
     readdirs = 0;
-    const module = { exports: {} };
-    const config = {
-      blog_folder_dir: path.join(dir, "blogs"),
-      blot_directory: dir,
-    };
-    const countingFs = {
-      ...fsExtra,
-      readdir: (...args) => {
-        readdirs++;
-        return fsExtra.readdir(...args);
-      },
-    };
-    vm.runInNewContext(
-      await fs.readFile(require.resolve("../routes/assets"), "utf8"),
-      {
-        module,
-        exports: module.exports,
-        require: (name) =>
-          name === "config"
-            ? config
-            : name === "fs-extra"
-            ? countingFs
-            : require(name),
-      }
-    );
+    // storage/folder reads directories through fs-extra
+    const readdir = fsExtra.readdir;
+    spyOn(fsExtra, "readdir").and.callFake((...args) => {
+      readdirs++;
+      return readdir(...args);
+    });
     const app = express();
     app.use((req, res, next) => {
-      req.blog = { id: "test" };
+      req.blog = { id: blogID };
       next();
     });
-    app.use(module.exports);
+    app.use(require("../routes/assets"));
     app.use((req, res) => res.sendStatus(404));
     server = await new Promise((resolve) => {
       const s = app.listen(0, "127.0.0.1", () => resolve(s));
@@ -68,7 +49,7 @@ describe("blog asset fallbacks", function () {
 
   afterEach(async function () {
     if (server) await new Promise((resolve) => server.close(resolve));
-    await fs.rm(dir, { recursive: true, force: true });
+    await fs.rm(blog, { recursive: true, force: true });
   });
 
   it("answers a miss under a missing directory with a single directory read", async function () {

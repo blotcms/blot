@@ -491,3 +491,44 @@ or uses `.listAll()` for small directories.
     `contentHash` without moving `updated`. One hash per file, but a
     conversion across every entry that must complete before anything compares
     the new values, and the CDN version tokens would still need a decision.
+
+## 8. `app/storage/folder` (local backend only)
+
+`app/storage/folder` exists, with plain functions taking `blogID` first like
+`storage/assets`: `read`, `createReadStream`, `serve`, `write`, `writeFrom`,
+`path` + `commit`, `ensureLocal`, `mkdir`, `rmdir`, `remove`, `move`, `stat`,
+`exists`, `list`, `listNames`, `listAll`, `walk`, `resolveCaseInsensitive` and `removeAll`.
+`index.js` is the public surface and documents each function; `local.js` is
+the only backend, and keeps the folder on disk exactly as `helper/localPath`
+resolves it today.
+
+What it keeps from today:
+
+- Paths resolve through `helper/localPath`, so `..` cannot leave the blog's
+  folder, and a name is normalised the way it always has been.
+- The no-symlink policy (`helper/assertNoSymlinks`) guards every read and
+  write (code `ELOOP`), and `list` and `walk` skip symlinks. That check goes
+  away with the filesystem on S3.
+- `resolveCaseInsensitive` picks with `helper/caseSensitivePath.pick`.
+
+What it does not do yet:
+
+- Call sites move onto it one area at a time (issue #2258, Phase B). The
+  request-time readers have (`blog/routes/assets.js`, the CDN's
+  `/folder/v-` route and `retrieve/folder.js`), and so has the dashboard
+  (`dashboard/site/folder`, upload, download and export), and so has the
+  build (`build/` with its converters and wikilinks, `folderAssets`,
+  `helper/transformer`, and `helper/contentVersion.fromFolder` for the
+  folder-link version tokens); `helper/localPath` and `blog_folder_dir` are still used directly
+  everywhere else.
+- There is no S3 backend, no Redis index and no content cache. `stat` with
+  `{ hash: true }` reads the whole file here; on S3 the hash comes from the
+  index.
+- `commit` does nothing but check for symlinks, because the path `path()`
+  returns is the file's real place. An S3 backend will return a staging path
+  and upload in `commit`.
+- `list` reads a directory's names whole in order to sort them (stats are
+  limited to the page), and `listAll` buffers everything.
+- Missing files reject with `NotFoundError` (`code: "ENOENT"`), including
+  streams, which emit it as `error`. Other fs errors (`EISDIR`, `EACCES`) pass
+  through unchanged.

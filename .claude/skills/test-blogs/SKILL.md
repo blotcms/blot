@@ -163,3 +163,8 @@ Newest last. Add one dated entry per run.
 - Blogs / content: `skilltest-1793543864/post.md` + `photo.png` (a small PNG) on gittest, on `0acc301c6`.
 - Result: live after 14s. The `_image_cache` image and `large` thumbnail returned 200 `image/png` with a long `max-age` from cdn.blot.im, and `inspect.js` found every asset on `disk=yes s3=yes`. Folder routes behaved: an uppercased path found the file by case, a missing file and `/100%25` gave 404, and the app stayed up. Cleanup: gone after 2s.
 - Odd: 14s is slower than the 1-3s of earlier gittest runs; this post had an image and it was the first push after a deploy, and one run can't say more. `/wp-admin/...` returned no HTTP status (curl 000), which is the proxy's scanner block, not the app.
+
+### 2026-11-01 — git client after native receive (#2327) and the materializer (#2329)
+- Blogs / content: `skilltest-1793557573/post.md` and a non-ASCII name in a folder with a space, on gittest, on `f12cfad6a`.
+- Result: add, edit, rename and delete each showed within 1s of the push. A push to another branch was refused with Blot's message, not `HTTP 400`, and made no ref. Cleanup: gone after 1s. Public pages only: `inspect.js` was not run.
+- Odd: none.

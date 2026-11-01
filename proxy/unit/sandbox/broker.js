@@ -40,11 +40,15 @@ function createBroker(options = {}) {
   const log = options.log || console.error;
   const spawnJail =
     options.spawnJail ||
-    ((name) =>
-      spawn(jail.NSJAIL, jail.args(name), {
-        stdio: ["pipe", "pipe", "ignore"],
-        env: {},
-      }));
+    ((name) => {
+      const { file, args } = jail.command(name);
+      return spawn(file, args, { stdio: ["pipe", "pipe", "ignore"], env: {} });
+    });
+  // What is left of a job in its own cgroup goes with it: a job's cgroup holds
+  // that one job, which is why such a job has a maxRunning of 1
+  const clearCgroup =
+    options.clearCgroup ||
+    ((directory) => fs.writeFileSync(directory + "/cgroup.kill", "1"));
 
   const running = new Set();
   const queue = [];
@@ -99,8 +103,17 @@ function createBroker(options = {}) {
     });
   }
 
+  // A job may have its own limit, below the broker's
+  function hasRoom({ name, job }) {
+    if (running.size >= maxRunning) return false;
+    if (!job.maxRunning) return true;
+    let same = 0;
+    for (const entry of running) if (entry.name === name) same++;
+    return same < job.maxRunning;
+  }
+
   function admit(request) {
-    if (running.size < maxRunning) return start(request);
+    if (hasRoom(request)) return start(request);
     if (queue.length >= maxQueued) return fail(request.socket, "busy");
     request.queued = Date.now();
     queue.push(request);
@@ -112,11 +125,17 @@ function createBroker(options = {}) {
   }
 
   function next() {
-    while (queue.length && running.size < maxRunning) {
-      const request = queue.shift();
-      if (request.socket.destroyed) continue;
-      if (Date.now() - request.queued > maxQueuedMs) fail(request.socket, "busy");
-      else start(request);
+    // Oldest first, passing over a job that is at its own limit
+    for (let i = 0; i < queue.length && running.size < maxRunning; ) {
+      const request = queue[i];
+      if (request.socket.destroyed) queue.splice(i, 1);
+      else if (Date.now() - request.queued > maxQueuedMs) {
+        queue.splice(i, 1);
+        fail(request.socket, "busy");
+      } else if (hasRoom(request)) {
+        queue.splice(i, 1);
+        start(request);
+      } else i++;
     }
   }
 
@@ -134,7 +153,7 @@ function createBroker(options = {}) {
     } catch (e) {
       return fail(socket, "failed");
     }
-    const entry = { child };
+    const entry = { child, name };
     running.add(entry);
 
     const kill = (error) => {
@@ -152,6 +171,13 @@ function createBroker(options = {}) {
       finished = true;
       clearTimeout(limit);
       running.delete(entry);
+      if (job.cgroup) {
+        try {
+          clearCgroup(job.cgroup);
+        } catch (e) {
+          log(`broker: job=${name} cannot clear its cgroup: ${e.code}`);
+        }
+      }
       const ms = Date.now() - started;
 
       let error = failure;

@@ -1,37 +1,8 @@
-// Pushover builds an http-duplex object for every Git request it handles (the
-// "Service" for POSTs to git-receive-pack and git-upload-pack, and a plain
-// duplex for GET info/refs and HEAD). http-duplex forwards the request's
-// events onto that object with req.on("error", self.emit.bind(self, "error")),
-// so if a client disconnects before the response has finished (for example
-// partway through a very large push) the request errors with "aborted" and the
-// error is re-emitted on the duplex. An EventEmitter with no "error" listener
-// throws, which takes down the whole process and every other request with it.
-//
-// Pushover only hands us the object later, and only for some requests: "push"
-// is emitted once the first chunk of the body names a branch, but tag pushes,
-// fetches, git's 0000 probe and bodies whose first chunk doesn't parse never
-// reach a listener we control (or are accepted without one). Rather than try to
-// catch every path, give each duplex an error listener at the moment it is
-// constructed by installing it on http-duplex itself.
-//
-// This must be required before pushover is used, but it patches the shared
-// prototype so it does not matter whether pushover has already been loaded.
-//
-// The same hook is where we can see the child process of every push and fetch,
-// so it also logs one line when each of them exits (see logExit). Pushover pipes
-// the child's stdout to the response but never reads its stderr or looks at how
-// it exited, so a process failing early was invisible.
-var path = require("path");
-var debug = require("debug")("blot:clients:git:routes");
+// Helpers for the git processes the git client starts for a request: one log
+// line when each of them exits (see logExit), a tail of its stderr to put in
+// that line, and a way to end one whose client has gone away (stop).
+var debug = require("debug")("blot:clients:git:guardServices");
 var clfdate = require("helper/clfdate");
-
-var HttpDuplex = require(
-  require.resolve("http-duplex", {
-    paths: [path.dirname(require.resolve("pushover"))],
-  })
-);
-
-var processKey = "_blotGitProcess";
 
 // How much of the end of a process's stderr to keep for the exit line
 var STDERR_TAIL_BYTES = 2048;
@@ -91,7 +62,8 @@ function formatExitLine(info) {
   return parts.join(" ");
 }
 
-// Logs how a git process finished.
+// Logs how a git process finished. `request` carries the request it served
+// (for its ID and handle) and `service` says which service it was.
 function logExit(duplex, ps) {
   var startedAt = Date.now();
   var tail = createTail(STDERR_TAIL_BYTES);
@@ -155,15 +127,8 @@ var STOP_GRACE_MS = 5 * 1000;
 
 function noop() {}
 
-function isConnectionError(err) {
-  return err && (err.code === "ECONNRESET" || err.code === "EPIPE");
-}
-
-// Pushover pipes a legacy `through` stream into the child's stdin and the
-// child's stdout out to the response. A legacy pipe throws if its destination
-// errors and nothing else is listening, so a late write to a stdin we have
-// destroyed (or a read from a stdout whose reader has gone) would otherwise
-// become an uncaught exception.
+// A late write to a stdin we have destroyed (or a read from a stdout whose
+// reader has gone) must not become an uncaught exception.
 function ignoreStreamErrors(ps) {
   if (ps._blotStreamErrorsIgnored) return;
 
@@ -178,16 +143,9 @@ function hasExited(ps) {
   return ps.exitCode !== null || ps.signalCode !== null;
 }
 
-// Ends a git child whose client has gone away.
-//
-// git-receive-pack hands the pack to `git index-pack --stdin`, which inherits
-// receive-pack's stdin: the pipe from us. Left alone, both wait on that pipe
-// forever (index-pack can hold hundreds of MB of RSS for a big push). Killing
-// receive-pack does end them, but leaves the push's quarantine directory
-// (objects/tmp_objdir-incoming-*) on disk. Closing the pipe instead gives
-// every reader EOF: index-pack fails with "early EOF", receive-pack reports
-// the failure, deletes the quarantine directory and exits; upload-pack sees
-// the end of its request and exits.
+// Ends a git child whose client has gone away. Closing its input gives it EOF,
+// so upload-pack sees the end of its request and exits, and a git which was
+// reading a pack fails with "early EOF" and cleans up after itself.
 function stop(ps) {
   if (!ps || ps._blotStopping || hasExited(ps)) return;
 
@@ -220,69 +178,6 @@ function stop(ps) {
     clearTimeout(timer);
   });
 }
-
-function onError(duplex, err) {
-  if (isConnectionError(err)) {
-    debug("Git connection error", err.message || err);
-  } else {
-    debug("Git unexpected error", err);
-  }
-
-  // The client has gone (or the response failed), so nothing will ever finish
-  // reading the request body. Stop the git subprocess pushover may have started
-  // for it rather than leaving it waiting on stdin forever.
-  stop(duplex[processKey]);
-}
-
-function guard(duplex) {
-  duplex.on("service", function (ps) {
-    duplex[processKey] = ps;
-    ignoreStreamErrors(ps);
-    logExit(duplex, ps);
-
-    // A client that hangs up while git is still sending (a clone or fetch)
-    // closes the response without an error, and the response then never
-    // drains: git would block writing to a full pipe indefinitely.
-    var res = duplex.response;
-
-    if (res && typeof res.once === "function") {
-      res.once("close", function () {
-        if (!res.writableFinished) stop(ps);
-      });
-    }
-  });
-
-  duplex.on("error", function (err) {
-    onError(duplex, err);
-  });
-}
-
-function install() {
-  var proto = HttpDuplex.prototype;
-
-  if (proto._blotGuarded) return;
-
-  // http-duplex's constructor starts with `self.request = req` before it
-  // forwards any events, so intercept that assignment with an accessor on the
-  // prototype. The constructor still ends up with an ordinary own property.
-  Object.defineProperty(proto, "request", {
-    configurable: true,
-    get: function () {},
-    set: function (req) {
-      Object.defineProperty(this, "request", {
-        value: req,
-        writable: true,
-        configurable: true,
-        enumerable: true,
-      });
-      guard(this);
-    },
-  });
-
-  Object.defineProperty(proto, "_blotGuarded", { value: true });
-}
-
-install();
 
 module.exports = {
   createTail: createTail,

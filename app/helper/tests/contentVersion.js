@@ -112,4 +112,62 @@ describe("contentVersion", function () {
       expect(byCtimeOnly).toEqual(contentVersion.fromStat(base));
     });
   });
+
+  describe("fromFolder", function () {
+    const folder = require("storage/folder");
+
+    global.test.blog();
+
+    // The token for a file in a blog's folder is the one the same file gets
+    // at its local path, in every size class, or every folder link would
+    // change and the CDN would have to fetch all of them again.
+    [
+      ["a small file", 1024],
+      ["a file hashed as a stream", 300 * 1024],
+      ["a file above the hashing cap", 6 * 1024 * 1024],
+    ].forEach(function ([label, size]) {
+      it("gives the token contentVersion gives " + label, async function () {
+        const filePath = this.blogDirectory + "/file.bin";
+
+        fs.outputFileSync(filePath, Buffer.alloc(size, "x"));
+        // A fractional mtime, which the size+mtime token must keep exactly
+        fs.utimesSync(filePath, 1700000000.123456, 1700000000.123456);
+
+        const stat = await folder.stat(this.blog.id, "/file.bin");
+
+        expect(await contentVersion.fromFolder(this.blog.id, "/file.bin", stat)).toEqual(
+          await contentVersion(filePath, fs.statSync(filePath))
+        );
+      });
+    });
+
+    it("doesn't read a file above the cap", async function () {
+      fs.outputFileSync(this.blogDirectory + "/big.bin", Buffer.alloc(6 * 1024 * 1024, "x"));
+
+      const stat = await folder.stat(this.blog.id, "/big.bin");
+
+      spyOn(fs, "readFile").and.callThrough();
+      spyOn(fs, "createReadStream").and.callThrough();
+
+      const version = await contentVersion.fromFolder(this.blog.id, "/big.bin", stat);
+
+      expect(version).toEqual(contentVersion.fromFolderStat(stat));
+      expect(fs.readFile).not.toHaveBeenCalled();
+      expect(fs.createReadStream).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("fromFolderStat", function () {
+    it("gives the token fromStat gives for the same real file", async function () {
+      const filePath = path.join(dir, "a.txt");
+      fs.writeFileSync(filePath, "hello");
+      // A fractional mtimeMs, which the token must keep exactly
+      fs.utimesSync(filePath, 1700000000.123456, 1700000000.123456);
+
+      const stat = fs.statSync(filePath);
+      const folderStat = { isDirectory: false, size: stat.size, modified: stat.mtimeMs };
+
+      expect(contentVersion.fromFolderStat(folderStat)).toEqual(contentVersion.fromStat(stat));
+    });
+  });
 });

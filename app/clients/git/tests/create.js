@@ -8,6 +8,11 @@ describe("git client create", function () {
     clone: false,
   });
 
+  var fs = require("fs-extra");
+  var Express = require("express");
+  var promisify = require("util").promisify;
+  var Blog = require("models/blog");
+  var repo = require("clients/git/repo");
   var create = require("clients/git/create");
   var disconnect = require("clients/git/disconnect");
   var Git = require("./setup/git");
@@ -21,11 +26,55 @@ describe("git client create", function () {
     create(blog, function (err) {
       if (err) return done.fail(err);
 
-      create(blog, function (err) {
-        expect(err.code).toEqual("EEXIST");
-        done();
+      create(blog, async function (err) {
+        try {
+          expect(err.code).toEqual("EEXIST");
+          expect(await fs.pathExists(repo.directory(blog.handle) + "/HEAD")).toBe(true);
+          expect(await fs.pathExists(localPath(blog.id, "/.git"))).toBe(false);
+          done();
+        } catch (e) {
+          done.fail(e);
+        }
       });
     });
+  });
+
+  it("refuses to connect a blog to a repository left at its handle", async function () {
+    var blog = this.blog;
+    var marker = repo.directory(blog.handle) + "/left-behind";
+    var messages = [];
+
+    await fs.outputFile(marker, "someone else's history");
+
+    var server = Express()
+      .use(function (req, res, next) {
+        req.blog = blog;
+        req.body = {};
+        res.message = function (url, message) {
+          messages.push(message);
+          res.sendStatus(200);
+        };
+        next();
+      })
+      .use(require("clients/git/routes").dashboard);
+
+    await new Promise(function (resolve) {
+      server = server.listen(0, resolve);
+    });
+
+    await fetch("http://127.0.0.1:" + server.address().port + "/create", {
+      method: "POST",
+    });
+
+    await new Promise(function (resolve) {
+      server.close(resolve);
+    });
+
+    var latest = await promisify(Blog.get)({ id: blog.id });
+
+    expect(messages.length).toBe(1);
+    expect(latest.client).not.toBe("git");
+    expect(await fs.pathExists(marker)).toBe(true);
   });
 
   // this prevents an existing bare repo from being clobbered
@@ -63,6 +112,9 @@ describe("git client create", function () {
         create(blog, function (err) {
           expect(err).not.toEqual(null);
           expect(err).toEqual(jasmine.any(Error));
+          expect(fs.pathExistsSync(repo.directory(blog.handle))).toBe(false);
+          // It isn't one this create made
+          expect(fs.pathExistsSync(localPath(blog.id, "/.git"))).toBe(true);
 
           done();
         });
@@ -91,7 +143,6 @@ describe("git client create", function () {
 
           // Verify files and folders are preserved in Blot's copy of blog folder
           expect(fs.readdirSync(blogDir)).toEqual([
-            ".git",
             "Sub Folder",
             "first.txt",
             "third",
@@ -136,7 +187,6 @@ describe("git client create", function () {
           if (err) return done.fail(err);
 
           expect(fs.readdirSync(blogDir).sort()).toEqual([
-            ".git",
             ".gitignore",
             ".verification",
             "post.txt",
@@ -199,9 +249,9 @@ describe("git client create", function () {
             "123\n"
           );
 
-          expect(fs.existsSync(blogDir + "/.git")).toBe(true);
+          expect(fs.existsSync(blogDir + "/.git")).toBe(false);
           expect(
-            await Git(blogDir).silent(true).raw(["rev-list", "--count", "HEAD"])
+            await Git(repo.directory(blog.handle)).silent(true).raw(["rev-list", "--count", "master"])
           ).not.toEqual("0\n");
 
           done();
@@ -219,8 +269,8 @@ describe("git client create", function () {
       create(blog, function (err) {
         if (err) return done.fail(err);
 
-        // Leave the blog folder without a .git, so a failed create's cleanup
-        // runs git config in a folder with no repo of its own
+        // Leave the blog folder without a .git, as a create makes none, so a
+        // failed create's cleanup finds no repo of its own
         fs.removeSync(blogDir + "/.git");
 
         create(blog, async function (err) {

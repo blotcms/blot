@@ -1,24 +1,72 @@
-// IMPLEMENTATION-SPECIFIC. This file tests the live clone: the second copy of
-// the repository which the git client keeps in the blog folder's .git
-// directory and runs `fetch` and `reset --hard` in. It is not behaviour a
-// user can see, so it does not belong with the specs that must survive the
-// rewrite of the git client (https://github.com/blotcms/blot/issues/2259).
-//
-// Delete this file when the live clone goes away: the blog folder is then
-// materialized straight from the repository, and has no .git directory whose
-// absence could be an error.
-describe("git client sync (implementation-specific: needs the live clone)", function () {
-  require("./setup")({ clone: false });
+// IMPLEMENTATION-SPECIFIC. A blog may have a live clone, the second copy of
+// the repository which the git client kept in the blog folder's .git directory
+// until Blot's writes stopped being made in it (#2259 PR 8), and a blog made
+// since never has one. A sync does not need it, keeps it at the new commit when
+// it is there, and must not be put off by one left behind master (as it is
+// after this code is rolled back). Delete this file when the live clones go
+// (PR 9).
+describe("git client sync (implementation-specific: the live clone)", function () {
+  require("./setup")({ clone: false, client: true });
 
   var fs = require("fs-extra");
-  var sync = require("clients/git/sync");
+  var helpers = require("./setup/helpers");
+  var liveClone = require("./setup/liveClone");
 
-  it("should return an error if there is no git repo in blog folder", function (done) {
-    fs.removeSync(this.blogDirectory + "/.git");
+  async function cloneHead(git) {
+    return (await git.raw(["rev-parse", "HEAD"])).trim();
+  }
 
-    sync(this.blog.id, this.blog.handle, function (err) {
-      expect(err.message).toContain("not");
-      done();
-    });
+  it("syncs a blog which has no live clone, and makes none", async function () {
+    expect(await fs.pathExists(this.blogDirectory + "/.git")).toBe(false);
+
+    await this.local.writeAndPush("/pushed.txt", "Pushed");
+    await this.local.writeAndPush("/pushed.txt", "Pushed again");
+
+    expect(await helpers.blogFile(this, "/pushed.txt")).toEqual(Buffer.from("Pushed again"));
+    expect(await fs.pathExists(this.blogDirectory + "/.git")).toBe(false);
+
+    await this.local.expectSynced();
+  });
+
+  it("keeps the live clone at the new commit", async function () {
+    var git = await liveClone(this);
+
+    await this.local.writeAndPush("/pushed.txt", "Pushed");
+
+    expect(await cloneHead(git)).toBe(await this.local.remoteHead());
+    expect(await helpers.blogFile(this, "/pushed.txt")).toEqual(Buffer.from("Pushed"));
+  });
+
+  it("syncs when the live clone is behind master", async function () {
+    var git = await liveClone(this);
+    var first = await cloneHead(git);
+
+    await this.local.writeAndPush("/one.txt", "One");
+
+    // As it is after a rollback in which Blot's writes moved master and the
+    // clone was not
+    await git.raw(["reset", "--quiet", "--mixed", first]);
+
+    await this.local.writeAndPush("/two.txt", "Two");
+
+    expect(await cloneHead(git)).toBe(await this.local.remoteHead());
+    expect(await helpers.blogFile(this, "/one.txt")).toEqual(Buffer.from("One"));
+    expect(await helpers.blogFile(this, "/two.txt")).toEqual(Buffer.from("Two"));
+
+    await this.local.expectSynced();
+  });
+
+  it("syncs when the live clone has no commits", async function () {
+    var Git = require("clients/git/git");
+    var path = require("path");
+
+    await Git(this.blogDirectory, {
+      env: { GIT_CEILING_DIRECTORIES: path.dirname(this.blogDirectory) },
+    }).raw(["init", "--quiet", "--initial-branch=master"]);
+
+    await this.local.writeAndPush("/pushed.txt", "Pushed");
+
+    expect(await helpers.blogFile(this, "/pushed.txt")).toEqual(Buffer.from("Pushed"));
+    await this.local.expectSynced();
   });
 });

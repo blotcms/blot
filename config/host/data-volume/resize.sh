@@ -51,6 +51,8 @@
 #   --freeze-ttl SECONDS     how long the read-only freeze lasts if this script
 #                            dies (default 900); the frozen copy must fit in it
 #   --any-time               allow the freeze within 10 minutes of 01:00 and 05:00 UTC
+#   --app-freeze             on a drill host, freeze with read-only.js as production does
+#                            rather than pausing the containers (a drill with real units)
 #   --to SSH_HOST            move prepare: the new host (as ssh reaches it from here)
 #   --existing               move prepare: the new host already has its data volume mounted
 #   --no-prewarm-check       move freeze: do not require the pre-warm to have finished
@@ -76,7 +78,7 @@ GRACE=15
 # live pass is a frozen pass of about a minute or less.
 MAX_FINAL=300
 FREEZE_TTL=900
-ANY_TIME=""; YES=""; DRY_RUN=""
+ANY_TIME=""; APP_FREEZE=""; PAUSE_UNITS=""; YES=""; DRY_RUN=""
 VTYPE=gp3; IOPS=""; THROUGHPUT=""
 CMD=""; SIZE=""; MSUB=""
 TO=""; EXISTING=""; NO_PREWARM_CHECK=""
@@ -106,6 +108,7 @@ while [ $# -gt 0 ]; do
     --iops) IOPS=$2; shift 2 ;;
     --throughput) THROUGHPUT=$2; shift 2 ;;
     --any-time) ANY_TIME=1; shift ;;
+    --app-freeze) APP_FREEZE=1; shift ;;
     --to) TO=$2; shift 2 ;;
     --existing) EXISTING=1; shift ;;
     --no-prewarm-check) NO_PREWARM_CHECK=1; shift ;;
@@ -195,6 +198,9 @@ gather_facts() {
   PROPAGATION=$(field "$FACTS" propagation); FSTYPE=$(field "$FACTS" fstype)
   SIZE_B=$(field "$FACTS" size_bytes); USED_B=$(field "$FACTS" used_bytes)
   DRILL=$(field "$FACTS" drill)
+  # A drill host pauses its stand-in containers instead of freezing the app,
+  # unless it runs real units (--app-freeze).
+  PAUSE_UNITS=$DRILL; [ -z "$APP_FREEZE" ] || PAUSE_UNITS=no
   PHASE=$(field "$FACTS" resize_phase); R_OLD=$(field "$FACTS" resize_old); R_NEW=$(field "$FACTS" resize_new)
   TARGET=$(field "$FACTS" resize_target); R_EXIST=$(field "$FACTS" resize_existing)
   SRC_IP=$(field "$FACTS" private_ip)
@@ -480,7 +486,7 @@ step_passes() {
 
 # unfreeze_app: lift the app-level freeze (or unpause the drill containers).
 unfreeze_app() {
-  if [ "$DRILL" = yes ]; then
+  if [ "$PAUSE_UNITS" = yes ]; then
     [ -z "$PAUSED" ] || ssh_run "$HOST" "sudo docker unpause $PAUSED" < /dev/null > /dev/null
   else
     ro off > /dev/null
@@ -515,7 +521,7 @@ undo_freeze() {
     esac
   else
     echo "WARNING: could not lift the freeze. The app refuses writes until the freeze expires (--freeze-ttl, $FREEZE_TTL s)." >&2
-    if [ "$DRILL" = yes ]; then echo "Run: ssh $HOST sudo docker unpause $PAUSED" >&2; else echo "Run: ssh $HOST sudo docker exec $CONTAINER node scripts/read-only.js off" >&2; fi
+    if [ "$PAUSE_UNITS" = yes ]; then echo "Run: ssh $HOST sudo docker unpause $PAUSED" >&2; else echo "Run: ssh $HOST sudo docker exec $CONTAINER node scripts/read-only.js off" >&2; fi
   fi
 }
 
@@ -541,8 +547,8 @@ refuse_near_cron() {
 # read-only (disk) and runs the frozen copy (copying). The caller decides what
 # happens next, and undo_freeze puts things back from whatever stage was reached.
 freeze_dry_run() {
-  if [ "$DRILL" = yes ]; then echo "would run: docker pause (blot-blue and blot-green)"; else echo "would run: docker exec $CONTAINER node scripts/read-only.js on --ttl $FREEZE_TTL --reason '$FREEZE_REASON'"; fi
-  if [ "$DRILL" != yes ]; then echo "would wait ${GRACE}s, then until lockedBlogs is empty (up to ${LOCK_WAIT}s)"; fi
+  if [ "$PAUSE_UNITS" = yes ]; then echo "would run: docker pause (blot-blue and blot-green)"; else echo "would run: docker exec $CONTAINER node scripts/read-only.js on --ttl $FREEZE_TTL --reason '$FREEZE_REASON'"; fi
+  if [ "$PAUSE_UNITS" != yes ]; then echo "would wait ${GRACE}s, then until lockedBlogs is empty (up to ${LOCK_WAIT}s)"; fi
   host_do freeze-disk 30
   host_do final-copy $((FREEZE_TTL - 90))
 }
@@ -550,7 +556,7 @@ freeze_dry_run() {
 freeze_app() {
   local out deadline
   FREEZE_STAGE=app
-  if [ "$DRILL" = yes ]; then
+  if [ "$PAUSE_UNITS" = yes ]; then
     PAUSED=$(echo "$FACTS" | sed -n 's/^container\.\([^=]*\)=.*/\1/p' | tr '\n' ' ')
     # (a container left paused by an interrupted run counts as paused)
     ssh_run "$HOST" 'for c in '"$PAUSED"'; do sudo docker pause "$c" > /dev/null 2>&1 || [ "$(sudo docker inspect -f "{{.State.Paused}}" "$c")" = true ] || exit 1; done' < /dev/null || die "docker pause failed"
@@ -583,7 +589,7 @@ freeze_and_copy() {
   echo "Old volume read-only ($(field "$out" waited_s)s)"
 
   FREEZE_STAGE=copying
-  if [ "$DRILL" != yes ]; then
+  if [ "$PAUSE_UNITS" != yes ]; then
     # Restart the TTL clock so the copy gets all of it.
     ro on --ttl "$FREEZE_TTL" --reason "'$FREEZE_REASON'" > /dev/null || die "could not extend the freeze"
     T_REARM=$(date +%s)
@@ -601,7 +607,7 @@ freeze_and_copy() {
 step_freeze_and_swap() {
   local t_on t_off out snap_tags
   say "4. Freeze, final copy and swap"
-  if [ "$DRILL" = yes ]; then
+  if [ "$PAUSE_UNITS" = yes ]; then
     echo "Drill host: the units (blot-blue and blot-green) are paused instead of using read-only.js."
   fi
   echo "The app will refuse writes (dashboard and client edits get a 503) for about $(fmt_duration "${LAST_DUR:-0}") or less:"
@@ -700,7 +706,7 @@ cmd_shrink() {
     [ "${line#*=}" = rslave ] || die "${line%%=*} binds the data directory with '${line#*=}', not rslave: deploy the rslave change first (a deploy recreates the containers)"
   done
   [ "$found" = 1 ] || die "no running blot-blue or blot-green on $HOST"
-  if [ "$DRILL" != yes ]; then
+  if [ "$PAUSE_UNITS" != yes ]; then
     out=$(ro status) || die "'node scripts/read-only.js status' does not work in $CONTAINER: deploy the read-only freeze first"
     # A freeze that is already on belongs to someone else unless it is ours
     # from an interrupted run; lifting it at the end would end their freeze.
@@ -738,7 +744,7 @@ cmd_shrink() {
  1. create and attach the new volume
  2. format it and mount it at a staging directory on the host
  3. rsync passes while the app runs, until one takes $(fmt_duration "$MAX_FINAL") or less (or $PASS_LIMIT passes)
- 4. app read-only ($([ "$DRILL" = yes ] && echo "containers paused" || echo "read-only.js, ${GRACE}s grace, up to ${LOCK_WAIT}s for locks")), old volume remounted read-only,
+ 4. app read-only ($([ "$PAUSE_UNITS" = yes ] && echo "containers paused" || echo "read-only.js, ${GRACE}s grace, up to ${LOCK_WAIT}s for locks")), old volume remounted read-only,
     parallel final copy, snapshot of the old volume, mount the new volume over the data directory
  5. retag both volumes, print what to do next
 EOF
@@ -1180,7 +1186,7 @@ cmd_move_freeze() {
         return 0
       fi ;;
   esac
-  if [ "$DRILL" != yes ] && [ -z "$DRY_RUN" ]; then
+  if [ "$PAUSE_UNITS" != yes ] && [ -z "$DRY_RUN" ]; then
     rostat=$(ro status) || die "'node scripts/read-only.js status' does not work in $CONTAINER"
     if ! echo "$rostat" | grep -q '"readOnly":null' && ! echo "$rostat" | grep -q '"reason":"data volume move"'; then
       die "the app is already read-only for something else: $rostat"
@@ -1188,7 +1194,7 @@ cmd_move_freeze() {
   fi
 
   say "Freeze and final copy"
-  if [ "$DRILL" = yes ]; then
+  if [ "$PAUSE_UNITS" = yes ]; then
     echo "Drill host: the units (blot-blue and blot-green) are paused instead of using read-only.js."
   fi
   echo "The app will refuse writes (dashboard and client edits get a 503) from now until the switch or move thaw,"
@@ -1223,7 +1229,7 @@ cmd_move_freeze() {
   echo
   echo "FROZEN. The final copy is on $TARGET; $HOST's data directory is read-only and the app refuses writes."
   echo "The frozen part so far took $(fmt_duration $(($(date +%s) - t_on)))."
-  if [ "$DRILL" = yes ]; then
+  if [ "$PAUSE_UNITS" = yes ]; then
     echo "The drill units stay paused until the switch or: $0 --host $HOST move thaw"
   else
     left=$((FREEZE_TTL - ($(date +%s) - T_REARM)))
@@ -1250,11 +1256,18 @@ cmd_move_thaw() {
   host_do thaw-disk
   echo "Data directory read-write again."
   [ -z "$DRY_RUN" ] || { echo "would lift the app freeze (or unpause the drill containers)"; return 0; }
-  if [ "$DRILL" = yes ]; then
+  if [ "$PAUSE_UNITS" = yes ]; then
     for c in $(echo "$FACTS" | sed -n 's/^container\.\([^=]*\)=.*/\1/p'); do
       ssh_run "$HOST" "sudo docker unpause $c" < /dev/null > /dev/null 2>&1 || true
     done
     echo "Drill containers unpaused."
+    # A drill that ran real units froze with --app-freeze, and thaw does not get
+    # that flag from a later command: lift our own freeze, recognised by its
+    # reason. Stand-in containers have no read-only.js, which is not an error.
+    if out=$(ro status 2> /dev/null) && echo "$out" | grep -q '"reason":"data volume move"'; then
+      ro off > /dev/null || die "could not lift the freeze; run: ssh $HOST sudo docker exec $CONTAINER node scripts/read-only.js off"
+      echo "Freeze lifted: the app accepts writes again."
+    fi
     return 0
   fi
   if ! out=$(ro status); then

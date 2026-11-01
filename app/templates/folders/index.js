@@ -3,10 +3,9 @@ const fs = require("fs-extra");
 const config = require("config");
 const basename = require("path").basename;
 const DIR = require("helper/rootDir") + "/app/templates/folders";
-const localPath = require("helper/localPath");
+const folder = require("storage/folder");
 const hashFile = require("helper/hashFile");
 const sync = require("sync");
-const { dirname } = require("path");
 const { promisify } = require("util");
 const fix = promisify(require("sync/fix"));
 const lock = require("helper/lock");
@@ -16,7 +15,8 @@ const setupUser = require("./setupUser");
 const setupBlogs = require("./setupBlogs");
 const demoFolders = require("../demoFolders");
 
-async function getChangedFiles(sourcePath, destPath) {
+// Compares the directory sourcePath with the folder of the blog blogID
+async function getChangedFiles(sourcePath, blogID) {
   const changes = {
     modified: new Set(),
     added: new Set(),
@@ -40,22 +40,25 @@ async function getChangedFiles(sourcePath, destPath) {
   }
 
   const sourceFiles = await getAllFiles(sourcePath);
-  const destFiles = await getAllFiles(destPath);
+  const destFiles = new Set();
+
+  for await (const relPath of folder.walk(blogID, "/")) {
+    destFiles.add(relPath);
+  }
 
   // Check for modified and added files
   for (const sourceFile of sourceFiles) {
     const relPath = sourceFile.slice(sourcePath.length);
-    const destFile = join(destPath, relPath);
 
-    if (!destFiles.has(destFile)) {
+    if (!destFiles.has(relPath)) {
       changes.added.add(relPath);
     } else {
       try {
-        const [sourceHash, destHash] = await Promise.all([
+        const [sourceHash, dest] = await Promise.all([
           hashFile(sourceFile),
-          hashFile(destFile),
+          folder.stat(blogID, relPath, { hash: true }),
         ]);
-        if (sourceHash !== destHash) {
+        if (sourceHash !== dest.hash) {
           changes.modified.add(relPath);
         }
       } catch (err) {
@@ -65,8 +68,7 @@ async function getChangedFiles(sourcePath, destPath) {
   }
 
   // Check for removed files
-  for (const destFile of destFiles) {
-    const relPath = destFile.slice(destPath.length);
+  for (const relPath of destFiles) {
     const sourceFile = join(sourcePath, relPath);
     if (!sourceFiles.has(sourceFile)) {
       changes.removed.add(relPath);
@@ -76,22 +78,19 @@ async function getChangedFiles(sourcePath, destPath) {
   return changes;
 }
 
-async function syncFolder(sourcePath, destPath) {
-  await fs.ensureDir(destPath);
+async function syncFolder(sourcePath, blogID) {
+  await folder.mkdir(blogID, "/");
 
   // Copy changed files
-  const changes = await getChangedFiles(sourcePath, destPath);
+  const changes = await getChangedFiles(sourcePath, blogID);
 
   for (const relPath of [...changes.added, ...changes.modified]) {
-    const sourceFile = join(sourcePath, relPath);
-    const destFile = join(destPath, relPath);
-    await fs.ensureDir(dirname(destFile));
-    await fs.copy(sourceFile, destFile, { preserveTimestamps: true });
+    await folder.writeFrom(blogID, relPath, join(sourcePath, relPath));
   }
 
   // Remove deleted files
   for (const relPath of changes.removed) {
-    await fs.remove(join(destPath, relPath));
+    await folder.remove(blogID, relPath);
   }
 
   return changes;
@@ -171,7 +170,7 @@ async function build(options = {}) {
       console.log("Building folder", path, "for blog", blog.handle);
 
       // Sync changed files and get list of changes
-      const changes = await syncFolder(path, localPath(blogID, "/"));
+      const changes = await syncFolder(path, blogID);
 
       // Only update changed files
       await applyChanges(blog, changes);

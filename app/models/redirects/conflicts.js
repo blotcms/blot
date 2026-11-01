@@ -1,7 +1,7 @@
 var async = require("async");
-var fs = require("fs-extra");
 var { join, dirname, basename, sep } = require("path");
-var config = require("config");
+var folder = require("storage/folder");
+var callbackify = require("util").callbackify;
 var client = require("models/client");
 var ensure = require("helper/ensure");
 var urlNormalizer = require("helper/urlNormalizer");
@@ -20,6 +20,9 @@ var UNSERVED_PATTERNS = ["..", ".php", "/.git", "\0"];
 
 // Stops a site with an enormous number of redirects hammering the disk
 var MAX_PATHS_CHECKED_ON_DISK = 500;
+
+// Stands in for the blog's folder when joining candidate paths
+var FOLDER = "/folder";
 
 module.exports = function conflicts(blog, redirects, callback) {
   ensure(blog, "object").and(redirects, "array").and(callback, "function");
@@ -200,14 +203,12 @@ function checkFolder(blogID, paths, results, callback) {
   if (!indexes.length || indexes.length > MAX_PATHS_CHECKED_ON_DISK)
     return callback();
 
-  var folder = join(config.blog_folder_dir, blogID);
-
   async.eachLimit(indexes, 10, checkPath, callback);
 
   function checkPath(index, next) {
-    var candidates = filesWhichWouldBeServed(folder, paths[index]);
+    var candidates = filesWhichWouldBeServed(paths[index]);
 
-    async.detectSeries(candidates, isFile, function (err, file) {
+    async.detectSeries(candidates, isFile.bind(null, blogID), function (err, file) {
       if (err) return next(err);
 
       if (file)
@@ -234,7 +235,7 @@ function isServed(path) {
 // The files assets.js will try, in order, for a given request. We skip its
 // case-insensitive walk of the folder, which is expensive, so a file whose
 // name is capitalized differently to the redirect goes unnoticed.
-function filesWhichWouldBeServed(folder, url) {
+function filesWhichWouldBeServed(url) {
   var path = decodeURIComponentSafely(url);
 
   return [
@@ -245,18 +246,22 @@ function filesWhichWouldBeServed(folder, url) {
     join(dirname(path), "_" + basename(path) + ".html"),
   ]
     .map(function (candidate) {
-      return join(folder, candidate);
+      return join(FOLDER, candidate);
     })
     .filter(function (candidate) {
-      // Don't let a path escape the site's folder
-      return candidate.startsWith(folder + sep);
+      // Don't let a path escape the site's folder (storage/folder would
+      // clamp it inside instead, and find a different file)
+      return candidate.startsWith(FOLDER + sep);
+    })
+    .map(function (candidate) {
+      return candidate.slice(FOLDER.length);
     });
 }
 
-function isFile(file, callback) {
-  fs.stat(file, function (err, stat) {
+function isFile(blogID, file, callback) {
+  callbackify(folder.stat)(blogID, file, function (err, stat) {
     if (err) return callback(null, false);
-    callback(null, stat.isFile());
+    callback(null, !stat.isDirectory);
   });
 }
 

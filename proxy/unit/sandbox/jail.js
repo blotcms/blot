@@ -13,8 +13,20 @@ const TMPFS_BYTES = 128 * MiB;
 // Where the Dockerfile puts the nsjail binary, and the unit's cgroup subtree
 // that the host binds in (proxy/deploy/common.sh)
 const NSJAIL = "/usr/local/bin/nsjail";
+const SU_EXEC = "/sbin/su-exec";
 const CGROUP_MOUNT = "/sandbox-cgroup";
 const POLICY = path.join(__dirname, "policy.kafel");
+const NETWORK_POLICY = path.join(__dirname, "policy-browser.kafel");
+const NETWORK_CONFIG = path.join(__dirname, "network.cfg");
+const ENTER_NETWORK = path.join(__dirname, "enter-network.sh");
+
+// The unit's browser cgroup, which the host binds in (proxy/deploy/common.sh)
+// when BLOT_SANDBOX_BROWSER=1
+const BROWSER_CGROUP = "/sandbox-browser-cgroup";
+
+// pasta can't start from a root nsjail, so a jail with a network is started by
+// its own uid, which is also the job's uid outside the namespace
+const NETWORK_UID = 65001;
 
 // The job code runs under node: /usr/src/app/app/sandbox/jobs/main.js <name>
 const node = (name) => [
@@ -61,6 +73,22 @@ const JOBS = {
     maxInputBytes: 256 * MiB,
     maxOutputBytes: 1 * MiB,
   },
+  // One Chromium per job, on the open internet behind the egress filter, in
+  // the unit's browser cgroup: that cgroup's limits replace memoryBytes, and
+  // one job at a time keeps a heavy page's memory to itself.
+  screenshot: {
+    command: [
+      "/usr/local/bin/node",
+      "/usr/src/app/app/sandbox/jobs/main.js",
+      "screenshot",
+    ],
+    network: true,
+    cgroup: BROWSER_CGROUP,
+    maxRunning: 1,
+    timeSeconds: 30,
+    maxInputBytes: 64 * 1024,
+    maxOutputBytes: 32 * MiB,
+  },
 };
 
 // Read-only binds, and nothing else. nsjail binds are recursive, so never bind
@@ -75,6 +103,28 @@ const BINDS = [
   "/usr/local/bin/node",
   "/usr/src/app/node_modules",
   "/usr/src/app/app/sandbox",
+];
+
+// What a job with a network adds. Never /etc/ssl: the unit's TLS private keys
+// are mounted at /etc/ssl/private. /proc is the container's, read-only, because
+// Chromium won't start without one and a fresh one can't be mounted (see
+// app/sandbox/README.md). The two /bin directories hold the shell, awk, sed,
+// nft and setpriv that enter-network.sh runs.
+const NETWORK_BINDS = [
+  "/proc",
+  "/bin",
+  "/sbin",
+  "/usr/sbin",
+  "/usr/share/fonts",
+  "/usr/share/fontconfig",
+  "/etc/fonts",
+  "/etc/ssl/certs",
+  "/etc/resolv.conf",
+  "/etc/passwd",
+  "/etc/group",
+  "/dev/null",
+  "/dev/urandom",
+  path.dirname(ENTER_NETWORK),
 ];
 
 function job(name) {
@@ -121,4 +171,60 @@ function args(name) {
   return flags.concat(j.command);
 }
 
-module.exports = { JOBS, NSJAIL, job, args };
+// nsjail's arguments for a job with a network. It differs from args() in four
+// ways: the jail is started by NETWORK_UID, so nsjail can't make cgroups itself;
+// the job keeps its capabilities until enter-network.sh has loaded the filter
+// and dropped them; the seccomp policy allows the sockets it needs; and Chromium
+// needs more file descriptors, more threads and an unlimited address space than
+// a converter does. Its memory and pids limits are the browser cgroup's.
+function networkArgs(name) {
+  const j = job(name);
+  const flags = [
+    "--config", NETWORK_CONFIG,
+    "-Mo",
+    "--really_quiet",
+    "--disable_proc",
+    "--hostname", "sandbox",
+    "--cwd", "/",
+    "-m", `none:/tmp:tmpfs:size=${256 * MiB}`,
+    "--time_limit", String(j.timeSeconds),
+    "-u", `65000:${NETWORK_UID}:1`,
+    "-g", `65000:${NETWORK_UID}:1`,
+    "--keep_caps",
+  ];
+  for (const bind of BINDS.concat(NETWORK_BINDS)) flags.push("-R", bind);
+  flags.push(
+    "--rlimit_as", "hard",
+    "--rlimit_cpu", String(j.timeSeconds),
+    "--rlimit_fsize", "256",
+    "--rlimit_nofile", "1024",
+    "--rlimit_core", "0",
+    "--seccomp_policy", NETWORK_POLICY,
+    "-E", "NODE_PATH=/usr/src/app/node_modules",
+    "-E", "HOME=/tmp",
+    "-E", "PATH=/usr/bin:/bin:/usr/sbin:/sbin",
+    "-E", "PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser",
+    "--",
+    "/bin/sh", ENTER_NETWORK
+  );
+  return flags.concat(j.command);
+}
+
+// Puts this shell in the job's cgroup, which only root can do, and becomes the
+// jail's own uid. Everything in it comes from this file, none from the client.
+const ENTER_CGROUP = 'echo $$ > "$1/cgroup.procs" && shift && exec "$@"';
+
+// The program and arguments that start a job's jail
+function command(name) {
+  const j = job(name);
+  if (!j.network) return { file: NSJAIL, args: args(name) };
+  return {
+    file: "/bin/sh",
+    args: [
+      "-c", ENTER_CGROUP, "sh", j.cgroup,
+      SU_EXEC, `${NETWORK_UID}:${NETWORK_UID}`, NSJAIL,
+    ].concat(networkArgs(name)),
+  };
+}
+
+module.exports = { JOBS, NSJAIL, BROWSER_CGROUP, job, args, command };

@@ -21,7 +21,8 @@ echo "docker $*" >> "$FAKE/calls"
 R="$FAKE/running"; mkdir -p "$R"
 name_arg() { while [ $# -gt 0 ]; do [ "$1" = --name ] && { echo "$2"; return; }; shift; done; }
 case "$1" in
-  image) if [[ "$*" == *Labels* ]]; then [[ "${!#}" =~ :[0-9a-f]{40}$ ]] && echo unit; exit 0; fi   # the unit images are the ones tagged with a commit
+  image) [[ "$*" == *Labels* ]] || [ -z "${FAKE_PAUSE_ON_INSPECT:-}" ] || echo raced > "$FAKE_PAUSE_ON_INSPECT"   # a pause that lands while the pull runs
+    if [[ "$*" == *Labels* ]]; then [[ "${!#}" =~ :[0-9a-f]{40}$ ]] && echo unit; exit 0; fi   # the unit images are the ones tagged with a commit
     [ -z "${FAKE_NO_AIRLOCK_IMAGE:-}" ] || [[ "${!#}" != *blot-airlock:* ]] || exit 1
     if [[ "$*" == *"{{.Id}}"* ]]; then echo "${!#}"; fi; exit 0 ;;
   images) for i in ${FAKE_IMAGES-}; do [[ "$i" == "$2":* ]] && echo "$i"; done; exit 0 ;;
@@ -34,6 +35,7 @@ case "$1" in
     # reset_cache_dir: the foreground container moves the entries aside, the
     # detached one deletes them
     if [[ "$*" == *"--entrypoint sh"* ]]; then
+      [[ "$*" != *":/out "* ]] || { [ -z "${FAKE_STATIC_FAILS:-}" ]; exit; }   # sync_static
       [ -z "${FAKE_RESET_FAILS:-}" ] || exit 1
       exit 0
     fi
@@ -181,7 +183,7 @@ F
 chmod +x "$T"/bin/*
 export PATH="$T/bin:$PATH"
 
-export PROXY_ENV_FILE="$T/proxy.env" PROXY_DISK_CACHE_DIR="$T/disk-cache" PROXY_LOG_DIR="$T/logs" \
+export PROXY_ENV_FILE="$T/proxy.env" PROXY_DISK_CACHE_DIR="$T/disk-cache" PROXY_GLOBAL_STATIC_DIR="$T/static" PROXY_LOG_DIR="$T/logs" \
   PROXY_CERT_DIR="$T/certs" PROXY_DEPLOY_LOCK="$T/lock" \
   PROXY_DEPLOY_SLEEP=true PROXY_HEALTH_TIMEOUT=1 PROXY_AIRLOCK_HEALTH_TIMEOUT=1 TMUX=fake # nap() is a no-op, so a refusal busy-waits out PROXY_HEALTH_TIMEOUT real seconds
 
@@ -316,7 +318,7 @@ check "success: each new unit gets its restart policy before its previous one is
 check "success: both units run the new image, nothing else is left, :443 is served" \
   'running_now blot-blue && running_now blot-green && gone blot-blue-previous && gone blot-green-previous && [ "$(cat "$FAKE/image/blot-blue")" = $UNIT_IMG ] && [ "$(cat "$FAKE/image/blot-green")" = $UNIT_IMG ] && serving container'
 check "success: the units are told which one they are (PROXY_UNIT), and get the fd ulimit and the CDN static mount" \
-  'called "docker create --restart no --name blot-blue --network host --cap-add SYS_NICE --ulimit nofile=65536:65536" && called "create .*--name blot-blue .*-e PROXY_UNIT=blue" && called "create .*--name blot-green .*-e PROXY_UNIT=green" && called "-v /var/www/blot/app/blog/static:/var/www/blot/app/blog/static:ro"'
+  'called "docker create --restart no --name blot-blue --network host --cap-add SYS_NICE --ulimit nofile=65536:65536" && called "create .*--name blot-blue .*-e PROXY_UNIT=blue" && called "create .*--name blot-green .*-e PROXY_UNIT=green" && called "-v $T/static:/var/www/blot/app/blog/static:ro"'
 check "success: exactly two stops, blue's and then green's, so one unit is always up" \
   '[ "$(grep -c "docker stop" "$FAKE/calls")" = 2 ]'
 
@@ -327,6 +329,30 @@ check "a re-run with the image both units already run: nothing is stopped, renam
 reset units; set_image blot-blue $UNIT_IMG; bluegreen
 check "blue already on the image (a deploy that stopped after blue): only green is replaced" \
   '[ $RC = 0 ] && ! called "docker stop --time 40 blot-blue" && called "docker stop --time 40 blot-green" && [ "$(cat "$FAKE/image/blot-green")" = $UNIT_IMG ]'
+
+reset units; set_image blot-blue $UNIT_IMG; set_image blot-green $UNIT_IMG; PROXY_DEPLOY_FORCE=1 bluegreen
+check "PROXY_DEPLOY_FORCE=1 replaces units that already run the image" \
+  '[ $RC = 0 ] && called "docker stop --time 40 blot-blue" && called "docker stop --time 40 blot-green" && called "docker create"'
+
+echo paused-for-a-test > "$T/deploy-paused"; export PROXY_DEPLOY_PAUSE_FILE="$T/deploy-paused"
+reset units; bluegreen
+check "deploys paused on the host: refused before anything happens, and it says why" \
+  '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create" && mentions "paused-for-a-test"'
+rm -f "$T/deploy-paused"; reset units; FAKE_PAUSE_ON_INSPECT="$T/deploy-paused" bluegreen
+check "a pause that lands after the early check (during the pull) still stops it, once the lock is held" \
+  '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create" && mentions "paused"'
+echo paused-for-a-test > "$T/deploy-paused"
+reset units; PROXY_DEPLOY_IGNORE_PAUSE=1 bluegreen
+check "PROXY_DEPLOY_IGNORE_PAUSE=1 deploys anyway" '[ $RC = 0 ] && called "docker create"'
+rm -f "$T/deploy-paused"; unset PROXY_DEPLOY_PAUSE_FILE
+
+reset units; PROXY_VERIFY_SKIP_REDIS_WRITE=1 bluegreen
+check "PROXY_VERIFY_SKIP_REDIS_WRITE=1 tells verify-container" '[ $RC = 0 ] && called "index.js [^ ]* --skip-redis-write"'
+reset units; bluegreen
+check "and it stays off by default" '[ $RC = 0 ] && ! called "skip-redis-write"'
+
+reset units; bash "$DEPLOY/reset-cache.sh" "$UNIT_IMG" >"$T/out" 2>&1; RC=$?
+check "reset-cache.sh empties the cache with the units running" '[ $RC = 0 ] && called "docker run --rm --user 0 --entrypoint sh" && ! called "docker stop"'
 
 reset units; set_image blot-blue $UNIT_IMG; set_image blot-green $UNIT_IMG; FAKE_UNHEALTHY=blot-green bluegreen
 check "an unhealthy unit is replaced even on the right image (here the replacement is unhealthy too: rolled back); the healthy one is not touched" \
@@ -444,10 +470,10 @@ mounted() { called "create .*-v $1:/var/cache/openresty"; }
 
 reset units; bluegreen
 check "steady: nothing is emptied, the warm cache is kept, the disk cache directory is mounted" \
-  '[ $RC = 0 ] && ! called "--entrypoint sh" && mounted "$T/disk-cache"'
+  '[ $RC = 0 ] && ! called "$T/disk-cache:/cache" && mounted "$T/disk-cache"'
 
 reset units; FAKE_FAIL_AFTER_STOP=1 bluegreen
-check "failed replacement after blue was stopped: the cache directory is not emptied (the other unit shares it)" '[ $RC != 0 ] && called "docker start blot-blue-previous" && ! called "--entrypoint sh"'
+check "failed replacement after blue was stopped: the cache directory is not emptied (the other unit shares it)" '[ $RC != 0 ] && called "docker start blot-blue-previous" && ! called "$T/disk-cache:/cache"'
 
 reset none; bluegreen
 check "fresh start: the cache directory is emptied first by a container, in the background too, and mounted" \
@@ -455,6 +481,18 @@ check "fresh start: the cache directory is emptied first by a container, in the 
 
 reset none; FAKE_RESET_FAILS=1 bluegreen
 check "fresh start whose cache directory cannot be emptied: refused before any unit exists" '[ $RC != 0 ] && ! called "docker create"'
+
+reset none; bluegreen
+check "fresh start: the image's static files are copied over the host's before any unit exists" \
+  '[ "$(line "-v $PROXY_GLOBAL_STATIC_DIR:/out")" -lt "$(line "docker create")" ] && called "docker run --rm --user 0 --entrypoint sh --memory 256m -v $PROXY_GLOBAL_STATIC_DIR:/out"'
+
+reset units; bluegreen
+check "steady: the static files are copied too, before the first unit is touched" \
+  '[ $RC = 0 ] && [ "$(line "-v $PROXY_GLOBAL_STATIC_DIR:/out")" -lt "$(line "docker create")" ]'
+
+reset units; FAKE_STATIC_FAILS=1 bluegreen
+check "static files that cannot be copied: refused before any unit changes" \
+  '[ $RC != 0 ] && ! called "docker create" && ! called "docker stop" && mentions "static files"'
 
 reset units; rmdir "$T/disk-cache"; bluegreen
 check "the cache directory is missing: refused, with the command to create it" \
@@ -537,13 +575,27 @@ check "the profile is Docker's default plus exactly clone, mount, umount2, pivot
     const first = p.syscalls[0];
     if (p.defaultAction !== \"SCMP_ACT_ERRNO\" || first.action !== \"SCMP_ACT_ALLOW\" || first.args || first.includes || first.excludes) process.exit(1);
     const names = first.names.slice().sort().join();
-    if (names !== \"clone,mount,pivot_root,sethostname,umount2\") process.exit(1);
+    if (names !== \"clone,mount,pivot_root,sethostname,setns,umount2,unshare\") process.exit(1);
   " "$SECCOMP"'
 
 reset units; rmdir "$T/sandbox-cgroup/green"; bluegreen
 check "BLOT_SANDBOX=1 without a unit's cgroup subtree: refused before anything is touched" \
   '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create" && mentions "green does not exist"'
-sed -i.bak '/^BLOT_SANDBOX=1$/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
+
+mkdir -p "$T/sandbox-cgroup/green"
+reset units; bluegreen
+check "BLOT_SANDBOX=1 alone gives a unit no browser flags" \
+  '[ $RC = 0 ] && called "create .*--name blot-blue" && ! called "/dev/net/tun" && ! called "sandbox-browser-cgroup"'
+
+echo "BLOT_SANDBOX_BROWSER=1" >> "$T/proxy.env"
+reset units; bluegreen
+check "BLOT_SANDBOX_BROWSER=1 without a unit's browser cgroup: refused before anything is touched" \
+  '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create" && mentions "blue-browser does not exist"'
+mkdir -p "$T/sandbox-cgroup/blue-browser" "$T/sandbox-cgroup/green-browser"
+reset units; bluegreen
+check "BLOT_SANDBOX_BROWSER=1 gives a unit the device and its own browser cgroup" \
+  '[ $RC = 0 ] && called "create .*--name blot-blue .*--device /dev/net/tun --mount type=bind,source=$T/sandbox-cgroup/blue-browser,target=/sandbox-browser-cgroup"'
+sed -i.bak -e '/^BLOT_SANDBOX=1$/d' -e '/^BLOT_SANDBOX_BROWSER=1$/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
 unset PROXY_SANDBOX_CGROUP_DIR
 
 reset units; FAKE_NODE_B_UNHEALTHY=blot-blue bluegreen

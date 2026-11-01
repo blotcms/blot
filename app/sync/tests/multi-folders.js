@@ -194,6 +194,11 @@ describe("sync multi-folder support", function () {
         var previewFile = localPath(this.blog.id, previewPath("/drafts/post"));
 
         expect(fs.existsSync(previewFile)).toBe(true);
+        expect(
+          fs.readdirSync(path.dirname(previewFile)).filter(function (name) {
+            return name.indexOf(".tmp-") === 0;
+          })
+        ).toEqual([]);
         done();
       }
     );

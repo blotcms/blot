@@ -42,12 +42,13 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true
 # its per-job pull cost) down.
 #
 # This is system config, so it applies to every git process in the container,
-# including the git-receive-pack / git-upload-pack processes the git client
-# spawns for pushes and clones (app/clients/git). pack.threads 1 stops
+# including the git upload-pack / index-pack / pack-objects processes the git
+# client spawns for clones and pushes (app/clients/git). pack.threads 1 stops
 # index-pack and pack-objects taking every core. receive.maxInputSize caps a
 # push just under the 2000M the proxy accepts for /clients/git/end/ (see
-# proxy/config/blot-site.conf), so one that is too big fails with a git error
-# the user can read rather than nginx's bare 413. Keep the two in step.
+# proxy/config/blot-site.conf); receivePack.js reads it and passes it to
+# index-pack, so one that is too big fails with a message the user can read
+# rather than nginx's bare 413. Keep the two in step.
 RUN apk add --no-cache git tini curl ca-certificates \
  && git config --system pack.threads 1 \
  && git config --system pack.windowMemory 32m \
@@ -336,12 +337,22 @@ RUN mkdir -p /etc/resty-auto-ssl/storage /etc/resty-auto-ssl/letsencrypt/conf \
  && chown -R ec2-user:ec2-user /etc/resty-auto-ssl /var/log/openresty /var/cache/openresty /run/blot
 
 # The sandbox (app/sandbox, off unless the host sets BLOT_SANDBOX). nsjail's
-# shared libraries come from the same Alpine edge it was built against.
-RUN apk add --no-cache --upgrade $ALPINE_EDGE protobuf libnl3
+# shared libraries come from the same Alpine edge it was built against. Chromium
+# for the browser job has to come from there too, in one transaction: the stable
+# one pulls abseil back down, and nsjail no longer starts. The rm is the dev
+# stage's (see there). The rest is what the jail's network needs; setpriv
+# replaces busybox's, which can't clear the bounding set.
+RUN apk add --no-cache --upgrade $ALPINE_EDGE protobuf libnl3 \
+    chromium nss freetype harfbuzz ttf-freefont font-noto-emoji \
+    passt nftables setpriv \
+ && rm -rf /usr/lib/libLLVM* /usr/lib/libgallium-*.so /usr/lib/dri \
+ && chromium-browser --version
 COPY --from=nsjail /nsjail/nsjail /usr/local/bin/nsjail
 # The broker runs as root, so its files are root-owned and read-only to the
 # app (uid 1000 rewrites /usr/src/app, so root must never load code from there)
-COPY proxy/unit/sandbox/broker.js proxy/unit/sandbox/jail.js proxy/unit/sandbox/policy.kafel /usr/local/lib/blot-sandbox/
+COPY proxy/unit/sandbox/broker.js proxy/unit/sandbox/jail.js proxy/unit/sandbox/policy.kafel \
+     proxy/unit/sandbox/policy-browser.kafel proxy/unit/sandbox/network.cfg \
+     proxy/unit/sandbox/egress.nft proxy/unit/sandbox/enter-network.sh /usr/local/lib/blot-sandbox/
 RUN chmod -R go-w /usr/local/lib/blot-sandbox \
  && nsjail --help >/dev/null
 

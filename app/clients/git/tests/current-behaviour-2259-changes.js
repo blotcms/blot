@@ -10,9 +10,9 @@ describe("current behaviour that #2259 changes", function () {
   var helpers = require("./setup/helpers");
 
   describe(".gitattributes", function () {
-    // New behaviour: files are written to the blog folder as the raw
-    // committed bytes, and the attributes below stop applying.
-    it("applies eol=crlf to the files written to the blog folder", async function () {
+    // Changed by #2259 PR 7: files are written to the blog folder as the raw
+    // committed bytes, and the attributes below no longer apply.
+    it("ignores eol=crlf in the files written to the blog folder", async function () {
       await this.local.commitFiles({
         "/.gitattributes": "* text=auto eol=crlf\n",
         "/lines.txt": "one\ntwo\nthree\n",
@@ -22,14 +22,14 @@ describe("current behaviour that #2259 changes", function () {
       // The clone has the line endings the user committed
       expect(await this.local.read("/lines.txt")).toEqual(Buffer.from("one\ntwo\nthree\n"));
 
-      // The blog folder was checked out with the attribute applied
+      // and so does the blog folder
       expect(await helpers.blogFile(this, "/lines.txt")).toEqual(
-        Buffer.from("one\r\ntwo\r\nthree\r\n")
+        Buffer.from("one\ntwo\nthree\n")
       );
     });
 
-    // New behaviour: the raw committed bytes, with $Id$ left as it is.
-    it("expands the ident attribute in the files written to the blog folder", async function () {
+    // Changed by #2259 PR 7: the raw committed bytes, with $Id$ left as it is.
+    it("does not expand the ident attribute in the files written to the blog folder", async function () {
       await this.local.commitFiles({
         "/.gitattributes": "*.txt ident\n",
         "/ident.txt": "$Id$\n",
@@ -37,52 +37,61 @@ describe("current behaviour that #2259 changes", function () {
       await this.local.push();
 
       expect(await this.local.read("/ident.txt")).toEqual(Buffer.from("$Id$\n"));
-      expect((await helpers.blogFile(this, "/ident.txt")).toString()).toMatch(
-        /^\$Id: [0-9a-f]{40} \$\n$/
-      );
+      expect(await helpers.blogFile(this, "/ident.txt")).toEqual(Buffer.from("$Id$\n"));
+    });
+  });
+
+  describe("Blot's own writes and .gitattributes", function () {
+    // Changed by #2259 PR 8: Blot's writes are committed as the bytes it was
+    // given, not through the rules of a .gitattributes file in the blog
+    // folder, which `git add` in the live clone applied (here, text=auto
+    // turned CRLF line endings into LF in the commit).
+    it("commits the bytes it is given, ignoring text=auto", async function () {
+      var write = require("util").promisify(require("clients/git/write"));
+
+      await this.local.writeAndPush("/.gitattributes", "* text=auto\n");
+      await write(this.blog.id, "/lines.txt", "one\r\ntwo\r\n");
+      await this.local.git(["fetch", "origin"]);
+
+      expect(
+        (await this.local.git(["cat-file", "blob", "origin/master:lines.txt"])).stdout
+      ).toBe("one\r\ntwo\r\n");
+      expect(await helpers.blogFile(this, "/lines.txt")).toEqual(Buffer.from("one\r\ntwo\r\n"));
     });
   });
 
   describe("branches", function () {
-    // New behaviour: a push which includes any ref other than master is
-    // rejected as a whole, whatever the order of its refs.
-    it("accepts a branch pushed together with master", async function () {
-      var local = this.local;
+    // Changed by #2259 PR 6: a push which includes any ref other than master
+    // is rejected as a whole, whatever the order of its refs. Master is not
+    // updated either, and no sync starts.
+    ["master sneaky", "sneaky master"].forEach(function (order) {
+      it("rejects a branch pushed together with master (" + order + ")", async function () {
+        var local = this.local;
+        var before = await local.remoteHead();
 
-      await local.commitFiles({ "/with-a-branch.txt": "Pushed with a branch" });
-      await local.git(["branch", "sneaky"]);
+        await local.commitFiles({ "/with-a-branch.txt": "Pushed with a branch" });
+        await local.git(["branch", "sneaky"]);
 
-      var pushed = await local.tryPush(["origin", "master", "sneaky"]);
+        var pushed = await local.tryPush(["origin"].concat(order.split(" ")));
 
-      expect(pushed.code).toBe(0);
-      await local.waitForSync();
+        expect(pushed.code).not.toBe(0);
+        expect(pushed.stderr).toContain("only the master branch is allowed");
 
-      expect(await local.remoteHead("sneaky")).toBe(await local.head());
-      expect(await helpers.blogHas(this, "/with-a-branch.txt")).toBe(true);
-    });
+        await local.waitForSync();
 
-    // New behaviour: as above.
-    it("accepts a branch pushed together with master, in the other order", async function () {
-      var local = this.local;
-
-      await local.commitFiles({ "/with-a-branch.txt": "Pushed with a branch" });
-      await local.git(["branch", "sneaky"]);
-
-      var pushed = await local.tryPush(["origin", "sneaky", "master"]);
-
-      expect(pushed.code).toBe(0);
-      await local.waitForSync();
-
-      expect(await local.remoteHead("sneaky")).toBe(await local.head());
-      expect(await helpers.blogHas(this, "/with-a-branch.txt")).toBe(true);
+        expect(await local.remoteHead("sneaky")).toBeNull();
+        expect(await local.remoteHead()).toBe(before);
+        expect(await helpers.blogHas(this, "/with-a-branch.txt")).toBe(false);
+      });
     });
   });
 
   describe("symbolic links and submodules", function () {
-    // New behaviour: the push is refused, with a message, before the client
-    // is told "ok". Nothing reaches the repository.
-    it("accepts a push with a symbolic link, then fails to sync it", async function () {
+    // Changed by #2259 PR 6: the push is refused, with a message, before the
+    // client is told "ok". Nothing reaches the repository.
+    it("refuses a push with a symbolic link, with a message", async function () {
       var local = this.local;
+      var before = await local.remoteHead();
 
       await local.write("/alongside.txt", "In the same commit as the link");
       await fs.symlink("alongside.txt", local.path("/link.txt"));
@@ -90,17 +99,18 @@ describe("current behaviour that #2259 changes", function () {
 
       var pushed = await local.tryPush();
 
-      // The client is told the push worked
-      expect(pushed.code).toBe(0);
-      expect(await local.remoteHead()).toBe(await local.head());
+      // The client is told why
+      expect(pushed.code).not.toBe(0);
+      expect(pushed.stderr).toContain("remote: refs/heads/master: Git blogs support regular files only");
+      expect(await local.remoteHead()).toBe(before);
 
       await local.waitForSync();
 
-      // The sync failed: the blog folder has nothing from the commit
+      // and the blog folder has nothing from the commit
       expect(await helpers.blogHas(this, "/alongside.txt")).toBe(false);
       expect(await helpers.blogHas(this, "/link.txt")).toBe(false);
 
-      // Replacing the link with a regular file lets the sync go through
+      // Replacing the link with a regular file lets the push go through
       await local.remove("/link.txt");
       await local.writeAndPush("/link.txt", "Now a regular file");
 
@@ -110,9 +120,10 @@ describe("current behaviour that #2259 changes", function () {
       await local.expectSynced();
     });
 
-    // New behaviour: as above.
-    it("accepts a push with a submodule, then fails to sync it", async function () {
+    // Changed by #2259 PR 6: as above.
+    it("refuses a push with a submodule, with a message", async function () {
       var local = this.local;
+      var before = await local.remoteHead();
 
       await local.write("/alongside.txt", "In the same commit as the submodule");
       await local.git(["add", "--all"]);
@@ -126,8 +137,9 @@ describe("current behaviour that #2259 changes", function () {
 
       var pushed = await local.tryPush();
 
-      expect(pushed.code).toBe(0);
-      expect(await local.remoteHead()).toBe(await local.head());
+      expect(pushed.code).not.toBe(0);
+      expect(pushed.stderr).toContain("remote: refs/heads/master: Git blogs support regular files only");
+      expect(await local.remoteHead()).toBe(before);
 
       await local.waitForSync();
 

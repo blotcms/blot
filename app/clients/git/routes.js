@@ -74,15 +74,28 @@ dashboard.post("/create", function (req, res, next) {
     return disconnect(req.blog.id, next);
   }
 
-  Blog.set(req.blog.id, { client: "git" }, function (err) {
-    if (err) return next(err);
+  // A repository here wasn't made by this blog, or is still being made. If
+  // create failed on it the owner would get a token for it, and could clone
+  // whatever it holds.
+  repo.exists(req.blog.handle, function (exists) {
+    if (exists) {
+      console.log(clfdate() + " Git: Refused to create over repo for blog", req.blog.id);
+      return res.message(
+        req.baseUrl + "/create",
+        new Error("A Git repository already exists for this username. Please contact us.")
+      );
+    }
 
-    res.redirect(req.baseUrl);
+    Blog.set(req.blog.id, { client: "git" }, function (err) {
+      if (err) return next(err);
 
-    create(req.blog, function (err) {
-      if (err) {
-        console.log(clfdate() + " Git: Error creating repo", err);
-      }
+      res.redirect(req.baseUrl);
+
+      create(req.blog, function (err) {
+        if (err) {
+          console.log(clfdate() + " Git: Error creating repo", err);
+        }
+      });
     });
   });
 });
@@ -169,8 +182,9 @@ function finished(blogID) {
   activeSyncs[blogID]--;
 }
 
+// A push which is refused starts no sync, so there may never have been one
 function finishedAllSyncs(blogID) {
-  return activeSyncs[blogID] === 0;
+  return !activeSyncs[blogID];
 }
 
 // Used for testing purposes only to determine when a sync has finished
@@ -186,23 +200,36 @@ site.get("/syncs-finished/:blogID", async function (req, res, next) {
   }
 });
 
-repo.onPush(function (blogID) {
-  // Used for testing purposes only
-  started(blogID);
+// The follow-up is written before the push is acknowledged (prepare), so a
+// crash between the acknowledgement and the sync can't lose the push. Once
+// the sync has run it takes the follow-up back.
+repo.onPush(
+  function (blogID, old, current, armed) {
+    // Used for testing purposes only
+    started(blogID);
 
-  followUps.run(blogID).then(
-    function () {
-      // Used for testing purposes only
-      finished(blogID);
-      debug("Sync finished");
+    followUps.run(blogID, armed).then(
+      function () {
+        // Used for testing purposes only
+        finished(blogID);
+        debug("Sync finished");
+      },
+      function (err) {
+        // Used for testing purposes only
+        finished(blogID);
+        debug(err);
+      }
+    );
+  },
+  {
+    prepare: function (blogID) {
+      return followUps.arm(blogID);
     },
-    function (err) {
-      // Used for testing purposes only
-      finished(blogID);
-      debug(err);
-    }
-  );
-});
+    abandon: function (blogID, armed) {
+      if (armed !== undefined) return followUps.alarm.cancelIf(blogID, armed);
+    },
+  }
+);
 
 // Keep req.url untouched: the canonical repository path parsed and
 // authenticated above selects the repository.

@@ -66,7 +66,7 @@ const createRes = () => {
 
 describe('dashboard folder remove route', function () {
   let touched;
-  let fs;
+  let storage;
   let establishSyncLock;
   let folderUpdate;
   let done;
@@ -77,8 +77,9 @@ describe('dashboard folder remove route', function () {
     folderUpdate = jasmine.createSpy('folder.update').and.returnValue(Promise.resolve());
     done = jasmine.createSpy('done').and.returnValue(Promise.resolve());
 
-    fs = {
-      pathExists: jasmine.createSpy('pathExists').and.returnValue(Promise.resolve(true)),
+    storage = {
+      NotFoundError: require('../../storage/folder/errors').NotFoundError,
+      stat: jasmine.createSpy('stat').and.returnValue(Promise.resolve({ isDirectory: false })),
       remove: jasmine.createSpy('remove').and.returnValue(Promise.resolve()),
     };
 
@@ -90,14 +91,9 @@ describe('dashboard folder remove route', function () {
       invalidateCache: jasmine.createSpy('invalidateCache'),
     };
 
-    setModuleMock('fs-extra', fs, touched);
+    setModuleMock('storage/folder', storage, touched);
     setModuleMock('clients', {}, touched);
     setModuleMock('sync/establishSyncLock', establishSyncLock, touched);
-    setModuleMock(
-      'helper/localPath',
-      (blogID, relPath) => path.join('/blogs', String(blogID), relPath.replace(/^\/+/, '')),
-      touched
-    );
     setResolvedModuleMock(require.resolve('../site/folder/index'), folderIndexMock, touched);
 
     delete require.cache[removeRoutePath];
@@ -144,7 +140,7 @@ describe('dashboard folder remove route', function () {
   });
 
   it('returns 404 when path is not found', async function () {
-    fs.pathExists.and.returnValue(Promise.resolve(false));
+    storage.stat.and.callFake(() => Promise.reject(new storage.NotFoundError()));
     const handler = require('../site/folder/remove');
     const res = createRes();
 
@@ -172,7 +168,7 @@ describe('dashboard folder remove route', function () {
     expect(res.statusCode).toBe(200);
     expect(res.body.ok).toBe(true);
     expect(res.body.removed).toBe('post.md');
-    expect(fs.remove).toHaveBeenCalledWith('/blogs/blog-1/post.md');
+    expect(storage.remove).toHaveBeenCalledWith('blog-1', '/post.md');
     expect(folderUpdate).toHaveBeenCalledWith('/post.md');
     expect(folderIndexMock.invalidateCache).toHaveBeenCalledWith(req.blog);
     expect(done).toHaveBeenCalledTimes(1);

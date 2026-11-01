@@ -1,7 +1,7 @@
 var async = require("async");
 var joinpath = require("path").join;
-var fs = require("fs-extra");
-var localPath = require("helper/localPath");
+var folder = require("storage/folder");
+var callbackify = require("util").callbackify;
 var determineTemplateFolder = require("./determineTemplateFolder");
 var shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 var getMetadata = require("./getMetadata");
@@ -18,9 +18,7 @@ function removeEnabledFromAllTemplates(blogID, callback) {
 }
 
 function removeEnabledFromAllTemplatesInFolder(blogID, folderName, callback) {
-  var root = localPath(blogID, folderName);
-
-  fs.readdir(root, function (err, entries) {
+  callbackify(folder.listNames)(blogID, folderName, function (err, listing) {
     if (err) {
       if (err.code === "ENOENT" || err.code === "ENOTDIR") return callback(null, []);
       return callback(err);
@@ -29,6 +27,15 @@ function removeEnabledFromAllTemplatesInFolder(blogID, folderName, callback) {
     var errors = [];
     var modifiedSlugs = [];
 
+    // Only directories hold templates (listings leave out symbolic links)
+    var entries = listing
+      .filter(function (entry) {
+        return entry.isDirectory;
+      })
+      .map(function (entry) {
+        return entry.name;
+      });
+
     async.eachSeries(
       entries,
       function (entry, next) {
@@ -36,67 +43,54 @@ function removeEnabledFromAllTemplatesInFolder(blogID, folderName, callback) {
           return next();
         }
 
-        var entryPath = joinpath(root, entry);
+        var packagePath = joinpath(folderName, entry, PACKAGE);
 
-        fs.lstat(entryPath, function (err, stat) {
+        callbackify(folder.read)(blogID, packagePath, function (err, buffer) {
           if (err) {
             if (err.code === "ENOENT") return next();
             errors.push(err);
             return next();
           }
 
-          if (stat.isSymbolicLink() || !stat.isDirectory()) return next();
+          var data;
 
-          var packagePath = joinpath(folderName, entry, PACKAGE);
-          var packageAbsolute = localPath(blogID, packagePath);
+          try {
+            data = JSON.parse(buffer.toString("utf-8"));
+          } catch (parseErr) {
+            errors.push(parseErr);
+            return next();
+          }
 
-          fs.readFile(packageAbsolute, "utf-8", function (err, contents) {
+          if (!data || data.enabled !== true) return next();
+
+          data.enabled = false;
+          var updated = JSON.stringify(data, null, 2);
+
+          callbackify(folder.write)(blogID, packagePath, updated, function (err) {
             if (err) {
-              if (err.code === "ENOENT") return next();
               errors.push(err);
               return next();
             }
 
-            var data;
+            modifiedSlugs.push(entry);
 
-            try {
-              data = JSON.parse(contents);
-            } catch (parseErr) {
-              errors.push(parseErr);
-              return next();
-            }
-
-            if (!data || data.enabled !== true) return next();
-
-            data.enabled = false;
-            var updated = JSON.stringify(data, null, 2);
-
-            fs.outputFile(packageAbsolute, updated, function (err) {
-              if (err) {
-                errors.push(err);
+            // Check if this template is locally-edited and write it back to the folder
+            var templateID = makeID(blogID, entry);
+            getMetadata(templateID, function (err, metadata) {
+              if (err || !metadata || !metadata.localEditing) {
                 return next();
               }
 
-              modifiedSlugs.push(entry);
-
-              // Check if this template is locally-edited and write it back to the folder
-              var templateID = makeID(blogID, entry);
-              getMetadata(templateID, function (err, metadata) {
-                if (err || !metadata || !metadata.localEditing) {
-                  return next();
+              writeToFolder(blogID, templateID, function (writeErr) {
+                if (writeErr) {
+                  console.warn(
+                    "Failed to write modified template to folder",
+                    blogID,
+                    templateID,
+                    writeErr
+                  );
                 }
-
-                writeToFolder(blogID, templateID, function (writeErr) {
-                  if (writeErr) {
-                    console.warn(
-                      "Failed to write modified template to folder",
-                      blogID,
-                      templateID,
-                      writeErr
-                    );
-                  }
-                  next();
-                });
+                next();
               });
             });
           });
@@ -119,4 +113,3 @@ function removeEnabledFromAllTemplatesInFolder(blogID, folderName, callback) {
 }
 
 module.exports = removeEnabledFromAllTemplates;
-
