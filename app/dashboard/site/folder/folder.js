@@ -52,6 +52,7 @@ const DEFAULT_PAGE_SIZE = 100;
 // being shown. We sweep the whole folder and cache the result so the
 // follow-up infinite-scroll page fetches don't re-list it. The cache is
 // bounded so a few huge folders can't pin unbounded memory.
+const STAT_SWEEP_CONCURRENCY = 32;
 const STAT_CACHE_LIMIT = 8;
 const statCache = new Map(); // "blogID_cacheID_dir" -> Promise<stat[]>
 
@@ -85,12 +86,25 @@ function byDisplayName(a, b) {
   });
 }
 
-// The folder's entries, without dotfiles and previews, in display order. A
-// listing carries each entry's stat, so nothing is stat'd again. Files which
-// vanish while a large folder is still syncing are not listed.
-async function listEntries(blog, dir) {
-  const entries = await folder.listAll(blog.id, dir);
+// Small promise pool: run fn over items, at most `limit` in flight.
+async function mapWithLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let cursor = 0;
 
+  async function worker() {
+    while (cursor < items.length) {
+      const index = cursor++;
+      results[index] = await fn(items[index], index);
+    }
+  }
+
+  const size = Math.max(1, Math.min(limit, items.length));
+  await Promise.all(Array.from({ length: size }, worker));
+  return results;
+}
+
+// Dotfiles and previews are not shown, and the rest is in display order
+function visible(entries) {
   return entries
     .filter(
       (item) => !item.name.startsWith(".") && !item.name.endsWith(".preview.html")
@@ -98,15 +112,30 @@ async function listEntries(blog, dir) {
     .sort((a, b) => byDisplayName(a.name, b.name));
 }
 
-function statEntry(blog, dir, entry) {
+// entry is a listing's entry or a stat of storage/folder, which both carry
+// isDirectory, size and modified
+function statEntry(blog, dir, name, entry) {
   const stat = Stat.format(entry, blog.timeZone);
 
-  stat.path = path.join(dir, entry.name);
+  stat.path = path.join(dir, name);
   // we don't want to turn '/' into '%2F' so we split on '/' and encode each part separately
   stat.url = stat.path.split("/").map(encodeURIComponent).join("/");
-  stat.name = entry.name;
+  stat.name = name;
 
   return stat;
+}
+
+// Stats one name, or resolves null if it is gone
+async function statName(blog, dir, name) {
+  try {
+    return statEntry(blog, dir, name, await folder.stat(blog.id, path.join(dir, name)));
+  } catch (err) {
+    // The file was removed between the listing and the stat (common while a
+    // large folder is still syncing), or is now a symlink. Skip it rather
+    // than failing the listing.
+    if (err && (err.code === "ENOENT" || err.code === "ELOOP")) return null;
+    throw err;
+  }
 }
 
 // Stat every entry once, cached per folder. Used for date / size sorts,
@@ -122,8 +151,9 @@ function readStatSweep(blog, dir) {
     return cached;
   }
 
-  const sweep = listEntries(blog, dir).then((entries) =>
-    entries.map((entry) => statEntry(blog, dir, entry))
+  // A listing carries each entry's stat, so nothing is stat'd again
+  const sweep = folder.listAll(blog.id, dir).then((entries) =>
+    visible(entries).map((entry) => statEntry(blog, dir, entry.name, entry))
   );
 
   // Don't leave a rejected promise cached.
@@ -261,15 +291,34 @@ async function getContents(blog, dir, options = {}) {
   let hasNext;
 
   if (sort === "name") {
-    const entries = await listEntries(blog, dir);
-    const ordered = descending ? entries.slice().reverse() : entries;
+    const names = visible(await folder.listNames(blog.id, dir)).map(
+      (entry) => entry.name
+    );
+    const ordered = descending ? names.slice().reverse() : names;
     total = ordered.length;
     page = clampPage(options.page, total, pageSize);
     startIndex = (page - 1) * pageSize;
-    pageStats = ordered
-      .slice(startIndex, startIndex + pageSize)
-      .map((entry) => statEntry(blog, dir, entry));
-    hasNext = startIndex + pageStats.length < total;
+
+    // Walk forward from startIndex collecting up to pageSize entries that
+    // still exist. Files vanish between the listing and the stat while a
+    // folder is syncing; skipping them without pulling the next name forward
+    // would leave the page short and the running count adrift.
+    const collected = [];
+    let cursor = startIndex;
+
+    while (collected.length < pageSize && cursor < ordered.length) {
+      const batch = ordered.slice(cursor, cursor + (pageSize - collected.length));
+      cursor += batch.length;
+
+      const batchStats = await mapWithLimit(batch, STAT_SWEEP_CONCURRENCY, (name) =>
+        statName(blog, dir, name)
+      );
+
+      for (const stat of batchStats) if (stat !== null) collected.push(stat);
+    }
+
+    pageStats = collected;
+    hasNext = cursor < ordered.length;
   } else {
     // Date / size sort: needs a stat for every entry, so sweep (and cache)
     // the whole folder, then order and slice.
