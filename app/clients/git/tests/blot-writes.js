@@ -26,6 +26,8 @@ describe("git client: Blot's own writes", function () {
 
     await write(this.blog.id, "/collected.txt", "Hello");
     expect(plumbing.collect.calls.count()).toBe(1);
+
+    await this.local.pull();
   });
 
   it("writes a file which a pull then brings to the user", async function () {
