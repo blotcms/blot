@@ -84,6 +84,24 @@ Its jail differs from the others (`networkArgs` in `proxy/unit/sandbox/jail.js`)
 A page that can't be screenshotted comes back as `meta.error`; only a broken job
 is a job failure.
 
+## The proxy jail
+
+The app's fetches of user-supplied URLs (`helper/airlock`) go through tinyproxy.
+With `BLOT_SANDBOX_PROXY=1` that is a long-running jail in the unit in place of
+the airlock's. It isn't a job, so the broker has no part in it: the supervisor
+keeps `proxy/unit/sandbox/proxy.js` running, which is root like the broker, makes
+`/sandbox-cgroup/proxy` (128 MiB, 128 pids) and starts the jail.
+
+It uses the same pasta network, `egress.nft` and capability drop as the browser
+job, and binds much less: no Node, app code or `/proc`. pasta forwards one port on
+the unit's loopback to it (`network-proxy-<unit>.cfg`, which must match
+`sandboxProxyPort` in `scripts/deploy/constants.js`), and `egress-proxy.nft`
+lets that port through the jail's loopback interface. pasta delivers connections
+from the jail's own address, `10.255.255.2`, which is the one client tinyproxy
+allows. A URL for `127.0.0.1:8888` gets a refusal from tinyproxy. pasta shares
+the job's uid outside the namespace, so the filter can't tell the two apart, and
+the most a URL can do is hold one of its 64 connections, as any slow server can.
+
 ## Why
 
 - **The broker is root-owned.** A jail with its own uid and cgroups has to be
