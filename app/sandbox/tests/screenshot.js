@@ -142,7 +142,7 @@ describe("sandbox screenshot job", function () {
     ["SANDBOX_TIMEOUT", "SANDBOX_KILLED"].forEach(function (code) {
       it("doesn't retry a page that ends in " + code, async function () {
         const failure = Object.assign(new Error("sandbox: page"), { code });
-        const run = spyOn(sandbox, "run").and.returnValue(Promise.reject(failure));
+        const run = spyOn(sandbox, "run").and.callFake(() => Promise.reject(failure));
 
         await rejection(screenshot("https://example.com", target));
         expect(run).toHaveBeenCalledTimes(1);
