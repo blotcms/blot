@@ -3,7 +3,10 @@
 #        resize.sh [options] grow <size-GiB>
 #        resize.sh [options] shrink <size-GiB> [--type gp3] [--iops N] [--throughput MiBps]
 #        resize.sh [options] finish
-# Resizes the EBS volume mounted at /var/www/blot/data on the app host.
+#        resize.sh [options] move prepare --to <new-ssh-host> [--existing]
+#        resize.sh [options] move copy|freeze|thaw|retag|status
+# Resizes the EBS volume mounted at /var/www/blot/data on the app host, or moves
+# its contents to another host.
 #
 #   status   what the host and the volume look like, and any resize in progress
 #   grow     online: modify-volume, then xfs_growfs. No freeze, nothing stops.
@@ -16,6 +19,21 @@
 #            holds the old volume any more: release the host's own mount of it
 #            (no reboot, no downtime; asks first), then detach it. Never
 #            deletes.
+#   move     the data goes to ANOTHER host, with --host as the source. The new
+#            host gets a volume made from a snapshot and filled with rsync
+#            while the old host keeps serving; writes stop only for the final
+#            pass. In order:
+#              prepare  snapshot, new volume in the new host's zone, attach,
+#                       stage it, start a pre-warm, set up the copy's ssh key
+#                       (--existing: the new host already has its volume, a
+#                       move back)
+#              copy     live passes, as in a shrink
+#              freeze   read-only, final pass, then STOP with the app frozen
+#                       and the source read-only: the switch (cycle.sh) goes on
+#              thaw     undo the freeze if there is no switch
+#              retag    after the switch: production tags on the new volume
+#            status shows where it is. Nothing is swapped or detached; the old
+#            host and its volume stay as the rollback.
 #
 # Read config/host/data-volume/README.md first, and rehearse with drill.sh.
 # Needs the read-only freeze (scripts/read-only.js) and the rslave data bind
@@ -33,11 +51,15 @@
 #   --freeze-ttl SECONDS     how long the read-only freeze lasts if this script
 #                            dies (default 900); the frozen copy must fit in it
 #   --any-time               allow the freeze within 10 minutes of 01:00 and 05:00 UTC
+#   --to SSH_HOST            move prepare: the new host (as ssh reaches it from here)
+#   --existing               move prepare: the new host already has its data volume mounted
+#   --no-prewarm-check       move freeze: do not require the pre-warm to have finished
 #   --yes                    do not ask for confirmation
 #   --dry-run                run every read-only check and print every step;
 #                            change nothing (only /tmp/blot-data-volume/host.sh
-#                            is copied to the host, which the checks need)
-# shrink only: --type gp3|gp2 (default gp3), --iops N, --throughput MiBps (gp3).
+#                            is copied to the host, which the checks need; a move
+#                            prepare copies it to the new host too)
+# shrink and move prepare: --type gp3|gp2 (default gp3), --iops N, --throughput MiBps (gp3).
 # Without --iops and --throughput a gp3 volume gets the included 3000 IOPS and
 # 125 MiB/s, which is enough (README, "Cost").
 set -euo pipefail
@@ -56,17 +78,19 @@ MAX_FINAL=300
 FREEZE_TTL=900
 ANY_TIME=""; YES=""; DRY_RUN=""
 VTYPE=gp3; IOPS=""; THROUGHPUT=""
-CMD=""; SIZE=""
+CMD=""; SIZE=""; MSUB=""
+TO=""; EXISTING=""; NO_PREWARM_CHECK=""
 
 REMOTE=/tmp/blot-data-volume/host.sh
 DATA_NAME="Blot /var/www/blot/data" # the Name tag the DLM snapshot policy targets
+FREEZE_REASON="data volume resize"  # what read-only.js on shows; a move says so in its own
 PASS_LIMIT=5                        # live passes before we ask
 STALE_PASS_SECONDS=1800             # a finished pass older than this does not count on a resume
 PLACEHOLDER_VOLUME=vol-00000000000000000
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --host | --profile | --region | --container | --lock-wait | --grace | --max-final-seconds | --freeze-ttl | --type | --iops | --throughput)
+    --host | --profile | --region | --container | --to | --lock-wait | --grace | --max-final-seconds | --freeze-ttl | --type | --iops | --throughput)
       [ $# -ge 2 ] || die "$1 needs a value" ;;
   esac
   case "$1" in
@@ -82,6 +106,9 @@ while [ $# -gt 0 ]; do
     --iops) IOPS=$2; shift 2 ;;
     --throughput) THROUGHPUT=$2; shift 2 ;;
     --any-time) ANY_TIME=1; shift ;;
+    --to) TO=$2; shift 2 ;;
+    --existing) EXISTING=1; shift ;;
+    --no-prewarm-check) NO_PREWARM_CHECK=1; shift ;;
     --yes) YES=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     -*) die "unknown option $1" ;;
@@ -92,7 +119,7 @@ while [ $# -gt 0 ]; do
       shift ;;
   esac
 done
-case "$CMD" in status | grow | shrink | finish) ;; *) die "usage: resize.sh [options] status|grow <GiB>|shrink <GiB>|finish" ;; esac
+case "$CMD" in status | grow | shrink | finish | move) ;; *) die "usage: resize.sh [options] status|grow <GiB>|shrink <GiB>|finish|move prepare|copy|freeze|thaw|retag|status" ;; esac
 case "$LOCK_WAIT$GRACE$MAX_FINAL$FREEZE_TTL$IOPS$THROUGHPUT" in *[!0-9]*) die "--lock-wait, --grace, --max-final-seconds, --freeze-ttl, --iops and --throughput take numbers" ;; esac
 case "$VTYPE" in gp2 | gp3) ;; *) die "--type must be gp3 or gp2" ;; esac
 # The final copy gets FREEZE_TTL minus 90 seconds (for the snapshot, the swap
@@ -100,9 +127,15 @@ case "$VTYPE" in gp2 | gp3) ;; *) die "--type must be gp3 or gp2" ;; esac
 [ "$FREEZE_TTL" -ge 300 ] || die "--freeze-ttl must be at least 300 seconds (the final copy gets the TTL minus 90 s as its time limit)"
 if [ "$CMD" = grow ] || [ "$CMD" = shrink ]; then
   case "$SIZE" in "" | *[!0-9]*) die "$CMD needs a size in GiB, e.g. resize.sh $CMD 600" ;; esac
+elif [ "$CMD" = move ]; then
+  case "$SIZE" in prepare | copy | freeze | thaw | retag | status) MSUB=$SIZE ;; *) die "usage: resize.sh [options] move prepare --to <new-ssh-host> [--existing] | copy | freeze | thaw | retag | status" ;; esac
 elif [ -n "$SIZE" ]; then
   die "unexpected argument $SIZE"
 fi
+[ -z "$TO$EXISTING" ] || { [ "$CMD" = move ] && [ "$MSUB" = prepare ]; } || die "--to and --existing are for move prepare"
+[ -z "$NO_PREWARM_CHECK" ] || { [ "$CMD" = move ] && [ "$MSUB" = freeze ]; } || die "--no-prewarm-check is for move freeze"
+[ "$CMD" != move ] || [ "$MSUB" != prepare ] || [ -n "$TO" ] || die "move prepare needs --to <the new host, as ssh reaches it>"
+[ -z "$TO" ] || [ "$TO" != "$HOST" ] || die "--to is the same as --host"
 [ "$VTYPE" = gp3 ] || [ -z "$IOPS$THROUGHPUT" ] || die "--iops and --throughput are for gp3"
 
 # One ssh connection for the whole run: the freeze is timed and each new
@@ -121,7 +154,7 @@ FREEZE_STAGE=none
 PAUSED=""
 cleanup() {
   undo_freeze
-  for h in $HOST; do ssh -o ControlPath="$CTL/%C" -O exit "$h" > /dev/null 2>&1 || true; done
+  for h in $HOST $TO; do ssh -o ControlPath="$CTL/%C" -O exit "$h" > /dev/null 2>&1 || true; done
   rm -rf "$CTL"
 }
 trap cleanup EXIT
@@ -163,6 +196,8 @@ gather_facts() {
   SIZE_B=$(field "$FACTS" size_bytes); USED_B=$(field "$FACTS" used_bytes)
   DRILL=$(field "$FACTS" drill)
   PHASE=$(field "$FACTS" resize_phase); R_OLD=$(field "$FACTS" resize_old); R_NEW=$(field "$FACTS" resize_new)
+  TARGET=$(field "$FACTS" resize_target); R_EXIST=$(field "$FACTS" resize_existing)
+  SRC_IP=$(field "$FACTS" private_ip)
 }
 
 # describe_volume <id>: sets V_SIZE V_TYPE V_IOPS V_TPUT V_AZ V_ENC V_KMS V_STATE V_INST V_NAME
@@ -226,7 +261,7 @@ cmd_status() {
 # An online grow needs no freeze: EBS grows the device under the mounted
 # filesystem, and XFS grows while mounted. Nothing stops, nothing is copied.
 cmd_grow() {
-  case "$PHASE" in prepared | copied) die "a shrink is in progress ($R_NEW); finish or abandon it first" ;; esac
+  case "$PHASE" in prepared | copied) die "a $([ -n "$TARGET" ] && echo move || echo shrink) is in progress ($R_NEW); finish or abandon it first" ;; esac
   # After a shrink the old volume is still mounted underneath until `finish`.
   # xfs_growfs takes its target size from the first mount listed there, the old
   # volume, and exits 0 at that size. Refuse before spending the 6-hour EBS change.
@@ -501,41 +536,26 @@ refuse_near_cron() {
   done
 }
 
-# step 4: freeze, final copy, snapshot, swap, unfreeze.
-step_freeze_and_swap() {
-  local t_on t_off out deadline budget snap_tags
-  say "4. Freeze, final copy and swap"
-  if [ "$DRILL" = yes ]; then
-    echo "Drill host: the units (blot-blue and blot-green) are paused instead of using read-only.js."
-  fi
-  echo "The app will refuse writes (dashboard and client edits get a 503) for about $(fmt_duration "${LAST_DUR:-0}") or less:"
-  echo "the last live pass took that long, and the frozen pass runs in parallel."
-  confirm "Freeze now?"
-  refuse_near_cron
-  aws_cli sts get-caller-identity --query Arn --output text > /dev/null 2>&1 ||
-    die "the AWS session expired during the passes; run: aws sso login --profile $AWS_PROFILE_NAME"
-  gather_facts
+# The freeze, shared by a shrink and a move. freeze_dry_run prints it; freeze_app
+# stops the app writing (FREEZE_STAGE=app); freeze_and_copy makes the disk
+# read-only (disk) and runs the frozen copy (copying). The caller decides what
+# happens next, and undo_freeze puts things back from whatever stage was reached.
+freeze_dry_run() {
+  if [ "$DRILL" = yes ]; then echo "would run: docker pause (blot-blue and blot-green)"; else echo "would run: docker exec $CONTAINER node scripts/read-only.js on --ttl $FREEZE_TTL --reason '$FREEZE_REASON'"; fi
+  if [ "$DRILL" != yes ]; then echo "would wait ${GRACE}s, then until lockedBlogs is empty (up to ${LOCK_WAIT}s)"; fi
+  host_do freeze-disk 30
+  host_do final-copy $((FREEZE_TTL - 90))
+}
 
-  # Everything from here until the swap is undone by undo_freeze on any
-  # failure, die or Ctrl-C.
-  t_on=$(date +%s)
-  if [ -n "$DRY_RUN" ]; then
-    if [ "$DRILL" = yes ]; then echo "would run: docker pause (blot-blue and blot-green)"; else echo "would run: docker exec $CONTAINER node scripts/read-only.js on --ttl $FREEZE_TTL --reason 'data volume resize'"; fi
-    if [ "$DRILL" != yes ]; then echo "would wait ${GRACE}s, then until lockedBlogs is empty (up to ${LOCK_WAIT}s)"; fi
-    host_do freeze-disk 30
-    host_do final-copy $((FREEZE_TTL - 90))
-    aws_mut ec2 create-snapshot --volume-id "$CUR_VOL" --description "before resize to $NEW_VOL"
-    host_do swap
-    echo "would lift the freeze and print how long it lasted"
-    return 0
-  fi
+freeze_app() {
+  local out deadline
   FREEZE_STAGE=app
   if [ "$DRILL" = yes ]; then
     PAUSED=$(echo "$FACTS" | sed -n 's/^container\.\([^=]*\)=.*/\1/p' | tr '\n' ' ')
     # (a container left paused by an interrupted run counts as paused)
     ssh_run "$HOST" 'for c in '"$PAUSED"'; do sudo docker pause "$c" > /dev/null 2>&1 || [ "$(sudo docker inspect -f "{{.State.Paused}}" "$c")" = true ] || exit 1; done' < /dev/null || die "docker pause failed"
   else
-    out=$(ro on --ttl "$FREEZE_TTL" --reason "'data volume resize'") || die "read-only.js on failed"
+    out=$(ro on --ttl "$FREEZE_TTL" --reason "'$FREEZE_REASON'") || die "read-only.js on failed"
     echo "$out" | grep -q '"readOnly":null' && die "the freeze did not take effect: $out"
     echo "Read-only freeze on"
     # The freeze only gates new requests. A dashboard save or a git push that
@@ -554,7 +574,10 @@ step_freeze_and_swap() {
     done
     echo "No folder locks held"
   fi
+}
 
+freeze_and_copy() {
+  local out budget
   FREEZE_STAGE=disk
   out=$(host_do freeze-disk 30) || die "the data volume would not go read-only: something is still writing (see above)"
   echo "Old volume read-only ($(field "$out" waited_s)s)"
@@ -562,7 +585,8 @@ step_freeze_and_swap() {
   FREEZE_STAGE=copying
   if [ "$DRILL" != yes ]; then
     # Restart the TTL clock so the copy gets all of it.
-    ro on --ttl "$FREEZE_TTL" --reason "'data volume resize'" > /dev/null || die "could not extend the freeze"
+    ro on --ttl "$FREEZE_TTL" --reason "'$FREEZE_REASON'" > /dev/null || die "could not extend the freeze"
+    T_REARM=$(date +%s)
   fi
   budget=$((FREEZE_TTL - 90))
   # The budget leaves 90s of the TTL for the snapshot, the swap and lifting the
@@ -571,6 +595,35 @@ step_freeze_and_swap() {
   echo "Final copy (parallel)..."
   out=$(host_do final-copy "$budget") || die "the final copy failed (see above)"
   echo "Final copy: $(field "$out" shards) shards in $(fmt_duration "$(field "$out" duration_s)"), $(gib "$(field "$out" new_used_bytes)") GiB on the new volume, inodes $(field "$out" inodes_old) -> $(field "$out" inodes_new) (logs/ and tmp/ contents are not copied)"
+}
+
+# step 4: freeze, final copy, snapshot, swap, unfreeze.
+step_freeze_and_swap() {
+  local t_on t_off out snap_tags
+  say "4. Freeze, final copy and swap"
+  if [ "$DRILL" = yes ]; then
+    echo "Drill host: the units (blot-blue and blot-green) are paused instead of using read-only.js."
+  fi
+  echo "The app will refuse writes (dashboard and client edits get a 503) for about $(fmt_duration "${LAST_DUR:-0}") or less:"
+  echo "the last live pass took that long, and the frozen pass runs in parallel."
+  confirm "Freeze now?"
+  refuse_near_cron
+  aws_cli sts get-caller-identity --query Arn --output text > /dev/null 2>&1 ||
+    die "the AWS session expired during the passes; run: aws sso login --profile $AWS_PROFILE_NAME"
+  gather_facts
+
+  # Everything from here until the swap is undone by undo_freeze on any
+  # failure, die or Ctrl-C.
+  t_on=$(date +%s)
+  if [ -n "$DRY_RUN" ]; then
+    freeze_dry_run
+    aws_mut ec2 create-snapshot --volume-id "$CUR_VOL" --description "before resize to $NEW_VOL"
+    host_do swap
+    echo "would lift the freeze and print how long it lasted"
+    return 0
+  fi
+  freeze_app
+  freeze_and_copy
 
   # Taken now, with the old volume at rest and final: this is the rollback.
   snap_tags='{"Key":"Name","Value":"Blot data before resize"},{"Key":"BlotDataVolumeResizeFrom","Value":"'$CUR_VOL'"}'
@@ -621,6 +674,7 @@ EOF
 cmd_shrink() {
   local need
   REPLACED_VOL=""; NEW_VOL=""; LAST_DUR=0; REP=""
+  case "$PHASE" in prepared | copied) [ -z "$TARGET" ] || die "a move to $TARGET is in progress ($R_NEW); finish it (move retag) or undo it (move thaw) first" ;; esac
 
   # An earlier run that swapped but did not finish tagging.
   # (Not retagged: the new volume still has its copy-in-progress name, or the old
@@ -763,11 +817,511 @@ cmd_finish() {
   fi
 }
 
+# Move to another host
+##########################################################
+
+# The data goes to a second host with a volume made from a snapshot and topped
+# up with rsync, so the old host serves until the Elastic IP moves and writes
+# stop only for the final pass. Detaching the volume and attaching it to the
+# new host is not an option: the old host would lose its folder files and
+# uncached renders for minutes. The freeze, passes and undo are the shrink's own.
+
+SNAP_MAX_AGE=172800 # seconds; an older "before move" snapshot is not reused
+
+# thost <subcommand>: host.sh on the NEW host (--to); thost_do for one that changes something.
+thost() { ssh_run "$TO" "sudo bash $REMOTE $*" < /dev/null; }
+thost_do() { ssh_run "$TO" "sudo bash $REMOTE ${DRY_RUN:+--dry-run} $*" < /dev/null; }
+
+# move_need <message>: a precondition. A dry run may not have prepared
+# anything yet, so there it is only a note.
+move_need() {
+  if [ -n "$DRY_RUN" ]; then echo "NOTE: a real run would stop here: $1"; else die "$1"; fi
+}
+
+# epoch <ISO time>: seconds since 1970 (GNU date, or the Mac's).
+epoch() { date -u -d "$1" +%s 2> /dev/null || date -j -u -f '%Y-%m-%dT%H:%M:%S' "${1%%.*}" +%s; }
+
+# move_state: the move this host is part of, checked against the live volume.
+move_state() {
+  [ -n "$TARGET" ] || { move_need "no move is prepared on $HOST: run move prepare --to <new host> first"; return 0; }
+  [ "$R_OLD" = "$CUR_VOL" ] || die "the state file on $HOST is for a move from $R_OLD, but the current volume is $CUR_VOL"
+  NEW_VOL=$R_NEW
+}
+
+# move_target_status: sets MS to host.sh move-status (state, plus what the target
+# says when the source reaches it with the move key) and checks it can be used.
+move_target_status() {
+  MS=$(host move-status) || die "cannot run move-status on $HOST"
+  [ -z "$TARGET" ] || [ -n "$DRY_RUN" ] || {
+    [ "$(field "$MS" ssh)" = ok ] || die "$HOST cannot ssh to $TARGET with its move key ($(field "$MS" ssh_error)). The target's security group must let $HOST's private address in on its ssh port"
+    [ "$(field "$MS" sudo)" = ok ] || die "ec2-user on $TARGET has no passwordless sudo"
+    [ "$(field "$MS" rsync)" = ok ] || die "rsync is not installed on $TARGET (sudo rsync failed)"
+  }
+}
+
+# attach_first_free <volume> <instance>: attach at the first free /dev/sdf../dev/sdp.
+attach_first_free() {
+  local used letter dev att i
+  aws_cli ec2 wait volume-available --volume-ids "$1"
+  used=$(aws_cli ec2 describe-instances --instance-ids "$2" --query 'Reservations[0].Instances[0].BlockDeviceMappings[].DeviceName' --output text | tr '\t' ' ')
+  dev=""
+  for letter in f g h i j k l m n o p; do
+    case " $used " in *" /dev/sd$letter "* | *" /dev/xvd$letter "*) ;; *) dev=/dev/sd$letter; break ;; esac
+  done
+  [ -n "$dev" ] || die "no free device name between /dev/sdf and /dev/sdp on $2 (in use: $used)"
+  aws_cli ec2 attach-volume --volume-id "$1" --instance-id "$2" --device "$dev" > /dev/null
+  echo "Attached as $dev"
+  aws_cli ec2 wait volume-in-use --volume-ids "$1"
+  for ((i = 0; i < 60; i++)); do
+    att=$(aws_cli ec2 describe-volumes --volume-ids "$1" --query 'Volumes[0].Attachments[0].State' --output text)
+    [ "$att" != attached ] || break
+    sleep 2
+  done
+  [ "$att" = attached ] || die "$1 is '$att', not attached"
+}
+
+# prepare, step 1: the snapshot. It is the source of the new volume and the
+# first rollback. SNAP is set.
+move_snapshot() {
+  local row tags age
+  say "2. Snapshot of $CUR_VOL"
+  row=$(aws_cli ec2 describe-snapshots --owner-ids self \
+    --filters "Name=tag:BlotDataVolumeMoveFrom,Values=$CUR_VOL" "Name=tag:Name,Values=Blot data before move" "Name=status,Values=pending,completed" \
+    --query 'sort_by(Snapshots,&StartTime)[-1].[SnapshotId,StartTime]' --output text)
+  SNAP=""
+  case "$row" in
+    "" | None*) ;;
+    *)
+      age=$(($(date +%s) - $(epoch "${row#*$'\t'}")))
+      if [ "$age" -le "$SNAP_MAX_AGE" ]; then
+        SNAP=${row%%$'\t'*}
+        echo "Using $SNAP, taken $(fmt_duration "$age") ago"
+      else
+        echo "$(echo "$row" | cut -f1) is older than $(fmt_duration "$SNAP_MAX_AGE"): taking a new one"
+      fi ;;
+  esac
+  if [ -z "$SNAP" ]; then
+    tags='{"Key":"Name","Value":"Blot data before move"},{"Key":"BlotDataVolumeMoveFrom","Value":"'$CUR_VOL'"}'
+    [ "$DRILL" != yes ] || tags="$tags"',{"Key":"BlotDrill","Value":"true"}'
+    confirm "Snapshot $CUR_VOL? (It is the source of the new volume and the first rollback; this host keeps serving.)"
+    SNAP=$(aws_mut ec2 create-snapshot --volume-id "$CUR_VOL" --description "before move to $T_INSTANCE" \
+      --tag-specifications '[{"ResourceType":"snapshot","Tags":['"$tags"']}]' --query SnapshotId --output text) ||
+      die "could not start the snapshot of $CUR_VOL"
+    if [ -n "$DRY_RUN" ]; then SNAP=snap-00000000000000000; return 0; fi
+    echo "Started $SNAP"
+  fi
+  # (a snapshot of a large volume takes a long time; the AWS waiter gives up after 10 minutes)
+  local st pr
+  while :; do
+    row=$(aws_cli ec2 describe-snapshots --snapshot-ids "$SNAP" --query 'Snapshots[0].[State,Progress]' --output text)
+    st=${row%%$'\t'*}; pr=${row#*$'\t'}
+    case "$st" in
+      completed) break ;;
+      pending) echo "  snapshot: $pr" ;;
+      *) die "$SNAP is '$st'" ;;
+    esac
+    sleep 30
+  done
+  echo "$SNAP completed"
+}
+
+# prepare, step 2: the volume, in the new host's zone, attached to it. NEW_VOL is set.
+move_create_and_attach() {
+  local tags name opts
+  say "3. The new volume (in $T_AZ, attached to $T_INSTANCE)"
+  if [ -z "$NEW_VOL" ]; then
+    name="Blot data (copy in progress)"
+    [ "$DRILL" != yes ] || name=drill-data-volume # never the production Name: DLM would snapshot it
+    tags='{"Key":"Name","Value":"'"$name"'"},{"Key":"BlotDataVolumeMoveFrom","Value":"'$CUR_VOL'"}'
+    [ "$DRILL" != yes ] || tags="$tags"',{"Key":"BlotDrill","Value":"true"}'
+    opts="--snapshot-id $SNAP --availability-zone $T_AZ --size $CUR_SIZE --volume-type $VTYPE"
+    [ -z "$IOPS" ] || opts="$opts --iops $IOPS"
+    [ -z "$THROUGHPUT" ] || opts="$opts --throughput $THROUGHPUT"
+    [ "$CUR_ENC" != True ] || opts="$opts --encrypted"
+    [ "$CUR_ENC" != True ] || [ "$CUR_KMS" = None ] || opts="$opts --kms-key-id $CUR_KMS"
+    confirm "Create a $CUR_SIZE GiB $VTYPE volume from $SNAP in $T_AZ (encrypted: $CUR_ENC) and attach it to $T_INSTANCE?"
+    # shellcheck disable=SC2086
+    NEW_VOL=$(aws_mut ec2 create-volume $opts --tag-specifications '[{"ResourceType":"volume","Tags":['"$tags"']}]' --query VolumeId --output text)
+    if [ -n "$DRY_RUN" ]; then
+      NEW_VOL=$PLACEHOLDER_VOLUME
+      aws_mut ec2 wait volume-available --volume-ids "$NEW_VOL"
+      aws_mut ec2 attach-volume --volume-id "$NEW_VOL" --instance-id "$T_INSTANCE" --device "/dev/sdf (first free of /dev/sdf../dev/sdp)"
+      return 0
+    fi
+    echo "Created $NEW_VOL"
+  else
+    echo "Using $NEW_VOL (already created)"
+  fi
+  describe_volume "$NEW_VOL"
+  if [ -n "$V_INST" ] && [ "$V_INST" != None ]; then
+    [ "$V_INST" = "$T_INSTANCE" ] || die "$NEW_VOL is attached to $V_INST, not to the new host's instance $T_INSTANCE"
+  else
+    attach_first_free "$NEW_VOL" "$T_INSTANCE"
+  fi
+}
+
+cmd_move_prepare() {
+  local TF T_INSTANCE T_AZ T_IP T_PORT T_KEY T_DRILL out pub t resume=""
+  NEW_VOL=""; SNAP=""
+  case "$PHASE" in
+    prepared | copied)
+      [ -n "$TARGET" ] || die "a shrink to $R_NEW is in progress; finish or abandon it first"
+      [ "$R_OLD" = "$CUR_VOL" ] || die "the state file on $HOST is for a move from $R_OLD, but the current volume is $CUR_VOL"
+      resume=1 ;;
+    swapped) die "a shrink swapped to $R_NEW and was not finished: run finish first" ;;
+  esac
+
+  say "Checking $TO"
+  push_host_script "$TO" || die "cannot copy host.sh to $TO"
+  TF=$(thost facts) || die "cannot run host.sh on $TO (ssh, or passwordless sudo)"
+  T_INSTANCE=$(field "$TF" instance_id); T_AZ=$(field "$TF" az); T_IP=$(field "$TF" private_ip)
+  T_PORT=$(field "$TF" ssh_port); T_KEY=$(field "$TF" ssh_hostkey); T_DRILL=$(field "$TF" drill)
+  [ -n "$T_INSTANCE" ] && [ -n "$T_AZ" ] && [ -n "$T_IP" ] || die "$TO did not report its instance ID, zone and address (IMDS)"
+  [ "$T_INSTANCE" != "$INSTANCE" ] || die "$TO is the same instance as $HOST"
+  [ "$T_DRILL" = "$DRILL" ] || die "$HOST is $([ "$DRILL" = yes ] || echo not\ )a drill host but $TO is $([ "$T_DRILL" = yes ] || echo not\ )one; a drill and production never mix"
+  [ -n "$T_KEY" ] || die "$TO has no /etc/ssh/ssh_host_ed25519_key.pub, so $HOST cannot check its identity"
+  [ "$(field "$TF" rsync)" = yes ] || die "rsync is not installed on $TO"
+  # A move back before retag: the old host still records its move to this host.
+  case "$(field "$TF" resize_phase)" in
+    prepared | copied)
+      t=$(field "$TF" resize_target); t=${t#*@}
+      [ -n "$EXISTING" ] && [ "${t%:*}" = "$SRC_IP" ] ||
+        die "$TO has a resize or move in progress of its own (phase $(field "$TF" resize_phase))" ;;
+  esac
+  [ "$T_AZ" = "$AZ" ] || echo "NOTE: $TO is in $T_AZ and $HOST in $AZ. The copy crosses zones; the plan keeps both in one."
+  if [ -n "$resume" ]; then
+    [ "$TARGET" = "ec2-user@$T_IP:$T_PORT" ] || die "the move in progress goes to $TARGET, but $TO is ec2-user@$T_IP:$T_PORT"
+    NEW_VOL=$R_NEW
+    [ "$R_EXIST" != yes ] || EXISTING=1
+    echo "Resuming the move to $NEW_VOL (phase $PHASE)"
+  fi
+
+  if [ -n "$EXISTING" ]; then
+    NEW_VOL=$(field "$TF" volume_id)
+    [[ "$NEW_VOL" =~ ^vol-[0-9a-f]{8,17}$ ]] || die "/etc/blot/data-volume on $TO does not hold a volume ID ('$NEW_VOL')"
+    [ "$(field "$TF" mountpoint)" = yes ] || die "/var/www/blot/data is not mounted on $TO (--existing is for a host that already has its volume)"
+    [ "$(field "$TF" mounted_volume)" = "$NEW_VOL" ] && [ "$(field "$TF" mounted_marker)" = "$NEW_VOL" ] ||
+      die "the volume mounted at /var/www/blot/data on $TO is '$(field "$TF" mounted_volume)' with marker '$(field "$TF" mounted_marker)', expected $NEW_VOL"
+    case ",$(field "$TF" options)," in *,ro,*) die "$TO's data directory is read-only: thaw it first (move thaw on that host)" ;; esac
+    [ "$NEW_VOL" != "$CUR_VOL" ] || die "$TO has the same volume as $HOST"
+  else
+    # A resumed move may already be mounted there, by the Next step below.
+    [ "$(field "$TF" mountpoint)" != yes ] || [ "$(field "$TF" mounted_volume)" = "$NEW_VOL" ] ||
+      die "$TO already has a volume mounted at /var/www/blot/data; use --existing to copy into it"
+    if [ -z "$NEW_VOL" ]; then
+      NEW_VOL=$(aws_cli ec2 describe-volumes --filters "Name=tag:BlotDataVolumeMoveFrom,Values=$CUR_VOL" "Name=status,Values=creating,available,in-use" \
+        --query 'Volumes[].VolumeId' --output text)
+      case "$NEW_VOL" in
+        "") ;;
+        *[[:space:]]*) die "several volumes are tagged BlotDataVolumeMoveFrom=$CUR_VOL ($NEW_VOL); delete the ones that are not wanted" ;;
+        *) echo "Found $NEW_VOL, created by an earlier run: resuming with it" ;;
+      esac
+    fi
+    if [ -n "$NEW_VOL" ]; then
+      describe_volume "$NEW_VOL"
+      [ "$V_AZ" = "$T_AZ" ] || die "$NEW_VOL is in $V_AZ, $TO is in $T_AZ; delete that volume by hand to start over"
+    fi
+  fi
+
+  say "Plan: $CUR_VOL on $HOST -> ${NEW_VOL:-a new volume} on $TO ($T_INSTANCE, $T_AZ)"
+  if [ -n "$EXISTING" ]; then
+    cat << EOF
+ 1. $TO already has its volume ($NEW_VOL): no snapshot, no new volume, no pre-warm
+ 2. make a key on $HOST for the copy and let it into ec2-user on $TO (from $HOST's address only)
+EOF
+  else
+    cat << EOF
+ 1. snapshot $CUR_VOL (tagged BlotDataVolumeMoveFrom): the source of the new volume and the first rollback
+ 2. create ${NEW_VOL:-a $VTYPE volume} from it in $T_AZ, with the same size and encryption, and attach it to $T_INSTANCE.
+    It is not named for the snapshot policy (DLM) until move retag.
+ 3. on $TO: write the new volume's own ID into its marker (host.sh adopt; never formats)
+ 4. on $TO: read the whole device once in the background (blot-data-prewarm): a volume made from a
+    snapshot loads from S3 on first read, and the switch must not be the first read
+ 5. make a key on $HOST for the copy and let it into ec2-user on $TO (from $HOST's address only)
+EOF
+  fi
+  confirm "Start?"
+
+  if [ -z "$EXISTING" ]; then
+    move_snapshot
+    move_create_and_attach
+    say "4. Staging $NEW_VOL on $TO, and warming it"
+    out=$(thost_do adopt "$NEW_VOL" "$CUR_VOL") || die "adopt failed on $TO (see above)"
+    echo "$out"
+    out=$(thost_do prewarm "$NEW_VOL") || die "could not start the pre-warm on $TO"
+    echo "$out"
+  fi
+
+  say "5. The copy's ssh key"
+  out=$(host_do move-prepare "$T_IP" "$T_PORT" "$NEW_VOL" "$T_KEY" ${EXISTING:+existing}) || die "move-prepare failed on $HOST"
+  if [ -n "$DRY_RUN" ]; then
+    echo "$out"
+    echo "would let the key into ec2-user's authorized_keys on $TO, from $SRC_IP"
+  else
+    pub=$(field "$out" public_key)
+    # shellcheck disable=SC2086
+    set -- $pub
+    [ "$1" = ssh-ed25519 ] && [ -n "${2:-}" ] || die "$HOST did not return a public key ($pub)"
+    thost_do authorize-key "$SRC_IP" "$1" "$2" > /dev/null || die "could not let the key into $TO"
+    # move-prepare wrote the state on the host: without this TARGET is still
+    # empty on a first run and move_target_status checks nothing.
+    gather_facts
+    move_target_status
+    echo "$HOST reaches $TO over ssh, with passwordless sudo and rsync"
+  fi
+
+  say "Next"
+  if [ -z "$EXISTING" ]; then
+    if [ "$DRILL" = yes ]; then
+      cat << EOF
+ 1. $TO has no deploy.sh in a drill; mount the volume the way it would:
+      ssh $TO 'echo $NEW_VOL | sudo tee /etc/blot/data-volume && sudo systemctl enable --now mount-data-volume.service'
+EOF
+    else
+      cat << EOF
+ 1. Mount it on $TO through mount-data-volume.service. A new host runs deploy.sh directly (not
+    npm run deploy-host, which sources the old host's address); see config/host/launch.sh:
+      DATA_VOLUME_ID=$NEW_VOL SSH_KEY=<key> PUBLIC_IP=<$TO's address> SSH_PORT=<its port> config/host/deploy.sh
+EOF
+    fi
+  else
+    echo " 1. $TO already has its volume mounted."
+  fi
+  cat << EOF
+ 2. Copy while $HOST keeps serving:
+      $0 --host $HOST move copy
+ 3. Then, once the pre-warm is done (move status): the freeze.
+      $0 --host $HOST move freeze
+EOF
+}
+
+# prewarm_line: one line on the pre-warm, from a move-status in MS.
+prewarm_line() {
+  local st dur pct
+  st=$(field "$MS" target_prewarm); dur=$(field "$MS" target_prewarm_duration_s); pct=$(field "$MS" target_prewarm_percent)
+  if [ "$R_EXIST" = yes ]; then echo "Pre-warm:   not needed (the target already had its volume)"; return 0; fi
+  case "$st" in
+    running) echo "Pre-warm:   running for $(fmt_duration "${dur:-0}"), ${pct:-?}% read" ;;
+    ok) echo "Pre-warm:   done in $(fmt_duration "${dur:-0}")" ;;
+    *) echo "Pre-warm:   ${st:-unknown}" ;;
+  esac
+}
+
+cmd_move_status() {
+  local l
+  if [ -z "$TARGET" ]; then
+    echo "No move is recorded on $HOST (state: ${PHASE:-none})."
+    return 0
+  fi
+  move_target_status_soft
+  echo "Move:       $R_OLD on $HOST -> $R_NEW at $TARGET, phase $PHASE$([ "$R_EXIST" != yes ] || echo ", target already had its volume")"
+  echo "Data dir:   $(field "$FACTS" options)"
+  if [ "$(field "$MS" ssh)" = ok ]; then
+    echo "Target:     reachable; volume mounted there '$(field "$MS" target_mounted_volume)', marker '$(field "$MS" target_mounted_marker)'$([ "$(field "$MS" target_mounted_volume)" = "$R_NEW" ] && echo " (as expected)" || echo " (NOT $R_NEW: deploy.sh has not mounted it yet?)")"
+    prewarm_line
+  else
+    echo "Target:     not reachable from $HOST: $(field "$MS" ssh_error)"
+  fi
+  for l in $(field "$FACTS" copy_labels); do
+    echo
+    echo "Copy pass $l:"
+    host copy-status "$l" | sed 's/^/  /'
+  done
+}
+# (status looks, it never dies on a target it cannot reach)
+move_target_status_soft() { MS=$(host move-status) || die "cannot run move-status on $HOST"; }
+
+cmd_move_copy() {
+  local v
+  move_state
+  [ -n "$TARGET" ] || return 0
+  case ",$(field "$FACTS" options)," in
+    *,ro,*) die "the data directory is read-only: the freeze is on. Undo it with move thaw, or go on with the switch" ;;
+  esac
+  [ "$PHASE" = prepared ] || die "phase is '$PHASE', not prepared: re-run move prepare --to <new host>"
+  move_target_status
+  if [ -z "$DRY_RUN" ]; then
+    v=$(field "$MS" target_mounted_volume)
+    [ "$v" = "$NEW_VOL" ] && [ "$(field "$MS" target_mounted_marker)" = "$NEW_VOL" ] ||
+      die "the volume mounted at /var/www/blot/data on the target is '$v' with marker '$(field "$MS" target_mounted_marker)', not $NEW_VOL: mount it first (the Next step of move prepare)"
+    case ",$(field "$MS" target_options)," in *,ro,*) die "the target's data directory is read-only" ;; esac
+    prewarm_line
+  fi
+  confirm "Copy from $HOST to $TARGET while the app keeps running?"
+  step_passes
+  if [ -z "$DRY_RUN" ]; then
+    move_target_status
+    prewarm_line
+  fi
+  echo
+  echo "Next: $0 --host $HOST move freeze"
+}
+
+cmd_move_freeze() {
+  local t_on left snap_tags pw rostat
+  FREEZE_REASON="data volume move"
+  move_state
+  [ -n "$TARGET" ] || return 0
+  case "$PHASE" in prepared | copied) ;; *) move_need "phase is '$PHASE', not prepared" ;; esac
+  move_target_status
+  if [ -z "$DRY_RUN" ]; then
+    [ "$(field "$MS" target_mounted_volume)" = "$NEW_VOL" ] && [ "$(field "$MS" target_mounted_marker)" = "$NEW_VOL" ] ||
+      die "the volume mounted at /var/www/blot/data on the target is '$(field "$MS" target_mounted_volume)', not $NEW_VOL"
+    pw=$(field "$MS" target_prewarm)
+    if [ "$R_EXIST" != yes ] && [ "$pw" != ok ]; then
+      if [ -n "$NO_PREWARM_CHECK" ]; then echo "WARNING: the pre-warm is '$pw' (--no-prewarm-check given): the first reads on the new volume will be slow"
+      else die "the pre-warm on the target is '${pw:-unknown}' ($(field "$MS" target_prewarm_percent)%): wait for it (move status), or pass --no-prewarm-check"; fi
+    fi
+  fi
+  case ",$(field "$FACTS" options)," in
+    *,ro,*)
+      if [ "$PHASE" = copied ]; then
+        echo "The data directory is already read-only and the final copy is done: the freeze is on. Undo it with move thaw, or go on with the switch."
+        return 0
+      fi ;;
+  esac
+  if [ "$DRILL" != yes ] && [ -z "$DRY_RUN" ]; then
+    rostat=$(ro status) || die "'node scripts/read-only.js status' does not work in $CONTAINER"
+    if ! echo "$rostat" | grep -q '"readOnly":null' && ! echo "$rostat" | grep -q '"reason":"data volume move"'; then
+      die "the app is already read-only for something else: $rostat"
+    fi
+  fi
+
+  say "Freeze and final copy"
+  if [ "$DRILL" = yes ]; then
+    echo "Drill host: the units (blot-blue and blot-green) are paused instead of using read-only.js."
+  fi
+  echo "The app will refuse writes (dashboard and client edits get a 503) from now until the switch or move thaw,"
+  echo "which is much longer than a shrink's window: this stops after the final copy with everything still frozen."
+  echo "The last live pass took $(fmt_duration "$(highest_pass_duration)"); the frozen pass runs in parallel and is shorter."
+  confirm "Freeze now?"
+  refuse_near_cron
+  aws_cli sts get-caller-identity --query Arn --output text > /dev/null 2>&1 ||
+    die "the AWS session expired; run: aws sso login --profile $AWS_PROFILE_NAME"
+  gather_facts
+
+  t_on=$(date +%s)
+  if [ -n "$DRY_RUN" ]; then
+    freeze_dry_run
+    aws_mut ec2 create-snapshot --volume-id "$CUR_VOL" --description "at move freeze, to $NEW_VOL"
+    echo "would stop there, with the app frozen and the data directory read-only, and print how long the freeze has left"
+    return 0
+  fi
+  # Until the final copy and the snapshot are done, undo_freeze puts everything back.
+  freeze_app
+  freeze_and_copy
+
+  snap_tags='{"Key":"Name","Value":"Blot data at move freeze"},{"Key":"BlotDataVolumeMoveFrom","Value":"'$CUR_VOL'"}'
+  [ "$DRILL" != yes ] || snap_tags="$snap_tags"',{"Key":"BlotDrill","Value":"true"}'
+  SNAP=$(aws_mut ec2 create-snapshot --volume-id "$CUR_VOL" --description "at move freeze, to $NEW_VOL" \
+    --tag-specifications '[{"ResourceType":"snapshot","Tags":['"$snap_tags"']}]' \
+    --query SnapshotId --output text) || die "could not start the snapshot of $CUR_VOL"
+  echo "Snapshot $SNAP of $CUR_VOL started (not waiting for it)"
+
+  # From here the EXIT trap leaves the freeze alone.
+  FREEZE_STAGE=done
+  echo
+  echo "FROZEN. The final copy is on $TARGET; $HOST's data directory is read-only and the app refuses writes."
+  echo "The frozen part so far took $(fmt_duration $(($(date +%s) - t_on)))."
+  if [ "$DRILL" = yes ]; then
+    echo "The drill units stay paused until the switch or: $0 --host $HOST move thaw"
+  else
+    left=$((FREEZE_TTL - ($(date +%s) - T_REARM)))
+    echo "The read-only freeze lapses by itself in about $(fmt_duration "$left") (--freeze-ttl $FREEZE_TTL); the switch has to"
+    echo "re-arm it (read-only.js on --ttl) or finish first. If it lapses with the disk still read-only, writes fail with"
+    echo "errors instead of 503s."
+  fi
+  echo "Go on with the switch, or undo: $0 --host $HOST move thaw"
+}
+
+# highest_pass_duration: how long the newest finished pass took.
+highest_pass_duration() {
+  local n
+  n=$(highest_pass)
+  if [ "$n" -gt 0 ]; then field "$(host copy-status "p$n")" duration_s | sed 's/^$/0/'; else echo 0; fi
+}
+
+cmd_move_thaw() {
+  local c out i ok=""
+  move_state
+  [ -n "$TARGET" ] || return 0
+  say "Thawing $HOST"
+  host_do stop-copy
+  host_do thaw-disk
+  echo "Data directory read-write again."
+  [ -z "$DRY_RUN" ] || { echo "would lift the app freeze (or unpause the drill containers)"; return 0; }
+  if [ "$DRILL" = yes ]; then
+    for c in $(echo "$FACTS" | sed -n 's/^container\.\([^=]*\)=.*/\1/p'); do
+      ssh_run "$HOST" "sudo docker unpause $c" < /dev/null > /dev/null 2>&1 || true
+    done
+    echo "Drill containers unpaused."
+    return 0
+  fi
+  if ! out=$(ro status); then
+    echo "WARNING: could not run read-only.js in $CONTAINER (stopped?). A freeze that is still on lapses by itself after its TTL."
+    return 0
+  fi
+  if echo "$out" | grep -q '"readOnly":null'; then
+    echo "The app was not frozen."
+  elif echo "$out" | grep -q '"reason":"data volume move"'; then
+    for i in 1 2 3; do
+      if ro off > /dev/null; then ok=1; break; fi
+      sleep 2
+    done
+    [ -n "$ok" ] || die "could not lift the freeze; run: ssh $HOST sudo docker exec $CONTAINER node scripts/read-only.js off"
+    echo "Freeze lifted: the app accepts writes again."
+  else
+    echo "The app is read-only for something else, which is left alone: $out"
+  fi
+}
+
+cmd_move_retag() {
+  local now name
+  move_state
+  [ -n "$TARGET" ] || return 0
+  case "$PHASE" in copied | moved) ;; *) move_need "phase is '$PHASE': move retag is for after the switch, once move freeze has finished" ;; esac
+  if [ -z "$DRY_RUN" ]; then
+    describe_volume "$NEW_VOL"
+    [ -n "$V_INST" ] && [ "$V_INST" != None ] || die "$NEW_VOL is not attached to any instance"
+    [ "$V_INST" != "$INSTANCE" ] || die "$NEW_VOL is attached to $HOST itself"
+  fi
+  say "Retag: $NEW_VOL becomes the data volume, $CUR_VOL is replaced"
+  echo "Run this after the switch. --host must be the OLD host by an address that still reaches it"
+  echo "(an alias for the Elastic IP now points at the new host)."
+  confirm "Retag?"
+  now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  name=$DATA_NAME
+  # A drill must never carry the production Name tag: the DLM policy would snapshot it.
+  if [ "$DRILL" = yes ]; then name=drill-data-volume; fi
+  # The new volume first, so there is never a moment with no volume matching the DLM policy.
+  aws_mut ec2 create-tags --resources "$NEW_VOL" --tags '[{"Key":"Name","Value":"'"$name"'"}]'
+  aws_mut ec2 create-tags --resources "$CUR_VOL" --tags '[{"Key":"Name","Value":"Blot data (replaced by '"$NEW_VOL"')"},{"Key":"BlotDataVolumeReplacedAt","Value":"'"$now"'"}]'
+  host_do move-done
+  say "Next"
+  cat << EOF
+ $HOST stays as the rollback, with $CUR_VOL mounted read-only and nothing detached or deleted,
+ until the cycle's finish. To go back before then: thaw $HOST (move thaw), then from the new host
+ move prepare --to <the old host> --existing, copy and freeze (README, "Moving to another host").
+EOF
+}
+
+cmd_move() {
+  case "$MSUB" in
+    prepare) cmd_move_prepare ;;
+    copy) cmd_move_copy ;;
+    freeze) cmd_move_freeze ;;
+    thaw) cmd_move_thaw ;;
+    retag) cmd_move_retag ;;
+    status) cmd_move_status ;;
+  esac
+}
+
 preflight
 case "$CMD" in
   status) cmd_status ;;
   grow) cmd_grow ;;
   shrink) cmd_shrink ;;
   finish) cmd_finish ;;
+  move) cmd_move ;;
 esac
 [ -z "$DRY_RUN" ] || { echo; echo "Dry run: nothing changed."; }

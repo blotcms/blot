@@ -1,9 +1,11 @@
 #!/bin/bash
 # Usage: drill.sh launch --ami ID --subnet ID --security-group ID --key-name NAME [options]
+#        drill.sh launch-target --ami ID --subnet ID --security-group ID --key-name NAME [options]
 #        drill.sh setup [--key PATH] <ssh-target>
+#        drill.sh setup-target [--key PATH] <ssh-target>
 #        drill.sh teardown [--yes] <instance-id>
 # Rehearses resize.sh on a throwaway instance with the same kernel and
-# userland as the app host, and a small copy of its layout, without touching
+# userland as the app host (Amazon Linux 2023 or 2), and a small copy of its layout, without touching
 # production: an 8 GiB XFS data volume mounted by mount-data-volume.sh, the
 # top-level directories filled with about 50,000 small files, two
 # "app" containers (one reading, one writing) that bind the data directory
@@ -18,9 +20,16 @@
 #   setup      install docker, rsync and xfsprogs, format the data volume,
 #              install mount-data-volume.sh and the docker drop-in from the repo,
 #              fill it, start the containers; then print the resize.sh commands
+#   launch-target  a second instance in the same subnet with NO data volume, the
+#              new host for rehearsing resize.sh move
+#   setup-target   the same packages and mount-data-volume.sh with its service
+#              and drop-in, but no data, no volume and no containers; then print
+#              the resize.sh move commands
 #   teardown   terminate the instance and delete its volumes and the snapshots
-#              the drill made, each by explicit ID, each only after its
-#              BlotDrill=true tag is checked again
+#              the drill made (those of a shrink or a move too), each by
+#              explicit ID, each only after its BlotDrill=true tag is checked
+#              again. A volume attached to some other instance is left alone:
+#              tear that instance down too.
 #
 # Options:
 #   --ssh-port N     launch: move sshd to port N before boot finishes (user data), for a
@@ -36,7 +45,7 @@ AWS_PROFILE_NAME=blot
 AWS_REGION=${AWS_REGION:-us-west-2}
 AMI=""; SUBNET=""; SECURITY_GROUP=""; KEY_NAME=""; SSH_PORT=""
 KEY=${DRILL_SSH_KEY:-}
-YES=""; DRY_RUN=""; CMD=""; ARG=""
+YES=""; DRY_RUN=""; CMD=""; ARG=""; NO_DATA=""
 MOUNT_BRANCH=origin/master
 REPO=$(cd "$HERE/../../.." && pwd)
 
@@ -78,12 +87,15 @@ cmd_launch() {
   [ -n "$AMI" ] && [ -n "$SUBNET" ] && [ -n "$SECURITY_GROUP" ] && [ -n "$KEY_NAME" ] ||
     die "launch needs --ami, --subnet, --security-group and --key-name (nothing is hardcoded; see the comments at the top of this file)"
   local tags='{"Key":"BlotDrill","Value":"true"},{"Key":"Name","Value":"drill-data-volume"}'
+  [ -z "$NO_DATA" ] || tags='{"Key":"BlotDrill","Value":"true"},{"Key":"Name","Value":"drill-data-volume-target"}'
   # The volume tag specification applies to every volume made at launch, the
   # root volume included; the root goes away with the instance.
   local specs='[{"ResourceType":"instance","Tags":['"$tags"']},{"ResourceType":"volume","Tags":['"$tags"']}]'
   # DeleteOnTermination is false for the data volume so that teardown, not
   # termination, is what deletes it, by ID and after checking the tag.
   local mappings='[{"DeviceName":"/dev/sdf","Ebs":{"VolumeSize":8,"VolumeType":"gp3","DeleteOnTermination":false}}]'
+  # The target of a move has no data volume: the move makes and attaches its own.
+  [ -z "$NO_DATA" ] || mappings=""
   # --ssh-port: user data that moves sshd to that port on first boot, before
   # cloud-init finishes, for a security group that does not allow 22 (the app
   # host's sshd is on a non-standard port too). The group itself is not touched.
@@ -95,13 +107,13 @@ cmd_launch() {
   if [ -n "$DRY_RUN" ]; then
     [ -z "$userdata" ] || echo "user data:
 $userdata"
-    echo "would run: aws --profile $AWS_PROFILE_NAME --region $AWS_REGION ec2 run-instances --image-id $AMI --instance-type t4g.small --subnet-id $SUBNET --security-group-ids $SECURITY_GROUP --key-name $KEY_NAME --block-device-mappings '$mappings' --tag-specifications '$specs'"
+    echo "would run: aws --profile $AWS_PROFILE_NAME --region $AWS_REGION ec2 run-instances --image-id $AMI --instance-type t4g.small --subnet-id $SUBNET --security-group-ids $SECURITY_GROUP --key-name $KEY_NAME${mappings:+ --block-device-mappings '$mappings'} --tag-specifications '$specs'"
     return 0
   fi
   local id ip
   id=$(aws_cli ec2 run-instances --image-id "$AMI" --instance-type t4g.small --subnet-id "$SUBNET" \
     --security-group-ids "$SECURITY_GROUP" --key-name "$KEY_NAME" \
-    --block-device-mappings "$mappings" --tag-specifications "$specs" ${userdata:+--user-data "$userdata"} \
+    ${mappings:+--block-device-mappings "$mappings"} --tag-specifications "$specs" ${userdata:+--user-data "$userdata"} \
     --query 'Instances[0].InstanceId' --output text)
   echo "Instance: $id"
   aws_cli ec2 wait instance-running --instance-ids "$id"
@@ -109,7 +121,7 @@ $userdata"
     awk '{ if ($1 != "None") print $1; else print $2 }')
   echo "Address:  $ip"
   echo
-  echo "Next: $0 --profile $AWS_PROFILE_NAME --region $AWS_REGION --key <your .pem> setup ec2-user@$ip"
+  echo "Next: $0 --profile $AWS_PROFILE_NAME --region $AWS_REGION --key <your .pem> setup${NO_DATA:+-target} ec2-user@$ip"
   echo "Afterwards: $0 --profile $AWS_PROFILE_NAME --region $AWS_REGION teardown $id"
 }
 
@@ -129,8 +141,11 @@ set -euo pipefail
 DATA=/var/www/blot/data
 LINK=/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${VOLUME_ID/-/}
 
-command -v docker > /dev/null || dnf install -y docker
-for p in rsync xfsprogs lsof; do rpm -q "$p" > /dev/null || dnf install -y "$p"; done
+# Amazon Linux 2023 has dnf; Amazon Linux 2 (the production host today) has yum
+# and gets docker from amazon-linux-extras.
+if command -v dnf > /dev/null; then PKG="dnf install -y"; DOCKER_PKG="dnf install -y docker"; else PKG="yum install -y"; DOCKER_PKG="amazon-linux-extras install -y docker"; fi
+command -v docker > /dev/null || $DOCKER_PKG
+for p in rsync xfsprogs lsof; do rpm -q "$p" > /dev/null || $PKG "$p"; done
 systemctl enable --now docker
 usermod -aG docker ec2-user || true
 
@@ -241,6 +256,72 @@ Clean up: $0 --profile $AWS_PROFILE_NAME --region $AWS_REGION teardown $instance
 EOF
 }
 
+# The target of a move: what a new host has before the volume arrives. No data
+# volume, no /etc/blot/data-volume (mount-data-volume.service would fail on it
+# and is not enabled): resize.sh move prepare makes and attaches the volume, and
+# the step it prints mounts it, as config/host/deploy.sh does on a real host.
+remote_setup_target() {
+  cat << 'EOF'
+set -euo pipefail
+# Amazon Linux 2023 has dnf; Amazon Linux 2 (the production host today) has yum
+# and gets docker from amazon-linux-extras.
+if command -v dnf > /dev/null; then PKG="dnf install -y"; DOCKER_PKG="dnf install -y docker"; else PKG="yum install -y"; DOCKER_PKG="amazon-linux-extras install -y docker"; fi
+command -v docker > /dev/null || $DOCKER_PKG
+for p in rsync xfsprogs lsof; do rpm -q "$p" > /dev/null || $PKG "$p"; done
+systemctl enable --now docker
+usermod -aG docker ec2-user || true
+mkdir -p /etc/blot /var/www/blot/data
+touch /etc/blot/drill
+chmod 755 /home/ec2-user/scripts/mount-data-volume.sh
+cp /home/ec2-user/scripts/mount-data-volume.service /etc/systemd/system/mount-data-volume.service
+mkdir -p /etc/systemd/system/docker.service.d
+cp /home/ec2-user/scripts/20-data-volume.conf /etc/systemd/system/docker.service.d/20-data-volume.conf
+systemctl daemon-reload
+EOF
+}
+
+cmd_setup_target() {
+  [ -n "$ARG" ] || die "usage: drill.sh setup-target [--key PATH] <ssh-target>"
+  [ -z "$DRY_RUN" ] || die "setup-target has no dry-run mode: it installs packages"
+  local target=$ARG instance i
+  if [ -z "${SSH_OPTS:-}" ]; then SSH_OPTS="${KEY:+-i $KEY }-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+  elif [ -n "$KEY" ]; then SSH_OPTS="$SSH_OPTS -i $KEY"; fi
+  [ -z "$KEY" ] || [ -f "$KEY" ] || die "no such key file: $KEY"
+  work=$(mktemp -d) # global: the EXIT trap uses it
+  trap 'rm -rf "$work"' EXIT
+  repo_file config/host/scripts/mount-data-volume.sh "$work/mount-data-volume.sh"
+  repo_file config/host/scripts/mount-data-volume.service "$work/mount-data-volume.service"
+  repo_file config/host/scripts/docker.service.d/20-data-volume.conf "$work/20-data-volume.conf"
+  chmod 755 "$work/mount-data-volume.sh"
+
+  say "Waiting for SSH to $target"
+  for i in $(seq 1 30); do ssh_run "$target" true 2> /dev/null && break; sleep 10; done
+  ssh_run "$target" true || die "cannot ssh to $target"
+
+  say "Checking this is a drill instance"
+  instance=$(ssh_run "$target" 'T=$(curl -sf -X PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 60"); curl -sf -H "X-aws-ec2-metadata-token: $T" http://169.254.169.254/latest/meta-data/instance-id')
+  [ "$(aws_cli ec2 describe-instances --instance-ids "$instance" --query 'Reservations[0].Instances[0].Tags[?Key==`BlotDrill`].Value | [0]' --output text)" = true ] ||
+    die "$instance is not tagged BlotDrill=true; refusing to set it up"
+
+  say "Installing docker, rsync, xfsprogs and mount-data-volume"
+  COPYFILE_DISABLE=1 tar -C "$work" -cf - mount-data-volume.sh mount-data-volume.service 20-data-volume.conf |
+    ssh_run "$target" 'mkdir -p /home/ec2-user/scripts && tar -xf - -C /home/ec2-user/scripts'
+  remote_setup_target | ssh_run "$target" "sudo bash -s"
+
+  say "Ready"
+  cat << EOF
+$instance has no data and no volume. From the repo root, with the source from \`setup\`
+(the key, if any, goes in SSH_OPTS; --host is the source, --to is this host):
+  export SSH_OPTS="${SSH_OPTS}"
+  P="--profile $AWS_PROFILE_NAME --region $AWS_REGION"
+  config/host/data-volume/resize.sh \$P --host <source> --dry-run move prepare --to $target
+  config/host/data-volume/resize.sh \$P --host <source> move prepare --to $target
+  (then the step it prints to mount the volume here, move copy, move freeze, move thaw)
+Clean up both: $0 --profile $AWS_PROFILE_NAME --region $AWS_REGION teardown $instance
+and the source's instance. Volumes of a move are deleted by whichever teardown finds them unattached.
+EOF
+}
+
 cmd_teardown() {
   [[ "$ARG" =~ ^i-[0-9a-f]{8,17}$ ]] || die "usage: drill.sh teardown <instance-id>"
   local id=$ARG state flag vols snaps v s out
@@ -251,24 +332,32 @@ cmd_teardown() {
   state=$(aws_cli ec2 describe-instances --instance-ids "$id" --query 'Reservations[0].Instances[0].State.Name' --output text)
   [ "$state" != terminated ] || die "$id is already terminated; its volumes can no longer be tied to it, delete any leftovers by hand"
   vols=$(aws_cli ec2 describe-instances --instance-ids "$id" --query 'Reservations[0].Instances[0].BlockDeviceMappings[].Ebs.VolumeId' --output text | tr '\t' ' ')
-  # Volumes the resizes made. After a shrink the old volume may be detached
-  # (it is not in the instance's mappings any more) and the new one points back
-  # at it with a BlotDataVolumeResizeFrom tag, so follow that tag both ways,
-  # transitively, from every volume the instance has: to the volume it names
-  # (the predecessor) and to the volumes that name it (the successors). Only
-  # volumes tagged BlotDrill=true are followed or listed. Then the snapshots
-  # whose BlotDataVolumeResizeFrom names any of them.
-  local all="$vols" queue="$vols" next x p succ
+  # Volumes the resizes and moves made. After a shrink the old volume may be
+  # detached (it is not in the instance's mappings any more) and the new one
+  # points back at it with a BlotDataVolumeResizeFrom tag; a move's new volume
+  # points back at the source's with BlotDataVolumeMoveFrom and is attached to
+  # the OTHER instance. So follow both tags both ways, transitively, from every
+  # volume the instance has: to the volume it names (the predecessor) and to the
+  # volumes that name it (the successors). Only volumes tagged BlotDrill=true are
+  # followed or listed, and one attached to another instance is left alone (that
+  # instance's own teardown takes it). Then the snapshots whose
+  # BlotDataVolumeResizeFrom or BlotDataVolumeMoveFrom names any of them.
+  local all="$vols" queue="$vols" next x p succ key att
   while [ -n "$queue" ]; do
     next=""
     for v in $queue; do
-      p=$(aws_cli ec2 describe-volumes --volume-ids "$v" --query 'Volumes[0].Tags[?Key==`BlotDataVolumeResizeFrom`].Value | [0]' --output text 2> /dev/null) || p=None
-      succ=$(aws_cli ec2 describe-volumes --filters "Name=tag:BlotDataVolumeResizeFrom,Values=$v" "Name=tag:BlotDrill,Values=true" --query 'Volumes[].VolumeId' --output text | tr '\t' ' ')
+      p=""; succ=""
+      for key in BlotDataVolumeResizeFrom BlotDataVolumeMoveFrom; do
+        p="$p $(aws_cli ec2 describe-volumes --volume-ids "$v" --query 'Volumes[0].Tags[?Key==`'"$key"'`].Value | [0]' --output text 2> /dev/null || echo None)"
+        succ="$succ $(aws_cli ec2 describe-volumes --filters "Name=tag:$key,Values=$v" "Name=tag:BlotDrill,Values=true" --query 'Volumes[].VolumeId' --output text | tr '\t' ' ')"
+      done
       for x in $p $succ; do
         [[ "$x" =~ ^vol-[0-9a-f]{8,17}$ ]] || continue
         case " $all " in *" $x "*) continue ;; esac
         # a predecessor must be a drill volume too (or already gone: nothing to delete)
         [ "$(volume_tag "$x" BlotDrill 2> /dev/null || echo None)" = true ] || continue
+        att=$(aws_cli ec2 describe-volumes --volume-ids "$x" --query 'Volumes[0].Attachments[0].InstanceId' --output text 2> /dev/null || echo None)
+        if [ "$att" != None ] && [ "$att" != "$id" ]; then echo "Leaving $x: it is attached to $att"; continue; fi
         all="$all $x"; next="$next $x"
       done
     done
@@ -276,7 +365,9 @@ cmd_teardown() {
   done
   snaps=""
   for v in $all; do
-    snaps="$snaps $(aws_cli ec2 describe-snapshots --owner-ids self --filters "Name=tag:BlotDataVolumeResizeFrom,Values=$v" "Name=tag:BlotDrill,Values=true" --query 'Snapshots[].SnapshotId' --output text | tr '\t' ' ')"
+    for key in BlotDataVolumeResizeFrom BlotDataVolumeMoveFrom; do
+      snaps="$snaps $(aws_cli ec2 describe-snapshots --owner-ids self --filters "Name=tag:$key,Values=$v" "Name=tag:BlotDrill,Values=true" --query 'Snapshots[].SnapshotId' --output text | tr '\t' ' ')"
+    done
   done
   vols=$(echo "$all" | tr ' ' '\n' | grep . | sort -u | tr '\n' ' ')
   snaps=$(echo "$snaps" | tr ' ' '\n' | grep . | sort -u | tr '\n' ' ')
@@ -315,7 +406,9 @@ cmd_teardown() {
 
 case "$CMD" in
   launch) cmd_launch ;;
+  launch-target) NO_DATA=1; cmd_launch ;;
   setup) cmd_setup ;;
+  setup-target) cmd_setup_target ;;
   teardown) cmd_teardown ;;
-  *) die "usage: drill.sh launch|setup <ssh-target>|teardown <instance-id>" ;;
+  *) die "usage: drill.sh launch|launch-target|setup <ssh-target>|setup-target <ssh-target>|teardown <instance-id>" ;;
 esac
