@@ -54,7 +54,7 @@ When a user pushes changes from their local repository to the bare repository, B
 
 - **`checkGitRepoExists.js`**: Validates that a Git repository exists in a given directory by using `git rev-parse --show-toplevel` and comparing the repository root with the expected blog folder path. Accounts for nested Git repositories (the entire Blot codebase is itself a Git repo).
 
-- **`renameRepo.js`**: Async function to rename a bare repository when a blog handle changes. Moves the bare repository from the old handle path to the new handle path.
+- **`renameRepo.js`**: Async function to rename a bare repository when a blog handle changes. Moves the bare repository from the old handle path to the new handle path, and rejects if a repository is already there. `Blog.set` runs it before saving the new handle, and the handle validator refuses a handle with a repository on disk unless the blog held that handle itself.
 
 ### Views
 
