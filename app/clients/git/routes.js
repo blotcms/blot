@@ -213,7 +213,7 @@ repo.onPush(
       return followUps.arm(blogID);
     },
     abandon: function (blogID, armed) {
-      return followUps.alarm.cancelIf(blogID, armed);
+      if (armed !== undefined) return followUps.alarm.cancelIf(blogID, armed);
     },
   }
 );

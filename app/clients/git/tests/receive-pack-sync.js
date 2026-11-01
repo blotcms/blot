@@ -89,6 +89,18 @@ describe("git client push and the sync", function () {
     expect(await client.zScore(ALARM, blogID)).toBe(null);
   });
 
+  it("leaves a follow-up which was already waiting", async function () {
+    var blogID = this.blog.id;
+    var due = Date.now() + 60 * 60 * 1000;
+
+    await client.zAdd(ALARM, { score: due, value: blogID });
+    await this.local.writeAndPush("/waiting.txt", "Waiting");
+
+    expect(await client.zScore(ALARM, blogID)).toBe(due);
+
+    await client.zRem(ALARM, blogID);
+  });
+
   it("fails the push, and moves nothing, when the follow-up can't be written", async function () {
     var local = this.local;
     var syncs = watchSyncs();

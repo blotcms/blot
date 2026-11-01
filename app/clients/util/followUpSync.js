@@ -69,7 +69,12 @@ function followUpSync(name, syncBlog) {
   // follow-up in Redis first, so that a process which dies before it has
   // synced the change does not lose it. Resolves to a token to pass to run()
   // once the change has been handed to it. Rejects if Redis can't take it.
+  //
+  // A follow-up already waiting will sync this change too, and may be all that
+  // syncs an earlier one, so it is left alone, and there is no token.
   async function arm(blogID) {
+    if ((await alarms.when(blogID)) !== null) return undefined;
+
     // The fraction makes the time ours alone, so run() can take back only
     // this follow-up and not one written since
     const due = Date.now() + ARM_MS + Math.random();
