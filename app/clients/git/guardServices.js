@@ -288,5 +288,6 @@ module.exports = {
   createTail: createTail,
   formatExitLine: formatExitLine,
   logExit: logExit,
+  stop: stop,
   STDERR_TAIL_BYTES: STDERR_TAIL_BYTES,
 };
