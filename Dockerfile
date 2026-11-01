@@ -337,14 +337,16 @@ RUN mkdir -p /etc/resty-auto-ssl/storage /etc/resty-auto-ssl/letsencrypt/conf \
  && chown -R ec2-user:ec2-user /etc/resty-auto-ssl /var/log/openresty /var/cache/openresty /run/blot
 
 # The sandbox (app/sandbox, off unless the host sets BLOT_SANDBOX). nsjail's
-# shared libraries come from the same Alpine edge it was built against.
-RUN apk add --no-cache --upgrade $ALPINE_EDGE protobuf libnl3
-# Chromium for the browser job, with the same rm as the dev stage (see there),
-# and what its jail's network needs. setpriv replaces busybox's, which can't
-# clear the bounding set.
-RUN apk add --no-cache chromium nss freetype harfbuzz ttf-freefont font-noto-emoji \
+# shared libraries come from the same Alpine edge it was built against. Chromium
+# for the browser job has to come from there too, in one transaction: the stable
+# one pulls abseil back down, and nsjail no longer starts. The rm is the dev
+# stage's (see there). The rest is what the jail's network needs; setpriv
+# replaces busybox's, which can't clear the bounding set.
+RUN apk add --no-cache --upgrade $ALPINE_EDGE protobuf libnl3 \
+    chromium nss freetype harfbuzz ttf-freefont font-noto-emoji \
     passt nftables setpriv \
- && rm -rf /usr/lib/libLLVM* /usr/lib/libgallium-*.so /usr/lib/dri
+ && rm -rf /usr/lib/libLLVM* /usr/lib/libgallium-*.so /usr/lib/dri \
+ && chromium-browser --version
 COPY --from=nsjail /nsjail/nsjail /usr/local/bin/nsjail
 # The broker runs as root, so its files are root-owned and read-only to the
 # app (uid 1000 rewrites /usr/src/app, so root must never load code from there)
