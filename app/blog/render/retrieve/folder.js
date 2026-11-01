@@ -1,6 +1,5 @@
-const fs = require("fs-extra");
 const Path = require("path");
-const localPath = require("helper/localPath");
+const storage = require("storage/folder");
 const alphanum = require("helper/alphanum");
 const { getEntry } = require("../../lib/models");
 const asRetriever = require("../../lib/asRetriever");
@@ -9,7 +8,7 @@ const {
   htmlExtRegex,
   fileExtRegex,
   encodeFolderPath,
-  versionedFolderPath,
+  versionedStoragePath,
 } = require("../replaceFolderLinks/shared");
 
 const CONCURRENCY = 5;
@@ -34,20 +33,20 @@ async function mapLimit(items, limit, iterator) {
 }
 
 // The href templates should use for an item. Links to files go straight to the
-// versioned CDN URL (reusing the stat already taken); `path` would hit the
+// versioned CDN URL (reusing the listing's stat); `path` would hit the
 // app's origin folder route instead. Directories are pages, and dotfile
 // segments, .html and extensionless files aren't served from the CDN, so
 // those get the plain encoded path.
 function itemURL(blogID, path, stat) {
   const cdnable =
-    stat.isFile() &&
+    !stat.isDirectory &&
     !path.split("/").some((segment) => segment[0] === ".") &&
     !htmlExtRegex.test(path) &&
     fileExtRegex.test(path);
 
   if (!cdnable) return encodeFolderPath(path);
 
-  return BLOT_CDN_TOKEN + "/folder/" + versionedFolderPath(blogID, path, stat);
+  return BLOT_CDN_TOKEN + "/folder/" + versionedStoragePath(blogID, path, stat);
 }
 
 async function folder(req, res) {
@@ -58,42 +57,45 @@ async function folder(req, res) {
     path = req.query.path;
   }
 
+  // ?path=a&path=b is an array
+  if (typeof path !== "string") return [];
+
   if (path !== "/") {
     parent = Path.dirname(path);
   }
 
-  let contents;
+  let listing;
 
   try {
-    contents = await fs.readdir(localPath(req.blog.id, path));
+    listing = await storage.listAll(req.blog.id, path);
   } catch (err) {
     // We should pass this error back to the template in future
     return [];
   }
 
   // Remove dotfiles and folders
-  contents = contents.filter((item) => item[0] !== ".");
-  // `contents` is an array of raw filenames at this point, not objects,
-  // so there's no `name` property to sort by - sort the strings directly.
-  contents = alphanum(contents);
+  listing = listing.filter((item) => item.name[0] !== ".");
+
+  // alphanum sorts strings, so sort the names and look the stats up by name
+  const stats = new Map(listing.map((item) => [item.name, item]));
+  let contents = alphanum(listing.map((item) => item.name));
 
   try {
     contents = await mapLimit(contents, CONCURRENCY, async (name) => {
       const fullPathToItem = Path.join(path, name);
-      const [stat, entry] = await Promise.all([
-        fs.stat(localPath(req.blog.id, fullPathToItem)),
-        getEntry(req.blog.id, fullPathToItem),
-      ]);
+      const stat = stats.get(name);
+      const entry = await getEntry(req.blog.id, fullPathToItem);
 
       return {
         name: name,
         path: fullPathToItem,
         pathURI: encodeURIComponent(fullPathToItem),
         url: itemURL(req.blog.id, fullPathToItem, stat),
-        isDirectory: stat.isDirectory(),
-        isFile: stat.isFile(),
+        isDirectory: stat.isDirectory,
+        isFile: !stat.isDirectory,
         entry: entry,
-        updated: stat.mtime,
+        // fs.Stats rounds mtimeMs to a whole millisecond for its mtime
+        updated: new Date(Math.round(stat.modified)),
       };
     });
   } catch (err) {

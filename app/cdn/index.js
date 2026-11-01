@@ -1,5 +1,3 @@
-const assertNoSymlinks = require("helper/assertNoSymlinks");
-const fs = require("fs").promises;
 const config = require("config");
 const express = require("express");
 const cdn = new express.Router();
@@ -8,8 +6,8 @@ const mime = require("mime-types");
 const client = require("models/client");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
 const key = require("models/template/key");
-const path = require("path");
 const assets = require("storage/assets");
+const folder = require("storage/folder");
 
 const GLOBAL_STATIC_FILES = config.blot_directory + "/app/blog/static";
 
@@ -47,23 +45,48 @@ cdn.use("/plugins", static(GLOBAL_STATIC_FILES + "/plugins"));
 cdn.use("/documentation/v-:version", static(config.views_directory));
 
 // Serves files directly from a blog's folder e.g.
-// /folder/blog_1234/favicon.ico
-cdn.use("/folder/v-:version", async (req, res, next) => {
+// /folder/v-1a2b3c4d/blog_1234/favicon.ico
+// With the semantics express.static had here: a year of caching, dotfiles
+// ignored, a directory without its trailing slash redirected to it. Anything
+// missing or behind a symlink is a bare 404, which exposes no path and does
+// not fall through to another static root.
+cdn.use("/folder/v-:version", async (req, res) => {
+  let pathname;
+
   try {
-    const filename = path.join(config.blog_folder_dir, decodeURIComponent(req.path));
-    await assertNoSymlinks(config.blog_folder_dir, filename);
-    // express.static also serves index.html for directory requests.
-    const stat = await fs.stat(filename);
-    if (stat.isDirectory()) {
-      await assertNoSymlinks(config.blog_folder_dir, path.join(filename, "index.html"));
-    }
-    next();
+    pathname = decodeURIComponent(req.path);
   } catch (err) {
-    // Never expose filesystem paths or distinguish forbidden links from a
-    // missing asset. Do not fall through to another static root.
-    res.sendStatus(404);
+    return res.sendStatus(404);
   }
-}, static(config.blog_folder_dir));
+
+  // pathname is /{blogID}/{path in the blog's folder}
+  const match = /^\/(blog_[^/]+)(\/.*)?$/.exec(pathname);
+
+  if (
+    !match ||
+    pathname.indexOf("\0") !== -1 ||
+    pathname.split("/").some((segment) => segment === ".." || segment.charAt(0) === ".")
+  ) {
+    return res.sendStatus(404);
+  }
+
+  try {
+    const relPath = match[2] || "/";
+    const stat = await folder.stat(match[1], relPath);
+
+    if (stat.isDirectory && relPath.slice(-1) !== "/") {
+      return res.redirect(301, req.originalUrl.replace(/^[^?]*/, "$&/"));
+    }
+
+    if (req.method !== "GET" && req.method !== "HEAD") return methodNotAllowed(res);
+
+    // A trailing slash serves the directory's index.html
+    await folder.serve(req, res, match[1], relPath, { maxAge: "1y" });
+  } catch (err) {
+    // The client went away after we started sending
+    if (!res.headersSent) res.sendStatus(404);
+  }
+});
 
 // Template output from the {{#cdn}} helper, stored in Redis by hash, e.g.
 // /template/{hash[0:2]}/{hash[2:4]}/{hash[4:]}/{basename}
@@ -108,10 +131,7 @@ cdn.use("/template", (req, res) => res.sendStatus(404));
 // error rather than falling through to another handler.
 cdn.use(async (req, res, next) => {
   if (req.method !== "GET" && req.method !== "HEAD") {
-    res.statusCode = 405;
-    res.setHeader("Allow", "GET, HEAD");
-    res.setHeader("Content-Length", "0");
-    return res.end();
+    return methodNotAllowed(res);
   }
 
   let pathname;
@@ -151,6 +171,13 @@ cdn.use(async (req, res, next) => {
 });
 
 module.exports = cdn;
+
+function methodNotAllowed(res) {
+  res.statusCode = 405;
+  res.setHeader("Allow", "GET, HEAD");
+  res.setHeader("Content-Length", "0");
+  return res.end();
+}
 
 function httpError(status, message) {
   const err = new Error(message);

@@ -83,6 +83,10 @@ const encodeFolderPath = (path) =>
 const versionedFolderPath = (blogID, path, stat) =>
   `v-${contentVersion.fromStat(stat)}/${blogID}${encodeFolderPath(path)}`;
 
+// The same, for a stat from storage/folder instead of fs.stat
+const versionedStoragePath = (blogID, path, stat) =>
+  `v-${contentVersion.fromFolderStat(stat)}/${blogID}${encodeFolderPath(path)}`;
+
 // Decodes the path portion of a folder link. Split off any ?query and
 // #hash first, so an encoded '#' or '?' in a file name isn't mistaken for
 // one. A path that isn't valid percent-encoding (e.g. '/100% luck.jpg' in a
@@ -116,4 +120,5 @@ module.exports = {
   encodeFolderPath,
   decodeFolderPath,
   versionedFolderPath,
+  versionedStoragePath,
 };

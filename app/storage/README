@@ -513,8 +513,10 @@ What it keeps from today:
 
 What it does not do yet:
 
-- Nothing calls it. Call sites move onto it one area at a time (issue #2258,
-  Phase B); `helper/localPath` and `blog_folder_dir` are still used directly.
+- Call sites move onto it one area at a time (issue #2258, Phase B). The
+  request-time readers have (`blog/routes/assets.js`, the CDN's
+  `/folder/v-` route and `retrieve/folder.js`); `helper/localPath` and
+  `blog_folder_dir` are still used directly everywhere else.
 - There is no S3 backend, no Redis index and no content cache. `stat` with
   `{ hash: true }` reads the whole file here; on S3 the hash comes from the
   index.
