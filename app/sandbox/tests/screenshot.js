@@ -63,9 +63,15 @@ describe("sandbox screenshot job", function () {
     }, SLOW);
 
     it("gives a page it can't reach back as an answer, not a failure", async function () {
+      // A port that was just free, as Chromium won't try the low ones at all
+      const closed = http.createServer();
+      await new Promise((resolve) => closed.listen(0, "127.0.0.1", resolve));
+      const { port } = closed.address();
+      await new Promise((resolve) => closed.close(resolve));
+
       const { meta, outputs } = await sandbox.run(
         "screenshot",
-        { url: "http://127.0.0.1:1/" },
+        { url: `http://127.0.0.1:${port}/` },
         empty
       );
       expect(meta.error).toMatch(/ERR_CONNECTION_REFUSED/);
