@@ -305,8 +305,12 @@ resized in place.
 - `blot-disable-thp.service` (THP `never` before Redis), `blot-instance-store.service`
   (mounts `/backups`; Redis only `Wants=` it, so it starts without it), and
   the `redis6` drop-in `zz-blot.conf` (`LimitNOFILE=65536`, `Restart=always`,
-  long start/stop timeouts). It is named `zz-` so it sorts after the package's
-  `limit.conf`, which would otherwise win.
+  long start/stop timeouts, `OOMScoreAdjust=-900` and `CPUWeight=1000`). On a
+  shared host the kill order under memory pressure is the BGSAVE child
+  (`oom-score-adj-values` in `redis.conf` lifts it to 1000), then the app, and
+  never Redis; Redis also wins the CPU when it is contended. A running Redis
+  only gets `OOMScoreAdjust` at its next restart. It is named `zz-` so it sorts
+  after the package's `limit.conf`, which would otherwise win.
 - `/etc/cron.d/blot-redis`, as `ec2-user`: backups (hourly at :00, daily at
   03:05, weekly on Sundays at 03:35, log in `~/backup.log`, truncated monthly) and the two monitoring
   scripts every 5 minutes (`~/tcpmem.log`, `~/redis-mem.log`).
