@@ -66,8 +66,13 @@ module.exports = function disconnect(blogID, callback) {
           fs.remove(localPath(blogID, "/.git"), function (err) {
             if (err) return callback(err);
 
-            // Last, so a failed lookup leaves an unused token, not a repo
-            flushTokenIfUnused(blog, callback);
+            // A later connection starts its own history
+            database.removeApplied(blog.id, function (err) {
+              if (err) return callback(err);
+
+              // Last, so a failed lookup leaves an unused token, not a repo
+              flushTokenIfUnused(blog, callback);
+            });
           });
         });
       });
