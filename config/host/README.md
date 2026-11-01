@@ -138,6 +138,11 @@ upgrades a package. It:
   `redis6-cli` as `/usr/local/bin/redis-cli`;
 - enables docker without starting it, checks cgroup v2, and adds a drop-in that
   orders docker after `redis6.service`; `ec2-user` joins the `docker` group;
+- installs `blot-sandbox-cgroup.service`, ordered before docker, which makes
+  `/sys/fs/cgroup/blot-sandbox/{blue,green}` for the units' nsjail sandbox
+  (`app/sandbox`). Each is capped at 512M of memory (no swap), 256 pids and a
+  `cpu.weight` of 25. Nothing uses them until `BLOT_SANDBOX=1` is set in the
+  proxy env file (`proxy/deploy/proxy.env.example`);
 - creates the `deploy` user (`scripts/deploy/setup-deploy-user.sh`);
 - with `BLOT_SSH_PORT`, sets sshd's port in `/etc/ssh/sshd_config.d/11-blot-port.conf`
   (sshd then listens on that port only);

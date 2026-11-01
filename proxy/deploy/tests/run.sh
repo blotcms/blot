@@ -519,6 +519,33 @@ check "no port is published and the unit is on the host network, not blotnet" \
 check "each unit reaches its own airlock on 127.0.0.1, which publishes on loopback only" \
   'called "create .*--name blot-blue .*-e BLOT_AIRLOCK_BROWSER_URL=http://127.0.0.1:19222 -e BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:18888" && called "create .*--name blot-green .*-e BLOT_AIRLOCK_BROWSER_URL=http://127.0.0.1:19223 -e BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:18889" && called "run -d .*--name blot-blue-airlock --network blotnet -p 127.0.0.1:19222:9222 -p 127.0.0.1:18888:8888 --cap-add=NET_ADMIN" && called "run -d .*--name blot-green-airlock --network blotnet -p 127.0.0.1:19223:9222 -p 127.0.0.1:18889:8888"'
 
+reset units; bluegreen
+check "without BLOT_SANDBOX a unit gets none of the sandbox flags" \
+  '[ $RC = 0 ] && called "create .*--name blot-blue" && ! called "cgroupns" && ! called "seccomp" && ! called "sandbox-cgroup" && ! called "BLOT_SANDBOX_SOCKET"'
+
+printf 'BLOT_SANDBOX=1\n' >> "$T/proxy.env"
+export PROXY_SANDBOX_CGROUP_DIR="$T/sandbox-cgroup"
+reset units; mkdir -p "$T/sandbox-cgroup/blue" "$T/sandbox-cgroup/green"; bluegreen
+SECCOMP="$(cd "$DEPLOY" && pwd)/sandbox-seccomp.json"
+check "BLOT_SANDBOX=1: each unit gets the host cgroup namespace, the seccomp profile, its own cgroup subtree and the broker's socket" \
+  '[ $RC = 0 ] && called "create .*--name blot-blue .*--cgroupns=host --security-opt seccomp=$SECCOMP --mount type=bind,source=$T/sandbox-cgroup/blue,target=/sandbox-cgroup -e BLOT_SANDBOX_SOCKET=/run/blot-sandbox/broker.sock" && called "create .*--name blot-green .*source=$T/sandbox-cgroup/green,target=/sandbox-cgroup"'
+check "and none of the flags the sandbox must not need" \
+  '! called "--privileged" && ! called "unconfined" && ! called "--cap-add SYS_ADMIN" && ! called "systempaths"'
+check "the profile is Docker's default plus exactly clone, mount, umount2, pivot_root and sethostname" \
+  'node -e "
+    const p = require(process.argv[1]);
+    const first = p.syscalls[0];
+    if (p.defaultAction !== \"SCMP_ACT_ERRNO\" || first.action !== \"SCMP_ACT_ALLOW\" || first.args || first.includes || first.excludes) process.exit(1);
+    const names = first.names.slice().sort().join();
+    if (names !== \"clone,mount,pivot_root,sethostname,umount2\") process.exit(1);
+  " "$SECCOMP"'
+
+reset units; rmdir "$T/sandbox-cgroup/green"; bluegreen
+check "BLOT_SANDBOX=1 without a unit's cgroup subtree: refused before anything is touched" \
+  '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create" && mentions "green does not exist"'
+sed -i.bak '/^BLOT_SANDBOX=1$/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
+unset PROXY_SANDBOX_CGROUP_DIR
+
 reset units; FAKE_NODE_B_UNHEALTHY=blot-blue bluegreen
 check "node-b never healthy in the new blue: rolled back, green untouched" \
   '[ $RC != 0 ] && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_OLD" ] && running_now blot-blue && ! called "docker stop --time 40 blot-green"'
