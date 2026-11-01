@@ -60,6 +60,11 @@ case "$name" in
   *) m=$name ;;
 esac
 [ ! -e "$W/down.$m" ] || exit 255
+# A connection reset while an association reaches the instance.
+if [ -n "${F:-}" ] && [ -s "$W/ssh_resets" ]; then
+  n=$(cat "$W/ssh_resets")
+  if [ "$n" -gt 0 ]; then echo $((n - 1)) > "$W/ssh_resets"; exit 255; fi
+fi
 # Gone at its launch address: reachable only through the override that names the Elastic IP.
 [ ! -e "$W/gone.$m" ] || [ -n "${F:-}" ] || exit 255
 # The launch address of <new> is released: it and a jump through it answer
@@ -136,7 +141,8 @@ case "$a" in
   *"describe-addresses"*"Addresses[0].PublicIp"*) echo 203.0.113.9 ;;
   *"describe-addresses"*"[InstanceId,PublicIp]"*) echo "$(cat "$W/eip_id") 203.0.113.9" ;;
   *"describe-addresses"*) cat "$W/eip_id" ;;
-  *associate-address*) m=${a##*--instance-id }; echo "${m%% *}" > "$W/eip_id"; echo new > "$W/eip_on" ;;
+  *associate-address*) m=${a##*--instance-id }; echo "${m%% *}" > "$W/eip_id"; echo new > "$W/eip_on"
+    [ ! -e "$W/flaky_move" ] || echo 2 > "$W/ssh_resets" ;;
   *"describe-volumes"*"Attachments"*) echo "i-old False" ;;
   *"describe-volumes"*) cat "$W/replaced_at" ;;
   *"describe-instance-attribute"*) cat "$W/protection" ;;
@@ -181,7 +187,7 @@ echo "i-0new 192.0.2.20" > "$W/cycle_instance"
 EOF
 cat > "$TMP/tree/config/host/deploy.sh" << 'EOF'
 #!/bin/bash
-echo "deploy.sh PUBLIC_IP=$PUBLIC_IP SSH_PORT=$SSH_PORT SSH_KEY=$SSH_KEY DATA_VOLUME_ID=$DATA_VOLUME_ID" >> "$W/calls"
+echo "deploy.sh PUBLIC_IP=$PUBLIC_IP SSH_PORT=$SSH_PORT SSH_KEY=$SSH_KEY DATA_VOLUME_ID=$DATA_VOLUME_ID SSH_OPTS=${SSH_OPTS:-}" >> "$W/calls"
 EOF
 cat > "$TMP/tree/config/host/data-volume/resize.sh" << 'EOF'
 #!/bin/bash
@@ -340,6 +346,7 @@ has "launch.sh is tagged with the cycle" "$CALLS" "--tag BlotCycle=c1"
 has "a drill launches a drill host" "$CALLS" "--drill"
 has "the drill markers are set" "$CALLS" "/etc/blot/drill /etc/blot-redis/drill"
 before "launch.sh, then deploy.sh" "launch.sh" "deploy.sh PUBLIC_IP=192.0.2.20 SSH_PORT=2222"
+has "deploy.sh does not record the new host's key" "$CALLS" "SSH_OPTS=-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 has "no volume yet" "$CALLS" "DATA_VOLUME_ID="
 has "it says what to add" "$OUT" "HostName 192.0.2.20"
 lacks "not npm run deploy-host" "$CALLS" "deploy-host"
@@ -587,7 +594,7 @@ lacks "move thaw is for rollback" "$CALLS" "move thaw"
 has "ssh to the new host follows the Elastic IP once it moved" "$(cat "$W/override_calls")" "read-only.js off"
 lacks "and not before (the roles are read first)" "$(cat "$W/override_calls")" "INFO replication"
 has "through a config naming the Elastic IP" "$(cat "$W/override_cfg")" "HostName 203.0.113.9"
-has "and checking the key as the alias" "$(cat "$W/override_cfg")" "HostKeyAlias 192.0.2.20"
+has "and checking the key as known_hosts spells it" "$(cat "$W/override_cfg")" "HostKeyAlias [192.0.2.20]:2222"
 has "over the user's own config" "$(cat "$W/override_cfg")" "Include $HOME/.ssh/config"
 lacks "retag waits for settle" "$CALLS" "move retag"
 has "the freeze TTL reaches resize.sh" "$CALLS" "--freeze-ttl 900"
@@ -603,8 +610,10 @@ lacks "nothing frozen" "$CALLS" "move freeze"
 lacks "nothing promoted" "$CALLS" "promote.sh --yes"
 # promote.sh finished FAILOVER but died before writing its marker.
 echo slave > "$W/role.old"; echo 10.0.0.2 > "$W/master.old"
+touch "$W/flaky_move"
 run "${SWITCH[@]}" --yes switch old new
-status_is "a master the old Redis follows resumes" 0
+rm -f "$W/flaky_move" "$W/ssh_resets"
+status_is "a master the old Redis follows resumes, past resets after the address moves" 0
 lacks "with no second freeze" "$CALLS" "move freeze"
 lacks "and no second promotion" "$CALLS" "promote.sh --yes"
 has "and writes the markers promote.sh did not" "$CALLS" "ssh new [new]: sudo touch /etc/blot-redis/active"
@@ -832,7 +841,7 @@ before "and the volume is mounted by deploy.sh" "host.sh prewarm" "DATA_VOLUME_I
 before "the env files and certificate come before the units" "wildcard-cert.sh new" "units.sh $COMMIT_SHA"
 before "the units come before the address moves" "units.sh $COMMIT_SHA" "associate-address"
 has "the units target the new host" "$CALLS" "target=new"
-has "the volume is made from the newest snapshot" "$CALLS" "create-volume --snapshot-id snap-0a1 --availability-zone us-west-2a --volume-type gp3 --iops 3000 --throughput 125"
+has "the volume is made from the newest snapshot" "$CALLS" "create-volume --snapshot-id snap-0a1 --availability-zone us-west-2a --volume-type gp3 --volume-initialization-rate 300 --iops 3000 --throughput 125"
 has "tagged for this cycle" "$CALLS" "BlotRestoreCycle"
 has "a drill volume keeps its drill name" "$CALLS" "drill-data-volume"
 lacks "and never the production name" "$CALLS" "Blot /var/www/blot/data"

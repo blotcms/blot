@@ -110,7 +110,7 @@ say "Packages"
 # the jails' iptables-multiport banaction. nftables is for the port 6379 rule
 # below; its nftables.service is never enabled, because the default config
 # flushes the whole ruleset, fail2ban's and docker's included.
-PACKAGES="docker fail2ban-server iptables-nft nftables rsyslog cronie chrony rsync xfsprogs nvme-cli redis6 logrotate lsof"
+PACKAGES="docker fail2ban-server iptables-nft nftables rsyslog cronie chrony rsync xfsprogs nvme-cli redis6 logrotate lsof sqlite"
 missing=""
 for pkg in $PACKAGES; do rpm -q "$pkg" > /dev/null 2>&1 || missing="$missing $pkg"; done
 # shellcheck disable=SC2086
