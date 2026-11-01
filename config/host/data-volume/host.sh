@@ -18,7 +18,7 @@
 #   grow-fs <size-bytes>       xfs_growfs after an online EBS grow
 #
 # Every subcommand prints key=value lines on stdout (resize.sh parses them with
-# field(), like config/redis/cutover.sh's gather) and anything else on stderr.
+# field(), like config/redis/promote.sh's gather) and anything else on stderr.
 # A non-zero exit is a failure. --dry-run runs the checks that only read and
 # prints what the rest would do.
 #

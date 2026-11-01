@@ -160,7 +160,7 @@ On the first run Redis's `/backups` cannot be mounted yet: it is a bind mount of
 `/var/instance-ssd/redis-backups`, and `deploy.sh` mounts the instance store
 afterwards. `deploy.sh` then starts `blot-instance-store.service`, so the
 warning from the Redis setup can be ignored. A new host has no
-`/etc/blot-redis/floating-ip`, so `backup.sh` does not upload from it yet.
+`/etc/blot-redis/active`, so `backup.sh` does not upload from it yet.
 
 `config/host/tests/setup.sh` runs it in Docker, and `config/host/tests/deploy.sh`
 runs `deploy.sh` on top of it. Still by hand:
