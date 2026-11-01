@@ -359,6 +359,108 @@ Each file is written to a temp file in the same directory, then moved into
 place as `root:deploy` mode `0640`, so the key is never world-readable. It never
 prints the key. Run it before the first `deploy-units`.
 
+## Recovery
+
+Redis and both units share one host, so losing the host loses the app and its
+Redis together. `cycle.sh restore` rebuilds from what is in AWS, in this order:
+
+1. A new host, and Redis restored onto it from the newest backup (at most about
+   an hour old; `restore.sh`, so `--offsite` works when AWS backups are gone).
+2. A new data volume from the newest completed snapshot of the lost volume. The
+   lost volume is only named, to find its snapshots. It is never attached,
+   detached or changed, so anything newer than the snapshot can still be
+   recovered from it.
+3. The units, then the Elastic IP.
+4. Reconcile (below).
+
+The snapshot is older than Redis, so Redis can name files the volume does not
+have. Step 4 is what repairs that.
+
+```
+config/host/cycle.sh --production --type <type> --cycle <name> --eip <eipalloc-...> \
+  --old-volume <vol-...> --commit <sha> \
+  --secrets-env <file> --proxy-env <file> --aws-credentials <file> \
+  [--offsite <profile> <s3://bucket>] [--redis-backup <name>] [--snapshot <snap-...>] \
+  [--bans-file data/bans.txt] [--wait-prewarm] [--yes] restore
+```
+
+There is no old host to read from, so you supply what is not in AWS or the repo,
+all of it from your machine:
+
+- `--secrets-env` and `--proxy-env`: `secrets.env` and `proxy.env` as they were
+  on the lost host. Keep a copy of each off the host, updated whenever they
+  change; nothing else has them. The socket settings are written in for you.
+- `--aws-credentials`: a credentials file with a `[default]` profile that can
+  read the Redis backups and write new ones. It becomes `~ec2-user/.aws` on the
+  new host (a new host has no instance profile).
+- `--commit`: the commit of the image to run. Run the script from a checkout of
+  `master`, as `deploy-units` requires.
+- `--old-volume`, or `--snapshot` to pick one yourself. `--eip`, and `--type`
+  and `--cycle` as in `launch`.
+- The host key pair and key (`BLOT_HOST_KEY_NAME`, `BLOT_HOST_SSH_KEY`,
+  `BLOT_SSH_PORT`), the deploy public key, `REDIS_MAXMEMORY` and `AWS_PROFILE`
+  and `AWS_REGION`, as for `launch`. The `blot` key is not on any host, so it
+  comes from you.
+
+Run it without a host name first: it launches the host and stops, printing the
+ssh alias to add. Run the same command again with the alias on the end, and it
+does the rest. Every step looks at the host and AWS to see what is done, so after
+a failure fix the cause and run it again; `--dry-run` prints the steps. It does
+not wait for the 01:00 and 05:00 UTC hours to pass.
+
+The Elastic IP is the last step. In production the script stops and asks you to
+type the ID of the instance that holds it now, whatever `--yes` says, because a
+host may be unreachable rather than gone: stop it first if so, or two Redis
+masters will diverge. It does not stop or touch that host. Only after the
+address has moved does the new volume get the name the snapshot policy targets,
+and the host start backing up. The old volume keeps its own tags; retag it when
+the reconcile is done.
+
+**How slow it is.** A volume made from a snapshot loads from S3 as it is read, so
+reads are slow until it has been read once. The script starts the same low
+priority pre-warm `resize.sh move` uses before the units start, and prints how
+long each step took ("timing: ..."), plus three cold 256 MiB reads straight from
+the device before the pre-warm touches it. `--wait-prewarm` holds the address
+back until the pre-warm has finished; without it the site comes up on a cold
+volume. A rehearsal (`--drill`, with a drill Elastic IP and the `BlotDrill=true`
+tag on everything) is where to record both numbers.
+
+### Reconcile
+
+```
+ssh <new> sudo docker exec --user 1000:1000 -e HOME=/home/node blot-blue node scripts/host-cycle/reconcile.js --since <snapshot start>
+```
+
+`restore` prints the command with the snapshot's start time. Without `--go` it
+only prints a plan:
+
+- **Which blogs.** Dropbox, Google Drive and iCloud blogs whose `cacheID` is at
+  or after `--since` (less `--margin`, 15 minutes), plus any with no `cacheID`.
+  A blog's `cacheID` is set when a sync changes something, so it is the time
+  of the last change Redis knows about; it is also set by template and setting
+  changes, which only costs a resync that was not needed. `--all` skips the
+  filter. Blogs of the same client run at most one at a time (`--per-client`),
+  and two at once overall (`--concurrency`), with `--pause` seconds after each,
+  because the clients' APIs have limits. A resync takes the blog's normal sync
+  lock, so it cannot race a live sync; one that cannot get the lock is left for
+  the next run.
+- **Order.** Most recently changed first.
+- **Git blogs** have no source to resync from. The plan lists their IDs and
+  last change instead. Whatever was pushed after the snapshot is only on the old
+  volume, unless its author pushes again.
+- **Resuming.** Finished blogs go in `reconcile-state.txt` in the data
+  directory, tied to `--since`. Run it again after a failure and it skips them;
+  `--restart` forgets them.
+
+It prints IDs and counts only.
+
+### What `restore` does not do
+
+It does not set up the offsite backup (the `offsite-bucket` file and its B2
+profile), and the permabans only come back with `--bans-file`. It does not move
+anything off the old volume: recover newer files from it by hand, with it
+attached read-only to a scratch host.
+
 ## Scripts and cron
 
 - The wildcard certificate is not renewed from the host: the app's scheduler
