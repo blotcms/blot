@@ -12,14 +12,46 @@ const NSJAIL = "/usr/local/bin/nsjail";
 const CGROUP_MOUNT = "/sandbox-cgroup";
 const POLICY = path.join(__dirname, "policy.kafel");
 
+// The job code runs under node: /usr/src/app/app/sandbox/jobs/main.js <name>
+const node = (name) => [
+  "/usr/local/bin/node",
+  "/usr/src/app/app/sandbox/jobs/main.js",
+  name,
+];
+
 // A job is a name from this table, never a path or a command from the client
 const JOBS = {
   metadata: {
-    command: [
-      "/usr/local/bin/node",
-      "/usr/src/app/app/sandbox/jobs/main.js",
-      "metadata",
-    ],
+    command: node("metadata"),
+    memoryBytes: 512 * MiB,
+    timeSeconds: 30,
+    maxInputBytes: 256 * MiB,
+    maxOutputBytes: 1 * MiB,
+  },
+  thumbnail: {
+    command: node("thumbnail"),
+    memoryBytes: 512 * MiB,
+    timeSeconds: 60,
+    maxInputBytes: 256 * MiB,
+    maxOutputBytes: 64 * MiB,
+  },
+  resize: {
+    command: node("resize"),
+    memoryBytes: 512 * MiB,
+    timeSeconds: 60,
+    maxInputBytes: 256 * MiB,
+    maxOutputBytes: 64 * MiB,
+  },
+  "to-png": {
+    command: node("to-png"),
+    memoryBytes: 512 * MiB,
+    timeSeconds: 60,
+    maxInputBytes: 256 * MiB,
+    maxOutputBytes: 64 * MiB,
+  },
+  // Spawns perl, which runs exiftool, reading the image from stdin
+  exif: {
+    command: node("exif"),
     memoryBytes: 512 * MiB,
     timeSeconds: 30,
     maxInputBytes: 256 * MiB,

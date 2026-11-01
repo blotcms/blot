@@ -9,7 +9,7 @@
 // the NODE_PATH the jail is given.
 
 const JOB = /^[a-z-]+$/;
-const JOBS = ["metadata"];
+const JOBS = ["metadata", "thumbnail", "resize", "to-png", "exif"];
 
 function readStdin() {
   return new Promise((resolve, reject) => {

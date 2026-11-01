@@ -43,6 +43,22 @@ test("jail: an unknown job throws", () => {
   }
 });
 
+test("jail: every job runs its own file in main.js, within its limits", () => {
+  assert.deepStrictEqual(Object.keys(jail.JOBS).sort(), ["exif", "metadata", "resize", "thumbnail", "to-png"]);
+  for (const [name, j] of Object.entries(jail.JOBS)) {
+    assert.deepStrictEqual(j.command.slice(-2), ["/usr/src/app/app/sandbox/jobs/main.js", name]);
+    assert.strictEqual(j.memoryBytes, 512 * 1024 * 1024);
+    assert.strictEqual(j.maxInputBytes, 256 * 1024 * 1024);
+    assert(fs.existsSync(path.join(__dirname, "../../../../app/sandbox/jobs", name + ".js")));
+  }
+  for (const name of ["thumbnail", "resize", "to-png"]) {
+    assert.strictEqual(jail.JOBS[name].timeSeconds, 60);
+    assert.strictEqual(jail.JOBS[name].maxOutputBytes, 64 * 1024 * 1024);
+  }
+  assert.strictEqual(jail.JOBS.exif.timeSeconds, 30);
+  assert.strictEqual(jail.JOBS.exif.maxOutputBytes, 1024 * 1024);
+});
+
 test("jail: the policy file is the one the flags name", () => {
   const argv = jail.args("metadata");
   const policy = argv[argv.indexOf("--seccomp_policy") + 1];
