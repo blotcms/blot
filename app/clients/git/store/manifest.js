@@ -33,7 +33,7 @@
 // hint is missing, damaged or names something which doesn't exist.
 //
 // Old manifests are not deleted here; that belongs with compaction.
-const { CorruptError, NotFoundError, TooLargeError, StaleManifestError } = require("./errors");
+const { CorruptError, NotFoundError, TooLargeError, StaleManifestError, ManifestTooLargeError } = require("./errors");
 const { MANIFEST_PREFIX, LATEST_KEY, PACK_NAME, manifestKey, manifestSeq, packKey, idxKey } = require("./layout");
 
 const VERSION = 1;
@@ -282,6 +282,13 @@ async function swap({ store, lock, base, next }) {
   validate(next);
   if (next.seq !== base.seq + 1) throw new StaleManifestError("The new manifest does not follow the one it was built on");
 
+  // A manifest is immutable, so one read() would refuse could never be fixed
+  // and would leave the repository unreadable: it is never written
+  const bytes = serialize(next);
+  if (bytes.length > MAX_BYTES) {
+    throw new ManifestTooLargeError("The manifest is " + bytes.length + " bytes; the most that can be read back is " + MAX_BYTES);
+  }
+
   await assertUploaded(store, base, next);
 
   return lock(async () => {
@@ -296,7 +303,6 @@ async function swap({ store, lock, base, next }) {
       throw new StaleManifestError("The manifest moved on from seq " + base.seq);
     }
 
-    const bytes = serialize(next);
     if (!(await store.putIfAbsent(manifestKey(next.seq), bytes))) {
       throw new StaleManifestError("The manifest moved on from seq " + base.seq);
     }

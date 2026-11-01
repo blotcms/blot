@@ -1,6 +1,6 @@
 const manifest = require("../manifest");
 const createMemoryStore = require("../objectStore/memory");
-const { CorruptError, StaleManifestError } = require("../errors");
+const { CorruptError, StaleManifestError, ManifestTooLargeError } = require("../errors");
 const { LATEST_KEY, manifestKey, manifestSeq } = require("../layout");
 
 const oid = (n) => String(n).repeat(40).slice(0, 40);
@@ -359,6 +359,18 @@ describe("git store manifest", function () {
       expect(results.filter(Boolean).length).toBe(1);
       expect(results.find(Boolean)).toEqual(jasmine.any(StaleManifestError));
       expect([a, b]).toContain(await manifest.read(store));
+    });
+
+    it("refuses a manifest too big to be read back, and writes nothing", async function () {
+      // One ref with a name of 64 MiB is the cheapest way to make one
+      const huge = { ...manifest.empty(), seq: 1, refs: { ["refs/heads/" + "a".repeat(64 * 1024 * 1024)]: oid(1) } };
+      const error = await fails(manifest.swap({ store, lock, base: manifest.empty(), next: huge }));
+      expect(error).toEqual(jasmine.any(ManifestTooLargeError));
+      expect(error.code).toBe("MANIFEST_TOO_LARGE");
+      expect(store.stats.putIfAbsents).toBe(0);
+      expect(store.stats.puts).toBe(0);
+      expect(lock.calls).toBe(0);
+      expect(await manifest.read(store)).toEqual(manifest.empty());
     });
 
     it("rejects a base which is not the newest manifest, without writing", async function () {

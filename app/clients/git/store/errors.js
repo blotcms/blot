@@ -45,7 +45,15 @@ class StaleManifestError extends StoreError {
   }
 }
 
+// A manifest bigger than can be read back, so it was not written
+class ManifestTooLargeError extends StoreError {
+  constructor(message) {
+    super(message, "MANIFEST_TOO_LARGE");
+  }
+}
+
 module.exports = {
+  ManifestTooLargeError,
   StoreError,
   NotFoundError,
   CorruptError,
