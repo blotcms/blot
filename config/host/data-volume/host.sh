@@ -386,8 +386,6 @@ cmd_facts() {
   echo "private_ip=$(imds local-ipv4)"
   echo "ssh_port=$(sshd_port)"
   echo "ssh_hostkey=$(awk '{print $2}' /etc/ssh/ssh_host_ed25519_key.pub 2> /dev/null || true)"
-  if [ -d /etc/blot ]; then echo etc_blot=yes; else echo etc_blot=no; fi
-  if [ -x "$MOUNT_SCRIPT" ]; then echo mount_script=yes; else echo mount_script=no; fi
   prewarm_report
   echo "copy_labels=$(copy_units | sed "s/^$UNIT_PREFIX//; s/\.service$//" | tr '\n' ' ')"
   if command -v rsync > /dev/null; then echo rsync=yes; else echo rsync=no; fi
@@ -635,13 +633,17 @@ cmd_final_copy() {
   fi
   take_lock
   work=$(mktemp -d /tmp/blot-final-copy.XXXXXX)
-  trap 'stop_rsyncs; close_master; rm -rf "$work"' EXIT
+  # close_master first: stop_rsyncs calls set_dest, which drops the -S from XFER_SSH.
+  trap 'close_master; stop_rsyncs; rm -rf "$work"' EXIT
   trap 'exit 143' INT TERM HUP
   if is_move; then
     # One connection for the whole frozen pass: each rsync would otherwise pay a
     # handshake inside the freeze, and sshd rate-limits new connections. Live
     # passes do not use this: they must outlive it.
-    $XFER_SSH -M -N -f -S "$work/ctl" "$XFER_HOST" < /dev/null || die "cannot open an ssh connection to $XFER_HOST"
+    # It runs on after this command, so it must not keep the lock (fd 9) or this
+    # script's stdout, which the operator's ssh session waits on.
+    $XFER_SSH -M -N -f -S "$work/ctl" "$XFER_HOST" < /dev/null > /dev/null 2> "$work/master" 9>&- ||
+      { cat "$work/master" >&2; die "cannot open an ssh connection to $XFER_HOST"; }
     XFER_SSH="$XFER_SSH -S $work/ctl"
     export XFER_SSH
   fi

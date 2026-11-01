@@ -981,7 +981,6 @@ cmd_move_prepare() {
   [ "$T_DRILL" = "$DRILL" ] || die "$HOST is $([ "$DRILL" = yes ] || echo not\ )a drill host but $TO is $([ "$T_DRILL" = yes ] || echo not\ )one; a drill and production never mix"
   [ -n "$T_KEY" ] || die "$TO has no /etc/ssh/ssh_host_ed25519_key.pub, so $HOST cannot check its identity"
   [ "$(field "$TF" rsync)" = yes ] || die "rsync is not installed on $TO"
-  [ "$(field "$TF" etc_blot)" = yes ] || [ "$(field "$TF" mount_script)" = yes ] || die "$TO has neither /etc/blot nor mount-data-volume.sh: it is not set up as a Blot host (config/host/launch.sh, then config/host/deploy.sh)"
   case "$(field "$TF" resize_phase)" in prepared | copied) die "$TO has a resize or move in progress of its own (phase $(field "$TF" resize_phase))" ;; esac
   [ "$T_AZ" = "$AZ" ] || echo "NOTE: $TO is in $T_AZ and $HOST in $AZ. The copy crosses zones; the plan keeps both in one."
   if [ -n "$resume" ]; then
@@ -1000,7 +999,9 @@ cmd_move_prepare() {
     case ",$(field "$TF" options)," in *,ro,*) die "$TO's data directory is read-only: thaw it first (move thaw on that host)" ;; esac
     [ "$NEW_VOL" != "$CUR_VOL" ] || die "$TO has the same volume as $HOST"
   else
-    [ "$(field "$TF" mountpoint)" != yes ] || die "$TO already has a volume mounted at /var/www/blot/data; use --existing to copy into it"
+    # A resumed move may already be mounted there, by the Next step below.
+    [ "$(field "$TF" mountpoint)" != yes ] || [ "$(field "$TF" mounted_volume)" = "$NEW_VOL" ] ||
+      die "$TO already has a volume mounted at /var/www/blot/data; use --existing to copy into it"
     if [ -z "$NEW_VOL" ]; then
       NEW_VOL=$(aws_cli ec2 describe-volumes --filters "Name=tag:BlotDataVolumeMoveFrom,Values=$CUR_VOL" "Name=status,Values=creating,available,in-use" \
         --query 'Volumes[].VolumeId' --output text)
