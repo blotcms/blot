@@ -1,8 +1,7 @@
-const assertNoSymlinks = require("helper/assertNoSymlinks");
 const fs = require("fs-extra");
 const path = require("path");
 const clients = require("clients");
-const localPath = require("helper/localPath");
+const storage = require("storage/folder");
 const establishSyncLock = require("sync/establishSyncLock");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 
@@ -162,21 +161,11 @@ const resolveRelativePath = (upload, globalIndex, lookups) => {
     .trim();
 };
 
-const resolveDestination = (blogID, relativePath) => {
-  const root = localPath(blogID, "/");
-  const absolute = localPath(blogID, `/${relativePath}`);
+// Whether a relative path climbs out of the blog's folder
+const escapesFolder = (relativePath) => {
+  const normalized = path.posix.normalize(relativePath);
 
-  const relative = path.relative(root, absolute);
-  const outside =
-    relative === ".." ||
-    relative.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(relative);
-
-  if (outside) {
-    return { valid: false, absolute };
-  }
-
-  return { valid: true, absolute };
+  return normalized === ".." || normalized.startsWith("../");
 };
 
 const removeTempFiles = async (uploads) => {
@@ -247,9 +236,7 @@ module.exports = async (req, res, next) => {
       continue;
     }
 
-    const destination = resolveDestination(req.blog.id, normalizedRelativePath);
-
-    if (!destination.valid) {
+    if (escapesFolder(normalizedRelativePath)) {
       rejected.push({
         field: upload.field,
         filename: upload.file.originalFilename,
@@ -263,7 +250,6 @@ module.exports = async (req, res, next) => {
     accepted.push({
       upload,
       relativePath: normalizedRelativePath,
-      absolutePath: destination.absolute,
     });
   }
 
@@ -271,7 +257,7 @@ module.exports = async (req, res, next) => {
     const existingChecks = await Promise.all(
       accepted.map(async (entry) => ({
         ...entry,
-        exists: await fs.pathExists(entry.absolutePath),
+        exists: await storage.exists(req.blog.id, `/${entry.relativePath}`),
       }))
     );
 
@@ -309,15 +295,19 @@ module.exports = async (req, res, next) => {
           continue;
         }
 
-        let contents;
+        const destination = `/${entry.relativePath}`;
 
         try {
-          await assertNoSymlinks(localPath(req.blog.id, "/"), entry.absolutePath);
-          contents = await fs.readFile(entry.upload.file.path);
           if (client) {
+            // Throws ELOOP if the path or one of its parents is a symlink
+            await storage.stat(req.blog.id, destination).catch((err) => {
+              if (!(err instanceof storage.NotFoundError)) throw err;
+            });
+
+            const contents = await fs.readFile(entry.upload.file.path);
             await writeClientFile(client, req.blog.id, entry.relativePath, contents);
           } else {
-            await fs.outputFile(entry.absolutePath, contents, { overwrite: true });
+            await storage.writeFrom(req.blog.id, destination, entry.upload.file.path);
           }
         } catch (err) {
           const errorResult = {

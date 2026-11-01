@@ -2,8 +2,7 @@ const path = require("path");
 const basename = path.basename;
 const Entry = require("models/entry");
 const moment = require("moment");
-const fs = require("fs-extra");
-const localPath = require("helper/localPath");
+const folder = require("storage/folder");
 const pathNormalize = require("helper/pathNormalizer");
 const Stat = require("./stat");
 const Build = require("build");
@@ -58,7 +57,7 @@ async function getFolderPost(blog, dir) {
 
   const existence = await Promise.all(
     sourcePaths.map((sourcePath) =>
-      fs.pathExists(localPath(blog.id, sourcePath)).catch(() => false)
+      folder.exists(blog.id, sourcePath).catch(() => false)
     )
   );
 
@@ -67,7 +66,7 @@ async function getFolderPost(blog, dir) {
   const stats = await Promise.all(
     sourcePaths.map((sourcePath, index) =>
       existence[index]
-        ? Stat(localPath(blog.id, sourcePath), blog.timeZone).catch(() => null)
+        ? Stat(blog.id, sourcePath, blog.timeZone).catch(() => null)
         : Promise.resolve(null)
     )
   );
