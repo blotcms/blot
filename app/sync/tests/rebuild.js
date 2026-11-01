@@ -85,7 +85,41 @@ describe("rebuild", function () {
     done();
   });
 
-  it("keeps a folder post aggregate through a full rebuild", async function (done) {
+  it("rebuilds files in nested folders", async function (done) {
+    const paths = ["/a/One.txt", "/a/b/Two.txt", "/a/b/c/d/Three.txt"];
+
+    for (const path of paths) {
+      await this.blog.write({ path, content: "Title: " + path });
+    }
+
+    await this.blog.rebuild();
+
+    for (const path of paths) {
+      await this.blog.check({ path, title: path });
+    }
+
+    done();
+  });
+
+  it("rebuilds a directory with more files than the walk runs stats at once", async function (done) {
+    const paths = [];
+
+    for (let i = 0; i < 80; i++) paths.push(`/big/Post ${i}.txt`);
+
+    for (const path of paths) {
+      await this.blog.write({ path, content: "Title: " + path });
+    }
+
+    await this.blog.rebuild();
+
+    for (const path of [paths[0], paths[40], paths[79]]) {
+      await this.blog.check({ path, title: path });
+    }
+
+    done();
+  });
+
+  it("keeps a folder post aggregate through a full rebuild",async function (done) {
     const Entry = require("models/entry");
     const { promisify } = require("util");
     const getEntry = (id) =>
