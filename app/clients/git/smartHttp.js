@@ -1,8 +1,7 @@
-// Serves the read side of git's smart HTTP protocol (ref advertisement and
-// upload-pack, so clones and fetches) by running `git upload-pack` directly.
-// repo.js hands every request to handle() first; receive-pack and everything
-// else (dumb HTTP, unknown paths, wrong methods) is left to pushover, which
-// keeps answering them as it always has.
+// Serves git's smart HTTP protocol. The read side (ref advertisement and
+// upload-pack, so clones and fetches) runs `git upload-pack` directly; the
+// write side is receivePack.js. Everything else (dumb HTTP, unknown paths,
+// wrong methods) is answered here with the statuses and bodies pushover gave.
 //
 // This stays on protocol v0, as pushover did: the Git-Protocol header is never
 // passed on and GIT_PROTOCOL is removed from git's environment, so a client
@@ -16,14 +15,11 @@ var spawn = require("child_process").spawn;
 var querystring = require("querystring");
 var debug = require("debug")("blot:clients:git:smartHttp");
 var guardServices = require("./guardServices");
+var receivePack = require("./receivePack");
+
+var noCache = receivePack.noCache;
 
 function noop() {}
-
-function noCache(res) {
-  res.setHeader("expires", "Fri, 01 Jan 1980 00:00:00 GMT");
-  res.setHeader("pragma", "no-cache");
-  res.setHeader("cache-control", "no-cache, max-age=0, must-revalidate");
-}
 
 function env() {
   var copy = Object.assign({}, process.env);
@@ -31,13 +27,6 @@ function env() {
   delete copy.GIT_PROTOCOL;
 
   return copy;
-}
-
-// A pkt-line, as git frames the "# service=" line before the advertisement
-function pktLine(content) {
-  var length = (4 + content.length).toString(16);
-
-  return "0000".slice(length.length) + length + content;
 }
 
 function fail(res, err) {
@@ -78,7 +67,7 @@ function advertise(req, res, directory) {
       fail(res, err);
     });
 
-    res.write(pktLine("# service=git-upload-pack\n") + "0000");
+    res.write(Buffer.concat([receivePack.pktLine("# service=git-upload-pack\n"), Buffer.from("0000")]));
     ps.stdout.on("error", noop);
     ps.stdout.pipe(res);
 
@@ -168,34 +157,76 @@ function fetch(req, res, directory) {
   });
 }
 
-// Returns true if it answered the request. The request has been authenticated,
-// req.gitHandle is the handle parsed by routes.js and directory is that
-// handle's repository; neither comes from the rest of the URL.
-function handle(req, res, directory) {
+function reply(res, status, body) {
+  res.statusCode = status;
+  res.end(body);
+}
+
+// GET /<handle>.git/HEAD, which dumb HTTP clients ask for
+function head(res, directory) {
+  fs.access(directory, function (err) {
+    if (err) {
+      res.statusCode = 404;
+      res.setHeader("content-type", "text/plain");
+      return res.end("repository not found");
+    }
+
+    fs.readFile(directory + "/HEAD", function (err, contents) {
+      if (err) return reply(res, 404, "not found");
+      res.end(contents);
+    });
+  });
+}
+
+// Answers the request. The request has been authenticated, req.gitHandle is
+// the handle parsed by routes.js and directory is that handle's repository;
+// neither comes from the rest of the URL. receive is passed to receivePack.
+function handle(req, res, directory, receive) {
   var url = req.url;
   var query = url.indexOf("?");
   var pathname = query === -1 ? url : url.slice(0, query);
   var repository = "/" + req.gitHandle + ".git";
 
-  if (!req.gitHandle) return false;
+  res.setHeader("connection", "close");
+
+  if (!req.gitHandle) return reply(res, 404, "not found");
 
   if (req.method === "GET" && pathname === repository + "/info/refs") {
     var service = querystring.parse(query === -1 ? "" : url.slice(query + 1)).service;
 
-    if (service !== "git-upload-pack" && service !== "upload-pack") return false;
+    if (!service || typeof service !== "string") {
+      return reply(res, 400, "service parameter required");
+    }
 
-    advertise(req, res, directory);
-    return true;
+    service = service.replace(/^git-/, "");
+
+    if (service === "upload-pack") return advertise(req, res, directory);
+    if (service === "receive-pack") return receivePack.advertise(req, res, directory);
+
+    return reply(res, 405, "service not available");
   }
 
-  // With a query string pushover reads the service as part of it and answers
-  // 405, so leave those to it.
-  if (req.method === "POST" && url === repository + "/git-upload-pack") {
-    fetch(req, res, directory);
-    return true;
+  if (req.method === "GET" && pathname === repository + "/HEAD") return head(res, directory);
+
+  if (req.method === "POST") {
+    if (url === repository + "/git-upload-pack") return fetch(req, res, directory);
+
+    if (url === repository + "/git-receive-pack") {
+      return receivePack.handle(req, res, Object.assign({ directory: directory, handle: req.gitHandle }, receive));
+    }
+
+    // Any other service, or a query string (which pushover read as part of
+    // the service's name)
+    if (url.indexOf(repository + "/git-") === 0 && url.length > repository.length + 5) {
+      return reply(res, 405, "service not available");
+    }
   }
 
-  return false;
+  if (req.method !== "GET" && req.method !== "POST") {
+    return reply(res, 405, "method not supported");
+  }
+
+  reply(res, 404, "not found");
 }
 
 module.exports = { handle: handle };

@@ -29,8 +29,9 @@ const { isRedisUnavailableError } = require("helper/redisUnavailable");
 // post rescheduled while it was publishing) keeps its new time, and one
 // cancelled during handling stays gone.
 //
-// set and cancel are a plain MULTI. Only claim, renew and complete use Lua,
-// because each compares before it writes and Redis 6.2 can't do that natively.
+// set and cancel are a plain MULTI. Only claim, renew, complete and cancelIf
+// use Lua, because each compares before it writes and Redis 6.2 can't do that
+// natively.
 
 // The three steps that compare before they write need to be atomic, and
 // Redis 6.2 has no compare-and-set, so each is a short Lua script.
@@ -50,6 +51,16 @@ return 0`;
 
 const COMPLETE = `
 if redis.call("HGET", KEYS[2], ARGV[1]) == ARGV[2] then
+  redis.call("ZREM", KEYS[1], ARGV[1])
+  redis.call("HDEL", KEYS[2], ARGV[1])
+  return 1
+end
+return 0`;
+
+// For cancelling only the alarm the caller set, not one set since
+const CANCEL_IF = `
+local score = redis.call("ZSCORE", KEYS[1], ARGV[1])
+if score and tonumber(score) == tonumber(ARGV[2]) then
   redis.call("ZREM", KEYS[1], ARGV[1])
   redis.call("HDEL", KEYS[2], ARGV[1])
   return 1
@@ -126,6 +137,18 @@ module.exports = function alarm(name, handler, options = {}) {
   async function cancel(id) {
     requireString(id, "id");
     await client.multi().zRem(key, id).hDel(claimsKey, id).exec();
+  }
+
+  // Cancels the alarm only if it is still due at `when`, the time it was set
+  // for: the caller's own alarm, not one set again since. Resolves true if it
+  // cancelled one.
+  async function cancelIf(id, when) {
+    requireString(id, "id");
+    const cancelled = await client.eval(CANCEL_IF, {
+      keys: [key, claimsKey],
+      arguments: [id, String(toMs(when))],
+    });
+    return Number(cancelled) === 1;
   }
 
   async function when(id) {
@@ -255,5 +278,5 @@ module.exports = function alarm(name, handler, options = {}) {
     }
   }
 
-  return { set, cancel, when, start, stop, poll };
+  return { set, cancel, cancelIf, when, start, stop, poll };
 };
