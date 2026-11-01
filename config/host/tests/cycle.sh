@@ -62,6 +62,9 @@ esac
 [ ! -e "$W/down.$m" ] || exit 255
 # Gone at its launch address: reachable only through the override that names the Elastic IP.
 [ ! -e "$W/gone.$m" ] || [ -n "${F:-}" ] || exit 255
+# The launch address of <new> is released: it and a jump through it answer
+# only once follow_eip has pointed ssh at the Elastic IP (-F).
+[ ! -e "$W/launch_released" ] || [ -n "${F:-}" ] || case "$name" in new | direct) exit 255 ;; esac
 case "$cmd" in
   *meta-data/instance-id*) echo "i-0$(printf %s "$m" | od -An -tx1 | tr -d ' \n' | cut -c1-8)"; exit 0 ;;
 esac
@@ -105,6 +108,7 @@ case "$cmd" in
   *"host.sh prewarm"*) printf 'prewarm=%s\nprewarm_percent=10\nprewarm_duration_s=5\n' "$(cat "$W/prewarm" 2> /dev/null || echo running)" ;;
   *".blot-data-volume"*) cat "$W/marker" 2> /dev/null || echo vol-0e ;;
   *"aws sts"*) [ -z "${STUB_NO_BACKUP_KEY:-}" ] ;;
+  *"curl -sS"*"cdn.blot.test"*"/layout.css"*) echo "${STUB_STATIC:-200}" ;;
   *"curl -sS"*) echo "${STUB_PROBE:-200}" ;;
   *"tar -C"*) cat > /dev/null ;;
 esac
@@ -129,6 +133,7 @@ case "$a" in
   *"describe-instances --filters"*) cat "$W/cycle_instance" 2> /dev/null || true ;;
   *"describe-instances --instance-ids"*"State.Name"*) echo running ;;
   *"describe-instances --instance-ids"*) cat "$W/tag" ;;
+  *"describe-addresses"*"Addresses[0].PublicIp"*) echo 203.0.113.9 ;;
   *"describe-addresses"*"[InstanceId,PublicIp]"*) echo "$(cat "$W/eip_id") 203.0.113.9" ;;
   *"describe-addresses"*) cat "$W/eip_id" ;;
   *associate-address*) m=${a##*--instance-id }; echo "${m%% *}" > "$W/eip_id"; echo new > "$W/eip_on" ;;
@@ -469,6 +474,15 @@ STUB_PROBE=502 run --drill app old new
 refused "a failed check through the private IP stops it"
 ready_for_switch
 rm "$W/units.new"
+run --drill app old new
+has "a static file is fetched from the CDN host through the private IP" "$CALLS" "--resolve cdn.blot.test:443:10.0.0.2 https://cdn.blot.test/layout.css"
+ready_for_switch
+rm "$W/units.new"
+STUB_STATIC=404 run --drill app old new
+refused "an unfilled static directory stops it"
+has "and says so" "$OUT" "layout.css"
+ready_for_switch
+rm "$W/units.new"
 STUB_UNITS_FAIL=1 run --drill app old new
 refused "a failed deploy stops it"
 # The env files were replaced by that run, so the next one finds them current.
@@ -527,6 +541,11 @@ rm "$W/units.new"
 run "${SWITCH[@]}" switch old new
 refused "new units down is refused"
 no_changes "no units"
+ready_for_switch
+STUB_STATIC=404 run "${SWITCH[@]}" switch old new
+refused "static files missing on the new host is refused"
+has "and says so" "$OUT" "layout.css"
+no_changes "static files missing"
 ready_for_switch
 echo "ghcr.io/blotcms/blot:2222222222222222222222222222222222222222" > "$W/image.new"
 run "${SWITCH[@]}" switch old new
@@ -598,6 +617,11 @@ run "${SWITCH[@]}" --yes --old-direct direct switch eipalias new
 status_is "a finished switch runs again" 0
 has "a resumed switch follows the Elastic IP too" "$(cat "$W/override_cfg")" "HostName 203.0.113.9"
 rm -f "$W/override_cfg" "$W/override_calls"
+touch "$W/launch_released"
+run "${SWITCH[@]}" --yes --old-direct direct switch eipalias new
+status_is "with <new>'s launch address released, --old-direct still reaches the old host" 0
+has "by following the Elastic IP before the first probe" "$(cat "$W/override_cfg")" "HostName 203.0.113.9"
+rm -f "$W/launch_released" "$W/override_cfg" "$W/override_calls"
 run "${SWITCH[@]}" --yes --old-direct direct switch eipalias newip
 status_is "with <new> already the Elastic IP it runs" 0
 [ ! -e "$W/override_cfg" ] && ok "and overrides nothing" || fail "an override for an alias that is already the Elastic IP"

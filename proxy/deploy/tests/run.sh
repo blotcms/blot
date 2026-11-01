@@ -35,6 +35,7 @@ case "$1" in
     # reset_cache_dir: the foreground container moves the entries aside, the
     # detached one deletes them
     if [[ "$*" == *"--entrypoint sh"* ]]; then
+      [[ "$*" != *":/out "* ]] || { [ -z "${FAKE_STATIC_FAILS:-}" ]; exit; }   # sync_static
       [ -z "${FAKE_RESET_FAILS:-}" ] || exit 1
       exit 0
     fi
@@ -182,7 +183,7 @@ F
 chmod +x "$T"/bin/*
 export PATH="$T/bin:$PATH"
 
-export PROXY_ENV_FILE="$T/proxy.env" PROXY_DISK_CACHE_DIR="$T/disk-cache" PROXY_LOG_DIR="$T/logs" \
+export PROXY_ENV_FILE="$T/proxy.env" PROXY_DISK_CACHE_DIR="$T/disk-cache" PROXY_GLOBAL_STATIC_DIR="$T/static" PROXY_LOG_DIR="$T/logs" \
   PROXY_CERT_DIR="$T/certs" PROXY_DEPLOY_LOCK="$T/lock" \
   PROXY_DEPLOY_SLEEP=true PROXY_HEALTH_TIMEOUT=1 PROXY_AIRLOCK_HEALTH_TIMEOUT=1 TMUX=fake # nap() is a no-op, so a refusal busy-waits out PROXY_HEALTH_TIMEOUT real seconds
 
@@ -317,7 +318,7 @@ check "success: each new unit gets its restart policy before its previous one is
 check "success: both units run the new image, nothing else is left, :443 is served" \
   'running_now blot-blue && running_now blot-green && gone blot-blue-previous && gone blot-green-previous && [ "$(cat "$FAKE/image/blot-blue")" = $UNIT_IMG ] && [ "$(cat "$FAKE/image/blot-green")" = $UNIT_IMG ] && serving container'
 check "success: the units are told which one they are (PROXY_UNIT), and get the fd ulimit and the CDN static mount" \
-  'called "docker create --restart no --name blot-blue --network host --cap-add SYS_NICE --ulimit nofile=65536:65536" && called "create .*--name blot-blue .*-e PROXY_UNIT=blue" && called "create .*--name blot-green .*-e PROXY_UNIT=green" && called "-v /var/www/blot/app/blog/static:/var/www/blot/app/blog/static:ro"'
+  'called "docker create --restart no --name blot-blue --network host --cap-add SYS_NICE --ulimit nofile=65536:65536" && called "create .*--name blot-blue .*-e PROXY_UNIT=blue" && called "create .*--name blot-green .*-e PROXY_UNIT=green" && called "-v $T/static:/var/www/blot/app/blog/static:ro"'
 check "success: exactly two stops, blue's and then green's, so one unit is always up" \
   '[ "$(grep -c "docker stop" "$FAKE/calls")" = 2 ]'
 
@@ -469,10 +470,10 @@ mounted() { called "create .*-v $1:/var/cache/openresty"; }
 
 reset units; bluegreen
 check "steady: nothing is emptied, the warm cache is kept, the disk cache directory is mounted" \
-  '[ $RC = 0 ] && ! called "--entrypoint sh" && mounted "$T/disk-cache"'
+  '[ $RC = 0 ] && ! called "$T/disk-cache:/cache" && mounted "$T/disk-cache"'
 
 reset units; FAKE_FAIL_AFTER_STOP=1 bluegreen
-check "failed replacement after blue was stopped: the cache directory is not emptied (the other unit shares it)" '[ $RC != 0 ] && called "docker start blot-blue-previous" && ! called "--entrypoint sh"'
+check "failed replacement after blue was stopped: the cache directory is not emptied (the other unit shares it)" '[ $RC != 0 ] && called "docker start blot-blue-previous" && ! called "$T/disk-cache:/cache"'
 
 reset none; bluegreen
 check "fresh start: the cache directory is emptied first by a container, in the background too, and mounted" \
@@ -480,6 +481,18 @@ check "fresh start: the cache directory is emptied first by a container, in the 
 
 reset none; FAKE_RESET_FAILS=1 bluegreen
 check "fresh start whose cache directory cannot be emptied: refused before any unit exists" '[ $RC != 0 ] && ! called "docker create"'
+
+reset none; bluegreen
+check "fresh start: the image's static files are copied over the host's before any unit exists" \
+  '[ "$(line "-v $PROXY_GLOBAL_STATIC_DIR:/out")" -lt "$(line "docker create")" ] && called "docker run --rm --user 0 --entrypoint sh --memory 256m -v $PROXY_GLOBAL_STATIC_DIR:/out"'
+
+reset units; bluegreen
+check "steady: the static files are copied too, before the first unit is touched" \
+  '[ $RC = 0 ] && [ "$(line "-v $PROXY_GLOBAL_STATIC_DIR:/out")" -lt "$(line "docker create")" ]'
+
+reset units; FAKE_STATIC_FAILS=1 bluegreen
+check "static files that cannot be copied: refused before any unit changes" \
+  '[ $RC != 0 ] && ! called "docker create" && ! called "docker stop" && mentions "static files"'
 
 reset units; rmdir "$T/disk-cache"; bluegreen
 check "the cache directory is missing: refused, with the command to create it" \

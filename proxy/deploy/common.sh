@@ -28,7 +28,10 @@
 #                                               read the access log here
 #   PROXY_CERT_DIR         /etc/ssl/private     wildcard cert + key (read-only)
 #   PROXY_GLOBAL_STATIC_DIR /var/www/blot/app/blog/static  the app's own static
-#                                               assets, read-only (see run_args())
+#                                               assets, read-only in the units
+#                                               (see run_args()); each deploy
+#                                               copies the image's over it
+#                                               (see sync_static)
 #   PROXY_SANDBOX_CGROUP_DIR /sys/fs/cgroup/blot-sandbox  where the host made
 #                                               each unit's cgroup subtree (only
 #                                               read with BLOT_SANDBOX=1)
@@ -287,6 +290,21 @@ reset_cache_dir() { # reset_cache_dir <host dir> <image>
     exit 0' sh "$trash" >/dev/null || return 1
   # all of .trash, so what an interrupted earlier reset left goes too
   docker run -d --rm --user 0 --entrypoint sh -v "$dir":/cache --memory "$TRANSIENT_MEMORY" "$image" -c 'rm -rf /cache/.trash' >/dev/null || true
+}
+
+# Copy the image's own static files (the copy Node reads, at
+# /usr/src/app/app/blog/static) over the host directory the units mount
+# read-only and OpenResty serves for cdn. from disk, so a new host and every
+# deploy have what the image has. It only adds and overwrites, never deletes:
+# pages a CDN cached for a year still point at older file names. An image
+# without that directory (the e2e's stand-ins) is left alone.
+sync_static() { # sync_static <image>
+  local image="$1" out
+  log "Copying the static files of $image into $GLOBAL_STATIC_DIR"
+  out=$(docker run --rm --user 0 --entrypoint sh --memory "$TRANSIENT_MEMORY" -v "$GLOBAL_STATIC_DIR":/out "$image" -c '
+    d=/usr/src/app/app/blog/static
+    if [ -d "$d" ]; then cp -a "$d"/. /out/ && echo copied; else echo "no $d in the image"; fi') || return 1
+  log "$out"
 }
 
 # Arguments for a unit container, from the settings file. Host networking, so

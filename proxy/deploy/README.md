@@ -28,7 +28,11 @@ directory `/var/www/blot/app/blog/static`), plus the cache directory
 below (`/var/instance-ssd/disk-cache`),
 so a redeploy keeps the warm cache and
 the app's own `cdn.` files are served from disk (with the `Cache-Control`/CORS headers of
-`location /`) instead of falling through to Node. Per-blog assets are not on
+`location /`) instead of falling through to Node. Each deploy copies the
+image's own static files over that directory before any unit starts
+(`sync_static` in `common.sh`), so a new host has them too. It only adds and
+overwrites, never deletes, because pages a CDN cached for a year still point at
+older file names. Per-blog assets are not on
 the host: they live in the storage bucket, which the CDN fetches from directly
 and the app serves as a fallback. Containers also get
 `--ulimit nofile=65536:65536` (`PROXY_NOFILE`) - headroom above both the
