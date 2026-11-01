@@ -223,6 +223,13 @@ After=blot-instance-store.service blot-disable-thp.service
 
 [Service]
 LimitNOFILE=65536
+# Redis last in the kill order (redis.conf lifts its BGSAVE child to the front).
+# A unit that dies restarts in seconds; Redis dying loses writes since the last
+# save.
+OOMScoreAdjust=-900
+# Redis first when the CPU is contended. docker's --cpu-shares 2048 is weight 79
+# and airlock's 512 is about 20, so 1000 wins; it costs nothing when idle.
+CPUWeight=1000
 Restart=always
 # Loading or saving a multi-GB RDB outlasts systemd's 90s default.
 TimeoutStartSec=600
@@ -283,6 +290,11 @@ if redis_up; then
   if [ -z "$SKIP_SYSTEMD" ] && [ "$nofile" != 65536 ]; then
     echo "LimitNOFILE: running $nofile, unit 65536" >> "$TMP/restart"
   fi
+  # A running Redis only gets the unit's value at its next restart.
+  oomadj=$(cat "/proc/$pid/oom_score_adj")
+  if [ -z "$SKIP_SYSTEMD" ] && [ "$oomadj" != -900 ]; then
+    echo "OOMScoreAdjust: running $oomadj, unit -900" >> "$TMP/restart"
+  fi
   if [ -s "$TMP/restart" ]; then
     echo "    Need a restart (not done), differing from the new config:"
     sed 's/^/      /' "$TMP/restart"
@@ -311,3 +323,4 @@ for key in vm.overcommit_memory vm.swappiness net.core.somaxconn net.ipv4.tcp_ma
 done
 pid=$(redis6-cli INFO server | tr -d '\r' | awk -F: '$1 == "process_id" {print $2}')
 echo "LimitNOFILE of Redis (pid $pid): $(awk '/^Max open files/ {print $4}' "/proc/$pid/limits")"
+echo "oom_score_adj of Redis (pid $pid): $(cat "/proc/$pid/oom_score_adj")"
