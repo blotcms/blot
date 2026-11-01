@@ -1,8 +1,8 @@
 var drafts = require("../drafts");
 var previewPath = drafts.previewPath;
 var Blog = require("models/blog");
-var localPath = require("helper/localPath");
-var fs = require("fs-extra");
+var storage = require("storage/folder");
+var callbackify = require("util").callbackify;
 
 module.exports = function (blogID, path, callback) {
   callback = callback || function () {};
@@ -25,7 +25,7 @@ module.exports = function (blogID, path, callback) {
       if (client) {
         client.write(blogID, preview_path, contents, callback);
       } else {
-        fs.outputFile(localPath(blogID, preview_path), contents, callback);
+        callbackify(storage.write)(blogID, preview_path, contents, callback);
       }
     });
   });

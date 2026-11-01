@@ -119,7 +119,7 @@ Acquires the blog's Redis folder lock (`lock.js`), then calls `callback(err, fol
 
 **File:** `rebuild.js`
 
-Walks every file in the blog's local folder and calls `update(path, ...)` on each in series. Does not acquire the sync lock; intended to be called by the caller's own sync session or an administrative tool.
+Walks every file in the blog's folder (one `storage/folder` `listNames` per directory, symlinks skipped) and calls `update(path, ...)` on each in series. Does not acquire the sync lock; intended to be called by the caller's own sync session or an administrative tool.
 
 - `options.thumbnails` — boolean. Flushes the thumbnail Transformer store and empties the `_thumbnails` static directory before rebuilding.
 - `options.imageCache` — boolean. Flushes the image-cache Transformer store and empties the `_image_cache` static directory before rebuilding.
@@ -281,8 +281,9 @@ sync(blogID, cb)
 | `models/ignoredFiles` | Records paths excluded from entry processing. |
 | `models/client` (Redis) | Publishes `sync:status:{blogID}` messages; reads dependency sets. |
 | `build` | Converts a file at a path into an entry object. |
-| `helper/localPath` | Resolves blog-relative paths to absolute paths on disk. |
-| `fs.stat` (size and mtime) | Detects mid-update file changes. Directories and missing paths have no fingerprint, so they never trigger a re-sync. |
+| `storage/folder` | Reads and writes the blog's folder (`stat`, `exists`, `listNames`, `read`, `write`). Sync no longer touches the filesystem itself, except for `folder.path`, which is handed to the sync clients. |
+| `helper/localPath` | Resolves the blog's folder for `folder.path`. |
+| `storage/folder` `stat` (size and mtime in ms) | Detects mid-update file changes. Directories and missing paths have no fingerprint, so they never trigger a re-sync. |
 | `helper/pathNormalizer` | Normalises path separators and casing before dispatch. |
 | `models/client` (Redis) | Backs the mutual exclusion lock in `lock.js`. |
 | `clients/*` | Dropbox, Git, and local clients all call `sync(blogID, ...)` to acquire the lock before processing their change lists. |

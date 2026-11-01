@@ -101,7 +101,7 @@ describe("rebuild", function () {
     done();
   });
 
-  it("rebuilds a directory with more files than the walk runs stats at once", async function (done) {
+  it("rebuilds a directory with many files", async function (done) {
     const paths = [];
 
     for (let i = 0; i < 40; i++) paths.push(`/big/Post ${i}.txt`);
