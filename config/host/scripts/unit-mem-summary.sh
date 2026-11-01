@@ -1,9 +1,11 @@
 #!/bin/sh
 # Summarises unit-mem.log (written by unit-mem-log.sh): for each container the
 # sample count, first and last sample, max and p99 of anon+shmem (the memory
-# that can't be reclaimed), max node_max, max oom_kill and the five
-# non-node processes with the highest peak RSS; and the host's lowest
-# mem_available. Read-only. Usage: unit-mem-summary.sh [logfile]
+# that can't be reclaimed), max node_max, max oom_kill, the cgroup's peak where
+# it has one, and the five non-node processes with the highest peak RSS; and
+# the host's lowest mem_available. For blot-sandbox-<unit> lines (the units'
+# sandbox jobs) peak and oom_kill are the numbers to read, against limit.
+# Read-only. Usage: unit-mem-summary.sh [logfile]
 LOG="${1:-/var/instance-ssd/logs/unit-mem.log}"
 VALUES=$(mktemp) || exit 1
 trap 'rm -f "$VALUES"' EXIT
@@ -26,6 +28,8 @@ function mib(b) { return sprintf("%.0f MiB", b / 1048576) }
   print name, held | ("sort -k1,1 -k2,2n > " values)
   if (f["node_max"] + 0 > nodemax[name]) nodemax[name] = f["node_max"] + 0
   if (f["oom_kill"] + 0 > oom[name]) oom[name] = f["oom_kill"] + 0
+  if (f["peak"] + 0 > peakmem[name]) peakmem[name] = f["peak"] + 0
+  limit[name] = f["limit"] + 0
   t = f["top"]; c = match(t, /:[0-9]+$/)
   if (c && t != "-:0" && substr(t, 1, c - 1) != "-") {
     comm = substr(t, 1, c - 1); b = substr(t, c + 1) + 0
@@ -43,6 +47,7 @@ END {
     name = order[k]
     printf "%s: %d samples, %s to %s\n", name, n[name], first[name], last[name]
     printf "  anon+shmem max %s, p99 %s; node_max max %s; oom_kill max %d\n", mib(max[name]), mib(p99[name]), mib(nodemax[name]), oom[name]
+    if (peakmem[name]) printf "  cgroup peak %s of limit %s\n", mib(peakmem[name]), mib(limit[name])
     cmd = "sort -k1,1nr | head -5"; fflush()
     for (key in seen) { split(key, kp, SUBSEP); if (kp[1] == name) print peak[key], kp[2] | cmd }
     close(cmd)

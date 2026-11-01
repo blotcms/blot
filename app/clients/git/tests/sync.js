@@ -33,6 +33,25 @@ describe("git client sync", function () {
     expect(await helpers.blogFile(this, path)).toEqual(Buffer.from(text));
   });
 
+  it("syncs a push when the response never reports finish", async function () {
+    var http = require("http");
+    var on = http.ServerResponse.prototype.on;
+    var path = helpers.randomPath(this.fake);
+    var text = content(this);
+
+    // What a client which hangs up on reading the push's result looks like.
+    // Only repo.js misses the event: node needs it to finish the request.
+    spyOn(http.ServerResponse.prototype, "on").and.callFake(function (event) {
+      if (event === "finish" && /clients\/git\/repo\.js/.test(new Error().stack))
+        return this;
+      return on.apply(this, arguments);
+    });
+
+    await this.local.writeAndPush(path, text);
+
+    expect(await helpers.blogFile(this, path)).toEqual(Buffer.from(text));
+  });
+
   it("handles updates to a file", async function () {
     var path = helpers.randomPath(this.fake);
     var changed = content(this) + "\nAn extra line";

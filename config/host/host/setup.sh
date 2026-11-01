@@ -137,6 +137,52 @@ else
   echo "    WARNING: user $APP_USER does not exist; it was not added to the docker group"
 fi
 
+say "Sandbox cgroups"
+# The units' nsjail sandbox (BLOT_SANDBOX, app/sandbox) puts each job in a
+# cgroup outside the unit's own, so a runaway job can't use the unit's memory.
+# The host makes one subtree per unit, which proxy/deploy/common.sh binds into
+# the unit when BLOT_SANDBOX=1. Inert until then. Before docker, so the
+# directories exist when a unit starts.
+put /usr/local/sbin/blot-sandbox-cgroup.sh 0755 root:root <<'EOF2'
+#!/bin/sh
+# Installed by config/host/host/setup.sh (blot-sandbox-cgroup.service).
+# Safe to run again.
+set -eu
+root=/sys/fs/cgroup
+tree=$root/blot-sandbox
+controllers="+memory +pids +cpu"
+
+echo "$controllers" > "$root/cgroup.subtree_control"
+mkdir -p "$tree/blue" "$tree/green"
+echo "$controllers" > "$tree/cgroup.subtree_control"
+for unit in blue green; do
+  dir=$tree/$unit
+  echo "$controllers" > "$dir/cgroup.subtree_control"
+  echo 512M > "$dir/memory.max"
+  echo 0 > "$dir/memory.swap.max"
+  echo 256 > "$dir/pids.max"
+  echo 25 > "$dir/cpu.weight"
+done
+EOF2
+put /etc/systemd/system/blot-sandbox-cgroup.service 0644 root:root <<'EOF2'
+[Unit]
+Description=Cgroup subtrees for the units' sandbox jobs
+Before=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/blot-sandbox-cgroup.sh
+
+[Install]
+WantedBy=multi-user.target
+EOF2
+sd daemon-reload
+sd enable blot-sandbox-cgroup.service
+# started again on a re-run, so a changed limit is applied; it only writes files.
+# Not fatal: nothing needs it until BLOT_SANDBOX=1, and the deploy refuses then
+sd restart blot-sandbox-cgroup.service || echo "    WARNING: blot-sandbox-cgroup.service failed"
+
 say "Deploy user"
 # With a key the script rewrites authorized_keys only if the key is missing;
 # without one it leaves an existing file alone.
@@ -278,6 +324,32 @@ say "Redis host setup"
 # On a live host a running Redis is not restarted (see its setup.sh).
 env BLOT_REDIS_SHARED_INSTANCE_STORE=1 REDIS_MAXMEMORY="$REDIS_MAXMEMORY" \
   BLOT_REDIS_SKIP_SYSTEMD="$SKIP_SYSTEMD" bash "$REDIS_SETUP"
+
+say "Memory caps"
+# After the Redis setup, which writes journald.conf.d/blot.conf (SystemMaxUse=100M,
+# right for a Redis-only host). Drop-ins apply in name order, so the zz- file wins
+# here and the journal gets more room next to the units' logs. Journald's default
+# cap is 10% of the filesystem, which is unbounded in practice on a big root.
+put /etc/systemd/journald.conf.d/zz-blot-host.conf 0644 root:root <<'EOF2'
+[Journal]
+SystemMaxUse=500M
+EOF2
+[ -n "$SKIP_SYSTEMD" ] || [ "$CHANGED" = 0 ] || systemctl restart systemd-journald
+# fail2ban keeps its ban lists in memory and reads the sshd, recidive and nginx
+# logs; its sqlite database is on disk. Past this it is OOM-killed on its own
+# instead of taking the units with it, and Restart= brings it back (the ban
+# lists reload from the database). Applied at its next start if it is stopped.
+put /etc/systemd/system/fail2ban.service.d/20-memory.conf 0644 root:root <<'EOF2'
+[Service]
+MemoryMax=256M
+Restart=on-failure
+RestartSec=5
+EOF2
+if [ -z "$SKIP_SYSTEMD" ] && [ "$CHANGED" = 1 ]; then
+  systemctl daemon-reload
+  # deploy.sh starts fail2ban on a new host; only a running one is restarted.
+  ! systemctl is-active --quiet fail2ban || systemctl restart fail2ban
+fi
 
 say "Verification"
 [ -n "$SKIP_SYSTEMD" ] || echo "docker: $(systemctl is-enabled docker) ($(systemctl is-active docker || true))"

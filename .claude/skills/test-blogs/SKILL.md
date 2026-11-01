@@ -158,3 +158,8 @@ Newest last. Add one dated entry per run.
 - Blogs / content: one `post.md`, then an edit, on gittest and dbtest; the same on icloudtest.
 - Result: gittest live after 1s, and with the page cached, the edit showed after 3s. dbtest live after 8s, edit after 8s. Cleanup: gittest gone after 1s. icloudtest had not synced after more than 10 minutes, which the operator says is normal iCloud slowness, so the iCloud lock fix (`31dc193e0`) is unverified.
 - Odd: a delete in a `bash -c` script is stopped by Claude Code's safety check, so the dbtest and icloudtest folders were left for the operator to delete. A 404 from a post that never went live looks the same as a successful removal, so check it was live first.
+
+### 2026-11-01 — git client after #2309, #2317 and #2258 Phase A
+- Blogs / content: `skilltest-1793543864/post.md` + `photo.png` (a small PNG) on gittest, on `0acc301c6`.
+- Result: live after 14s. The `_image_cache` image and `large` thumbnail returned 200 `image/png` with a long `max-age` from cdn.blot.im, and `inspect.js` found every asset on `disk=yes s3=yes`. Folder routes behaved: an uppercased path found the file by case, a missing file and `/100%25` gave 404, and the app stayed up. Cleanup: gone after 2s.
+- Odd: 14s is slower than the 1-3s of earlier gittest runs; this post had an image and it was the first push after a deploy, and one run can't say more. `/wp-admin/...` returned no HTTP status (curl 000), which is the proxy's scanner block, not the app.

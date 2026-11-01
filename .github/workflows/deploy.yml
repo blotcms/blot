@@ -34,7 +34,7 @@ concurrency:
 
 # Everything that doesn't depend on the image (checkout, SSH, Node, GHCR
 # login) runs first, so when the run is dispatched straight after a merge the
-# only thing left once build.yml publishes the image is the deploy itself.
+# only thing left once unit-image.yml publishes the image is the deploy itself.
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -88,7 +88,7 @@ jobs:
 
           # The deploy environment's branch policy is evaluated against the
           # run ref (master), so the target must live on master too - both to
-          # honour that policy and because build.yml only publishes images
+          # honour that policy and because unit-image.yml only publishes images
           # for master commits.
           if ! git merge-base --is-ancestor "$SHA" origin/master; then
             echo "❌ Error: commit $SHA is not on master"
@@ -139,15 +139,15 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Don't ship a commit whose CI failed. build.yml publishes the image only
-      # after its own checks, but node.yml (tests) is independent of it.
+      # Don't ship a commit whose CI failed. unit-image.yml publishes the image
+      # only after its own checks, but node.yml (tests) is independent of it.
       - name: Wait for CI on the target commit
         env:
           GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ steps.resolve.outputs.sha }}
           CUSTOM: ${{ steps.resolve.outputs.custom }}
           SKIP_CHECKS: ${{ github.event.inputs.skip_checks }}
-          REQUIRED: "node build app-e2e unit-image"
+          REQUIRED: "node app-e2e unit-image"
           OPTIONAL: "integration .github/workflows/proxy-deploy-e2e.yml"
         run: |
           if [ "$SKIP_CHECKS" = "true" ]; then
@@ -216,7 +216,7 @@ jobs:
 
           # For the default (dispatched) commit the build workflow may still
           # be running, so wait up to 25 min. For an explicitly chosen commit
-          # the image should already exist - build.yml tags only the push-tip
+          # the image should already exist - unit-image.yml tags only the push-tip
           # github.sha of each master push, so an intermediate or merged-in
           # commit never gets one. Fail fast with a clear reason instead of
           # polling 25 min for a tag that will never appear.
@@ -236,7 +236,7 @@ jobs:
             if [ "$i" -eq "$MAX_APP_TRIES" ]; then
               echo "❌ App image not found: $IMAGE"
               if [ "$CUSTOM" = "true" ]; then
-                echo "   build.yml only publishes an image for the tip commit of each master push."
+                echo "   unit-image.yml only publishes an image for the tip commit of each master push."
                 echo "   Pick a commit that was a push tip on master (not an intermediate or merge parent)."
               fi
               exit 1

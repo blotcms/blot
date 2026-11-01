@@ -42,6 +42,7 @@ describe("redis.conf", function () {
     expect(only("repl-backlog-size")).toBe("256mb");
     expect(config["client-output-buffer-limit"]).toEqual([
       "replica 1gb 512mb 120",
+      "normal 512mb 0 0",
     ]);
     expect(only("repl-diskless-sync")).toBe("no");
   });

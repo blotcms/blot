@@ -186,6 +186,23 @@ mounts at `/var/cache/openresty`. It must exist and belong to uid 1000
   cache has a few shard directories) and deletes that in a detached container,
   so the deploy does not wait for millions of files to go.
 
+## The sandbox (`BLOT_SANDBOX=1`)
+
+Off unless `BLOT_SANDBOX=1` is in the proxy env file. Then a unit also gets
+`--cgroupns=host`, `--security-opt seccomp=sandbox-seccomp.json`, a bind of
+`/sys/fs/cgroup/blot-sandbox/<unit>` at `/sandbox-cgroup`, and
+`BLOT_SANDBOX_SOCKET`; the deploy refuses, before touching anything, if the
+host has not made those directories (`config/host/host/setup.sh`, Amazon Linux
+2023). See `app/sandbox/README.md`.
+
+`sandbox-seccomp.json` is moby's `profiles/seccomp/default.json` at v25.0.14
+(Docker on Amazon Linux 2023 is 25) with one entry added first in `syscalls`,
+allowing `clone`, `mount`, `umount2`, `pivot_root` and `sethostname`; the deploy
+tests check that entry and nothing else. To update it, fetch the default
+profile of the Docker version on the host from
+`https://raw.githubusercontent.com/moby/moby/<tag>/profiles/seccomp/default.json`
+and add that entry again.
+
 ## Trying issuance against a real ACME server
 
 The sweep above covers certificates that already exist. For *issuing*, CI can

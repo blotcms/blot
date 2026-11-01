@@ -2,10 +2,10 @@ var fs = require("fs-extra");
 var localPath = require("helper/localPath");
 var Blog = require("models/blog");
 var User = require("models/user");
-var Git = require("simple-git");
 var debug = require("debug")("blot:clients:git:disconnect");
 var database = require("./database");
-var dataDir = require("./dataDir");
+var repo = require("./repo");
+var Git = require("./git");
 
 // The git token is account-wide: every site the owner has connected to
 // git shares it, so it can only be flushed with the owner's last git site.
@@ -39,7 +39,7 @@ module.exports = function disconnect(blogID, callback) {
 
   // Throws an error if directory does not exist
   try {
-    liveRepo = Git(liveRepoDirectory).silent(true);
+    liveRepo = Git(liveRepoDirectory);
   } catch (err) {
     return callback(err);
   }
@@ -57,7 +57,7 @@ module.exports = function disconnect(blogID, callback) {
       database.removeStatus(blog.id, function (err) {
         if (err) return callback(err);
         // Remove the bare git repo in /repos
-        fs.remove(dataDir + "/" + blog.handle + ".git", function (err) {
+        fs.remove(repo.directory(blog.handle), function (err) {
           if (err) return callback(err);
 
           // Remove the .git directory in the user's blog folder?
@@ -66,8 +66,13 @@ module.exports = function disconnect(blogID, callback) {
           fs.remove(localPath(blogID, "/.git"), function (err) {
             if (err) return callback(err);
 
-            // Last, so a failed lookup leaves an unused token, not a repo
-            flushTokenIfUnused(blog, callback);
+            // A later connection starts its own history
+            database.removeApplied(blog.id, function (err) {
+              if (err) return callback(err);
+
+              // Last, so a failed lookup leaves an unused token, not a repo
+              flushTokenIfUnused(blog, callback);
+            });
           });
         });
       });

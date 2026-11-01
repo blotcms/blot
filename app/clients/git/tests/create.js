@@ -10,7 +10,7 @@ describe("git client create", function () {
 
   var create = require("clients/git/create");
   var disconnect = require("clients/git/disconnect");
-  var Git = require("simple-git");
+  var Git = require("./setup/git");
   var localPath = require("helper/localPath");
   var setClientToGit = require("./setup/setClientToGit");
 
@@ -50,7 +50,7 @@ describe("git client create", function () {
   });
 
   it("should fail when there is a repo with an origin in the blog's folder", function (done) {
-    var Git = require("simple-git");
+    var Git = require("./setup/git");
     var blog = this.blog;
 
     Git = Git(localPath(blog.id, "/")).silent(true);

@@ -83,6 +83,18 @@ describe("deploy verify-container", function () {
     expect(await check.run({ redis: readOnly, skipRedisWrite: true })).toContain("write skipped");
   });
 
+  it("skips the sandbox check unless the host turned the sandbox on", async function () {
+    const check = checks.find((c) => c.name === "sandbox");
+    const socket = process.env.BLOT_SANDBOX_SOCKET;
+    delete process.env.BLOT_SANDBOX_SOCKET;
+
+    try {
+      expect(await check.run({})).toMatch(/^skipped/);
+    } finally {
+      if (socket !== undefined) process.env.BLOT_SANDBOX_SOCKET = socket;
+    }
+  });
+
   it("passes the storage bucket check against a reachable bucket and fails without one", async function () {
     const config = require("config");
     const check = checks.find((c) => c.name === "storage bucket reachable");

@@ -476,7 +476,7 @@ check "failed replacement after blue was stopped: the cache directory is not emp
 
 reset none; bluegreen
 check "fresh start: the cache directory is emptied first by a container, in the background too, and mounted" \
-  '[ $RC = 0 ] && [ "$(reset_of "$T/disk-cache")" -lt "$(line "docker create")" ] && mounted "$T/disk-cache" && called "docker run -d --rm --user 0 --entrypoint sh -v $T/disk-cache:/cache"'
+  '[ $RC = 0 ] && [ "$(reset_of "$T/disk-cache")" -lt "$(line "docker create")" ] && mounted "$T/disk-cache" && called "docker run -d --rm --user 0 --entrypoint sh -v $T/disk-cache:/cache --memory 256m"'
 
 reset none; FAKE_RESET_FAILS=1 bluegreen
 check "fresh start whose cache directory cannot be emptied: refused before any unit exists" '[ $RC != 0 ] && ! called "docker create"'
@@ -538,11 +538,38 @@ check "blue's airlock, then blue is replaced, checked and verified, all before g
 check "both units and their airlocks run, the units on the new image, and blue was verified once" \
   'running_now blot-blue && running_now blot-green && running_now blot-blue-airlock && running_now blot-green-airlock && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-green")" = "$UNIT_IMG" ] && [ "$(grep -c verify-container "$FAKE/calls")" = 1 ] && called "exec --user 1000:1000 -e HOME=/home/node blot-blue node /usr/src/app/scripts/deploy/verify-container/index.js $SHA_NEW"'
 check "a unit gets both env files (secrets.env first), its name, sockets, memory, heaps, release and mounts" \
-  'called "create --restart no --name blot-blue --network host --cap-add SYS_NICE --ulimit nofile=65536:65536 --stop-timeout 40" && called "create .*--env-file $T/secrets.env --env-file $T/proxy.env -e BLOT_UNIT=blue -e PROXY_UNIT=blue -e PROXY_UPSTREAM_MODE=unit" && called "create .*-e BLOT_SOCKET=$T/run-blot/blue-a.sock -e BLOT_WORKER_SOCKET=$T/run-blot/blue-b.sock" && called "create .*--memory 3840m --cpus 4 --cpu-shares 2048" && called "create .*-e BLOT_RELEASE_ID=$SHA_NEW" && called "create .*-e NODE_OPTIONS=--max-old-space-size=1800 --report-on-fatalerror --report-directory=/usr/src/app/data/node-reports/blot-blue" && called "create .*-e BLOT_WORKER_MAX_OLD_SPACE_SIZE=750" && called "create .*bind-propagation=rslave" && called "create .*source=$T/tmp,target=$T/tmp" && called "create .*-e BLOT_TMP_DIRECTORY=$T/tmp"'
+  'called "create --restart no --name blot-blue --network host --cap-add SYS_NICE --ulimit nofile=65536:65536 --stop-timeout 40" && called "create .*--env-file $T/secrets.env --env-file $T/proxy.env -e BLOT_UNIT=blue -e PROXY_UNIT=blue -e PROXY_UPSTREAM_MODE=unit" && called "create .*-e BLOT_SOCKET=$T/run-blot/blue-a.sock -e BLOT_WORKER_SOCKET=$T/run-blot/blue-b.sock" && called "create .*--memory 3300m --cpus 4 --cpu-shares 2048" && called "create .*-e BLOT_RELEASE_ID=$SHA_NEW" && called "create .*-e NODE_OPTIONS=--max-old-space-size=1800 --report-on-fatalerror --report-directory=/usr/src/app/data/node-reports/blot-blue" && called "create .*-e BLOT_WORKER_MAX_OLD_SPACE_SIZE=750" && called "create .*bind-propagation=rslave" && called "create .*source=$T/tmp,target=$T/tmp" && called "create .*-e BLOT_TMP_DIRECTORY=$T/tmp"'
 check "no port is published and the unit is on the host network, not blotnet" \
   '! called "create .* -p " && ! called "create .*blotnet" && called "create .*--network host"'
 check "each unit reaches its own airlock on 127.0.0.1, which publishes on loopback only" \
   'called "create .*--name blot-blue .*-e BLOT_AIRLOCK_BROWSER_URL=http://127.0.0.1:19222 -e BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:18888" && called "create .*--name blot-green .*-e BLOT_AIRLOCK_BROWSER_URL=http://127.0.0.1:19223 -e BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:18889" && called "run -d .*--name blot-blue-airlock --network blotnet -p 127.0.0.1:19222:9222 -p 127.0.0.1:18888:8888 --cap-add=NET_ADMIN" && called "run -d .*--name blot-green-airlock --network blotnet -p 127.0.0.1:19223:9222 -p 127.0.0.1:18889:8888"'
+
+reset units; bluegreen
+check "without BLOT_SANDBOX a unit gets none of the sandbox flags" \
+  '[ $RC = 0 ] && called "create .*--name blot-blue" && ! called "cgroupns" && ! called "seccomp" && ! called "sandbox-cgroup" && ! called "BLOT_SANDBOX_SOCKET"'
+
+printf 'BLOT_SANDBOX=1\n' >> "$T/proxy.env"
+export PROXY_SANDBOX_CGROUP_DIR="$T/sandbox-cgroup"
+reset units; mkdir -p "$T/sandbox-cgroup/blue" "$T/sandbox-cgroup/green"; bluegreen
+SECCOMP="$(cd "$DEPLOY" && pwd)/sandbox-seccomp.json"
+check "BLOT_SANDBOX=1: each unit gets the host cgroup namespace, the seccomp profile, its own cgroup subtree and the broker's socket" \
+  '[ $RC = 0 ] && called "create .*--name blot-blue .*--cgroupns=host --security-opt seccomp=$SECCOMP --mount type=bind,source=$T/sandbox-cgroup/blue,target=/sandbox-cgroup -e BLOT_SANDBOX_SOCKET=/run/blot-sandbox/broker.sock" && called "create .*--name blot-green .*source=$T/sandbox-cgroup/green,target=/sandbox-cgroup"'
+check "and none of the flags the sandbox must not need" \
+  '! called "--privileged" && ! called "unconfined" && ! called "--cap-add SYS_ADMIN" && ! called "systempaths"'
+check "the profile is Docker's default plus exactly clone, mount, umount2, pivot_root and sethostname" \
+  'node -e "
+    const p = require(process.argv[1]);
+    const first = p.syscalls[0];
+    if (p.defaultAction !== \"SCMP_ACT_ERRNO\" || first.action !== \"SCMP_ACT_ALLOW\" || first.args || first.includes || first.excludes) process.exit(1);
+    const names = first.names.slice().sort().join();
+    if (names !== \"clone,mount,pivot_root,sethostname,umount2\") process.exit(1);
+  " "$SECCOMP"'
+
+reset units; rmdir "$T/sandbox-cgroup/green"; bluegreen
+check "BLOT_SANDBOX=1 without a unit's cgroup subtree: refused before anything is touched" \
+  '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create" && mentions "green does not exist"'
+sed -i.bak '/^BLOT_SANDBOX=1$/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
+unset PROXY_SANDBOX_CGROUP_DIR
 
 reset units; FAKE_NODE_B_UNHEALTHY=blot-blue bluegreen
 check "node-b never healthy in the new blue: rolled back, green untouched" \

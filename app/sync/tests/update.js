@@ -1,6 +1,7 @@
 describe("update", function () {
   var sync = require("../index");
   var fs = require("fs-extra");
+  var build = require("build");
 
   // The "rebuilds an entry if the source file changes" spec below writes
   // the source file every 10ms for ~3 seconds while sync.update recurses
@@ -111,6 +112,63 @@ describe("update", function () {
             });
           });
         });
+      });
+    });
+  });
+
+  it("re-syncs a file that changed while it was being processed", function (testDone) {
+    const Entry = require("models/entry");
+    const path = this.fake.path(".txt");
+    const blogID = this.blog.id;
+    const original = Entry.set;
+    let calls = 0;
+
+    sync(blogID, function (err, folder, done) {
+      if (err) return testDone.fail(err);
+
+      spyOn(Entry, "set").and.callFake(function (blogID, entryPath, entry, cb) {
+        // Change the source (and its size) after the first build read it
+        if (++calls === 1)
+          fs.outputFileSync(folder.path + path, "second version");
+        original.call(Entry, blogID, entryPath, entry, cb);
+      });
+
+      fs.outputFileSync(folder.path + path, "first");
+
+      folder.update(path, function (err, result) {
+        if (err) return testDone.fail(err);
+        expect(result.error).toBeNull();
+        expect(calls).toBe(2);
+
+        Entry.get(blogID, path, function (entry) {
+          expect(entry.html).toContain("second version");
+          done(null, testDone);
+        });
+      });
+    });
+  });
+
+  it("does not re-sync a directory", function (testDone) {
+    const dir = "/some-folder";
+    const blogID = this.blog.id;
+
+    sync(blogID, function (err, folder, done) {
+      if (err) return testDone.fail(err);
+      fs.ensureDirSync(folder.path + dir);
+
+      // A build writing .preview.html files moves a directory's mtime. A
+      // directory has no fingerprint, so this must not re-run the update.
+      const touch = spyOn(build, "findMultiFolder").and.callFake(function () {
+        const later = new Date(Date.now() + 5000 * touch.calls.count());
+        fs.utimesSync(folder.path + dir, later, later);
+        return null;
+      });
+
+      folder.update(dir, function (err, result) {
+        if (err) return testDone.fail(err);
+        expect(result.error).toBeNull();
+        expect(touch.calls.count()).toBe(1);
+        done(null, testDone);
       });
     });
   });

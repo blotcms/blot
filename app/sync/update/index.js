@@ -2,7 +2,6 @@ var assertNoSymlinks = require("helper/assertNoSymlinks");
 var fs = require("fs-extra");
 var localPath = require("helper/localPath");
 var clfdate = require("helper/clfdate");
-var hashFile = require("helper/hashFile");
 var drop = require("./drop");
 var set = require("./set");
 var flushCache = require("models/blog/flushCache");
@@ -23,6 +22,18 @@ function firstError(current, next) {
   return isRedisUnavailableError(next) ? next : current;
 }
 
+// A cheap stand-in for hashing the file: if the size or mtime differ between
+// the start and end of an update, the file changed while it was processed.
+// Only regular files get one. A directory's mtime moves when a build writes
+// its .preview.html files into it, which would re-sync forever, and a missing
+// path has nothing to compare, so both are null.
+function fingerprint(path, callback) {
+  fs.stat(path, { bigint: true }, function (err, stat) {
+    if (err || !stat || !stat.isFile()) return callback(null);
+    callback(stat.size + ":" + stat.mtimeNs);
+  });
+}
+
 module.exports = function (blog, log, status) {
   return function update(path, callback) {
     // if typoeof callback is not function, throw error
@@ -40,7 +51,7 @@ module.exports = function (blog, log, status) {
     status("Syncing " + path);
 
     assertNoSymlinks(localPath(blog.id, "/"), localPath(blog.id, path)).then(function () {
-      hashFile(localPath(blog.id, path), function (err, hashBefore) {
+      fingerprint(localPath(blog.id, path), function (before) {
         function done(err) {
           if (err) {
             console.error(clfdate(), blog.id, path, err);
@@ -49,7 +60,7 @@ module.exports = function (blog, log, status) {
           // Redis cannot take the write (a host cutover, a restart, an
           // outage), so the database does not reflect the file on disk. The
           // client must know, otherwise it marks the change as applied and
-          // nothing ever builds the entry. Skip the re-hash and cache flush:
+          // nothing ever builds the entry. Skip the re-check and cache flush:
           // both would only wait on the same Redis.
           if (err && isRedisUnavailableError(err)) return callback(err);
 
@@ -57,8 +68,8 @@ module.exports = function (blog, log, status) {
           // will not build, say) and must not stop the rest of the sync,
           // so it is logged above and never escapes.
           var updateError = err;
-          hashFile(localPath(blog.id, path), function (err, hashAfter) {
-            if (hashBefore !== hashAfter) {
+          fingerprint(localPath(blog.id, path), function (after) {
+            if (before !== after) {
               status("Re-syncing " + path);
               return update(path, callback);
             }
@@ -67,7 +78,7 @@ module.exports = function (blog, log, status) {
             // but if we don't do it after updating each files
             // long syncs can produce weird cache behaviour
             flushCache(blog.id, function () {
-              callback(null, { error: updateError || err || null });
+              callback(null, { error: updateError || null });
             });
           });
         }
