@@ -497,7 +497,7 @@ or uses `.listAll()` for small directories.
 `app/storage/folder` exists, with plain functions taking `blogID` first like
 `storage/assets`: `read`, `createReadStream`, `serve`, `write`, `writeFrom`,
 `path` + `commit`, `ensureLocal`, `mkdir`, `rmdir`, `remove`, `move`, `stat`,
-`exists`, `list`, `listAll`, `walk`, `resolveCaseInsensitive` and `removeAll`.
+`exists`, `list`, `listNames`, `listAll`, `walk`, `resolveCaseInsensitive` and `removeAll`.
 `index.js` is the public surface and documents each function; `local.js` is
 the only backend, and keeps the folder on disk exactly as `helper/localPath`
 resolves it today.

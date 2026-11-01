@@ -8,7 +8,7 @@ const {
   htmlExtRegex,
   fileExtRegex,
   encodeFolderPath,
-  versionedStoragePath,
+  versionedFolderPath,
 } = require("../replaceFolderLinks/shared");
 
 const CONCURRENCY = 5;
@@ -46,7 +46,7 @@ function itemURL(blogID, path, stat) {
 
   if (!cdnable) return encodeFolderPath(path);
 
-  return BLOT_CDN_TOKEN + "/folder/" + versionedStoragePath(blogID, path, stat);
+  return BLOT_CDN_TOKEN + "/folder/" + versionedFolderPath(blogID, path, stat);
 }
 
 async function folder(req, res) {

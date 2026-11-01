@@ -15,7 +15,7 @@ const {
   htmlExtRegex,
   fileExtRegex,
   encodeFolderPath,
-  versionedStoragePath,
+  versionedFolderPath,
 } = require("../render/replaceFolderLinks/shared");
 
 // Constants
@@ -160,13 +160,13 @@ assets.use(async (req, res, next) => {
   if (await trySend(exactPath)) return;
 
   // Every other candidate is resolved from directory listings, each read at
-  // most once (all of its pages), rather than by probing the folder once per
+  // most once, rather than by probing the folder once per
   // candidate. Listings leave out symlinks, so none is ever a candidate, and
   // whatever we do send still goes through storage/folder's symlink check.
   const listings = new Map();
   const list = (dir) => {
     if (!listings.has(dir))
-      listings.set(dir, folder.listAll(blogID, dir).catch(() => null));
+      listings.set(dir, folder.listNames(blogID, dir).catch(() => null));
     return listings.get(dir);
   };
 
@@ -351,7 +351,7 @@ async function redirectLargeFolderFile(req, res, path) {
   redirectToCdn(
     req,
     res,
-    "/folder/" + versionedStoragePath(req.blog.id, path, stat)
+    "/folder/" + versionedFolderPath(req.blog.id, path, stat)
   );
   return true;
 }
