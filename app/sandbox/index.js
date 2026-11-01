@@ -118,6 +118,7 @@ function viaBroker(socketPath, job, args, input) {
     let size = 0;
     let connectError = null;
     let done = false;
+    let file = null;
 
     const socket = net.connect(socketPath);
 
@@ -126,6 +127,7 @@ function viaBroker(socketPath, job, args, input) {
       done = true;
       clearTimeout(timer);
       socket.destroy();
+      if (file) file.destroy();
       err ? reject(err) : resolve(result);
     };
 
@@ -162,7 +164,7 @@ function viaBroker(socketPath, job, args, input) {
 
     if (Buffer.isBuffer(input)) return socket.end(input);
 
-    const file = fs.createReadStream(input.path);
+    file = fs.createReadStream(input.path);
     file.on("error", (err) => finish(sandboxError("INPUT", "cannot read input: " + err.code)));
     file.pipe(socket);
   });

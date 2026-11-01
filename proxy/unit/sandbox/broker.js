@@ -1,7 +1,7 @@
 // The sandbox broker. Runs as root inside the unit, started by the supervisor
 // (proxy/unit/supervisor.sh) with a clean environment, because a jail with its
 // own uid and cgroups has to be started by root. Node (uid 1000) talks to it on
-// a Unix socket only uid 1000 can reach; the protocol is in app/sandbox/README.md.
+// a Unix socket only its group can reach; the protocol is in app/sandbox/README.md.
 //
 // This file and its siblings are owned by root and read-only to the app (the
 // Dockerfile copies them to /usr/local/lib/blot-sandbox): root must never load
@@ -16,21 +16,27 @@ const jail = require("./jail");
 
 const DIRECTORY = "/run/blot-sandbox";
 const SOCKET = DIRECTORY + "/broker.sock";
-const OWNER = 1000;
+// The app's group. The directory stays root's: chown follows symlinks, so root
+// must never chown a path in a directory the app could write to.
+const GROUP = 1000;
 const MAX_RUNNING = 4;
 const MAX_QUEUED = 32;
 const MAX_HEADER_BYTES = 4096;
 // nsjail enforces the job's time limit itself; this is for when it doesn't
 const KILL_GRACE_MS = 2000;
 const DRAIN_MS = 10 * 1000;
+// A paused socket can't tell us its client left, and the client gives up by
+// now, so a request that has waited this long gets no jail
+const MAX_QUEUED_MS = 60 * 1000;
 
-// options: { socket, owner, spawnJail(name) -> child process, jobs, maxRunning,
+// options: { socket, group, spawnJail(name) -> child process, jobs, maxRunning,
 // maxQueued, log }. The defaults are the real ones; tests replace spawnJail.
 function createBroker(options = {}) {
   const socketPath = options.socket || SOCKET;
   const jobs = options.jobs || jail.JOBS;
   const maxRunning = options.maxRunning || MAX_RUNNING;
   const maxQueued = options.maxQueued === undefined ? MAX_QUEUED : options.maxQueued;
+  const maxQueuedMs = options.maxQueuedMs === undefined ? MAX_QUEUED_MS : options.maxQueuedMs;
   const log = options.log || console.error;
   const spawnJail =
     options.spawnJail ||
@@ -96,6 +102,7 @@ function createBroker(options = {}) {
   function admit(request) {
     if (running.size < maxRunning) return start(request);
     if (queue.length >= maxQueued) return fail(request.socket, "busy");
+    request.queued = Date.now();
     queue.push(request);
     // a client that gives up while queued never gets a jail
     request.socket.once("close", () => {
@@ -107,7 +114,9 @@ function createBroker(options = {}) {
   function next() {
     while (queue.length && running.size < maxRunning) {
       const request = queue.shift();
-      if (!request.socket.destroyed) start(request);
+      if (request.socket.destroyed) continue;
+      if (Date.now() - request.queued > maxQueuedMs) fail(request.socket, "busy");
+      else start(request);
     }
   }
 
@@ -215,18 +224,18 @@ function createBroker(options = {}) {
   function listen() {
     return new Promise((resolve, reject) => {
       const directory = require("path").dirname(socketPath);
-      fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-      fs.chmodSync(directory, 0o700);
-      if (options.owner !== undefined) fs.chownSync(directory, options.owner, options.owner);
+      fs.mkdirSync(directory, { recursive: true, mode: 0o710 });
+      if (options.group !== undefined) fs.chownSync(directory, 0, options.group);
+      fs.chmodSync(directory, 0o710);
       // a stale socket from a previous broker
       fs.rmSync(socketPath, { force: true });
       server.once("error", reject);
-      const umask = process.umask(0o177);
+      const umask = process.umask(0o117);
       server.listen(socketPath, () => {
         process.umask(umask);
         try {
-          fs.chmodSync(socketPath, 0o600);
-          if (options.owner !== undefined) fs.chownSync(socketPath, options.owner, options.owner);
+          if (options.group !== undefined) fs.chownSync(socketPath, 0, options.group);
+          fs.chmodSync(socketPath, 0o660);
         } catch (e) {
           return reject(e);
         }
@@ -254,7 +263,7 @@ if (require.main === module) {
     console.error("broker: must run as root");
     process.exit(1);
   }
-  const broker = createBroker({ owner: OWNER });
+  const broker = createBroker({ group: GROUP });
   broker.listen().then(
     () => console.log(`broker: listening on ${SOCKET}`),
     (err) => {

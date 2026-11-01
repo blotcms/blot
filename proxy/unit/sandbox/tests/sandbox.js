@@ -81,6 +81,7 @@ async function withBroker(options, fn) {
     jobs: options.jobs || JOBS(),
     maxRunning: options.maxRunning,
     maxQueued: options.maxQueued,
+    maxQueuedMs: options.maxQueuedMs,
     log: () => {},
     spawnJail: () => {
       counter++;
@@ -225,7 +226,17 @@ test("broker: at most maxRunning jails at once, then a queue, then busy", async 
   });
 });
 
-test("broker: the socket is 0600 and a stale one is replaced", async () => {
+test("broker: a request that queued too long is busy, not given a jail", async () => {
+  await withBroker({ script: "sleep 0.2; cat", maxRunning: 1, maxQueuedMs: 50 }, async (socket) => {
+    const first = request(socket, job, "a");
+    await sleep(30);
+    const second = request(socket, job, "b");
+    assert.deepStrictEqual((await first).header, { ok: true, length: 1 });
+    assert.deepStrictEqual((await second).header, { ok: false, error: "busy" });
+  });
+});
+
+test("broker: the socket is 0660 and a stale one is replaced", async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-broker-"));
   const socket = path.join(directory, "sub", "broker.sock");
   fs.mkdirSync(path.dirname(socket));
@@ -233,8 +244,8 @@ test("broker: the socket is 0600 and a stale one is replaced", async () => {
   const broker = createBroker({ socket, jobs: JOBS(), log: () => {} });
   try {
     await broker.listen();
-    assert.strictEqual(fs.statSync(socket).mode & 0o777, 0o600);
-    assert.strictEqual(fs.statSync(path.dirname(socket)).mode & 0o777, 0o700);
+    assert.strictEqual(fs.statSync(socket).mode & 0o777, 0o660);
+    assert.strictEqual(fs.statSync(path.dirname(socket)).mode & 0o777, 0o710);
   } finally {
     broker.close();
     fs.rmSync(directory, { recursive: true, force: true });

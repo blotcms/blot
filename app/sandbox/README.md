@@ -38,7 +38,7 @@ Args are JSON and every job checks them, since they come from the less trusted s
 
 ## Protocol
 
-One connection is one job, on `/run/blot-sandbox/broker.sock` (0600, uid 1000).
+One connection is one job, on `/run/blot-sandbox/broker.sock` (0660, root and group 1000, in a root-owned directory: root must never chown a path the app could replace).
 
 1. The client sends one JSON line, `{"job":"metadata"}`. Every byte after it is
    piped unparsed to the jail's stdin, up to the job's `maxInputBytes`; the
