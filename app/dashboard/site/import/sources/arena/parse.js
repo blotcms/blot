@@ -3,7 +3,7 @@ const download = require("../../helper/download");
 const { join, extname } = require("path");
 const moment = require("moment");
 const fs = require("fs-extra");
-const sharp = require("sharp");
+const sandbox = require("sandbox");
 const async = require("async");
 const helper = require("dashboard/site/import/helper");
 const sanitize = require("./sanitize");
@@ -131,7 +131,7 @@ async function image(item, outputDirectory) {
 
   const extension =
     extname(item.image.filename) ||
-    "." + (await sharp(data).metadata()).format;
+    "." + (await sandbox.run("metadata", {}, data)).meta.format;
 
   const name = sanitize(title) + extension;
 
