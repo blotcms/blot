@@ -7,6 +7,9 @@ const BLOT_DIRECTORY =
   process.env.BLOT_DIRECTORY || resolve(__dirname + "/../");
 const BLOT_DATA_DIRECTORY =
   process.env.BLOT_DATA_DIRECTORY || BLOT_DIRECTORY + "/data";
+// The app's scratch space, on the host's instance store in production
+const BLOT_TMP_DIRECTORY =
+  process.env.BLOT_TMP_DIRECTORY || BLOT_DATA_DIRECTORY + "/tmp";
 const BLOT_HOST = process.env.BLOT_HOST || "localhost";
 // Unix socket the server also listens on, for the reverse proxy; empty for none
 const BLOT_SOCKET = process.env.BLOT_SOCKET || "";
@@ -109,7 +112,7 @@ module.exports = {
   blot_directory: BLOT_DIRECTORY,
   data_directory: BLOT_DATA_DIRECTORY,
   views_directory: BLOT_DIRECTORY + "/app/views-built",
-  tmp_directory: process.env.BLOT_TMP_DIRECTORY || BLOT_DATA_DIRECTORY + "/tmp",
+  tmp_directory: BLOT_TMP_DIRECTORY,
   log_directory:
     process.env.BLOT_LOG_DIRECTORY || BLOT_DATA_DIRECTORY + "/logs",
   blog_folder_dir: BLOT_DATA_DIRECTORY + "/blogs",
@@ -274,6 +277,23 @@ module.exports = {
     region: process.env.BLOT_STORAGE_REGION || "us-west-2",
     // Set to point at a simulated S3 (MinIO) in development and tests.
     endpoint: process.env.BLOT_STORAGE_ENDPOINT || "",
+  },
+
+  // The content cache of the S3 backend of storage/folder
+  // (app/storage/folder/cache.js, #2258): bytes of blog files read from the
+  // bucket, kept on the instance store and bounded by max_bytes. Files over
+  // max_file_bytes are read and served straight from S3; ensureLocal caches
+  // any size. min_free_percent makes it give room back when the disk itself
+  // runs low.
+  folder_cache: {
+    directory:
+      process.env.BLOT_FOLDER_CACHE_DIRECTORY ||
+      BLOT_TMP_DIRECTORY + "/storage-folder-cache",
+    max_bytes:
+      Number(process.env.BLOT_FOLDER_CACHE_MAX_BYTES) || 50 * 1024 * 1024 * 1024,
+    max_file_bytes:
+      Number(process.env.BLOT_FOLDER_CACHE_MAX_FILE_BYTES) || 4 * 1024 * 1024,
+    min_free_percent: 10,
   },
 
   mailgun: {
