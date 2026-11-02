@@ -196,6 +196,10 @@ describe("git store commit", function () {
       fx.git(dir, ["clone", "-q", "--bare", src, oracle]);
 
       const steps = [
+        // Nothing below a file, or below a folder which is not there, to remove
+        ["posts/a.txt/deeper.txt", null],
+        ["nowhere/at/all.txt", null],
+        ["run.sh/inner.txt", null],
         ["posts/new.txt", "Hello"],
         ["posts/2024/deep/er/file.txt", "Deep"],
         ["run.sh", "#!/bin/sh\necho changed\n"],
@@ -237,6 +241,18 @@ describe("git store commit", function () {
       expect(listing(bare)).toBe(listing(oracle));
       expect(fx.text(bare, ["log", "--format=%H|%an <%ae>|%cn <%ce>|%s", MASTER])).toBe(fx.text(oracle, ["log", "--format=%H|%an <%ae>|%cn <%ce>|%s", MASTER]));
       expect(fx.text(bare, ["log", "-1", "--format=%an <%ae>|%s", MASTER])).toBe("Your Name <you@example.com>|Removed Café");
+    });
+
+    it("does not touch a file when a removal names a path below it, or below a folder which is not there", async function () {
+      const writes = { ...inner.stats };
+
+      for (const below of ["/posts/a.txt/b.txt", "/posts/a.txt/b/c.txt", "/run.sh/x", "/nowhere/x.txt"]) {
+        expect((await commit({ store, cache, lock, path: below, remove: true })).changed).toBe(false, below);
+      }
+
+      expect(used(writes)).toEqual(jasmine.objectContaining({ puts: 0, putIfAbsents: 0 }));
+      const bare = await exportRepo();
+      expect(fx.text(bare, ["ls-tree", "-r", "--name-only", MASTER]).split("\n")).toEqual(["docs/x.txt", "posts/2024/b.txt", "posts/a.txt", "run.sh"]);
     });
 
     it("keeps the mode of an executable file when it is written again", async function () {
@@ -347,7 +363,11 @@ describe("git store commit", function () {
       for (const entry of [pack, piece]) {
         expect((await store.head(packKey(entry.name))).size).toBe(entry.size);
         expect((await store.head(idxKey(entry.name))).size).toBe(entry.idxSize);
-        expect(await store.head(revKey(entry.name))).not.toBeNull();
+      }
+      expect(await store.head(revKey(pack.name))).not.toBeNull();
+      // A history piece is read whole, so it has no reverse index
+      expect(await store.head(revKey(piece.name))).toBeNull();
+      {
       }
 
       const bare = await expectGitHappy();
@@ -619,6 +639,30 @@ describe("git store commit", function () {
       expect(cache.stats().reservedBytes).toBe(0);
     });
 
+    it("reserves room for the raw copy of a stream and its deflated copy together", async function () {
+      // 1.5 MiB of random bytes does not deflate, so scratch holds about 3 MiB
+      const tight = createCache({ dir: path.join(dir, "tight"), maxBytes: 2560 * 1024 });
+      const error = await commit({ store, cache: tight, lock, path: "/large.bin", contents: chunked(11, 1536 * 1024).stream }).then(() => null, (err) => err);
+      expect(error).toEqual(jasmine.any(NoRoomError));
+      expect(tight.stats().reservedBytes).toBe(0);
+      expect((await manifest.read(store)).seq).toBe(1);
+
+      const roomy = createCache({ dir: path.join(dir, "roomy"), maxBytes: 4 * MiB });
+      const file = chunked(11, 1536 * 1024);
+      expect((await commit({ store, cache: roomy, lock, path: "/large.bin", contents: file.stream })).changed).toBe(true);
+      expect(roomy.stats().reservedBytes).toBe(0);
+    });
+
+    it("stops reading a stream of unknown size as soon as it passes the limit", async function () {
+      const file = chunked(12, 3 * MiB);
+      const error = await commit({ store, cache, lock, path: "/large.bin", contents: file.stream, limit: 256 * 1024 }).then(() => null, (err) => err);
+
+      expect(error).toEqual(jasmine.any(TooLargeError));
+      expect(file.produced()).toBeLessThan(MiB);
+      expect(scratchLeft()).toEqual([]);
+      expect(cache.stats().reservedBytes).toBe(0);
+    });
+
     it("is refused over the limit, and when the cache has no room for its scratch space", async function () {
       const writes = { ...inner.stats };
 
@@ -663,16 +707,14 @@ describe("git store commit", function () {
       expect(spent.reads).toBe(0);
       expect(spent.lists).toBe(0);
 
-      // Writing: the pack, index and reverse index, the same for the history
-      // piece, the manifest and the hint
-      expect(spent.puts).toBe(6 + 1);
+      // Writing: the pack, index and reverse index, the history piece and its
+      // index, and the hint, then the manifest. swap() looks at nothing first:
+      // the files were just uploaded, and the create decides the rest.
+      expect(spent.puts).toBe(5 + 1);
       expect(spent.putIfAbsents).toBe(1);
+      expect(spent.heads).toBe(1);
 
-      // Checking, in manifest.swap: the four files it is about to name, and
-      // that the manifest after this one is not there, twice
-      expect(spent.heads).toBe(1 + 4 + 2);
-
-      expect(spent.reading + spent.writing).toBe(16);
+      expect(spent.reading + spent.writing).toBe(9);
     });
 
     it("takes the same number however deep the history is", async function () {
@@ -699,7 +741,7 @@ describe("git store commit", function () {
       expect(cold.reads).toBeGreaterThan(0);
       expect(cold.lists).toBe(0);
       expect(cold.reading).toBeLessThanOrEqual(warm ? 20 : 26); // without a cache, index parts are fetched again
-      expect(cold.writing).toBe(8);
+      expect(cold.writing).toBe(7);
 
       if (!warm) return;
       fresh();

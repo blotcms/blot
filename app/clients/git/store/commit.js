@@ -36,8 +36,9 @@
 //      the pack is self-contained. The file's contents are its last entry, so
 //      every other entry starts near the front of the pack, and the .idx
 //      never needs 8-byte offsets. Write its .idx and .rev, and a history
-//      piece: a pack of just the commit, which compaction merges later.
-//   4. Upload them, then swap the manifest. A swap that lost to a push or to
+//      piece: a pack of just the commit and its .idx, which compaction merges
+//      later (a piece is read whole, so it has no .rev).
+//   4. Upload them all at once, then swap the manifest. A swap that lost to a push or to
 //      another commit starts again from the new manifest, up to three
 //      attempts and then EMOVED. If master has not moved (a tag was pushed,
 //      say) the pack already uploaded is reused.
@@ -319,28 +320,43 @@ function createScratch(cache) {
   let reservation = null;
   let counter = 0;
 
+  // The bytes of the files in scratch right now, which together are what the
+  // reservation has to cover: the raw copy of a stream stays while the
+  // deflated copy is written beside it
+  const files = new Map();
+  let live = 0;
+
+  // Small caches take smaller steps
+  const step = Math.max(1, Math.min(RESERVE_STEP, Math.floor(cache.maxBytes / 8)));
+
   return {
     // A file in scratch with `source` written into it, through the stream
-    // `stages` (a compressor, say), within the budget; resolves with the
-    // bytes written
-    async write(source, ...stages) {
+    // `stages` (a compressor, say), within the budget and, if given, within
+    // `limit` bytes written; resolves with the bytes written
+    async write(source, { stages = [], limit = Infinity } = {}) {
       if (!reservation) reservation = await cache.reserve(FIRST_RESERVE);
       const file = nodePath.join(reservation.dir, "contents-" + ++counter);
-      let written = 0;
+      files.set(file, 0);
 
       async function* counted(chunks) {
         for await (const chunk of chunks) {
           const buffer = toChunk(chunk);
-          written += buffer.length;
-          if (written > reservation.bytes) await reservation.extend(Math.max(written - reservation.bytes, RESERVE_STEP));
+          files.set(file, files.get(file) + buffer.length);
+          live += buffer.length;
+          if (files.get(file) > limit) throw new TooLargeError("The file is larger than the " + limit + " bytes Blot accepts");
+          if (live > reservation.bytes) await reservation.extend(Math.max(live - reservation.bytes, step));
           yield buffer;
         }
       }
 
       await pipeline(source, ...stages, counted, fs.createWriteStream(file));
-      return { file, written };
+      return { file, written: files.get(file) };
     },
-    remove: (file) => fsp.rm(file, { force: true }),
+    async remove(file) {
+      await fsp.rm(file, { force: true });
+      live -= files.get(file) || 0;
+      files.delete(file);
+    },
     async release() {
       if (reservation) await reservation.release().catch((err) => console.error("Git store: could not remove scratch space", err));
     },
@@ -372,7 +388,7 @@ async function prepareBlob(contents, { scratch, limit, size }) {
   // A stream of unknown length is counted first
   let raw = null;
   if (size === undefined || size === null) {
-    raw = await scratch.write(contents);
+    raw = await scratch.write(contents, { limit });
     size = raw.written;
     contents = fs.createReadStream(raw.file);
   }
@@ -405,7 +421,7 @@ async function deflateToScratch(chunks, size, { scratch, limit }) {
     if (seen !== size) throw new Error("The contents are " + seen + " bytes, not the " + size + " they were said to be");
   }
 
-  const { file, written } = await scratch.write(Readable.from(hashed(), { objectMode: false }), zlib.createDeflate());
+  const { file, written } = await scratch.write(Readable.from(hashed(), { objectMode: false }), { stages: [zlib.createDeflate()] });
   return { oid: hash.digest("hex"), size, compressedSize: written, file };
 }
 
@@ -451,6 +467,10 @@ async function build({ objects, parent, parts, blob, message, identity, when }) 
     levels.push(entries);
     const name = Buffer.from(parts[depth]);
     const next = entries.find((e) => e.mode === DIRECTORY && e.name.equals(name));
+
+    // Nothing is below a file, or below a directory which is not there, to
+    // remove: as in git, that is no change, and the file is not touched
+    if (!next && !blob && depth < parts.length - 1) return null;
     treeOid = next ? next.oid.toString("hex") : null;
   }
 
@@ -488,15 +508,17 @@ async function build({ objects, parent, parts, blob, message, identity, when }) 
   return { parent, commit: entry.oid, objects: [...trees, { ...entry, body }] };
 }
 
-async function uploadPack(store, pack) {
+// Uploads a pack with its index and, unless it is a history piece (read whole,
+// so nothing wants its reverse index), its reverse index, all at once. Every
+// upload has ended, one way or the other, before this settles.
+async function uploadPack(store, pack, { rev = true } = {}) {
   const body = pack.body();
-  try {
-    await store.put(packKey(pack.name), body);
-  } finally {
-    if (body.destroy) body.destroy();
-  }
-  await store.put(idxKey(pack.name), pack.idx);
-  await store.put(revKey(pack.name), pack.rev);
+  const puts = [store.put(packKey(pack.name), body), store.put(idxKey(pack.name), pack.idx)];
+  if (rev) puts.push(store.put(revKey(pack.name), pack.rev));
+  const results = await Promise.allSettled(puts);
+  if (body.destroy) body.destroy();
+  const failed = results.find((result) => result.status === "rejected");
+  if (failed) throw failed.reason;
 }
 
 const entryOf = ({ name, size, idx, objects }) => ({ name, size, idxSize: idx.length, objects });
@@ -537,7 +559,7 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
 
         // Every upload ends before this goes on, so none is still reading a
         // file from scratch when scratch is deleted
-        const results = await Promise.allSettled([uploadPack(store, pack), uploadPack(store, piece)]);
+        const results = await Promise.allSettled([uploadPack(store, pack), uploadPack(store, piece, { rev: false })]);
         const failed = results.find((result) => result.status === "rejected");
         if (failed) throw failed.reason;
         uploaded = { pack, piece };
@@ -551,7 +573,7 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
       });
 
       try {
-        await manifest.swap({ store, lock, base, next });
+        await manifest.swap({ store, lock, base, next, uploaded: [uploaded.pack.name, uploaded.piece.name] });
       } catch (err) {
         if (err instanceof OutcomeUnknownError) return { outcome: "unknown", commit: built.commit, parent, changed: null, seq: next.seq, error: err };
         if (!(err instanceof StaleManifestError)) throw err;
