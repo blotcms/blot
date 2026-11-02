@@ -146,6 +146,50 @@ describe("git client: materialize", function () {
     });
   }
 
+  // What applying a commit adds to the resident memory of a node process which
+  // does nothing else, at its peak. This process cannot measure it. Each chunk
+  // read from git is a Buffer outside the heap, and it stays resident, though
+  // written and dead, until a GC. Once a long run has grown the young generation
+  // only V8's 64 MiB limit on external memory prompts one, so here that much
+  // garbage piles up or not depending on the specs that ran first. A 1 MiB
+  // semi-space collects the chunks every few MiB, whatever the size of the file.
+  var MEASURE_MEMORY = `
+    var [materialize, directory, folder, from, to] = process.argv.slice(1);
+    var before = process.memoryUsage().rss;
+    var peak = before;
+    var timer = setInterval(function () {
+      peak = Math.max(peak, process.memoryUsage().rss);
+    }, 5);
+
+    require(materialize)(directory, { path: folder, log: function () {} }, from, to, function (err) {
+      clearInterval(timer);
+      if (err) throw err;
+      console.log(peak - before);
+    });
+  `;
+
+  function memoryGrowth(spec, from, to) {
+    return new Promise(function (resolve, reject) {
+      execFile(
+        process.execPath,
+        [
+          "--max-semi-space-size=1",
+          "-e",
+          MEASURE_MEMORY,
+          require.resolve("clients/git/materialize"),
+          spec.directory,
+          spec.folder,
+          from,
+          to,
+        ],
+        function (err, stdout, stderr) {
+          if (err) return reject(new Error(err.message + stderr));
+          resolve(Number(stdout));
+        }
+      );
+    });
+  }
+
   // Everything below a directory as { "relative/path": Buffer }, with its
   // directories as "relative/path/": true
   async function list(directory, prefix) {
@@ -390,20 +434,10 @@ describe("git client: materialize", function () {
     for (var offset = 0; offset < blob.length; offset += block.length) block.copy(blob, offset);
 
     var first = await commit(this, { "big.bin": blob, "after.txt": "After the large file" });
-    var before = process.memoryUsage().rss;
-    var peak = before;
-    var timer = setInterval(function () {
-      peak = Math.max(peak, process.memoryUsage().rss);
-    }, 5);
-
-    try {
-      await apply(this, EMPTY_TREE, first);
-    } finally {
-      clearInterval(timer);
-    }
+    var growth = await memoryGrowth(this, EMPTY_TREE, first);
 
     // Buffering the file would add at least its size
-    expect(peak - before).toBeLessThan(blob.length / 2);
+    expect(growth).toBeLessThan(blob.length / 2);
     expect(Buffer.compare(await fs.readFile(this.folder + "/big.bin"), blob)).toBe(0);
     expect(await fs.readFile(this.folder + "/after.txt", "utf8")).toBe("After the large file");
   }, 120 * 1000);
