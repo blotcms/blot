@@ -182,10 +182,10 @@ module.exports = {
     },
   },
 
+  // Whether the pandoc converters are loaded. Its heap and time limits are
+  // in the sandbox job, app/sandbox/jobs/pandoc.js, which runs it.
   pandoc: {
     bin: process.env.BLOT_PANDOC_PATH || "pandoc",
-    maxmemory: "500M", // 500mb
-    timeout: 10000, // 10s
   },
 
   // The "airlock" container (config/airlock) is the single egress point for

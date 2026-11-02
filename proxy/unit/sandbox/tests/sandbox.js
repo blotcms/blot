@@ -29,6 +29,22 @@ test("jail: never --user, never binds /usr or /, disables /proc", () => {
   assert.deepStrictEqual(argv.slice(-3), jail.JOBS.metadata.command);
 });
 
+test("jail: /tmp is 128 MiB, or the job's own size", () => {
+  const tmpfs = (name) => {
+    const argv = jail.args(name);
+    return argv[argv.indexOf("-m") + 1];
+  };
+  assert.strictEqual(tmpfs("metadata"), `none:/tmp:tmpfs:size=${128 * 1024 * 1024}`);
+  assert.strictEqual(tmpfs("pandoc"), `none:/tmp:tmpfs:size=${512 * 1024 * 1024}`);
+});
+
+test("jail: binds pandoc's binary, not /usr/local/bin", () => {
+  const argv = jail.args("pandoc");
+  const binds = argv.filter((a, i) => argv[i - 1] === "-R");
+  assert(binds.includes("/usr/local/bin/pandoc"));
+  assert(!binds.includes("/usr/local/bin") && !binds.includes("/usr/local"));
+});
+
 test("jail: passes exactly one environment variable", () => {
   const argv = jail.args("metadata");
   assert.deepStrictEqual(
@@ -44,12 +60,12 @@ test("jail: an unknown job throws", () => {
 });
 
 test("jail: every job runs its own file in main.js, within its limits", () => {
-  assert.deepStrictEqual(Object.keys(jail.JOBS).sort(), ["exif", "favicon", "metadata", "resize", "screenshot", "template-image", "thumbnail", "to-png"]);
+  assert.deepStrictEqual(Object.keys(jail.JOBS).sort(), ["exif", "favicon", "metadata", "pandoc", "resize", "screenshot", "template-image", "thumbnail", "to-png"]);
   for (const [name, j] of Object.entries(jail.JOBS)) {
     assert.deepStrictEqual(j.command.slice(-2), ["/usr/src/app/app/sandbox/jobs/main.js", name]);
     assert(fs.existsSync(path.join(__dirname, "../../../../app/sandbox/jobs", name + ".js")));
     if (j.network) continue;
-    assert.strictEqual(j.memoryBytes, 512 * 1024 * 1024);
+    assert.strictEqual(j.memoryBytes, (name === "pandoc" ? 1024 : 512) * 1024 * 1024);
     assert.strictEqual(j.maxInputBytes, 256 * 1024 * 1024);
   }
   for (const name of ["thumbnail", "resize", "to-png"]) {
@@ -57,6 +73,7 @@ test("jail: every job runs its own file in main.js, within its limits", () => {
     assert.strictEqual(jail.JOBS[name].maxOutputBytes, 64 * 1024 * 1024);
   }
   assert.strictEqual(jail.JOBS.exif.timeSeconds, 30);
+  assert.strictEqual(jail.JOBS.pandoc.timeSeconds, 30);
   assert.strictEqual(jail.JOBS.exif.maxOutputBytes, 1024 * 1024);
 });
 

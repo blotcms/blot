@@ -1,6 +1,6 @@
 # Sandbox
 
-Runs jobs on untrusted bytes (images, their metadata and web pages so far) in an [nsjail](https://github.com/google/nsjail)
+Runs jobs on untrusted bytes (images, their metadata, documents pandoc converts and web pages so far) in an [nsjail](https://github.com/google/nsjail)
 jail instead of in the app's Node process, which holds the secrets and the blog
 data mount. Design and phases: #2257.
 
@@ -35,6 +35,20 @@ starts `SANDBOX_`, and it never falls back to in-process.
 - `template-image` a template image setting: a decode check, then the original
   and its thumbnails, cropped and cut to a shape (`image-mask.js`, `crop.js`).
 - `favicon` a template's favicon set, one ICO and a few PNGs.
+- `pandoc` a docx, odt, rtf, org or markdown document to HTML, through
+  `build/converters/pandoc.js`. The job picks pandoc's options from a few checked
+  args (the format, and for markdown KaTeX, callouts and citations), never flags
+  from the caller. A markdown post's bibliography and CSL come after the
+  document in the input, their lengths in the args. outputs[0] is the HTML and
+  the rest are the media pandoc extracted from a docx or odt, named in
+  `meta.media`; the converters write them to the blog's assets. A document
+  pandoc can't convert, or its 10s timeout, is `meta.error`, so it fails the
+  build like any bad file without being a sandbox failure; pandoc killed for
+  any other reason (the jail's memory limit) fails the job. It spawns
+  `/usr/local/bin/pandoc`, bound on its own; in-process it honours
+  `BLOT_PANDOC_PATH`. The callouts Lua filter is `jobs/callouts.lua`. It gets
+  1 GiB and a 512 MiB `/tmp`: pandoc alone peaks near 500 MiB at its own heap
+  cap, and the document and its media are in `/tmp` and in Node as well.
 
 Callers write any output files themselves: the jail can't reach the data mount.
 Args are JSON and every job checks them, since they come from the less trusted side.
@@ -65,7 +79,7 @@ which is at most its time limit.
 1. Add `jobs/<name>.js` exporting `run(args, input)`, returning
    `{ meta, outputs: [Buffer, ...] }`. `meta` must be JSON.
 2. Add `<name>` to `JOBS` in `jobs/main.js` and an entry in `proxy/unit/sandbox/jail.js`
-   (command, memory, time and byte limits). The names are `/^[a-z-]+$/`.
+   (command, memory, time and byte limits, and `/tmp` if not 128 MiB). The names are `/^[a-z-]+$/`.
 3. If it needs a binary or library the jail doesn't bind, add a read-only bind
    in `jail.js`. Never bind `/usr` or `/`.
 
@@ -140,13 +154,14 @@ neither is anything run by `docker exec`.
   the supervisor starts it with a clean environment (no secrets, no `NODE_OPTIONS`).
 - **No `/proc`, except for the browser job.** `--disable_proc`. A fresh `/proc` can't be mounted under
   Docker's masked paths, and the alternative (`systempaths=unconfined`) would
-  let root in the unit write host sysctls. sharp and exiftool don't need it.
+  let root in the unit write host sysctls. sharp, exiftool and pandoc don't need it.
 - **`-u 65000:65000:1`, not `--user`.** As root, `--user` leaves the job mapped
   to root outside the namespace.
 - **Binds are listed, never `/usr`.** nsjail binds are recursive and
   `/usr/src/app/data` is the blog data mount. The jail has no `/bin`, so jobs
   run `/usr/local/bin/node file.js` and `/usr/bin/perl /usr/bin/exiftool`
-  directly; `#!/usr/bin/env` scripts won't start.
+  directly; `#!/usr/bin/env` scripts won't start. pandoc is a static binary,
+  bound on its own: never `/usr/local/bin`.
 - **The environment is empty** except `NODE_PATH`, so `require("sharp")` resolves.
 - **Job cgroups are outside the unit's.** The host makes
   `/sys/fs/cgroup/blot-sandbox/<unit>` (`config/host/host/setup.sh`) and the

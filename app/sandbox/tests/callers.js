@@ -95,4 +95,31 @@ describe("callers of the sandbox when it fails", function () {
       done();
     });
   });
+
+  it("docx converter fails to convert and writes no media", function (done) {
+    const test = this;
+    const docx = require("build/converters/docx");
+    const source = path.join(__dirname, "../../build/converters/docx/tests/image.docx");
+    fs.copySync(source, test.blogDirectory + "/image.docx");
+
+    docx.read(test.blog, "/image.docx", function (err, html) {
+      expect(err.code).toEqual("SANDBOX_TIMEOUT");
+      expect(html).toBeUndefined();
+      expect(sandbox.run.calls.argsFor(0)[0]).toEqual("pandoc");
+      done();
+    });
+  });
+
+  it("markdown converter fails to convert", function (done) {
+    const test = this;
+    const markdown = require("build/converters/markdown");
+    fs.outputFileSync(test.blogDirectory + "/post.md", "# Hello");
+
+    markdown.read(test.blog, "/post.md", function (err, html) {
+      expect(err.code).toEqual("SANDBOX_TIMEOUT");
+      expect(html).toBeUndefined();
+      expect(sandbox.run.calls.argsFor(0)[1].from).toEqual("markdown");
+      done();
+    });
+  });
 });

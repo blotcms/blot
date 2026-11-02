@@ -7,7 +7,8 @@ const path = require("path");
 const MiB = 1024 * 1024;
 
 // Encoded images pass through /tmp (app/sandbox/jobs/encode.js). A tmpfs counts
-// toward the job's memory limit, so this is a ceiling, not a reservation.
+// toward the job's memory limit, so this is a ceiling, not a reservation. A job
+// may set its own, tmpfsBytes.
 const TMPFS_BYTES = 128 * MiB;
 
 // Where the Dockerfile puts the nsjail binary, and the unit's cgroup subtree
@@ -84,6 +85,20 @@ const JOBS = {
     maxInputBytes: 256 * MiB,
     maxOutputBytes: 8 * MiB,
   },
+  // Spawns pandoc on one document (docx, odt, rtf, org or markdown, with a
+  // bibliography and CSL) and returns the HTML and any media it extracted.
+  // pandoc caps its own heap at 500M and is killed after 10s by the job. At
+  // that cap pandoc alone peaks at about 500 MiB (a 36 MB docx), and the
+  // document and its media sit in /tmp and in Node too, so it gets more
+  // memory and /tmp than the image jobs.
+  pandoc: {
+    command: node("pandoc"),
+    memoryBytes: 1024 * MiB,
+    tmpfsBytes: 512 * MiB,
+    timeSeconds: 30,
+    maxInputBytes: 256 * MiB,
+    maxOutputBytes: 64 * MiB,
+  },
   // Spawns perl, which runs exiftool, reading the image from stdin
   exif: {
     command: node("exif"),
@@ -120,6 +135,7 @@ const BINDS = [
   "/usr/bin",
   "/usr/share/perl5",
   "/usr/local/bin/node",
+  "/usr/local/bin/pandoc",
   "/usr/src/app/node_modules",
   "/usr/src/app/app/sandbox",
 ];
@@ -169,7 +185,7 @@ function args(name) {
     "--disable_proc",
     "--hostname", "sandbox",
     "--cwd", "/",
-    "-m", `none:/tmp:tmpfs:size=${TMPFS_BYTES}`,
+    "-m", `none:/tmp:tmpfs:size=${j.tmpfsBytes || TMPFS_BYTES}`,
     "--time_limit", String(j.timeSeconds),
     // uid 65000 inside and outside. Never --user: as root it leaves the job
     // mapped to root outside the namespace.
