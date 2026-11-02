@@ -8,7 +8,7 @@ const BANDCAMP_HOST = /^([a-z0-9-]+\.)*bandcamp\.com$/i;
 
 // Bandcamp is not an oEmbed provider, so unlike the other video embeds this
 // one scrapes the target page itself. To keep that from being an SSRF sink
-// (it is not routed through the airlock - see config/airlock/README.md) it
+// (it is not routed through the egress proxy, helper/airlock) it
 // never fetches the raw user href: the host is pinned to bandcamp.com, the
 // URL is rebuilt from just the validated host + path (no scheme downgrade,
 // no credentials, no port, no query), and redirects are not followed - a

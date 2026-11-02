@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Runs this git worktree in its own Node container on a-local.blot … e-local.blot,
-# sharing the main stack's nginx, Redis, data/ and airlock. See worktrees.md.
+# sharing the main stack's nginx, Redis and data/. See worktrees.md.
 #
 #   scripts/development/preview.sh up [url-or-path]
 #                                         claim a slot (or reuse this worktree's) and print

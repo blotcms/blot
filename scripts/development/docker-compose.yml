@@ -22,8 +22,6 @@ services:
         condition: service_healthy
       toxiproxy:
         condition: service_started
-      airlock:
-        condition: service_healthy
       minio-init:
         condition: service_completed_successfully
     env_file:
@@ -35,11 +33,6 @@ services:
       - DEBUG=${DEBUG:-}
       # Survives nodemon restarts, so each one recompiles only what changed
       - NODE_COMPILE_CACHE=/tmp/node-compile-cache
-      # Route bookmark screenshots and remote-image downloads through the
-      # egress-filtered airlock container. Comment these two out to have the
-      # app hit the network directly (no SSRF protection).
-      - BLOT_AIRLOCK_BROWSER_URL=http://airlock:9222
-      - BLOT_AIRLOCK_PROXY_URL=http://airlock:8888
       # Generated assets live only in this simulated S3 (MinIO, below), as in
       # production; the app won't start without a bucket. The credentials are
       # MinIO's development root user, set below.
@@ -126,23 +119,6 @@ services:
     expose:
       - "26379"
       - "8081"
-
-  # Single egress boundary for fetching untrusted, user-supplied URLs
-  # (bookmark screenshots, remote images in posts). See config/airlock.
-  airlock:
-    build:
-      context: ../../config/airlock
-      dockerfile: Dockerfile
-    # entrypoint.sh exits non-zero (fail closed) if any of its services go
-    # down, relying on the restart policy to bring it back - matches
-    # --restart unless-stopped in the production docker run (see README.md).
-    restart: unless-stopped
-    # Needed so the entrypoint can install the nftables egress filter.
-    cap_add:
-      - NET_ADMIN
-    expose:
-      - "9222"
-      - "8888"
 
   nginx:
     build:

@@ -40,7 +40,8 @@ const REQUIRED_ENV = [
   "BLOT_SESSION_SECRET",
   "BLOT_STRIPE_SECRET",
   "BLOT_STRIPE_WEBHOOK_SECRET",
-  "BLOT_AIRLOCK_BROWSER_URL",
+  // the sandbox: production has no other browser or egress proxy
+  "BLOT_SANDBOX_SOCKET",
   "BLOT_AIRLOCK_PROXY_URL",
 ];
 
@@ -217,11 +218,11 @@ async function sandboxWorks() {
   return `the jail read a ${meta.width}x${meta.height} ${meta.format}`;
 }
 
-// The browser jail, only when the host turned it on: Chromium starts in it, and
+// The browser jail, whenever there is a sandbox: Chromium starts in it, and
 // the egress filter is really there. The metadata address must be refused: a
 // jail that reaches it, or times out on it, is not a jail to go live with.
 async function sandboxBrowserWorks() {
-  if (process.env.BLOT_SANDBOX_BROWSER !== "1") return "skipped, BLOT_SANDBOX_BROWSER is not set";
+  if (!process.env.BLOT_SANDBOX_SOCKET) return "skipped, BLOT_SANDBOX_SOCKET is not set";
 
   const sandbox = require("../../../app/sandbox");
   const empty = Buffer.alloc(0);
@@ -240,11 +241,11 @@ async function sandboxBrowserWorks() {
   return `Chromium started and ${metadata.meta.error}`;
 }
 
-// The proxy jail, only when the host turned it on. A forward-proxy request for
-// the metadata address must not get through: tinyproxy answers 500 when the
-// filter refuses it. The airlock check proves the proxy itself answers.
+// The proxy jail, whenever there is a sandbox. A forward-proxy request for the
+// metadata address must not get through: tinyproxy answers 500 when the filter
+// refuses it, which also proves the proxy answers at all.
 async function sandboxProxyWorks({ config }) {
-  if (process.env.BLOT_SANDBOX_PROXY !== "1") return "skipped, BLOT_SANDBOX_PROXY is not set";
+  if (!process.env.BLOT_SANDBOX_SOCKET) return "skipped, BLOT_SANDBOX_SOCKET is not set";
 
   const { hostname, port } = new URL(config.airlock.proxy);
   const metadata = "http://169.254.169.254/latest/meta-data/";
@@ -295,36 +296,6 @@ async function releaseID({ expectedRelease }) {
   return expectedRelease;
 }
 
-// Deliberately not the degrade-gracefully view of the airlock the app takes
-// at runtime: a container that can't reach it should not go live.
-async function airlock({ config }) {
-  const { browser_url, proxy } = config.airlock;
-  if (!browser_url || !proxy) throw new Error("airlock URLs are not configured");
-
-  const res = await request({
-    url: new URL("/json/version", browser_url).href,
-    host: new URL(browser_url).host,
-  }).catch((err) => {
-    throw new Error(`browser ${browser_url} unreachable: ${err.message}`);
-  });
-  if (res.status !== 200) throw new Error(`browser ${browser_url} returned ${res.status}`);
-
-  // A forward-proxy request (like `curl -x`) for the special host tinyproxy
-  // answers itself, so it needs no egress - the same probe the airlock's own
-  // HEALTHCHECK uses.
-  const { hostname, port } = new URL(proxy);
-  const proxied = await request({
-    url: "http://tinyproxy.stats/",
-    host: "tinyproxy.stats",
-    options: { hostname, port, path: "http://tinyproxy.stats/" },
-  }).catch((err) => {
-    throw new Error(`proxy ${proxy} unreachable: ${err.message}`);
-  });
-  if (proxied.status !== 200) throw new Error(`proxy ${proxy} returned ${proxied.status}`);
-
-  return "browser and proxy reachable";
-}
-
 async function canaryBlog({ config }) {
   const host = `preview-of-${CANARY_TEMPLATE}-on-${CANARY_HANDLE}.${config.host}`;
   const { base, options } = local(config);
@@ -364,7 +335,6 @@ module.exports = [
   { name: "sandbox browser", run: sandboxBrowserWorks },
   { name: "node filter", run: nodeFilter },
   { name: "required environment", run: requiredEnv },
-  { name: "airlock", run: airlock },
   { name: "sandbox proxy", run: sandboxProxyWorks },
   { name: "canary blog render", run: canaryBlog },
   { name: "dashboard log-in render", run: loginPage },

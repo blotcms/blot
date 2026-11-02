@@ -78,7 +78,8 @@ async function main() {
     // caches to the storage bucket (its scratch files, and the staging area
     // for those uploads, go in the tmp mount run.js adds).
     writableData: true,
-    // Builds fetch remote images and take screenshots through the airlock.
+    // Builds fetch remote images through blot-blue's proxy jail. A probe has
+    // no browser, so link screenshots fail (scripts/probe/run.js).
     airlock: true,
     nodeFlags: [
       "--expose-gc",

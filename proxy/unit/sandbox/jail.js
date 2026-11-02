@@ -21,7 +21,6 @@ const NETWORK_CONFIG = path.join(__dirname, "network.cfg");
 const ENTER_NETWORK = path.join(__dirname, "enter-network.sh");
 
 // The unit's browser cgroup, which the host binds in (proxy/deploy/common.sh)
-// when BLOT_SANDBOX_BROWSER=1
 const BROWSER_CGROUP = "/sandbox-browser-cgroup";
 // The proxy jail's, in the unit's subtree. ./proxy.js makes it.
 const PROXY_CGROUP = CGROUP_MOUNT + "/proxy";

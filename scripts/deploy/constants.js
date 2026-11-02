@@ -1,11 +1,8 @@
 // CPU weights (docker --cpu-shares). Docker's default weight is 1024. Shares
 // only matter when the host's CPUs are contended - they decide who gets the
 // CPU when there isn't enough to go around. Serving (the units' Node processes,
-// which take the dashboard and blog traffic) gets ~4x the background weight:
-// the airlock, which runs screenshots and entry-build downloads, is background
-// work. A slightly slower save is better than a slow blog.
+// which take the dashboard and blog traffic) gets twice Docker's default.
 const SERVING_CPU_SHARES = 2048;
-const BACKGROUND_CPU_SHARES = 512;
 
 // The two units (#2119): blot-blue and blot-green, each one container holding
 // OpenResty, node-a (blogs, dashboard reads) and node-b (the worker child:
@@ -16,18 +13,18 @@ const BACKGROUND_CPU_SHARES = 512;
 // being replaced, so each is sized for everything the app does, not half of it:
 //   node-a   the blog container's heap (1500) plus room for dashboard reads
 //   node-b   the sync container's heap, with the same overhead it had for
-//            pandoc and esbuild (the browser moved to the airlock)
+//            pandoc and esbuild (the browser runs in the sandbox)
 //   memory   both heaps plus 750m for everything else: OpenResty's workers,
 //            V8's overhead, pandoc, git and esbuild. Sized to fit beside Redis
-//            on one host (#2261): two units, two airlocks and Redis's maxmemory
-//            and fork overhead come to under 14 GiB of 16. Page cache counts
+//            on one host (#2261): two units, their sandbox cgroups (outside
+//            this limit: config/host/host/setup.sh) and Redis's maxmemory and
+//            fork overhead come to under 14 GiB of 16. Page cache counts
 //            against this too, but it is reclaimed, so what matters is the
 //            memory that can't be (unit-mem-summary.sh on the host)
 // The heaps are ceilings, not reservations: V8 uses what the render caches
 // and requests need, and the unit's cgroup limit sits above both so a runaway
 // heap dies with a diagnostic report rather than to the OOM killer.
-// cpus overcommits slightly. Each unit
-// has its own airlock (AIRLOCK below), paid for separately.
+// cpus overcommits slightly.
 const UNIT = {
   cpus: 4,
   memory: "3300m",
@@ -81,35 +78,15 @@ module.exports = {
 
   ENV_FILE_ON_SERVER: "/etc/blot/secrets.env",
 
-  // The airlock (config/airlock), the egress boundary for fetching untrusted,
-  // user-supplied URLs. Each unit has its own, deployed with it by
-  // proxy/deploy/common.sh on blotnet, with memory kept tight: idle it sits
-  // under ~300m, and it ran three back-to-back full 1200x1200 @2x screenshots
-  // in testing with no OOM. Bookmark screenshots and remote-image downloads
-  // run there, serialized by the lock in app/helper/screenshot. The 512m is
-  // paid for out of the unit's memory (UNIT above).
-  //
-  // The registry, network and sizing below are every unit's airlock's.
-  AIRLOCK: {
-    registry: "ghcr.io/blotcms/blot-airlock",
-    network: "blotnet",
-    memory: "512m",
-    cpus: 1,
-    // Screenshots and remote downloads for entry builds - background work,
-    // weighted below serving (see SERVING_CPU_SHARES above).
-    cpuShares: BACKGROUND_CPU_SHARES,
-
-    // One airlock per unit (#2119), deployed with it as blot-<unit>-airlock.
-    // A unit runs on the host network and cannot join blotnet or resolve
-    // names on it, so each airlock publishes its two ports on 127.0.0.1
-    // only, at a distinct host port per unit, and the unit is given those
-    // URLs. The ports are well clear of 8088-8090, which the old containers
-    // hold during the cutover. The egress filter (config/airlock/egress.nft)
-    // is in the airlock's own network namespace, so it does not depend on
-    // how its clients reach it. See config/airlock/README.md.
+  // The sandbox's proxy jail in each unit (proxy/unit/sandbox/proxy.js), the
+  // egress boundary for fetching untrusted, user-supplied URLs since the
+  // airlock went (#2257). It listens on the host's loopback at a port per
+  // unit: units share the host network, so the two must differ. Screenshots
+  // run in the sandbox's browser jail and need no port.
+  SANDBOX: {
     units: {
-      blue: { name: "blot-blue-airlock", browserPort: 19222, proxyPort: 18888, sandboxProxyPort: 18988 },
-      green: { name: "blot-green-airlock", browserPort: 19223, proxyPort: 18889, sandboxProxyPort: 18989 },
+      blue: { proxyPort: 18988 },
+      green: { proxyPort: 18989 },
     },
   },
 };

@@ -6,7 +6,7 @@
 //     bad input ("failed") is the expected answer to a corrupt file, so it is
 //     not reported.
 //   - from each web process (not the worker child), every five minutes, the
-//     unit's fetch proxy: the airlock's or the sandbox's jail. It must answer,
+//     unit's fetch proxy, the sandbox's proxy jail. It must answer,
 //     and must refuse the metadata address (tinyproxy says 500).
 //
 // One email per process at most every ten minutes. What happens in between is

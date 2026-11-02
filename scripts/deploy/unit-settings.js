@@ -8,7 +8,7 @@
 // quotes), so the file can be sourced by a shell.
 const constants = require("./constants");
 
-const { UNIT, AIRLOCK } = constants;
+const { UNIT, SANDBOX } = constants;
 
 function settings() {
   const values = {
@@ -27,19 +27,10 @@ function settings() {
     LOG_MAX_SIZE: constants.LOG_MAX_SIZE,
     LOG_MAX_FILE: constants.LOG_MAX_FILE,
     LOG_COMPRESS: constants.LOG_COMPRESS,
-    AIRLOCK_REGISTRY: AIRLOCK.registry,
-    AIRLOCK_NETWORK: AIRLOCK.network,
-    AIRLOCK_MEMORY: AIRLOCK.memory,
-    AIRLOCK_CPUS: AIRLOCK.cpus,
-    AIRLOCK_CPU_SHARES: AIRLOCK.cpuShares,
   };
 
-  for (const [unit, airlock] of Object.entries(AIRLOCK.units)) {
-    const key = unit.toUpperCase();
-    values[`AIRLOCK_${key}_NAME`] = airlock.name;
-    values[`AIRLOCK_${key}_BROWSER_PORT`] = airlock.browserPort;
-    values[`AIRLOCK_${key}_PROXY_PORT`] = airlock.proxyPort;
-    values[`SANDBOX_${key}_PROXY_PORT`] = airlock.sandboxProxyPort;
+  for (const [unit, sandbox] of Object.entries(SANDBOX.units)) {
+    values[`SANDBOX_${unit.toUpperCase()}_PROXY_PORT`] = sandbox.proxyPort;
   }
 
   for (const [key, value] of Object.entries(values)) {

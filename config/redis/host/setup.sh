@@ -231,8 +231,8 @@ OOMScoreAdjust=-900
 # its processes. So the BGSAVE child, which is meant to die first, would take
 # Redis down with it: a final save and a reload, over a minute on real data.
 OOMPolicy=continue
-# Redis first when the CPU is contended. docker's --cpu-shares 2048 is weight 79
-# and airlock's 512 is about 20, so 1000 wins; it costs nothing when idle.
+# Redis first when the CPU is contended. docker's --cpu-shares 2048 is weight 79,
+# so 1000 wins; it costs nothing when idle.
 CPUWeight=1000
 Restart=always
 # Loading or saving a multi-GB RDB outlasts systemd's 90s default.
