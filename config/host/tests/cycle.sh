@@ -605,7 +605,7 @@ before "promote, then the markers" "promote.sh --yes direct new" "ssh new [new]:
 has "the old Redis loses its active marker" "$CALLS" "ssh direct [old]: sudo rm -f /etc/blot-redis/active"
 has "the Elastic IP goes to the new instance" "$CALLS" "--allocation-id eipalloc-0a --instance-id $NEW_ID --allow-reassociation"
 has "the old units stop through --old-direct" "$CALLS" "ssh direct [old]: sudo bash -c"
-has "and any airlocks a host still has" "$CALLS" "docker ps -q --filter name=-airlock | xargs -r docker stop"
+has "and any airlocks a host still has" "$CALLS" "docker ps --quiet --filter name=-airlock | xargs -r docker stop"
 lacks "they are only stopped" "$CALLS" "docker rm"
 has "the freeze goes through the new host" "$CALLS" "ssh new [new]: sudo docker exec blot-blue node scripts/read-only.js off"
 lacks "move thaw is for rollback" "$CALLS" "move thaw"
@@ -719,7 +719,7 @@ rm -f "$W/override_cfg"
 run --drill --eip eipalloc-0a settle old new
 status_is "settle works" 0
 has "settle follows the Elastic IP without the alias being edited" "$(cat "$W/override_cfg")" "HostName 203.0.113.9"
-has "a forced rolling deploy of the same image" "$CALLS" "units.sh $OLD_SHA target=new ignore_pause=1 force=1 skip_write= "
+has "a forced rolling deploy of the same image" "$CALLS" "units.sh $OLD_SHA target=new ignore_pause=1 force=1 skip_write="
 has "the dashboard is checked" "$CALLS" "https://blot.test/sites/log-in"
 before "deploy, then retag" "units.sh" "move retag"
 before "retag, then deploys resume" "move retag" "rm -f /etc/blot/deploy-paused"

@@ -611,7 +611,7 @@ rearm() { # rearm <host whose Redis is the master>: the TTL clock starts again
 # read-only, as in acquire_lock in proxy/deploy/common.sh. The containers are
 # stopped, not removed: they are the rollback.
 stop_old_units() {
-  on "$OLD_NOW" "sudo bash -c 'f=/tmp/blot-proxy-deploy.lock; [ -e \$f ] || touch \$f; exec 9< \$f; flock -w 300 9; docker stop --time 40 $UNIT_NAMES > /dev/null; docker ps -q --filter name=-airlock | xargs -r docker stop > /dev/null'"
+  on "$OLD_NOW" "sudo bash -c 'f=/tmp/blot-proxy-deploy.lock; [ -e \$f ] || touch \$f; exec 9< \$f; flock -w 300 9; docker stop --time 40 $UNIT_NAMES > /dev/null; docker ps --quiet --filter name=-airlock | xargs -r docker stop > /dev/null'"
   [ -z "$(on "$OLD_NOW" "sudo docker ps -q --filter name=^blot-")" ] || die "containers are still running on $OLD_NOW"
 }
 
