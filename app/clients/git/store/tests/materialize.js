@@ -840,17 +840,20 @@ describe("git store materialize", function () {
       const cold = requests(store);
 
       // The two commits, the root and posts/ on each side, and the blob, with
-      // the index and pack checks. Far fewer than the whole tree takes.
-      expect(cold).toBeLessThan(30);
+      // the index (one GET, whole) and the pack's HEAD: 9, where reading the
+      // index by range made it 19. Far fewer than the whole tree takes.
+      expect(cold).toBeLessThanOrEqual(9);
       expect(cold).toBeLessThan(everything);
 
-      // Warm: a new reader over the same cache. Without zlib.crc32 (Node 21
-      // and earlier) the cache stores nothing, so it cannot help there.
+      // Warm: a new reader over the same cache, which has the index and the
+      // commits and trees, so only the blob is read (10 before the cache kept
+      // objects and whole indexes). Without zlib.crc32 (Node 21 and earlier)
+      // the cache stores nothing, so it cannot help there.
       const warmReader = createReader({ store, cache, packs: entries });
       await apply(warmReader, from, to);
       const warm = requests(store) - cold;
 
-      if (zlib.crc32) expect(warm).toBeLessThan(14);
+      if (zlib.crc32) expect(warm).toBe(1);
       if (zlib.crc32) expect(warm).toBeLessThan(cold);
       expect(warm).toBeLessThanOrEqual(cold);
     });

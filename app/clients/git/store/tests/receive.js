@@ -198,11 +198,18 @@ describe("git store receive", function () {
       // The pack, its index and reverse index, the history piece and its index, and the hint
       expect(used.puts).toBe(6);
 
-      // Everything else is looking: manifests, index lookups for the bases and
-      // for the objects the new commit's tree changed, and the entries read
-      // for the bases. None of it grows with the repository's history.
+      // Everything else is looking, 10 requests where it was 18: the
+      // advertisement's manifest read (the hint, a HEAD for what follows it
+      // and the manifest), receive's own (the hint and a HEAD, run together,
+      // the manifest's bytes kept), the pack's index read whole (one GET, no
+      // HEAD) and a HEAD for the pack, and the entries read for the bases, the
+      // parent commit and the trees the new commit changed. None of it grows
+      // with the repository's history.
       const reading = used.heads + used.reads + used.gets;
-      expect(reading).toBeLessThanOrEqual(18);
+      expect(used.gets).toBe(3);
+      expect(used.heads).toBe(3);
+      expect(used.reads).toBe(4);
+      expect(reading).toBe(10);
     });
 
     it("accepts a push which carries no objects", async function () {
