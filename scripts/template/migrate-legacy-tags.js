@@ -14,8 +14,8 @@
 // Only Mustache tags are touched, never text, comments or partial names. An
 // alias a template or view defines as its own local is left alone, and tags
 // after a set-delimiter tag are read with the new delimiters. Content and stored
-// partials are both rewritten; locally edited templates are written back to
-// the blog's folder.
+// partials are both rewritten. For a locally edited template, the rewritten
+// views' files (and only those) are written back to the blog's folder.
 //
 // Dry run by default. --apply writes; --verbose lists each view.
 // Usage: node scripts/template/migrate-legacy-tags.js [--apply] [--verbose]
@@ -24,7 +24,12 @@
 const { promisify } = require("util");
 const client = require("models/client");
 const Template = require("models/template");
-const writeToFolder = require("models/template/writeToFolder");
+const Blog = require("models/blog");
+const clients = require("clients");
+const folder = require("storage/folder");
+const folderLock = require("sync/lock");
+const determineTemplateFolder = require("models/template/determineTemplateFolder");
+const joinpath = require("path").join;
 const redisKeys = require("../util/redisKeys");
 
 const APPLY = process.argv.includes("--apply");
@@ -37,7 +42,8 @@ const option = (flag, fallback) => {
 const LIMIT = option("--limit", 0);
 const CONCURRENCY = option("--concurrency", 4);
 const setView = promisify(Template.setView);
-const writeToFolderAsync = promisify(writeToFolder);
+const getBlog = promisify((id, callback) => Blog.get({ id }, callback));
+const templateFolder = promisify(determineTemplateFolder);
 
 const ALIASES = {
   absoluteURLs: "absolute_urls",
@@ -215,17 +221,92 @@ async function viewUpdates(id, name, template) {
 
 // Every changed view bumps its blog's cacheID and rebuilds the template's CDN
 // manifest, so a blog's views are saved one at a time, a few blogs at once.
-async function applyBlog(views, templates, progress) {
-  const rewritten = new Set();
-
+async function applyBlog(owner, views, templates, progress) {
+  const byTemplate = new Map();
   for (const { id, name } of views) {
+    if (!byTemplate.has(id)) byTemplate.set(id, []);
+    byTemplate.get(id).push(name);
+  }
+
+  for (const [id, names] of byTemplate) {
     if (LIMIT && progress.done >= LIMIT) break;
     const template = templates.get(id);
+
+    // A locally edited template is saved and its changed files written under
+    // the blog's folder lock, so a sync can't rebuild it from the old files
+    // in between. Only the rewritten views' files are written.
+    if (!template.localEditing) {
+      await saveViews(id, names, template, progress);
+      continue;
+    }
+
+    let release;
+    try {
+      // As models/template/withFolderLock: waits about 30s for a sync
+      ({ release } = await folderLock.lock(owner, {
+        ttl: 10 * 1000,
+        heartbeat: 3 * 1000,
+        retries: 6,
+        minTimeout: 500,
+      }));
+    } catch (err) {
+      process.exitCode = 1;
+      count("templates skipped: folder busy");
+      console.log("Could not lock folder for", owner, id, err.message);
+      continue;
+    }
+
+    try {
+      const saved = await saveViews(id, names, template, progress);
+      if (saved.length) await writeViews(owner, id, template, saved);
+    } finally {
+      await release().catch((err) => console.log("Failed to release lock", owner, err.message));
+    }
+  }
+}
+
+// Writes the named views' files to a locally edited template's folder, as
+// models/template/writeToFolder does but leaving every other file (and
+// package.json) alone, and skipping a file whose content already matches.
+// The caller holds the blog's folder lock.
+async function writeViews(owner, id, template, names) {
+  count("templates written to folder");
+  try {
+    const blog = await getBlog(owner);
+    const syncClient = blog && blog.client && clients[blog.client];
+    const dir = joinpath(await templateFolder(owner), template.slug);
+
+    for (const name of names) {
+      const content = await client.hGet("template:" + id + ":view:" + name, "content");
+      if (typeof content !== "string" || !content) continue;
+      const path = joinpath(dir, name);
+
+      const existing = await folder.read(owner, path).catch(() => null);
+      if (existing && existing.toString("utf-8") === content) continue;
+
+      if (syncClient) await promisify(syncClient.write)(owner, path, content);
+      await folder.write(owner, path, content);
+      count("view files written");
+    }
+  } catch (err) {
+    // Redis is already migrated, so a re-run won't find these views: write
+    // them by hand, or with models/template/writeToFolder (the whole template)
+    process.exitCode = 1;
+    console.log("Failed to write views to folder", owner, id, names.join(","), err.message);
+  }
+}
+
+// Saves the views that still need rewriting; resolves to their names
+async function saveViews(id, names, template, progress) {
+  const saved = [];
+
+  for (const name of names) {
+    if (LIMIT && progress.done >= LIMIT) break;
     const result = await viewUpdates(id, name, template);
     if (!result) continue;
     try {
       await setView(id, result.updates);
-      rewritten.add(id);
+      saved.push(name);
       count("views saved");
     } catch (err) {
       process.exitCode = 1;
@@ -238,19 +319,7 @@ async function applyBlog(views, templates, progress) {
     }
   }
 
-  for (const id of rewritten) {
-    const template = templates.get(id);
-    if (!template.localEditing) continue;
-    count("templates written to folder");
-    try {
-      await writeToFolderAsync(template.owner, id);
-    } catch (err) {
-      // Redis is already migrated, so a re-run won't find this template:
-      // retry it by hand with writeToFolder(owner, id)
-      process.exitCode = 1;
-      console.log("Failed to write template to folder", template.owner, id, err.message);
-    }
-  }
+  return saved;
 }
 
 async function main() {
@@ -261,14 +330,16 @@ async function main() {
   await redisKeys("template:*:info", async (key) => {
     if ((await client.type(key)) !== "hash") return;
     const id = key.slice("template:".length, -":info".length);
-    const [owner, localEditing, locals] = await client.hmGet(key, [
+    const [owner, localEditing, locals, slug] = await client.hmGet(key, [
       "owner",
       "localEditing",
       "locals",
+      "slug",
     ]);
     if (!owner || owner === "SITE") return;
     templates.set(id, {
       owner,
+      slug,
       localEditing: localEditing === "true",
       locals: Object.keys(parseJSON(locals)),
     });
@@ -302,10 +373,11 @@ async function main() {
 
   if (APPLY) {
     const progress = { done: 0, total: LIMIT || total, start: Date.now() };
-    const queue = [...byOwner.values()];
+    const queue = [...byOwner];
     const worker = async () => {
       while (queue.length && !(LIMIT && progress.done >= LIMIT)) {
-        await applyBlog(queue.shift(), templates, progress);
+        const [owner, views] = queue.shift();
+        await applyBlog(owner, views, templates, progress);
       }
     };
     await Promise.all(Array.from({ length: CONCURRENCY }, worker));
