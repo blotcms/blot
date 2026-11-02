@@ -29,14 +29,14 @@
 // - writes a marker for every empty directory on disk which has none;
 // - deletes objects and index records for paths which are not on disk.
 //
-// --apply and --verify run each blog under its sync lock, as a sync would
-// (sync(), as scripts/storage/rebuild-file-index.js does), so nothing writes
-// the folder meanwhile. A blog which is locked (a sync is running) is skipped
-// and listed, to retry with --blog. That also means a sync of a blog which
-// waits more than a few seconds for the backfill fails, as it would behind
-// any long sync, so apply a large blog when it is quiet. A disabled blog
-// cannot be synced, so it is skipped too. A dry run takes no lock. A blog
-// applied without errors leaves the dirty set.
+// --apply and --verify run each blog holding its sync lock (sync/hold.js,
+// which takes the lock as sync() does but does nothing else), so nothing
+// writes the folder meanwhile. Disabled blogs are included. A blog which is
+// locked (a sync is running) is skipped and listed, to retry with --blog.
+// That also means a sync of a blog which waits more than a few seconds for
+// the backfill fails, as it would behind any long sync, so apply a large
+// blog when it is quiet. A blog with no folder on disk is skipped too. A dry
+// run takes no lock. A blog applied without errors leaves the dirty set.
 //
 // Needs BLOT_STORAGE_BUCKET and credentials (see
 // config/storage-bucket/README.md). On the production host, as the user
@@ -56,6 +56,7 @@ const backend = require("storage/folder/s3");
 const { DIRTY_KEY } = require("storage/folder/mirror");
 const { NotFoundError } = require("storage/folder/errors");
 const { createPool } = require("storage/util");
+const hold = require("sync/hold");
 
 const MAX_LISTED_ERRORS = 100;
 
@@ -301,43 +302,6 @@ async function backfillBlog(blogID, options) {
   return stats;
 }
 
-// Runs fn under the blog's sync lock, like scripts/storage/rebuild-file-index.js.
-// Rejects with code "ELOCKED" if a sync holds it, or "ESKIPPED" if the blog
-// cannot be synced (missing or disabled).
-function underLock(blogID, fn) {
-  const Sync = require("sync");
-
-  return new Promise(function (resolve, reject) {
-    Sync(blogID, function (err, folder, done) {
-      if (err) {
-        const skip = new Error(err.message);
-        skip.code = /Failed to acquire folder lock/.test(err.message) ? "ELOCKED" : "ESKIPPED";
-        return reject(skip);
-      }
-
-      let result;
-
-      Promise.resolve()
-        .then(fn)
-        .then(
-          function (value) {
-            result = value;
-            return null;
-          },
-          function (err) {
-            return err;
-          }
-        )
-        .then(function (failure) {
-          done(failure, function (err) {
-            if (failure || err) reject(failure || err);
-            else resolve(result);
-          });
-        });
-    });
-  });
-}
-
 async function blogIDs(options) {
   let ids;
 
@@ -376,7 +340,7 @@ async function run(options) {
     try {
       const work = () => backfillBlog(blogID, { apply: apply, log: log });
 
-      stats = locked ? await underLock(blogID, work) : await work();
+      stats = locked ? await hold(blogID, work) : await work();
     } catch (err) {
       if (err.code === "ELOCKED" || err.code === "ESKIPPED") {
         totals.skipped.push(blogID);
@@ -447,7 +411,7 @@ function summarise(totals, options) {
 
   if (totals.skipped.length) {
     lines.push("");
-    lines.push(totals.skipped.length + " blogs skipped (locked or not syncable), retry each with --blog:");
+    lines.push(totals.skipped.length + " blogs skipped (locked, or no folder on disk), retry each with --blog:");
     for (const id of totals.skipped) lines.push("  " + id);
   }
 

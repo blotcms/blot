@@ -531,7 +531,7 @@ What it does not do yet:
   folder-link version tokens), and so has everything else: nothing outside
   `app/storage` reaches a blog's folder directly, which
   `scripts/tests/ci/check-folder-access.js` enforces.
-- There is no content cache, no dual writing and no backfill. `stat` with
+- There is no content cache (dual writing and the backfill are below). `stat` with
   `{ hash: true }` (Dropbox's content hash) reads the whole file on disk, and
   downloads it on S3, whose index holds only the SHA-1.
 - On disk, `commit` does nothing but check for symlinks, because the path
@@ -583,7 +583,8 @@ records for paths no longer on disk. `--dry-run` (the default) reports,
 `--apply` changes, `--verify` exits non-zero on any difference; `--blog`,
 `--from`, `--dirty` (only the blogs in the dirty set) and `--concurrency`
 (blogs at once) choose what to run over. `--apply` and `--verify` run each
-blog under its sync lock and skip a locked or disabled blog, to retry with
-`--blog`; a blog applied without errors leaves the dirty set. It is safe to
+blog holding its sync lock (`app/sync/hold.js`: the lock as `sync()` takes
+it, and nothing else, so disabled blogs are included) and skip a locked
+blog, to retry with `--blog`; a blog applied without errors leaves the dirty set. It is safe to
 rerun. Turn mirroring on for a blog before its backfill, so nothing written
 in between is missed.

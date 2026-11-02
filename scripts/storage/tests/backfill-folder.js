@@ -138,6 +138,18 @@ describe("scripts/storage/backfill-folder", function () {
     expect(await keys(this.blog.id)).toEqual(["/a.txt/inner.txt", "/empty/", "/posts"]);
   });
 
+  it("backfills a disabled blog", async function () {
+    await this.blog.update({ isDisabled: true });
+
+    var totals = await backfill(this.blog.id, "apply");
+
+    await this.blog.update({ isDisabled: false });
+
+    expect(totals.skipped).toEqual([]);
+    expect(totals.errors).toEqual(0);
+    expect(await keys(this.blog.id)).toEqual(["/a.txt", "/empty/", "/posts/2024/b.md"]);
+  });
+
   it("skips a blog whose sync lock is held", async function () {
     var held = await folderLock.lock(this.blog.id);
     var totals;
