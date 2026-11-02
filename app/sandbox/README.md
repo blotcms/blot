@@ -1,6 +1,6 @@
 # Sandbox
 
-Runs jobs on untrusted bytes (images, their metadata and web pages so far) in an [nsjail](https://github.com/google/nsjail)
+Runs jobs on untrusted bytes (images, their metadata, documents pandoc converts and web pages so far) in an [nsjail](https://github.com/google/nsjail)
 jail instead of in the app's Node process, which holds the secrets and the blog
 data mount. Design and phases: #2257.
 
@@ -35,6 +35,25 @@ starts `SANDBOX_`, and it never falls back to in-process.
 - `template-image` a template image setting: a decode check, then the original
   and its thumbnails, cropped and cut to a shape (`image-mask.js`, `crop.js`).
 - `favicon` a template's favicon set, one ICO and a few PNGs.
+- `pandoc` a docx, odt, rtf, org or markdown document to HTML, through
+  `build/converters/pandoc.js`. The job picks pandoc's options from a few checked
+  args (the format, and for markdown KaTeX, callouts and citations), never flags
+  from the caller. A markdown post's bibliography and CSL come after the
+  document in the input, their lengths in the args. outputs[0] is the HTML and
+  the rest are the media pandoc extracted from a docx or odt, named in
+  `meta.media`; the converters write them to the blog's assets. A document
+  pandoc can't convert, or its 10s timeout, is `meta.error`, so it fails the
+  build like any bad file without being a sandbox failure. pandoc killed for
+  any other reason (the jail's memory limit) is `meta.error` too, since the job
+  survives it; the caller rejects with `SANDBOX_KILLED` and reports it to
+  `alerts.js`, because the broker would only see "failed". It spawns
+  `/usr/local/bin/pandoc`, bound on its own; in-process it honours
+  `BLOT_PANDOC_PATH`. The callouts Lua filter is `jobs/callouts.lua`. It has
+  the usual 512 MiB and 128 MiB `/tmp`, under the unit's sandbox subtree's cap,
+  and caps pandoc's heap at 400M so that most documents too large for it fail as
+  pandoc errors. A very large docx or odt (tens of MB of images, which sit in
+  `/tmp` and in Node as well as in pandoc) can still exceed the jail. That is
+  accepted: it emails the admin.
 - `unzip` a zip archive into its files, one output each. It refuses absolute and
   upward paths, symlinks, too many records, too many bytes and too high a ratio
   (a bad archive is a `meta.error`, not a thrown error). Output stops at 60 MiB.
@@ -152,13 +171,14 @@ email per process every ten minutes, with counts for what happened in between.
   the supervisor starts it with a clean environment (no secrets, no `NODE_OPTIONS`).
 - **No `/proc`, except for the browser job.** `--disable_proc`. A fresh `/proc` can't be mounted under
   Docker's masked paths, and the alternative (`systempaths=unconfined`) would
-  let root in the unit write host sysctls. sharp and exiftool don't need it.
+  let root in the unit write host sysctls. sharp, exiftool and pandoc don't need it.
 - **`-u 65000:65000:1`, not `--user`.** As root, `--user` leaves the job mapped
   to root outside the namespace.
 - **Binds are listed, never `/usr`.** nsjail binds are recursive and
   `/usr/src/app/data` is the blog data mount. The jail has no `/bin`, so jobs
   run `/usr/local/bin/node file.js` and `/usr/bin/perl /usr/bin/exiftool`
-  directly; `#!/usr/bin/env` scripts won't start.
+  directly; `#!/usr/bin/env` scripts won't start. pandoc is a static binary,
+  bound on its own: never `/usr/local/bin`.
 - **The environment is empty** except `NODE_PATH`, so `require("sharp")` resolves.
 - **Job cgroups are outside the unit's.** The host makes
   `/sys/fs/cgroup/blot-sandbox/<unit>` (`config/host/host/setup.sh`) and the
