@@ -4,7 +4,8 @@
 // paths that hurt in production. Writes one JSON result (see metrics below).
 // The workflow runs it alternately against the base and head checkouts and
 // compare.js turns the results into the PR comment. Run inside the dev image
-// with NODE_PATH=app, against a Redis you don't mind flushing:
+// with NODE_PATH=app, against a throwaway Redis (it writes the sites and
+// flushes nothing):
 //
 //   node --expose-gc scripts/benchmarks/mega/run.js --output result.json
 //
