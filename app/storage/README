@@ -553,7 +553,7 @@ What it does not do yet:
   folder-link version tokens), and so has everything else: nothing outside
   `app/storage` reaches a blog's folder directly, which
   `scripts/tests/ci/check-folder-access.js` enforces.
-- There is no dual writing and no backfill. `stat` with
+- Dual writing and the backfill are below. `stat` with
   `{ hash: true }` (Dropbox's content hash) reads the whole file on disk, and
   downloads it on S3, whose index holds only the SHA-1.
 - On disk, `commit` does nothing but check for symlinks, because the path
@@ -563,3 +563,52 @@ What it does not do yet:
 - Missing files reject with `NotFoundError` (`code: "ENOENT"`), including
   streams, which emit it as `error`. Other fs errors (`EISDIR`, `EACCES`) pass
   through unchanged.
+
+### Mirroring to S3 (#2258 Phase C: write to both, disk first)
+
+For the blogs `config.folder_mirror` names, every change made through
+`storage/folder` on disk is then made in the S3 backend too: the objects under
+`{blogID}/folder/` and the `models/file` index. Disk stays authoritative and
+every read still comes from it; the copy is there for the reconcile to check
+and for shadow reads to try (the next steps of Phase C).
+
+- **The switch** is `BLOT_FOLDER_MIRROR` (`config.folder_mirror`): `off` (the
+  default), `all`, or blog IDs separated by commas (`blog_abc,blog_def`). It
+  is read on every write. With no storage bucket configured, mirroring logs
+  once and does nothing.
+- **How** (`folder/mirror.js`, called from `folder/index.js`): each mutating
+  call runs on the local backend first and, once it has succeeded, is
+  mirrored. `write` (buffer or stream) and `writeFrom` (copy or move) upload
+  the file from its place in the folder, with its modified time on disk, so a
+  stream is consumed once, by the disk, and the index's SHA-1 is computed as
+  the upload streams. `commit` makes S3 match the path on disk (a file or a
+  whole directory). `mkdir` writes a marker; `remove` and `rmdir` delete the
+  path. `move` is copy plus delete in S3, or, when S3 does not have the source
+  yet, an upload of the destination from disk. `removeAll` deletes the blog's
+  copy; it does so whenever the blog has an index, even once the blog is no
+  longer mirrored.
+- **Failures** never fail the caller: the change is on disk. The mirror logs
+  a `[storage/folder mirror] failed blog=... op=... path=... error=...` line
+  and adds the blog to the Redis set `storage:folder:mirror:dirty`, for the
+  backfill (and later the reconcile) to repair. Nothing is retried beyond
+  what `storage/s3.js` already retries per request.
+- **Locking and latency**: changes are made inside the blog's sync lock, so
+  the mirror runs under it too and the index keeps its single writer. The
+  mirror is awaited, so a blog's changes reach S3 in order, at the cost of
+  the S3 round trips on each mirrored write.
+
+**Backfill**: `scripts/storage/backfill-folder.js` brings a blog's copy in
+line with its disk: it uploads files which are missing or differ (by size,
+then modified time, then the SHA-1 when the index has one, computed on disk
+only then), writes markers for empty directories, and deletes objects and
+records for paths no longer on disk. `--dry-run` (the default) reports,
+`--apply` changes, `--verify` exits non-zero on any difference; `--blog`,
+`--from`, `--dirty` (only the blogs in the dirty set) and `--concurrency`
+(blogs at once) choose what to run over. `--apply` and `--verify` run each
+blog holding its sync lock (`app/sync/hold.js`: the lock as `sync()` takes
+it, and nothing else, so disabled blogs are included) and skip a locked
+blog, to retry with `--blog`; a blog applied without errors leaves the dirty set, before its
+lock is released. A blog in the dirty set (or named by `--blog`) which no
+longer exists has its whole copy removed: its deletion could not remove it. It is safe to
+rerun. Turn mirroring on for a blog before its backfill, so nothing written
+in between is missed.
