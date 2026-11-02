@@ -18,8 +18,7 @@ const { BLOG_DIRECTORY_DELETED } = require("clients/icloud/error");
 
 const SETUP = { setupComplete: false, transferringToiCloud: false };
 
-// What each writer leaves on the row. `legacy` modes drop the code, as rows
-// written before errorCode existed (or by an older macserver) have none.
+// What each writer leaves on the row.
 const MODES = {
   "folder-missing": {
     expect: "error: SOURCE_MISSING (watcher saw the folder deleted)",
@@ -28,11 +27,6 @@ const MODES = {
       error: BLOG_DIRECTORY_DELETED,
       errorCode: "SOURCE_MISSING",
     },
-  },
-  "legacy-folder-missing": {
-    expect: "error: SOURCE_MISSING, inferred from a row with no errorCode",
-    fields: { setupComplete: true, error: BLOG_DIRECTORY_DELETED },
-    dropCode: true,
   },
   "transfer-failed": {
     expect: "error: TRANSFER_INCOMPLETE (initial transfer to iCloud failed)",
@@ -49,14 +43,6 @@ const MODES = {
       error: "Invalid sharing link",
       errorCode: "SETUP_FAILED",
     }),
-  },
-  "legacy-setup-failed": {
-    expect: "ok, inferred as a setup failure from a row with no errorCode",
-    fields: Object.assign({}, SETUP, {
-      acceptedSharingLink: false,
-      error: "Invalid sharing link",
-    }),
-    dropCode: true,
   },
   "setting-up": {
     expect: "syncing (initial transfer running)",
@@ -92,8 +78,7 @@ async function health(blogID) {
   console.log("getHealth:", JSON.stringify(await getHealth(blogID), null, 2));
 }
 
-// Put the row back exactly as it was, field by field, so a legacy row stays
-// legacy (database.store() would classify it)
+// Put the row back exactly as it was, field by field
 async function restore(blogID, before) {
   const key = database._key(blogID);
   await client.del(key);
@@ -123,10 +108,6 @@ async function run(mode, blogID, keep) {
     // Start from a clear error so errorSince is stamped fresh
     await database.store(blogID, { error: null });
     await database.store(blogID, MODES[mode].fields);
-
-    if (MODES[mode].dropCode) {
-      await client.hDel(database._key(blogID), ["errorCode", "errorSince"]);
-    }
 
     const after = await database.get(blogID);
     console.log(
