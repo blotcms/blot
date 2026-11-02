@@ -37,6 +37,7 @@ const shadow = require("./index");
 const { manifest, layout } = require("../store");
 const sweep = require("../store/sweep");
 const { verifyImport } = require("../store/import");
+const limiter = require("../limiter");
 const { measure } = require("./counting");
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -246,7 +247,8 @@ async function deepCheck(ctx, scratchDir) {
   const { gitDir, store, cache } = ctx;
 
   try {
-    const result = await verifyImport({ store, cache, gitDir, scratchDir });
+    // Background work for the git limiter, like the rest of shadow mode
+    const result = await verifyImport({ store, cache, gitDir, scratchDir, gate: limiter.gate("background") });
     return { findings: [], refs: result.refs, objects: result.objects };
   } catch (err) {
     const kind = verdict(err);

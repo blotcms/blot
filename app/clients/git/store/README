@@ -317,7 +317,7 @@ The git processes the store runs (`index-pack` and `pack-objects` in `receive`, 
                   settles once it has closed; gate calls it when the host has
                   room, and returns what it returns
 
-Without a gate, git starts at once, as before. The store imports nothing to do this (`limit.js`, `createChildren`), and keeps its own `-c` settings for `pack-objects` (`PACK_CONFIG`) and its empty system config whatever the host passes. The git client's host gives a push's `receive` `limiter.gate("interactive")` and compaction, imports and rewrites `limiter.gate("background")` (`app/clients/git/limiter.js`), where it builds stores: shadow mode, which is not on master yet. `tests/gate.js` checks that every git process goes through the gate and that none starts before the gate lets it.
+Without a gate, git starts at once, as before. The store imports nothing to do this (`limit.js`, `createChildren`), and keeps its own `-c` settings for `pack-objects` (`PACK_CONFIG`) and its empty system config whatever the host passes. The git client's host is shadow mode (`app/clients/git/shadow`), which gives every call `limiter.gate("background")` (`app/clients/git/limiter.js`), the `receive` that mirrors a push included: nothing waits on its work. A host serving a user's push from the store would give that `receive` `limiter.gate("interactive")`. `tests/gate.js` checks that every git process goes through the gate and that none starts before the gate lets it.
 
 ## Specs
 

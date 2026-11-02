@@ -52,7 +52,14 @@
 //
 // with outcome=mismatch and a detail= for anything mirroring cannot explain.
 // Blog handles and emails are kept out of the logs: IDs only.
+//
+// All of it is background work for the git limiter (../limiter.js), the
+// mirror of a push too: every git process it starts, its own in the EBS
+// repository (with the limiter's memory settings) and the store's (through
+// the gate it is given), waits for a place in the background lane. Its
+// figures include that wait.
 const path = require("path");
+const { PassThrough } = require("stream");
 const { spawn } = require("child_process");
 const { LRUCache } = require("lru-cache");
 const config = require("config");
@@ -63,6 +70,7 @@ const receive = require("../store/receive");
 const storeCommit = require("../store/commit");
 const compact = require("../store/compact");
 const importRepo = require("../store/import");
+const limiter = require("../limiter");
 const counting = require("./counting");
 const { measure } = counting;
 
@@ -231,8 +239,12 @@ async function contextFor(blogID) {
 
 // ---- Git in the EBS repository -----------------------------------------
 
+// The gate the store's git goes through (see store/README, "Limiting git")
+const gate = limiter.gate("background");
+
+// Call only once the limiter has given the command a place
 function spawnGit(gitDir, args) {
-  return spawn("git", args, {
+  return spawn("git", limiter.args(args), {
     cwd: gitDir,
     env: Object.assign({}, process.env, { GIT_DIR: gitDir, GIT_TERMINAL_PROMPT: "0" }),
     stdio: ["pipe", "pipe", "pipe"],
@@ -243,7 +255,7 @@ function spawnGit(gitDir, args) {
 
 // Resolves with { code, stdout, stderr }, whatever the exit code
 function git(gitDir, args, input) {
-  return new Promise((resolve, reject) => {
+  return limiter.run("background", () => new Promise((resolve, reject) => {
     const child = spawnGit(gitDir, args);
     const stdout = [];
     let stderr = "";
@@ -256,7 +268,7 @@ function git(gitDir, args, input) {
     child.on("error", reject);
     child.on("close", (code, signal) => resolve({ code: signal ? 1 : code, stdout: Buffer.concat(stdout).toString(), stderr }));
     child.stdin.end(input);
-  });
+  }));
 }
 
 async function gitOk(gitDir, args, input) {
@@ -296,28 +308,51 @@ async function isAncestor(gitDir, ancestor, descendant) {
 }
 
 // A thin pack of everything reachable from the tips the store does not
-// already reach, as a git push would send it. Resolves with the pack as a
-// stream, and done(), which ends git and resolves with its exit and stderr.
+// already reach, as a git push would send it. Returns the pack as a stream,
+// which flows once git has a place in the background lane, and done(), which
+// ends git and resolves with its exit and stderr.
+//
+// receive reads the whole pack into scratch before it starts any git of its
+// own, so git here has closed, and given its place back, before the store's
+// index-pack asks for one: a mirror never holds one place while it waits for
+// another.
 function packFor(gitDir, tips, have) {
-  const child = spawnGit(gitDir, ["pack-objects", "--revs", "--stdout", "--thin", "--delta-base-offset", "-q"]);
-  let stderr = "";
-  const closed = new Promise((resolve) => {
-    child.on("close", (code, signal) => resolve({ code: signal ? 1 : code, stderr }));
-    child.on("error", (err) => resolve({ code: 1, stderr: err.message }));
-  });
+  const stream = new PassThrough();
+  let child = null;
+  let stopped = false;
 
-  child.stderr.on("data", (chunk) => {
-    if (stderr.length < STDERR_BYTES) stderr += chunk;
+  const closed = limiter.run("background", () => {
+    if (stopped) return { code: 1, stderr: "stopped before it started" };
+
+    child = spawnGit(gitDir, ["pack-objects", "--revs", "--stdout", "--thin", "--delta-base-offset", "-q"]);
+
+    let stderr = "";
+    const exited = new Promise((resolve) => {
+      child.on("close", (code, signal) => resolve({ code: signal ? 1 : code, stderr }));
+      child.on("error", (err) => {
+        stream.destroy(err);
+        resolve({ code: 1, stderr: err.message });
+      });
+    });
+
+    child.stderr.on("data", (chunk) => {
+      if (stderr.length < STDERR_BYTES) stderr += chunk;
+    });
+    child.stdin.on("error", () => {});
+    child.stdin.end(tips.concat(have.map((oid) => "^" + oid)).join("\n") + "\n");
+    child.stdout.pipe(stream);
+
+    return exited;
   });
-  child.stdin.on("error", () => {});
-  child.stdin.end(tips.concat(have.map((oid) => "^" + oid)).join("\n") + "\n");
 
   return {
-    stream: child.stdout,
+    stream,
     // Waits for git, which has finished once its output has been read to the
-    // end; if it was not (receive gave up on the pack), git is stopped
+    // end; if it was not (receive gave up on the pack), git is stopped, or
+    // never started
     done() {
-      if (!child.stdout.readableEnded && child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+      if (!child) stopped = true;
+      else if (!stream.readableEnded && child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
       return closed;
     },
   };
@@ -383,7 +418,7 @@ async function runMirror(ctx, task) {
 
       try {
         const called = Date.now();
-        const result = await receive({ store, cache, lock, commands, pack: source });
+        const result = await receive({ store, cache, lock, commands, pack: source, gate });
         const receiveMs = Date.now() - (firstByte === null ? called : firstByte);
         const git = pack ? await pack.done() : null;
         return { result, git, receiveMs };
@@ -482,7 +517,7 @@ async function runImport(ctx, ebs, extra, before, scratchDir) {
   let measured;
 
   try {
-    measured = await measure(() => importRepo({ store, cache, lock, gitDir, scratchDir: scratchDir || null }));
+    measured = await measure(() => importRepo({ store, cache, lock, gitDir, scratchDir: scratchDir || null, gate }));
   } catch (err) {
     // Another process imported it first: the next mirror pushes onto that
     if (err.code === "ENOTEMPTY" || err.code === "EMOVED") {
@@ -607,7 +642,7 @@ async function runWrite(ctx, task) {
 
 async function runCompact(ctx, options) {
   const { blogID, store, cache, lock } = ctx;
-  const measured = await measure(() => compact({ store, cache, lock, ...options }));
+  const measured = await measure(() => compact({ store, cache, lock, ...options, gate }));
   const result = measured.result;
   const stats = result.stats || {};
 
@@ -657,8 +692,11 @@ function start(blogID, state) {
   if (state.draining) return;
 
   // Not until the push has been answered, or the write has returned, so that
-  // spawning git and the first requests never compete with their last steps
-  state.draining = new Promise((resolve) => setTimeout(resolve, START_DELAY_MS)).then(() => drain(blogID, state));
+  // spawning git and the first requests never compete with their last steps.
+  // Outside any place in the git limiter the caller holds (a push's apply
+  // calls this under its interactive place), so shadow's git waits for room
+  // in the background lane of its own.
+  state.draining = limiter.outside(() => new Promise((resolve) => setTimeout(resolve, START_DELAY_MS)).then(() => drain(blogID, state)));
 }
 
 async function drain(blogID, state) {

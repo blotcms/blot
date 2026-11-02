@@ -13,6 +13,10 @@
 //
 // filter(command) picks the commands to look at. Set GIT_SPY_SLEEP in
 // process.env to make each command take that many seconds longer.
+//
+// The log and the real git are written into the script too, so the git store's
+// commands (store/), which run without the GIT_ variables of their caller's
+// environment, are logged and run as well.
 var fs = require("fs-extra");
 var path = require("path");
 var childProcess = require("child_process");
@@ -29,6 +33,11 @@ var SCRIPT = [
   "",
 ].join("\n");
 
+// A shell word for a path
+function quote(text) {
+  return "'" + String(text).replace(/'/g, "'\\''") + "'";
+}
+
 module.exports = function spyGit() {
   var spy = {};
   var saved = null;
@@ -37,7 +46,13 @@ module.exports = function spyGit() {
     var directory = fs.mkdtempSync(path.join(tempDir(), "git-spy-"));
     var real = childProcess.execFileSync("sh", ["-c", "command -v git"]).toString().trim();
 
-    fs.writeFileSync(path.join(directory, "git"), SCRIPT, { mode: 0o755 });
+    spy.log = path.join(directory, "log");
+
+    fs.writeFileSync(
+      path.join(directory, "git"),
+      SCRIPT.split('"$GIT_SPY_LOG"').join(quote(spy.log)).split('"$GIT_SPY_REAL"').join(quote(real)),
+      { mode: 0o755 }
+    );
 
     saved = {
       directory: directory,
@@ -46,7 +61,6 @@ module.exports = function spyGit() {
       GIT_SPY_REAL: process.env.GIT_SPY_REAL,
     };
 
-    spy.log = path.join(directory, "log");
     fs.writeFileSync(spy.log, "");
 
     process.env.GIT_SPY_LOG = spy.log;

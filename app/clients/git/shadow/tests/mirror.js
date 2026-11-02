@@ -180,4 +180,82 @@ describe("git store shadow mode: mirroring", function () {
     var current = await manifest.read(this.stores[this.blog.id]);
     expect(current.packs.length).toBeLessThan(8);
   });
+
+  it("runs a mirror's git in the background lane, with the limiter's settings", async function () {
+    var limiter = require("clients/git/limiter");
+    var spy = require("clients/git/tests/setup/spyGit")();
+    var caps = limiter.stats();
+    var gitDir = this.gitDir;
+    var cacheDirectory = require("config").git_store.cache_directory;
+    var release = function () {};
+
+    await this.local.writeAndPush("/a.txt", "A");
+    await setup.expectMirrored(this);
+
+    // Shadow's own commands in the EBS repository, and the store's, which run
+    // in its scratch space in the cache
+    function shadowOwn(command) {
+      return (
+        command.gitDir === gitDir &&
+        /(pack-objects --revs --stdout --thin|for-each-ref --format=%\(objectname\) %\(refname\) refs\/heads refs\/tags|cat-file --batch-check=%\(objectname\) %\(objecttype\))/.test(command.args)
+      );
+    }
+    function store(command) {
+      return command.gitDir.indexOf(cacheDirectory) === 0 || command.args.indexOf(cacheDirectory) !== -1;
+    }
+    function mirrors(command) {
+      return shadowOwn(command) || store(command);
+    }
+
+    limiter.reset({ background: 1 });
+    spy.install();
+
+    try {
+      // The background lane is full; the interactive lane is not
+      var holding = limiter.run("background", function () {
+        return new Promise(function (resolve) {
+          release = resolve;
+        });
+      });
+
+      await this.local.writeAndPush("/b.txt", "B");
+
+      // Well past the mirror's start: it is waiting for the place
+      await new Promise(function (resolve) {
+        setTimeout(resolve, 1500);
+      });
+
+      expect(spy.commands(mirrors)).toEqual([]);
+      expect(this.shadowLines("push")).toEqual([]);
+      expect(limiter.stats().background.waiting).toBeGreaterThan(0);
+
+      release();
+      await holding;
+      await shadow.idle(this.blog.id);
+
+      var own = spy.commands(shadowOwn);
+      var theStore = spy.commands(store);
+
+      expect(own.some((command) => /pack-objects --revs/.test(command.args))).toBe(true);
+      expect(theStore.some((command) => /index-pack --stdin --fix-thin/.test(command.args))).toBe(true);
+
+      // One background place: never two of them at once, and the pack made
+      // for receive does not hold it while the store's index-pack waits
+      expect(spy.mostAtOnce(mirrors)).toBe(1);
+
+      // Shadow's own commands carry the limiter's memory settings
+      own.forEach(function (command) {
+        expect(command.args).toContain("-c pack.threads=1");
+        expect(command.args).toContain("-c gc.auto=0");
+      });
+    } finally {
+      release();
+      spy.restore();
+      limiter.reset({ interactive: caps.interactive.max, background: caps.background.max, gc: caps.gc.max });
+    }
+
+    var current = await setup.expectMirrored(this);
+    expect(current.refs["refs/heads/master"]).toBe(await this.local.head());
+    expect(this.shadowLines("push").pop()).toContain("outcome=ok");
+  });
 });

@@ -2,6 +2,8 @@
 
 Shadow mode mirrors every push and every one of Blot's own commits into the git store (`../store`, #2259) while the bare repositories on disk stay the source of truth. `index.js` has the mirroring and the format of its log lines. This file covers the test-only read route.
 
+All of shadow mode's git (its own commands in the repository on disk, with the git client's memory settings, and the store's, through the `gate` it passes to `receive`, `compact`, `importRepo` and `verifyImport`) waits for a place in the background lane of `../limiter.js`, the mirror of a push included, so it never holds up a user's push or clone. Its `storeMs` figures include that wait. The read route below runs no git.
+
 ## The test-only read route
 
 **What it is for.** Before cutover we want a table of real production numbers for EBS and the store side by side: clone and fetch as well as push and write. Pushes and writes are timed by shadow mode itself. Clones and fetches could only be run against the store in specs, so this route serves them from the store in production, for a real `git clone` and `git fetch`, and the same requests on the normal route are timed too.
