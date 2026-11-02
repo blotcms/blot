@@ -148,7 +148,11 @@ neither is anything run by `docker exec`.
 - **Job cgroups are outside the unit's.** The host makes
   `/sys/fs/cgroup/blot-sandbox/<unit>` (`config/host/host/setup.sh`) and the
   deploy binds it at `/sandbox-cgroup` with `--cgroupns=host`; `--cgroupns=private`
-  can't move a job into it.
+  can't move a job into it. So their limits add to the units' on the host.
+- **Jobs go first when the host runs out of memory.** The broker's shell sets
+  `oom_score_adj` to 1000 before it execs nsjail, so a job is killed before the
+  units' Node; only Redis's BGSAVE child, also 1000 and larger, goes ahead of
+  it. Set as root, the job's uid can't lower it. The proxy jail is left alone.
 - **The seccomp profile** (`proxy/deploy/sandbox-seccomp.json`) is Docker's
   default plus `clone`, `mount`, `umount2`, `pivot_root` and `sethostname`, so
   nsjail can build the jail, and `setns` and `unshare` for pasta. Nothing else is added: not `--privileged`, not
