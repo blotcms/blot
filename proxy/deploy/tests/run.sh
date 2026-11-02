@@ -9,6 +9,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY="$HERE/.."
 T="$(mktemp -d)"
+REAL_OPENSSL="$(command -v openssl)"   # before the fakes go on the PATH
 trap 'rm -rf "$T"' EXIT
 export FAKE="$T/fake"
 mkdir -p "$T/bin" "$T/certs" "$T/disk-cache" "$T/logs" "$FAKE"
@@ -716,6 +717,25 @@ check "one unit unhealthy, the other still starting: it is left alone" '! called
 reset units; : > "$T/lock"; FAKE_LOCK_HELD=1 FAKE_UNHEALTHY_LIST="blot-blue blot-blue-previous blot-blue-airlock blot-neutral" health; rm -f "$T/lock"
 check "a deploy holds the lock: the units and -previous are left alone, the airlock and old Node containers are not" \
   '! called "docker restart blot-blue$" && ! called "docker restart blot-blue-previous" && called "docker restart blot-blue-airlock" && called "docker restart blot-neutral"'
+
+echo "stored certificates (real openssl)"
+# A certificate as auto-ssl's lua-cjson stores it: newlines as \n and every /
+# as \/. The base64 must contain a / for this to mean anything.
+mkdir -p "$T/real"; ln -sf "$REAL_OPENSSL" "$T/real/openssl"
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  "$REAL_OPENSSL" req -x509 -newkey rsa:2048 -nodes -keyout "$T/real/k.pem" -out "$T/real/c.pem" -days 1 -subj /CN=a.custom.test 2>/dev/null
+  grep -q / "$T/real/c.pem" && break
+done
+REAL_FP="$("$REAL_OPENSSL" x509 -in "$T/real/c.pem" -noout -fingerprint -sha256 | cut -d= -f2)"
+REAL_JSON="{\"expiry\":99999999999,\"fullchain_pem\":\"$(awk '{ printf "%s\\n", $0 }' "$T/real/c.pem" | sed 's#/#\\/#g')\"}"
+stored_fps() ( # the real stored_cert_fps from common.sh, a fake Redis holding REAL_JSON, the real openssl
+  PATH="$T/real:$PATH"
+  eval "$(sed -n '/^stored_cert_fps()/,/^}/p' "$DEPLOY/common.sh")"
+  redis_cli() { while read -r _; do printf '%s\n' "$REAL_JSON"; done; }
+  printf 'a.custom.test\n' | stored_cert_fps
+)
+check "the test certificate's base64 contains a /" 'grep -q / "$T/real/c.pem" && [[ "$REAL_JSON" == *"\\/"* ]]'
+check "a real certificate stored as cjson writes it: its fingerprint is computed and matches the one served" '[ -n "$REAL_FP" ] && [ "$(stored_fps)" = "a.custom.test $REAL_FP" ]'
 
 echo "$pass passed, $failed failed"
 [ "$failed" = 0 ]

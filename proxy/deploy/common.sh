@@ -562,14 +562,15 @@ cert_sweep() {
 # ones with a certificate in ssl:<domain>:latest (the first in fullchain_pem,
 # the one the proxy serves). One pipelined redis-cli call reads them all; the
 # fingerprints are computed here. Read with awk and sed, as no JSON tool is
-# guaranteed on the host.
+# guaranteed on the host; the JSON string is unescaped as lua-cjson writes it
+# (newlines as \n, every / as \/).
 stored_cert_fps() {
   local domains d pem fp
   domains="$(sed '/^$/d')"
   [ -n "$domains" ] || return 0
   while IFS= read -r d <&3 && IFS= read -r pem <&4; do
     [ "$pem" != - ] || continue
-    fp=$(printf '%s\n' "$pem" | sed 's/\\n/\n/g' | openssl x509 -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)
+    fp=$(printf '%s\n' "$pem" | sed -e 's/\\\//\//g' -e 's/\\r//g' -e 's/\\n/\n/g' -e 's/\\\\/\\/g' | openssl x509 -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)
     [ -z "$fp" ] || echo "$d $fp"
   done 3< <(printf '%s\n' "$domains") 4< <(printf '%s\n' "$domains" | sed 's/^/get ssl:/; s/$/:latest/' | redis_cli --raw 2>/dev/null \
     | awk '{ if (match($0, /"fullchain_pem":"[^"]*"/)) print substr($0, RSTART + 17, RLENGTH - 18); else print "-" }')
