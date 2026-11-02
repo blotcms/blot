@@ -1,0 +1,181 @@
+name: benchmarks-mega
+
+# The mega-site benchmark (scripts/benchmarks/mega): renders generated sites
+# shaped like the blogs whose renders have hurt every other blog on the same
+# process, with the base and head commits alternating in one job (runners are
+# too noisy to compare against a stored history), and posts the comparison as
+# a sticky comment on the branch's pull request.
+#
+# workflow_dispatch: run it on any branch. The base is the branch's open pull
+#   request's base (or the `base` input, or master), at its merge base.
+# pull_request labeled `mega-benchmark`: the same, for that pull request.
+#
+# Report-only: it never fails.
+
+on:
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: "Runs of each side"
+        default: "3"
+      base:
+        description: "Branch to compare against (default: the pull request's base, else master)"
+        default: ""
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: benchmarks-mega-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mega:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'mega-benchmark'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    continue-on-error: true
+
+    services:
+      redis:
+        image: redis:6
+        ports:
+          - 6379:6379
+
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ITERATIONS: ${{ inputs.iterations || '3' }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+    steps:
+      - name: Checkout head
+        uses: actions/checkout@v4
+        with:
+          path: head
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+
+      - name: Find the pull request and the base commit
+        id: refs
+        working-directory: head
+        env:
+          INPUT_BASE: ${{ inputs.base }}
+          EVENT_PR: ${{ github.event.pull_request.number }}
+          EVENT_BASE: ${{ github.base_ref }}
+        run: |
+          PR="$EVENT_PR"
+          BASE="$EVENT_BASE"
+          if [ -z "$PR" ]; then
+            read -r PR PR_BASE < <(gh pr list --repo "$GITHUB_REPOSITORY" --head "$GITHUB_REF_NAME" \
+              --state open --json number,baseRefName --jq '.[0] | "\(.number) \(.baseRefName)"' || true)
+            BASE="${INPUT_BASE:-${PR_BASE:-master}}"
+          fi
+          git fetch --no-tags origin "$BASE"
+          BASE_SHA=$(git merge-base "origin/$BASE" HEAD)
+          HEAD_SHA=$(git rev-parse HEAD)
+          git worktree add --detach ../base "$BASE_SHA"
+          {
+            echo "pr=$PR"
+            echo "base=$BASE"
+            echo "base_sha=$BASE_SHA"
+            echo "head_sha=$HEAD_SHA"
+          } >> "$GITHUB_OUTPUT"
+          echo "Comparing $HEAD_SHA against $BASE_SHA (merge base with $BASE), PR ${PR:-none}"
+
+      - name: Mark the comment as running
+        if: steps.refs.outputs.pr != ''
+        run: |
+          node head/scripts/benchmarks/mega/compare.js --status running \
+            --pr "${{ steps.refs.outputs.pr }}" \
+            --head-sha "${{ steps.refs.outputs.head_sha }}" --run-url "$RUN_URL"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Both sides run in head's dev image (see benchmarks.yml): node.yml
+      # usually published it already
+      - name: Reuse test image
+        id: reuse
+        run: |
+          IMAGE=$(bash head/scripts/tests/ci/image-tag.sh)
+          if docker pull -q "$IMAGE"; then
+            docker tag "$IMAGE" blot-bench:latest
+            echo "hit=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.reuse.outputs.hit != 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build benchmark image
+        if: steps.reuse.outputs.hit != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: head
+          target: dev
+          load: true
+          tags: blot-bench:latest
+          cache-from: |
+            type=gha,scope=benchmarks-arm64
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/blot:buildcache-arm64
+
+      # Alternate which side goes first, so drift over the job (thermal,
+      # neighbours) lands on both. Each run is a fresh process on an empty
+      # Redis. The benchmark itself is always head's, so both sides are
+      # measured the same way; the app and config are each side's own.
+      - name: Run (${{ env.ITERATIONS }} each side)
+        run: |
+          mkdir -p .benchmarks/mega
+          for i in $(seq 1 "$ITERATIONS"); do
+            if [ $((i % 2)) -eq 1 ]; then ORDER="base head"; else ORDER="head base"; fi
+            for SIDE in $ORDER; do
+              echo "::group::$SIDE, run $i of $ITERATIONS"
+              docker run --rm --network host redis:6 redis-cli -h 127.0.0.1 -p 6379 flushall
+              docker run --rm --network host \
+                -e BLOT_REDIS_HOST=localhost \
+                -e BLOT_HOST=localhost \
+                -e BLOT_PROTOCOL=https \
+                -e BENCHMARK_SHA="$(git -C "$SIDE" rev-parse HEAD)" \
+                -v "$GITHUB_WORKSPACE/$SIDE/app:/usr/src/app/app" \
+                -v "$GITHUB_WORKSPACE/$SIDE/config:/usr/src/app/config" \
+                -v "$GITHUB_WORKSPACE/head/scripts:/usr/src/app/scripts" \
+                -v "$GITHUB_WORKSPACE/.benchmarks:/benchmarks" \
+                blot-bench:latest \
+                sh -c "rm -rf /usr/src/app/data && mkdir /usr/src/app/data && \
+                  node --expose-gc --max-old-space-size=1800 scripts/benchmarks/mega/run.js \
+                    --label $SIDE --output /benchmarks/mega/$SIDE-$i.json" \
+                || echo "::warning::$SIDE run $i failed"
+              echo "::endgroup::"
+            done
+          done
+
+      - name: Compare and comment
+        if: always() && steps.refs.outcome == 'success'
+        run: |
+          node head/scripts/benchmarks/mega/compare.js --dir .benchmarks/mega \
+            --base-sha "${{ steps.refs.outputs.base_sha }}" \
+            --head-sha "${{ steps.refs.outputs.head_sha }}" \
+            --run-url "$RUN_URL" --markdown .benchmarks/mega/comment.md \
+            ${{ steps.refs.outputs.pr != '' && format('--pr {0}', steps.refs.outputs.pr) || '' }}
+          cat .benchmarks/mega/comment.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mega-benchmark
+          path: .benchmarks/mega/
+          if-no-files-found: warn

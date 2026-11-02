@@ -3,7 +3,7 @@
 Reproducible build + render benchmarks for a Blot blog, plus the CI plumbing
 that turns them into a PR comment and a master-branch regression watch.
 
-## The four workflows
+## The five workflows
 
 | Workflow | Trigger | Scale | What it measures |
 |---|---|---|---|
@@ -11,6 +11,7 @@ that turns them into a PR comment and a master-branch regression watch.
 | [`benchmarks-corpus.yml`](../../.github/workflows/benchmarks-corpus.yml) | weekly + manual | large (1000 sites / ~160k posts) | nothing directly - builds and caches the corpus the next workflow reads |
 | [`benchmarks-render.yml`](../../.github/workflows/benchmarks-render.yml) | manual, until `benchmarks-corpus.yml` works again | the cached large corpus | render + burst phases only, against realistic production-shaped data |
 | [`benchmarks-converters.yml`](../../.github/workflows/benchmarks-converters.yml) | PR/push touching `app/build/converters/**` | tiny (a converter's own test fixtures) | per-converter conversion timing, in-process |
+| [`benchmarks-mega.yml`](../../.github/workflows/benchmarks-mega.yml) | manual, or the `mega-benchmark` label on a PR | two generated sites shaped like the blogs that hurt everyone else, plus four small ones | base vs head in one job: cold/warm/after-bump renders, template previews, other blogs' latency meanwhile, heap. See [`mega/README.md`](mega/README.md) |
 
 `benchmarks.yml` is unchanged in behavior from before this document's corpus
 additions - it's the fast, always-on smoke check. The other three are
