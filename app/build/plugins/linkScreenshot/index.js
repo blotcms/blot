@@ -27,7 +27,7 @@ function render($, callback, { blogID, path }) {
   // Only ever screenshot a plain public http(s) URL. Credentials in the URL
   // are a common trick for slipping an internal host past a naive check.
   // Destination IP filtering (private ranges, cloud metadata, rebinding) is
-  // enforced in the airlock container - see config/airlock.
+  // enforced in the sandbox's browser jail - see app/sandbox/README.md.
   let parsedHref;
   try {
     parsedHref = new URL(href);
@@ -47,8 +47,8 @@ function render($, callback, { blogID, path }) {
     href,
     localPathToScreenshot,
     // untrusted: href comes from a user-uploaded .webloc/.url file, so this
-    // must run in the airlock container - see helper/airlock and
-    // config/airlock/README.md. In production helper/screenshot refuses to
+    // must run in the sandbox's browser jail - see app/sandbox/README.md.
+    // In production helper/screenshot refuses to
     // fall back to a locally-launched Chromium for this.
     { width: SCREENSHOT_WIDTH, height: SCREENSHOT_HEIGHT, untrusted: true },
     function (err) {

@@ -23,11 +23,10 @@ name_arg() { while [ $# -gt 0 ]; do [ "$1" = --name ] && { echo "$2"; return; };
 case "$1" in
   image) [[ "$*" == *Labels* ]] || [ -z "${FAKE_PAUSE_ON_INSPECT:-}" ] || echo raced > "$FAKE_PAUSE_ON_INSPECT"   # a pause that lands while the pull runs
     if [[ "$*" == *Labels* ]]; then [[ "${!#}" =~ :[0-9a-f]{40}$ ]] && echo unit; exit 0; fi   # the unit images are the ones tagged with a commit
-    [ -z "${FAKE_NO_AIRLOCK_IMAGE:-}" ] || [[ "${!#}" != *blot-airlock:* ]] || exit 1
     if [[ "$*" == *"{{.Id}}"* ]]; then echo "${!#}"; fi; exit 0 ;;
   images) for i in ${FAKE_IMAGES-}; do [[ "$i" == "$2":* ]] && echo "$i"; done; exit 0 ;;
   rmi) [[ " ${FAKE_IMAGE_IN_USE:-} " != *" ${!#} "* ]]; exit ;;
-  pull) [ -z "${FAKE_NO_AIRLOCK_IMAGE:-}" ] || [[ "${!#}" != *blot-airlock:* ]] || exit 1; exit 0 ;;
+  pull) exit 0 ;;
   network) echo 172.17.0.1 ;;
   ps) if [[ "$*" == *health=unhealthy* ]]; then printf '%s\n' ${FAKE_UNHEALTHY_LIST-}; exit 0; fi
     if [[ "$*" == *" -a "* ]]; then ls "$FAKE/all" 2>/dev/null; else ls "$R"; fi; exit 0 ;;
@@ -62,7 +61,6 @@ case "$1" in
   logs) cat "$FAKE/dlogs/${!#}" 2>/dev/null ;;
   inspect) if [[ "$*" == *Labels* ]]; then [[ "$(cat "$FAKE/image/${!#}" 2>/dev/null)" =~ :[0-9a-f]{40}$ ]] && echo unit; exit 0; fi
     if [[ "$*" == *"State.Running"* ]]; then echo "${FAKE_HEALTH_OF_OTHER:-healthy}"; exit 0; fi
-    if [[ "$*" == *"Health.Status"* ]]; then if [ "${!#}" = "${FAKE_AIRLOCK_UNHEALTHY:-}" ]; then echo unhealthy; else echo healthy; fi; exit 0; fi
     if [[ "$*" == *"{{.Image}}"* || "$*" == *"{{.Config.Image}}"* ]]; then cat "$FAKE/image/${!#}" 2>/dev/null; exit 0; fi
     cat "$FAKE/started/${!#}" 2>/dev/null ;;
   exec)
@@ -185,7 +183,7 @@ export PATH="$T/bin:$PATH"
 
 export PROXY_ENV_FILE="$T/proxy.env" PROXY_DISK_CACHE_DIR="$T/disk-cache" PROXY_GLOBAL_STATIC_DIR="$T/static" PROXY_LOG_DIR="$T/logs" \
   PROXY_CERT_DIR="$T/certs" PROXY_DEPLOY_LOCK="$T/lock" \
-  PROXY_DEPLOY_SLEEP=true PROXY_HEALTH_TIMEOUT=1 PROXY_AIRLOCK_HEALTH_TIMEOUT=1 TMUX=fake # nap() is a no-op, so a refusal busy-waits out PROXY_HEALTH_TIMEOUT real seconds
+  PROXY_DEPLOY_SLEEP=true PROXY_HEALTH_TIMEOUT=1 TMUX=fake # nap() is a no-op, so a refusal busy-waits out PROXY_HEALTH_TIMEOUT real seconds
 
 # Units (#2119): the images, and the settings blue-green.sh reads for one. The
 # numbers are the real ones from scripts/deploy/constants.js; only the host
@@ -194,7 +192,7 @@ SHA_NEW=0123456789abcdef0123456789abcdef01234567
 SHA_OLD=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 UNIT_IMG="ghcr.io/blotcms/blot:$SHA_NEW"
 UNIT_OLD="ghcr.io/blotcms/blot:$SHA_OLD"
-AIRLOCK_NEW="ghcr.io/blotcms/blot-airlock:$SHA_NEW"
+# The airlocks the sandbox replaced (#2257), still on a host until a deploy
 AIRLOCK_OLD="ghcr.io/blotcms/blot-airlock:$SHA_OLD"
 mkdir -p "$T/data" "$T/tmp" "$T/run-blot"
 node "$DEPLOY/../../scripts/deploy/unit-settings.js" > "$T/unit-settings.env"
@@ -212,7 +210,8 @@ up() { touch "$FAKE/running/$1" "$FAKE/all/$1"; echo "${2:-$UNIT_OLD}" > "$FAKE/
 # reset [baremetal|none|units]: fresh host state, `serving` says who owns :443
 #   none      no unit running
 #   baremetal a systemd unit
-#   units     blot-blue and blot-green on an older image, each with its airlock
+#   units     blot-blue and blot-green on an older image, each with the airlock
+#             a host still had before the sandbox replaced it
 reset() {
   rm -rf "$FAKE"; mkdir -p "$FAKE/running" "$FAKE/all" "$FAKE/image"; : > "$FAKE/calls"; rm -f "$PROXY_LOG_DIR/error.log"
   unset "${!FAKE_@}" 2>/dev/null; export FAKE="$T/fake"
@@ -548,16 +547,16 @@ check "a failed deploy removes no images" '[ $RC != 0 ] && ! called "docker rmi"
 echo "units (#2119)"
 
 reset units; bluegreen
-check "blue's airlock, then blue is replaced, checked and verified, all before green is touched" \
-  '[ $RC = 0 ] && before "docker run -d --restart unless-stopped --name blot-blue-airlock" "docker create --restart no --name blot-blue" && before "docker create --restart no --name blot-blue" "verify-container" && before "verify-container" "docker stop --time 40 blot-green" && before "docker stop --time 40 blot-green" "docker run -d --restart unless-stopped --name blot-green-airlock"'
-check "both units and their airlocks run, the units on the new image, and blue was verified once" \
-  'running_now blot-blue && running_now blot-green && running_now blot-blue-airlock && running_now blot-green-airlock && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-green")" = "$UNIT_IMG" ] && [ "$(grep -c verify-container "$FAKE/calls")" = 1 ] && called "exec --user 1000:1000 -e HOME=/home/node blot-blue node /usr/src/app/scripts/deploy/verify-container/index.js $SHA_NEW"'
+check "blue is replaced, checked and verified, all before green is touched, and no airlock is started" \
+  '[ $RC = 0 ] && before "docker create --restart no --name blot-blue" "verify-container" && before "verify-container" "docker stop --time 40 blot-green" && ! called "airlock --network"'
+check "both units run on the new image, blue was verified once, and the old airlocks are gone" \
+  'running_now blot-blue && running_now blot-green && ! running_now blot-blue-airlock && ! running_now blot-green-airlock && before "docker stop --time 40 blot-green" "docker rm -f blot-blue-airlock" && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-green")" = "$UNIT_IMG" ] && [ "$(grep -c verify-container "$FAKE/calls")" = 1 ] && called "exec --user 1000:1000 -e HOME=/home/node blot-blue node /usr/src/app/scripts/deploy/verify-container/index.js $SHA_NEW"'
 check "a unit gets both env files (secrets.env first), its name, sockets, memory, heaps, release and mounts" \
   'called "create --restart no --name blot-blue --network host --cap-add SYS_NICE --ulimit nofile=65536:65536 --stop-timeout 40" && called "create .*--env-file $T/secrets.env --env-file $T/proxy.env -e BLOT_UNIT=blue -e PROXY_UNIT=blue -e PROXY_UPSTREAM_MODE=unit" && called "create .*-e BLOT_SOCKET=$T/run-blot/blue-a.sock -e BLOT_WORKER_SOCKET=$T/run-blot/blue-b.sock" && called "create .*--memory 3300m --cpus 4 --cpu-shares 2048" && called "create .*-e BLOT_RELEASE_ID=$SHA_NEW" && called "create .*-e NODE_OPTIONS=--max-old-space-size=1800 --report-on-fatalerror --report-directory=/usr/src/app/data/node-reports/blot-blue" && called "create .*-e BLOT_WORKER_MAX_OLD_SPACE_SIZE=750" && called "create .*bind-propagation=rslave" && called "create .*source=$T/tmp,target=$T/tmp" && called "create .*-e BLOT_TMP_DIRECTORY=$T/tmp"'
 check "no port is published and the unit is on the host network, not blotnet" \
   '! called "create .* -p " && ! called "create .*blotnet" && called "create .*--network host"'
-check "each unit reaches its own airlock on 127.0.0.1, which publishes on loopback only" \
-  'called "create .*--name blot-blue .*-e BLOT_AIRLOCK_BROWSER_URL=http://127.0.0.1:19222 -e BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:18888" && called "create .*--name blot-green .*-e BLOT_AIRLOCK_BROWSER_URL=http://127.0.0.1:19223 -e BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:18889" && called "run -d .*--name blot-blue-airlock --network blotnet -p 127.0.0.1:19222:9222 -p 127.0.0.1:18888:8888 --cap-add=NET_ADMIN" && called "run -d .*--name blot-green-airlock --network blotnet -p 127.0.0.1:19223:9222 -p 127.0.0.1:18889:8888"'
+check "without BLOT_SANDBOX a unit is given no browser and no proxy" \
+  '! called "BLOT_AIRLOCK_BROWSER_URL" && ! called "BLOT_AIRLOCK_PROXY_URL"'
 
 reset units; bluegreen
 check "without BLOT_SANDBOX a unit gets none of the sandbox flags" \
@@ -565,10 +564,12 @@ check "without BLOT_SANDBOX a unit gets none of the sandbox flags" \
 
 printf 'BLOT_SANDBOX=1\n' >> "$T/proxy.env"
 export PROXY_SANDBOX_CGROUP_DIR="$T/sandbox-cgroup"
-reset units; mkdir -p "$T/sandbox-cgroup/blue" "$T/sandbox-cgroup/green"; bluegreen
+reset units; mkdir -p "$T/sandbox-cgroup/blue" "$T/sandbox-cgroup/green" "$T/sandbox-cgroup/blue-browser" "$T/sandbox-cgroup/green-browser"; bluegreen
 SECCOMP="$(cd "$DEPLOY" && pwd)/sandbox-seccomp.json"
 check "BLOT_SANDBOX=1: each unit gets the host cgroup namespace, the seccomp profile, its own cgroup subtree and the broker's socket" \
   '[ $RC = 0 ] && called "create .*--name blot-blue .*--cgroupns=host --security-opt seccomp=$SECCOMP --mount type=bind,source=$T/sandbox-cgroup/blue,target=/sandbox-cgroup -e BLOT_SANDBOX_SOCKET=/run/blot-sandbox/broker.sock" && called "create .*--name blot-green .*source=$T/sandbox-cgroup/green,target=/sandbox-cgroup"'
+check "and the device and browser cgroup the jails need, and its fetches go to its own proxy jail" \
+  'called "create .*--name blot-blue .*--device /dev/net/tun --mount type=bind,source=$T/sandbox-cgroup/blue-browser,target=/sandbox-browser-cgroup -e BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:18988" && called "create .*--name blot-green .*BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:18989" && ! called "BLOT_AIRLOCK_BROWSER_URL"'
 check "and none of the flags the sandbox must not need" \
   '! called "--privileged" && ! called "unconfined" && ! called "--cap-add SYS_ADMIN" && ! called "systempaths"'
 check "the profile is Docker's default plus exactly clone, mount, umount2, pivot_root and sethostname" \
@@ -585,36 +586,15 @@ check "BLOT_SANDBOX=1 without a unit's cgroup subtree: refused before anything i
   '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create" && mentions "green does not exist"'
 
 mkdir -p "$T/sandbox-cgroup/green"
-reset units; bluegreen
-check "BLOT_SANDBOX=1 alone gives a unit no browser flags" \
-  '[ $RC = 0 ] && called "create .*--name blot-blue" && ! called "/dev/net/tun" && ! called "sandbox-browser-cgroup"'
-
-echo "BLOT_SANDBOX_BROWSER=1" >> "$T/proxy.env"
-reset units; bluegreen
-check "BLOT_SANDBOX_BROWSER=1 without a unit's browser cgroup: refused before anything is touched" \
+reset units; rmdir "$T/sandbox-cgroup/blue-browser"; bluegreen; mkdir -p "$T/sandbox-cgroup/blue-browser"
+check "BLOT_SANDBOX=1 without a unit's browser cgroup: refused before anything is touched" \
   '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create" && mentions "blue-browser does not exist"'
-mkdir -p "$T/sandbox-cgroup/blue-browser" "$T/sandbox-cgroup/green-browser"
-reset units; bluegreen
-check "BLOT_SANDBOX_BROWSER=1 gives a unit the device and its own browser cgroup" \
-  '[ $RC = 0 ] && called "create .*--name blot-blue .*--device /dev/net/tun --mount type=bind,source=$T/sandbox-cgroup/blue-browser,target=/sandbox-browser-cgroup"'
-check "without BLOT_SANDBOX_PROXY the app's fetches stay on the airlock's proxy" \
-  'called "create .*--name blot-blue .*BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:18888"'
-
-sed -i.bak -e '/^BLOT_SANDBOX_BROWSER=1$/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
-echo "BLOT_SANDBOX_PROXY=1" >> "$T/proxy.env"
-reset units; bluegreen
-check "BLOT_SANDBOX_PROXY=1 gives a unit the device, and points its fetches at its own jail" \
-  '[ $RC = 0 ] && called "create .*--name blot-blue .*BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:18988" && called "create .*--name blot-green .*BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:18989" && called "create .*--name blot-blue .*--device /dev/net/tun" && ! called "sandbox-browser-cgroup"'
-sed -i.bak -e '/^BLOT_SANDBOX=1$/d' -e '/^BLOT_SANDBOX_PROXY=1$/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
+sed -i.bak -e '/^BLOT_SANDBOX=1$/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
 unset PROXY_SANDBOX_CGROUP_DIR
 
 reset units; FAKE_NODE_B_UNHEALTHY=blot-blue bluegreen
 check "node-b never healthy in the new blue: rolled back, green untouched" \
   '[ $RC != 0 ] && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_OLD" ] && running_now blot-blue && ! called "docker stop --time 40 blot-green"'
-
-reset units; FAKE_AIRLOCK_UNHEALTHY=blot-blue-airlock bluegreen
-check "blue's airlock does not come up: the unit is not created, blue is put back, green untouched" \
-  '[ $RC != 0 ] && mentions "airlock for blot-blue did not come up" && ! called "docker create --restart no --name blot-blue" && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_OLD" ] && ! called "docker stop --time 40 blot-green"'
 
 reset units; bluegreen; : > "$FAKE/calls"
 bluegreen
@@ -641,20 +621,19 @@ check "the socket directory missing on the host: refused before anything is touc
 echo "units: steady deploys"
 
 reset units; bluegreen
-check "steady: blue then green, each with its airlock replaced first, blue verified, exactly two stops, no old containers to stop" \
-  '[ $RC = 0 ] && before "docker rm -f blot-blue-airlock" "docker create --restart no --name blot-blue" && before "verify-container" "docker stop --time 40 blot-green" && [ "$(stopped_count)" = 2 ] && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-green")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-blue-airlock")" = "$AIRLOCK_NEW" ]'
+check "steady: blue then green, blue verified, exactly two stops, no old containers to stop" \
+  '[ $RC = 0 ] && before "verify-container" "docker stop --time 40 blot-green" && [ "$(stopped_count)" = 2 ] && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-green")" = "$UNIT_IMG" ]'
 
-reset units; up blot-blue "$UNIT_IMG"; up blot-green "$UNIT_IMG"; up blot-blue-airlock "$AIRLOCK_NEW"; up blot-green-airlock "$AIRLOCK_NEW"; bluegreen
+reset units; up blot-blue "$UNIT_IMG"; up blot-green "$UNIT_IMG"; bluegreen
 check "steady, same image already deployed: nothing is stopped, created or replaced" \
   '[ $RC = 0 ] && [ "$(stopped_count)" = 0 ] && ! called "docker create" && ! called "docker run -d" && mentions "nothing to do"'
 
-reset units; up blot-blue "$UNIT_IMG"; up blot-green "$UNIT_IMG"; bluegreen
-check "steady, the units are current but their airlocks are not: the airlocks are replaced, the units left alone" \
-  '[ $RC = 0 ] && [ "$(stopped_count)" = 0 ] && ! called "docker create" && [ "$(cat "$FAKE/image/blot-blue-airlock")" = "$AIRLOCK_NEW" ] && [ "$(cat "$FAKE/image/blot-green-airlock")" = "$AIRLOCK_NEW" ]'
+reset units; FAKE_IMAGES="$AIRLOCK_OLD" bluegreen
+check "steady: the old airlocks and their image are removed after the deploy" \
+  '[ $RC = 0 ] && called "docker rm -f blot-blue-airlock" && called "docker rm -f blot-green-airlock" && called "docker rmi $AIRLOCK_OLD"'
 
-reset units; FAKE_IMAGES="ghcr.io/blotcms/blot-airlock:$SHA_OLD ghcr.io/blotcms/blot-airlock:$SHA_NEW" bluegreen
-check "steady: superseded airlock images are removed, the one in use is kept" \
-  '[ $RC = 0 ] && called "docker rmi ghcr.io/blotcms/blot-airlock:$SHA_OLD" && ! called "docker rmi ghcr.io/blotcms/blot-airlock:$SHA_NEW"'
+reset units; FAKE_UNHEALTHY=blot-blue bluegreen
+check "a failed deploy leaves the old airlocks alone" '[ $RC != 0 ] && running_now blot-blue-airlock && ! called "docker rm -f blot-blue-airlock"'
 
 reset units; FAKE_NODE_A_UNHEALTHY=blot-blue bluegreen
 check "steady, node-a of the new blue never healthy: the new unit is removed BEFORE the old one starts (they share sockets), green untouched" \
@@ -665,12 +644,8 @@ check "steady, node-b of green is down: blue is not stopped, a unit counts as he
   '[ $RC != 0 ] && ! called "docker stop" && mentions "refusing to stop blot-blue"'
 
 reset units; FAKE_VERIFY_FAIL=1 bluegreen
-check "steady, verify-container fails on blue: rolled back, green untouched, the airlock stays on the new image" \
+check "steady, verify-container fails on blue: rolled back, green untouched" \
   '[ $RC != 0 ] && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_OLD" ] && ! called "docker stop --time 40 blot-green"'
-
-reset units; FAKE_NO_AIRLOCK_IMAGE=1 bluegreen
-check "steady, no airlock image for the commit: the airlocks keep the image they run and the units are still replaced" \
-  '[ $RC = 0 ] && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_IMG" ]'
 
 reset units; FAKE_PURGE_FAIL=1 bluegreen
 check "steady, the purge endpoint is not reachable from the new blue: rolled back" '[ $RC != 0 ] && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_OLD" ]'

@@ -36,7 +36,7 @@ PROC="${PROC:-/proc}"
 DOCKER="${DOCKER:-docker}"
 SAMPLES="${SAMPLES:-4}"
 INTERVAL="${INTERVAL:-15}"
-CONTAINERS="${CONTAINERS:-blot-blue blot-green blot-blue-airlock blot-green-airlock}"
+CONTAINERS="${CONTAINERS:-blot-blue blot-green}"
 
 # Cron mails any output, so stay quiet; a missing log directory means the
 # instance store isn't mounted, which is not ours to fix.

@@ -57,7 +57,7 @@ describe("linkScreenshot plugin", function () {
     }, opts);
   });
 
-  it("marks the screenshot untrusted so it must run in the airlock", function (done) {
+  it("marks the screenshot untrusted so it must run in the sandbox", function (done) {
     const href = "https://example.com/";
 
     render(doc(href), function () {
@@ -94,9 +94,9 @@ describe("linkScreenshot plugin", function () {
   // Deliberately NOT in `refused`: this plugin only checks protocol and
   // credentials, so a plain http(s) URL pointing at the cloud metadata
   // address is handed to the screenshot service same as any other. It's
-  // the airlock's egress filter (config/airlock/egress.nft) that has to
-  // reject this one, not this layer - see config/airlock/README.md.
-  it("passes the metadata address through - it's the airlock's job to block it", function (done) {
+  // the browser jail's egress filter (proxy/unit/sandbox/egress.nft) that has
+  // to reject this one, not this layer - see app/sandbox/README.md.
+  it("passes the metadata address through - it's the sandbox's job to block it", function (done) {
     const href = "http://169.254.169.254/latest/meta-data/";
 
     render(doc(href), function () {

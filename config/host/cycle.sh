@@ -91,7 +91,6 @@ SYNC_TRIES=720                   # checks 10 seconds apart: two hours for the fi
 FINISH_MIN_DAYS=3
 FRESH_REDIS_KEYS=10              # a fresh Redis holds only its samplers' keys (tcpmem-log.sh, redis-mem-log.sh)
 UNIT_NAMES="blot-blue blot-green"
-AIRLOCK_NAMES="blot-blue-airlock blot-green-airlock"
 
 MODE=""; OLD_REDIS=""; OLD_DIRECT=""; EIP=""; BANS_FILE=""; VERIFY_HOSTS=""; TYPE=""; CYCLE=""
 FREEZE_TTL=900; ANY_TIME=""; YES=""; DRY_RUN=""
@@ -550,7 +549,7 @@ pause_deploys() {
 }
 
 phase_app() {
-  local info sha airlock problem address host code
+  local info sha problem address host code
   refuse_after_switch
   info=$(redis_info "$NEW")
   [ "$(info_field "$info" role)" = slave ] && [ "$(info_field "$info" master_link_status)" = up ] ||
@@ -564,7 +563,6 @@ phase_app() {
     need "a deploy is running on $OLD_NOW: wait for it, then run app again"
 
   IMAGE=$(old_image); sha=${IMAGE##*:}
-  airlock=$(docker_field "$OLD_NOW" blot-blue-airlock '{{.Config.Image}}')
   echo "Image: $IMAGE"
 
   say "Env files, backup settings and the wildcard certificate"
@@ -578,7 +576,7 @@ phase_app() {
   # A unit only reads the env files when it is created, so edited ones mean
   # replacing it even though it already runs this image.
   act env BLOT_DEPLOY_TARGET="$NEW" PROXY_DEPLOY_IGNORE_PAUSE=1 PROXY_VERIFY_SKIP_REDIS_WRITE=1 \
-    PROXY_AIRLOCK_IMAGE="$airlock" PROXY_DEPLOY_FORCE="${ENV_CHANGED:+1}" "$ROOT/scripts/deploy/units.sh" "$sha"
+    PROXY_DEPLOY_FORCE="${ENV_CHANGED:+1}" "$ROOT/scripts/deploy/units.sh" "$sha"
 
   [ -z "$DRY_RUN" ] || { echo "would check the units and curl the site through $NEW's private IP"; return 0; }
   problem=$(units_ok "$NEW") || die "$problem"
@@ -613,7 +611,7 @@ rearm() { # rearm <host whose Redis is the master>: the TTL clock starts again
 # read-only, as in acquire_lock in proxy/deploy/common.sh. The containers are
 # stopped, not removed: they are the rollback.
 stop_old_units() {
-  on "$OLD_NOW" "sudo bash -c 'f=/tmp/blot-proxy-deploy.lock; [ -e \$f ] || touch \$f; exec 9< \$f; flock -w 300 9; docker stop --time 40 $UNIT_NAMES $AIRLOCK_NAMES > /dev/null'"
+  on "$OLD_NOW" "sudo bash -c 'f=/tmp/blot-proxy-deploy.lock; [ -e \$f ] || touch \$f; exec 9< \$f; flock -w 300 9; docker stop --time 40 $UNIT_NAMES > /dev/null; docker ps --quiet --filter name=-airlock | xargs -r docker stop > /dev/null'"
   [ -z "$(on "$OLD_NOW" "sudo docker ps -q --filter name=^blot-")" ] || die "containers are still running on $OLD_NOW"
 }
 
@@ -822,7 +820,7 @@ phase_settle() {
     # once-at-boot steps that failed on the replica (onceAtStartup, folders()).
     say "Rolling deploy of ${IMAGE##*:} on $NEW"
     act env BLOT_DEPLOY_TARGET="$NEW" PROXY_DEPLOY_IGNORE_PAUSE=1 PROXY_DEPLOY_FORCE=1 \
-      PROXY_AIRLOCK_IMAGE="$(docker_field "$NEW" blot-blue-airlock '{{.Config.Image}}')" "$ROOT/scripts/deploy/units.sh" "${IMAGE##*:}"
+      "$ROOT/scripts/deploy/units.sh" "${IMAGE##*:}"
   else
     echo "Deploys are not paused on $NEW: the rolling deploy has happened"
   fi

@@ -68,8 +68,9 @@ checks and how it cleans up. For build-probe the container:
 - mounts the data directory **read-write**, since builds write to it, and the
   host's tmp directory (`/var/instance-ssd/tmp`) read-write, as the app
   containers do;
-- is attached to the airlock network, since builds fetch remote images and
-  take screenshots through it;
+- runs on the host network with blot-blue's proxy jail as its egress proxy,
+  since builds fetch remote images; it has no browser, so link screenshots
+  fail;
 - has its own memory limit (default 2g: room for a heap snapshot on top of a
   full heap), heap limit (default 750MB, as node-b) and one CPU, so a spike
   here can't get a live container OOM-killed or starve it;

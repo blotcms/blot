@@ -7,15 +7,15 @@ describe("helper/airlock", function () {
   const original = {
     required: config.airlock.required,
     proxy: config.airlock.proxy,
-    browser_url: config.airlock.browser_url,
+    browser: config.sandbox.browser,
   };
 
   // The module reads config.airlock at require time, so each spec sets the
   // state it wants and re-requires a fresh copy.
-  const load = ({ required, proxy, browser_url } = {}) => {
+  const load = ({ required, proxy, browser } = {}) => {
     config.airlock.required = !!required;
     config.airlock.proxy = proxy || null;
-    config.airlock.browser_url = browser_url || null;
+    config.sandbox.browser = !!browser;
     delete require.cache[airlockPath];
     return require("helper/airlock");
   };
@@ -29,7 +29,7 @@ describe("helper/airlock", function () {
     nock.enableNetConnect();
     config.airlock.required = original.required;
     config.airlock.proxy = original.proxy;
-    config.airlock.browser_url = original.browser_url;
+    config.sandbox.browser = original.browser;
     delete require.cache[airlockPath];
   });
 
@@ -53,18 +53,18 @@ describe("helper/airlock", function () {
     }).toThrowError(/some-sink/);
   });
 
-  it("throws from assertBrowserReady when required but browser_url is unset", function () {
+  it("throws from assertBrowserReady when required but there is no sandbox browser", function () {
     const airlock = load({ required: true });
     expect(function () {
       airlock.assertBrowserReady("linkScreenshot");
     }).toThrowError(/linkScreenshot/);
   });
 
-  it("does not throw when required and the airlock is configured", function () {
+  it("does not throw when required and the proxy and sandbox are configured", function () {
     const airlock = load({
       required: true,
       proxy: "http://airlock:8888",
-      browser_url: "http://airlock:9222",
+      browser: true,
     });
     expect(airlock.assertProxyReady("x")).toBeUndefined();
     expect(airlock.assertBrowserReady("x")).toBeUndefined();
