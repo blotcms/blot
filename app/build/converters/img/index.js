@@ -4,7 +4,7 @@ const titlify = require("build/prepare/titlify");
 const ensure = require("helper/ensure");
 const { withLocal } = require("build/converters/folderStat");
 const hash = require("helper/hash");
-const sharp = require("sharp");
+const sandbox = require("sandbox");
 const assets = require("storage/assets");
 const exif = require("./exif");
 const Transformer = require("helper/transformer");
@@ -44,14 +44,6 @@ async function read(blog, path, callback) {
     const isRetina = path.toLowerCase().includes("@2x") ? 'data-2x="true"' : "";
     let outputPath = path;
 
-    let metadata = {};
-
-    try {
-      metadata = await sharp(localPath).metadata();
-    } catch (metadataErr) {
-      metadata = {};
-    }
-
     const parsedExif = await exif.parseExif(localPath, blog.imageExif);
 
     const extras = Object.keys(parsedExif).length
@@ -65,13 +57,14 @@ async function read(blog, path, callback) {
       const convertedRelativePath = `/_assets/${hashPath}/${convertedFilename}`;
 
       const writeConversion = async (sourcePath, relativePath) => {
-        // sharp writes the converted image to a local path, which we then
-        // commit to the blog's assets
+        // the sandbox converts the image and we write it to a local path,
+        // which we then commit to the blog's assets
         const absolutePath = assets.path(blog.id, relativePath);
 
         await fs.ensureDir(dirname(absolutePath));
         await assets.remove(blog.id, relativePath);
-        await sharp(sourcePath).png().toFile(absolutePath);
+        const { outputs } = await sandbox.run("to-png", {}, { path: sourcePath });
+        await fs.writeFile(absolutePath, outputs[0]);
         await assets.commit(blog.id, relativePath);
 
         return { relativePath };

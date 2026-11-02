@@ -1,29 +1,19 @@
-var sharp = require("sharp");
+var sandbox = require("sandbox");
 var config = require("./config");
 var FORMATS = config.FORMATS;
 var MIN_WIDTH = config.MIN_WIDTH;
 var MIN_HEIGHT = config.MIN_HEIGHT;
 var debug = require("debug")("blot:entry:build:thumbnail:validate");
 
-// Sharp seems to cache files based on their
-// path and not the contents of the file at
-// a particular path. It was returning stale
-// versions of a file in the blog's folder.
-// Perhaps it might be smarter to copy the file
-// to the temporary directory before operating on it?
-// It's also possible that this is a bug in Sharp's
-// caching that has been fixed in a more recent version
-// or that still needs to be fixed. I should investigate.
-sharp.cache(false);
-
 module.exports = function (path, callback) {
   var format, width, height;
 
   debug(path);
-  sharp(path).metadata(function (err, info) {
-    if (err) return callback(err);
+  sandbox.run("metadata", {}, { path: path }).then(function (result) {
+    var err;
+    var info = result.meta;
 
-    if (!info) {
+    if (!info || !info.format) {
       err = new Error("Could not read file info");
       return callback(err);
     }
@@ -50,5 +40,5 @@ module.exports = function (path, callback) {
 
     debug(path, "is valid");
     callback();
-  });
+  }, callback);
 };
