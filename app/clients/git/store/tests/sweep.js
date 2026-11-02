@@ -672,7 +672,7 @@ describe("git store sweep, after compacting a real repository", function () {
     clock = T0 + 21 * DAY;
     const quiet = await sweep({ store, now: clock, keepManifests: 1 });
     expect(quiet.packsDeleted).toBe(0);
-    ok(await runGit(["pull", "-q", "--ff-only"], { cwd: target }));
+    ok(await runGit(["-c", "gc.auto=0", "-c", "maintenance.auto=false", "pull", "-q", "--ff-only"], { cwd: target }));
     fx.git(target, ["fsck", "--strict", "--no-dangling"]);
   });
 });

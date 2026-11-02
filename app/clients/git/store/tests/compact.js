@@ -468,14 +468,15 @@ describe("git store compaction", function () {
       expect(latest.snapshots.length).toBe(4);
       expect(latest.snapshots[latest.snapshots.length - 1].refs).toEqual(latest.refs);
 
-      // Two pushes behind, at a snapshot that is kept: only those pushes' packs
-      ok(await runGit(["-c", "transfer.fsckObjects=true", "fetch", "-q", "origin"], { cwd: recent }));
+      // Two pushes behind, at a snapshot that is kept: only those pushes' packs.
+      // No auto gc, which a fetch can start in the background, under fsck
+      ok(await runGit(["-c", "gc.auto=0", "-c", "maintenance.auto=false", "-c", "transfer.fsckObjects=true", "fetch", "-q", "origin"], { cwd: recent }));
       expect(lastResult().packs).toBe(2);
       expect(lastResult().objects).toBeLessThan(15);
       expectMirror(recent);
 
       // Eight behind, older than every snapshot kept: everything, as a clone
-      ok(await runGit(["-c", "transfer.fsckObjects=true", "fetch", "-q", "origin"], { cwd: old }));
+      ok(await runGit(["-c", "gc.auto=0", "-c", "maintenance.auto=false", "-c", "transfer.fsckObjects=true", "fetch", "-q", "origin"], { cwd: old }));
       expect(lastResult().packs).toBe(latest.packs.length);
       expectMirror(old);
     });
