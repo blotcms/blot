@@ -132,6 +132,42 @@ describe("git store shadow mode: daily maintenance", function () {
       expect(result.findings[0].check).toBe("deep");
       expect(["mismatch", "missing"]).toContain(result.findings[0].kind);
     });
+
+    it("counts a deep check that fails for want of scratch space as an error, not a mismatch", async function () {
+      await this.local.writeAndPush("/a.txt", "A");
+      await setup.expectMirrored(this);
+
+      // Scratch is a file, so the clone has nowhere to go
+      var file = this.tmp + "/not-a-directory";
+      require("fs").writeFileSync(file, "x");
+
+      var result = await this.check({ deep: true, scratchDir: file + "/scratch" });
+
+      expect(result.findings.length).toBe(1);
+      expect(result.findings[0].check).toBe("deep");
+      expect(result.findings[0].kind).toBe("error");
+      expect(this.shadowLines("verify").filter((line) => /check=deep/.test(line))[0]).toContain("outcome=error");
+    });
+
+    it("tells a verdict on the store from trouble on this machine", function () {
+      var { CorruptError, NotFoundError } = require("clients/git/store").errors;
+      var coded = function (message, code) {
+        return Object.assign(new Error(message), { code: code });
+      };
+
+      expect(maintenance._verdict(new CorruptError("The store's refs differ from the source's"))).toBe("mismatch");
+      expect(maintenance._verdict(new NotFoundError("No such key: packs/pack-x.pack"))).toBe("missing");
+      expect(maintenance._verdict(new Error("git index-pack --strict --fsck-objects x.pack failed: fatal: pack has bad object at offset 12"))).toBe("mismatch");
+      expect(maintenance._verdict(new Error("git fsck --strict --no-dangling failed: missing blob 1234"))).toBe("mismatch");
+
+      expect(maintenance._verdict(coded("ENOSPC: no space left on device, write", "ENOSPC"))).toBe(null);
+      expect(maintenance._verdict(coded("EACCES: permission denied, mkdtemp", "EACCES"))).toBe(null);
+      expect(maintenance._verdict(coded("EMFILE: too many open files", "EMFILE"))).toBe(null);
+      expect(maintenance._verdict(coded("No room in the cache", "NO_ROOM"))).toBe(null);
+      expect(maintenance._verdict(new Error("git index-pack --strict x.pack failed: fatal: unable to write: No space left on device"))).toBe(null);
+      expect(maintenance._verdict(new Error("git init -q --bare clone.git failed: Permission denied"))).toBe(null);
+      expect(maintenance._verdict(Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }))).toBe(null);
+    });
   });
 
   describe("the sweep", function () {
@@ -188,6 +224,47 @@ describe("git store shadow mode: daily maintenance", function () {
       expect(counts.live).toBe(1);
 
       expect(this.shadowLines("remove").filter((line) => / outcome=ok /.test(line)).length).toBe(2);
+    });
+
+    it("reports a prefix it could not clean up, and goes on to the rest", async function () {
+      await this.local.writeAndPush("/a.txt", "A");
+      await setup.expectMirrored(this);
+
+      var ctx = this;
+      var gone = await old(this, "blog_gone", 2 * DAY);
+      this.stores.blog_broken = {
+        id: "broken",
+        list: async function* () {
+          throw new Error("listing failed");
+        },
+      };
+      maintenance._setPrefixLister(async function* () {
+        yield "blog_broken";
+        yield "blog_gone";
+        yield ctx.blog.id;
+      });
+
+      var counts = await maintenance.orphans();
+
+      expect(counts.errors).toBe(1);
+      expect(counts.removed).toBe(1);
+      expect(await keys(gone)).toEqual([]);
+      expect(counts.findings).toEqual([{ blog: "blog_broken", check: "orphan", kind: "error", detail: "listing failed" }]);
+
+      // The daily run emails it
+      var sent = [];
+      var result = await gitStoreMaintenance.run({
+        recheckDelayMs: 10,
+        deepCount: 0,
+        sendEmail: async function (view) {
+          sent.push(view);
+        },
+      });
+
+      expect(result.sent).toBe(true);
+      expect(sent.length).toBe(1);
+      expect(sent[0].findings).toEqual([{ blog: "blog_broken", kind: "error", check: "orphan", detail: "listing failed" }]);
+      expect(result.report.orphans.errors).toBe(1);
     });
   });
 

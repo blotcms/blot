@@ -220,9 +220,28 @@ async function cheapCheck(ctx) {
   return { findings, refs: Object.keys(current.refs).length, files: files.length, seq: current.seq };
 }
 
-// The deep check. What verifyImport throws is its verdict: a file the clone
-// needed is missing, or the clone failed index-pack, fsck or the comparison
-// with EBS. A failed request to the bucket is an error, not a verdict.
+// What git says when the machine, not the cloned bytes, is the problem
+const LOCAL_TROUBLE = /No space left on device|Permission denied|Too many open files|Read-only file system|Disk quota exceeded|Cannot allocate memory/i;
+
+// The verdict a deep check's failure is about the store: "missing" for a
+// file the store does not have, "mismatch" for bytes or refs that are wrong
+// (the store's CorruptError, which verifyImport also throws when refs, HEAD
+// or a peeled tag differ, or index-pack or fsck failing on the clone). Null
+// for anything else (scratch space, the filesystem, the network, the cache's
+// room): an error in checking, which says nothing about the store.
+function verdict(err) {
+  if (!err) return null;
+  if (err.code === "NOT_FOUND") return "missing";
+  if (err.code === "CORRUPT") return "mismatch";
+
+  const message = String(err.message || "");
+  if (!err.code && /^git (index-pack|fsck)\b/.test(message) && !LOCAL_TROUBLE.test(message)) return "mismatch";
+
+  return null;
+}
+
+// The deep check. A verdict on the store is a finding; any other failure is
+// thrown, so twice() counts it as an error.
 async function deepCheck(ctx, scratchDir) {
   const { gitDir, store, cache } = ctx;
 
@@ -230,8 +249,8 @@ async function deepCheck(ctx, scratchDir) {
     const result = await verifyImport({ store, cache, gitDir, scratchDir });
     return { findings: [], refs: result.refs, objects: result.objects };
   } catch (err) {
-    if (err && err.$metadata) throw err;
-    const kind = err && err.code === "NOT_FOUND" ? "missing" : "mismatch";
+    const kind = verdict(err);
+    if (!kind) throw err;
     return { findings: [{ kind, detail: shadow.scrub(err, ctx) }] };
   }
 }
@@ -326,9 +345,13 @@ let listPrefixes = s3Prefixes;
 // in another process left after the disconnect's two passes (see removeBlog
 // in ./index.js), or a disconnect cut off by a restart. A blog on git is never
 // touched, and is looked up again just before the delete. Only the keys listed
-// are deleted, so anything written after the listing is left.
+// are deleted, so anything written after the listing is left. Resolves with
+// counts, and `findings`: a kind "error" finding for each prefix whose lookup,
+// listing or delete failed, for the alert email. A failed listing of the
+// prefixes themselves rejects.
 async function orphans({ now = Date.now(), minAge = ORPHAN_MIN_AGE_MS } = {}) {
   const counts = { prefixes: 0, live: 0, removed: 0, spared: 0, ignored: 0, errors: 0, deleted: 0 };
+  const findings = [];
 
   for await (const blogID of listPrefixes()) {
     counts.prefixes++;
@@ -374,12 +397,14 @@ async function orphans({ now = Date.now(), minAge = ORPHAN_MIN_AGE_MS } = {}) {
       counts.deleted += keys.length;
       shadow.log({ blog: blogID, op: "remove", outcome: "ok", reason: "orphan", deleted: keys.length });
     } catch (err) {
+      const detail = shadow.scrub(err);
       counts.errors++;
-      shadow.log({ blog: blogID, op: "remove", outcome: "error", reason: "orphan", detail: shadow.scrub(err) });
+      findings.push({ blog: blogID, check: "orphan", kind: "error", detail });
+      shadow.log({ blog: blogID, op: "remove", outcome: "error", reason: "orphan", detail });
     }
   }
 
-  return counts;
+  return { ...counts, findings };
 }
 
 // ---- The daily run --------------------------------------------------------
@@ -426,10 +451,12 @@ async function daily({ now = Date.now(), deepCount = DEEP_SAMPLE, recheckDelayMs
 
   let orphaned;
   try {
-    orphaned = await orphans({ now, minAge: orphanMinAge });
+    const { findings: failed, ...counts } = await orphans({ now, minAge: orphanMinAge });
+    orphaned = counts;
+    findings.push(...failed);
   } catch (err) {
     orphaned = { prefixes: 0, live: 0, removed: 0, spared: 0, ignored: 0, errors: 1, deleted: 0 };
-    findings.push({ blog: "-", check: "orphans", kind: "error", detail: shadow.scrub(err) });
+    findings.push({ blog: "-", check: "orphan", kind: "error", detail: shadow.scrub(err) });
   }
 
   return { blogs: ids.length, sweeps, deepChecked, findings, orphans: orphaned, ms: Date.now() - started };
@@ -450,5 +477,6 @@ module.exports = {
   deepSample,
   DEEP_SAMPLE,
   RECHECK_DELAY_MS,
+  _verdict: verdict,
   _setPrefixLister,
 };
