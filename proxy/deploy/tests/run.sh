@@ -169,6 +169,7 @@ case "$1" in
       if [[ "$*" != *" -in "* ]] && [[ "$served" == *custom* ]]; then
         # a custom domain: the certificate comes from Redis, not the wildcard file
         if [ -n "${FAKE_NO_CUSTOM_CERT:-}" ] && [[ "$served" == *"$FAKE_NO_CUSTOM_CERT"* ]]; then :
+        elif [ -n "${FAKE_MISSING_AFTER_STOP:-}" ] && [[ "$served" == *"$FAKE_MISSING_AFTER_STOP"* ]] && [ -e "$FAKE/stopped" ]; then :
         elif [ -n "${FAKE_CUSTOM_FP_AFTER_STOP:-}" ] && [ -e "$FAKE/stopped" ]; then echo "fp=$FAKE_CUSTOM_FP_AFTER_STOP"
         elif [ "$(cat "$FAKE/serving")" = container ]; then echo "fp=${FAKE_CUSTOM_FP_CONTAINER:-C}"
         elif [[ "$(cat "$FAKE/serving")" = baremetal ]]; then echo "fp=${FAKE_CUSTOM_FP_BAREMETAL:-C}"; fi
@@ -251,17 +252,23 @@ check "no custom-domain certificate to compare: refused (unless skipped)" '[ $RC
 reset units; FAKE_CUSTOM_DOMAINS="" PROXY_SKIP_CERT_SWEEP=1 bluegreen
 check "PROXY_SKIP_CERT_SWEEP=1 skips the comparison" '[ $RC = 0 ] && mentions "not comparing"'
 
-reset units; FAKE_CUSTOM_FP_AFTER_STOP=B PROXY_CERT_RECHECK_DELAY=0 bluegreen
+reset units; FAKE_CUSTOM_FP_AFTER_STOP=B bluegreen
 check "a custom-domain certificate differs after blue was replaced: rolled back" '[ $RC != 0 ] && called "docker start blot-blue-previous" && ! called "docker rm -f blot-blue-previous" && mentions "custom-domain certificates"'
 
 reset units; FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_EXPIRED_DOMAINS="a.custom.test b.custom.test" bluegreen
 check "a custom-domain certificate that has expired and is no longer served is not held against the deploy" '[ $RC = 0 ]'
 
-reset units; FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_STORED_FP=B PROXY_CERT_RECHECK_DELAY=0 bluegreen
-check "a custom-domain certificate renewed during the deploy (now serving what Redis holds): allowed" '[ $RC = 0 ] && mentions "was renewed during the deploy"'
+reset units; FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_STORED_FP=B bluegreen
+check "a custom-domain certificate renewed during the deploy (now serving what Redis holds): allowed" '[ $RC = 0 ] && mentions "was renewed and serves the certificate Redis holds"'
 
-reset units; FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_STORED_FP=D PROXY_CERT_RECHECK_DELAY=0 bluegreen
+reset units; FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_STORED_FP=D bluegreen
 check "a custom-domain certificate that differs from both the old one and Redis: rolled back" '[ $RC != 0 ] && called "docker start blot-blue-previous" && mentions "custom-domain certificates"'
+
+reset units; FAKE_MISSING_AFTER_STOP=b.custom.test FAKE_STORED_FP=B bluegreen
+check "a custom-domain certificate that went missing after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-blue-previous" && mentions "custom-domain certificates"'
+
+reset units; FAKE_CUSTOM_DOMAINS="a.custom.test b.custom.test c.custom.test d.custom.test e.custom.test f.custom.test" FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_STORED_FP=B bluegreen
+check "many custom-domain certificates changed at once (even to what Redis holds): rolled back, not looked up one by one" '[ $RC != 0 ] && called "docker start blot-blue-previous" && mentions "custom-domain certificates changed or went missing (6)" && ! mentions "was renewed"'
 
 # The replacement issues a new certificate for a domain whose stored one had
 # expired, so the fingerprint changes. Expiry is judged before the swap: the

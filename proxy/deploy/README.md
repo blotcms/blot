@@ -114,9 +114,17 @@ would pass every other check. `blue-green.sh` therefore records the certificate 
 running proxy presents for **every** `ssl:<domain>:latest` key in Redis (looked
 up by SNI on `127.0.0.1`), and requires every one to be unchanged on the
 real ports after the swap (it rolls back if one differs). A domain that
-presented no certificate beforehand is not held against the replacement. A
-certificate that legitimately renews in the seconds between the two sweeps
-would fail the check; rerun the script.
+presented no certificate beforehand is not held against the replacement.
+
+A renewal changes a domain's certificate without the replacement being at
+fault: Redis holds the new one at once, but each unit's auto-ssl keeps serving
+the old one from its in-memory cache for up to an hour, so the two units differ
+for that domain and either may answer a sweep. A changed domain therefore
+passes if the certificate it presents after the swap is exactly the one Redis
+holds for it now (`fullchain_pem` in `ssl:<domain>:latest`). A different
+certificate, or none, still fails. This is checked for at most 5 changed
+domains, with one Redis read each and no waiting, so it adds no time to a
+deploy; more than 5 changed at once is taken as a broken replacement and fails.
 
 On a **fresh start** there is no running proxy to compare with, so instead the
 new container must present a certificate for every custom domain in Redis
