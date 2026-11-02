@@ -110,7 +110,7 @@ Implement folder storage limits (include generated files in this amount?). #2258
 
 Bump katex to >= 0.18.2 (low, prototype pollution Dependabot alert).
 
-A few days after turning the sandbox on (BLOT_SANDBOX=1, #2257): is 512 MiB per unit enough, given four jobs share it? There is no data before then: Amazon Linux 2 can't run it. Run unit-mem-summary.sh on the host and read blot-sandbox-blue/green: cgroup peak against the limit, and oom_kill above 0 means jobs were killed. Then `grep "broker: job="` in the unit logs for what failed. If it's tight, raise memory.max in blot-sandbox-cgroup.sh (config/host/host/setup.sh), within #2261's budget, or lower MAX_RUNNING in proxy/unit/sandbox/broker.js.
+A few days after turning the sandbox on (BLOT_SANDBOX=1, #2257): is 512 MiB per unit enough, given four jobs and up to three fetch-image jails share it? There is no data before then: Amazon Linux 2 can't run it. Run unit-mem-summary.sh on the host and read blot-sandbox-blue/green: cgroup peak against the limit, and oom_kill above 0 means jobs were killed. Then `grep "broker: job="` in the unit logs for what failed. If it's tight, raise memory.max in blot-sandbox-cgroup.sh (config/host/host/setup.sh), within #2261's budget, or lower MAX_RUNNING in proxy/unit/sandbox/broker.js.
 ---
 
 Investigate slow creep of green's baseline heap (~40-80MB/day lowest heapUsed in [STATS], never resets until a V8 OOM crash; crashed 13+14 Oct 2026). Leak or unbounded cache? Compare heap snapshots taken hours apart
@@ -540,7 +540,6 @@ Improve images:
   - Implement for thumbnails too
 - Add support for large image tiling and zooming with photoswipe or add a plugin using OpenSeadragon to add Deep Zoom capabilities for huge megapixel images so you could publish them directly to Blot.
 - Extract multiple thumbnails per blog post (as many as there are images) for cooler image grid possibilities. Add a property to entries which lets you list all the images in a post so [Jean](https://mail.google.com/mail/u/0/#inbox/FMfcgzGtwgpcHJMnwFNXtNHWHMlZFFlb)can add them to his sitemap
-- Add size / time limits to image caching function which fetches remote images
 - Image cacher should work for webp, tiff, etc. as well as JPG
 
 Improvements to docs and documentation:
