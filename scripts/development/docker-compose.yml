@@ -33,6 +33,8 @@ services:
       - BLOT_REDIS_HOST=${BLOT_REDIS_HOST:-redis}
       - CONTAINER_NAME=blot-container-green
       - DEBUG=${DEBUG:-}
+      # Survives nodemon restarts, so each one recompiles only what changed
+      - NODE_COMPILE_CACHE=/tmp/node-compile-cache
       # Route bookmark screenshots and remote-image downloads through the
       # egress-filtered airlock container. Comment these two out to have the
       # app hit the network directly (no SSRF protection).
@@ -54,7 +56,7 @@ services:
       - ../../scripts:/usr/src/app/scripts
       - ../../TODO:/usr/src/app/TODO
       - ../../config:/usr/src/app/config
-    command: npx --node-options="--max-old-space-size=${BLOT_MAX_OLD_SPACE_SIZE:-750} --trace-deprecation --require /usr/src/app/scripts/development/fake-dropbox-errors.js --require /usr/src/app/scripts/development/fake-google-drive-errors.js" nodemon /usr/src/app/app/index.js --watch /usr/src/app/app -e js,html,css --ignore /usr/src/app/app/documentation/data --ignore /usr/src/app/app/documentation/output --ignore /usr/src/app/app/views --ignore /usr/src/app/app/views-built  --ignore /usr/src/app/app/clients/*/views --ignore /usr/src/app/app/templates/folders --ignore /usr/src/app/app/templates/source
+    command: npx --node-options="--max-old-space-size=${BLOT_MAX_OLD_SPACE_SIZE:-750} --trace-deprecation --require /usr/src/app/scripts/development/fake-dropbox-errors.js --require /usr/src/app/scripts/development/fake-google-drive-errors.js" nodemon /usr/src/app/app/index.js --watch /usr/src/app/app -e js,html,css --ignore /usr/src/app/app/documentation/data --ignore /usr/src/app/app/documentation/output --ignore /usr/src/app/app/views --ignore /usr/src/app/app/views-built  --ignore /usr/src/app/app/clients/*/views --ignore /usr/src/app/app/templates/folders --ignore /usr/src/app/app/templates/source --ignore "**/tests/**"
 
   redis:
     image: "redis:6.2.12-alpine"

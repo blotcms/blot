@@ -15,8 +15,8 @@ describe("Blot's documentation'", function () {
     await this.checkBrokenLinks();
   });
 
-  it("refreshes generated tool pages after restoring a stale cache", async function () {
-    const toolName = "__documentation-cache-startup-test";
+  it("skips the build until a source changes", async function () {
+    const toolName = "__documentation-build-hash-test";
     const sourcePath = path.join(
       config.blot_directory,
       "app/views/how/tools/text-editors",
@@ -28,58 +28,59 @@ describe("Blot's documentation'", function () {
       toolName,
       "index.html"
     );
-    const originalTmpDirectory = config.tmp_directory;
-    const tmpDirectory = await fs.mkdtemp(
-      path.join(os.tmpdir(), "blot-documentation-cache-")
-    );
-
-    config.tmp_directory = tmpDirectory;
+    const faviconPath = path.join(config.views_directory, "favicon.ico");
 
     try {
-      await fs.outputFile(sourcePath, "<h1>Cache Startup Test Tool</h1>");
-      await fs.remove(generatedPath);
+      await build({ watch: false, skipZip: true });
 
-      const hash = await build.computeViewsHash();
-      const cacheDirectory = path.join(
-        tmpDirectory,
-        "documentation-cache",
-        hash,
-        "views-built"
+      // Nothing changed, so nothing touches the output
+      await fs.remove(faviconPath);
+      await build({ watch: false, skipZip: true });
+      expect(await fs.pathExists(faviconPath)).toBe(false);
+
+      await fs.outputFile(sourcePath, "<h1>Build Hash Test Tool</h1>");
+      await build({ watch: false, skipZip: true });
+
+      expect(await fs.readFile(generatedPath, "utf8")).toContain(
+        "Build Hash Test Tool"
       );
-
-      // Deliberately put the pre-tool-build output under the current hash.
-      // This models a stale/incomplete cache that a startup must not trust.
-      await fs.copy(config.views_directory, cacheDirectory);
-
-      await build({ watch: false });
-
-      const generated = await fs.readFile(generatedPath, "utf8");
-      expect(generated).toContain("Cache Startup Test Tool");
-
-      const refreshedCachePath = path.join(
-        tmpDirectory,
-        "documentation-cache",
-        await build.computeViewsHash(),
-        "views-built",
-        "how/tools",
-        toolName,
-        "index.html"
-      );
-
-      expect(await fs.pathExists(refreshedCachePath)).toBe(true);
-      expect(await fs.readFile(refreshedCachePath, "utf8")).toContain(
-        "Cache Startup Test Tool"
-      );
+      expect(await fs.pathExists(faviconPath)).toBe(true);
     } finally {
       await fs.remove(sourcePath);
       await fs.remove(generatedPath);
-      try {
-        await build.rebuildTools();
-      } finally {
-        config.tmp_directory = originalTmpDirectory;
-        await fs.remove(tmpDirectory);
-      }
+      await build.rebuildTools();
     }
+  });
+
+  it("does not let a build without ZIP files stand in for a full one", async function () {
+    const zipFinished = "generating template ZIP files";
+    const logged = spyOn(console, "log").and.callThrough();
+
+    const hash = path.join(config.views_directory, ".build-hash");
+
+    await fs.remove(hash);
+    await build({ watch: false, skipZip: true });
+    logged.calls.reset();
+
+    const recorded = await fs.readFile(hash, "utf8");
+    expect(recorded).toEqual("no-zip:" + (await build.computeViewsHash()));
+
+    await build({ watch: false });
+
+    const messages = logged.calls.allArgs().map((args) => args.join(" "));
+    expect(messages.some((line) => line.includes(zipFinished))).toBe(true);
+    expect(await fs.readFile(hash, "utf8")).toEqual(
+      await build.computeViewsHash()
+    );
+
+    // ...while a full build satisfies one without them
+    logged.calls.reset();
+    await build({ watch: false, skipZip: true });
+    expect(
+      logged.calls
+        .allArgs()
+        .some((args) => args.join(" ").includes("Generated views are up to date"))
+    ).toBe(true);
   });
 
   it("includes app/templates/source in computeViewsHash", async function () {
@@ -97,16 +98,16 @@ describe("Blot's documentation'", function () {
       const after = await build.computeViewsHash();
 
       // templates.js reads app/templates/source (see loadTemplates), so a
-      // change there must change the fingerprint used to decide whether an
-      // existing dev cache is still valid. If this doesn't hold, a stale
-      // cache gets restored on top of the change on the next build.
+      // change there must change the fingerprint used to decide whether the
+      // generated views are up to date. If this doesn't hold, the next build
+      // is skipped on top of the change.
       expect(after).not.toEqual(before);
     } finally {
       await fs.outputFile(readmePath, original);
     }
   });
 
-  it("rebuilds template pages instead of restoring a stale cache when template source changes", async function () {
+  it("rebuilds template pages when template source changes", async function () {
     const readmePath = path.join(
       config.blot_directory,
       "app/templates/source/text/README"
@@ -124,14 +125,14 @@ describe("Blot's documentation'", function () {
     config.tmp_directory = tmpDirectory;
 
     try {
-      // Populate a cache entry for the current (unmodified) source.
+      // Record the fingerprint of the current (unmodified) source.
       await build({ watch: false, skipZip: true });
 
       // Change an input that only templates.js reads. This models editing
       // a template's README, or running templates.js directly for fast
       // local iteration (a documented pattern) - either way, the change
-      // must survive the next full build rather than being reverted by a
-      // cache restore keyed on a fingerprint that never noticed it.
+      // must reach the output on the next full build rather than being
+      // missed by a fingerprint that never noticed it.
       await fs.outputFile(readmePath, original + "\nMARKER_README_CHANGE\n");
 
       await build({ watch: false, skipZip: true });
@@ -206,15 +207,6 @@ describe("Blot's documentation'", function () {
       await build({ watch: false, skipZip: true });
 
       expect(await fs.pathExists(probeBuilt)).toBe(false);
-      const cachedProbe = path.join(
-        tmpDirectory,
-        "documentation-cache",
-        await build.computeViewsHash(),
-        "views-built",
-        "templates",
-        probeName
-      );
-      expect(await fs.pathExists(cachedProbe)).toBe(false);
     } finally {
       await fs.remove(probeSource);
       await fs.remove(probeBuilt);
@@ -223,7 +215,7 @@ describe("Blot's documentation'", function () {
     }
   });
 
-  it("overlapping builds do not crash or corrupt the cache", async function () {
+  it("overlapping builds do not crash", async function () {
     const originalTmpDirectory = config.tmp_directory;
     const tmpDirectory = await fs.mkdtemp(
       path.join(os.tmpdir(), "blot-documentation-cache-")
@@ -231,23 +223,12 @@ describe("Blot's documentation'", function () {
 
     config.tmp_directory = tmpDirectory;
 
-    const snapshot = (dir) =>
-      recursiveReadDir(dir)
-        .map((file) => {
-          const stat = fs.statSync(file);
-          return file.slice(dir.length + 1) + ":" + stat.size;
-        })
-        .sort();
-
-    const cacheSnapshot = async () => {
-      const cacheDir = path.join(
-        tmpDirectory,
-        "documentation-cache",
-        await build.computeViewsHash(),
-        "views-built"
+    const expectFingerprintRecorded = async () => {
+      const recorded = await fs.readFile(
+        path.join(config.views_directory, ".build-hash"),
+        "utf8"
       );
-      expect(await fs.pathExists(cacheDir)).toBe(true);
-      expect(snapshot(cacheDir)).toEqual(snapshot(config.views_directory));
+      expect(recorded).toEqual("no-zip:" + (await build.computeViewsHash()));
     };
 
     const runChildBuild = () =>
@@ -288,6 +269,8 @@ describe("Blot's documentation'", function () {
       });
 
     try {
+      await fs.remove(path.join(config.views_directory, ".build-hash"));
+
       // A lock left by a dead process must not wedge the next build.
       let deadPid = null;
       for (let pid = 200000; pid < 900000; pid += 997) {
@@ -313,13 +296,12 @@ describe("Blot's documentation'", function () {
       const rejected = overlapped.filter((result) => result.status === "rejected");
       if (rejected.length) throw rejected[0].reason;
 
-      await cacheSnapshot();
+      await expectFingerprintRecorded();
 
       // A second process (nodemon restart, or a manual build while the
-      // server is rebuilding) shares the cache directory and used to hit
-      // ENOTEMPTY inside fs.rm while the other build was still copying.
+      // server is rebuilding) waits for the first
       await Promise.all([runChildBuild(), runChildBuild()]);
-      await cacheSnapshot();
+      await expectFingerprintRecorded();
     } finally {
       config.tmp_directory = originalTmpDirectory;
       await fs.remove(tmpDirectory);
@@ -379,8 +361,8 @@ describe("Blot's documentation'", function () {
     expect(batches[batches.length - 1].sort()).toEqual(["a.html", "b.html", "c.html"]);
   });
 
-  it("updates changed tool pages and refreshes their cache", async function () {
-    const toolName = "__documentation-cache-change-test";
+  it("updates changed tool pages", async function () {
+    const toolName = "__documentation-tool-change-test";
     const sourcePath = path.join(
       config.blot_directory,
       "app/views/how/tools/text-editors",
@@ -400,31 +382,17 @@ describe("Blot's documentation'", function () {
     config.tmp_directory = tmpDirectory;
 
     try {
-      await fs.outputFile(sourcePath, "<h1>Cache Change Test Tool</h1>");
+      await fs.outputFile(sourcePath, "<h1>Change Test Tool</h1>");
       await build.rebuildTools();
 
       await fs.outputFile(
         sourcePath,
-        "<h1>Updated Cache Change Test Tool</h1>"
+        "<h1>Updated Change Test Tool</h1>"
       );
       await build.rebuildTools();
 
       expect(await fs.readFile(generatedPath, "utf8")).toContain(
-        "Updated Cache Change Test Tool"
-      );
-
-      const refreshedCachePath = path.join(
-        tmpDirectory,
-        "documentation-cache",
-        await build.computeViewsHash(),
-        "views-built",
-        "how/tools",
-        toolName,
-        "index.html"
-      );
-
-      expect(await fs.readFile(refreshedCachePath, "utf8")).toContain(
-        "Updated Cache Change Test Tool"
+        "Updated Change Test Tool"
       );
     } finally {
       await fs.remove(sourcePath);

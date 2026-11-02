@@ -1,20 +1,20 @@
 const config = require("config");
 const { join, dirname, basename, extname } = require("path");
 const fs = require("fs-extra");
-const crypto = require("crypto");
 const chokidar = require("chokidar");
 const html = require("./html");
 const favicon = require("./favicon");
 const recursiveReadDir = require("../../helper/recursiveReadDirSync");
 const clfdate = require("helper/clfdate");
+const fingerprintFiles = require("helper/fingerprintFiles");
 
 const SOURCE_DIRECTORY = join(__dirname, "../../views");
 const DESTINATION_DIRECTORY = config.views_directory;
 
 // templates.js renders its output from this directory as well as
 // SOURCE_DIRECTORY (see templatesSourceDirectory in templates.js). It must
-// be part of the cache's fingerprint below, or a change here goes
-// undetected and a stale cache gets restored on top of it.
+// be part of the fingerprint below, or a change here goes undetected and
+// the build is skipped on top of it.
 const TEMPLATES_SOURCE_DIRECTORY = join(__dirname, "../../templates/source");
 
 const buildCSS = require("./css")({
@@ -32,47 +32,37 @@ const templates = require("./templates");
 const generateThumbnail = require("./generate-thumbnail");
 const gitCommits = require("../tools/git-commits").build;
 
-// Cache-related functions (development only).
+// Build fingerprint (development only).
+//
+// The generated views stay on disk between restarts, so a restart whose
+// sources are unchanged has nothing to build. Each build records a fingerprint
+// of its inputs beside its output, and the next one skips the work when it
+// matches. It lives with the output, not in data/tmp, because worktree previews
+// share data/ but each has its own views-built.
 //
 // Decision on partial/targeted build helpers (e.g. running templates.js
 // directly for fast local iteration, or the "templates/" branch of the
-// watcher handler below): they are not made to update the cache
-// themselves, and the cache-restore path does not try to detect drift by
-// inspecting the destination. Instead, computeViewsHash() is required to
-// cover every input a helper reads from, so the hash is a complete
-// fingerprint of the build - a given hash can only ever correspond to one
-// possible output. Restoring a cache entry for a matching hash is then
-// always correct, and running a helper directly can't leave the
-// destination in a state a full rebuild wouldn't already produce for that
-// same hash. If a new build script starts reading from another directory,
-// that directory needs to be added to computeViewsHash() (or the script
-// added to buildScripts below), the same way TEMPLATES_SOURCE_DIRECTORY was.
-async function hashDirectory(hash, directory) {
-  if (!(await fs.pathExists(directory))) return;
+// watcher handler below): they do not update the fingerprint themselves.
+// Instead, computeViewsHash() is required to cover every input a helper
+// reads from, so a helper's change only ever causes a rebuild. If a new build
+// script starts reading from another directory, that directory needs to be
+// added to computeViewsHash(), the same way TEMPLATES_SOURCE_DIRECTORY was.
+const BUILD_HASH_PATH = join(DESTINATION_DIRECTORY, ".build-hash");
 
-  const files = recursiveReadDir(directory);
+// A build without the template ZIPs can't stand in for one with them, so a
+// fingerprint from such a build (the specs') only satisfies another.
+const NO_ZIP_PREFIX = "no-zip:";
 
-  for (const file of files) {
-    const stat = await fs.stat(file);
-    const relativePath = file.slice(directory.length + 1);
-    hash.update(relativePath);
-    hash.update(stat.mtime.getTime().toString());
-    hash.update(stat.size.toString());
-  }
-}
+function computeViewsHash() {
+  return fingerprintFiles([
+    // All files in the views directory
+    SOURCE_DIRECTORY,
 
-async function computeViewsHash() {
-  const hash = crypto.createHash("sha256");
+    // templates.js also reads from here (see loadTemplates in templates.js),
+    // so it must affect the fingerprint too.
+    TEMPLATES_SOURCE_DIRECTORY,
 
-  // Hash all files in the views directory
-  await hashDirectory(hash, SOURCE_DIRECTORY);
-
-  // templates.js also reads from here (see loadTemplates in templates.js),
-  // so it must affect the cache's fingerprint too.
-  await hashDirectory(hash, TEMPLATES_SOURCE_DIRECTORY);
-
-  // Also hash build scripts that affect the output
-  const buildScripts = [
+    // Also the build scripts that affect the output
     join(__dirname, "css.js"),
     join(__dirname, "js.js"),
     join(__dirname, "html.js"),
@@ -82,81 +72,22 @@ async function computeViewsHash() {
     join(__dirname, "../tools/git-commits.js"),
     join(__dirname, "../tools/hljs.js"),
     join(__dirname, "../tools/finder/build.js"),
-  ];
-
-  for (const script of buildScripts) {
-    try {
-      if (await fs.pathExists(script)) {
-        const stat = await fs.stat(script);
-        const relativePath = script.slice(__dirname.length + 1);
-        hash.update(relativePath);
-        hash.update(stat.mtime.getTime().toString());
-        hash.update(stat.size.toString());
-      }
-    } catch (e) {
-      // Ignore errors for missing files
-    }
-  }
-
-  return hash.digest("hex");
+  ]);
 }
 
-async function restoreFromCache(cacheDir) {
-  if (fs.pathExistsSync(cacheDir)) {
-    console.log(clfdate(), "Restoring documentation from cache");
-    fs.copySync(cacheDir, DESTINATION_DIRECTORY);
-    console.log(clfdate(), "Cache restored");
-    return true;
-  }
-  return false;
+async function isUpToDate(hash, skipZip) {
+  const recorded = await fs.readFile(BUILD_HASH_PATH, "utf8").catch(() => "");
+  return recorded === hash || (skipZip && recorded === NO_ZIP_PREFIX + hash);
 }
 
-async function saveToCache(cacheDir) {
-  await fs.ensureDir(cacheDir);
-  // A cache directory may already exist when a watcher refreshes a cache
-  // with the same source hash. Remove files from the previous snapshot so
-  // generated output cannot remain stale in the refreshed cache.
-  await fs.emptyDir(cacheDir);
-  await fs.copy(DESTINATION_DIRECTORY, cacheDir);
-  console.log(clfdate(), "Documentation cache saved");
+async function recordBuildHash(hash, skipZip = false) {
+  await fs.outputFile(BUILD_HASH_PATH, (skipZip ? NO_ZIP_PREFIX : "") + hash);
 }
 
-async function cleanOldCaches(cacheRoot, currentHash) {
-  try {
-    const entries = await fs.readdir(cacheRoot);
-    for (const entry of entries) {
-      if (entry !== currentHash) {
-        const oldCachePath = join(cacheRoot, entry);
-        await fs.remove(oldCachePath);
-        console.log(clfdate(), "Removed old cache:", entry);
-      }
-    }
-  } catch (e) {
-    // Ignore errors when cleaning old caches
-  }
-}
-
-async function refreshDevelopmentCache() {
-  if (config.environment !== "development") return null;
-
-  const hash = await computeViewsHash();
-  const cacheRoot = join(config.tmp_directory, "documentation-cache");
-  const cacheDir = join(cacheRoot, hash, "views-built");
-
-  await saveToCache(cacheDir);
-  await cleanOldCaches(cacheRoot, hash);
-
-  return { hash, cacheDir };
-}
-
-// Two builds that share a cache directory (same views hash) crash in
-// saveToCache. fs-extra's emptyDir/remove is Node's fs.rm, and fs.rm's
-// rmdir throws ENOTEMPTY when the other build is still copying files into
-// that directory. cleanOldCaches swallows the error; saveToCache does not,
-// so the rejection kills the process (nodemon restart overlapping a build,
-// or two build() calls). The same overlap also deletes files out from under
-// fs.copy (ENOENT) and leaves a partial cache that a later restore trusts.
-// A mkdir lock covers both a second call in this process and a second process.
+// Builds don't overlap: a second call in this process, or a second process
+// (a nodemon restart overlapping a build, or a manual build while the server is
+// rebuilding), would write the same files as the first.
+// A mkdir lock covers both.
 const BUILD_LOCK_WAIT_MS = 50;
 const BUILD_LOCK_TIMEOUT_MS = 10 * 60 * 1000;
 const BUILD_LOCK_FRESH_MS = 1000;
@@ -381,12 +312,6 @@ function withDocumentationBuildLock(task) {
   });
 }
 
-async function rebuildTools() {
-  console.log("Rebuilding tools");
-  await tools();
-  await refreshDevelopmentCache();
-}
-
 async function logBuildStep(name, task) {
   const startedAt = Date.now();
   console.log(clfdate(), "Documentation build:", "Starting", name);
@@ -418,8 +343,9 @@ async function logBuildStep(name, task) {
   }
 }
 
+// Resolves to false if the file could not be built
 const handle =
-  (initial = false, cacheDir = null, options = {}) =>
+  (initial = false) =>
   async (path) => {
     try {
       if (path.endsWith("README")) {
@@ -428,7 +354,8 @@ const handle =
 
       if (path.includes("tools/")) {
         if (initial) return;
-        await rebuildTools();
+        console.log("Rebuilding tools");
+        await tools();
         return;
       }
 
@@ -481,43 +408,29 @@ const handle =
           join(DESTINATION_DIRECTORY, path)
         );
       }
-
-      // After partial rebuild, update cache if in development. A watcher
-      // batch defers this so one burst does not copy the whole output once
-      // per file.
-      if (!initial && !options.deferCache && config.environment === "development") {
-        await refreshDevelopmentCache();
-      }
     } catch (e) {
       console.error(e);
+      return false;
     }
   };
 
 async function buildDocumentation({ watch = false, skipZip = false } = {}) {
   const now = Date.now();
 
-  let cacheDir = null;
-  let cacheRestored = false;
-
-  // Cache logic (development only)
+  // Fingerprint (development only)
   let hash = null;
+  let upToDate = false;
 
   if (config.environment === "development") {
     hash = await logBuildStep(
       "hashing views and build scripts",
       computeViewsHash
     );
-    const cacheRoot = join(config.tmp_directory, "documentation-cache");
-    cacheDir = join(cacheRoot, hash, "views-built");
-
-    // Try to restore from cache before expensive build steps
-    cacheRestored = await logBuildStep("checking documentation cache", () =>
-      restoreFromCache(cacheDir)
-    );
+    upToDate = await isUpToDate(hash, skipZip);
     console.log(
       clfdate(),
       "Documentation build:",
-      cacheRestored ? "Documentation cache hit" : "Documentation cache miss"
+      upToDate ? "Generated views are up to date" : "Generated views are stale"
     );
   }
 
@@ -532,16 +445,11 @@ async function buildDocumentation({ watch = false, skipZip = false } = {}) {
     );
   }
 
-  // Tool pages are generated from a directory of source files, so a cache
-  // snapshot can be stale even when its source hash matches. Refresh this
-  // generated subtree after restoring a development cache before starting
-  // the watcher. The rest of the documentation can still use the cache.
-  if (cacheRestored) {
-    await logBuildStep("rebuilding tool pages from cache", rebuildTools);
-  }
+  // Only run expensive build steps if the output is stale
+  if (!upToDate) {
+    // A build cut short must not pass for a finished one
+    await fs.remove(BUILD_HASH_PATH);
 
-  // Only run expensive build steps if cache was not restored
-  if (!cacheRestored) {
     if (!skipZip) {
       await logBuildStep("generating template ZIP files", zip);
     }
@@ -557,9 +465,9 @@ async function buildDocumentation({ watch = false, skipZip = false } = {}) {
       path.slice(SOURCE_DIRECTORY.length + 1)
     );
 
-    const initialHandler = handle(true, cacheDir);
+    const initialHandler = handle(true);
 
-    await logBuildStep(
+    const copied = await logBuildStep(
       `copying ${paths.length} documentation source files`,
       () => Promise.all(paths.map(initialHandler))
     );
@@ -591,11 +499,12 @@ async function buildDocumentation({ watch = false, skipZip = false } = {}) {
       console.error(e);
     }
 
-    // Save to cache after full rebuild (development only)
-    await logBuildStep(
-      "saving documentation build cache",
-      refreshDevelopmentCache
-    );
+    // The hash from before the build: a source edited during it (the watcher
+    // isn't running yet) then makes the next start build again. A file that
+    // failed does the same, rather than staying broken until it next changes.
+    if (config.environment === "development" && !copied.includes(false)) {
+      await recordBuildHash(hash, skipZip);
+    }
   }
 
   console.log(
@@ -606,15 +515,17 @@ async function buildDocumentation({ watch = false, skipZip = false } = {}) {
   );
 
   if (watch) {
-    const handler = handle(false, cacheDir, { deferCache: true });
+    const handler = handle();
     // One queue for the whole burst. Each chokidar event used to start its
     // own lock wait, so a branch switch could time out later files with
     // ELOCKED before they were rebuilt.
     const enqueue = createWatchQueue(async (batch) => {
       await withDocumentationBuildLock(async () => {
-        for (const filePath of batch) await handler(filePath);
-        if (config.environment === "development") {
-          await refreshDevelopmentCache();
+        await fs.remove(BUILD_HASH_PATH);
+        const results = [];
+        for (const filePath of batch) results.push(await handler(filePath));
+        if (config.environment === "development" && !results.includes(false)) {
+          await recordBuildHash(await computeViewsHash(), skipZip);
         }
       });
     });
@@ -683,5 +594,5 @@ if (require.main === module) {
 }
 
 module.exports.computeViewsHash = computeViewsHash;
-module.exports.rebuildTools = () => withDocumentationBuildLock(rebuildTools);
+module.exports.rebuildTools = () => withDocumentationBuildLock(tools);
 module.exports.createWatchQueue = createWatchQueue;
