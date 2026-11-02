@@ -9,6 +9,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY="$HERE/.."
 T="$(mktemp -d)"
+REAL_OPENSSL="$(command -v openssl)"   # before the fakes go on the PATH
 trap 'rm -rf "$T"' EXIT
 export FAKE="$T/fake"
 mkdir -p "$T/bin" "$T/certs" "$T/disk-cache" "$T/logs" "$FAKE"
@@ -129,13 +130,14 @@ fi
 if [[ " $* " == *" get blot:openresty:ssl:pem "* ]]; then echo "${FAKE_REDIS_WILDCARD_PEM:-}"; exit; fi
 if [ "$*" = "-h 10.0.0.5 --raw" ] || [ "$*" = "-s /run/blot/redis/redis.sock --raw" ]; then
   # common.sh's expired_cert_domains: "get ssl:<domain>:latest" lines on stdin,
-  # one stored certificate JSON line back for each
+  # one stored certificate JSON line back for each (also common.sh's
+  # stored_cert_fps: the fullchain_pem is read from it)
   while read -r _ key; do
     d=${key#ssl:}; d=${d%:latest}
     if [[ " ${FAKE_EXPIRED_DOMAINS:-} " == *" $d "* ]] && { [ -z "${FAKE_EXPIRED_ONLY_AT_BASELINE:-}" ] || [ ! -e "$FAKE/stopped" ]; }; then
       echo '{"expiry":1}'
     else
-      echo '{"expiry":99999999999}'
+      echo '{"expiry":99999999999,"fullchain_pem":"STORED-CERT\nline"}\'
     fi
   done
   exit
@@ -160,10 +162,13 @@ case "$1" in
     if [[ "$*" == *-pubkey* ]]; then echo pub; exit; fi
     if [[ "$*" == *-fingerprint* ]]; then
       [[ "$*" == *" -in "* ]] || served="$(cat)"
+      # common.sh's stored_cert_fp: the certificate Redis holds for a domain
+      if [[ "$served" == *STORED-CERT* ]]; then [ -n "${FAKE_STORED_FP:-}" ] && echo "fp=$FAKE_STORED_FP"; exit; fi
       if [[ "$*" != *" -in "* ]] && [[ "$served" == *custom* ]]; then
         # a custom domain: the certificate comes from Redis, not the wildcard file
         if [ -n "${FAKE_NO_CUSTOM_CERT:-}" ] && [[ "$served" == *"$FAKE_NO_CUSTOM_CERT"* ]]; then :
-        elif [ -n "${FAKE_CUSTOM_FP_AFTER_STOP:-}" ] && [ -e "$FAKE/stopped" ]; then echo "fp=$FAKE_CUSTOM_FP_AFTER_STOP"
+        elif [ -n "${FAKE_MISSING_AFTER_STOP:-}" ] && [[ "$served" == *"$FAKE_MISSING_AFTER_STOP"* ]] && [ -e "$FAKE/stopped" ]; then :
+        elif [ -n "${FAKE_CUSTOM_FP_AFTER_STOP:-}" ] && [ -e "$FAKE/stopped" ] && { [ -z "${FAKE_CHANGED_PATTERN:-}" ] || [[ "$served" == *$FAKE_CHANGED_PATTERN* ]]; }; then echo "fp=$FAKE_CUSTOM_FP_AFTER_STOP"
         elif [ "$(cat "$FAKE/serving")" = container ]; then echo "fp=${FAKE_CUSTOM_FP_CONTAINER:-C}"
         elif [[ "$(cat "$FAKE/serving")" = baremetal ]]; then echo "fp=${FAKE_CUSTOM_FP_BAREMETAL:-C}"; fi
         exit
@@ -250,6 +255,28 @@ check "a custom-domain certificate differs after blue was replaced: rolled back"
 
 reset units; FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_EXPIRED_DOMAINS="a.custom.test b.custom.test" bluegreen
 check "a custom-domain certificate that has expired and is no longer served is not held against the deploy" '[ $RC = 0 ]'
+
+reset units; FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_STORED_FP=B bluegreen
+check "a custom-domain certificate renewed during the deploy (now serving what Redis holds): allowed" '[ $RC = 0 ] && mentions "was renewed and serves the certificate Redis holds"'
+
+reset units; FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_STORED_FP=D bluegreen
+check "a custom-domain certificate that differs from both the old one and Redis: rolled back" '[ $RC != 0 ] && called "docker start blot-blue-previous" && mentions "custom-domain certificates"'
+
+reset units; FAKE_MISSING_AFTER_STOP=b.custom.test FAKE_STORED_FP=B bluegreen
+check "a custom-domain certificate that went missing after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-blue-previous" && mentions "custom-domain certificates"'
+
+MANY="$(seq -f 'd%g.custom.test' 1 100 | tr '\n' ' ')"
+reset units; FAKE_CUSTOM_DOMAINS="$MANY" FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_CHANGED_PATTERN='d[0-9].custom.test' FAKE_STORED_FP=B bluegreen
+check "9 of 100 custom-domain certificates renewed (now what Redis holds): allowed" '[ $RC = 0 ] && mentions "d1.custom.test was renewed"'
+
+reset units; FAKE_CUSTOM_DOMAINS="$MANY" FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_CHANGED_PATTERN='d[0-9].custom.test' FAKE_STORED_FP=A bluegreen
+check "9 of 100 custom-domain certificates changed to what Redis does not hold: rolled back" '[ $RC != 0 ] && called "docker start blot-blue-previous" && mentions "custom-domain certificates changed or went missing (9)"'
+
+reset units; FAKE_CUSTOM_DOMAINS="$MANY" FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_CHANGED_PATTERN='d[1-2][0-9].custom.test' FAKE_STORED_FP=B bluegreen
+check "20 of 100 custom-domain certificates renewed: allowed" '[ $RC = 0 ] && mentions "d15.custom.test was renewed"'
+
+reset units; FAKE_CUSTOM_DOMAINS="$MANY" FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_STORED_FP=B bluegreen
+check "all 100 custom-domain certificates changed (even to what Redis holds): rolled back without looking them up" '[ $RC != 0 ] && called "docker start blot-blue-previous" && mentions "custom-domain certificates changed or went missing (100)" && ! mentions "was renewed"'
 
 # The replacement issues a new certificate for a domain whose stored one had
 # expired, so the fingerprint changes. Expiry is judged before the swap: the
@@ -690,6 +717,25 @@ check "one unit unhealthy, the other still starting: it is left alone" '! called
 reset units; : > "$T/lock"; FAKE_LOCK_HELD=1 FAKE_UNHEALTHY_LIST="blot-blue blot-blue-previous blot-blue-airlock blot-neutral" health; rm -f "$T/lock"
 check "a deploy holds the lock: the units and -previous are left alone, the airlock and old Node containers are not" \
   '! called "docker restart blot-blue$" && ! called "docker restart blot-blue-previous" && called "docker restart blot-blue-airlock" && called "docker restart blot-neutral"'
+
+echo "stored certificates (real openssl)"
+# A certificate as auto-ssl's lua-cjson stores it: newlines as \n and every /
+# as \/. The base64 must contain a / for this to mean anything.
+mkdir -p "$T/real"; ln -sf "$REAL_OPENSSL" "$T/real/openssl"
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  "$REAL_OPENSSL" req -x509 -newkey rsa:2048 -nodes -keyout "$T/real/k.pem" -out "$T/real/c.pem" -days 1 -subj /CN=a.custom.test 2>/dev/null
+  grep -q / "$T/real/c.pem" && break
+done
+REAL_FP="$("$REAL_OPENSSL" x509 -in "$T/real/c.pem" -noout -fingerprint -sha256 | cut -d= -f2)"
+REAL_JSON="{\"expiry\":99999999999,\"fullchain_pem\":\"$(awk '{ printf "%s\\n", $0 }' "$T/real/c.pem" | sed 's#/#\\/#g')\"}"
+stored_fps() ( # the real stored_cert_fps from common.sh, a fake Redis holding REAL_JSON, the real openssl
+  PATH="$T/real:$PATH"
+  eval "$(sed -n '/^stored_cert_fps()/,/^}/p' "$DEPLOY/common.sh")"
+  redis_cli() { while read -r _; do printf '%s\n' "$REAL_JSON"; done; }
+  printf 'a.custom.test\n' | stored_cert_fps
+)
+check "the test certificate's base64 contains a /" 'grep -q / "$T/real/c.pem" && [[ "$REAL_JSON" == *"\\/"* ]]'
+check "a real certificate stored as cjson writes it: its fingerprint is computed and matches the one served" '[ -n "$REAL_FP" ] && [ "$(stored_fps)" = "a.custom.test $REAL_FP" ]'
 
 echo "$pass passed, $failed failed"
 [ "$failed" = 0 ]
