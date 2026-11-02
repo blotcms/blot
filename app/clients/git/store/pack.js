@@ -15,9 +15,11 @@ const TYPES = { 1: "commit", 2: "tree", 3: "blob", 4: "tag" };
 const OFS_DELTA = 6;
 const REF_DELTA = 7;
 
-// The first read of an entry takes its header and, for most commits and trees,
-// all its data. After that reads grow, so a large entry is a handful of reads.
-const FIRST_READ = 4096;
+// The first read of an entry takes its header and, for commits, trees and most
+// text files, all its data. After that reads grow, so a large entry is a
+// handful of reads. Over S3 a round trip costs far more than the bytes: at 60
+// MB/s, 32 KiB is half a millisecond, where a second read is tens of them.
+const FIRST_READ = 32 * 1024;
 const NEXT_READ = 64 * 1024;
 const MAX_READ = 1024 * 1024;
 
@@ -75,14 +77,43 @@ function isDelta(entry) {
   return entry.baseOffset !== undefined || entry.baseOid !== undefined;
 }
 
+// The packs of each store found the size their manifest says, by key. Bounded:
+// the oldest are forgotten, which only costs a HEAD.
+const MAX_CHECKED = 4096;
+const sizes = new WeakMap();
+function checkedSizes(store) {
+  if (!sizes.has(store)) sizes.set(store, new Map());
+  return sizes.get(store);
+}
+
+function noteSize(store, key, size) {
+  const found = checkedSizes(store);
+  found.delete(key);
+  found.set(key, size);
+  if (found.size > MAX_CHECKED) found.delete(found.keys().next().value);
+}
+
 // Opens a pack for reading entries. `size` is the pack's length (from the
 // manifest), which is how a truncated pack is told from a whole one.
-function openPack({ store, key, size, name }) {
+//
+// `recent` (optional) is a small shared LRU of the first reads of entries
+// (see recentReads), so an entry opened again soon (its type, then its data; a
+// delta's size, then the delta) is not fetched again.
+function openPack({ store, key, size, name, recent = null }) {
   const end = size - TRAILER;
 
+  function firstRead(offset) {
+    if (!recent) return readRange(offset, FIRST_READ);
+    // A read which came back short is not kept: it is an error, and trying
+    // again should ask the store again
+    const whole = Math.min(FIRST_READ, size - offset);
+    return recent.get(key + ":" + offset, () => readRange(offset, FIRST_READ), (bytes) => bytes.length === whole);
+  }
+
   // The pack in the store must be the length the manifest says. Checked once
-  // per pack opened, alongside the first read.
-  let sized = null;
+  // per pack in this process, alongside the first read: a pack never changes,
+  // so one found the right size stays so.
+  let sized = checkedSizes(store).get(key) === size ? Promise.resolve() : null;
   function checkSize() {
     if (!sized) {
       sized = store
@@ -90,6 +121,7 @@ function openPack({ store, key, size, name }) {
         .then((found) => {
           if (!found) throw new NotFoundError(name + " is not in the store");
           if (found.size !== size) throw new CorruptError(name + " is " + found.size + " bytes; the manifest says " + size);
+          noteSize(store, key, size);
         })
         .catch((err) => {
           sized = null;
@@ -128,7 +160,7 @@ function openPack({ store, key, size, name }) {
       throw new CorruptError(name + " has no entry at offset " + offset);
     }
 
-    const [first] = await Promise.all([readRange(offset, FIRST_READ), checkSize()]);
+    const [first] = await Promise.all([firstRead(offset), checkSize()]);
     const entry = parseHeader(first.subarray(0, MAX_HEADER), offset);
     if (entry.size > maxSize) throw new TooLargeError("Pack entry at " + offset + " is larger than " + maxSize + " bytes");
 
@@ -160,4 +192,28 @@ function openPack({ store, key, size, name }) {
   return { name, size, open, read };
 }
 
-module.exports = { openPack, isDelta, parseHeader };
+// The first reads of the last `max` entries opened, as promises, for packs to
+// share (openPack's `recent`). A read which fails, or which `keep` says is not
+// to be kept, is forgotten. Memory is at most `max` reads of FIRST_READ.
+function recentReads(max = 64) {
+  const reads = new Map();
+  return {
+    get(name, fetch, keep = () => true) {
+      let read = reads.get(name);
+      if (read) {
+        reads.delete(name);
+      } else {
+        read = fetch();
+        const forget = () => reads.get(name) === read && reads.delete(name);
+        read.then((bytes) => keep(bytes) || forget(), forget);
+      }
+      reads.set(name, read);
+      if (reads.size > max) reads.delete(reads.keys().next().value);
+      return read;
+    },
+  };
+}
+
+// `noteSize(store, key, size)` is for a caller which has just uploaded the pack
+// itself and seen the upload succeed, so it is known to be that size
+module.exports = { openPack, isDelta, parseHeader, noteSize, recentReads };

@@ -736,11 +736,13 @@ describe("git store commit", function () {
       const emptyCache = createCache({ dir: path.join(dir, "cold-cache"), maxBytes: 64 * MiB });
       const cold = await measure(() => commit({ store, cache: emptyCache, lock, path: "/posts/2024/cold.txt", contents: Buffer.from("Cold\n") }));
 
-      // The manifest, then the index of the one pack and the entries of the
-      // commit and the three trees. None of it grows with the history.
+      // The manifest (the hint, then a HEAD and the manifest together), the
+      // index of the one pack read whole (one GET), a HEAD for the pack, and
+      // the entries of the commit and the three trees: 9, where reading the
+      // index by range made it 14. None of it grows with the history.
       expect(cold.reads).toBeGreaterThan(0);
       expect(cold.lists).toBe(0);
-      expect(cold.reading).toBeLessThanOrEqual(warm ? 14 : 20); // without a cache, index parts are fetched again
+      expect(cold.reading).toBeLessThanOrEqual(warm ? 9 : 20); // without a cache, index parts are fetched again
       expect(cold.writing).toBe(7);
 
       if (!warm) return;

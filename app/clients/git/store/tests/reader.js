@@ -3,6 +3,7 @@
 const fx = require("./helpers/fixture");
 const timeout = require("./helpers/timeout");
 const createReader = require("../reader");
+const { chooseWhole } = require("../idx");
 const createCache = require("../cache");
 const createMemoryStore = require("../objectStore/memory");
 const { CorruptError, TooLargeError } = require("../errors");
@@ -104,16 +105,27 @@ describe("git store reader", function () {
       const cache = createCache({ dir: workDir + "/cache-c", maxBytes: 50 * 1024 * 1024 });
       const { store, reader } = await readerFor(packs, { cache });
       const commit = fx.listEntries(packs[0]).find((e) => e.type === "commit" && e.depth === 0);
-      const before = store.stats.reads;
+      const requests = () => store.stats.reads + store.stats.gets + store.stats.heads;
+      const before = requests();
 
+      // The index whole (one GET), the pack's HEAD and the entry: 3, where
+      // reading the index by range (and its HEAD) made it 5
       await reader.read(commit.oid);
-      const first = store.stats.reads - before;
-      expect(first).toBeLessThanOrEqual(5);
+      expect(requests() - before).toBe(3);
 
-      // The same commit again needs only its own bytes
-      const second = store.stats.reads;
+      // The same commit again is in the cache of objects
+      const second = requests();
       await reader.read(commit.oid);
-      expect(store.stats.reads - second).toBeLessThanOrEqual(1);
+      expect(requests() - second).toBe(0);
+
+      // And so is the index, for a reader opened later (the cache needs
+      // zlib.crc32, Node 22, to keep anything)
+      if (!require("zlib").crc32) return;
+      const next = createReader({ store, cache, packs: reader.packs.map((name) => ({ name, size: packs[0].pack.length, idxSize: packs[0].idx.length, objects: 0 })) });
+      const tree = fx.listEntries(packs[0]).find((e) => e.type === "tree" && e.depth === 0);
+      const third = requests();
+      await next.read(tree.oid);
+      expect(store.stats.gets + store.stats.heads + store.stats.reads - third).toBe(1);
     });
 
     it("streams an object stored whole in small chunks", async function () {
@@ -328,4 +340,33 @@ describe("git store reader", function () {
     });
   });
 
+  describe("which indexes are read whole", function () {
+    const MiB = 1024 * 1024;
+    const pack = (n, idxSize) => ({ name: "pack-" + String(n).padStart(40, "0"), idxSize });
+    const names = (set) => [...set].map((name) => Number(name.slice(5)));
+
+    it("reads every index whole when they fit, and none over the size of one", function () {
+      const packs = [pack(1, 3 * MiB), pack(2, 5 * MiB), pack(3, 1024)];
+      expect(names(chooseWhole(packs, { maxBytes: 1024 * MiB })).sort()).toEqual([1, 3]);
+      expect(names(chooseWhole(packs, null)).sort()).toEqual([1, 3]);
+    });
+
+    it("takes the newest first, within 16 MiB, or a sixteenth of a smaller cache", function () {
+      const packs = Array.from({ length: 10 }, (_, i) => pack(i + 1, 3 * MiB));
+      expect(names(chooseWhole(packs, { maxBytes: 1024 * MiB })).sort((a, b) => a - b)).toEqual([6, 7, 8, 9, 10]);
+      expect(names(chooseWhole(packs, { maxBytes: 64 * MiB }))).toEqual([10]);
+      expect(names(chooseWhole(packs, { maxBytes: 32 * MiB }))).toEqual([]);
+    });
+
+    it("reads by range what does not fit, and reads the same objects", async function () {
+      fx.repackAll(fixture.dir);
+      const packs = fx.readPacks(fixture.dir);
+      // A sixteenth of this cache is smaller than the index
+      const cache = createCache({ dir: workDir + "/cache-range", maxBytes: 8 * packs[0].idx.length });
+      const { store, reader } = await readerFor(packs, { cache });
+      await expectAllObjects(reader);
+      expect(store.stats.gets).toBe(0);
+      expect(store.stats.reads).toBeGreaterThan(0);
+    });
+  });
 });

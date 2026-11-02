@@ -23,8 +23,8 @@ const path = require("path");
 const { CorruptError, NotFoundError, TooLargeError } = require("./errors");
 const { applyDelta, resultSize } = require("./delta");
 const { applyDeltaToFile, writeFile } = require("./expand");
-const { openIndex } = require("./idx");
-const { openPack, isDelta } = require("./pack");
+const { openIndex, chooseWhole } = require("./idx");
+const { openPack, isDelta, recentReads } = require("./pack");
 const { packKey, idxKey } = require("./layout");
 const { mapLimit, createSemaphore } = require("./limit");
 
@@ -33,7 +33,20 @@ const MAX_CHAIN = 5000;
 
 const DEFAULT_MAX_SIZE = 64 * 1024 * 1024;
 
-const LOOKUP_CONCURRENCY = 8;
+// How many packs' indexes are asked about one object at once (an index held
+// whole answers from memory), and how many whole indexes are fetched at once
+const LOOKUP_CONCURRENCY = 32;
+const INDEX_CONCURRENCY = 64;
+
+// Commits, trees and tags up to this size are kept in the cache by ID once
+// read (and Blot's commits and pushes put theirs there), so the next commit,
+// push or diff along the same paths reads none of them
+const OBJECT_CACHE_MAX = 256 * 1024;
+const CACHED_TYPES = { commit: 1, tree: 2, tag: 4 };
+
+// How many object types a reader remembers it has seen in its packs
+const MAX_TYPES = 65536;
+const TYPE_BY_CODE = { 1: "commit", 2: "tree", 4: "tag" };
 
 // How much of a delta's data is read to see how big its result is
 const HEADER_BYTES = 32;
@@ -55,7 +68,13 @@ function objectHasher(type, size) {
 // ever be, and an object which needs more is a TooLargeError rather than a
 // NoRoomError (which means the room is taken just now). `scratchConcurrency`
 // (default 1) is how many objects may be streamed through scratch at once.
-function createReader({ store, cache = null, packs, maxSize = DEFAULT_MAX_SIZE, scratch = null, scratchConcurrency = 1 }) {
+//
+// With a cache, `read` keeps the commits, trees and tags it reads there by ID
+// (each checked against its ID when it comes back), and answers from it: the
+// object is the same whichever pack holds it. A reader over only some of a
+// repository's packs, which must not see objects the others hold, passes
+// `objectCache: false`.
+function createReader({ store, cache = null, packs, maxSize = DEFAULT_MAX_SIZE, scratch = null, scratchConcurrency = 1, objectCache = true }) {
   const scratchTurn = createSemaphore(scratchConcurrency);
 
   // Throws TooLargeError if `bytes` of scratch could never be had
@@ -69,22 +88,44 @@ function createReader({ store, cache = null, packs, maxSize = DEFAULT_MAX_SIZE, 
     }
   }
 
+  const whole = chooseWhole(packs, cache);
+  const recent = recentReads();
   const opened = packs.map((entry) => ({
     name: entry.name,
-    pack: openPack({ store, key: packKey(entry.name), size: entry.size, name: entry.name }),
+    pack: openPack({ store, key: packKey(entry.name), size: entry.size, name: entry.name, recent }),
     index: openIndex({
       store,
       key: idxKey(entry.name),
       size: entry.idxSize,
       cache,
       namespace: store.id,
+      whole: whole.has(entry.name),
     }),
   }));
   const byName = new Map(opened.map((p) => [p.name, p]));
 
+  // The indexes read whole are all fetched at once, on the first lookup, so a
+  // repository of many packs costs one round of GETs (none once cached), not
+  // one per pack per lookup
+  let loading = null;
+  function loadIndexes() {
+    if (!loading) {
+      loading = mapLimit(
+        opened.filter((p) => p.index.whole),
+        INDEX_CONCURRENCY,
+        (p) => p.index.load()
+      ).catch((err) => {
+        loading = null;
+        throw err;
+      });
+    }
+    return loading;
+  }
+
   // Where object `oid` is: { pack, offset } in the newest pack holding it, or
   // null. Every pack is asked at once, since each answer may be a cache hit.
   async function locate(oid) {
+    await loadIndexes();
     const offsets = await mapLimit(opened, LOOKUP_CONCURRENCY, (p) => p.index.lookup(oid));
     for (let i = opened.length - 1; i >= 0; i--) {
       if (offsets[i] !== null) return { pack: opened[i], offset: offsets[i] };
@@ -145,28 +186,83 @@ function createReader({ store, cache = null, packs, maxSize = DEFAULT_MAX_SIZE, 
   // a delta the headers of its bases until one is not a delta. That is a
   // single small read when the object is stored whole. The data is not
   // inflated, so unlike read() this does not check the object against its ID.
+  //
+  // It always asks the packs, never the cache of objects: receive's check
+  // that what a push links to exists relies on it.
   async function typeOf(oid) {
+    if (packTypes.has(oid)) return packTypes.get(oid);
+
     let at = await locate(oid);
     if (!at) return null;
 
     for (let steps = 0; steps < MAX_CHAIN; steps++) {
       const entry = await at.pack.pack.open(at.offset);
       entry.output.return();
-      if (!isDelta(entry)) return entry.type;
+      if (!isDelta(entry)) {
+        noteType(oid, entry.type);
+        return entry.type;
+      }
       at = await baseOf(at, entry);
     }
     throw new CorruptError("Delta chain does not end");
   }
 
+  // The types of the objects this reader has found in its packs (read or
+  // typeOf), so it does not ask the packs again. Never filled from the cache.
+  // The oldest are forgotten past MAX_TYPES.
+  const packTypes = new Map();
+  const noteType = (oid, type) => {
+    packTypes.set(oid, type);
+    if (packTypes.size > MAX_TYPES) packTypes.delete(packTypes.keys().next().value);
+  };
+
   // The object `oid` as { type, size, data }, or null if no pack has it.
   // Throws CorruptError if what the packs hold for it is not it.
   async function read(oid, { maxSize: limit = maxSize } = {}) {
-    const at = await locate(oid);
-    if (!at) return null;
+    const known = await cachedObject(oid);
+    if (known && known.data.length <= limit) return known;
 
-    const { type, data } = await resolve(at, limit);
-    check(oid, type, data);
+    // Concurrent reads of one object (a prefetch and the read it was for)
+    // share one
+    const flight = limit + ":" + oid;
+    if (!reading.has(flight)) {
+      reading.set(
+        flight,
+        (async () => {
+          const at = await locate(oid);
+          if (!at) return null;
+
+          const { type, data } = await resolve(at, limit);
+          check(oid, type, data);
+          noteType(oid, type);
+          await remember(oid, type, data);
+          return { type, size: data.length, data };
+        })().finally(() => reading.delete(flight))
+      );
+    }
+    return reading.get(flight);
+  }
+
+  const reading = new Map();
+  const objectKey = (oid) => store.id + "/obj/" + oid;
+
+  // A commit, tree or tag from the cache, checked against its ID, or null
+  async function cachedObject(oid) {
+    if (!cache || !objectCache) return null;
+    const hit = await cache.get(objectKey(oid)).catch(() => null);
+    if (!hit || !hit.length || !TYPE_BY_CODE[hit[0]]) return null;
+    const type = TYPE_BY_CODE[hit[0]];
+    const data = hit.subarray(1);
+    if (objectHasher(type, data.length).update(data).digest("hex") !== oid) return null;
     return { type, size: data.length, data };
+  }
+
+  // Keeps a commit, tree or tag in the cache by ID. `data` must be the object
+  // `oid` is; a caller other than read() passes what it has just hashed or
+  // written itself.
+  async function remember(oid, type, data) {
+    if (!cache || !objectCache || !CACHED_TYPES[type] || data.length > OBJECT_CACHE_MAX) return false;
+    return cache.put(objectKey(oid), Buffer.concat([Buffer.from([CACHED_TYPES[type]]), data])).catch(() => false);
   }
 
   // The size of the object a delta entry builds, from the start of its data
@@ -353,6 +449,13 @@ function createReader({ store, cache = null, packs, maxSize = DEFAULT_MAX_SIZE, 
   // limit is built in files (streamThroughScratch). Smaller ones are still
   // resolved in memory, which is cheaper.
   async function stream(oid, { maxSize: limit = maxSize } = {}) {
+    // A commit, tree or tag kept in the cache (a push's delta bases are often
+    // the trees of the push before) was checked against its ID as it came out
+    const known = await cachedObject(oid);
+    if (known && known.data.length <= limit) {
+      return { type: known.type, size: known.size, data: (async function* () { yield known.data; })() };
+    }
+
     const at = await locate(oid);
     if (!at) return null;
 
@@ -385,7 +488,7 @@ function createReader({ store, cache = null, packs, maxSize = DEFAULT_MAX_SIZE, 
     return { type: entry.type, size: entry.size, data: verified() };
   }
 
-  return { packs: opened.map((p) => p.name), has, locate, typeOf, read, stream, pack: (name) => byName.get(name) };
+  return { packs: opened.map((p) => p.name), has, locate, typeOf, read, stream, remember, pack: (name) => byName.get(name) };
 }
 
 module.exports = createReader;
