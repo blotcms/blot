@@ -8,10 +8,10 @@
 //
 // By default the old packs are left for the sweep, which deletes them once
 // the old manifests have left its recovery window (a week). With --purge they
-// are deleted now: every older manifest is written over with an empty one,
-// every pack the new manifest does not name is deleted, and so is the sweep's
-// record. A clone or fetch streaming an old pack at that moment fails and has
-// to be run again.
+// are deleted now: every pack the new manifest does not name, and the sweep's
+// record. The old manifests stay either way (they hold no content) and age out
+// as usual. A clone or fetch streaming an old pack at that moment fails and
+// has to be run again.
 //
 // This is not wired into the app, and the target is always explicit: there is
 // no default bucket.
@@ -41,8 +41,9 @@
 //                      (default 1024); the cache lives in a temporary directory
 //
 // Prints the result as JSON. Exits 0 for a rewrite, a dry run or an empty
-// repository, 1 for a failure and 2 if the swap's outcome could not be
-// confirmed (run it again).
+// repository, 1 for a failure, 2 if the swap's outcome could not be confirmed
+// (run it again), and 3 if a purge left the newest manifest naming a missing
+// pack ("damaged" in rewrite.js; push again from a clone).
 
 const fs = require("fs");
 const os = require("os");
@@ -75,6 +76,14 @@ async function main() {
   const { error, ...printable } = result;
   if (error) printable.error = error.message;
   console.log(JSON.stringify(printable, null, 2));
+  if (result.outcome === "damaged") {
+    console.error(
+      "DAMAGED: the repository was rewritten, but after the purge the newest manifest names packs that are missing: " +
+        result.purged.missing.join(", ") +
+        ". A push re-uploaded one while it was being deleted. Push again from a clone to repair it."
+    );
+    process.exit(3);
+  }
   process.exit(result.outcome === "unknown" ? 2 : 0);
 }
 

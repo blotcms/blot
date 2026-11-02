@@ -15,10 +15,10 @@
 //   scratchDir  a directory to work in instead of a reservation from the
 //               cache, for a repository bigger than the cache. A directory of
 //               its own is made inside it and removed in every case.
-//   purge       delete the old manifests' contents and every pack the new
-//               manifest does not name, now (see purge() below). Without it,
-//               the old packs go through the sweep once the old manifests
-//               leave its recovery window.
+//   purge       delete every pack the new manifest does not name, now (see
+//               purge() below). Without it, the old packs go through the
+//               sweep once the old manifests leave its recovery window. The
+//               old manifests stay either way: they hold no content.
 //   dryRun      do everything up to the uploads, in scratch, and report what
 //               would be dropped (and, with purge, deleted). Writes nothing to
 //               the store.
@@ -52,9 +52,11 @@
 //
 // It resolves with
 //
-//   outcome   "rewritten", "empty" (seq 0, nothing done), "dry-run", or
+//   outcome   "rewritten", "empty" (seq 0, nothing done), "dry-run",
 //             "unknown" (the swap may or may not have happened and reading
-//             back failed: OutcomeUnknownError, as `error`; run it again)
+//             back failed: OutcomeUnknownError, as `error`; run it again), or
+//             "damaged": rewritten, but after the purge a pack the newest
+//             manifest names is missing (`purged.missing`; see purge())
 //   seq       the manifest swapped in (for a dry run, the one read)
 //   epoch     its epoch
 //   before    { packs, bytes, objects } of the manifest rewritten: the packs,
@@ -62,8 +64,9 @@
 //             and the distinct objects in its packs
 //   after     the same for the new manifest
 //   dropped   { objects, bytes }: before less after
-//   purged    { manifests, packs, bytes, spared } (zero without purge); for a
-//             dry run with purge, `wouldPurge` says what would go
+//   purged    { packs, bytes, spared, missing } (zero without purge); for a
+//             dry run with purge, `wouldPurge` ({ packs, bytes }) says what
+//             would go
 //   stats     { ms, attempts, gitMs, uploadMs, swapMs, purgeMs, requests }
 //
 // It throws for anything else (a NoRoomError, a git failure, a CorruptError
@@ -73,7 +76,7 @@
 const fsp = require("fs/promises");
 const path = require("path");
 const { StaleManifestError, OutcomeUnknownError, CorruptError, NoRoomError } = require("./errors");
-const { SWEEP_KEY, manifestKey, manifestSeq, packFile } = require("./layout");
+const { SWEEP_KEY, PACK_PREFIX, manifestKey, packKey, idxKey, packFile } = require("./layout");
 const { mapLimit } = require("./limit");
 const manifest = require("./manifest");
 const { PACK_CONFIG, git: shared } = require("./compact");
@@ -235,68 +238,67 @@ async function make({ store, cache, scratchDir, base, packConfig, dryRun, stats 
 
 // ---- Purging --------------------------------------------------------------
 
-// What the store holds: numbered manifests below `below` ({ seq, key, size }),
-// and pack files by pack name ({ ext: { key, size, lastModified } })
-async function listRepository(store, below) {
-  const manifests = [];
+// The pack files the store holds, by pack name: { ext: { key, size,
+// lastModified } }
+async function listPacks(store) {
   const packs = new Map();
-  for await (const item of store.list("")) {
-    const seq = manifestSeq(item.key);
-    if (seq !== null) {
-      if (seq < below) manifests.push({ seq, ...item });
-      continue;
-    }
+  for await (const item of store.list(PACK_PREFIX)) {
     const file = packFile(item.key);
-    if (file) {
-      if (!packs.has(file.name)) packs.set(file.name, {});
-      packs.get(file.name)[file.ext] = item;
-    }
+    if (!file) continue;
+    if (!packs.has(file.name)) packs.set(file.name, {});
+    packs.get(file.name)[file.ext] = item;
   }
-  manifests.sort((a, b) => a.seq - b.seq);
-  return { manifests, packs };
+  return packs;
 }
 
 // The second a last-modified time falls in (S3 keeps whole seconds)
 const second = (ms) => (Number.isFinite(ms) ? Math.floor(ms / 1000) : Infinity);
 
-// Deletes, now, what the rewrite to manifest `ours` (already swapped in, read
-// from the store or returned by the swap) left behind:
+// Deletes, now, the packs the rewrite to manifest `ours` (already swapped in,
+// read from the store or returned by the swap) left behind: every pack (.pack,
+// .idx and .rev; history packs and pieces too) that neither `ours` nor any
+// manifest after it names, and whose files were all last written in a second
+// before the one `ours` was created in (by the store's clock, from a HEAD of
+// it), and the sweep's record (sweep/pending.json), whose marks are for packs
+// that are gone now or will be marked again.
 //
-//   - Every numbered manifest below it is written over with a tombstone
-//     (manifest.tombstone): a valid manifest with the same seq which names no
-//     pack. Not deleted: a writer that read one of them as the newest (within
-//     manifest.MAX_BASE_AGE) and stalled would otherwise create the next seq
-//     again, in the hole, and be told its swap landed when the repository
-//     moved on without it. Written over, the key never stops existing, so its
-//     create finds it taken and the swap is stale, as before. latest.json is
-//     not touched (the swap wrote it). The sweep deletes tombstones, in order,
-//     once they leave its recovery window, as any other old manifest.
-//   - Every pack (.pack, .idx and .rev) that neither `ours` nor any manifest
-//     after it names, and whose files were all last written in a second before
-//     the one `ours` was created in (by the store's clock, from a HEAD of it).
-//     A writer whose base is `ours` or later read it after it was created, so
-//     what it uploads is later and is left alone (for the sweep, if it never
-//     swaps). A writer whose base came before `ours` can no longer swap what
-//     it uploaded: receive refuses, and commit and compaction start again or
-//     give up, when the epoch they built on is not the newest manifest's.
-//     Just before a pack's files are deleted the manifests are read forward
-//     from the newest seen (a HEAD for the next seq, a GET of any found), a
-//     pack one names is spared, each file is HEADed and spared if written
-//     since, and the newest manifest is asserted not to name it (code
-//     PURGE_REFERENCED, which can only fire on a bug), as the sweep does.
-//   - The sweep's record (sweep/pending.json), whose marks are for packs that
-//     are gone now or will be marked again.
+// Manifests are not touched. The older ones hold refs and object IDs, never
+// content, so they leak nothing that was scrubbed; they stay for the sweep,
+// which deletes them in order once they leave its recovery window, as always,
+// so nothing manifest.swap's guards rely on changes. Until then they name
+// packs that are gone, which the sweep takes as already deleted. One must not
+// be put back by hand.
+//
+// Which writers this can race: one whose base is `ours` or later read it after
+// it was created, so what it uploads is later and is left alone (for the
+// sweep, if it never swaps). One whose base came before `ours` can no longer
+// swap what it uploaded: receive refuses, and commit and compaction start again
+// or give up, when the epoch they built on is not the newest manifest's.
+//
+// Just before a pack's files are deleted the manifests are read forward from
+// the newest seen (a HEAD for the next seq, a GET of any found), and a pack
+// one names is spared; then each file in turn is HEADed, spared if it was
+// written since the cutoff, and deleted at once, so the time between the
+// check and the DELETE is one round trip; and the newest manifest is asserted
+// not to name it (code PURGE_REFERENCED, which can only fire on a bug), as
+// the sweep does. What is left is the sweep's own race: a writer that uploads
+// the very same bytes (packs are named by content) between a file's HEAD and
+// its DELETE and then names the pack. The object store has no DELETE
+// conditional on the last-modified time, so it cannot be closed here; instead,
+// once done, the newest manifest is read again and every .pack and .idx it
+// names is HEADed, and any that is missing is reported in `missing`
+// (rewriteRepo then answers "damaged"). Pushing again from a clone repairs it.
 //
 // A clone or fetch still streaming an old pack fails part way, with an error
 // to its client, which tries again against the new manifest. That is the cost
 // of deleting now, and why purging is the operator's choice. Safe to run
-// again: what is gone is skipped, and tombstones are written again.
+// again: what is gone is skipped.
 //
-// Resolves with { manifests, packs, bytes, spared }: the manifests written
-// over, the packs deleted, their files' bytes, and the packs left because
-// they were written after the rewrite.
+// Resolves with { packs, bytes, spared, missing }: the packs deleted, their
+// files' bytes, the packs left because they were written after the rewrite,
+// and the names of packs the newest manifest names whose files are missing.
 async function purge({ store, ours }) {
-  const result = { manifests: 0, packs: 0, bytes: 0, spared: 0 };
+  const result = { packs: 0, bytes: 0, spared: 0, missing: [] };
   const created = await store.head(manifestKey(ours.seq));
   if (!created) throw new Error("The rewritten manifest " + manifestKey(ours.seq) + " is not in the store");
   const cutoff = second(created.lastModified);
@@ -313,16 +315,7 @@ async function purge({ store, ours }) {
   }
   await readForward();
 
-  const { manifests, packs } = await listRepository(store, ours.seq);
-
-  // The manifests below first, oldest first, so none still names a pack once
-  // it is deleted
-  for (const { seq } of manifests) {
-    await store.put(manifestKey(seq), manifest.serialize(manifest.tombstone(seq, ours.epoch)));
-    result.manifests++;
-  }
-
-  for (const [name, listed] of packs) {
+  for (const [name, listed] of await listPacks(store)) {
     if (named.has(name)) continue;
     if (Object.values(listed).some((file) => !(second(file.lastModified) < cutoff))) {
       result.spared++;
@@ -331,40 +324,48 @@ async function purge({ store, ours }) {
 
     await readForward();
     if (named.has(name)) continue;
-
-    const keys = EXTS.map((ext) => "packs/" + name + "." + ext);
-    const found = await Promise.all(keys.map((key) => store.head(key)));
-    if (found.some((file) => file && !(second(file.lastModified) < cutoff))) {
-      result.spared++;
-      continue;
-    }
-    const present = keys.map((key, i) => found[i] && { key, size: found[i].size }).filter(Boolean);
-    if (!present.length) continue;
-
     if (manifest.packsNamed(newest).includes(name)) {
       throw coded("The purge was about to delete " + name + ", which the newest manifest (seq " + newest.seq + ") names", "PURGE_REFERENCED");
     }
 
-    // Every DELETE settles before this goes on, so a failure leaves none in
-    // flight, and running the purge again finishes the job
-    const settled = await Promise.allSettled(present.map(({ key }) => store.delete(key)));
-    const failed = settled.find((outcome) => outcome.status === "rejected");
-    if (failed) throw failed.reason;
-    result.packs++;
-    result.bytes += present.reduce((sum, { size }) => sum + size, 0);
+    // A HEAD and then the DELETE, a file at a time, so each check is as
+    // close to its DELETE as it can be. A file written since the cutoff
+    // spares what is left of the pack (and what went is reported below, if
+    // anything names it).
+    let deleted = 0;
+    let spared = false;
+    for (const ext of EXTS) {
+      const key = "packs/" + name + "." + ext;
+      const found = await store.head(key);
+      if (!found) continue;
+      if (!(second(found.lastModified) < cutoff)) {
+        spared = true;
+        break;
+      }
+      await store.delete(key);
+      deleted++;
+      result.bytes += found.size;
+    }
+    if (spared) result.spared++;
+    else if (deleted) result.packs++;
   }
 
   await store.delete(SWEEP_KEY);
+
+  // The check after: everything the newest manifest names is there
+  const latest = await manifest.read(store);
+  for (const entry of namedEntries(latest)) {
+    const [pack, idx] = await Promise.all([store.head(packKey(entry.name)), store.head(idxKey(entry.name))]);
+    if (!pack || !idx) result.missing.push(entry.name);
+  }
   return result;
 }
 
 // What purge() would do after a rewrite of `base` into `kept` (the names the
-// new manifest would have): every manifest there is now, and every pack but
-// those. For a dry run.
-async function planPurge(store, base, kept) {
-  const { manifests, packs } = await listRepository(store, base.seq + 1);
-  const plan = { manifests: manifests.length, packs: 0, bytes: 0 };
-  for (const [name, listed] of packs) {
+// new manifest would have): delete every pack but those. For a dry run.
+async function planPurge(store, kept) {
+  const plan = { packs: 0, bytes: 0 };
+  for (const [name, listed] of await listPacks(store)) {
     if (kept.includes(name)) continue;
     plan.packs++;
     plan.bytes += Object.values(listed).reduce((sum, file) => sum + file.size, 0);
@@ -381,7 +382,7 @@ async function rewriteRepo({ store: objects, cache, lock, scratchDir = null, pur
   const started = Date.now();
   const { store, requests } = counting(objects);
   const stats = { ms: 0, attempts: 0, gitMs: 0, uploadMs: 0, swapMs: 0, purgeMs: 0, requests };
-  const none = { manifests: 0, packs: 0, bytes: 0, spared: 0 };
+  const none = { packs: 0, bytes: 0, spared: 0, missing: [] };
   const finish = (result) => ({ ...result, stats: { ...stats, ms: Date.now() - started } });
   const report = (made) => ({
     before: made.before,
@@ -401,7 +402,7 @@ async function rewriteRepo({ store: objects, cache, lock, scratchDir = null, pur
 
     if (dryRun) {
       const result = { outcome: "dry-run", seq: current.seq, epoch: manifest.epochOf(current), ...report(made), purged: none };
-      if (purging) result.wouldPurge = await planPurge(store, current, [made.main, made.history].filter(Boolean).map((p) => p.name));
+      if (purging) result.wouldPurge = await planPurge(store, [made.main, made.history].filter(Boolean).map((p) => p.name));
       return finish(result);
     }
 
@@ -427,7 +428,10 @@ async function rewriteRepo({ store: objects, cache, lock, scratchDir = null, pur
       purged = await purge({ store, ours: next });
       stats.purgeMs = Date.now() - at;
     }
-    return finish({ outcome: "rewritten", seq: next.seq, epoch, ...report(made), purged });
+    // A pack the newest manifest names is missing: the purge lost the race
+    // described at purge() (or something else deleted it)
+    const outcome = purged.missing.length ? "damaged" : "rewritten";
+    return finish({ outcome, seq: next.seq, epoch, ...report(made), purged });
   }
 }
 

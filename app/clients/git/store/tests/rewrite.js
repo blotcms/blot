@@ -10,6 +10,7 @@ const path = require("path");
 const { execFile } = require("child_process");
 const fx = require("./helpers/fixture");
 const timeout = require("./helpers/timeout");
+const faults = require("./helpers/faults");
 const { createReceiveServer, push } = require("./helpers/receiveServer");
 const { startServer, runGit } = require("./helpers/upload-server");
 const manifest = require("../manifest");
@@ -23,6 +24,7 @@ const createMemoryStore = require("../objectStore/memory");
 const createFsStore = require("../objectStore/fs");
 const createReader = require("../reader");
 const { idxKey, packKey, manifestKey, manifestSeq, packFile, SWEEP_KEY } = require("../layout");
+const DAY = 24 * 60 * 60 * 1000;
 const { StaleManifestError, CorruptError } = require("../errors");
 
 const MiB = 1024 * 1024;
@@ -238,15 +240,6 @@ describe("git store rewrite", function () {
       expect(() => manifest.validate(next)).not.toThrow();
       expect(() => manifest.rewritten(next, { epoch: "e2", pack, history })).toThrow();
     });
-
-    it("a tombstone is a valid, empty manifest with the seq it replaces", function () {
-      const t = manifest.tombstone(7, "e2");
-      expect(manifest.parse(manifest.serialize(t))).toEqual(t);
-      expect(t.seq).toBe(7);
-      expect(manifest.packsNamed(t)).toEqual([]);
-      expect(t.refs).toEqual({});
-      expect(t.writer).toMatch(/^purged-/);
-    });
   });
 
   describe("a repository with a secret scrubbed from its history", function () {
@@ -299,7 +292,7 @@ describe("git store rewrite", function () {
       // second and third commits
       expect(result.dropped.objects).toBe(result.before.objects - result.after.objects);
       expect(result.dropped.objects).toBeGreaterThanOrEqual(5);
-      expect(result.purged).toEqual({ manifests: 0, packs: 0, bytes: 0, spared: 0 });
+      expect(result.purged).toEqual({ packs: 0, bytes: 0, spared: 0, missing: [] });
       expect(result.stats.attempts).toBe(1);
     });
 
@@ -378,10 +371,13 @@ describe("git store rewrite", function () {
     let env;
     let result;
     let after;
+    let manifestsBefore; // seq -> bytes
 
     beforeAll(async function () {
       env = await scenario();
       await env.inner.put(SWEEP_KEY, Buffer.from(JSON.stringify({ version: 1, marked: {} })));
+      manifestsBefore = new Map();
+      for (let seq = 1; seq <= env.before.seq; seq++) manifestsBefore.set(seq, await env.inner.get(manifestKey(seq)));
       result = await rewrite(env, { purge: true });
       after = await manifest.read(env.inner);
     });
@@ -392,6 +388,7 @@ describe("git store rewrite", function () {
       expect(result.purged.packs).toBe(before.length);
       expect(result.purged.bytes).toBeGreaterThan(0);
       expect(result.purged.spared).toBe(0);
+      expect(result.purged.missing).toEqual([]);
 
       const left = new Set();
       for await (const { key } of env.inner.list("packs/")) left.add(packFile(key).name);
@@ -399,15 +396,9 @@ describe("git store rewrite", function () {
       expect(await env.inner.head(SWEEP_KEY)).toBeNull();
     });
 
-    it("writes over every older manifest with an empty one that names nothing", async function () {
-      expect(result.purged.manifests).toBe(env.before.seq);
-      for (let seq = 1; seq < after.seq; seq++) {
-        const m = manifest.parse(await env.inner.get(manifestKey(seq)));
-        expect(m.seq).toBe(seq);
-        expect(manifest.packsNamed(m)).toEqual([]);
-        expect(m.refs).toEqual({});
-        expect(m.epoch).toBe(result.epoch);
-      }
+    it("leaves every older manifest as it was: they hold refs and IDs, not content", async function () {
+      expect("manifests" in result.purged).toBe(false);
+      for (const [seq, bytes] of manifestsBefore) expect((await env.inner.get(manifestKey(seq))).equals(bytes)).toBe(true, seq);
     });
 
     it("leaves the secret's bytes nowhere in the store", async function () {
@@ -416,10 +407,9 @@ describe("git store rewrite", function () {
       for (const oid of [env.secretCommit, env.secretTree, env.secretBlob]) expect(scan.oids.has(oid)).toBe(false, oid);
       expect(scan.contents.includes(SECRET)).toBe(false);
 
-      for (const { key, bytes } of await rawBytes(env.inner)) {
-        expect(bytes.includes(SECRET)).toBe(false, key);
-        for (const oid of [env.secretCommit, env.secretTree, env.secretBlob]) expect(bytes.includes(oid)).toBe(false, key);
-      }
+      // The old manifests are still there, with object IDs in them, but no
+      // key holds the secret itself
+      for (const { key, bytes } of await rawBytes(env.inner)) expect(bytes.includes(SECRET)).toBe(false, key);
     });
 
     it("still reads, clones and fetches", async function () {
@@ -437,24 +427,32 @@ describe("git store rewrite", function () {
       const next = manifest.advance(early, { refs: { ...early.refs, "refs/tags/late": early.refs["refs/heads/master"] } });
       const error = await manifest.swap({ store: { ...env.inner }, lock: env.lock, base: early, next }).catch((err) => err);
       expect(error instanceof StaleManifestError).toBe(true);
-      const there = manifest.parse(await env.inner.get(manifestKey(early.seq + 1)));
-      expect(there.writer).not.toBe(next.writer);
+      expect((await env.inner.get(manifestKey(early.seq + 1))).equals(manifestsBefore.get(early.seq + 1))).toBe(true);
       expect((await manifest.read(env.inner)).seq).toBe(after.seq);
     });
   });
 
-  describe("tombstones", function () {
-    it("are deleted by the sweep, oldest first, once they leave its window", async function () {
+  describe("the sweep after a purge", function () {
+    it("ages the old manifests out in order, taking the packs they name that are gone as deleted", async function () {
       const env = await scenario();
       const result = await rewrite(env, { purge: true });
       const after = await manifest.read(env.inner);
-      // Twenty more manifests, so the tombstones are below the ones kept
+      // Twenty more manifests, so the old ones are below the ones kept
       for (let i = 0; i < 20; i++) {
         env.now += 1000;
         const out = await blotWrite({ store: env.inner, cache: env.cache, lock: env.lock, path: "note-" + i + ".md", contents: Buffer.from("note " + i + "\n") });
         expect(out.outcome).toBe("ok");
       }
-      env.now += 8 * 24 * 60 * 60 * 1000;
+
+      // Inside the window the old manifests are kept, and so read, and the
+      // packs they name are not there: nothing to mark, nothing fails
+      env.now += DAY;
+      const early = await sweep({ store: env.inner, now: env.now });
+      expect(early.manifestsDeleted).toBe(0);
+      expect(early.packsMarked).toBe(0);
+      expect(early.packsDeleted).toBe(0);
+
+      env.now += 7 * DAY;
       const swept = await sweep({ store: env.inner, now: env.now });
       expect(swept.manifestsDeleted).toBeGreaterThanOrEqual(after.seq - 1);
       for (let seq = 1; seq < after.seq; seq++) expect(await env.inner.head(manifestKey(seq))).toBeNull();
@@ -486,12 +484,59 @@ describe("git store rewrite", function () {
       const again = await rewriteRepo.purge({ store: env.inner, ours });
       expect(again.packs).toBe(0);
       expect(again.spared).toBe(1);
-      expect(again.manifests).toBe(env.before.seq);
+      expect(again.missing).toEqual([]);
       await expectClone(env, ours);
     });
   });
 
   describe("racing other writers", function () {
+    it("reports a pack re-uploaded and named between a HEAD and its DELETE as damaged", async function () {
+      const env = await scenario();
+      await rewrite(env);
+      const ours = await manifest.read(env.inner);
+
+      // The first push's pack, which a push after the rewrite uploads again,
+      // byte for byte, and names (a force push back to that history, say)
+      const old = env.before.packs.find((pack) => pack.seq === 1);
+      const bytes = { pack: await env.inner.get(packKey(old.name)), idx: await env.inner.get(idxKey(old.name)) };
+      const store = faults(env.inner).inject("delete", { key: packKey(old.name), delay: 200 });
+
+      const purging = rewriteRepo.purge({ store, ours });
+      while (!store.calls.includes("delete " + packKey(old.name))) await new Promise((resolve) => setTimeout(resolve, 5));
+
+      // In the window: the HEAD has passed, the DELETE has not been sent
+      env.now += 5000;
+      await env.inner.put(packKey(old.name), bytes.pack);
+      await env.inner.put(idxKey(old.name), bytes.idx);
+      const base = await manifest.read(env.inner);
+      await manifest.swap({ store: env.inner, lock: env.lock, base, next: manifest.advance(base, { refs: base.refs, packs: [old] }) });
+
+      const purged = await purging;
+      expect(purged.missing).toEqual([old.name]);
+      expect(await env.inner.head(packKey(old.name))).toBeNull();
+      // The .idx, written after the cutoff, was spared
+      expect(await env.inner.head(idxKey(old.name))).not.toBeNull();
+    });
+
+    it("answers damaged, and the command line would exit 3, when the check after the purge finds a pack missing", async function () {
+      const env = await scenario();
+      // A store whose final HEADs say the rewritten pack is gone
+      let rewritten = null;
+      const store = faults(env.inner);
+      const wrapped = {
+        ...store,
+        putIfAbsent: async (key, buffer) => {
+          const created = await env.inner.putIfAbsent(key, buffer);
+          rewritten = manifest.parse(buffer);
+          store.inject("head", { key: packKey(rewritten.packs[0].name), answer: null, skip: 0 });
+          return created;
+        },
+      };
+      const result = await rewriteRepo({ store: wrapped, cache: env.cache, lock: env.lock, purge: true });
+      expect(result.outcome).toBe("damaged");
+      expect(result.purged.missing).toEqual([rewritten.packs[0].name]);
+    });
+
     it("includes a push that lands while it works, by doing it again", async function () {
       const env = await scenario();
       let tip = null;
@@ -658,7 +703,6 @@ describe("git store rewrite", function () {
 
       // The manifests before the compaction leave the window, then what they
       // named is marked, then deleted a grace later
-      const DAY = 24 * 60 * 60 * 1000;
       env.now += 3 * DAY;
       const marking = await sweep({ store: env.inner, now: env.now, recoveryWindow: 2 * DAY, keepManifests: 1 });
       expect(marking.packsMarked).toBeGreaterThan(0);
@@ -705,14 +749,13 @@ describe("git store rewrite", function () {
       expect(env.inner.stats.deletes).toBe(before.deletes);
       expect(await manifest.read(env.inner)).toEqual(env.before);
       expect(dry.seq).toBe(env.before.seq);
-      expect(dry.wouldPurge.manifests).toBe(env.before.seq);
+      expect(Object.keys(dry.wouldPurge).sort()).toEqual(["bytes", "packs"]);
       expect(dry.wouldPurge.packs).toBe(manifest.packsNamed(env.before).length);
       expect(env.cache.stats().reservedBytes).toBe(0);
 
       const real = await rewrite(env, { purge: true });
       expect(real.dropped).toEqual(dry.dropped);
       expect(real.before).toEqual(dry.before);
-      expect(real.purged.manifests).toBe(dry.wouldPurge.manifests);
       expect(real.purged.packs).toBe(dry.wouldPurge.packs);
       expect(real.purged.bytes).toBe(dry.wouldPurge.bytes);
     });

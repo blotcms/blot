@@ -526,27 +526,6 @@ function rewritten(base, { epoch, pack = null, history = null, peeled }) {
   };
 }
 
-// What a rewrite's purge writes over each manifest older than its own: a
-// valid, empty manifest with the same seq, which names no pack. The key is
-// overwritten, never deleted, so it never stops existing: a writer holding an
-// old manifest as its base still finds the next seq taken, and its swap is
-// stale (see "Rewriting a repository" in the README). Its writer nonce starts
-// "purged-", for whoever reads one by hand.
-function tombstone(seq, epoch) {
-  return {
-    version: VERSION,
-    seq,
-    writer: "purged-" + crypto.randomBytes(8).toString("hex"),
-    ...(epoch ? { epoch } : {}),
-    head: null,
-    refs: {},
-    packs: [],
-    snapshots: [],
-    history: null,
-    historyPieces: [],
-  };
-}
-
 // How many snapshots a manifest keeps, and how many bytes of them, once
 // compaction trims it (see trimSnapshots). A snapshot is about 100 bytes for a
 // blog with a ref or two, so 1000 of them is about 100 KB; the byte cap is for
@@ -770,7 +749,6 @@ module.exports = {
   advance,
   compacted,
   rewritten,
-  tombstone,
   epochOf,
   newEpoch,
   trimSnapshots,

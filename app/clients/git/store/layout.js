@@ -13,10 +13,8 @@
 // Packs are immutable and named by content, so a name never refers to two
 // different packs and a pack is uploaded once. A numbered manifest is
 // immutable too: it is created once, by a conditional write, and never
-// overwritten, except by a rewrite's purge, which writes an empty manifest
-// (a tombstone) over each one older than its own (see rewrite.js). Only
-// latest.json is otherwise overwritten, and it is only a hint (and the sweep's
-// record, which only says what to look at again).
+// overwritten. Only latest.json is overwritten, and it is only a hint (and
+// the sweep's record, which only says what to look at again).
 
 const MANIFEST_PREFIX = "manifests/";
 const LATEST_KEY = MANIFEST_PREFIX + "latest.json";
