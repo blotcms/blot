@@ -20,6 +20,7 @@ const JOBS = [
   "favicon",
   "pandoc",
   "unzip",
+  "fetch-image",
 ];
 
 // The jobs that don't use sharp

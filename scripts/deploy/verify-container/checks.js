@@ -241,6 +241,24 @@ async function sandboxBrowserWorks() {
   return `Chromium started and ${metadata.meta.error}`;
 }
 
+// The fetch-image job, whenever there is a sandbox: its jail starts in its
+// cgroup, and the egress filter refuses the metadata address. A jail that
+// reaches it, or times out on it, is not one to go live with.
+async function sandboxFetchWorks() {
+  if (!process.env.BLOT_SANDBOX_SOCKET) return "skipped, BLOT_SANDBOX_SOCKET is not set";
+
+  const sandbox = require("../../../app/sandbox");
+  const { meta } = await sandbox.run(
+    "fetch-image",
+    { url: "http://169.254.169.254/latest/meta-data/" },
+    Buffer.alloc(0)
+  );
+  if (!/^(ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|EACCES|EPERM)$/.test(meta.code || "")) {
+    throw new Error(`the metadata address was not refused: ${meta.error || "it answered"}`);
+  }
+  return `the fetch jail started and ${meta.code}`;
+}
+
 // The proxy jail, whenever there is a sandbox. A forward-proxy request for the
 // metadata address must not get through: tinyproxy answers 500 when the filter
 // refuses it, which also proves the proxy answers at all.
@@ -333,6 +351,7 @@ module.exports = [
   { name: "sharp", run: sharpWorks },
   { name: "sandbox", run: sandboxWorks },
   { name: "sandbox browser", run: sandboxBrowserWorks },
+  { name: "sandbox fetch", run: sandboxFetchWorks },
   { name: "node filter", run: nodeFilter },
   { name: "required environment", run: requiredEnv },
   { name: "sandbox proxy", run: sandboxProxyWorks },

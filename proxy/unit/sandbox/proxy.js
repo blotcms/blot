@@ -4,22 +4,17 @@
 // which only root can, and waits on the jail. Like the broker it is root-owned
 // and requires only Node built-ins and ./jail. See app/sandbox/README.md.
 
-const fs = require("fs");
 const { spawn } = require("child_process");
+const cgroup = require("./cgroup");
 const jail = require("./jail");
 
 const MiB = 1024 * 1024;
 
 // In the unit's sandbox subtree, so it shares that budget with the image jobs.
-// oom.group: the supervisor starts a whole new jail, not half of one.
+// oom.group: the supervisor starts a whole new jail, not half of one. Anything
+// left by a proxy that died hard holds the port, so it is killed.
 function prepareCgroup(directory) {
-  fs.mkdirSync(directory, { recursive: true });
-  fs.writeFileSync(directory + "/memory.max", String(128 * MiB));
-  fs.writeFileSync(directory + "/memory.swap.max", "0");
-  fs.writeFileSync(directory + "/memory.oom.group", "1");
-  fs.writeFileSync(directory + "/pids.max", "128");
-  // anything left by a proxy that died hard holds the port
-  fs.writeFileSync(directory + "/cgroup.kill", "1");
+  cgroup.prepare(directory, { memoryBytes: 128 * MiB, pids: 128 });
 }
 
 function start(unit) {

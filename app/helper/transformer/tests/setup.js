@@ -7,6 +7,51 @@ module.exports = function setup(options) {
   var etag = '"test-etag"';
   var lastModified = new Date("2020-01-01T00:00:00Z").toUTCString();
   var sequenceQueue = [];
+  var zlib = require("zlib");
+
+  // A remote URL must serve an image now (the sandbox's fetch-image job
+  // refuses anything else), so each text body is served as a PNG as many
+  // pixels wide as the text is long: different bodies stay different images,
+  // and the transform below reads the length back from the width.
+  var CRC_TABLE = Array.from({ length: 256 }, function (_, n) {
+    for (var k = 0; k < 8; k++) n = n & 1 ? 0xedb88320 ^ (n >>> 1) : n >>> 1;
+    return n >>> 0;
+  });
+
+  function crc32(buffer) {
+    var crc = 0xffffffff;
+    for (var i = 0; i < buffer.length; i++) {
+      crc = CRC_TABLE[(crc ^ buffer[i]) & 0xff] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  function chunk(type, data) {
+    var length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    var body = Buffer.concat([Buffer.from(type), data]);
+    var crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([length, body, crc]);
+  }
+
+  function imageFor(text) {
+    var width = Math.max(1, Buffer.byteLength(text));
+    var header = Buffer.alloc(13);
+    header.writeUInt32BE(width, 0);
+    header.writeUInt32BE(1, 4);
+    header[8] = 8; // bit depth
+    header[9] = 0; // greyscale
+    var row = Buffer.alloc(width + 1); // a filter byte, then the pixels
+    return Buffer.concat([
+      Buffer.from("89504e470d0a1a0a", "hex"),
+      chunk("IHDR", header),
+      chunk("IDAT", zlib.deflateSync(row)),
+      chunk("IEND", Buffer.alloc(0)),
+    ]);
+  }
+
+  var PNG_SIGNATURE = Buffer.from("89504e470d0a1a0a", "hex");
 
   // Only server an image at this route if
   // the request passes the correct query
@@ -24,7 +69,7 @@ module.exports = function setup(options) {
       return res.status(304).end();
     }
 
-    res.send(responseBody);
+    res.type("png").send(imageFor(responseBody));
   });
 
   server.get("/sequence", function (req, res) {
@@ -65,11 +110,10 @@ module.exports = function setup(options) {
     if (status >= 400) return res.send(config.body || "");
 
     // Serve the body gzip-encoded: Content-Length then describes the
-    // compressed size, which is smaller than the bytes node-fetch hands
-    // back after decoding.
+    // compressed size, which is smaller than the bytes the fetch-image job
+    // reads after decoding.
     if (config.gzip) {
-      var zlib = require("zlib");
-      var gz = zlib.gzipSync(Buffer.from(body));
+      var gz = zlib.gzipSync(imageFor(body));
       res.set({
         "Content-Encoding": "gzip",
         "Content-Length": String(gz.length),
@@ -77,7 +121,7 @@ module.exports = function setup(options) {
       return res.end(gz);
     }
 
-    res.send(body);
+    res.type("png").send(imageFor(body));
   });
 
   // Create temporary blog before each test, clean up after
@@ -91,11 +135,17 @@ module.exports = function setup(options) {
     // some task that I don't want to repeat needlessly.
     // In reality, it might be the function which turns
     // an image into thumbnails, or the function which
+    // A downloaded image's size is its width, the length of the text it
+    // stands for (see imageFor above).
     this.transform = function (path, done) {
-      fs.stat(path, function (err, stat) {
+      fs.readFile(path, function (err, contents) {
         if (err) return done(err);
 
-        done(null, { size: stat.size });
+        if (contents.subarray(0, 8).equals(PNG_SIGNATURE)) {
+          return done(null, { size: contents.readUInt32BE(16) });
+        }
+
+        done(null, { size: contents.length });
       });
     };
 
