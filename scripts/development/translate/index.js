@@ -16,7 +16,7 @@ const User = require("models/user");
 const Blog = require("models/blog");
 const Template = require("models/template");
 const client = require("models/client");
-const localPath = require("helper/localPath");
+const storage = require("storage/folder");
 const nsv = require("helper/nsv");
 const determineTemplateFolder = promisify(
   require("models/template/determineTemplateFolder")
@@ -171,7 +171,7 @@ async function writeReadme(source, destination, values) {
 }
 
 async function establishReadmes(blog, template, url) {
-  const folder = localPath(blog.id, "/");
+  const folder = await storage.path(blog.id, "/");
   const slug = template.id.split(":").slice(1).join(":");
   const date = new Date().toISOString().slice(0, 10);
 
@@ -193,7 +193,7 @@ async function establishReadmes(blog, template, url) {
 
   const wroteTemplate = await writeReadme(
     "README.template.md",
-    localPath(blog.id, join(templateFolder, slug, "README")),
+    await storage.path(blog.id, join(templateFolder, slug, "README")),
     {
       templateName: template.name || slug,
       sourceURL: url,
@@ -221,7 +221,7 @@ async function git(folder, args) {
 }
 
 async function establishRepository(blog) {
-  const folder = localPath(blog.id, "/");
+  const folder = await storage.path(blog.id, "/");
 
   if (await fs.pathExists(join(folder, ".git"))) return false;
 
@@ -268,7 +268,7 @@ async function main(url, requestedHandle) {
 
   emit("blogID", blog.id);
   emit("handle", blog.handle);
-  emit("folder", localPath(blog.id, "/"));
+  emit("folder", await storage.path(blog.id, "/"));
   emit("templateID", template.id);
   emit("templateSlug", slug);
   emit("siteURL", `${config.protocol}${blog.handle}.${config.host}`);

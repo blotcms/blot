@@ -6,6 +6,7 @@ const layout = require("./layout");
 const manifest = require("./manifest");
 const createCache = require("./cache");
 const createMemoryStore = require("./objectStore/memory");
+const createFsStore = require("./objectStore/fs");
 const createReader = require("./reader");
 const { readRanges } = require("./ranges");
 
@@ -17,6 +18,7 @@ function createS3Store(options) {
 module.exports = {
   createCache,
   createMemoryStore,
+  createFsStore,
   createS3Store,
   createReader,
   readRanges,

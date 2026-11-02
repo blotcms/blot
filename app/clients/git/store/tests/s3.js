@@ -176,6 +176,32 @@ const MIB = 1024 * 1024;
     expect(uploads.Uploads || []).toEqual([]);
   });
 
+  it("imports a repository whose pack is larger than a part, in a multipart upload, and clones it back", async function () {
+    const workDir = fx.tempDir();
+    try {
+      const dir = workDir + "/repo";
+      fx.buildFixture(dir, { commits: 6, large: false });
+      require("fs").writeFileSync(dir + "/large.bin", crypto.randomBytes(12 * MIB));
+      fx.git(dir, ["add", "-A"]);
+      fx.git(dir, ["commit", "-q", "-m", "A large file"]);
+
+      const store = newStore();
+      const cache = createCache({ dir: workDir + "/cache", maxBytes: 256 * MIB });
+      const before = sent.parts;
+      const importRepo = require("../import");
+      const result = await importRepo({ store, cache, lock: (fn) => fn(), gitDir: dir + "/.git" });
+
+      expect(result.outcome).toBe("imported");
+      expect(result.pack.size).toBeGreaterThan(12 * MIB);
+      expect(sent.parts - before).toBe(Math.ceil(result.pack.size / (5 * MIB)));
+      expect((await store.head("packs/" + result.pack.name + ".pack")).size).toBe(result.pack.size);
+      expect((await manifest.read(store)).packs.map((pack) => pack.name)).toEqual([result.pack.name]);
+      expect((await importRepo.verifyImport({ store, cache, gitDir: dir + "/.git" })).refs).toBe(2);
+    } finally {
+      fx.remove(workDir);
+    }
+  });
+
   describe("a repository read by range", function () {
     let workDir;
     let fixture;

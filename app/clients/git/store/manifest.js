@@ -302,9 +302,13 @@ async function read(store, { clock = Date.now } = {}) {
 // more than MAX_BASE_AGE ago. A base read() did not return (built by hand, or
 // a copy) has no time and passes; every writer here swaps the very object
 // read() gave it.
-function assertFresh(base, clock) {
+function isFresh(base, clock = Date.now) {
   const at = readAt.get(base);
-  if (at !== undefined && clock() - at > MAX_BASE_AGE) {
+  return at === undefined || clock() - at <= MAX_BASE_AGE;
+}
+
+function assertFresh(base, clock) {
+  if (!isFresh(base, clock)) {
     throw new StaleManifestError("The manifest seq " + base.seq + " was read too long ago to build on; read it again");
   }
 }
@@ -616,6 +620,7 @@ module.exports = {
   advance,
   compacted,
   trimSnapshots,
+  isFresh,
   snapshotBytes,
   packsNamed,
   swap,

@@ -130,6 +130,15 @@ no-new-privs comes with it, so no setuid program works under Node. The broker an
 the proxy jail start separately, as they must. OpenResty isn't filtered, and
 neither is anything run by `docker exec`.
 
+## Alerts
+
+`alerts.js` emails the admin (`SANDBOX_ALERT`) when a job is killed, times out,
+is cut short or answers nonsense, when the broker can't be reached or its queue
+is full, and, checked every five minutes from each web process, when the unit's
+fetch proxy (the airlock's or the jail's) stops answering or lets the metadata
+address through. A job that fails on bad input isn't reported. At most one
+email per process every ten minutes, with counts for what happened in between.
+
 ## Why
 
 - **The broker is root-owned.** A jail with its own uid and cgroups has to be
@@ -154,8 +163,8 @@ neither is anything run by `docker exec`.
   can't move a job into it. So their limits add to the units' on the host.
 - **Jobs go first when the host runs out of memory.** The broker's shell sets
   `oom_score_adj` to 1000 before it execs nsjail, so a job is killed before the
-  units' Node; only Redis's BGSAVE child, also 1000 and larger, goes ahead of
-  it. Set as root, the job's uid can't lower it. The proxy jail is left alone.
+  units' Node: `node-b` sets itself to 900 (`app/index.js`) and `node-a` stays
+  at 0. Only Redis's BGSAVE child, also 1000 and larger, goes ahead of it. Set as root, the job's uid can't lower it. The proxy jail is left alone.
 - **The seccomp profile** (`proxy/deploy/sandbox-seccomp.json`) is Docker's
   default plus `clone`, `mount`, `umount2`, `pivot_root` and `sethostname`, so
   nsjail can build the jail, and `setns` and `unshare` for pasta. Nothing else is added: not `--privileged`, not

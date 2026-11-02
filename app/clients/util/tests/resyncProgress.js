@@ -1,24 +1,15 @@
 const fs = require("fs-extra");
-const os = require("os");
 const { join } = require("path");
 const { countLocalFiles, createProgress } = require("../resyncProgress");
 
 describe("resync progress", function () {
-  let directory;
-
-  beforeEach(async function () {
-    directory = await fs.mkdtemp(join(os.tmpdir(), "blot-resync-progress-"));
-  });
-
-  afterEach(async function () {
-    await fs.remove(directory);
-  });
+  global.test.blog();
 
   it("counts files recursively without counting directories", async function () {
-    await fs.outputFile(join(directory, "one.txt"), "one");
-    await fs.outputFile(join(directory, "nested", "two.txt"), "two");
+    await fs.outputFile(join(this.blogDirectory, "one.txt"), "one");
+    await fs.outputFile(join(this.blogDirectory, "nested", "two.txt"), "two");
 
-    expect(await countLocalFiles(directory)).toBe(2);
+    expect(await countLocalFiles(this.blog.id, "/")).toBe(2);
   });
 
   it("increases the total before publishing newly discovered work", function () {

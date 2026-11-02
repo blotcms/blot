@@ -1,5 +1,5 @@
 const redisServer = require("../redis-server");
-const { collect, line, parseBackup, BACKUP_KEY, OFFSITE_KEY, MEMORY_HISTORY_KEY, DISK_HISTORY_KEY, RESIZE_URL } = redisServer;
+const { collect, lines, parseBackup, BACKUP_KEY, OFFSITE_KEY, MEMORY_HISTORY_KEY, DISK_HISTORY_KEY, RESIZE_URL } = redisServer;
 const { SAMPLE_KEY } = require("../../check-redis-host");
 
 describe("scheduler/daily/redis-server", function () {
@@ -85,106 +85,114 @@ describe("scheduler/daily/redis-server", function () {
     };
   }
 
-  // A day-old snapshot 0.1 GB lower: 70% of 11 GB is 7.7 GB, ~47 days away
+  // A day-old snapshot 0.1 GB lower: 80% of 11 GB is 8.8 GB, ~58 days away
   const withSnapshot = { snapshot: snapshotLine() };
 
-  const render = async (options) => line(await collect({ client: fakeRedis(options), now: NOW }));
+  // { redis, server }, the two lines of the email
+  const both = async (options) => lines(await collect({ client: fakeRedis(options), now: NOW }));
+  const redis = async (options) => (await both(options)).redis;
+  const server = async (options) => (await both(options)).server;
 
-  it("is one line: memory with the days to a resize, disk, last save and last backup", async function () {
-    expect(await render(withSnapshot)).toBe(
-      "Redis server: memory 27% (resize in ~47 days, 8 GB free), disk 21% (19 GB free), host RAM 75% available (12 GB), saved 3m ago, backed up 30m ago"
-    );
+  it("is two lines: Redis (memory with the days to a resize, last save, last backup) and the server (disk, RAM)", async function () {
+    const result = await both(withSnapshot);
+
+    expect(result).toEqual({
+      redis: "Redis: memory 27% (resize in ~58 days, 8 GB free), saved 3m ago, backed up 30m ago",
+      server: "Server: disk 21% (19 GB free), RAM 75% available (12 GB)",
+    });
+    expect(result.redis).not.toContain("\n");
+    expect(result.server).not.toContain("\n");
   });
 
   describe("memory", function () {
     it("leaves out the projection with no previous snapshot or one that is too recent", async function () {
-      const expected = "Redis server: memory 27% (8 GB free), disk 21% (19 GB free), host RAM 75% available (12 GB), saved 3m ago, backed up 30m ago";
+      const expected = "Redis: memory 27% (8 GB free), saved 3m ago, backed up 30m ago";
 
-      expect(await render()).toBe(expected);
-      expect(await render({ snapshot: snapshotLine({ age: 10 * MINUTE }) })).toBe(expected);
-      expect(await render({ snapshot: "garbage" })).toBe(expected);
+      expect(await redis()).toBe(expected);
+      expect(await redis({ snapshot: snapshotLine({ age: 10 * MINUTE }) })).toBe(expected);
+      expect(await redis({ snapshot: "garbage" })).toBe(expected);
     });
 
     it("uses the growth over the oldest reading in the last week", async function () {
       // 0.7 GB over 7 days is 0.1 GB a day, though the last day was flat. The
       // readings from before the week, with no growth, are ignored.
       const history = historyLine([9 * DAY, 3 * GB], [8 * DAY, 3 * GB], [7 * DAY, 2.3 * GB], [DAY, 2.9 * GB]);
-      expect(await render({ snapshot: history })).toContain("memory 27% (resize in ~47 days, 8 GB free)");
+      expect(await redis({ snapshot: history })).toContain("memory 27% (resize in ~58 days, 8 GB free)");
     });
 
     it("scales a snapshot that is not a day old to a day", async function () {
-      const result = await render({ snapshot: snapshotLine({ age: 2 * DAY, memory: 2.8 * GB }) });
-      expect(result).toContain("memory 27% (resize in ~47 days, 8 GB free)");
+      const result = await redis({ snapshot: snapshotLine({ age: 2 * DAY, memory: 2.8 * GB }) });
+      expect(result).toContain("memory 27% (resize in ~58 days, 8 GB free)");
     });
 
     it("says stable when memory is flat or shrinking", async function () {
-      expect(await render({ snapshot: snapshotLine({ memory: 3 * GB }) })).toContain("memory 27% (stable, 8 GB free)");
-      expect(await render({ snapshot: snapshotLine({ memory: 3.5 * GB }) })).toContain("memory 27% (stable, 8 GB free)");
+      expect(await redis({ snapshot: snapshotLine({ memory: 3 * GB }) })).toContain("memory 27% (stable, 8 GB free)");
+      expect(await redis({ snapshot: snapshotLine({ memory: 3.5 * GB }) })).toContain("memory 27% (stable, 8 GB free)");
     });
 
     it("says stable when a resize is more than a year away", async function () {
-      // 70% of 11 GB is 7.7 GB: 4.7 GB to go at 12 MB a day is over a year
-      const result = await render({ snapshot: snapshotLine({ memory: 3 * GB - 12 * 1024 * 1024 }) });
+      // 80% of 11 GB is 8.8 GB: 5.8 GB to go at 12 MB a day is over a year (~495 days)
+      const result = await redis({ snapshot: snapshotLine({ memory: 3 * GB - 12 * 1024 * 1024 }) });
       expect(result).toContain("memory 27% (stable, 8 GB free)");
     });
 
-    it("says to resize now, with the link, from 70% of maxmemory", async function () {
-      const below = await render({ memory: info({ used: 7.69 * GB }), ...withSnapshot });
+    it("says to resize now, with the link, from 80% of maxmemory", async function () {
+      const below = await redis({ memory: info({ used: 8.79 * GB }), ...withSnapshot });
       expect(below).not.toContain("resize now");
 
-      const at = await render({ memory: info({ used: 7.7 * GB }), snapshot: snapshotLine({ memory: 7.6 * GB }) });
+      const at = await redis({ memory: info({ used: 8.8 * GB }), snapshot: snapshotLine({ memory: 8.7 * GB }) });
       expect(at).toBe(
-        `Redis server: memory 70% (**[resize now](${RESIZE_URL})**, 3.3 GB free), disk 21% (19 GB free), host RAM 75% available (12 GB), saved 3m ago, backed up 30m ago`
+        `Redis: memory 80% (**[resize now](${RESIZE_URL})**, 2.2 GB free), saved 3m ago, backed up 30m ago`
       );
       expect(RESIZE_URL).toBe(
         "https://github.com/blotcms/blot/blob/master/config/redis/README.md#increasing-the-redis-server-size"
       );
 
-      expect(await render({ memory: info({ used: 10 * GB }) })).toContain("memory 91% (**[resize now]");
+      expect(await redis({ memory: info({ used: 10 * GB }) })).toContain("memory 91% (**[resize now]");
     });
 
     it("shows no negative headroom when memory is over maxmemory", async function () {
-      const result = await render({ memory: info({ used: 11.5 * GB }) });
+      const result = await redis({ memory: info({ used: 11.5 * GB }) });
       expect(result).toContain("memory 105% (**[resize now](");
       expect(result).toContain("**, 0 Bytes free)");
     });
 
     it("copes with no maxmemory", async function () {
-      expect(await render({ memory: info({ maxmemory: 0 }), ...withSnapshot })).toContain(
+      expect(await redis({ memory: info({ maxmemory: 0 }), ...withSnapshot })).toContain(
         "memory 3 GB, no maxmemory set,"
       );
     });
   });
 
-  describe("host RAM", function () {
+  describe("RAM", function () {
     const ram = (available) => ` ram_total=${16 * GB} ram_avail=${available * GB}`;
     const disk = ` disk_root=${5 * GB}/${24 * GB}/${19 * GB}`;
 
     it("shows the host's available RAM, after the disk", async function () {
-      expect(await render()).toContain("disk 21% (19 GB free), host RAM 75% available (12 GB), saved");
+      expect(await server()).toBe("Server: disk 21% (19 GB free), RAM 75% available (12 GB)");
     });
 
     it("is bold below 15%", async function () {
       const extra = (available) => ram(available) + disk;
 
-      expect(await render({ sample: sampleLine({ extra: extra(2.5) }) })).toContain("host RAM 16% available (2.5 GB)");
-      expect(await render({ sample: sampleLine({ extra: extra(2) }) })).toContain("**host RAM 13% available (2 GB)**");
+      expect(await server({ sample: sampleLine({ extra: extra(2.5) }) })).toEndWith(", RAM 16% available (2.5 GB)");
+      expect(await server({ sample: sampleLine({ extra: extra(2) }) })).toEndWith(", **RAM 13% available (2 GB)**");
     });
 
     it("says when the host did not report it", async function () {
-      expect(await render({ sample: sampleLine({ extra: disk }) })).toContain(", host RAM not reported, saved");
+      expect(await server({ sample: sampleLine({ extra: disk }) })).toEndWith(", RAM not reported");
     });
 
     it("is left out with no sample or a stale one, which the disk part already says", async function () {
-      expect(await render({ sample: null })).not.toContain("host RAM");
-      expect(await render({ sample: sampleLine({ age: 25 * MINUTE }) })).not.toContain("host RAM");
+      expect(await server({ sample: null })).not.toContain("RAM");
+      expect(await server({ sample: sampleLine({ age: 25 * MINUTE }) })).not.toContain("RAM");
     });
   });
 
   describe("disk", function () {
     it("shows only the root disk normally", async function () {
-      const result = await render();
-      expect(result).toContain("disk 21% (19 GB free), host RAM");
+      const result = await server();
+      expect(result).toContain("disk 21% (19 GB free), RAM");
       expect(result).not.toContain("backup disk");
       expect(result).not.toContain("/backups");
     });
@@ -192,105 +200,106 @@ describe("scheduler/daily/redis-server", function () {
     it("says where the root disk is heading", async function () {
       // 80% of 24 GB is 19.2 GB: 14.2 GB to go at 0.1 GB a day
       const growing = historyLine([DAY, 4.9 * GB, "ip-10-0-0-1"]);
-      expect(await render({ disk: growing })).toContain("disk 21% (resize in ~142 days, 19 GB free)");
+      expect(await server({ disk: growing })).toContain("disk 21% (resize in ~142 days, 19 GB free)");
 
       const flat = historyLine([DAY, 5 * GB, "ip-10-0-0-1"]);
-      expect(await render({ disk: flat })).toContain("disk 21% (stable, 19 GB free)");
+      expect(await server({ disk: flat })).toContain("disk 21% (stable, 19 GB free)");
     });
 
     it("starts afresh on a different host", async function () {
       const replaced = historyLine([DAY, 1 * GB, "ip-10-0-0-9"]);
-      expect(await render({ disk: replaced })).toContain("disk 21% (19 GB free)");
+      expect(await server({ disk: replaced })).toContain("disk 21% (19 GB free)");
     });
 
     it("says to resize now from 80% full", async function () {
       const extra = ` disk_root=${20 * GB}/${24 * GB}/${4 * GB}`;
-      expect(await render({ sample: sampleLine({ extra }) })).toContain("disk 83% (**resize now**, 4 GB free)");
+      expect(await server({ sample: sampleLine({ extra }) })).toContain("disk 83% (**resize now**, 4 GB free)");
     });
 
     it("says when the backup disk is 80% full or more", async function () {
       const extra = ` disk_root=${5 * GB}/${24 * GB} disk_backups=${79 * GB}/${100 * GB}`;
-      expect(await render({ sample: sampleLine({ extra }) })).not.toContain("backup disk");
+      expect(await server({ sample: sampleLine({ extra }) })).not.toContain("backup disk");
 
       const full = ` disk_root=${5 * GB}/${24 * GB} disk_backups=${85 * GB}/${100 * GB}`;
-      expect(await render({ sample: sampleLine({ extra: full }) })).toContain(
-        "disk 21% (19 GB free), **backup disk 85% full**, host RAM"
+      expect(await server({ sample: sampleLine({ extra: full }) })).toContain(
+        "disk 21% (19 GB free), **backup disk 85% full**, RAM"
       );
     });
 
     it("uses df's available figure, which excludes reserved blocks", async function () {
       // 5 GB used of 24 GB, but only 17 GB available: 1 - 17 / (5 + 17) = 23%
       const extra = ` disk_root=${5 * GB}/${24 * GB}/${17 * GB} disk_backups=${78 * GB}/${100 * GB}/${17 * GB}`;
-      const result = await render({ sample: sampleLine({ extra }) });
+      const result = await server({ sample: sampleLine({ extra }) });
 
-      expect(result).toContain("disk 23% (17 GB free), **backup disk 82% full**, host RAM");
+      expect(result).toContain("disk 23% (17 GB free), **backup disk 82% full**, RAM");
     });
 
     it("works out the disk from used and total for a sample without the available figure", async function () {
       const extra = ` disk_root=${5 * GB}/${24 * GB} disk_backups=${85 * GB}/${100 * GB}`;
-      expect(await render({ sample: sampleLine({ extra }) })).toContain(
-        "disk 21% (19 GB free), **backup disk 85% full**, host RAM"
+      expect(await server({ sample: sampleLine({ extra }) })).toContain(
+        "disk 21% (19 GB free), **backup disk 85% full**, RAM"
       );
     });
 
     it("says when /backups is not mounted", async function () {
       const extra = ` disk_root=${5 * GB}/${24 * GB}`;
-      expect(await render({ sample: sampleLine({ extra }) })).toContain(
-        "disk 21% (19 GB free), **/backups not mounted**, host RAM"
+      expect(await server({ sample: sampleLine({ extra }) })).toContain(
+        "disk 21% (19 GB free), **/backups not mounted**, RAM"
       );
     });
 
     it("says so when the host has sent no sample", async function () {
-      expect(await render({ sample: null })).toBe(
-        "Redis server: memory 27% (8 GB free), no sample from the Redis host, saved 3m ago, backed up 30m ago"
-      );
+      expect(await both({ sample: null })).toEqual({
+        redis: "Redis: memory 27% (8 GB free), saved 3m ago, backed up 30m ago",
+        server: "Server: no sample from the host",
+      });
     });
 
     it("says how old a stale sample is instead of using it", async function () {
-      expect(await render({ sample: sampleLine({ age: 45 * MINUTE }) })).toContain("memory 27% (8 GB free), sample 45m old, saved");
-      expect(await render({ sample: sampleLine({ age: 3 * HOUR }) })).toContain("sample 3h old");
+      expect(await server({ sample: sampleLine({ age: 45 * MINUTE }) })).toBe("Server: sample 45m old");
+      expect(await server({ sample: sampleLine({ age: 3 * HOUR }) })).toBe("Server: sample 3h old");
     });
 
     it("copes with a sample from before the host reported disk", async function () {
-      expect(await render({ sample: sampleLine({ extra: "" }) })).toContain("disk not reported by the Redis host");
+      expect(await server({ sample: sampleLine({ extra: "" }) })).toContain("disk not reported");
     });
   });
 
   describe("last save", function () {
     it("says how long ago, in compact units", async function () {
-      expect(await render({ memory: info({ saveAge: 2 * HOUR }) })).toContain("saved 2h ago");
-      expect(await render({ memory: info({ saveAge: 3 * DAY }) })).toContain("saved 3d ago");
+      expect(await redis({ memory: info({ saveAge: 2 * HOUR }) })).toContain("saved 2h ago");
+      expect(await redis({ memory: info({ saveAge: 3 * DAY }) })).toContain("saved 3d ago");
     });
 
     it("says a failed save, instead of when", async function () {
-      const result = await render({ memory: info({ saveStatus: "err" }) });
+      const result = await redis({ memory: info({ saveStatus: "err" }) });
       expect(result).toContain("**last save failed**, backed up");
       expect(result).not.toContain("saved");
     });
 
     it("copes with Redis not reporting persistence", async function () {
-      const result = await render({ memory: "# Memory\r\nused_memory:5\r\nmaxmemory:10\r\n" });
+      const result = await redis({ memory: "# Memory\r\nused_memory:5\r\nmaxmemory:10\r\n" });
       expect(result).toContain("save not reported");
     });
   });
 
   describe("last backup", function () {
     it("says how long ago", async function () {
-      expect(await render({ backup: backupLine({ age: 2 * HOUR }) })).toEndWith("backed up 2h ago");
+      expect(await redis({ backup: backupLine({ age: 2 * HOUR }) })).toEndWith("backed up 2h ago");
     });
 
     it("says overdue after two hours", async function () {
-      expect(await render({ backup: backupLine({ age: 3 * HOUR, kind: "daily" }) })).toEndWith(
+      expect(await redis({ backup: backupLine({ age: 3 * HOUR, kind: "daily" }) })).toEndWith(
         "**last backup 3h ago, overdue**"
       );
-      expect(await render({ backup: backupLine({ age: 3 * DAY }) })).toEndWith(
+      expect(await redis({ backup: backupLine({ age: 3 * DAY }) })).toEndWith(
         "**last backup 3d ago, overdue**"
       );
     });
 
     it("says when none is recorded or it cannot be read", async function () {
-      expect(await render({ backup: null })).toEndWith("**no backup recorded**");
-      expect(await render({ backup: "garbage" })).toEndWith("**no backup recorded**");
+      expect(await redis({ backup: null })).toEndWith("**no backup recorded**");
+      expect(await redis({ backup: "garbage" })).toEndWith("**no backup recorded**");
       expect(parseBackup(null)).toBe(null);
       expect(parseBackup(backupLine({ bytes: 1234 }))).toEqual({
         time: NOW - 30 * MINUTE,
@@ -303,26 +312,26 @@ describe("scheduler/daily/redis-server", function () {
 
   describe("offsite backup", function () {
     it("says how long ago, after the backup", async function () {
-      expect(await render({ offsite: backupLine({ age: 5 * HOUR, kind: "daily" }) })).toEndWith(
+      expect(await redis({ offsite: backupLine({ age: 5 * HOUR, kind: "daily" }) })).toEndWith(
         "backed up 30m ago, offsite 5h ago"
       );
     });
 
     it("flags it after two days", async function () {
-      expect(await render({ offsite: backupLine({ age: 2 * DAY, kind: "daily" }) })).toEndWith(
+      expect(await redis({ offsite: backupLine({ age: 2 * DAY, kind: "daily" }) })).toEndWith(
         "offsite 2d ago"
       );
-      expect(await render({ offsite: backupLine({ age: 3 * DAY, kind: "daily" }) })).toEndWith(
+      expect(await redis({ offsite: backupLine({ age: 3 * DAY, kind: "daily" }) })).toEndWith(
         "**last offsite backup 3d ago, overdue**"
       );
     });
 
     it("flags a value that cannot be read", async function () {
-      expect(await render({ offsite: "garbage" })).toEndWith("**offsite backup unreadable**");
+      expect(await redis({ offsite: "garbage" })).toEndWith("**offsite backup unreadable**");
     });
 
     it("shows nothing where offsite is not configured", async function () {
-      const result = await render({});
+      const result = await redis({});
       expect(result).toEndWith("backed up 30m ago");
       expect(result).not.toContain("offsite");
     });
@@ -334,11 +343,13 @@ describe("scheduler/daily/redis-server", function () {
         redisServer((err, result) => (err ? reject(err) : resolve(result)), deps)
       );
 
-    it("passes the line to the email", async function () {
+    it("passes the two lines to the email", async function () {
       const result = await run({ client: fakeRedis(withSnapshot), now: NOW });
-      expect(Object.keys(result)).toEqual(["redis_server"]);
-      expect(result.redis_server).toStartWith("Redis server: memory 27% (resize in ~47 days, 8 GB free)");
-      expect(result.redis_server).not.toContain("\n");
+      expect(Object.keys(result)).toEqual(["redis", "server"]);
+      expect(result.redis).toStartWith("Redis: memory 27% (resize in ~58 days, 8 GB free)");
+      expect(result.server).toStartWith("Server: disk 21% (19 GB free)");
+      expect(result.redis).not.toContain("\n");
+      expect(result.server).not.toContain("\n");
     });
 
     it("stores today's readings for tomorrow's trends", async function () {
@@ -352,7 +363,7 @@ describe("scheduler/daily/redis-server", function () {
 
       // A day later they are the baseline: no growth
       const tomorrow = await run({ client, now: NOW + DAY });
-      expect(tomorrow.redis_server).toContain("memory 27% (stable, 8 GB free)");
+      expect(tomorrow.redis).toContain("memory 27% (stable, 8 GB free)");
     });
 
     it("keeps the previous readings when run again within the hour", async function () {
@@ -386,7 +397,7 @@ describe("scheduler/daily/redis-server", function () {
       };
 
       const result = await run({ client, now: NOW });
-      expect(result.redis_server).toStartWith("Redis server: memory 27%");
+      expect(result.redis).toStartWith("Redis: memory 27%");
     });
 
     it("never fails the daily email when Redis cannot be read", async function () {
@@ -396,16 +407,19 @@ describe("scheduler/daily/redis-server", function () {
         },
       };
 
-      expect(await run({ client })).toEqual({ redis_server: "Redis server: unavailable (connection refused)" });
+      expect(await run({ client })).toEqual({
+        redis: "Redis: unavailable (connection refused)",
+        server: "Server: unavailable (its sample is read from Redis)",
+      });
     });
 
     it("never fails the daily email when INFO is unexpected", async function () {
       const result = await run({ client: fakeRedis({ memory: "# Memory\r\n" }) });
-      expect(result.redis_server).toMatch(/^Redis server: unavailable \(INFO memory has no used_memory/);
+      expect(result.redis).toMatch(/^Redis: unavailable \(INFO memory has no used_memory/);
     });
   });
 
-  it("renders as one paragraph in the daily email", function () {
+  it("renders each line as its own paragraph in the daily email", function () {
     const fs = require("fs");
     const Mustache = require("mustache");
     const { marked } = require("marked");
@@ -414,12 +428,14 @@ describe("scheduler/daily/redis-server", function () {
     const html = marked.parse(
       Mustache.render(template, {
         render_time: "p50 10ms",
-        redis_server: `Redis server: memory 72% (**[resize now](${RESIZE_URL})**, 3 GB free), disk 21% (19 GB free), saved 3m ago`,
+        redis: `Redis: memory 82% (**[resize now](${RESIZE_URL})**, 2 GB free), saved 3m ago`,
+        server: "Server: disk 21% (19 GB free), RAM 75% available (12 GB)",
       })
     );
 
     expect(html).toContain(
-      `<p>Redis server: memory 72% (<strong><a href="${RESIZE_URL}">resize now</a></strong>, 3 GB free), disk 21% (19 GB free), saved 3m ago</p>`
+      `<p>Redis: memory 82% (<strong><a href="${RESIZE_URL}">resize now</a></strong>, 2 GB free), saved 3m ago</p>`
     );
+    expect(html).toContain("<p>Server: disk 21% (19 GB free), RAM 75% available (12 GB)</p>");
   });
 });

@@ -40,9 +40,6 @@ function harness(options) {
       }
       return paths;
     },
-    "helper/localPath": function (_, path) {
-      return path;
-    },
     "../database": {
       blog: {
         get: async function () {

@@ -220,7 +220,6 @@ Symbolic links (including links within the blog) and submodules are not supporte
 - `models/user`: User model for email-based user lookup
 - `helper/ensure`: Runtime type validation utility
 - `helper/clfdate`: CLF date formatting for logs
-- `helper/localPath`: Helper to construct absolute paths within blog directories
 - `sync`: Distributed lock manager for coordinating blog folder updates
 - `clients/util/shouldIgnoreFile`: Utility to determine if a file should be excluded from syncing
 

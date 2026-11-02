@@ -400,20 +400,20 @@ describe("scheduler check-redis-host", function () {
   });
 
   describe("maxmemory", function () {
-    it("alerts once at 80%, then once below 75%", async function () {
-      const h = harness({ memory: { used: 8 * GB, maxmemory: 10 * GB } });
+    it("alerts once at 90%, then once below 85%", async function () {
+      const h = harness({ memory: { used: 9 * GB, maxmemory: 10 * GB } });
 
       await h.tick();
       expect(titles(h.sent[0])).toEqual(["Redis memory nearing maxmemory"]);
-      expect(h.sent[0].alerts[0].message).toBe("8.00GB of 10.00GB (80%)");
+      expect(h.sent[0].alerts[0].message).toBe("9.00GB of 10.00GB (90%)");
 
-      h.client.memory.used = 7.6 * GB;
+      h.client.memory.used = 8.6 * GB;
       await h.tick();
       expect(h.sent.length).toBe(1);
 
       h.advance(CONDITION_MIN_INTERVAL);
       h.sample = sampleLine({ time: h.now });
-      h.client.memory.used = 7.4 * GB;
+      h.client.memory.used = 8.4 * GB;
       await h.tick();
       expect(h.sent[1].summary).toBe("recovered: Redis memory nearing maxmemory");
     });
@@ -543,7 +543,7 @@ describe("scheduler check-redis-host", function () {
       ]);
       expect(v.thresholds).toEqual({
         tcpMem: "50%",
-        maxmemory: "80%",
+        maxmemory: "90%",
         hostMemory: "10%",
         hostMemoryMinutes: 10,
         stale: "20 minutes",

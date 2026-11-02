@@ -11,12 +11,10 @@
 // Only core modules and NODE_PATH-resolved app modules - the script is copied
 // to /tmp inside the container, so it cannot see the app's node_modules.
 const { promisify } = require("util");
-const fs = require("fs");
-const path = require("path");
 
 const User = require("models/user");
 const Blog = require("models/blog");
-const localPath = require("helper/localPath");
+const folder = require("storage/folder");
 const config = require("config");
 const buildTemplates = promisify(require("templates"));
 const rebuild = promisify(require("sync/rebuild"));
@@ -59,9 +57,7 @@ if (!email) {
       "This blog is served through the containerised proxy in the e2e suite.",
     ].join("\n") + "\n";
 
-  const postPath = localPath(blog.id, "/hello.txt");
-  await fs.promises.mkdir(path.dirname(postPath), { recursive: true });
-  await fs.promises.writeFile(postPath, post);
+  await folder.write(blog.id, "/hello.txt", post);
   await rebuild(blog.id, {});
 
   console.log(

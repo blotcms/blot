@@ -2,8 +2,6 @@ const storage = require("storage/folder");
 const { promisify } = require("util");
 const { join } = require("path");
 const clfdate = require("helper/clfdate");
-// Only for localDescendants and countLocalFiles, which walk an absolute path
-const localPath = require("helper/localPath");
 const download = promisify(require("../util/download"));
 const {
   MAX_FILE_SIZE,
@@ -211,8 +209,7 @@ async function resetToBlotWithClient(
     startedAt,
   };
 
-  const localRoot = localPath(blogID, "/");
-  const progress = createProgress(await countLocalFiles(localRoot), publish);
+  const progress = createProgress(await countLocalFiles(blogID, "/"), publish);
 
   await walk(
     blogID,
@@ -261,7 +258,6 @@ const walk = async (
   summary,
   progress
 ) => {
-  const localRoot = localPath(blogID, "/");
   publish("Checking", dir);
   const [remoteContents, localContents] = await Promise.all([
     remoteReaddir(client, join(dropboxRoot, dir)),
@@ -270,11 +266,10 @@ const walk = async (
 
   for (const { name, path_display, is_directory } of localContents) {
     const pathOnBlot = join(dir, name);
-    const pathOnDisk = join(localRoot, dir, name);
     // A directory removed in one fs.remove call still accounts for every
     // file total counted inside it, so current must advance by that many.
     const removedCount = is_directory
-      ? await countLocalFiles(pathOnDisk)
+      ? await countLocalFiles(blogID, pathOnBlot)
       : 1;
 
     if (shouldIgnoreFile(pathOnBlot)) {
@@ -298,7 +293,7 @@ const walk = async (
       progress.publish("Removing", pathOnBlot, false, removedCount);
       try {
         const descendants = is_directory
-          ? await localDescendants(pathOnDisk, pathOnBlot)
+          ? await localDescendants(blogID, pathOnBlot)
           : [];
         // Before the removal, while there is something left to stat
         summary.removedFiles[pathOnBlot] = is_directory

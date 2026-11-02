@@ -25,7 +25,7 @@ const Tags = require("models/tags");
 const Blog = require("models/blog");
 const client = require("models/client");
 const pathIndex = require("models/entries/pathIndex");
-const localPath = require("helper/localPath");
+const localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
 
 const getEntry = (blogID, id) =>
   promisify((next) => Entry.get(blogID, id, (entry) => next(null, entry)))();
