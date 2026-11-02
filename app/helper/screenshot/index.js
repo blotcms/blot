@@ -6,7 +6,7 @@ const Bottleneck = require("bottleneck");
 const config = require("config");
 const retry = require("./retry");
 const clfdate = require("helper/clfdate");
-const airlock = require("helper/airlock");
+const egress = require("helper/egress");
 const sandbox = require("sandbox");
 
 // In production screenshots run in the sandbox's browser jail (app/sandbox,
@@ -423,7 +423,7 @@ const screenshot = async (site, path, options = {}) => {
   // fall back to puppeteer.launch(). Trusted callers (app/templates/screenshots.js
   // - URLs built from config.host, no user input) don't set the flag.
   if (options.untrusted && !config.sandbox.browser) {
-    airlock.assertBrowserReady("build/plugins/linkScreenshot");
+    egress.assertBrowserReady("build/plugins/linkScreenshot");
   }
 
   const take = config.sandbox.browser ? takeScreenshotInSandbox : takeScreenshot;
