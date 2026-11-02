@@ -9,10 +9,6 @@ function lexKey(blogID) {
   return "blog:" + blogID + ":entries:lex";
 }
 
-function readyKey(blogID) {
-  return "blog:" + blogID + ":entries:lex:ready";
-}
-
 function backfillIndex(blogID, callback) {
   ensure(blogID, "string").and(callback, "function");
 
@@ -28,7 +24,6 @@ function backfillIndex(blogID, callback) {
       }
     }
 
-    multi.set(readyKey(blogID), "1");
     await multi.exec();
 
     callback(null, ids ? ids.length : 0);
@@ -39,6 +34,5 @@ function backfillIndex(blogID, callback) {
 
 module.exports = {
   lexKey: lexKey,
-  readyKey: readyKey,
   backfillIndex: backfillIndex,
 };

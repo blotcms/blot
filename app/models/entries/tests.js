@@ -452,7 +452,6 @@ describe("entries", function () {
   it("getPage should return a page of entries sorted by date", async function (done) {
     const key = `blog:${this.blog.id}:entries`;
     const lexKey = `blog:${this.blog.id}:entries:lex`;
-    const lexReadyKey = `blog:${this.blog.id}:entries:lex:ready`;
     const now = Date.now();
     const ids = ["/a.txt", "/b.txt", "/c.txt", "/d.txt", "/e.txt", "/f.txt"];
     // Add 6 mock entries in Redis
@@ -467,7 +466,6 @@ describe("entries", function () {
 
     const pipeline = redis.multi();
     ids.forEach((id) => pipeline.zAdd(lexKey, { score: 0, value: id }));
-    pipeline.set(lexReadyKey, "1");
     await pipeline.exec();
 
     // spy on the Entry.get function
@@ -503,9 +501,7 @@ describe("entries", function () {
           next: 3,
           previous: 1,
           total: 3, // 6 entries / 2 per page
-          pageSize: 2,
           page_size: 2,
-          totalEntries: 6,
           total_entries: 6,
         });
         expect(entries.at(-1).pagination).toEqual(pagination);
@@ -543,7 +539,6 @@ describe("entries", function () {
     const blogID = this.blog.id;
     const key = `blog:${blogID}:entries`;
     const lexKey = `blog:${blogID}:entries:lex`;
-    const lexReadyKey = `blog:${blogID}:entries:lex:ready`;
     const now = Date.now();
     const ids = ["/a.txt", "/b.txt", "/c.txt", "/d.txt", "/e.txt", "/f.txt"];
 
@@ -558,7 +553,6 @@ describe("entries", function () {
 
     const pipeline = redis.multi();
     ids.forEach((id) => pipeline.zAdd(lexKey, { score: 0, value: id }));
-    pipeline.set(lexReadyKey, "1");
     await pipeline.exec();
 
     spyOn(Entry, "get").and.callFake((blogID, ids, callback) => {
@@ -626,9 +620,7 @@ describe("entries", function () {
           next: null,
           previous: null,
           total: 1,
-          pageSize: 10,
           page_size: 10,
-          totalEntries: 1,
           total_entries: 1,
         });
         expect(entries.at(-1).pagination).toEqual(pagination);
@@ -691,11 +683,10 @@ describe("entries", function () {
 
 
   describe("path index maintenance", function () {
-    it("updates lex index for changed entries once index is ready", async function () {
+    it("updates lex index for changed entries", async function () {
       const blogID = this.blog.id;
       const entriesKey = `blog:${blogID}:entries`;
       const lexKey = `blog:${blogID}:entries:lex`;
-      const readyKey = `blog:${blogID}:entries:lex:ready`;
       const now = Date.now();
 
       await redis.zAdd(entriesKey, { score: now, value: "/Blog/existing.txt" });
@@ -703,7 +694,6 @@ describe("entries", function () {
       await redis
         .multi()
         .zAdd(lexKey, { score: 0, value: "/Blog/existing.txt" })
-        .set(readyKey, "1")
         .exec();
 
       await new Promise((resolve, reject) => {
@@ -718,9 +708,6 @@ describe("entries", function () {
       const ids = await redis.zRange(lexKey, 0, -1);
       expect(ids).toContain("/Blog/existing.txt");
       expect(ids).toContain("/Blog/new.txt");
-
-      const ready = await redis.exists(readyKey);
-      expect(ready).toBe(1);
     });
   });
   describe("path prefix pagination", function () {
@@ -748,7 +735,6 @@ describe("entries", function () {
         .zAdd(`blog:${blogID}:entries:lex`, { score: 0, value: "/Blog/b.txt" })
         .zAdd(`blog:${blogID}:entries:lex`, { score: 0, value: "/Blog/c.txt" })
         .zAdd(`blog:${blogID}:entries:lex`, { score: 0, value: "/Notes/d.txt" })
-        .set(`blog:${blogID}:entries:lex:ready`, "1")
         .exec();
     }
 
@@ -767,9 +753,7 @@ describe("entries", function () {
             next: 2,
             previous: null,
             total: 2,
-            pageSize: 2,
             page_size: 2,
-            totalEntries: 3,
             total_entries: 3,
           });
           expect(entries.at(-1).pagination).toEqual(pagination);
@@ -813,7 +797,6 @@ describe("entries", function () {
         .zAdd(lexKey, { score: 0, value: tieIDs[0] })
         .zAdd(lexKey, { score: 0, value: tieIDs[1] })
         .zAdd(lexKey, { score: 0, value: tieIDs[2] })
-        .set(`blog:${blogID}:entries:lex:ready`, "1")
         .exec();
 
       const taggedSetKey = `blog:${blogID}:tags:sorted:redis-tie-check`;

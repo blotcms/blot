@@ -118,8 +118,6 @@ module.exports = function (blogID, entry, callback) {
     drop(SCHEDULED);
   }
 
-  multi.set(pathIndex.readyKey(blogID), "1");
-
   multi
     .exec()
     .then(function () {

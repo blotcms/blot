@@ -43,6 +43,7 @@ const { readRanges } = require("./ranges");
 const { parseHeader } = require("./pack");
 const inflateStream = require("./inflate");
 const pktline = require("./pktline");
+const { negotiate, choosePacks } = require("./fetch");
 const { CorruptError, ProtocolError, UnsupportedError, BusyError, ClientGoneError } = require("./errors");
 
 const FANOUT = 8 + 256 * 4;
@@ -609,7 +610,10 @@ function createLimiter({ max, maxWaiting = 0 }) {
 // Writes the clone of the repository `manifest` describes to `out`, a Writable
 // (an HTTP response). With `sideband` (a capability name, "side-band-64k" or
 // "side-band") the pack goes in that sideband, after `prelude` (bytes to send
-// first, which serve() uses for NAK); without, it is written raw.
+// first, which serve() uses for the negotiation's answer); without, it is
+// written raw. `packs` are the packs to send, the manifest's all of them unless
+// a fetch has worked out that the client has the older ones (fetch.js): they
+// are planned and streamed exactly as a clone's are.
 //
 // Resolves { objects, bytes, skipped, rewritten, toRef } once all of it has been
 // written. On failure it rejects and the transfer has not been completed:
@@ -618,7 +622,7 @@ function createLimiter({ max, maxWaiting = 0 }) {
 // an error status; otherwise `out` has been ended (after an error packet, when
 // there is a sideband to carry it) or destroyed. A client which went away is a
 // ClientGoneError: reading stopped as soon as it was known.
-async function clone({ store, manifest, out, prelude, sideband = null, limiter = null, chunkSize = CHUNK_SIZE, mergeBudget, keepaliveAfter = KEEPALIVE_AFTER, progress = true }) {
+async function clone({ store, manifest, packs = manifest.packs, out, prelude, sideband = null, limiter = null, chunkSize = CHUNK_SIZE, mergeBudget, keepaliveAfter = KEEPALIVE_AFTER, progress = true }) {
   const controller = new AbortController();
   const run = { store, signal: controller.signal, chunkSize, mergeBudget };
   const stats = { objects: 0, bytes: 0, skipped: 0, rewritten: 0, toRef: 0 };
@@ -667,7 +671,7 @@ async function clone({ store, manifest, out, prelude, sideband = null, limiter =
 
     let thePlan;
     try {
-      thePlan = await plan(run, manifest.packs);
+      thePlan = await plan(run, packs);
     } finally {
       clearTimeout(timer);
       clearInterval(timer);
@@ -705,13 +709,13 @@ async function clone({ store, manifest, out, prelude, sideband = null, limiter =
   }
 }
 
-// What a POST to git-upload-pack asks for: { wants, capabilities, done }.
+// What a POST to git-upload-pack asks for: { wants, haves, capabilities, done }.
 // Throws UnsupportedError for what this store does not do, ProtocolError for
 // what is not git.
 function parseRequest(body) {
   if (body.length > MAX_REQUEST) throw new ProtocolError("The request is too large");
 
-  const request = { wants: [], capabilities: [], done: false };
+  const request = { wants: [], haves: [], capabilities: [], done: false };
 
   for (const packet of pktline.split(body)) {
     if (packet.flush) continue;
@@ -725,7 +729,9 @@ function parseRequest(body) {
       request.wants.push(oid);
       if (!request.capabilities.length) request.capabilities = line.slice(46).split(" ").filter(Boolean);
     } else if (line.startsWith("have ")) {
-      throw new UnsupportedError("Fetching into an existing clone is not supported yet");
+      const oid = line.slice(5);
+      if (!/^[0-9a-f]{40}$/.test(oid)) throw new ProtocolError("Bad have line");
+      request.haves.push(oid);
     } else if (line === "done") {
       request.done = true;
     } else {
@@ -745,21 +751,48 @@ function tips(manifest) {
   return found;
 }
 
+// What upload-pack says before the pack, in git's own words (see
+// get_common_commits in upload-pack.c). A client which asked for
+// multi_ack_detailed is told each common commit and, when a round has ended in
+// a flush, whether the server is ready. A client which did not is only ever
+// sent NAK, so it keeps negotiating until it says done. `early` is a round
+// which ends with the pack, for a client which sent no-done: the final ACK
+// follows NAK, as in git.
+function acknowledgement({ commons, ready, done, early, detailed }) {
+  const last = commons[commons.length - 1];
+  const lines = detailed ? commons.map((oid) => "ACK " + oid + " common\n") : [];
+
+  if (done) {
+    lines.push(detailed && commons.length ? "ACK " + last + "\n" : "NAK\n");
+  } else {
+    if (detailed && ready && last) lines.push("ACK " + last + " ready\n");
+    lines.push("NAK\n");
+    if (early && last) lines.push("ACK " + last + "\n");
+  }
+  return Buffer.concat(lines.map((line) => pktline.packet(line)));
+}
+
 // Answers a POST to git-upload-pack. `body` is the request, already
 // decompressed. Everything goes to `out`, which this ends.
 //
 // - A request which asks for nothing (git's "0000" probe) gets an empty answer.
-// - A request for something this store does not do (shallow, filter, have lines
-//   until fetch is built, a client without ofs-delta) or for an ID which is not
-//   a ref's tip gets an "ERR" packet, which git shows as "remote error".
-//   Nothing else is sent.
-// - Otherwise: NAK, then the whole repository as one pack. A client which
-//   asked for fewer refs than there are still gets all of them; it can't
-//   receive too little.
+// - A request for something this store does not do (shallow, filter, a client
+//   without ofs-delta) or for an ID which is not a ref's tip gets an "ERR"
+//   packet, which git shows as "remote error". Nothing else is sent.
+// - A request which has not said done gets the answer to its have lines (see
+//   fetch.js and acknowledgement above): which are common, and whether the
+//   server is ready. With no-done and ready, the pack follows at once.
+// - Otherwise: the acknowledgement, then one pack. For a request with no haves
+//   that is the whole repository, as a clone. With haves it is the packs newer
+//   than the newest snapshot of the refs which the client provably has, or all
+//   of them if there is none. It is never too little and can be more than the
+//   client needs.
 //
 // A ProtocolError (the request isn't git) is thrown before anything is written,
-// so the host can answer 400. A BusyError is too (503).
-async function serve({ store, manifest, body, out, limiter, chunkSize, mergeBudget, keepaliveAfter }) {
+// so the host can answer 400. A BusyError is too (503), and so is a failure
+// to read the history to negotiate. `cache` (cache.js) is optional and only
+// saves requests.
+async function serve({ store, cache, manifest, body, out, limiter, chunkSize, mergeBudget, keepaliveAfter, walkLimit, historyLimit }) {
   const request = parseRequestOrRefuse(body);
   const refusal = request.refusal || check(manifest, request);
 
@@ -772,19 +805,35 @@ async function serve({ store, manifest, body, out, limiter, chunkSize, mergeBudg
     return { empty: true };
   }
 
-  const nak = pktline.packet("NAK\n");
-  if (!request.done) {
-    out.end(nak);
-    return { negotiated: true };
+  const capabilities = request.capabilities;
+  const detailed = capabilities.includes("multi_ack_detailed");
+  const negotiation = request.haves.length
+    ? await negotiate({ store, cache, manifest, haves: request.haves, limiter, maxWalk: walkLimit, maxHistory: historyLimit })
+    : { floor: 0, commons: [], ready: false, walked: 0 };
+  const facts = { commons: negotiation.commons.length, ready: negotiation.ready, walked: negotiation.walked };
+
+  const early = !request.done && detailed && negotiation.ready && negotiation.commons.length > 0 && capabilities.includes("no-done");
+  if (!request.done && !early) {
+    out.end(acknowledgement({ ...negotiation, detailed }));
+    return { negotiated: true, floor: negotiation.floor, ...facts };
   }
 
-  const sideband = request.capabilities.includes("side-band-64k") ? "side-band-64k" : request.capabilities.includes("side-band") ? "side-band" : null;
-  return clone({ store, manifest, out, prelude: nak, sideband, limiter,
+  const { packs, floor } = await choosePacks({ store, cache, manifest, wants: request.wants, negotiation });
+  const sideband = capabilities.includes("side-band-64k") ? "side-band-64k" : capabilities.includes("side-band") ? "side-band" : null;
+  const sent = await clone({
+    store,
+    manifest,
+    packs,
+    out,
+    prelude: acknowledgement({ ...negotiation, done: request.done, early, detailed }),
+    sideband,
+    limiter,
     chunkSize,
     mergeBudget,
     keepaliveAfter,
-    progress: !request.capabilities.includes("no-progress"),
+    progress: !capabilities.includes("no-progress"),
   });
+  return { ...sent, floor, packs: packs.length, ...facts };
 }
 
 function parseRequestOrRefuse(body) {

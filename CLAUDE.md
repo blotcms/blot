@@ -29,6 +29,14 @@ After opening a pull request in this repo:
 - Push back on nitpicky edge cases Codex flags, and discuss anything with the maintainer during the cycle.
 - Never merge a PR without the maintainer's explicit approval.
 
+# Squash merges
+
+The maintainer always squash merges. A branch's own commits never reach `master`; only the one squashed commit does. So when PRs depend on each other:
+
+- Stack them: open each later PR against the branch of the one before it (`gh pr create --base <earlier branch>`), not against `master`, so its diff shows only its own change.
+- Once the earlier PR is squash merged, rebase the later branch onto `master` with `git rebase --onto origin/master <earlier branch's old tip>`, retarget the PR to `master` (`gh pr edit <n> --base master`) and force push. Merging `master` in instead keeps the earlier PR's commits beside their squashed copy, which conflicts wherever the earlier PR changed after the later one branched off.
+- Never rely on a commit from an unmerged branch being in `master` under its own SHA.
+
 # Local preview
 
 `https://local.blot` serves the main checkout, not agent worktrees. To show the operator a worktree's running code, use the `preview` skill (`scripts/development/preview.sh up <url-or-path>`) rather than asking them to check out the branch.

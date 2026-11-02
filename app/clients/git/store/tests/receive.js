@@ -214,7 +214,9 @@ describe("git store receive", function () {
       const current = await manifest.read(store);
       expect(current.seq).toBe(before.seq + 1);
       expect(current.refs["refs/tags/old"]).toBe(fixture.commits[1]);
-      expect(current.packs).toEqual(before.packs);
+      // The tag's commit is not known to be reachable (this repository was seeded
+      // with no history pieces), so the packs are listed again
+      expect(current.packs.map((pack) => pack.name)).toEqual(before.packs.map((pack) => pack.name));
       expect(current.historyPieces).toEqual([]);
       expect(store.stats.puts - puts).toBe(1); // the hint, no packs
       expectNoScratch();

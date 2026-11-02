@@ -19,9 +19,10 @@ async function collect(stream) {
   return Buffer.concat(chunks);
 }
 
-// Options: store, manifest (a function returning the manifest to serve),
-// limiter and chunkSize (passed to serve)
-async function startServer({ store, manifest, limiter, chunkSize, keepaliveAfter }) {
+// Options: store, manifest (a function returning the manifest to serve, or a
+// promise of it), cache, limiter, chunkSize, walkLimit and historyLimit (passed
+// to serve)
+async function startServer({ store, cache, manifest, limiter, chunkSize, keepaliveAfter, walkLimit, historyLimit }) {
   const results = [];
   const errors = [];
   const requests = [];
@@ -32,7 +33,7 @@ async function startServer({ store, manifest, limiter, chunkSize, keepaliveAfter
     try {
       if (req.method === "GET" && req.url.startsWith("/repo.git/info/refs?service=git-upload-pack")) {
         res.setHeader("content-type", CONTENT_TYPE);
-        return res.end(advertise(manifest()));
+        return res.end(advertise(await manifest()));
       }
 
       if (req.method === "POST" && req.url === "/repo.git/git-upload-pack") {
@@ -40,7 +41,7 @@ async function startServer({ store, manifest, limiter, chunkSize, keepaliveAfter
         if (req.headers["content-encoding"] === "gzip") body = zlib.gunzipSync(body);
 
         res.setHeader("content-type", RESULT_TYPE);
-        results.push(await serve({ store, manifest: manifest(), body, out: res, limiter, chunkSize, keepaliveAfter }));
+        results.push(await serve({ store, cache, manifest: await manifest(), body, out: res, limiter, chunkSize, keepaliveAfter, walkLimit, historyLimit }));
         return;
       }
 
