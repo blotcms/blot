@@ -23,6 +23,9 @@
 //               against any budget; a directory of its own is made inside it and
 //               removed in every case.
 //   pack        git pack-objects' settings, over PACK_CONFIG (compact.js)
+//   clock       the clock manifest.read and swap time the base by (an import
+//               that outlasts manifest.MAX_BASE_AGE reads again and, if the
+//               repository is still empty, swaps on that); for specs
 //
 // The steps, in the order they run:
 //
@@ -404,7 +407,7 @@ const entryOf = ({ name, size, idxSize, objects }) => ({ name, size, idxSize, ob
 
 // ---- Import ---------------------------------------------------------------
 
-async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = null, pack = {}, estimateBytes = null }) {
+async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = null, pack = {}, estimateBytes = null, clock = Date.now }) {
   if (typeof lock !== "function") throw new Error("importRepo needs the host's lock function");
   if (!gitDir) throw new Error("importRepo needs gitDir");
   if (!scratchDir && !(cache && typeof cache.reserve === "function")) throw new Error("importRepo needs a cache to reserve scratch space from, or a scratchDir");
@@ -423,7 +426,7 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
     throw coded("The repository is shallow, so its history is incomplete. Only a complete repository can be imported.", "ESHALLOW");
   }
 
-  const base = await manifest.read(store);
+  const base = await manifest.read(store, { clock });
   if (base.seq !== 0) {
     throw coded("The store repository already has a manifest (seq " + base.seq + "). An import only goes into an empty repository.", "ENOTEMPTY", { seq: base.seq });
   }
@@ -514,13 +517,15 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
     if (failedUpload) throw failedUpload.reason;
     stats.uploadMs = Date.now() - mark;
 
-    const next = manifest.advance(base, {
-      refs,
-      head,
-      packs: [entryOf(main)],
-      history: commits ? { ...entryOf(commits), through: 1 } : null,
-      peeled,
-    });
+    const build = (on) =>
+      manifest.advance(on, {
+        refs,
+        head,
+        packs: [entryOf(main)],
+        history: commits ? { ...entryOf(commits), through: 1 } : null,
+        peeled,
+      });
+    let next = build(base);
     stats.bytesUp = main.size + main.idxSize + main.rev.length + (commits ? commits.size + commits.idxSize : 0) + manifest.serialize(next).length;
 
     const result = {
@@ -535,7 +540,19 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
 
     mark = Date.now();
     try {
-      await manifest.swap({ store, lock, base, next, uploaded: [main.name, ...(commits ? [commits.name] : [])] });
+      const uploaded = [main.name, ...(commits ? [commits.name] : [])];
+      try {
+        await manifest.swap({ store, lock, base, next, uploaded, clock });
+      } catch (err) {
+        // An import that took longer than a swap lets a base be held (a day)
+        // reads the manifest again: still empty, it swaps on that, once
+        if (!(err instanceof StaleManifestError) || manifest.isFresh(base, clock)) throw err;
+        const fresh = await manifest.read(store, { clock });
+        if (fresh.seq !== 0) throw err;
+        next = build(fresh);
+        result.seq = next.seq;
+        await manifest.swap({ store, lock, base: fresh, next, uploaded, clock });
+      }
     } catch (err) {
       stats.swapMs = Date.now() - mark;
       if (err instanceof OutcomeUnknownError) return { ...result, outcome: "unknown", error: err, stats: finish() };

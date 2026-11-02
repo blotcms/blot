@@ -1,6 +1,7 @@
 var async = require("async");
 var joinpath = require("path").join;
 var folder = require("storage/folder");
+var blogFolder = require("clients/folder");
 var callbackify = require("util").callbackify;
 var determineTemplateFolder = require("./determineTemplateFolder");
 var shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
@@ -66,7 +67,8 @@ function removeEnabledFromAllTemplatesInFolder(blogID, folderName, callback) {
           data.enabled = false;
           var updated = JSON.stringify(data, null, 2);
 
-          callbackify(folder.write)(blogID, packagePath, updated, function (err) {
+          // Through the client, so the provider gets the change too
+          callbackify(blogFolder.write)(blogID, packagePath, updated, function (err) {
             if (err) {
               errors.push(err);
               return next();

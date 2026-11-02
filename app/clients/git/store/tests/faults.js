@@ -107,7 +107,7 @@ describe("git store against a misbehaving object store", function () {
     it("delays a call", async function () {
       store.inject("head", { delay: 30 });
       const started = Date.now();
-      expect(await store.head("k")).toEqual({ size: 10 });
+      expect((await store.head("k")).size).toBe(10);
       expect(Date.now() - started).toBeGreaterThanOrEqual(25);
     });
 

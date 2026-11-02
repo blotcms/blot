@@ -1,5 +1,5 @@
 # Callouts
 
-Converts blockquotes beginning with callout markers such as `[!note]`, `[!warning]+`, or `[!tip]-` into scoped callout HTML during Pandoc Markdown conversion.
+Converts blockquotes beginning with callout markers such as `[!note]`, `[!warning]+`, or `[!tip]-` into scoped callout HTML during Pandoc Markdown conversion. The Lua filter that does it is `app/sandbox/jobs/callouts.lua`, next to the sandbox job that runs pandoc, since the jail binds only `app/sandbox`.
 
 Callouts require this plugin to be enabled and apply only to `.md`, `.markdown`, `.txt`, and `.text` sources handled by the Markdown converter. The marker/title line can be separated from its body with a normal newline; trailing spaces are not required. Nested callouts receive no special handling beyond Pandoc's normal AST traversal and are not guaranteed to produce a particular nested structure.

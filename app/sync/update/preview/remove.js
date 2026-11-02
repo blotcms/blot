@@ -1,11 +1,11 @@
 var drafts = require("../drafts");
 var previewPath = drafts.previewPath;
 var Blog = require("models/blog");
+var blogFolder = require("clients/folder");
+var callbackify = require("util").callbackify;
 
 module.exports = function (blogID, path, callback) {
   callback = callback || function () {};
-
-  var clients = require("clients");
 
   Blog.get({ id: blogID }, function (err, blog) {
     if (err) return callback(err);
@@ -13,8 +13,9 @@ module.exports = function (blogID, path, callback) {
     if (!blog.client) return callback();
 
     var preview_path = previewPath(path);
-    var client = clients[blog.client];
 
-    client.remove(blogID, preview_path, callback);
+    callbackify(blogFolder.remove)(blog, preview_path, function (err) {
+      callback(err || null);
+    });
   });
 };

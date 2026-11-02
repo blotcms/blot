@@ -4,7 +4,10 @@
 //
 // The object store interface (keys are relative to the repository):
 //
-//   head(key)                       -> { size } | null
+//   head(key)                       -> { size, lastModified } | null, where
+//                                      lastModified is when the object was
+//                                      last written, in ms since the epoch
+//                                      (S3 keeps whole seconds)
 //   read(key, offset, length)       -> Buffer; a range, shorter if it runs past
 //                                      the end, empty if it starts past it
 //   get(key, { maxBytes })          -> Buffer of the whole object, for small
@@ -18,11 +21,15 @@
 //                                      it was). Of several racing writers of
 //                                      one key, exactly one gets true.
 //   delete(key)                     -> nothing if it was already gone
-//   list(prefix)                    -> async iterable of { key, size }
+//   list(prefix)                    -> async iterable of { key, size,
+//                                      lastModified }, in key order
 //   id                              -> a string naming this store, which
 //                                      namespaces what the cache holds for it
 //
 // A missing key makes read and get throw NotFoundError (stream errors with it).
+//
+// createMemoryStore({ now }) takes the clock that stamps lastModified (default
+// Date.now), so a spec can move time on without waiting.
 const { Readable } = require("stream");
 const { NotFoundError, TooLargeError } = require("../errors");
 
@@ -35,8 +42,9 @@ async function collect(body) {
   return Buffer.concat(chunks);
 }
 
-function createMemoryStore() {
+function createMemoryStore({ now = Date.now } = {}) {
   const objects = new Map();
+  const modified = new Map();
   const id = "memory:" + ++created;
   const stats = { heads: 0, reads: 0, bytesRead: 0, gets: 0, puts: 0, putIfAbsents: 0, deletes: 0, lists: 0 };
 
@@ -49,7 +57,7 @@ function createMemoryStore() {
   async function head(key) {
     stats.heads++;
     const object = objects.get(key);
-    return object ? { size: object.length } : null;
+    return object ? { size: object.length, lastModified: modified.get(key) } : null;
   }
 
   async function read(key, offset, length) {
@@ -80,7 +88,9 @@ function createMemoryStore() {
   }
 
   async function put(key, body) {
-    objects.set(key, await collect(body));
+    const bytes = await collect(body);
+    objects.set(key, bytes);
+    modified.set(key, now());
     stats.puts++;
   }
 
@@ -89,18 +99,22 @@ function createMemoryStore() {
     stats.putIfAbsents++;
     if (objects.has(key)) return false;
     objects.set(key, Buffer.from(buffer));
+    modified.set(key, now());
     return true;
   }
 
   async function remove(key) {
     stats.deletes++;
     objects.delete(key);
+    modified.delete(key);
   }
 
   async function* list(prefix = "") {
     stats.lists++;
     for (const key of [...objects.keys()].sort()) {
-      if (key.startsWith(prefix)) yield { key, size: objects.get(key).length };
+      // A key deleted while the listing is read is left out, as S3 may
+      const object = objects.get(key);
+      if (object && key.startsWith(prefix)) yield { key, size: object.length, lastModified: modified.get(key) };
     }
   }
 

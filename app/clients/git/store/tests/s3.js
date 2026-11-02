@@ -157,7 +157,7 @@ const MIB = 1024 * 1024;
     // parts in flight, one being cut, and one just read, never a stream's worth
     expect(worstLead).toBeLessThanOrEqual(5 * MIB * 4 + 2 * MIB);
     expect(sent.parts - before.parts).toBe(8);
-    expect(await store.head("big.pack")).toEqual({ size: total });
+    expect((await store.head("big.pack")).size).toBe(total);
     expect((await store.read("big.pack", 7 * MIB + 3, 10)).equals(chunk.subarray(3, 13))).toBe(true);
   });
 
@@ -194,7 +194,7 @@ const MIB = 1024 * 1024;
       expect(result.outcome).toBe("imported");
       expect(result.pack.size).toBeGreaterThan(12 * MIB);
       expect(sent.parts - before).toBe(Math.ceil(result.pack.size / (5 * MIB)));
-      expect(await store.head("packs/" + result.pack.name + ".pack")).toEqual({ size: result.pack.size });
+      expect((await store.head("packs/" + result.pack.name + ".pack")).size).toBe(result.pack.size);
       expect((await manifest.read(store)).packs.map((pack) => pack.name)).toEqual([result.pack.name]);
       expect((await importRepo.verifyImport({ store, cache, gitDir: dir + "/.git" })).refs).toBe(2);
     } finally {

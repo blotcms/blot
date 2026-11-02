@@ -324,6 +324,103 @@ describe("git store manifest", function () {
       return manifest.advance(base, { refs: { "refs/heads/master": oid(n) }, packs: [pack] });
     }
 
+    describe("a base held too long", function () {
+      let now;
+      const clock = () => now;
+
+      beforeEach(async function () {
+        now = 1000;
+        const first = await push(await manifest.read(store, { clock }), 1);
+        await manifest.swap({ store, lock, base: (await manifest.read(store, { clock })), next: first, clock });
+      });
+
+      it("is refused, before any request, once it was read more than MAX_BASE_AGE ago", async function () {
+        const base = await manifest.read(store, { clock });
+        const next = await push(base, 2);
+
+        now += manifest.MAX_BASE_AGE + 1;
+        const before = { ...store.stats };
+        const error = await fails(manifest.swap({ store, lock, base, next, clock }));
+        expect(error).toEqual(jasmine.any(StaleManifestError));
+        expect(store.stats).toEqual(before);
+        expect(lock.calls).toBe(1);
+
+        // Read again, it goes through
+        const fresh = await manifest.read(store, { clock });
+        await manifest.swap({ store, lock, base: fresh, next: await push(fresh, 2), clock });
+        expect((await manifest.read(store)).seq).toBe(2);
+      });
+
+      it("is accepted up to MAX_BASE_AGE", async function () {
+        const base = await manifest.read(store, { clock });
+        const next = await push(base, 2);
+        now += manifest.MAX_BASE_AGE;
+        await manifest.swap({ store, lock, base, next, clock });
+        expect((await manifest.read(store)).seq).toBe(2);
+      });
+
+      it("is refused, writing nothing, when it grows too old waiting for the lock", async function () {
+        const base = await manifest.read(store, { clock });
+        const next = await push(base, 2);
+        const slow = (fn) => {
+          now += manifest.MAX_BASE_AGE + 1;
+          return lock(fn);
+        };
+        const before = store.stats.putIfAbsents;
+        expect(await fails(manifest.swap({ store, lock: slow, base, next, clock }))).toEqual(jasmine.any(StaleManifestError));
+        expect(store.stats.putIfAbsents).toBe(before);
+        expect(await store.head(manifestKey(2))).toBe(null);
+      });
+
+      it("counts from the swap for the manifest a swap returns", async function () {
+        const base = await manifest.read(store, { clock });
+        now += manifest.MAX_BASE_AGE - 10;
+        const next = await manifest.swap({ store, lock, base, next: await push(base, 2), clock });
+        now += manifest.MAX_BASE_AGE - 10;
+        await manifest.swap({ store, lock, base: next, next: await push(next, 3), clock });
+        now += manifest.MAX_BASE_AGE + 1;
+        expect(await fails(manifest.swap({ store, lock, base: next, next: await push(next, 3), clock }))).toEqual(jasmine.any(StaleManifestError));
+      });
+
+      it("makes no request for the manifest it keeps in memory within 12 hours, and one HEAD after", async function () {
+        const stats = () => ({ ...store.stats });
+        const diff = (before) => Object.fromEntries(Object.entries(store.stats).map(([k, v]) => [k, v - before[k]]).filter(([, v]) => v));
+
+        now += 11 * 60 * 60 * 1000;
+        let before = stats();
+        const warm = await manifest.read(store, { clock });
+        expect(warm.seq).toBe(1);
+        // The hint, and a HEAD for the next seq
+        expect(diff(before)).toEqual({ gets: 1, bytesRead: jasmine.any(Number), heads: 1 });
+
+        // Its time is the read that last asked the store, not this one
+        now += manifest.MAX_BASE_AGE - 11 * 60 * 60 * 1000 + 1;
+        expect(await fails(manifest.swap({ store, lock, base: warm, next: await push(warm, 2), clock }))).toEqual(jasmine.any(StaleManifestError));
+
+        // Past 12 hours it is checked with a HEAD, and counts from then
+        before = stats();
+        const checked = await manifest.read(store, { clock });
+        expect(diff(before)).toEqual({ gets: 1, bytesRead: jasmine.any(Number), heads: 2 });
+        now += manifest.MAX_BASE_AGE - 1;
+        await manifest.swap({ store, lock, base: checked, next: await push(checked, 2), clock });
+        expect((await manifest.read(store)).seq).toBe(2);
+      });
+
+      it("passes for a base read() did not return, such as the empty manifest a new repository starts from", async function () {
+        const fresh = createMemoryStore();
+        const empty = await manifest.read(fresh, { clock });
+        expect(empty.seq).toBe(0);
+        const first = manifest.advance(empty, { refs: { "refs/heads/master": oid(1) } });
+        await manifest.swap({ store: fresh, lock, base: empty, next: first, clock });
+
+        // Built by hand: no read time, so it is not timed
+        const byHand = { ...(await manifest.read(fresh)) };
+        now += 10 * manifest.MAX_BASE_AGE;
+        await manifest.swap({ store: fresh, lock, base: byHand, next: manifest.advance(byHand, { refs: byHand.refs }), clock });
+        expect((await manifest.read(fresh)).seq).toBe(2);
+      });
+    });
+
     it("stops a writer which stalled with its lock expired while another swap landed", async function () {
       const first = await push(manifest.empty(), 1);
       await manifest.swap({ store, lock, base: manifest.empty(), next: first });
@@ -539,5 +636,137 @@ describe("git store manifest", function () {
       await hint(1);
       expect(await manifest.read(store)).toEqual(manifest.empty());
     });
+  });
+
+  describe("trimming snapshots", function () {
+    // A manifest after `n` pushes, each moving master and keeping a tag
+    // (annotated: peeled) pushed at `tagAt`
+    function pushed(n, { tagAt = 1, refs = 1 } = {}) {
+      let m = manifest.empty();
+      for (let i = 1; i <= n; i++) {
+        const next = { "refs/heads/master": oid((i % 9) + 1) };
+        for (let r = 1; r < refs; r++) next["refs/heads/branch-" + r] = oid(((i + r) % 9) + 1);
+        const peeled = {};
+        if (i >= tagAt) next["refs/tags/v1"] = "a".repeat(40);
+        if (i === tagAt) peeled["a".repeat(40)] = oid(1);
+        if (i === n) {
+          next["refs/tags/v" + i] = "b".repeat(40);
+          peeled["b".repeat(40)] = oid(2);
+        }
+        m = manifest.advance(m, { refs: next, peeled });
+      }
+      return m;
+    }
+
+    it("keeps the newest maxSnapshots, trimming only from the old end", function () {
+      const m = pushed(30);
+      const kept = manifest.trimSnapshots(m.snapshots, { maxSnapshots: 10 });
+      expect(kept.length).toBe(10);
+      expect(kept).toEqual(m.snapshots.slice(20));
+      expect(manifest.trimSnapshots(m.snapshots, { maxSnapshots: 30 })).toBe(m.snapshots);
+    });
+
+    it("trims by bytes too, but never below minSnapshots", function () {
+      const m = pushed(30, { refs: 40 });
+      const each = manifest.snapshotBytes(m.snapshots[10]);
+      expect(each).toBeGreaterThan(40 * 50);
+
+      const kept = manifest.trimSnapshots(m.snapshots, { maxSnapshotBytes: 5.5 * each, minSnapshots: 2 });
+      expect(kept.length).toBe(5);
+      expect(kept[kept.length - 1]).toBe(m.snapshots[29]);
+
+      expect(manifest.trimSnapshots(m.snapshots, { maxSnapshotBytes: 10, minSnapshots: 3 }).length).toBe(3);
+      // minSnapshots never keeps more than maxSnapshots
+      expect(manifest.trimSnapshots(m.snapshots, { maxSnapshots: 2, maxSnapshotBytes: 10, minSnapshots: 8 }).length).toBe(2);
+    });
+
+    it("keeps about 100 KB of snapshots for a blog with one ref, by default", function () {
+      const m = pushed(1500, { tagAt: Infinity });
+      const kept = manifest.trimSnapshots(m.snapshots);
+      expect(kept.length).toBe(1000);
+      const bytes = kept.reduce((sum, snapshot) => sum + manifest.snapshotBytes(snapshot), 0);
+      expect(bytes).toBeLessThan(120 * 1024);
+    });
+
+    it("trims in compacted, keeping only the peeled tags the snapshots left name", function () {
+      const m = pushed(12, { tagAt: 3 });
+      // The tag pushed at 3 is in the snapshots of 3 to 6, then deleted
+      m.refs = { ...m.snapshots[11].refs };
+      delete m.refs["refs/tags/v1"];
+      m.snapshots = m.snapshots.map((snapshot, i) => (i >= 6 ? { ...snapshot, refs: { ...snapshot.refs } } : snapshot));
+      for (const snapshot of m.snapshots.slice(6)) delete snapshot.refs["refs/tags/v1"];
+      manifest.validate(m);
+      expect(Object.keys(m.peeled).sort()).toEqual(["a".repeat(40), "b".repeat(40)]);
+
+      // The newest 8 include 5 and 6, which still name v1's tag
+      const eight = manifest.compacted(m, { limits: { maxSnapshots: 8 } });
+      expect(eight.snapshots.map((s) => s.seq)).toEqual([5, 6, 7, 8, 9, 10, 11, 12]);
+      expect(Object.keys(eight.peeled).sort()).toEqual(["a".repeat(40), "b".repeat(40)]);
+
+      // The newest 6 do not, so its peeled entry goes; the current refs' stays
+      const six = manifest.compacted(m, { limits: { maxSnapshots: 6 } });
+      expect(six.snapshots.length).toBe(6);
+      expect(six.peeled).toEqual({ ["b".repeat(40)]: oid(2) });
+      manifest.validate(six);
+
+      // A manifest from before peeled existed stays without it
+      const old = { ...m };
+      delete old.peeled;
+      expect("peeled" in manifest.compacted(old, { limits: { maxSnapshots: 6 } })).toBe(false);
+    });
+
+    it("leaves the snapshots alone in advance, so a push never trims", function () {
+      const m = pushed(1100, { tagAt: Infinity });
+      expect(m.snapshots.length).toBe(1100);
+      expect(manifest.compacted(m, {}).snapshots.length).toBe(1000);
+    });
+  });
+
+  describe("reading after old manifests are deleted", function () {
+    let store;
+    let lock;
+    let chain;
+
+    beforeEach(async function () {
+      store = createMemoryStore();
+      lock = createLock();
+      chain = [manifest.empty()];
+      for (let i = 1; i <= 30; i++) {
+        const next = manifest.advance(chain[i - 1], { refs: { "refs/heads/master": oid((i % 9) + 1) } });
+        await manifest.swap({ store, lock, base: chain[i - 1], next });
+        chain.push(next);
+      }
+      for (let seq = 1; seq <= 20; seq++) await store.delete(manifestKey(seq));
+    });
+
+    // Another process, so nothing is kept from the swaps
+    const fresh = async () => {
+      const other = createMemoryStore();
+      for (const [key, bytes] of store.objects) await other.put(key, bytes);
+      return other;
+    };
+
+    it("reads the newest with the hint", async function () {
+      expect((await manifest.read(await fresh())).seq).toBe(30);
+    });
+
+    it("reads the newest with no hint", async function () {
+      await store.delete(LATEST_KEY);
+      const other = await fresh();
+      expect((await manifest.read(other)).seq).toBe(30);
+      expect(other.stats.lists).toBe(1);
+    });
+
+    for (const [name, seq] of [
+      ["a few behind", 26],
+      ["more than a few behind", 21],
+      ["naming a deleted manifest", 12],
+      ["naming the last deleted manifest", 20],
+    ]) {
+      it("reads the newest with a hint " + name, async function () {
+        await store.put(LATEST_KEY, Buffer.from(JSON.stringify({ seq })));
+        expect((await manifest.read(await fresh())).seq).toBe(30);
+      });
+    }
   });
 });

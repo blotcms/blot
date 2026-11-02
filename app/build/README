@@ -209,9 +209,9 @@ The `plugins.convert(blog, path, html, callback)` function runs all enabled plug
 
 ## Dependencies
 
-The `config.pandoc.bin` configuration key determines whether Pandoc-dependent converters are available. Pandoc processes are spawned with a memory cap (`config.pandoc.maxmemory`) and a timeout (`config.pandoc.timeout`).
+The `config.pandoc.bin` configuration key determines whether Pandoc-dependent converters are available. Pandoc runs in the sandbox's `pandoc` job (`app/sandbox/jobs/pandoc.js`, called through `build/converters/pandoc.js`), which sets its options, a heap cap and a timeout; the converters write the media it extracts from docx and odt files themselves.
 
-Image operations use the `sharp` library. Thumbnail creation uploads its output to the blog's assets in the storage bucket (`storage/assets`) under `/_thumbnails/`. Image format conversions (HEIC, HEIF, TIFF, WebP, AVIF to PNG) go to `/_assets/`. Tools that need a local path (sharp, pandoc, puppeteer) write to a staging path (`assets.path()`, under the tmp directory) and `assets.commit()` uploads it and deletes the staged copy, so read an asset back with `assets.read`/`ensureLocal`, not from the staging path.
+Image operations use the `sharp` library. Thumbnail creation uploads its output to the blog's assets in the storage bucket (`storage/assets`) under `/_thumbnails/`. Image format conversions (HEIC, HEIF, TIFF, WebP, AVIF to PNG) go to `/_assets/`. Tools that need a local path (sharp, puppeteer) write to a staging path (`assets.path()`, under the tmp directory) and `assets.commit()` uploads it and deletes the staged copy, so read an asset back with `assets.read`/`ensureLocal`, not from the staging path.
 
 The `helper/transformer` utility provides caching of expensive operations (image optimization, format conversion, thumbnail creation) keyed by file path.
 
