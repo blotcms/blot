@@ -16,9 +16,10 @@ The deployment system uses an SSH user (`deploy`) that can execute commands on t
 
 ### Redis
 
-Redis does not run on the app host or in these containers. It has its own host,
-reached at the floating private IP in `BLOT_REDIS_HOST`, and is built and
-operated with the scripts in `config/redis/` (see
+Redis does not run in these containers. It runs on the same host as the units
+(the `redis6` systemd service), reached over the Unix socket
+`/run/blot/redis/redis.sock` (`BLOT_REDIS_SOCKET`), and is set up and operated
+with the scripts in `config/redis/` (see
 [config/redis/README.md](../../config/redis/README.md)). Deploys do not touch
 it. Do not deploy or restart the proxy around a Redis promotion.
 
