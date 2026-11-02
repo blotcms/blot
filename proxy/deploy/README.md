@@ -122,9 +122,12 @@ the old one from its in-memory cache for up to an hour, so the two units differ
 for that domain and either may answer a sweep. A changed domain therefore
 passes if the certificate it presents after the swap is exactly the one Redis
 holds for it now (`fullchain_pem` in `ssl:<domain>:latest`). A different
-certificate, or none, still fails. This is checked for at most 5 changed
-domains, with one Redis read each and no waiting, so it adds no time to a
-deploy; more than 5 changed at once is taken as a broken replacement and fails.
+certificate, or none, still fails. The certificates for all changed domains are
+read from Redis in one pipelined `redis-cli` call and fingerprinted locally, so
+this adds no waiting. A renewal pass changes a few percent of the domains at
+once (about 25 of 1,500 a day); if more than a quarter of the certified domains
+changed (and more than 10), that is a broken replacement, and the deploy fails
+without any lookup.
 
 On a **fresh start** there is no running proxy to compare with, so instead the
 new container must present a certificate for every custom domain in Redis

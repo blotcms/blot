@@ -127,19 +127,16 @@ if [[ " $* " == *" ping "* ]]; then
   [ -z "${FAKE_REDIS_DOWN:-}" ] && echo PONG; exit 0
 fi
 if [[ " $* " == *" get blot:openresty:ssl:pem "* ]]; then echo "${FAKE_REDIS_WILDCARD_PEM:-}"; exit; fi
-if [[ " $* " == *" get ssl:"*":latest "* ]]; then
-  # common.sh's stored_cert_fp: the stored certificate JSON of one domain
-  echo '{"expiry":99999999999,"fullchain_pem":"STORED-CERT\nline"}'; exit
-fi
 if [ "$*" = "-h 10.0.0.5 --raw" ] || [ "$*" = "-s /run/blot/redis/redis.sock --raw" ]; then
   # common.sh's expired_cert_domains: "get ssl:<domain>:latest" lines on stdin,
-  # one stored certificate JSON line back for each
+  # one stored certificate JSON line back for each (also common.sh's
+  # stored_cert_fps: the fullchain_pem is read from it)
   while read -r _ key; do
     d=${key#ssl:}; d=${d%:latest}
     if [[ " ${FAKE_EXPIRED_DOMAINS:-} " == *" $d "* ]] && { [ -z "${FAKE_EXPIRED_ONLY_AT_BASELINE:-}" ] || [ ! -e "$FAKE/stopped" ]; }; then
       echo '{"expiry":1}'
     else
-      echo '{"expiry":99999999999}'
+      echo '{"expiry":99999999999,"fullchain_pem":"STORED-CERT\nline"}\'
     fi
   done
   exit
@@ -170,7 +167,7 @@ case "$1" in
         # a custom domain: the certificate comes from Redis, not the wildcard file
         if [ -n "${FAKE_NO_CUSTOM_CERT:-}" ] && [[ "$served" == *"$FAKE_NO_CUSTOM_CERT"* ]]; then :
         elif [ -n "${FAKE_MISSING_AFTER_STOP:-}" ] && [[ "$served" == *"$FAKE_MISSING_AFTER_STOP"* ]] && [ -e "$FAKE/stopped" ]; then :
-        elif [ -n "${FAKE_CUSTOM_FP_AFTER_STOP:-}" ] && [ -e "$FAKE/stopped" ]; then echo "fp=$FAKE_CUSTOM_FP_AFTER_STOP"
+        elif [ -n "${FAKE_CUSTOM_FP_AFTER_STOP:-}" ] && [ -e "$FAKE/stopped" ] && { [ -z "${FAKE_CHANGED_PATTERN:-}" ] || [[ "$served" == *$FAKE_CHANGED_PATTERN* ]]; }; then echo "fp=$FAKE_CUSTOM_FP_AFTER_STOP"
         elif [ "$(cat "$FAKE/serving")" = container ]; then echo "fp=${FAKE_CUSTOM_FP_CONTAINER:-C}"
         elif [[ "$(cat "$FAKE/serving")" = baremetal ]]; then echo "fp=${FAKE_CUSTOM_FP_BAREMETAL:-C}"; fi
         exit
@@ -267,8 +264,18 @@ check "a custom-domain certificate that differs from both the old one and Redis:
 reset units; FAKE_MISSING_AFTER_STOP=b.custom.test FAKE_STORED_FP=B bluegreen
 check "a custom-domain certificate that went missing after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-blue-previous" && mentions "custom-domain certificates"'
 
-reset units; FAKE_CUSTOM_DOMAINS="a.custom.test b.custom.test c.custom.test d.custom.test e.custom.test f.custom.test" FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_STORED_FP=B bluegreen
-check "many custom-domain certificates changed at once (even to what Redis holds): rolled back, not looked up one by one" '[ $RC != 0 ] && called "docker start blot-blue-previous" && mentions "custom-domain certificates changed or went missing (6)" && ! mentions "was renewed"'
+MANY="$(seq -f 'd%g.custom.test' 1 100 | tr '\n' ' ')"
+reset units; FAKE_CUSTOM_DOMAINS="$MANY" FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_CHANGED_PATTERN='d[0-9].custom.test' FAKE_STORED_FP=B bluegreen
+check "9 of 100 custom-domain certificates renewed (now what Redis holds): allowed" '[ $RC = 0 ] && mentions "d1.custom.test was renewed"'
+
+reset units; FAKE_CUSTOM_DOMAINS="$MANY" FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_CHANGED_PATTERN='d[0-9].custom.test' FAKE_STORED_FP=A bluegreen
+check "9 of 100 custom-domain certificates changed to what Redis does not hold: rolled back" '[ $RC != 0 ] && called "docker start blot-blue-previous" && mentions "custom-domain certificates changed or went missing (9)"'
+
+reset units; FAKE_CUSTOM_DOMAINS="$MANY" FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_CHANGED_PATTERN='d[1-2][0-9].custom.test' FAKE_STORED_FP=B bluegreen
+check "20 of 100 custom-domain certificates renewed: allowed" '[ $RC = 0 ] && mentions "d15.custom.test was renewed"'
+
+reset units; FAKE_CUSTOM_DOMAINS="$MANY" FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_STORED_FP=B bluegreen
+check "all 100 custom-domain certificates changed (even to what Redis holds): rolled back without looking them up" '[ $RC != 0 ] && called "docker start blot-blue-previous" && mentions "custom-domain certificates changed or went missing (100)" && ! mentions "was renewed"'
 
 # The replacement issues a new certificate for a domain whose stored one had
 # expired, so the fingerprint changes. Expiry is judged before the swap: the

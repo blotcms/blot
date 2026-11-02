@@ -558,13 +558,21 @@ cert_sweep() {
     echo "$3 ${fp:-none}"' _ "$SITE_IP" "$port" {} | sort
 }
 
-# The fingerprint of the certificate stored for a domain (the first in
-# ssl:<domain>:latest's fullchain_pem, the one the proxy serves), or nothing.
-# Read with awk and sed, as no JSON tool is guaranteed on the host.
-stored_cert_fp() { # stored_cert_fp <domain>
-  redis_cli --raw get "ssl:$1:latest" 2>/dev/null \
-    | awk '{ if (match($0, /"fullchain_pem":"[^"]*"/)) print substr($0, RSTART + 17, RLENGTH - 18) }' \
-    | sed 's/\\n/\n/g' | openssl x509 -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2
+# stored_cert_fps: domains on stdin -> "<domain> <fingerprint>" lines for the
+# ones with a certificate in ssl:<domain>:latest (the first in fullchain_pem,
+# the one the proxy serves). One pipelined redis-cli call reads them all; the
+# fingerprints are computed here. Read with awk and sed, as no JSON tool is
+# guaranteed on the host.
+stored_cert_fps() {
+  local domains d pem fp
+  domains="$(sed '/^$/d')"
+  [ -n "$domains" ] || return 0
+  while IFS= read -r d <&3 && IFS= read -r pem <&4; do
+    [ "$pem" != - ] || continue
+    fp=$(printf '%s\n' "$pem" | sed 's/\\n/\n/g' | openssl x509 -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)
+    [ -z "$fp" ] || echo "$d $fp"
+  done 3< <(printf '%s\n' "$domains") 4< <(printf '%s\n' "$domains" | sed 's/^/get ssl:/; s/$/:latest/' | redis_cli --raw 2>/dev/null \
+    | awk '{ if (match($0, /"fullchain_pem":"[^"]*"/)) print substr($0, RSTART + 17, RLENGTH - 18); else print "-" }')
 }
 
 # Every domain that presented a certificate before must present the same one
@@ -573,21 +581,26 @@ stored_cert_fp() { # stored_cert_fp <domain>
 # unit keeps serving the old certificate from auto-ssl's in-memory cache for up
 # to an hour, so for that hour the two units differ for that domain and the
 # unit now answering may be either. Serving what Redis holds is correct; a
-# different certificate, or none, fails. Only a handful of changed domains get
-# the Redis lookup (one command each, no waiting): many changed at once is a
-# broken replacement, not renewals.
+# different certificate, or none, fails. A renewal pass changes a few percent
+# of the domains at once; if more than a quarter changed (and more than 10),
+# that is a broken replacement, and nothing is looked up.
 certs_unchanged() { # certs_unchanged <baseline> <now>
-  local bad
+  local bad total count stored
   bad=$(comm -23 <(printf '%s\n' "$1" | grep -v ' none$' | sort) <(printf '%s\n' "$2" | sort) | drop_expired)
-  if [ -n "$bad" ] && [ "$(printf '%s\n' "$bad" | wc -l)" -le 5 ]; then
-    bad=$(printf '%s\n' "$bad" | while read -r domain fp; do
-      now=$(printf '%s\n' "$2" | awk -v d="$domain" '$1 == d { print $2 }')
-      if [ -n "$now" ] && [ "$now" != none ] && [ "$now" = "$(stored_cert_fp "$domain")" ]; then
-        log "  $domain was renewed and serves the certificate Redis holds" >&2
-      else
-        echo "$domain $fp"
-      fi
-    done)
+  if [ -n "$bad" ]; then
+    total=$(printf '%s\n' "$1" | grep -vc ' none$')
+    count=$(printf '%s\n' "$bad" | wc -l | tr -d ' ')
+    if [ "$count" -le 10 ] || [ $((count * 4)) -le "$total" ]; then
+      stored="$(printf '%s\n' "$bad" | awk '{ print $1 }' | stored_cert_fps)"
+      bad=$(printf '%s\n' "$bad" | while read -r domain fp; do
+        now=$(printf '%s\n' "$2" | awk -v d="$domain" '$1 == d { print $2 }')
+        if [ -n "$now" ] && [ "$now" != none ] && printf '%s\n' "$stored" | grep -qxF "$domain $now"; then
+          log "  $domain was renewed and serves the certificate Redis holds" >&2
+        else
+          echo "$domain $fp"
+        fi
+      done)
+    fi
   fi
   [ -z "$bad" ] || {
     log "custom-domain certificates changed or went missing ($(printf '%s\n' "$bad" | wc -l | tr -d ' ')): first few, as they were:"
