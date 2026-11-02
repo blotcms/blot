@@ -1,12 +1,9 @@
-const { inspect } = require("util");
 const buildFromFolder = require("models/template").buildFromFolder;
 const Blog = require("models/blog");
 const Update = require("./update");
 const renames = require("./renames");
-const folderLock = require("./lock");
+const { take } = require("./hold");
 const messenger = require("./messenger");
-const gatherLockDiagnostics = require("./lock-diagnostics");
-const clfdate = require("helper/clfdate");
 const previewReload = require("helper/publishPreviewReload");
 const regenerateTemplateManifests = require("./update/regenerateTemplateManifests");
 const readOnly = require("helper/readOnly");
@@ -16,10 +13,6 @@ const {
   addPendingUpdate,
   removePendingUpdate
 } = require("./lock-diagnostics-state");
-
-const LOCK_STALE_TIMEOUT_MS = 10 * 1000;
-const LOCK_UPDATE_INTERVAL_MS = 3 * 1000; // lowered from 5s to avoid ECOMPROMISED errors?
-const PROCESS_STARTED = Date.now();
 
 function sync(blogID, callback) {
   if (typeof blogID !== "string") {
@@ -57,59 +50,12 @@ function start(blogID, callback) {
     try {
       log("Acquiring lock on folder");
 
-      // Only retry at startup to handle stale locks from killed processes
-      const timeSinceStart = Date.now() - PROCESS_STARTED;
-      const retries =
-        timeSinceStart < LOCK_STALE_TIMEOUT_MS
-          ? { retries: 1, minTimeout: LOCK_STALE_TIMEOUT_MS + 1000 } // 11s total
-          : { retries: 3, minTimeout: 750 }; // 0.75s, 1.5s, 3s = 5.25s total
+      // Resolves to null if the data directory became read-only between
+      // the check in sync() and taking the lock (hold.js has released it
+      // again): wait for the freeze to lift and start over.
+      const lock = await take(blogID, { syncID, acquiredAt: () => lockAcquiredAt });
 
-      const lock = await folderLock.lock(blogID, {
-        ttl: LOCK_STALE_TIMEOUT_MS,
-        heartbeat: LOCK_UPDATE_INTERVAL_MS,
-        ...retries,
-        onCompromised: (err) => {
-          // Another process may now own the lock, so the sync can no longer
-          // be trusted to be exclusive. Log diagnostics, then crash the
-          // process (as proper-lockfile's handler did) so it stops writing.
-          gatherLockDiagnostics({ blogID, lockAcquiredAt, syncContext: { syncID } })
-            .catch((diagErr) => ({ diagnosticsError: String(diagErr) }))
-            .then((diagnostics) => {
-              // console.error's default util.inspect depth (2) was silently
-              // flattening diagnostics.pendingSyncs/pendingUpdates to
-              // "[Object]" - exactly the detail needed to tell whether some
-              // other blog's sync was starving this heartbeat. depth: null
-              // prints it in full.
-              console.error(
-                clfdate(),
-                "[LOCK COMPROMISED]",
-                inspect(
-                  {
-                    blogID,
-                    error: { message: err.message, code: err.code },
-                    lockConfig: {
-                      ttl: LOCK_STALE_TIMEOUT_MS,
-                      heartbeat: LOCK_UPDATE_INTERVAL_MS
-                    },
-                    diagnostics
-                  },
-                  { depth: null, maxArrayLength: null }
-                )
-              );
-            })
-            .finally(() => {
-              setImmediate(() => {
-                throw err;
-              });
-            });
-        }
-      });
-      // The freeze may have begun between the check in sync() and taking the
-      // lock. Back off and wait again, so that once the freeze is on, any
-      // lock still held belongs to a sync that started before it.
-      // A failed check counts as writable, so it can never strand the lock.
-      if (await readOnly.status().catch(() => null)) {
-        await lock.release();
+      if (!lock) {
         log("Data directory became read-only, waiting");
         return sync(blogID, callback);
       }

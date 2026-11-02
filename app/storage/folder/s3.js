@@ -449,9 +449,11 @@ async function write(blogID, relPath, data) {
 }
 
 // A copy is modified now, as fs.copyFile makes it on disk. A move keeps the
-// source's modified time, as a rename does.
+// source's modified time, as a rename does. options.modified (ms) overrides
+// both, for the mirror of a file already on disk (./mirror.js).
 async function writeFrom(blogID, relPath, srcPath, options) {
   var move = !!(options && options.move);
+  var given = options && options.modified;
   var path = locate(blogID, relPath);
 
   if (path === "/") throw new Error("storage/folder: write needs a path inside the folder");
@@ -459,7 +461,7 @@ async function writeFrom(blogID, relPath, srcPath, options) {
   await checkWritable(blogID, path, "file");
 
   try {
-    var modified = move ? (await fs.stat(srcPath)).mtimeMs : Date.now();
+    var modified = given !== undefined ? given : move ? (await fs.stat(srcPath)).mtimeMs : Date.now();
     var uploaded = await s3.uploadFile(objectKey(blogID, path), srcPath);
   } catch (err) {
     if (err.code === "ENOENT") throw new NotFoundError(err.message);

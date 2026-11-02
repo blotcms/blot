@@ -19,7 +19,7 @@
 const s3 = require("storage/s3");
 const File = require("models/file");
 const Blog = require("models/blog");
-const Sync = require("sync");
+const hold = require("sync/hold");
 const backend = require("storage/folder/s3");
 const { promisify } = require("util");
 
@@ -117,27 +117,8 @@ async function main() {
     return;
   }
 
-  let result;
-
-  await new Promise(function (resolve, reject) {
-    Sync(blogID, function (err, folder, done) {
-      if (err) return reject(err);
-
-      backend.rebuildIndex(blogID, { hash: options.hash }).then(
-        function (counts) {
-          result = counts;
-          done(null, function (err) {
-            if (err) reject(err);
-            else resolve();
-          });
-        },
-        function (err) {
-          done(err, function () {
-            reject(err);
-          });
-        }
-      );
-    });
+  const result = await hold(blogID, function () {
+    return backend.rebuildIndex(blogID, { hash: options.hash });
   });
 
   report("Rebuilt:", result);
