@@ -4,7 +4,7 @@ const database = require("./database");
 module.exports = async (blogID, callback) => {
 
     // Capture the folderId before deleting the account record, otherwise
-    // the verified-content cache and migration cursor for this blog's
+    // the verified-content cache for this blog's
     // Drive folder become unreachable and leak in Redis permanently.
     const account = await database.blog.get(blogID);
 

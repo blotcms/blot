@@ -26,7 +26,9 @@
 #                          variable of the GitHub deploy environment (gh). Only the source
 #                          is printed. None found is an error, except with --drill or
 #                          --dry-run (which never asks gh)
-#   --root-gb N            root volume size in GB, gp3 (default 200: the Redis RDB and a spare copy)
+#   --root-gb N            root volume size in GB, gp3 (default 40: the OS, Docker
+#                          images, and the Redis RDB at its 6gb maxmemory twice
+#                          over, as a save writes a new file beside the old)
 #   --instance-profile NAME  IAM instance profile (default none)
 #   --user USER            SSH user (default ec2-user)
 #   --profile NAME         AWS CLI profile        --region NAME   (default us-west-2)
@@ -59,7 +61,7 @@ PROVISIONED_BY=config/host/launch.sh
 TYPE=""; KEY_NAME=${BLOT_HOST_KEY_NAME:-}; KEY=${BLOT_HOST_SSH_KEY:-}; REDIS_MAXMEMORY=${REDIS_MAXMEMORY:-}
 SSH_PORT=${BLOT_SSH_PORT:-}; DEPLOY_KEY=${BLOT_DEPLOY_PUBLIC_KEY:-}; DEPLOY_KEY_SOURCE=""
 [ -z "$DEPLOY_KEY" ] || DEPLOY_KEY_SOURCE="BLOT_DEPLOY_PUBLIC_KEY in the environment"
-ROOT_GB=200; INSTANCE_PROFILE=""; SSH_USER=ec2-user
+ROOT_GB=40; INSTANCE_PROFILE=""; SSH_USER=ec2-user
 DRY_RUN=""; DRILL=""; LIST=""
 AWS_REGION=${AWS_REGION:-us-west-2}; AWS_PROFILE_ARGS=""; EXTRA_TAGS=""
 

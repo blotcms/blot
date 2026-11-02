@@ -11,6 +11,7 @@ const timeout = require("./helpers/timeout");
 const { createReceiveServer, push } = require("./helpers/receiveServer");
 const manifest = require("../manifest");
 const receive = require("../receive");
+const blotWrite = require("../commit");
 const createCache = require("../cache");
 const createMemoryStore = require("../objectStore/memory");
 const createReader = require("../reader");
@@ -473,28 +474,165 @@ describe("git store receive", function () {
       expectNoScratch();
     });
 
-    it("refuses when the manifest moves under the swap itself", async function () {
-      const a = commit("a");
-      const b = commit("b");
+    describe("when another writer's manifest lands just before the push's", function () {
+      const create = (ref, oid = fixture.commits[1]) => ({ old: ZERO, new: oid, ref });
+      const MOVED_ERROR = "the ref moved while you were pushing; pull and try again";
 
-      // Another push lands after this one has looked, just before its swap
-      let raced = false;
-      const racing = async (fn) => {
-        if (!raced) {
-          raced = true;
-          expect((await direct([update(a, "refs/tags/raced", ZERO)], thin(a))).outcome).toBe("ok");
-        }
-        return lock(fn);
-      };
+      // A lock which, for the first `wins.length` swaps, lets `wins[n]()` land a
+      // manifest after the push has built its own and before it creates it
+      function racing(wins) {
+        const state = { swaps: 0 };
+        state.lock = async (fn) => {
+          const win = wins[state.swaps++];
+          if (win) await win();
+          return lock(fn);
+        };
+        return state;
+      }
 
-      const result = await receive({ store, cache, lock: racing, commands: [update(b)], pack: bodyOf(thin(b)) });
-      expect(result.outcome).toBe("refused");
-      expect(result.results[0].error).toContain("the ref moved");
+      // What compaction does to the manifest: a new seq, the same refs and packs
+      async function compaction() {
+        const base = await manifest.read(store);
+        await manifest.swap({ store, lock, base, next: manifest.advance(base, { refs: base.refs }) });
+      }
 
-      const current = await manifest.read(store);
-      expect(current.refs[MASTER]).toBe(fixture.head);
-      expect(current.refs["refs/tags/raced"]).toBe(a);
-      expectNoScratch();
+      const tagged = (ref, oid) => async () => expect((await direct([create(ref, oid)], null)).outcome).toBe("ok");
+      const blotCommit = (name) => async () => expect((await blotWrite({ store, cache, lock, path: name, contents: Buffer.from("x\n") })).changed).toBe(true);
+      const pushed = (tip) => async () => expect((await direct([update(tip)], thin(tip))).outcome).toBe("ok");
+
+      it("applies the push on the new manifest when only the packs changed", async function () {
+        const b = commit("b");
+        const before = await manifest.read(store);
+        const race = racing([compaction]);
+        const puts = store.stats.puts;
+
+        const result = await receive({ store, cache, lock: race.lock, commands: [update(b)], pack: bodyOf(thin(b)) });
+        expect(result.outcome).toBe("ok");
+        expect(race.swaps).toBe(2);
+        expect(result.seq).toBe(before.seq + 2);
+
+        // The push's five uploads once (not again for the retry), and a hint for each manifest
+        expect(store.stats.puts - puts).toBe(5 + 2);
+
+        const current = await manifest.read(store);
+        expect(current.seq).toBe(before.seq + 2);
+        expect(current.refs).toEqual({ [MASTER]: b, "refs/tags/v1": fixture.tag });
+        expect(current.packs.map((pack) => pack.name)).toEqual([...before.packs.map((pack) => pack.name), result.stats.packs[0]]);
+        expect(current.historyPieces.length).toBe(1);
+        await expectReadable(current, b);
+        await expectFsck(current, b);
+        expectNoScratch();
+      });
+
+      it("succeeds when Blot commits to master while a tag is pushed", async function () {
+        const race = racing([blotCommit("race.txt")]);
+        const result = await receive({ store, cache, lock: race.lock, commands: [create("refs/tags/old")], pack: null });
+        expect(result.outcome).toBe("ok");
+        expect(race.swaps).toBe(2);
+
+        const current = await manifest.read(store);
+        expect(current.refs["refs/tags/old"]).toBe(fixture.commits[1]);
+        expect(current.refs[MASTER]).not.toBe(fixture.head);
+        expect(current.seq).toBe(3);
+        expectNoScratch();
+      });
+
+      it("succeeds when another push moves a different ref", async function () {
+        const b = commit("b");
+        const race = racing([tagged("refs/tags/other")]);
+        const result = await receive({ store, cache, lock: race.lock, commands: [update(b)], pack: bodyOf(thin(b)) });
+        expect(result.outcome).toBe("ok");
+
+        const current = await manifest.read(store);
+        expect(current.refs[MASTER]).toBe(b);
+        expect(current.refs["refs/tags/other"]).toBe(fixture.commits[1]);
+        await expectReadable(current, b);
+      });
+
+      it("records a pushed tag's peeled target when it retries", async function () {
+        fx.git(src, ["tag", "-a", "-m", "Release", "rel1", fixture.head]);
+        const tag = fx.text(src, ["rev-parse", "refs/tags/rel1"]);
+
+        const race = racing([blotCommit("race.txt")]);
+        const result = await receive({ store, cache, lock: race.lock, commands: [create("refs/tags/rel1", tag)], pack: bodyOf(fx.packRevs(src, [tag], [fixture.head], { thin: true })) });
+        expect(result.outcome).toBe("ok");
+        expect(race.swaps).toBe(2);
+
+        const current = await manifest.read(store);
+        expect(current.refs["refs/tags/rel1"]).toBe(tag);
+        expect(current.peeled[tag]).toBe(fixture.head);
+      });
+
+      it("works out again which packs a tag push makes needed", async function () {
+        // A tag on a commit no ref reaches lists every pack again, with the seq
+        // of the manifest it lands on, which is the one after the race's
+        const race = racing([compaction]);
+        const before = await manifest.read(store);
+        const result = await receive({ store, cache, lock: race.lock, commands: [create("refs/tags/old")], pack: null });
+        expect(result.outcome).toBe("ok");
+
+        const current = await manifest.read(store);
+        expect(current.seq).toBe(before.seq + 2);
+        expect(current.packs.map((pack) => [pack.name, pack.seq])).toEqual(before.packs.map((pack) => [pack.name, current.seq]));
+      });
+
+      it("refuses when another push moved the same ref, as before", async function () {
+        const a = commit("a");
+        const b = commit("b");
+        const race = racing([pushed(a)]);
+
+        const result = await receive({ store, cache, lock: race.lock, commands: [update(b)], pack: bodyOf(thin(b)) });
+        expect(result.outcome).toBe("refused");
+        expect(race.swaps).toBe(1);
+        expect(result.results).toEqual([{ ref: MASTER, error: MOVED_ERROR }]);
+        expect(result.messages).toContain("Nothing was pushed.");
+
+        const current = await manifest.read(store);
+        expect(current.refs[MASTER]).toBe(a);
+        expectNoScratch();
+      });
+
+      it("refuses only for the refs that moved", async function () {
+        const a = commit("a");
+        const b = commit("b");
+        const race = racing([pushed(a)]);
+
+        const result = await receive({ store, cache, lock: race.lock, commands: [update(b), create("refs/tags/new")], pack: bodyOf(thin(b)) });
+        expect(result.outcome).toBe("refused");
+        expect(result.results.find((r) => r.ref === MASTER).error).toBe(MOVED_ERROR);
+        expect((await manifest.read(store)).refs["refs/tags/new"]).toBeUndefined();
+      });
+
+      it("refuses when the other writer made a name conflict", async function () {
+        const b = commit("b");
+        const race = racing([tagged("refs/tags/z/y")]);
+        const result = await receive({ store, cache, lock: race.lock, commands: [update(b), create("refs/tags/z")], pack: bodyOf(thin(b)) });
+        expect(result.outcome).toBe("refused");
+        expect(result.results.some((r) => /cannot lock ref 'refs\/tags\/z'/.test(r.error || ""))).toBe(true);
+        expect((await manifest.read(store)).refs[MASTER]).toBe(fixture.head);
+      });
+
+      it("retries more than once, but not past three attempts in all", async function () {
+        const b = commit("b");
+        const twice = racing([compaction, compaction]);
+        const ok = await receive({ store, cache, lock: twice.lock, commands: [update(b)], pack: bodyOf(thin(b)) });
+        expect(ok.outcome).toBe("ok");
+        expect(twice.swaps).toBe(3);
+        expect((await manifest.read(store)).refs[MASTER]).toBe(b);
+
+        const c = commit("c");
+        const before = await manifest.read(store);
+        const thrice = racing([compaction, compaction, compaction]);
+        const result = await receive({ store, cache, lock: thrice.lock, commands: [update(c, MASTER, b)], pack: bodyOf(fx.packRevs(src, [c], [b], { thin: true })) });
+        expect(thrice.swaps).toBe(3);
+        expect(result.outcome).toBe("refused");
+        expect(result.results).toEqual([{ ref: MASTER, error: MOVED_ERROR }]);
+
+        const current = await manifest.read(store);
+        expect(current.seq).toBe(before.seq + 3);
+        expect(current.refs[MASTER]).toBe(b);
+        expectNoScratch();
+      });
     });
 
     it("refuses a tip which is not there, even when no objects came with it", async function () {

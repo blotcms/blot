@@ -1,4 +1,3 @@
-const migrationBudget = require("./util/migrationBudget");
 const comparePaths = require("./util/comparePaths");
 const folder = require("storage/folder");
 const { join } = require("path");
@@ -71,13 +70,8 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
   }
 
   const drive = await createDriveClient(serviceAccountId);
-  const { getByPath, getApplied, setApplied, set, remove, getVerifiedContents, setVerifiedContent,
-    getMigrationCursor, setMigrationCursor } = database.folder(folderId, blogID);
-  const migrationCursor = await getMigrationCursor();
-  const canMigrate = migrationBudget();
-  let lastMigrated = migrationCursor;
-  let migrationExhausted = false;
-  let deferred = 0;
+  const { getByPath, getApplied, setApplied, set, remove, getVerifiedContents, setVerifiedContent } =
+    database.folder(folderId, blogID);
   const checkWeCanContinue = CheckWeCanContinue(blogID, account);
   const progress = createProgress(
     await countLocalFiles(localPath(blogID, "/")),
@@ -264,21 +258,6 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
             ? Boolean(verified)
             : existsLocally?.size === size && isModifiedTimeCurrent;
 
-        // Warm old equal-size files incrementally, without turning the first
-        // sync after deployment into a complete content scan. A persistent
-        // cursor advances on attempts, including failures, for fair retries.
-        const legacy = !isGoogleAppFile && md5Checksum && !cached &&
-          existsLocally && !existsLocally.isDirectory && existsLocally.size === size;
-        if (legacy) {
-          if (comparePaths(path, migrationCursor) <= 0 || migrationExhausted || !canMigrate(size)) {
-            if (comparePaths(path, migrationCursor) > 0) migrationExhausted = true;
-            deferred++;
-            progress.publishThrottled("Verification deferred", path);
-            continue;
-          }
-          lastMigrated = path;
-        }
-
         if (!existsLocally || !identical) {
           await checkWeCanContinue();
           // A missing existsLocally was already added to total by the
@@ -324,7 +303,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
             // A previous rebuild/cache-store may have failed after publication.
             // Rebuild before recording verification, even if bytes now match.
             // Only count downloads that changed local bytes: a verified
-            // match (e.g. the legacy verification warm-up) isn't a missed
+            // match isn't a missed
             // change, even though it still triggers a rebuild below.
             if (result?.updated) {
               summary.downloaded += 1;
@@ -389,13 +368,9 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
 
   try {
     await walk("/", folderId);
-    await setMigrationCursor(migrationExhausted ? lastMigrated : "");
-    progress.finish(deferred
-      ? `Finished processing folder (${deferred} content verifications deferred)`
-      : "Finished processing folder");
+    progress.finish("Finished processing folder");
     return summary;
   } catch (err) {
-    if (lastMigrated !== migrationCursor) await setMigrationCursor(lastMigrated);
     publish("Sync failed", err.message);
     onError(err);
     return false;
