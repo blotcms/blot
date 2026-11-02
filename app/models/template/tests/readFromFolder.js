@@ -33,6 +33,25 @@ describe("template", function () {
     });
   });
 
+  it("marks a template read from a folder without package.json as locally edited", function (done) {
+    var setMetadata = require("../index").setMetadata;
+    var makeID = require("../util/makeID");
+    var test = this;
+
+    fs.outputFileSync(this.tmp + "/entries.html", "{{title}}");
+
+    setMetadata(makeID(this.blog.id, this.blog.handle), { localEditing: false }, function (err) {
+      if (err) return done.fail(err);
+
+      readFromFolder(test.blog.id, test.dir, function (err, template) {
+        if (err) return done.fail(err);
+
+        expect(template.localEditing).toEqual(true);
+        done();
+      });
+    });
+  });
+
   it("explains what is wrong with an invalid package.json", function (done) {
     fs.outputFileSync(this.tmp + "/package.json", '{\n  "name": "Example",\n}');
 
