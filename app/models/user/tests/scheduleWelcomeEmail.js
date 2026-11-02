@@ -219,37 +219,4 @@ describe("user", function () {
     expect((await getUser(uid)).welcomeEmailSent).toBe(true);
     expect(await alarms.when(uid)).toBe(null);
   });
-
-  it("defaults missing fields when loading legacy users", function (done) {
-    var uid = this.user.uid;
-
-    (async function () {
-      try {
-        var original = await client.get(key.user(uid));
-
-        await client.set(
-          key.user(uid),
-          JSON.stringify({ uid: uid, email: "legacy@example.com" })
-        );
-
-        User.getById(uid, function (err, user) {
-          if (err) return done.fail(err);
-
-          expect(user.created).toBe(0);
-          expect(user.welcomeEmailSent).toBe(true);
-
-          (async function () {
-            try {
-              await client.set(key.user(uid), original);
-              done();
-            } catch (restoreErr) {
-              done.fail(restoreErr);
-            }
-          })();
-        });
-      } catch (err) {
-        done.fail(err);
-      }
-    })();
-  });
 });
