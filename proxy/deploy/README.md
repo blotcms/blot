@@ -78,7 +78,7 @@ The way back from a bad unit image is an older unit image, `npm run deploy-units
 2. **`/etc/blot/proxy.env`** from the example. The units' sockets come
    from the settings the scripts write; `/run/blot` is mounted into each unit and each
    socket is checked before and after the swap. `PROXY_PRIVATE_IP` and
-   `PROXY_REDIS_HOST` (both required, the scripts refuse empty values) must be the Redis host, and `PROXY_PRIVATE_IP` must be `127.0.0.1`:
+   `PROXY_REDIS_HOST` (both required, the scripts refuse empty values) must point at Redis (in production `unix:/run/blot/redis/redis.sock`, as below), and `PROXY_PRIVATE_IP` must be `127.0.0.1`:
    units run with host networking, so Node reaches the purge listener on loopback.
    `BLOT_REVERSE_PROXY_URLS` in `/etc/blot/secrets.env` must be `http://127.0.0.1:8077`
    to match. The units read these at start, so redeploy after editing them.

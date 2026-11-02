@@ -24,6 +24,13 @@
 //                                    pushes, so no push rebuilds the history
 //                                    pack; compaction merges them into it.
 //                                    Optional when read: absent means none.
+//     "peeled": { "<tag oid>": "<oid>" }
+//                                    for each annotated tag that a ref (now or
+//                                    in a snapshot) points at, the object it
+//                                    finally points at, which is what the
+//                                    advertisement's "^{}" lines carry. Optional
+//                                    when read: a manifest without it has never
+//                                    recorded one.
 //   }
 //
 // What makes a swap safe is the conditional create of manifests/<seq + 1>.json
@@ -146,6 +153,13 @@ function validate(m) {
     if (m.history.through > m.seq) fail("history is newer than the manifest");
   }
 
+  if (m.peeled !== undefined) {
+    if (!m.peeled || typeof m.peeled !== "object" || Array.isArray(m.peeled)) fail("peeled must be an object");
+    for (const [tag, target] of Object.entries(m.peeled)) {
+      if (!OID.test(tag) || !OID.test(target)) fail("peeled must map object IDs to object IDs");
+    }
+  }
+
   if (m.historyPieces !== undefined) {
     if (!Array.isArray(m.historyPieces)) fail("historyPieces must be a list");
     for (const piece of m.historyPieces) {
@@ -170,6 +184,7 @@ function serialize(m) {
     refs: sortRefs(m.refs),
     snapshots: m.snapshots.map((s) => ({ seq: s.seq, refs: sortRefs(s.refs) })),
   };
+  if (m.peeled) document.peeled = sortRefs(m.peeled);
   return Buffer.from(JSON.stringify(document, null, 2) + "\n");
 }
 
@@ -268,22 +283,42 @@ async function read(store) {
 }
 
 // The manifest which follows `base` after a push: `refs` are all the refs now,
-// `packs` the packs the push added and `historyPieces` the history pieces it
+// `packs` the packs the push added (one the manifest already lists is moved to
+// the end with this push's seq: its objects were made reachable again by this
+// push, and a pack's seq is the push that last made its objects needed, which
+// fetch relies on) and `historyPieces` the history pieces it
 // added (all already uploaded), `head` and `history` are changed only if
-// given. The ref snapshot for the push is recorded.
-function advance(base, { refs, packs = [], historyPieces = [], head = base.head, history = base.history }) {
+// given. The ref snapshot for the push is recorded. `peeled` adds the peeled
+// targets of annotated tags the push put in refs; the manifest keeps the ones
+// for tags the refs and snapshots still name, and no others. A manifest which
+// has refs but no `peeled` was written before the field existed, so which of
+// its refs are annotated tags is not known; it stays without the field (and
+// fetch treats it with care) rather than claim that none are.
+function advance(base, { refs, packs = [], historyPieces = [], head = base.head, history = base.history, peeled = {} }) {
   const seq = base.seq + 1;
+  const snapshots = [...base.snapshots, { seq, refs: { ...refs } }];
+  const moved = new Set(packs.map((pack) => pack.name));
+  const records = base.peeled !== undefined || base.snapshots.length === 0;
   return {
     ...base,
     seq,
     writer: crypto.randomBytes(16).toString("hex"),
     head,
     refs: { ...refs },
-    packs: [...base.packs, ...packs.map((pack) => ({ ...pack, seq }))],
-    snapshots: [...base.snapshots, { seq, refs: { ...refs } }],
+    packs: [...base.packs.filter((pack) => !moved.has(pack.name)), ...packs.map((pack) => ({ ...pack, seq }))],
+    snapshots,
+    ...(records ? { peeled: keepPeeled({ ...base.peeled, ...peeled }, snapshots) } : {}),
     history,
     historyPieces: [...(base.historyPieces || []), ...historyPieces.map((piece) => ({ ...piece, seq }))],
   };
+}
+
+// The peeled targets of the tags some snapshot names. A snapshot is how long a
+// tag can still be asked for, so it is how long its target is wanted.
+function keepPeeled(peeled, snapshots) {
+  const named = new Set();
+  for (const snapshot of snapshots) for (const oid of Object.values(snapshot.refs)) named.add(oid);
+  return Object.fromEntries(Object.entries(peeled).filter(([tag]) => named.has(tag)));
 }
 
 // Packs are uploaded before the manifest that names them. This checks it,

@@ -851,10 +851,7 @@ module.exports = (function () {
 
       pagination.total = Math.max(1, Math.ceil(totalEntries / pageSize));
       pagination.current = pageNo;
-      pagination.pageSize = pageSize;
       pagination.page_size = pageSize;
-      pagination.totalEntries = totalEntries;
-      // Prefer snake_case in public payloads; keep camelCase for legacy compatibility.
       pagination.total_entries = totalEntries;
 
       // total entries is not 0 indexed, remove 1

@@ -18,6 +18,7 @@ describe("atomic user updates", function () {
       uid: id, email: email, blogs: [], isDisabled: false,
       lastSession: "", created: 0, welcomeEmailSent: true,
       passwordHash: "initial-password", subscription: {}, paypal: {},
+      paymentMethods: [],
     };
   }
 

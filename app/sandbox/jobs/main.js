@@ -9,7 +9,7 @@
 // the NODE_PATH the jail is given.
 
 const JOB = /^[a-z-]+$/;
-const JOBS = ["metadata", "screenshot"];
+const JOBS = ["metadata", "thumbnail", "resize", "to-png", "exif", "screenshot"];
 
 function readStdin() {
   return new Promise((resolve, reject) => {
@@ -23,6 +23,11 @@ function readStdin() {
 async function main() {
   const name = process.argv[2];
   if (!JOB.test(name || "") || !JOBS.includes(name)) throw new Error("unknown job");
+
+  // Here, not in the jobs: this is process-wide, and in-process that would be
+  // every other use of sharp in the app. One thread per jail keeps a jail's CPU
+  // and memory to what the broker's slots assume.
+  if (name !== "exif") require("sharp").concurrency(1);
 
   const stdin = await readStdin();
   const end = stdin.indexOf(10);

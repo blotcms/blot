@@ -56,7 +56,7 @@ All state is stored in Redis. There is no relational database or document store 
 |------|-------------|
 | `util/makeID.js` | Derives a stable template ID from an owner string and a name by slugifying the name and joining with `":"`. Example: `"abc123:my-theme"`. |
 | `util/serialize.js` | Converts `object` and `array` typed fields in a model instance to JSON strings before writing to Redis hashes. |
-| `util/deserialize.js` | Converts JSON-stringified and boolean fields back to their native types after reading from Redis hashes, and drops the retired `isPublic` field. Other undeclared fields, including a view's legacy `type`, are kept. |
+| `util/deserialize.js` | Converts JSON-stringified and boolean fields back to their native types after reading from Redis hashes. |
 | `util/generateCdnUrl.js` | Constructs a CDN URL for a rendered view asset given a view name and content hash. Uses a three-level directory structure derived from the first four characters of the hash. |
 | `util/updateCdnManifest.js` | Recomputes the CDN manifest for a template: resolves `{{#cdn}}` targets that are files in the owner blog's folder, renders each view that is a `{{#cdn}}` target, hashes the output, stores the result on disk and in Redis, cleans up stale hashes, and writes the updated manifest into the template's metadata. Also maintains the reverse index of the folder files the template depends on. Skips SITE-owned templates and templates not currently installed on their owner blog. |
 | `util/resolveFolderLinks.js` | Wraps literal links to files in the blog's folder in a view's text in `{{#cdn}}`. A Mustache-safe tokenizer over the raw text; `wrapFolderLinks` also returns the targets it added, for `getFullView`, `getPartials` and `updateCdnManifest`. |
@@ -316,7 +316,7 @@ Values which never pass through a view's text are resolved from the same manifes
 
 The wrapped copy is not stored: `view.content` stays the author's source and is what is analysed, edited and exported. `getFullView` is cached per blog `cacheID` (`blog/render/full-view-cache`), so the blog lookup and the wrapping run once per view per `cacheID` in each process, not per request. `updateCdnManifest` calls the same `wrapFolderLinks` on every view's content, with the same hosts, and resolves the targets it returns as folder files only (a target the author also wrote as a view name stays a view). A target with no manifest entry (a missing file, or a link to a view such as `/style.css`) renders as written, so `{{blog.url}}/x` and own-host links to missing files become root-relative.
 
-A new handle or domain bumps the blog's `cacheID` and regenerates the installed template's manifest in the background (`models/blog/set`). `scripts/template/regenerate-cdn-manifests.js` regenerates the manifests of existing templates.
+A new handle or domain bumps the blog's `cacheID` and regenerates the installed template's manifest in the background (`models/blog/set`).
 
 ### Dependency index
 

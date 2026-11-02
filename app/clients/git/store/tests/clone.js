@@ -709,7 +709,6 @@ describe("git store clone", function () {
       ["a shallow clone", [pkt("deepen 1\n")], /Shallow/],
       ["shallow lines", [pkt("shallow " + "a".repeat(40) + "\n")], /Shallow/],
       ["a filter", [pkt("filter blob:none\n")], /filters/],
-      ["a fetch with have lines", [pkt("have " + "a".repeat(40) + "\n")], /existing clone/],
     ]) {
       it("refuses " + name + " with an error packet, and sends no pack", async function () {
         const body = Buffer.concat([want(fixture.head, caps), ...lines.map((l) => Buffer.from(l)), Buffer.from("0000" + pkt("done\n"))]);

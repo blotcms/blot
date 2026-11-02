@@ -782,7 +782,7 @@ describe("tagged cache", function () {
       .and.callFake(async function (blogID, tags, options) {
         return {
           entryIDs: [],
-          pagination: { pageSize: options.limit },
+          pagination: { page_size: options.limit },
           tag: "foo",
           tagged: { foo: true },
           slugs: ["foo"],

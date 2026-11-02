@@ -112,7 +112,7 @@ describe("update", function () {
       async.eachSeries(
         items,
         function (item, next) {
-          fs.outputFileSync(folder.path + item.oldPath, item.content, "utf-8");
+          fs.outputFileSync(blogDirectory + item.oldPath, item.content, "utf-8");
           folder.update(item.oldPath, next);
         },
         function (err) {
@@ -129,8 +129,8 @@ describe("update", function () {
                 items,
                 function (item, next) {
                   fs.moveSync(
-                    folder.path + item.oldPath,
-                    folder.path + item.newPath
+                    blogDirectory + item.oldPath,
+                    blogDirectory + item.newPath
                   );
                   folder.update(item.oldPath, function () {
                     folder.update(item.newPath, next);
@@ -193,11 +193,11 @@ describe("update", function () {
               async.series(
                 [
                   function (next) {
-                    fs.removeSync(folder.path + path);
+                    fs.removeSync(blogDirectory + path);
                     folder.update(path, next);
                   },
                   function (next) {
-                    fs.removeSync(folder.path + ghostPath);
+                    fs.removeSync(blogDirectory + ghostPath);
                     folder.update(ghostPath, function (err) {
                       if (err) return next(err);
 
@@ -277,12 +277,12 @@ describe("update", function () {
     sync(this.blog.id, function (err, folder, done) {
       if (err) return testDone.fail(err);
 
-      fs.outputFileSync(folder.path + path, content, "utf-8");
+      fs.outputFileSync(blogDirectory + path, content, "utf-8");
 
       folder.update(path, function (err) {
         if (err) return testDone.fail(err);
 
-        fs.moveSync(folder.path + path, folder.path + newPath);
+        fs.moveSync(blogDirectory + path, blogDirectory + newPath);
 
         async.series(
           [folder.update.bind(this, path), folder.update.bind(this, newPath)],
@@ -320,12 +320,12 @@ describe("update", function () {
     sync(this.blog.id, function (err, folder, done) {
       if (err) return testDone.fail(err);
 
-      fs.outputFileSync(folder.path + path, content, "utf-8");
+      fs.outputFileSync(blogDirectory + path, content, "utf-8");
 
       folder.update(path, function (err) {
         if (err) return testDone.fail(err);
 
-        fs.moveSync(folder.path + path, folder.path + newPath);
+        fs.moveSync(blogDirectory + path, blogDirectory + newPath);
 
         async.series(
           [folder.update.bind(this, path), folder.update.bind(this, newPath)],
@@ -344,6 +344,13 @@ describe("update", function () {
 
   // Set up a test blog before each test
   global.test.blog();
+
+  // The blog's folder on disk, which these specs change directly
+  let blogDirectory;
+
+  beforeEach(function () {
+    blogDirectory = this.blogDirectory;
+  });
 
   // Expose methods for creating fake files, paths, etc.
   beforeEach(function () {
@@ -379,7 +386,7 @@ describe("update", function () {
       sync(blog.id, function (err, folder, done) {
         if (err) return callback(err);
 
-        fs.removeSync(folder.path + path);
+        fs.removeSync(blogDirectory + path);
 
         folder.update(path, function (err) {
           if (err) return callback(err);
@@ -396,7 +403,7 @@ describe("update", function () {
       sync(blog.id, function (err, folder, done) {
         if (err) return callback(err);
 
-        fs.outputFileSync(folder.path + path, contents, "utf-8");
+        fs.outputFileSync(blogDirectory + path, contents, "utf-8");
 
         folder.update(path, function (err) {
           if (err) return callback(err);

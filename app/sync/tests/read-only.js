@@ -47,7 +47,7 @@ describe("sync while the data directory is read-only", function () {
     await finished;
 
     expect(result.err).toBeFalsy();
-    expect(result.folder.path).toEqual(jasmine.any(String));
+    expect(result.folder.update).toEqual(jasmine.any(Function));
     expect((await lock.inspect(blog.id)).held).toBe(true);
 
     await new Promise(function (resolve) {
@@ -61,7 +61,7 @@ describe("sync while the data directory is read-only", function () {
     sync(this.blog.id, function (err, folder, done) {
       if (err) return testDone.fail(err);
 
-      expect(folder.path).toEqual(jasmine.any(String));
+      expect(folder.update).toEqual(jasmine.any(Function));
 
       done(null, testDone);
     });

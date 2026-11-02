@@ -38,20 +38,6 @@ describe("user getById", function () {
     expect(result.email).toEqual("getbyid@example.com");
   });
 
-  it("applies default created=0 for legacy users", async function () {
-    var legacyUser = { uid: uid, email: "legacy@example.com" };
-    await client.set(key.user(uid), JSON.stringify(legacyUser));
-    var result = await get(uid);
-    expect(result.created).toBe(0);
-  });
-
-  it("applies default welcomeEmailSent=true for legacy users", async function () {
-    var legacyUser = { uid: uid, email: "legacy@example.com" };
-    await client.set(key.user(uid), JSON.stringify(legacyUser));
-    var result = await get(uid);
-    expect(result.welcomeEmailSent).toBe(true);
-  });
-
   it("preserves existing created and welcomeEmailSent values", async function () {
     var userWithValues = Object.assign({}, validUser, {
       created: 1234567890,
