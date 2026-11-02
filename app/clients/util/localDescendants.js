@@ -1,31 +1,21 @@
-const fs = require("fs-extra");
-const { join } = require("path");
+const folder = require("storage/folder");
 
-// The blog paths of everything inside a local folder, parents before their
-// contents, or [] if it isn't a folder. A sync walk removes a folder that's
-// gone remotely with one fs.remove, but update() on the folder's path drops
-// nothing beneath it, so the walk must update each of these paths too.
+// The blog paths of everything inside a folder of the blog, parents before
+// their contents, or [] if it isn't a folder. A sync walk removes a folder
+// that's gone remotely with one remove, but update() on the folder's path
+// drops nothing beneath it, so the walk must update each of these paths too.
 // Otherwise the entries for the files inside stay published until Fix()
 // finds them missing.
-module.exports = async function localDescendants(directory, path) {
-  let contents;
+module.exports = async function localDescendants(blogID, path) {
+  const paths = [];
 
   try {
-    contents = await fs.readdir(directory, { withFileTypes: true });
+    for await (const item of folder.walk(blogID, path, { directories: true })) {
+      paths.push(item);
+    }
   } catch (err) {
     if (err.code === "ENOENT" || err.code === "ENOTDIR") return [];
     throw err;
-  }
-
-  const paths = [];
-
-  for (const item of contents) {
-    paths.push(join(path, item.name));
-    if (item.isDirectory()) {
-      paths.push(
-        ...(await localDescendants(join(directory, item.name), join(path, item.name)))
-      );
-    }
   }
 
   return paths;

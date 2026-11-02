@@ -32,7 +32,6 @@ function harness(count = 1) {
   };
   const stubs = {
     "storage/folder": {},
-    "helper/localPath": (_, path) => path,
     "../database": {
       blog: {
         get: async () => ({

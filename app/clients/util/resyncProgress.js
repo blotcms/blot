@@ -1,14 +1,12 @@
-const fs = require("fs-extra");
-const { join } = require("path");
+const folder = require("storage/folder");
 
-async function countLocalFiles(directory) {
+// The number of files (not directories) in a folder of the blog. Rejects if
+// the folder doesn't exist.
+async function countLocalFiles(blogID, path) {
   let total = 0;
-  const contents = await fs.readdir(directory, { withFileTypes: true });
 
-  for (const item of contents) {
-    const path = join(directory, item.name);
-    if (item.isDirectory()) total += await countLocalFiles(path);
-    else total += 1;
+  for await (const _ of folder.walk(blogID, path)) {
+    total += 1;
   }
 
   return total;

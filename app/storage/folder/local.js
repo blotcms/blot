@@ -1,6 +1,6 @@
 var config = require("config");
 var ensure = require("helper/ensure");
-var localPath = require("helper/localPath");
+var pathNormalizer = require("helper/pathNormalizer");
 var assertNoSymlinks = require("helper/assertNoSymlinks");
 var caseSensitivePath = require("helper/caseSensitivePath");
 var hashFile = require("helper/hashFile");
@@ -8,13 +8,13 @@ var fs = require("fs-extra");
 var { randomUUID: uuid } = require("crypto");
 var { pipeline } = require("stream/promises");
 var { PassThrough, Readable } = require("stream");
-var { join, dirname, relative, sep } = require("path");
+var { join, dirname, relative, resolve, sep } = require("path");
 var { NotFoundError } = require("./errors");
 
 // The local-disk backend of storage/folder: a blog's folder is the directory
 // {blog_folder_dir}/{blogID}, exactly as the rest of the app has always used
-// it. Paths are resolved by helper/localPath, so they are normalised the same
-// way as everywhere else and ".." is clamped inside the blog's folder.
+// it. Paths are normalised by helper/pathNormalizer, the same way as
+// everywhere else, and ".." is clamped inside the blog's folder.
 //
 // The no-symlink policy lives here, and only here. A symlink inside a blog
 // folder could expose a file outside it, so every operation which reads or
@@ -27,6 +27,22 @@ function noop() {}
 
 var DEFAULT_LIMIT = 1000;
 var STAT_BATCH = 64;
+
+// Joins a blog path onto the blog's folder on disk. Resolving the path against
+// the folder's root first means a path with too many ".." cannot produce
+// anything outside the folder.
+function localPath(blogID, path) {
+  if (!path) path = "/";
+
+  path = pathNormalizer(path);
+
+  var root = join(config.blog_folder_dir, blogID);
+
+  path = resolve(root, path);
+  path = join(root, path);
+
+  return path;
+}
 
 // Resolves a blog and a path to its folder and an absolute local path inside
 // it. Blog IDs are not user input, but they must still be one path segment.

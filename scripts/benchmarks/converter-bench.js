@@ -5,7 +5,7 @@
  * Per-converter build-time micro-benchmark: times N conversions of a
  * converter's own existing test fixtures using its actual `read(blog, path,
  * callback)` function directly - no full blog/Redis/rebuild machinery, since
- * a converter's `read` only touches the filesystem (via helper/localPath,
+ * a converter's `read` only touches the filesystem (via
  * config.blog_folder_dir) and, for some converters (docx/odt), shells out to
  * pandoc/soffice - it does not need Redis at all.
  *
@@ -109,10 +109,10 @@ async function benchmarkConverter(name, n) {
   }
 
   const config = require("../../app/config");
-  const LocalPath = require("../../app/helper/localPath");
+  const { join } = require("path");
 
   // A throwaway blog ID so `read(blog, path, callback)` (which resolves
-  // paths via helper/localPath + config.blog_folder_dir) has somewhere real
+  // paths under config.blog_folder_dir) has somewhere real
   // to read from, without needing Blog.create/Redis.
   const blogID = `converter-bench-${name}`;
   const blog = {
@@ -128,7 +128,7 @@ async function benchmarkConverter(name, n) {
       callouts: { enabled: false },
     },
   };
-  const blogDir = LocalPath(blogID, "/");
+  const blogDir = join(config.blog_folder_dir, blogID, "/");
 
   fs.mkdirSync(blogDir, { recursive: true });
 

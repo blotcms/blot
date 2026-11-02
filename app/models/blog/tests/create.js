@@ -42,7 +42,7 @@ describe("Blog.create", function () {
   it("creates the blog's folder", function (done) {
     var test = this;
     var fs = require("fs-extra");
-    var localPath = require("helper/localPath");
+    var localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
 
     create(test.user.uid, { handle: "exampleblog" }, function (err, blog) {
       if (err) return done.fail(err);

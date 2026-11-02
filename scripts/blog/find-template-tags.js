@@ -21,7 +21,6 @@ const progress = require("../each/progress");
 const Entries = require("models/entries");
 const Entry = require("models/entry");
 const folder = require("storage/folder");
-const localPath = require("helper/localPath");
 const { relative } = require("path");
 
 const TAG = /\{\{[\s\S]*?\}\}\}?/g;
@@ -112,18 +111,20 @@ function summarise(blog, user, files) {
 // The path is only printed, for the operator to cat, so this is the one place
 // which still names the file on the local disk.
 // Double-quoted for the shell, so escape the characters it treats specially.
-function catCommand(blogID, path) {
-  const file = relative(process.cwd(), localPath(blogID, path));
+async function catCommand(blogID, path) {
+  const file = relative(process.cwd(), await folder.path(blogID, path));
   return 'cat "' + file.replace(/(["\\$`])/g, "\\$1") + '"';
 }
 
-function printFiles(blogID, files) {
-  files.forEach((file) => console.log("  " + catCommand(blogID, file.path)));
+async function printFiles(blogID, files) {
+  for (const file of files) {
+    console.log("  " + (await catCommand(blogID, file.path)));
+  }
 }
 
-function printResult(result) {
+async function printResult(result) {
   console.log("blog:   " + result.blogID);
-  printFiles(result.blogID, result.files);
+  await printFiles(result.blogID, result.files);
 }
 
 function searchOne() {
@@ -133,7 +134,7 @@ function searchOne() {
       return process.exit(1);
     }
 
-    scan(blog).then(function (files) {
+    scan(blog).then(async function (files) {
       const result = summarise(blog, user, files);
 
       if (asJSON) {
@@ -146,7 +147,7 @@ function searchOne() {
       console.log("domain: " + (blog.domain || "(none)"));
       console.log("");
       console.log(files.length + " file(s) with template tags in their source");
-      printFiles(blog.id, files);
+      await printFiles(blog.id, files);
 
       process.exit();
     });
@@ -161,7 +162,7 @@ function searchAll() {
   eachBlog(
     function (user, blog, next) {
       scan(blog)
-        .then(function (files) {
+        .then(async function (files) {
           searched++;
           if (!files.length) return;
 
@@ -169,14 +170,14 @@ function searchAll() {
           results.push(result);
 
           // Report matches as they are found (kept off stdout for --json).
-          if (!asJSON) printResult(result);
+          if (!asJSON) await printResult(result);
         })
         .catch(function (err) {
           console.error("Error scanning blog " + blog.id + ": " + err.message);
         })
         .then(() => next());
     },
-    function () {
+    async function () {
       const totalFiles = results.reduce((n, r) => n + r.files.length, 0);
       const summary = {
         blogsSearched: searched,
@@ -198,7 +199,7 @@ function searchAll() {
           " blog(s)"
       );
 
-      results.forEach(printResult);
+      for (const result of results) await printResult(result);
 
       process.exit();
     },

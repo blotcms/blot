@@ -4,7 +4,7 @@ describe("image", function () {
   var image = require("./index");
   var cheerio = require("cheerio");
   var fs = require("fs-extra");
-  var localPath = require("helper/localPath");
+  var localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
   var config = require("config");
   var assets = require("storage/assets");
   var crypto = require("crypto");
