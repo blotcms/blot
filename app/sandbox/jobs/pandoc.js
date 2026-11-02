@@ -20,9 +20,10 @@ const { spawn } = require("child_process");
 const FORMATS = ["markdown", "docx", "odt", "rtf", "org"];
 const EXTENSION = /^\.[A-Za-z0-9]{1,16}$/;
 
-// pandoc's own heap limit and time limit, as the converters always had. The
-// jail's limits in proxy/unit/sandbox/jail.js sit above both.
-const MAX_HEAP = "500M";
+// pandoc's own heap and time limits. The heap sits below the jail's 512 MiB
+// (proxy/unit/sandbox/jail.js), which Node, the document and its media share,
+// so a document too large for it is usually a pandoc error, not a killed jail.
+const MAX_HEAP = "400M";
 const TIMEOUT_MS = 10 * 1000;
 
 // Matches maxOutputBytes in proxy/unit/sandbox/jail.js

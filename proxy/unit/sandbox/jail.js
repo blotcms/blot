@@ -7,8 +7,7 @@ const path = require("path");
 const MiB = 1024 * 1024;
 
 // Encoded images pass through /tmp (app/sandbox/jobs/encode.js). A tmpfs counts
-// toward the job's memory limit, so this is a ceiling, not a reservation. A job
-// may set its own, tmpfsBytes.
+// toward the job's memory limit, so this is a ceiling, not a reservation.
 const TMPFS_BYTES = 128 * MiB;
 
 // Where the Dockerfile puts the nsjail binary, and the unit's cgroup subtree
@@ -87,14 +86,13 @@ const JOBS = {
   },
   // Spawns pandoc on one document (docx, odt, rtf, org or markdown, with a
   // bibliography and CSL) and returns the HTML and any media it extracted.
-  // pandoc caps its own heap at 500M and is killed after 10s by the job. At
-  // that cap pandoc alone peaks at about 500 MiB (a 36 MB docx), and the
-  // document and its media sit in /tmp and in Node too, so it gets more
-  // memory and /tmp than the image jobs.
+  // pandoc caps its own heap at 400M, so most documents too large for the
+  // jail fail as pandoc errors, and is killed after 10s by the job. A very
+  // large docx or odt (tens of MB of images: the document and its media sit
+  // in /tmp and in Node too) can still exceed the jail and fail the job.
   pandoc: {
     command: node("pandoc"),
-    memoryBytes: 1024 * MiB,
-    tmpfsBytes: 512 * MiB,
+    memoryBytes: 512 * MiB,
     timeSeconds: 30,
     maxInputBytes: 256 * MiB,
     maxOutputBytes: 64 * MiB,
@@ -185,7 +183,7 @@ function args(name) {
     "--disable_proc",
     "--hostname", "sandbox",
     "--cwd", "/",
-    "-m", `none:/tmp:tmpfs:size=${j.tmpfsBytes || TMPFS_BYTES}`,
+    "-m", `none:/tmp:tmpfs:size=${TMPFS_BYTES}`,
     "--time_limit", String(j.timeSeconds),
     // uid 65000 inside and outside. Never --user: as root it leaves the job
     // mapped to root outside the namespace.

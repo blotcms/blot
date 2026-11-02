@@ -29,15 +29,6 @@ test("jail: never --user, never binds /usr or /, disables /proc", () => {
   assert.deepStrictEqual(argv.slice(-3), jail.JOBS.metadata.command);
 });
 
-test("jail: /tmp is 128 MiB, or the job's own size", () => {
-  const tmpfs = (name) => {
-    const argv = jail.args(name);
-    return argv[argv.indexOf("-m") + 1];
-  };
-  assert.strictEqual(tmpfs("metadata"), `none:/tmp:tmpfs:size=${128 * 1024 * 1024}`);
-  assert.strictEqual(tmpfs("pandoc"), `none:/tmp:tmpfs:size=${512 * 1024 * 1024}`);
-});
-
 test("jail: binds pandoc's binary, not /usr/local/bin", () => {
   const argv = jail.args("pandoc");
   const binds = argv.filter((a, i) => argv[i - 1] === "-R");
@@ -65,7 +56,7 @@ test("jail: every job runs its own file in main.js, within its limits", () => {
     assert.deepStrictEqual(j.command.slice(-2), ["/usr/src/app/app/sandbox/jobs/main.js", name]);
     assert(fs.existsSync(path.join(__dirname, "../../../../app/sandbox/jobs", name + ".js")));
     if (j.network) continue;
-    assert.strictEqual(j.memoryBytes, (name === "pandoc" ? 1024 : 512) * 1024 * 1024);
+    assert.strictEqual(j.memoryBytes, 512 * 1024 * 1024);
     assert.strictEqual(j.maxInputBytes, 256 * 1024 * 1024);
   }
   for (const name of ["thumbnail", "resize", "to-png"]) {

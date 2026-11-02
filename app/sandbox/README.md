@@ -46,9 +46,12 @@ starts `SANDBOX_`, and it never falls back to in-process.
   build like any bad file without being a sandbox failure; pandoc killed for
   any other reason (the jail's memory limit) fails the job. It spawns
   `/usr/local/bin/pandoc`, bound on its own; in-process it honours
-  `BLOT_PANDOC_PATH`. The callouts Lua filter is `jobs/callouts.lua`. It gets
-  1 GiB and a 512 MiB `/tmp`: pandoc alone peaks near 500 MiB at its own heap
-  cap, and the document and its media are in `/tmp` and in Node as well.
+  `BLOT_PANDOC_PATH`. The callouts Lua filter is `jobs/callouts.lua`. It has
+  the usual 512 MiB and 128 MiB `/tmp`, under the unit's sandbox subtree's cap,
+  and caps pandoc's heap at 400M so that most documents too large for it fail as
+  pandoc errors. A very large docx or odt (tens of MB of images, which sit in
+  `/tmp` and in Node as well as in pandoc) can still exceed the jail and fail
+  the job. That is accepted: sandbox failures email the admin (#2391).
 
 Callers write any output files themselves: the jail can't reach the data mount.
 Args are JSON and every job checks them, since they come from the less trusted side.
@@ -79,7 +82,7 @@ which is at most its time limit.
 1. Add `jobs/<name>.js` exporting `run(args, input)`, returning
    `{ meta, outputs: [Buffer, ...] }`. `meta` must be JSON.
 2. Add `<name>` to `JOBS` in `jobs/main.js` and an entry in `proxy/unit/sandbox/jail.js`
-   (command, memory, time and byte limits, and `/tmp` if not 128 MiB). The names are `/^[a-z-]+$/`.
+   (command, memory, time and byte limits). The names are `/^[a-z-]+$/`.
 3. If it needs a binary or library the jail doesn't bind, add a read-only bind
    in `jail.js`. Never bind `/usr` or `/`.
 
