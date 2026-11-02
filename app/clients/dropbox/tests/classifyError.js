@@ -6,7 +6,6 @@ const {
   dropboxTag,
   issueFromAccount,
   flagsFromAccount,
-  backfillPatch,
   keepsErrorAfterDownload,
 } = require("../util/classifyError");
 const tagSource = require("../util/tagSource");
@@ -140,12 +139,6 @@ describe("dropbox classifyError", function () {
       });
     });
 
-    it("maps a legacy 409 with no source to SOURCE_MISSING", function () {
-      expect(issueFromAccount({ error_code: 409 }).code).toBe(
-        health.CODES.SOURCE_MISSING
-      );
-    });
-
     it("does not surface a 409 stored from apply", function () {
       expect(
         issueFromAccount({ error_code: 409, error_source: SOURCES.APPLY })
@@ -156,16 +149,6 @@ describe("dropbox classifyError", function () {
       expect(
         issueFromAccount({ error_code: 400, error_source: SOURCES.AUTH }).code
       ).toBe(health.CODES.REAUTH_REQUIRED);
-    });
-
-    it("maps a legacy unsourced 400 (refresh failure) to REAUTH_REQUIRED", function () {
-      expect(issueFromAccount({ error_code: 400 }).code).toBe(
-        health.CODES.REAUTH_REQUIRED
-      );
-      expect(backfillPatch({ error_code: 400, last_sync: 5 })).toEqual({
-        error_source: SOURCES.AUTH,
-        error_since: 5,
-      });
     });
 
     it("keeps only quota errors through a download-only pass", function () {
@@ -195,7 +178,9 @@ describe("dropbox classifyError", function () {
         folder_missing: false,
         quota_exceeded: false,
       });
-      expect(flagsFromAccount({ error_code: 409 })).toEqual({
+      expect(
+        flagsFromAccount({ error_code: 409, error_source: SOURCES.DELTA })
+      ).toEqual({
         revoked: false,
         folder_missing: true,
         quota_exceeded: false,
@@ -210,62 +195,6 @@ describe("dropbox classifyError", function () {
         folder_missing: false,
         quota_exceeded: false,
       });
-    });
-  });
-
-  describe("backfillPatch", function () {
-    it("stamps error_source on legacy 401 and 409 rows", function () {
-      expect(backfillPatch({ error_code: 401, last_sync: 5 })).toEqual({
-        error_source: SOURCES.AUTH,
-        error_since: 5,
-      });
-      const missingFolder = backfillPatch({ error_code: 409 });
-      expect(missingFolder.error_source).toBe(SOURCES.DELTA);
-      expect(typeof missingFolder.error_since).toBe("number");
-      expect(missingFolder.error_since).toBeGreaterThan(0);
-    });
-
-    it("clears stale transient error_codes", function () {
-      expect(backfillPatch({ error_code: 500 })).toEqual({
-        error_code: 0,
-        error_source: "",
-        error_since: 0,
-      });
-      expect(backfillPatch({ error_code: 429 })).toEqual({
-        error_code: 0,
-        error_source: "",
-        error_since: 0,
-      });
-    });
-
-    it("leaves a fully stamped actionable row alone", function () {
-      expect(
-        backfillPatch({
-          error_code: 401,
-          error_source: SOURCES.AUTH,
-          error_since: 99,
-        })
-      ).toBe(null);
-    });
-
-    it("does not overwrite an existing error_source", function () {
-      expect(
-        backfillPatch({
-          error_code: 409,
-          error_source: SOURCES.APPLY,
-          error_since: 1,
-        })
-      ).toBe(null);
-    });
-
-    it("keeps an auth-source 400 rather than treating it as transient", function () {
-      expect(
-        backfillPatch({
-          error_code: 400,
-          error_source: SOURCES.AUTH,
-          error_since: 1,
-        })
-      ).toBe(null);
     });
   });
 

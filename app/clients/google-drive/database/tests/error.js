@@ -3,12 +3,10 @@ const {
   SETUP_ERROR,
   MESSAGES,
   classify,
-  classifyFromProse,
   sourceMissingFields,
   lostFolderMessage,
   clearAllErrorFields,
   clearHealthErrorFields,
-  backfillPatch,
   isLostFolderError,
   isTransientDriveError,
   isQuotaError,
@@ -16,17 +14,8 @@ const {
 } = require("../error");
 
 describe("google drive database.error", function () {
-  it("classifies trash, delete, and inaccessible prose as SOURCE_MISSING", function () {
-    expect(classifyFromProse(MESSAGES.TRASHED)).toBe(health.CODES.SOURCE_MISSING);
-    expect(classifyFromProse(MESSAGES.DELETED)).toBe(health.CODES.SOURCE_MISSING);
-    expect(classifyFromProse(MESSAGES.INACCESSIBLE)).toBe(
-      health.CODES.SOURCE_MISSING
-    );
-  });
-
   it("does not treat setup failures as sync health", function () {
     expect(isSetupError(SETUP_ERROR)).toBe(true);
-    expect(classifyFromProse(SETUP_ERROR)).toBeNull();
     expect(classify({ error: SETUP_ERROR })).toBeNull();
   });
 
@@ -39,13 +28,13 @@ describe("google drive database.error", function () {
     ).toBe(health.CODES.SOURCE_MISSING);
   });
 
-  it("ignores unknown errorCode values and falls back to prose", function () {
+  it("ignores unknown errorCode values", function () {
     expect(
       classify({
         error: MESSAGES.DELETED,
         errorCode: "NOPE",
       })
-    ).toBe(health.CODES.SOURCE_MISSING);
+    ).toBeNull();
   });
 
   it("preserves errorSince when the same SOURCE_MISSING is written again", function () {
@@ -69,28 +58,6 @@ describe("google drive database.error", function () {
       errorCode: null,
       errorSince: null,
     });
-  });
-
-  it("backfills missing errorCode from legacy prose and skips rows that already match", function () {
-    expect(backfillPatch({ error: MESSAGES.TRASHED })).toEqual({
-      errorCode: health.CODES.SOURCE_MISSING,
-    });
-    expect(
-      backfillPatch({
-        error: MESSAGES.TRASHED,
-        errorCode: health.CODES.SOURCE_MISSING,
-      })
-    ).toBeNull();
-  });
-
-  it("clears a health code left on a setup-failure row", function () {
-    expect(
-      backfillPatch({
-        error: SETUP_ERROR,
-        errorCode: health.CODES.SYNC_ERROR,
-        errorSince: 1,
-      })
-    ).toEqual({ errorCode: null, errorSince: null });
   });
 
   it("treats 404 and permission-denied 403 as a lost folder", function () {

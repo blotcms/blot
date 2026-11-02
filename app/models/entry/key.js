@@ -21,15 +21,6 @@ module.exports = {
     return "blog:" + blogID + ":dependents:" + pathNormalize(path).toLowerCase();
   },
 
-  // How dependents keys were written before they were lowercased: the path
-  // exactly as authored. Existing sets in Redis still live under these keys
-  // until each entry is rebuilt (scripts/entry/rebuild-all.js), so readers
-  // look at both. Remove this, and the fallbacks that use it, once that has
-  // run everywhere.
-  dependentsExactCase: function (blogID, path) {
-    return "blog:" + blogID + ":dependents:" + pathNormalize(path);
-  },
-
   search: function (blogID) {
     return "blog:" + blogID + ":search";
   },
