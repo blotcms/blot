@@ -51,7 +51,7 @@ function allowed(file) {
   );
 }
 
-const files = execFileSync("git", ["ls-files", "app", "scripts", "config"], {
+const files = execFileSync("git", ["ls-files", "app", "scripts", "config", "proxy/e2e"], {
   cwd: root,
   encoding: "utf8",
   maxBuffer: 64 * 1024 * 1024,
