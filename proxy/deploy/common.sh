@@ -386,6 +386,9 @@ run_args() { # run_args <name>
       --device /dev/net/tun
       --mount "type=bind,source=$SANDBOX_CGROUP_DIR/$unit-browser,target=/sandbox-browser-cgroup"
       -e "BLOT_EGRESS_PROXY_URL=http://127.0.0.1:$proxy_port"
+      # the same, under the name images from before #2417 read, so a rollback
+      # to one with units.sh still finds its proxy
+      -e "BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:$proxy_port"
     )
   fi
 }
