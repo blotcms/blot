@@ -59,6 +59,25 @@ describe("scheduler prune-tmp", function () {
     expect(await exists(this.root + "/elsewhere/keep.txt")).toBe(true);
   });
 
+  it("leaves the git store's cache alone", async function () {
+    const config = require("config");
+    const saved = config.git_store.cache_directory;
+
+    config.git_store.cache_directory = this.tmp + "/git-store";
+
+    try {
+      await write(this.tmp, "git-store/main/entries/ab/entry", 3 * DAY, "git-store");
+      await write(this.tmp, "old-upload", 2 * DAY);
+
+      await this.run();
+
+      expect(await exists(this.tmp + "/git-store/main/entries/ab/entry")).toBe(true);
+      expect(await exists(this.tmp + "/old-upload")).toBe(false);
+    } finally {
+      config.git_store.cache_directory = saved;
+    }
+  });
+
   describe("imports", function () {
     const importPath = (root, importID) => root + "/import/blog_1/" + importID;
 
