@@ -110,6 +110,15 @@ describe("git store compaction plan", function () {
     expect(compact.plan(m, { keepRecent: 0, maxBytes: 1300 })).toBe(null);
   });
 
+  it("counts an .idx towards the cap, skipping a pack whose .idx alone is too big without stopping there", function () {
+    const m = manifestWith([
+      { ...pack(1, 100000, 1), idxSize: 190000 },
+      { ...pack(2, 110000, 2), idxSize: 2000 },
+      { ...pack(3, 120000, 3), idxSize: 2000 },
+    ]);
+    expect(compact.plan(m, { keepRecent: 0, maxBytes: 262144 }).packs.sort()).toEqual([pack(2).name, pack(3).name]);
+  });
+
   it("merges the small packs that fit past maxPacks, leaving a big base", function () {
     const many = [pack(1, 15000, 1), ...Array.from({ length: 40 }, (_, i) => pack(i + 2, 500, i + 2))];
     expect(compact.plan(manifestWith(many)).packs.length).toBe(41);
@@ -539,6 +548,66 @@ describe("git store compaction", function () {
 
       // Left to size merges by the cache, it finds nothing small enough to do
       expect((await compact({ store, cache: small, lock })).outcome).toBe("nothing");
+    });
+
+    it("still merges the packs when the history is too big to rewrite, leaving the pieces", async function () {
+      const pieces = latest.historyPieces.length;
+      const historyBytes = latest.historyPieces.reduce((sum, p) => sum + p.size + p.idxSize, 0);
+      const maxBytes = historyBytes - 1;
+      const chosen = compact.plan(latest, { minPieces: 2, maxBytes });
+      expect(chosen.packs.length).toBeGreaterThan(1);
+      expect(chosen.history).toBe(true);
+
+      const small = createCache({ dir: path.join(dir, "small"), maxBytes: 4 * maxBytes + 64 * 1024 });
+      const result = await compact({ store, cache: small, lock, minPieces: 2, maxBytes });
+      expect(result.outcome).toBe("compacted");
+      expect(result.into).toMatch(/^pack-/);
+      expect(result.history).toBe(null);
+      expect(result.stats.historySkipped).toBe("too large");
+
+      await refresh();
+      expect(latest.historyPieces.length).toBe(pieces);
+      expect(latest.history).toBe(null);
+      expectMirror(await clone("after"));
+    });
+
+    it("skips the history, not the packs, when the cache has no room for both", async function () {
+      const chosen = compact.plan(latest, { minPieces: 2, maxBytes: Infinity });
+      const byName = new Map(latest.packs.map((p) => [p.name, p]));
+      const packBytes = chosen.packs.reduce((sum, name) => sum + byName.get(name).size + byName.get(name).idxSize, 0);
+
+      // Room for the packs' scratch and not much more
+      const small = createCache({ dir: path.join(dir, "small"), maxBytes: 2 * packBytes + 64 * 1024 + 100 });
+      const result = await compact({ store, cache: small, lock, minPieces: 2, maxBytes: Infinity });
+      expect(result.outcome).toBe("compacted");
+      expect(result.merged.length).toBe(chosen.packs.length);
+      expect(result.stats.historySkipped).toBe("no room");
+      expect(small.stats().reservedBytes).toBe(0);
+    });
+
+    it("waits for every download to stop, and leaves nothing in scratch, when one fails", async function () {
+      const scratch = path.join(dir, "cache", "scratch");
+      let active = 0;
+      let peak = 0;
+      const counting = {
+        ...store,
+        stream(key, ...args) {
+          const stream = store.stream(key, ...args);
+          active++;
+          peak = Math.max(peak, active);
+          stream.once("close", () => active--);
+          return stream;
+        },
+      };
+      store.inject("stream", { key: /\.pack$/, delay: 300, times: 20 });
+      store.inject("stream", { key: /\.idx$/, before: dropped() });
+
+      const error = await compact({ store: counting, cache, lock }).then(() => null, (err) => err);
+      expect(error.code).toBe("ECONNRESET");
+      expect(peak).toBeGreaterThan(1);
+      expect(active).toBe(0);
+      expect(fs.existsSync(scratch) ? fs.readdirSync(scratch) : []).toEqual([]);
+      expect(cache.stats().reservedBytes).toBe(0);
     });
 
     it("merges the small packs of a repository larger than its cache, leaving the big one", async function () {

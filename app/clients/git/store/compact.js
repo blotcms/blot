@@ -61,7 +61,11 @@
 //   into      the merged pack's name, or null
 //   history   the new history pack's name, or null if it was not rebuilt
 //   stats     { ms, attempts, packsIn, bytesIn, objectsIn, bytesOut, objectsOut,
-//               piecesIn, historyBytesIn, historyBytesOut, commits }
+//               piecesIn, historyBytesIn, historyBytesOut, commits,
+//               historySkipped }. historySkipped is null, or why the history
+//               was due a rebuild but was left this run: "too large" (its
+//               inputs are over maxBytes) or "no room" (the cache had no room
+//               left for them once the packs had theirs)
 //
 // It throws for anything else (a NoRoomError when the cache has no room for
 // the scratch space, an upload that failed, an Error with code EMOVED when the
@@ -71,7 +75,7 @@ const fsp = require("fs/promises");
 const path = require("path");
 const { pipeline } = require("stream/promises");
 const { spawn } = require("child_process");
-const { StaleManifestError, OutcomeUnknownError, CorruptError } = require("./errors");
+const { StaleManifestError, OutcomeUnknownError, CorruptError, NoRoomError } = require("./errors");
 const { packKey, idxKey, revKey } = require("./layout");
 const { mapLimit } = require("./limit");
 const manifest = require("./manifest");
@@ -85,6 +89,9 @@ const DEFAULTS = { keepRecent: 4, maxPacks: 32, factor: 2, minPieces: 16, maxByt
 // compact() takes no more than this share of the cache's budget for the inputs
 // of a merge, unless maxBytes is given. Scratch holds them and the output.
 const CACHE_SHARE = 4;
+
+// Scratch for a merge is twice its inputs (the inputs and the output) and this
+const SLACK = 64 * 1024;
 
 // A swap lost to a push is retried this many times in all. Pushes and commits
 // only add, so a retry needs no new upload, just a new manifest.
@@ -172,16 +179,20 @@ function plan(m, options = {}) {
     below += pack.size;
   });
 
-  // The merge must fit in scratch: only the smallest packs of the split whose
-  // .pack and .idx add up to maxBytes are taken
-  let fits = 0;
+  // The merge must fit in scratch: of the packs of the split, the smallest by
+  // .pack and .idx together (what the cap counts; an .idx can be large next
+  // to its pack) whose sum fits in maxBytes are taken
+  const bytes = (pack) => pack.size + pack.idxSize;
+  const byBytes = sorted.slice(0, split).sort((a, b) => bytes(a) - bytes(b) || (a.name < b.name ? -1 : 1));
+  const taken = [];
   let total = 0;
-  while (fits < split && total + sorted[fits].size + sorted[fits].idxSize <= maxBytes) {
-    total += sorted[fits].size + sorted[fits].idxSize;
-    fits++;
+  for (const pack of byBytes) {
+    if (total + bytes(pack) > maxBytes) break;
+    total += bytes(pack);
+    taken.push(pack);
   }
 
-  const packs = fits >= 2 ? sorted.slice(0, fits).map((pack) => pack.name) : [];
+  const packs = taken.length >= 2 ? taken.map((pack) => pack.name) : [];
   const history = (m.historyPieces || []).length >= Math.max(1, minPieces);
   return packs.length || history ? { packs, history } : null;
 }
@@ -247,11 +258,21 @@ function assertContains(outer, inner, what) {
 }
 
 // Fetches a pack and its .idx into `dir`, streaming, and checks they are the
-// sizes the manifest says and belong together
-async function fetchInput(store, entry, dir) {
+// sizes the manifest says and belong together. `downloads` is shared by every
+// input of a run: the first copy to fail aborts the others, and each copy has
+// settled (its streams closed, nothing more written) before this rejects, so
+// scratch is never deleted under one still writing.
+async function fetchInput(store, entry, dir, downloads) {
   const packFile = path.join(dir, entry.name + ".pack");
   const idxFile = path.join(dir, entry.name + ".idx");
-  await Promise.all([pipeline(store.stream(packKey(entry.name)), fs.createWriteStream(packFile)), pipeline(store.stream(idxKey(entry.name)), fs.createWriteStream(idxFile))]);
+  const copy = (key, file) =>
+    pipeline(store.stream(key), fs.createWriteStream(file), { signal: downloads.controller.signal }).catch((err) => {
+      if (!downloads.error) downloads.error = err;
+      downloads.controller.abort();
+      throw err;
+    });
+  const copies = await Promise.allSettled([copy(packKey(entry.name), packFile), copy(idxKey(entry.name), idxFile)]);
+  if (copies.some((settled) => settled.status === "rejected")) throw downloads.error;
 
   const [packStat, idx] = await Promise.all([fsp.stat(packFile), fsp.readFile(idxFile)]);
   if (packStat.size !== entry.size || idx.length !== entry.idxSize) {
@@ -330,31 +351,65 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, ...
   if (typeof lock !== "function") throw new Error("compact needs the host's lock function");
 
   const started = Date.now();
-  const stats = { ms: 0, attempts: 0, packsIn: 0, bytesIn: 0, objectsIn: 0, bytesOut: 0, objectsOut: 0, piecesIn: 0, historyBytesIn: 0, historyBytesOut: 0, commits: 0 };
+  const stats = {
+    ms: 0,
+    attempts: 0,
+    packsIn: 0,
+    bytesIn: 0,
+    objectsIn: 0,
+    bytesOut: 0,
+    objectsOut: 0,
+    piecesIn: 0,
+    historyBytesIn: 0,
+    historyBytesOut: 0,
+    commits: 0,
+    historySkipped: null,
+  };
   const result = (outcome, extra) => ({ outcome, seq: null, merged: [], into: null, history: null, ...extra, stats: { ...stats, ms: Date.now() - started } });
 
   const base = await manifest.read(store);
-  const maxBytes = options.maxBytes !== undefined ? options.maxBytes : cache.maxBytes > 0 ? Math.floor(cache.maxBytes / CACHE_SHARE) : DEFAULTS.maxBytes;
+  const maxBytes = options.maxBytes !== undefined ? options.maxBytes : cache.maxBytes > 0 ? Math.max(0, Math.floor((cache.maxBytes - SLACK) / CACHE_SHARE)) : DEFAULTS.maxBytes;
   const chosen = plan(base, { ...options, maxBytes });
   if (!chosen) return result("nothing", { seq: base.seq });
 
   const byName = new Map(base.packs.map((pack) => [pack.name, pack]));
   const packInputs = chosen.packs.map((name) => byName.get(name));
-  const pieceInputs = chosen.history ? [...base.historyPieces] : [];
-  const historyInputs = chosen.history ? [...(base.history ? [base.history] : []), ...pieceInputs] : [];
+  let pieceInputs = chosen.history ? [...base.historyPieces] : [];
+  let historyInputs = chosen.history ? [...(base.history ? [base.history] : []), ...pieceInputs] : [];
+  const inputBytes = (inputs) => inputs.reduce((sum, pack) => sum + pack.size + pack.idxSize, 0);
+  const skipHistory = (reason) => {
+    stats.historySkipped = reason;
+    pieceInputs = [];
+    historyInputs = [];
+  };
 
-  stats.packsIn = packInputs.length;
-  stats.bytesIn = packInputs.reduce((sum, pack) => sum + pack.size, 0);
-  stats.objectsIn = packInputs.reduce((sum, pack) => sum + pack.objects, 0);
-  stats.piecesIn = pieceInputs.length;
-  stats.historyBytesIn = historyInputs.reduce((sum, pack) => sum + pack.size, 0);
+  // The history is rewritten whole, so it is budgeted on its own and never
+  // holds up the packs: past maxBytes, or with no room left in the cache once
+  // the packs have theirs, it is skipped this run
+  if (historyInputs.length && inputBytes(historyInputs) > maxBytes) skipHistory("too large");
+  if (!packInputs.length && !historyInputs.length) return result("nothing", { seq: base.seq });
 
   // The inputs, and an output about as big as them, with room to spare
-  const inputBytes = [...packInputs, ...historyInputs].reduce((sum, pack) => sum + pack.size + pack.idxSize, 0);
-  const reservation = await cache.reserve(2 * inputBytes + 64 * 1024);
+  const reservation = await cache.reserve(2 * inputBytes(packInputs) + SLACK);
   const children = new Set();
 
   try {
+    if (historyInputs.length) {
+      try {
+        await reservation.extend(2 * inputBytes(historyInputs));
+      } catch (err) {
+        if (!(err instanceof NoRoomError)) throw err;
+        skipHistory("no room");
+      }
+    }
+    if (!packInputs.length && !historyInputs.length) return result("nothing", { seq: base.seq });
+
+    stats.packsIn = packInputs.length;
+    stats.bytesIn = packInputs.reduce((sum, pack) => sum + pack.size, 0);
+    stats.objectsIn = packInputs.reduce((sum, pack) => sum + pack.objects, 0);
+    stats.piecesIn = pieceInputs.length;
+    stats.historyBytesIn = historyInputs.reduce((sum, pack) => sum + pack.size, 0);
+
     const gitDir = path.join(reservation.dir, "repo.git");
     const packDir = path.join(gitDir, "objects", "pack");
     await runGit(children, ["init", "-q", "--bare", gitDir], { gitDir });
@@ -363,7 +418,9 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, ...
     // A pack can be both, after a push that brought only commits; it is
     // fetched once
     const unique = [...new Map([...packInputs, ...historyInputs].map((entry) => [entry.name, entry])).values()];
-    const fetched = new Map((await mapLimit(unique, CONCURRENCY, (entry) => fetchInput(store, entry, packDir))).map((input) => [input.entry.name, input]));
+    // mapLimit waits for every fetch in flight before it rejects
+    const downloads = { controller: new AbortController(), error: null };
+    const fetched = new Map((await mapLimit(unique, CONCURRENCY, (entry) => fetchInput(store, entry, packDir, downloads))).map((input) => [input.entry.name, input]));
 
     const outDir = path.join(reservation.dir, "out");
     const merged = packInputs.length
