@@ -344,7 +344,7 @@ describe("storage/folder cache", function () {
     await age(b, 1000);
 
     // 3 bytes short of 10% free: the least recent entry goes, the other stays
-    spyOn(require("fs").promises, "statfs").and.resolveTo({ blocks: 100, bavail: 7, bsize: 1 });
+    spyOn(require("fs").promises, "statfs").and.callFake(async () => ({ blocks: 100, bavail: 7, bsize: 1 }));
 
     await cache.check();
 

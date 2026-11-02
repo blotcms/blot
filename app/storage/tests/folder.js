@@ -1295,7 +1295,7 @@ describe("storage/folder", function () {
 
         var full = Object.assign(new Error("no space left on device"), { code: "ENOSPC" });
 
-        spyOn(contentCache(), "use").and.returnValue(Promise.reject(full));
+        spyOn(contentCache(), "use").and.callFake(() => Promise.reject(full));
 
         expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("from S3");
       });
