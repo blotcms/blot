@@ -84,6 +84,16 @@ const JOBS = {
     maxInputBytes: 256 * MiB,
     maxOutputBytes: 8 * MiB,
   },
+  // A zip archive, read into its files (app/sandbox/jobs/unzip.js): the
+  // archive in memory, then every file. The output stops under the 64 MiB a
+  // reply may hold (app/sandbox/index.js), with the file names.
+  unzip: {
+    command: node("unzip"),
+    memoryBytes: 512 * MiB,
+    timeSeconds: 30,
+    maxInputBytes: 64 * MiB,
+    maxOutputBytes: 60 * MiB,
+  },
   // Spawns perl, which runs exiftool, reading the image from stdin
   exif: {
     command: node("exif"),
