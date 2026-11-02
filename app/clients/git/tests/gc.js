@@ -32,11 +32,17 @@ describe("git client gc", function () {
   }
 
   describe("of a repository", function () {
+    // Long enough for the gcs below, each made a second longer
+    var TIMEOUT = 30 * 1000;
+
     beforeEach(async function () {
+      // gcs other specs asked for, which would otherwise run alongside these
+      await gc.flush();
+
       this.root = await fs.mkdtemp(path.join(tempDir(), "gc-spec-"));
       this.directory = path.join(this.root, "repo.git");
       childProcess.execFileSync("git", ["init", "--quiet", "--bare", "--initial-branch=master", this.directory]);
-    });
+    }, TIMEOUT);
 
     afterEach(async function () {
       await fs.remove(this.root);
@@ -57,7 +63,7 @@ describe("git client gc", function () {
 
       for (var j = 0; j < 50; j++) gc.schedule(directory);
 
-      await gc.drained();
+      await gc.flush();
 
       var gcs = spy.commands(gcsIn(directory));
 
@@ -65,19 +71,19 @@ describe("git client gc", function () {
       expect(spy.mostAtOnce(gcsIn(directory))).toBe(1);
       expect(gcs[0].args).toContain("-c gc.autoDetach=false");
       expect(gcs[0].args).not.toContain("gc.auto=0");
-    });
+    }, TIMEOUT);
 
     it("forgets a repository once its gc has run", async function () {
       gc.settings.delay = 0;
       gc.schedule(this.directory);
 
-      await gc.drained();
+      await gc.flush();
       gc.schedule(path.join(this.root, "gone.git"));
-      await gc.drained();
+      await gc.flush();
 
       expect(spy.commands(gcsIn(this.directory)).length).toBe(1);
       expect(limiter.stats().gc.running).toBe(0);
-    });
+    }, TIMEOUT);
   });
 
   describe("after Blot's writes", function () {
