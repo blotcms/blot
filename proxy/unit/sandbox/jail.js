@@ -24,9 +24,10 @@ const ENTER_NETWORK = path.join(__dirname, "enter-network.sh");
 const BROWSER_CGROUP = "/sandbox-browser-cgroup";
 // The proxy jail's, in the unit's subtree. ./proxy.js makes it.
 const PROXY_CGROUP = CGROUP_MOUNT + "/proxy";
-// The fetch-image job's, in the unit's subtree too, so it shares that budget
-// with the image jobs. The broker makes it (./cgroup.js), with cgroupLimits.
-const FETCH_CGROUP = CGROUP_MOUNT + "/fetch";
+// The fetch-image job's, in the unit's subtree too, so they share that budget
+// with the image jobs. One jail each, so a slow server holds up one of them.
+// The broker makes them (./cgroup.js), with the job's cgroupLimits.
+const FETCH_CGROUPS = [1, 2, 3].map((n) => `${CGROUP_MOUNT}/fetch-${n}`);
 
 // pasta can't start from a root nsjail, so a jail with a network is started by
 // its own uid, which is also the job's uid outside the namespace
@@ -119,7 +120,8 @@ const JOBS = {
   },
   // One Chromium per job, on the open internet behind the egress filter, in
   // the unit's browser cgroup: that cgroup's limits replace memoryBytes, and
-  // one job at a time keeps a heavy page's memory to itself.
+  // one job at a time keeps a heavy page's memory to itself. A job with a
+  // network runs in one of its cgroups, which holds one jail at a time.
   screenshot: {
     command: [
       "/usr/local/bin/node",
@@ -127,21 +129,19 @@ const JOBS = {
       "screenshot",
     ],
     network: true,
-    cgroup: BROWSER_CGROUP,
-    maxRunning: 1,
+    cgroups: [BROWSER_CGROUP],
     timeSeconds: 30,
     maxInputBytes: 64 * 1024,
     maxOutputBytes: 32 * MiB,
   },
   // Fetches one image from a URL and re-encodes it (remote images in posts,
   // helper/transformer/download), behind the egress filter like the browser
-  // job but with no browser, /proc or fonts. Its cgroup holds one job.
+  // job but with no browser, /proc or fonts.
   "fetch-image": {
     command: node("fetch-image"),
     network: true,
-    cgroup: FETCH_CGROUP,
+    cgroups: FETCH_CGROUPS,
     cgroupLimits: { memoryBytes: 384 * MiB, pids: 64 },
-    maxRunning: 1,
     timeSeconds: 30,
     maxInputBytes: 64 * 1024,
     maxOutputBytes: 50 * MiB,
@@ -315,8 +315,9 @@ function inCgroup(cgroup, args, { raiseOomScore }) {
   };
 }
 
-// The program and arguments that start a job's jail
-function command(name) {
+// The program and arguments that start a job's jail; for a job with a
+// network, in one of its cgroups, the first unless the broker picks another
+function command(name, cgroup) {
   const j = job(name);
   if (!j.network) {
     return {
@@ -324,9 +325,11 @@ function command(name) {
       args: ["-c", `${RAISE_OOM_SCORE} && exec "$@"`, "sh", NSJAIL].concat(args(name)),
     };
   }
+  const directory = cgroup || j.cgroups[0];
+  if (!j.cgroups.includes(directory)) throw new Error("unknown cgroup");
   const extra = NETWORK_JOBS[name];
   return inCgroup(
-    j.cgroup,
+    directory,
     networkArgs({
       config: NETWORK_CONFIG,
       binds: BINDS.concat(NETWORK_BINDS, extra.binds),
@@ -358,4 +361,4 @@ function proxyCommand(unit) {
   );
 }
 
-module.exports = { JOBS, NSJAIL, BROWSER_CGROUP, PROXY_CGROUP, FETCH_CGROUP, OOM_SCORE_ADJ, job, args, command, proxyCommand };
+module.exports = { JOBS, NSJAIL, BROWSER_CGROUP, PROXY_CGROUP, FETCH_CGROUPS, OOM_SCORE_ADJ, job, args, command, proxyCommand };

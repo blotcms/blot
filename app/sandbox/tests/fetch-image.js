@@ -229,14 +229,21 @@ describe("sandbox fetch-image job", function () {
 
   it("refuses an image with too many pixels before decoding it", async function () {
     const huge = await sharp({
-      create: { width: 10000, height: 6000, channels: 3, background: "#000000" },
+      create: { width: 6000, height: 4100, channels: 3, background: "#000000" },
     })
       .png({ compressionLevel: 9 })
       .toBuffer();
     routes["/huge.png"] = serve(huge);
+    // fewer pixels, but WebP's limit is lower
+    const webp = await sharp({
+      create: { width: 4100, height: 4000, channels: 3, background: "#000000" },
+    })
+      .webp()
+      .toBuffer();
+    routes["/huge.webp"] = serve(webp, { "Content-Type": "image/webp" });
 
-    const { meta } = await fetchImage({ url: origin + "/huge.png" });
-    expect(meta.error).toBe("image is too large");
+    expect((await fetchImage({ url: origin + "/huge.png" })).meta.error).toBe("image is too large");
+    expect((await fetchImage({ url: origin + "/huge.webp" })).meta.error).toBe("image is too large");
   });
 
   it("reports a bad status, and a body cut short", async function () {

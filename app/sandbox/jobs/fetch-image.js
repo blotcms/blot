@@ -28,8 +28,6 @@ const MAX_BODY_BYTES = 32 * MiB;
 const MAX_DECODED_BYTES = 32 * MiB;
 // A re-encoded image can be larger than the one that came in
 const MAX_OUTPUT_BYTES = 48 * MiB;
-// Every frame of an animation together. A phone photo is well under it.
-const MAX_PIXELS = 50 * 1000 * 1000;
 
 // Each response's headers, then each gap in its body, then the whole fetch with
 // its redirects. With the encode these fit in the job's limit in jail.js.
@@ -39,12 +37,24 @@ const DEADLINE = 20 * 1000;
 
 // What the callers' transforms take (app/build/plugins/image/optimize.js,
 // app/build/thumbnail/config.js), each re-encoded in its own format. Never SVG:
-// sharp can only rasterise it.
+// sharp can only rasterise it. Without optimised coding the JPEG encoder needs
+// half the memory, for a file a fraction of a percent larger.
 const ENCODERS = {
-  jpeg: (image) => image.jpeg({ quality: 90 }),
+  jpeg: (image) => image.jpeg({ quality: 90, optimiseCoding: false }),
   png: (image) => image.png(),
   gif: (image) => image.gif(),
   webp: (image) => image.webp({ quality: 90 }),
+};
+
+// Pixels, every frame of an animation together, so the decode and encode fit
+// in the job's cgroup (cgroupLimits in jail.js). The worst cases are a
+// progressive JPEG, whose decoder holds every coefficient, and WebP, whose
+// decoder and encoder both hold the whole image. A 24 MP camera's photo fits.
+const MAX_PIXELS = {
+  jpeg: 24 * 1000 * 1000,
+  png: 24 * 1000 * 1000,
+  gif: 24 * 1000 * 1000,
+  webp: 16 * 1000 * 1000,
 };
 
 // The response headers helper/transformer/download caches on
@@ -260,13 +270,14 @@ async function reencode(body) {
 
   const pages = info.pages || 1;
   const height = info.pageHeight || info.height;
-  if (!info.width || !height || info.width * height * pages > MAX_PIXELS) {
+  const limit = MAX_PIXELS[info.format];
+  if (!info.width || !height || info.width * height * pages > limit) {
     throw new FetchError("image is too large");
   }
 
   // Applying the EXIF orientation keeps a photo the right way up once the
   // re-encode has dropped its EXIF. An animation has none.
-  let image = sharp(body, { animated: pages > 1, limitInputPixels: MAX_PIXELS }).keepIccProfile();
+  let image = sharp(body, { animated: pages > 1, limitInputPixels: limit }).keepIccProfile();
   if (pages === 1) image = image.rotate();
 
   let output;

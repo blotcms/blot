@@ -64,10 +64,12 @@ starts `SANDBOX_`, and it never falls back to in-process.
   the two conditional headers itself, and sends no others. It follows up to 5
   redirects, each checked the same way, and gives up after 20s, or 5s without
   data. The body is capped at 32 MiB as it arrives and again once its gzip,
-  deflate or brotli is undone, so a small bomb stops there. It must decode as a
-  JPEG, PNG, GIF or WebP of at most 50 million pixels, every frame counted, and
-  comes back in that format: JPEG and WebP at quality 90, with the EXIF
-  rotation applied and only the colour profile kept, a GIF still animated.
+  deflate or brotli is undone, so a small bomb stops there. It must be a JPEG,
+  PNG or GIF of at most 24 million pixels, or a WebP of 16 million, every frame
+  counted, so that the worst of them (a progressive JPEG, whose decoder holds
+  every coefficient) fits in the job's memory. It comes back in that format:
+  JPEG and WebP at quality 90, with the EXIF rotation applied and only the
+  colour profile kept, a GIF still animated.
   Never SVG, which sharp can only rasterise: a remote SVG stays a remote link.
   `meta` is the status, the caching headers (`etag`, `lastModified`,
   `expires`, `cacheControl`, `age`), the format and size; a 304 has no
@@ -93,7 +95,7 @@ One connection is one job, on `/run/blot-sandbox/broker.sock` (0660, root and gr
    bytes. The client checks it against N and the lengths; the broker never
    reads it.
 
-The broker runs at most 4 jails, fewer of a job with its own `maxRunning`, and queues 32 more, then answers `busy`. It
+The broker runs at most 4 jails, fewer of a job with its own `maxRunning` or `cgroups`, and queues 32 more, then answers `busy`. It
 takes no paths, and logs one line per failed job with no input data. A client
 that vanishes after ending its input is not noticed until the jail finishes,
 which is at most its time limit.
@@ -125,14 +127,16 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   sets no-new-privs before the job starts, and the job doesn't start if that fails.
   The unit needs `/dev/net/tun`, and `setns` and `unshare` in its seccomp profile.
 - **It is started by uid 65001, not root,** because pasta won't start from a root
-  nsjail. So nsjail can't make cgroups: the broker's shell joins the job to its
-  job's cgroup first, whose limits are the job's, and the broker kills what is
-  left in it afterwards. That is why one of each runs at a time per unit. The
-  browser's is `/sandbox-browser-cgroup` (`/sys/fs/cgroup/blot-sandbox/<unit>-browser`
-  on the host). `fetch-image`'s is `/sandbox-cgroup/fetch`, in the unit's
-  sandbox subtree, so it shares that budget with the image jobs: the broker
-  makes it when it starts (`proxy/unit/sandbox/cgroup.js`), as the proxy jail
-  makes its own, with 384 MiB and 64 pids.
+  nsjail. So nsjail can't make cgroups: the broker's shell joins the job to a
+  free one of the job's `cgroups` first, whose limits are the job's, and the
+  broker kills what is left in it afterwards. So each holds one jail at a time.
+  The browser has one, `/sandbox-browser-cgroup` (`/sys/fs/cgroup/blot-sandbox/<unit>-browser`
+  on the host), so one screenshot runs at a time per unit. `fetch-image` has
+  three, `/sandbox-cgroup/fetch-1` to `3`, in the unit's sandbox subtree, so
+  they share that budget with the image jobs, and one slow server holds up
+  one of them. The broker makes them when it starts
+  (`proxy/unit/sandbox/cgroup.js`), as the proxy jail makes its own, with
+  384 MiB and 64 pids each.
 - **`/proc` is the container's, read-only, for the browser job only.** Chromium aborts without a real one.
   A job can read the unit's process list and command lines, so no secret may
   ever be on a command line. Other uids' `environ`, `maps` and `fd` are denied.
