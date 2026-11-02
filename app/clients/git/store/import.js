@@ -645,3 +645,5 @@ async function verifyImport({ store, cache, gitDir, scratchDir = null }) {
 
 module.exports = importRepo;
 module.exports.verifyImport = verifyImport;
+// For rewrite.js, which packs and proves what the refs reach in the same way
+module.exports.internals = { counting, peelTags, describePack, packEverything, packCommits, proveClosed, watchGrowth, upload, has, entryOf, SLACK };
