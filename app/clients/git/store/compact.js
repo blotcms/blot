@@ -15,6 +15,8 @@
 //   factor        the geometric factor (default 2): see plan() below
 //   minPieces     the history is rebuilt once there are this many history
 //                 pieces (default 16)
+//   maxBytes      the most bytes of .pack and .idx one merge takes in
+//                 (default a quarter of the cache's budget)
 //   pack          git pack-objects' settings, over PACK_CONFIG below; they
 //                 are passed on the command line, so no system config applies
 //
@@ -77,7 +79,11 @@ const { buildRev } = require("./rev");
 
 const MiB = 1024 * 1024;
 
-const DEFAULTS = { keepRecent: 4, maxPacks: 32, factor: 2, minPieces: 16 };
+const DEFAULTS = { keepRecent: 4, maxPacks: 32, factor: 2, minPieces: 16, maxBytes: 256 * MiB };
+
+// compact() takes no more than this share of the cache's budget for the inputs
+// of a merge, unless maxBytes is given. Scratch holds them and the output.
+const CACHE_SHARE = 4;
 
 // A swap lost to a push is retried this many times in all. Pushes and commits
 // only add, so a retry needs no new upload, just a new manifest.
@@ -129,12 +135,19 @@ const PACK_CONFIG = {
 // only as many as the log of the repository's size, and the big base pack is
 // normally never rewritten. A merge of fewer than two packs is not one.
 //
+// Size. The inputs are fetched into scratch, which comes out of the cache, and
+// a repository can be far larger than the cache. So the merge takes only the
+// smallest packs of the split whose .pack and .idx together fit in `maxBytes`
+// (and still at least two), past `maxPacks` too. A pack that never fits in a
+// merge with another stays as it is: the count still comes down, and the big
+// packs are left alone.
+//
 // History. Every push adds a history piece, which a fetch that has to walk
 // history reads with a request of its own. Once there are `minPieces` of them
 // they are merged into the history pack, which costs a read and a write of the
 // whole history pack (commits only, a few hundred bytes each).
 function plan(m, options = {}) {
-  const { keepRecent, maxPacks, factor, minPieces } = { ...DEFAULTS, ...options };
+  const { keepRecent, maxPacks, factor, minPieces, maxBytes } = { ...DEFAULTS, ...options };
 
   let candidates = m.packs;
   if (m.packs.length <= maxPacks && keepRecent > 0) {
@@ -150,7 +163,16 @@ function plan(m, options = {}) {
     below += pack.size;
   });
 
-  const packs = split >= 2 ? sorted.slice(0, split).map((pack) => pack.name) : [];
+  // The merge must fit in scratch: only the smallest packs of the split whose
+  // .pack and .idx add up to maxBytes are taken
+  let fits = 0;
+  let total = 0;
+  while (fits < split && total + sorted[fits].size + sorted[fits].idxSize <= maxBytes) {
+    total += sorted[fits].size + sorted[fits].idxSize;
+    fits++;
+  }
+
+  const packs = fits >= 2 ? sorted.slice(0, fits).map((pack) => pack.name) : [];
   const history = (m.historyPieces || []).length >= Math.max(1, minPieces);
   return packs.length || history ? { packs, history } : null;
 }
@@ -303,7 +325,8 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, ...
   const result = (outcome, extra) => ({ outcome, seq: null, merged: [], into: null, history: null, ...extra, stats: { ...stats, ms: Date.now() - started } });
 
   const base = await manifest.read(store);
-  const chosen = plan(base, options);
+  const maxBytes = options.maxBytes !== undefined ? options.maxBytes : cache.maxBytes > 0 ? Math.floor(cache.maxBytes / CACHE_SHARE) : DEFAULTS.maxBytes;
+  const chosen = plan(base, { ...options, maxBytes });
   if (!chosen) return result("nothing", { seq: base.seq });
 
   const byName = new Map(base.packs.map((pack) => [pack.name, pack]));
@@ -319,7 +342,7 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, ...
 
   // The inputs, and an output about as big as them, with room to spare
   const inputBytes = [...packInputs, ...historyInputs].reduce((sum, pack) => sum + pack.size + pack.idxSize, 0);
-  const reservation = await cache.reserve(2 * inputBytes + 2 * MiB);
+  const reservation = await cache.reserve(2 * inputBytes + 64 * 1024);
   const children = new Set();
 
   try {

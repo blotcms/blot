@@ -99,6 +99,27 @@ describe("git store compaction plan", function () {
     expect(compact.plan(manifestWith(many.slice(0, 32))).packs.length).toBe(27);
   });
 
+  it("never takes in more than maxBytes, leaving a base pack bigger than that alone", function () {
+    // The base is under twice the rest, so the geometric split takes it too
+    const m = manifestWith([pack(1, 500, 1), pack(2, 100, 2), pack(3, 100, 3), pack(4, 100, 4), pack(5, 100, 5)]);
+    expect(compact.plan(m, { keepRecent: 0 }).packs.length).toBe(5);
+
+    // Each small pack is 100 bytes and a 1100-byte .idx
+    expect(compact.plan(m, { keepRecent: 0, maxBytes: 5000 }).packs.sort()).toEqual([2, 3, 4, 5].map((n) => pack(n).name));
+    expect(compact.plan(m, { keepRecent: 0, maxBytes: 2500 }).packs.length).toBe(2);
+    expect(compact.plan(m, { keepRecent: 0, maxBytes: 1300 })).toBe(null);
+  });
+
+  it("merges the small packs that fit past maxPacks, leaving a big base", function () {
+    const many = [pack(1, 15000, 1), ...Array.from({ length: 40 }, (_, i) => pack(i + 2, 500, i + 2))];
+    expect(compact.plan(manifestWith(many)).packs.length).toBe(41);
+
+    const chosen = compact.plan(manifestWith(many), { maxBytes: 40 * 1600 });
+    expect(chosen.packs.length).toBe(40);
+    expect(chosen.packs).not.toContain(pack(1).name);
+    expect(compact.plan(manifestWith(many), { maxBytes: 10 * 1600 }).packs.length).toBe(10);
+  });
+
   it("rebuilds the history once there are enough pieces", function () {
     expect(compact.plan(manifestWith([pack(1, 1000, 1)], 15))).toBe(null);
     expect(compact.plan(manifestWith([pack(1, 1000, 1)], 16))).toEqual({ packs: [], history: true });
@@ -501,9 +522,39 @@ describe("git store compaction", function () {
     it("fails with NoRoomError, changing nothing, when the cache has no room for its scratch space", async function () {
       const before = await manifest.read(store);
       const small = createCache({ dir: path.join(dir, "small"), maxBytes: 1024 });
-      const error = await compact({ store, cache: small, lock }).then(() => null, (err) => err);
+      const error = await compact({ store, cache: small, lock, maxBytes: Infinity }).then(() => null, (err) => err);
       expect(error).toEqual(jasmine.any(NoRoomError));
       expect(await manifest.read(store)).toEqual(before);
+
+      // Left to size merges by the cache, it finds nothing small enough to do
+      expect((await compact({ store, cache: small, lock })).outcome).toBe("nothing");
+    });
+
+    it("merges the small packs of a repository larger than its cache, leaving the big one", async function () {
+      fs.writeFileSync(path.join(work, "photo.jpg"), fx.bytes(9, 2 * MiB));
+      fx.git(work, ["add", "-A"]);
+      fx.git(work, ["commit", "-q", "-m", "A big file"]);
+      await pushWork();
+      const big = latest.packs[latest.packs.length - 1];
+      expect(big.size).toBeGreaterThan(2 * MiB);
+      await pushes(8);
+
+      // A quarter of a 1 MiB cache: the big pack can never be an input, though
+      // the geometric split alone (with a factor large enough) would take it
+      const small = createCache({ dir: path.join(dir, "small"), maxBytes: 1 * MiB });
+      expect(compact.plan(latest, { factor: 100, maxBytes: Infinity }).packs).toContain(big.name);
+
+      const before = latest.packs.length;
+      const result = await compact({ store, cache: small, lock, factor: 100 });
+      expect(result.outcome).toBe("compacted");
+      expect(result.merged).not.toContain(big.name);
+      expect(result.stats.bytesIn).toBeLessThan(256 * 1024);
+
+      await refresh();
+      expect(latest.packs.length).toBe(before - result.merged.length + 1);
+      expect(latest.packs.map((p) => p.name)).toContain(big.name);
+      await expectObjects();
+      expectMirror(await clone("after"));
     });
 
     it("refuses an input that is not the size the manifest says, changing nothing", async function () {
