@@ -47,15 +47,30 @@ const ENCODERS = {
 };
 
 // Pixels, every frame of an animation together, so the decode and encode fit
-// in the job's cgroup (cgroupLimits in jail.js). The worst cases are a
-// progressive JPEG, whose decoder holds every coefficient, and WebP, whose
-// decoder and encoder both hold the whole image. A 24 MP camera's photo fits.
+// in the job's cgroup (cgroupLimits in jail.js), measured. A 24 MP camera's
+// photo fits. Lower for what has to be decoded whole: a progressive JPEG,
+// whose decoder holds every coefficient, so fewer pixels unless its chroma is
+// subsampled 4:2:0; an interlaced PNG; and WebP.
+const MP = 1000 * 1000;
 const MAX_PIXELS = {
-  jpeg: 24 * 1000 * 1000,
-  png: 24 * 1000 * 1000,
-  gif: 24 * 1000 * 1000,
-  webp: 16 * 1000 * 1000,
+  jpeg: 24 * MP,
+  png: 24 * MP,
+  gif: 24 * MP,
+  webp: 12 * MP,
 };
+const MAX_PROGRESSIVE_PIXELS = {
+  jpeg: (info) => (info.chromaSubsampling === "4:2:0" ? 24 * MP : 12 * MP),
+  png: () => 12 * MP,
+};
+
+// The callers shrink every image to fit inside this anyway
+// (app/build/plugins/image/resize.js), so the decoder can shrink as it reads
+const MAX_DIMENSION = 3000;
+
+function pixelLimit(info) {
+  const progressive = MAX_PROGRESSIVE_PIXELS[info.format];
+  return info.isProgressive && progressive ? progressive(info) : MAX_PIXELS[info.format];
+}
 
 // The response headers helper/transformer/download caches on
 const CACHE_HEADERS = {
@@ -270,15 +285,19 @@ async function reencode(body) {
 
   const pages = info.pages || 1;
   const height = info.pageHeight || info.height;
-  const limit = MAX_PIXELS[info.format];
+  const limit = pixelLimit(info);
   if (!info.width || !height || info.width * height * pages > limit) {
     throw new FetchError("image is too large");
   }
 
   // Applying the EXIF orientation keeps a photo the right way up once the
-  // re-encode has dropped its EXIF. An animation has none.
+  // re-encode has dropped its EXIF. An animation has none, and keeps its size.
   let image = sharp(body, { animated: pages > 1, limitInputPixels: limit }).keepIccProfile();
-  if (pages === 1) image = image.rotate();
+  if (pages === 1) {
+    image = image
+      .rotate()
+      .resize(MAX_DIMENSION, MAX_DIMENSION, { fit: "inside", withoutEnlargement: true });
+  }
 
   let output;
   try {
@@ -336,4 +355,4 @@ async function run(args) {
   }
 }
 
-module.exports = { run, MAX_REDIRECTS, MAX_BODY_BYTES, MAX_DECODED_BYTES, MAX_PIXELS };
+module.exports = { run, MAX_REDIRECTS, MAX_BODY_BYTES, MAX_DECODED_BYTES, MAX_DIMENSION };

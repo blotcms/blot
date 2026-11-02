@@ -24,10 +24,10 @@ const ENTER_NETWORK = path.join(__dirname, "enter-network.sh");
 const BROWSER_CGROUP = "/sandbox-browser-cgroup";
 // The proxy jail's, in the unit's subtree. ./proxy.js makes it.
 const PROXY_CGROUP = CGROUP_MOUNT + "/proxy";
-// The fetch-image job's, in the unit's subtree too, so they share that budget
-// with the image jobs. One jail each, so a slow server holds up one of them.
-// The broker makes them (./cgroup.js), with the job's cgroupLimits.
-const FETCH_CGROUPS = [1, 2, 3].map((n) => `${CGROUP_MOUNT}/fetch-${n}`);
+// The fetch-image job's, in the unit's subtree too, so it shares that budget
+// with the image jobs and the proxy jail. The broker makes it (./cgroup.js),
+// with the job's cgroupLimits.
+const FETCH_CGROUP = CGROUP_MOUNT + "/fetch";
 
 // pasta can't start from a root nsjail, so a jail with a network is started by
 // its own uid, which is also the job's uid outside the namespace
@@ -136,12 +136,17 @@ const JOBS = {
   },
   // Fetches one image from a URL and re-encodes it (remote images in posts,
   // helper/transformer/download), behind the egress filter like the browser
-  // job but with no browser, /proc or fonts.
+  // job but with no browser, /proc or fonts. One at a time: posts' remote
+  // images are background build work, and a slow server holding the rest up
+  // for its time limit is acceptable. Its own short queue keeps a backlog of
+  // them out of the broker's, which the dashboard's jobs use too: a fetch
+  // over it is busy, and the post keeps its remote link.
   "fetch-image": {
     command: node("fetch-image"),
     network: true,
-    cgroups: FETCH_CGROUPS,
-    cgroupLimits: { memoryBytes: 384 * MiB, pids: 64 },
+    cgroups: [FETCH_CGROUP],
+    cgroupLimits: { memoryBytes: 256 * MiB, pids: 64 },
+    maxQueued: 8,
     timeSeconds: 30,
     maxInputBytes: 64 * 1024,
     maxOutputBytes: 50 * MiB,
@@ -361,4 +366,4 @@ function proxyCommand(unit) {
   );
 }
 
-module.exports = { JOBS, NSJAIL, BROWSER_CGROUP, PROXY_CGROUP, FETCH_CGROUPS, OOM_SCORE_ADJ, job, args, command, proxyCommand };
+module.exports = { JOBS, NSJAIL, BROWSER_CGROUP, PROXY_CGROUP, FETCH_CGROUP, OOM_SCORE_ADJ, job, args, command, proxyCommand };

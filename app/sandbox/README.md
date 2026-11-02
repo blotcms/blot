@@ -65,11 +65,13 @@ starts `SANDBOX_`, and it never falls back to in-process.
   redirects, each checked the same way, and gives up after 20s, or 5s without
   data. The body is capped at 32 MiB as it arrives and again once its gzip,
   deflate or brotli is undone, so a small bomb stops there. It must be a JPEG,
-  PNG or GIF of at most 24 million pixels, or a WebP of 16 million, every frame
-  counted, so that the worst of them (a progressive JPEG, whose decoder holds
-  every coefficient) fits in the job's memory. It comes back in that format:
-  JPEG and WebP at quality 90, with the EXIF rotation applied and only the
-  colour profile kept, a GIF still animated.
+  PNG or GIF of at most 24 million pixels, every frame counted, or 12 million
+  for what is decoded whole: a progressive JPEG (unless its chroma is 4:2:0),
+  an interlaced PNG and WebP. Measured, the worst of these stays under about
+  220 MiB. It comes back in that format, shrunk to fit inside 3000 px as the
+  callers do anyway (which lets the decoder shrink as it reads): JPEG and WebP
+  at quality 90, with the EXIF rotation applied and only the colour profile
+  kept, a GIF still animated and its size.
   Never SVG, which sharp can only rasterise: a remote SVG stays a remote link.
   `meta` is the status, the caching headers (`etag`, `lastModified`,
   `expires`, `cacheControl`, `age`), the format and size; a 304 has no
@@ -130,13 +132,21 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   nsjail. So nsjail can't make cgroups: the broker's shell joins the job to a
   free one of the job's `cgroups` first, whose limits are the job's, and the
   broker kills what is left in it afterwards. So each holds one jail at a time.
-  The browser has one, `/sandbox-browser-cgroup` (`/sys/fs/cgroup/blot-sandbox/<unit>-browser`
-  on the host), so one screenshot runs at a time per unit. `fetch-image` has
-  three, `/sandbox-cgroup/fetch-1` to `3`, in the unit's sandbox subtree, so
-  they share that budget with the image jobs, and one slow server holds up
-  one of them. The broker makes them when it starts
-  (`proxy/unit/sandbox/cgroup.js`), as the proxy jail makes its own, with
-  384 MiB and 64 pids each.
+  The browser's is `/sandbox-browser-cgroup` (`/sys/fs/cgroup/blot-sandbox/<unit>-browser`
+  on the host), so one screenshot runs at a time per unit. `fetch-image`'s is
+  `/sandbox-cgroup/fetch`, 256 MiB and 64 pids, which the broker makes when it
+  starts (`proxy/unit/sandbox/cgroup.js`), as the proxy jail makes its own. So
+  one fetch runs at a time per unit, and a slow server holds the rest up for
+  as long as 20s. That is background build work. A fetch waits in a queue of
+  its own, at most 8, inside the broker's, so a backlog of them never fills
+  the queue the dashboard's jobs wait in: past it, or after a minute queued,
+  the answer is `busy` (alerted) and the post keeps its remote link.
+- **The fetch shares the unit's sandbox subtree** (`blot-sandbox/<unit>`,
+  512 MiB) with the proxy jail (128 MiB at most) and the image jobs (each up
+  to 512 MiB, four at once). The fetch and the proxy together take at most
+  384 MiB of it; the image jobs have the rest and whatever those two aren't
+  using. The subtree's final size is for the unit memory work (TODO) to set
+  from measured peaks.
 - **`/proc` is the container's, read-only, for the browser job only.** Chromium aborts without a real one.
   A job can read the unit's process list and command lines, so no secret may
   ever be on a command line. Other uids' `environ`, `maps` and `fd` are denied.

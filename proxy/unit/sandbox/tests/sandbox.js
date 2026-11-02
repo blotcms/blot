@@ -97,15 +97,13 @@ test("jail: a job with a network starts as its own uid, in its cgroup, behind th
   assert.deepStrictEqual(jail.JOBS.screenshot.cgroups, [jail.BROWSER_CGROUP]);
 });
 
-test("jail: the fetch-image job's cgroups are its own, in the unit's subtree, with limits", () => {
+test("jail: the fetch-image job has one cgroup of its own, in the unit's subtree, and a short queue", () => {
   const j = jail.JOBS["fetch-image"];
-  assert.strictEqual(j.cgroups, jail.FETCH_CGROUPS);
-  assert.strictEqual(new Set(j.cgroups).size, 3);
-  for (const cgroup of j.cgroups) {
-    assert.strictEqual(path.dirname(cgroup), "/sandbox-cgroup");
-    assert.notStrictEqual(cgroup, jail.PROXY_CGROUP);
-  }
-  assert.deepStrictEqual(j.cgroupLimits, { memoryBytes: 384 * 1024 * 1024, pids: 64 });
+  assert.deepStrictEqual(j.cgroups, [jail.FETCH_CGROUP]);
+  assert.strictEqual(path.dirname(jail.FETCH_CGROUP), "/sandbox-cgroup");
+  assert.notStrictEqual(jail.FETCH_CGROUP, jail.PROXY_CGROUP);
+  assert.deepStrictEqual(j.cgroupLimits, { memoryBytes: 256 * 1024 * 1024, pids: 64 });
+  assert.strictEqual(j.maxQueued, 8);
 });
 
 test("jail: a job with a network never binds keys, data or /usr", () => {
@@ -555,6 +553,28 @@ test("broker: a job in cgroups runs one jail in each, and clears that one after"
   assert(["/c/1", "/c/2"].includes(spawned[3]));
   assert.strictEqual(spawned[2], null);
   assert.deepStrictEqual(cleared.slice().sort(), ["/c/1", "/c/2", spawned[3]].sort());
+});
+
+test("broker: a job with its own maxQueued is busy past it, and leaves the rest of the queue to others", async () => {
+  const jobs = { ...JOBS(), fetch: { ...JOBS().echo, maxRunning: 1, maxQueued: 1 } };
+  const { script, release } = hold();
+  await withBroker({ jobs, maxRunning: 1, maxQueued: 4, script }, async (socket, broker) => {
+    const first = request(socket, line("fetch"), "");
+    await until(() => broker.running.size === 1);
+    const second = request(socket, line("fetch"), "");
+    await until(() => broker.queue.length === 1);
+
+    assert.deepStrictEqual((await request(socket, line("fetch"), "")).header, { ok: false, error: "busy" });
+
+    // the broker's queue still has room for other jobs
+    const other = request(socket, job, "");
+    await until(() => broker.queue.length === 2);
+
+    release();
+    for (const reply of await Promise.all([first, second, other])) {
+      assert.strictEqual(reply.header.ok, true);
+    }
+  });
 });
 
 test("broker: makes the cgroups jobs ask for when it listens, and logs one it can't", async () => {

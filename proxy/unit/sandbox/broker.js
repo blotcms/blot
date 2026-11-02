@@ -125,9 +125,16 @@ function createBroker(options = {}) {
     return same < job.maxRunning;
   }
 
+  // The broker's queue, and a job's own, shorter one if it has one
+  function queueIsFull({ name, job }) {
+    if (queue.length >= maxQueued) return true;
+    if (job.maxQueued === undefined) return false;
+    return queue.filter((entry) => entry.name === name).length >= job.maxQueued;
+  }
+
   function admit(request) {
     if (hasRoom(request)) return start(request);
-    if (queue.length >= maxQueued) return fail(request.socket, "busy");
+    if (queueIsFull(request)) return fail(request.socket, "busy");
     request.queued = Date.now();
     queue.push(request);
     // a client that gives up while queued never gets a jail

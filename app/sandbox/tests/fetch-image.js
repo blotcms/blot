@@ -4,7 +4,7 @@ describe("sandbox fetch-image job", function () {
   const sharp = require("sharp");
   const config = require("config");
   const sandbox = require("../");
-  const { MAX_REDIRECTS, MAX_DECODED_BYTES } = require("../jobs/fetch-image");
+  const { MAX_REDIRECTS, MAX_DECODED_BYTES, MAX_DIMENSION } = require("../jobs/fetch-image");
 
   const MiB = 1024 * 1024;
   const empty = Buffer.alloc(0);
@@ -95,6 +95,17 @@ describe("sandbox fetch-image job", function () {
     expect([meta.width, meta.height]).toEqual([20, 60]);
     const info = await sharp(outputs[0]).metadata();
     expect(info.orientation).toBeUndefined();
+  });
+
+  it("shrinks an image to fit inside the size its callers use", async function () {
+    const wide = await png(MAX_DIMENSION * 2, 10);
+    routes["/wide.png"] = serve(wide);
+
+    const { meta, outputs } = await fetchImage({ url: origin + "/wide.png" });
+
+    expect([meta.width, meta.height]).toEqual([MAX_DIMENSION, 5]);
+    const info = await sharp(outputs[0]).metadata();
+    expect([info.width, info.height]).toEqual([MAX_DIMENSION, 5]);
   });
 
   it("keeps an animated GIF animated", async function () {
@@ -234,16 +245,22 @@ describe("sandbox fetch-image job", function () {
       .png({ compressionLevel: 9 })
       .toBuffer();
     routes["/huge.png"] = serve(huge);
-    // fewer pixels, but WebP's limit is lower
-    const webp = await sharp({
-      create: { width: 4100, height: 4000, channels: 3, background: "#000000" },
-    })
-      .webp()
-      .toBuffer();
-    routes["/huge.webp"] = serve(webp, { "Content-Type": "image/webp" });
+    // fewer pixels, but the limit is lower for what is decoded whole
+    const create = { width: 3700, height: 3500, channels: 3, background: "#000000" };
+    routes["/huge.webp"] = serve(await sharp({ create }).webp().toBuffer());
+    routes["/progressive.jpg"] = serve(
+      await sharp({ create }).jpeg({ progressive: true, chromaSubsampling: "4:4:4" }).toBuffer()
+    );
+    routes["/interlaced.png"] = serve(await sharp({ create }).png({ progressive: true }).toBuffer());
+    // ...unless a progressive JPEG's chroma is subsampled
+    routes["/progressive-420.jpg"] = serve(
+      await sharp({ create }).jpeg({ progressive: true, chromaSubsampling: "4:2:0" }).toBuffer()
+    );
 
-    expect((await fetchImage({ url: origin + "/huge.png" })).meta.error).toBe("image is too large");
-    expect((await fetchImage({ url: origin + "/huge.webp" })).meta.error).toBe("image is too large");
+    for (const name of ["huge.png", "huge.webp", "progressive.jpg", "interlaced.png"]) {
+      expect((await fetchImage({ url: `${origin}/${name}` })).meta.error).toBe("image is too large");
+    }
+    expect((await fetchImage({ url: origin + "/progressive-420.jpg" })).meta.format).toBe("jpeg");
   });
 
   it("reports a bad status, and a body cut short", async function () {
