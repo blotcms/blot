@@ -48,6 +48,7 @@ module.exports = async function loadTemplate(req, res, next) {
   const template = {
     locals: metadata.locals,
     id: req.blog.template,
+    cacheID: metadata.cacheID,
     cdn: metadata.cdn || {},
   };
 

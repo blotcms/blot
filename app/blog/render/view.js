@@ -45,6 +45,7 @@ async function renderView(templateID, viewName) {
       template: {
         locals: metadata.locals || {},
         id: templateID,
+        cacheID: metadata.cacheID,
         cdn:
           metadata.cdn && typeof metadata.cdn === "object" ? metadata.cdn : {},
       },

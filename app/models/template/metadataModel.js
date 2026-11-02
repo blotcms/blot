@@ -13,4 +13,5 @@ module.exports = {
   locals: "object",
   cdn: "object",
   fileDependencies: "array",
+  cacheID: "string",
 };
