@@ -18,6 +18,12 @@
 //                                    the refs as they were after each push
 //     "history": null | { "name", "size", "idxSize", "objects", "through": 7 }
 //                                    the pack holding the history up to a swap
+//     "historyPieces": [             a pack of just the commits of each push
+//       { "name", "size", "idxSize", "objects", "seq": 8 }
+//     ]                              since then, oldest first. Appended by
+//                                    pushes, so no push rebuilds the history
+//                                    pack; compaction merges them into it.
+//                                    Optional when read: absent means none.
 //   }
 //
 // What makes a swap safe is the conditional create of manifests/<seq + 1>.json
@@ -75,7 +81,7 @@ const OID = /^[0-9a-f]{40}$/;
 const WRITER = /^[0-9a-zA-Z_-]{1,64}$/;
 
 function empty() {
-  return { version: VERSION, seq: 0, writer: "", head: null, refs: {}, packs: [], snapshots: [], history: null };
+  return { version: VERSION, seq: 0, writer: "", head: null, refs: {}, packs: [], snapshots: [], history: null, historyPieces: [] };
 }
 
 function fail(message) {
@@ -138,6 +144,15 @@ function validate(m) {
     checkPack(m.history, "history");
     checkCount(m.history.through, "history.through");
     if (m.history.through > m.seq) fail("history is newer than the manifest");
+  }
+
+  if (m.historyPieces !== undefined) {
+    if (!Array.isArray(m.historyPieces)) fail("historyPieces must be a list");
+    for (const piece of m.historyPieces) {
+      checkPack(piece, "historyPieces[]");
+      checkCount(piece.seq, "historyPieces[].seq");
+      if (piece.seq > m.seq) fail("a history piece is newer than the manifest");
+    }
   }
 
   return m;
@@ -253,9 +268,10 @@ async function read(store) {
 }
 
 // The manifest which follows `base` after a push: `refs` are all the refs now,
-// `packs` the packs the push added (already uploaded), `head` and `history`
-// are changed only if given. The ref snapshot for the push is recorded.
-function advance(base, { refs, packs = [], head = base.head, history = base.history }) {
+// `packs` the packs the push added and `historyPieces` the history pieces it
+// added (all already uploaded), `head` and `history` are changed only if
+// given. The ref snapshot for the push is recorded.
+function advance(base, { refs, packs = [], historyPieces = [], head = base.head, history = base.history }) {
   const seq = base.seq + 1;
   return {
     ...base,
@@ -266,6 +282,7 @@ function advance(base, { refs, packs = [], head = base.head, history = base.hist
     packs: [...base.packs, ...packs.map((pack) => ({ ...pack, seq }))],
     snapshots: [...base.snapshots, { seq, refs: { ...refs } }],
     history,
+    historyPieces: [...(base.historyPieces || []), ...historyPieces.map((piece) => ({ ...piece, seq }))],
   };
 }
 
@@ -274,6 +291,8 @@ function advance(base, { refs, packs = [], head = base.head, history = base.hist
 async function assertUploaded(store, base, next) {
   const known = new Set(base.packs.map((pack) => pack.name));
   const added = next.packs.filter((pack) => !known.has(pack.name));
+  const knownPieces = new Set((base.historyPieces || []).map((piece) => piece.name));
+  added.push(...(next.historyPieces || []).filter((piece) => !knownPieces.has(piece.name)));
   if (next.history && !(base.history && base.history.name === next.history.name)) added.push(next.history);
 
   for (const pack of added) {

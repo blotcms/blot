@@ -1,0 +1,476 @@
+// Receiving a push, against real repositories and a real `git push`. The
+// repository in the store starts as a few commits of the standard fixture; the
+// client is that fixture's working directory, so what it sends is a genuine
+// thin pack built against what the server advertised.
+const fs = require("fs");
+const path = require("path");
+const { Readable } = require("stream");
+const fx = require("./helpers/fixture");
+const faults = require("./helpers/faults");
+const timeout = require("./helpers/timeout");
+const { createReceiveServer, push } = require("./helpers/receiveServer");
+const manifest = require("../manifest");
+const receive = require("../receive");
+const createCache = require("../cache");
+const createMemoryStore = require("../objectStore/memory");
+const createReader = require("../reader");
+const { manifestKey, packKey, idxKey, revKey } = require("../layout");
+
+const ZERO = "0".repeat(40);
+const MASTER = "refs/heads/master";
+const MiB = 1024 * 1024;
+
+const dropped = () => Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" });
+
+// What the host's lock does: one swap at a time
+function createLock() {
+  let tail = Promise.resolve();
+  return (fn) => {
+    const run = tail.then(fn);
+    tail = run.catch(() => {});
+    return run;
+  };
+}
+
+const bodyOf = (buffer) => Readable.from([buffer]);
+
+describe("git store receive", function () {
+  timeout(60 * 1000);
+
+  let dir;
+  let src;
+  let fixture;
+  let store;
+  let cache;
+  let lock;
+  let server;
+
+  // Puts the fixture's history in the store as a repository would hold it
+  async function seed(target) {
+    fx.repackAll(src);
+    const packs = fx.readPacks(src);
+    expect(packs.length).toBe(1);
+
+    const entry = await fx.upload(target, packs[0], fx.listEntries(packs[0]).length);
+    const base = manifest.empty();
+    const next = manifest.advance(base, {
+      refs: { [MASTER]: fixture.head, "refs/tags/v1": fixture.tag },
+      head: MASTER,
+      packs: [entry],
+    });
+    await manifest.swap({ store: target, lock, base, next });
+  }
+
+  async function setup({ wrap = (s) => s, maxBytes = 64 * MiB, limit } = {}) {
+    dir = fx.tempDir();
+    src = path.join(dir, "src");
+    fixture = fx.buildFixture(src, { commits: 4, large: false });
+    store = wrap(createMemoryStore());
+    cache = createCache({ dir: path.join(dir, "cache"), maxBytes });
+    lock = createLock();
+    await seed(store);
+    server = await createReceiveServer({ store, cache, lock, limit });
+  }
+
+  async function teardown() {
+    if (server) await server.close();
+    server = null;
+    fx.remove(dir);
+  }
+
+  // The scratch space a push used is gone, and the budget it held is back
+  function expectNoScratch() {
+    const scratch = path.join(dir, "cache", "scratch");
+    expect(fs.existsSync(scratch) ? fs.readdirSync(scratch) : []).toEqual([]);
+    expect(cache.stats().reservedBytes).toBe(0);
+  }
+
+  // Commits a change on the client, on a branch of its own off master, and
+  // returns the commit. Without a file, edits one line of a tracked file.
+  function commit(branch, change = () => fs.writeFileSync(path.join(src, "docs", "big.txt"), fs.readFileSync(path.join(src, "docs", "big.txt"), "utf8").replace("line 3 ", "line 3 edited by " + branch + " "))) {
+    fx.git(src, ["checkout", "-q", "-B", branch, fixture.head]);
+    change();
+    fx.git(src, ["add", "-A"]);
+    fx.git(src, ["commit", "-q", "-m", "Change from " + branch]);
+    return fx.text(src, ["rev-parse", "HEAD"]);
+  }
+
+  // A thin pack of `tip` against the fixture's head, as a push would send it
+  const thin = (tip) => fx.packRevs(src, [tip], [fixture.head], { thin: true });
+
+  const update = (tip, ref = MASTER, old = fixture.head) => ({ old, new: tip, ref });
+
+  function direct(commands, pack, options = {}) {
+    return receive({ store, cache, lock, commands, pack: pack ? bodyOf(pack) : null, ...options });
+  }
+
+  // Every object reachable from `tip` reads back from the store's packs
+  async function expectReadable(current, tip) {
+    const reader = createReader({ store, cache, packs: current.packs });
+    const oids = fx.text(src, ["rev-list", "--objects", tip]).split("\n").map((line) => line.split(" ")[0]);
+    const expected = fx.catAll(src, oids);
+
+    for (const oid of oids) {
+      const found = await reader.read(oid);
+      expect(found).not.toBeNull(oid);
+      expect(found.type).toBe(expected.get(oid).type);
+      expect(found.data.equals(expected.get(oid).data)).toBe(true);
+    }
+  }
+
+  // Rebuilds the repository from what the store holds and has git check it
+  async function expectFsck(current, tip) {
+    const check = path.join(dir, "check.git");
+    fx.git(dir, ["init", "-q", "--bare", check]);
+    for (const pack of current.packs) {
+      const target = path.join(check, "objects", "pack", pack.name);
+      fs.writeFileSync(target + ".pack", await store.get(packKey(pack.name)));
+      fs.writeFileSync(target + ".idx", await store.get(idxKey(pack.name)));
+    }
+    fx.git(check, ["update-ref", MASTER, tip]);
+    fx.git(check, ["fsck", "--strict", "--no-dangling"]);
+    fs.rmSync(check, { recursive: true, force: true });
+  }
+
+  describe("a push from a real git client", function () {
+    beforeEach(() => setup());
+    afterEach(teardown);
+
+    it("takes a thin pack, completes it, and swaps the manifest", async function () {
+      const tip = commit("work");
+      const before = await manifest.read(store);
+
+      const pushed = await push(src, [server.url, "work:master"]);
+      expect(pushed.stderr).toContain("master");
+      expect(pushed.code).toBe(0);
+
+      const result = server.results[0];
+      expect(result.outcome).toBe("ok");
+      expect(result.stats.basesFetched).toBeGreaterThan(0);
+
+      const current = await manifest.read(store);
+      expect(current.seq).toBe(before.seq + 1);
+      expect(current.refs[MASTER]).toBe(tip);
+      expect(current.refs["refs/tags/v1"]).toBe(fixture.tag);
+      expect(current.packs.length).toBe(before.packs.length + 1);
+
+      await expectReadable(current, tip);
+      await expectFsck(current, tip);
+      expectNoScratch();
+    });
+
+    it("writes a reverse index, and a history piece of just the push's commits", async function () {
+      const tip = commit("work");
+      expect((await push(src, [server.url, "work:master"])).code).toBe(0);
+
+      const current = await manifest.read(store);
+      const added = current.packs[current.packs.length - 1];
+      expect((await store.get(revKey(added.name))).length).toBe(12 + 4 * added.objects + 40);
+
+      expect(current.historyPieces.length).toBe(1);
+      const piece = current.historyPieces[0];
+      expect(piece.seq).toBe(current.seq);
+      expect(piece.objects).toBe(1);
+
+      const entries = fx.listEntries({ pack: await store.get(packKey(piece.name)), idx: await store.get(idxKey(piece.name)) });
+      expect(entries.map((e) => [e.oid, e.type])).toEqual([[tip, "commit"]]);
+      expect((await store.get(revKey(piece.name))).length).toBe(12 + 4 + 40);
+    });
+
+    it("makes a one-file push in a small, fixed number of requests", async function () {
+      commit("work");
+      const before = { ...store.stats };
+      expect((await push(src, [server.url, "work:master"])).code).toBe(0);
+
+      const used = Object.fromEntries(Object.keys(before).map((key) => [key, store.stats[key] - before[key]]));
+
+      // The manifest: read at the start and again before the swap (the hint,
+      // a HEAD for what follows it, the manifest itself), then the swap
+      expect(used.lists).toBe(0);
+      expect(used.putIfAbsents).toBe(1);
+
+      // The pack, its index and reverse index, the history piece's three, and the hint
+      expect(used.puts).toBe(7);
+
+      // Everything else is looking: manifests, index lookups for the bases and
+      // for the objects the new commit's tree changed, and the entries read
+      // for the bases. None of it grows with the repository's history.
+      const reading = used.heads + used.reads + used.gets;
+      expect(reading).toBeLessThanOrEqual(32);
+    });
+
+    it("accepts a push which carries no objects", async function () {
+      const before = await manifest.read(store);
+      const puts = store.stats.puts;
+
+      const pushed = await push(src, [server.url, fixture.commits[1] + ":refs/tags/old"]);
+      expect(pushed.code).toBe(0);
+
+      const current = await manifest.read(store);
+      expect(current.seq).toBe(before.seq + 1);
+      expect(current.refs["refs/tags/old"]).toBe(fixture.commits[1]);
+      expect(current.packs).toEqual(before.packs);
+      expect(current.historyPieces).toEqual([]);
+      expect(store.stats.puts - puts).toBe(1); // the hint, no packs
+      expectNoScratch();
+    });
+
+    it("refuses a branch other than master, and changes nothing", async function () {
+      const tip = commit("work");
+      const before = await manifest.read(store);
+      const puts = store.stats.puts;
+
+      const pushed = await push(src, [server.url, tip + ":refs/heads/other"]);
+      expect(pushed.code).not.toBe(0);
+      expect(pushed.stderr).toContain("only the master branch is allowed");
+
+      expect(server.results[0].outcome).toBe("refused");
+      expect(await manifest.read(store)).toEqual(before);
+      expect(store.stats.puts).toBe(puts);
+      expectNoScratch();
+    });
+
+    it("refuses master and another branch pushed together, in either order", async function () {
+      commit("work");
+      const before = await manifest.read(store);
+
+      for (const refs of [["work:master", "work:other"], ["work:other", "work:master"]]) {
+        const pushed = await push(src, [server.url, ...refs]);
+        expect(pushed.code).not.toBe(0);
+        expect(pushed.stderr).toContain("only the master branch is allowed");
+      }
+
+      expect(await manifest.read(store)).toEqual(before);
+    });
+
+    it("refuses to delete master", async function () {
+      const before = await manifest.read(store);
+      const pushed = await push(src, [server.url, ":master"]);
+      expect(pushed.code).not.toBe(0);
+      expect(pushed.stderr).toContain("master cannot be deleted");
+      expect(await manifest.read(store)).toEqual(before);
+    });
+  });
+
+  describe("receive() with the pack in hand", function () {
+    beforeEach(() => setup());
+    afterEach(teardown);
+
+    it("takes a first push to an empty repository: a root commit checks every entry", async function () {
+      const empty = createMemoryStore();
+      const everything = fx.packRevs(src, [fixture.head, fixture.tag], []);
+
+      const result = await receive({
+        store: empty,
+        cache,
+        lock,
+        commands: [update(fixture.head, MASTER, ZERO)],
+        pack: bodyOf(everything),
+      });
+      expect(result.outcome).toBe("ok");
+
+      const current = await manifest.read(empty);
+      expect(current.seq).toBe(1);
+      expect(current.head).toBe(MASTER);
+      expect(current.refs[MASTER]).toBe(fixture.head);
+      expect(current.historyPieces[0].objects).toBe(fixture.commits.length);
+      store = empty;
+      await expectReadable(current, fixture.head);
+      await expectFsck(current, fixture.head);
+      expectNoScratch();
+    });
+
+    it("refuses a stale base: the ref has moved since the client looked", async function () {
+      const a = commit("a");
+      const b = commit("b");
+
+      expect((await direct([update(a)], thin(a))).outcome).toBe("ok");
+      const before = await manifest.read(store);
+      const puts = store.stats.puts;
+
+      const result = await direct([update(b)], thin(b));
+      expect(result.outcome).toBe("refused");
+      expect(result.results).toEqual([{ ref: MASTER, error: "the ref moved while you were pushing; pull and try again" }]);
+      expect(result.messages).toContain("Nothing was pushed.");
+
+      expect(await manifest.read(store)).toEqual(before);
+      expect(store.stats.puts).toBe(puts);
+      expectNoScratch();
+    });
+
+    it("refuses when the manifest moves under the swap itself", async function () {
+      const a = commit("a");
+      const b = commit("b");
+
+      // Another push lands after this one has looked, just before its swap
+      let raced = false;
+      const racing = async (fn) => {
+        if (!raced) {
+          raced = true;
+          expect((await direct([update(a, "refs/tags/raced", ZERO)], thin(a))).outcome).toBe("ok");
+        }
+        return lock(fn);
+      };
+
+      const result = await receive({ store, cache, lock: racing, commands: [update(b)], pack: bodyOf(thin(b)) });
+      expect(result.outcome).toBe("refused");
+      expect(result.results[0].error).toContain("the ref moved");
+
+      const current = await manifest.read(store);
+      expect(current.refs[MASTER]).toBe(fixture.head);
+      expect(current.refs["refs/tags/raced"]).toBe(a);
+      expectNoScratch();
+    });
+
+    it("refuses a tip which is not there, even when no objects came with it", async function () {
+      const before = await manifest.read(store);
+      const puts = store.stats.puts;
+
+      const result = await direct([update("1".repeat(40))], null);
+      expect(result.outcome).toBe("refused");
+      expect(result.results[0].error).toBe("missing necessary objects");
+
+      expect(await manifest.read(store)).toEqual(before);
+      expect(store.stats.puts).toBe(puts);
+      expectNoScratch();
+    });
+
+    it("refuses a branch which points at something other than a commit", async function () {
+      const result = await direct([update(fx.text(src, ["rev-parse", fixture.head + "^{tree}"]))], null);
+      expect(result.outcome).toBe("refused");
+      expect(result.results[0].error).toBe("branches must point to a commit");
+    });
+
+    it("refuses a commit whose tree points at an object nobody has", async function () {
+      const lie = fx.git(src, ["mktree", "--missing"], "100644 blob " + "ab".repeat(20) + "\tghost.txt\n").toString().trim();
+      const tip = fx.text(src, ["commit-tree", lie, "-p", fixture.head, "-m", "Points at a ghost"]);
+      const pack = fx.git(src, ["pack-objects", "--stdout", "-q"], tip + "\n" + lie + "\n");
+
+      const before = await manifest.read(store);
+      const puts = store.stats.puts;
+
+      const result = await direct([update(tip)], pack);
+      expect(result.outcome).toBe("refused");
+      expect(result.results[0].error).toBe("missing necessary objects");
+      expect(await manifest.read(store)).toEqual(before);
+      expect(store.stats.puts).toBe(puts);
+      expectNoScratch();
+    });
+
+    it("refuses a thin pack whose base the repository does not have", async function () {
+      // "other" is built on "work", which was never pushed, so its deltas name blobs the store lacks
+      const work = commit("work");
+      fx.git(src, ["checkout", "-q", "-B", "other", work]);
+      fs.writeFileSync(path.join(src, "docs", "big.txt"), fs.readFileSync(path.join(src, "docs", "big.txt"), "utf8").replace("line 5 ", "line 5 else "));
+      fx.git(src, ["commit", "-q", "-am", "On top of work"]);
+      const other = fx.text(src, ["rev-parse", "HEAD"]);
+
+      const result = await direct([update(other)], fx.packRevs(src, [other], [work], { thin: true }));
+      expect(result.outcome).toBe("refused");
+      expect(result.status).not.toBe("ok");
+      expect(result.messages[0]).toMatch(/^Push failed: /);
+      expectNoScratch();
+    });
+
+    it("refuses bytes which are not a pack", async function () {
+      const result = await direct([update(fixture.head)], Buffer.from("PACK this is not a pack, not at all, no"));
+      expect(result.outcome).toBe("refused");
+      expect(result.status).toMatch(/not valid/);
+      expectNoScratch();
+    });
+
+    it("refuses a push over the limit, after reading it all", async function () {
+      const tip = commit("big", () => fs.writeFileSync(path.join(src, "big.bin"), fx.bytes(9, 2 * MiB)));
+      const pack = thin(tip);
+      expect(pack.length).toBeGreaterThan(MiB);
+
+      const result = await direct([update(tip)], pack, { limit: MiB });
+      expect(result.outcome).toBe("refused");
+      expect(result.status).toBe("the push is larger than the 1 MB Blot accepts");
+
+      const early = await direct([update(tip)], pack, { limit: MiB, sizeHint: pack.length });
+      expect(early.status).toBe(result.status);
+      expectNoScratch();
+    });
+
+    it("fails clearly when the cache has no room, and gives the budget back", async function () {
+      const small = createCache({ dir: path.join(dir, "small"), maxBytes: 256 * 1024 });
+      const tip = commit("big", () => fs.writeFileSync(path.join(src, "big.bin"), fx.bytes(9, 2 * MiB)));
+
+      const result = await receive({ store, cache: small, lock, commands: [update(tip)], pack: bodyOf(thin(tip)) });
+      expect(result.outcome).toBe("failed");
+      expect(result.status).toMatch(/no room/);
+      expect(result.error.code).toBe("NO_ROOM");
+      expect(result.messages).toContain("Nothing was pushed.");
+
+      expect(small.stats().reservedBytes).toBe(0);
+      expect(fs.readdirSync(path.join(dir, "small", "scratch"))).toEqual([]);
+      expect((await manifest.read(store)).refs[MASTER]).toBe(fixture.head);
+    });
+  });
+
+  describe("when the object store misbehaves", function () {
+    let faulty;
+
+    beforeEach(async function () {
+      faulty = null;
+      await setup({ wrap: (s) => (faulty = faults(s)) });
+    });
+    afterEach(teardown);
+
+    it("leaves the refs and manifest alone when a pack will not upload", async function () {
+      const tip = commit("work");
+      const before = await manifest.read(store);
+      faulty.inject("put", { key: /\.pack$/, before: dropped() });
+
+      const result = await direct([update(tip)], thin(tip));
+      expect(result.outcome).toBe("failed");
+      expect(result.error.code).toBe("ECONNRESET");
+      expect(result.messages).toContain("Nothing was pushed.");
+
+      expect(await manifest.read(store)).toEqual(before);
+      expect(await store.head(manifestKey(before.seq + 1))).toBeNull();
+      expectNoScratch();
+    });
+
+    it("leaves them alone when the index will not upload either", async function () {
+      const tip = commit("work");
+      const before = await manifest.read(store);
+      faulty.inject("put", { key: /\.idx$/, before: dropped() });
+
+      expect((await direct([update(tip)], thin(tip))).outcome).toBe("failed");
+      expect(await manifest.read(store)).toEqual(before);
+      expectNoScratch();
+    });
+
+    it("reports a swap whose outcome cannot be known as neither success nor failure", async function () {
+      const tip = commit("work");
+      const next = manifestKey(2);
+
+      // The manifest lands, the answer is lost, and so is the read back
+      faulty.inject("putIfAbsent", { key: next, after: dropped() });
+      faulty.inject("get", { key: next, before: dropped(), times: 5 });
+
+      const result = await direct([update(tip)], thin(tip));
+      expect(result.outcome).toBe("unknown");
+      expect(result.status).not.toBe("ok");
+      expect(result.results.every((r) => r.error)).toBe(true);
+      expect(result.messages.join(" ")).toMatch(/could not confirm/);
+      expect(result.messages).not.toContain("Nothing was pushed.");
+      expect(result.error.code).toBe("OUTCOME_UNKNOWN");
+
+      // It did land, which is why the client must not be told it failed
+      expect(await store.head(next)).not.toBeNull();
+      expectNoScratch();
+    });
+
+    it("counts a swap whose answer was lost but which reads back as its own as a success", async function () {
+      const tip = commit("work");
+      faulty.inject("putIfAbsent", { key: manifestKey(2), after: dropped() });
+
+      const result = await direct([update(tip)], thin(tip));
+      expect(result.outcome).toBe("ok");
+      expect((await manifest.read(store)).refs[MASTER]).toBe(tip);
+    });
+  });
+});
