@@ -512,10 +512,12 @@ copy_env() {
 # copy_backup_config: backup.sh on the new host uses ~ec2-user/.aws (it has no
 # instance profile, see #2261) and the offsite bucket file. A drill gets neither,
 # so it can never upload to the real buckets.
-# copy_aws_section <file in ~/.aws> <section>: appends just that section to the new host's.
+# copy_aws_section <file in ~/.aws> <section>: adds just that section to the new
+# host's file, on a line of its own, unless it is there already.
 copy_aws_section() {
+  on "$NEW" "grep -qsxF '$2' \"\$HOME/.aws/$1\"" && return 0
   on "$OLD_REDIS" "awk -v s='$2' '/^\\[/ {p = (\$0 == s)} p' \"\$HOME/.aws/$1\"" |
-    pipe_to "$NEW" "umask 077; cat >> \"\$HOME/.aws/$1\""
+    pipe_to "$NEW" "umask 077; { echo; cat; } >> \"\$HOME/.aws/$1\""
 }
 
 copy_backup_config() {
@@ -526,8 +528,7 @@ copy_backup_config() {
   if on "$NEW" "aws sts get-caller-identity > /dev/null 2>&1"; then
     echo "$NEW's AWS credentials work: not copying $OLD_REDIS's over them"
     # backup.sh's daily offsite upload needs this profile, and only warns without it.
-    if on "$OLD_REDIS" 'grep -qs "^\[blot-b2\]" "$HOME/.aws/credentials"' &&
-      ! on "$NEW" 'grep -qs "^\[blot-b2\]" "$HOME/.aws/credentials"'; then
+    if on "$OLD_REDIS" 'grep -qs "^\[blot-b2\]" "$HOME/.aws/credentials"'; then
       copy_aws_section credentials "[blot-b2]"
       copy_aws_section config "[profile blot-b2]"
     fi

@@ -107,7 +107,8 @@ case "$cmd" in
   *"sudo bash -c"*) script=${cmd#sudo bash -c }; eval "bash -c ${script//\/etc\/blot/$W/etc.$m}" ;;
   *"sed -n 's/^BLOT_HOST"*) echo blot.test ;;
   *"mountpoint -q"*) [ ! -e "$W/nomount.$m" ] ;;
-  *'grep -qs "^\[blot-b2\]"'*) [ "$m" != new ] || [ -n "${STUB_NEW_HAS_B2:-}" ] ;;
+  *'grep -qs "^\[blot-b2\]"'*) true ;;
+  *"grep -qsxF"*) [ -n "${STUB_NEW_HAS_B2:-}" ] || { [ -n "${STUB_NEW_HAS_B2_CREDS:-}" ] && [[ "$cmd" == *credentials* ]]; } ;;
   *".aws/credentials"*) cat > /dev/null; touch "$W/creds.$m" ;;
   *"mkdir /tmp/blot-data-volume"*) cat > /dev/null ;;
   *blockdev*) echo "268435456 bytes (268 MB, 256 MiB) copied, 1.0 s, 268 MB/s" ;;
@@ -517,6 +518,12 @@ ready_for_switch
 echo None > "$W/tag"; rm "$W/units.new"
 STUB_NEW_HAS_B2=1 run --production app old new
 lacks "it doesn't add the offsite profile twice" "$CALLS" "awk -v s="
+ready_for_switch
+echo None > "$W/tag"; rm "$W/units.new"
+STUB_NEW_HAS_B2_CREDS=1 run --production app old new
+has "a half-finished copy of the profile is completed" "$CALLS" "awk -v s='[profile blot-b2]'"
+lacks "without repeating the half that is there" "$CALLS" "awk -v s='[blot-b2]'"
+has "each on a line of its own" "$CALLS" "{ echo; cat; }"
 ready_for_switch
 echo None > "$W/tag"; rm "$W/units.new"
 STUB_NO_BACKUP_KEY=1 run --production app old new
