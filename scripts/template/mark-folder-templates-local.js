@@ -33,6 +33,7 @@ async function markBlog(blogID) {
 
     for (const entry of entries) {
       if (!entry || !entry.name || entry.name.startsWith(".")) continue;
+      if (!entry.isDirectory) continue;
 
       const id = makeID(blogID, entry.name);
       const [owner, localEditing] = await client.hmGet("template:" + id + ":info", [
@@ -40,8 +41,7 @@ async function markBlog(blogID) {
         "localEditing",
       ]);
 
-      // A file rather than a template directory, or a directory the next
-      // sync will create a template for
+      // A directory the next sync will create a template for
       if (owner !== blogID || localEditing === "true") continue;
 
       count("templates to mark");
