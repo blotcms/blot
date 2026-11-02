@@ -8,7 +8,7 @@ var boundedDownload = require("./download");
 var lifecycle = require("../lifecycle");
 
 function download(url, callback) {
-  boundedDownload(url, { airlockLabel: "import/download_pdfs" })
+  boundedDownload(url, { egressLabel: "import/download_pdfs" })
     .then(({ data }) => callback(null, data), callback);
 }
 

@@ -7,8 +7,8 @@ const moment = require('moment');
 const verify = require('./verify');
 const identifyNameServers = require('./identifyNameServers');
 // triggerAutoSSL() below pokes a user-set hostname; route it through the
-// airlock proxy like the other user-controlled fetches. See helper/airlock.
-const fetch = require('helper/airlock').fetch;
+// egress proxy like the other user-controlled fetches. See helper/egress.
+const fetch = require('helper/egress').fetch;
 const Domain = express.Router();
 
 const ip = config.ip;

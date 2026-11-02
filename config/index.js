@@ -36,9 +36,9 @@ const reverse_proxies = process.env.BLOT_REVERSE_PROXY_URLS
   ? ["http://127.0.0.1:80"]
   : [];
 
-// See the "airlock" and "sandbox" config blocks below. This is a warning, not a
+// See the "egress" and "sandbox" config blocks below. This is a warning, not a
 // thrown error: a unit deployed without the sandbox must not crash on boot. It
-// does NOT mean user-controlled URLs are fetched directly - helper/airlock
+// does NOT mean user-controlled URLs are fetched directly - helper/egress
 // and helper/screenshot fail those operations closed in production (the post
 // builds without the image or screenshot, the domain check errors) rather
 // than falling back to an unprotected fetch. The warning just flags that this
@@ -46,11 +46,11 @@ const reverse_proxies = process.env.BLOT_REVERSE_PROXY_URLS
 // those features are broken until it is redeployed with it.
 if (
   environment === "production" &&
-  !(process.env.BLOT_AIRLOCK_PROXY_URL && process.env.BLOT_SANDBOX_SOCKET)
+  !(process.env.BLOT_EGRESS_PROXY_URL && process.env.BLOT_SANDBOX_SOCKET)
 ) {
   console.warn(
     "WARNING: this production container has no sandbox (BLOT_SANDBOX_SOCKET, " +
-      "BLOT_AIRLOCK_PROXY_URL). Bookmark-link screenshots, remote-image " +
+      "BLOT_EGRESS_PROXY_URL). Bookmark-link screenshots, remote-image " +
       "downloads and user-domain checks fail closed until it is redeployed " +
       "with BLOT_SANDBOX=1. See app/sandbox/README.md."
   );
@@ -186,16 +186,16 @@ module.exports = {
 
   // The single egress point for fetching untrusted, user-supplied URLs (remote
   // images in posts, imports, domain checks): the forward proxy in the
-  // sandbox's proxy jail in each unit. Named after the airlock container it
-  // replaced (#2257). When unset the app talks to the network directly - fine
+  // sandbox's proxy jail in each unit, which replaced the airlock container
+  // (#2257). When unset the app talks to the network directly - fine
   // for local development, but with no SSRF protection (see the production
   // warning above). See app/sandbox/README.md.
-  airlock: {
+  egress: {
     // HTTP(S) forward proxy, e.g. http://127.0.0.1:18988 - consumed by
     // app/helper/transformer/download and every other user-controlled fetch
-    // via helper/airlock.
-    proxy: process.env.BLOT_AIRLOCK_PROXY_URL || null,
-    // When true (production), helper/airlock refuses a user-controlled fetch
+    // via helper/egress.
+    proxy: process.env.BLOT_EGRESS_PROXY_URL || null,
+    // When true (production), helper/egress refuses a user-controlled fetch
     // that isn't going through the proxy instead of falling back to a
     // direct one. Read this rather than re-deriving from environment.
     required: environment === "production",

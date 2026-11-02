@@ -200,7 +200,7 @@ gets `--cgroupns=host`, `--security-opt seccomp=sandbox-seccomp.json`, binds of
 `/sys/fs/cgroup/blot-sandbox/<unit>` at `/sandbox-cgroup` and
 `/sys/fs/cgroup/blot-sandbox/<unit>-browser` at `/sandbox-browser-cgroup`,
 `--device /dev/net/tun` for pasta, `BLOT_SANDBOX_SOCKET`, and
-`BLOT_AIRLOCK_PROXY_URL` pointing at its proxy jail on the unit's own port. The
+`BLOT_EGRESS_PROXY_URL` pointing at its proxy jail on the unit's own port. The
 deploy refuses, before touching anything, if the host has not made those
 directories (`config/host/host/setup.sh`, Amazon Linux 2023). See
 `app/sandbox/README.md`.

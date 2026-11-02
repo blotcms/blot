@@ -123,8 +123,7 @@ is a job failure.
 
 ## The proxy jail
 
-The app's fetches of user-supplied URLs (`helper/airlock`, named after the
-airlock container this replaced) go through tinyproxy, in a long-running jail in
+The app's fetches of user-supplied URLs (`helper/egress`) go through tinyproxy, in a long-running jail in
 the unit, whenever the unit has a sandbox. It isn't a job, so the broker has no part in it: the supervisor
 keeps `proxy/unit/sandbox/proxy.js` running, which is root like the broker, makes
 `/sandbox-cgroup/proxy` (128 MiB, 128 pids) and starts the jail.

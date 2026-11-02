@@ -324,7 +324,7 @@ sync_static() { # sync_static <image>
 #     Screenshots run in its browser jail, and the app's fetches of untrusted
 #     URLs go through the proxy jail in this unit, on its own port
 #     (proxy/unit/sandbox/proxy.js). Without it there is neither, and production
-#     refuses those features (helper/airlock, helper/screenshot) rather than
+#     refuses those features (helper/egress, helper/screenshot) rather than
 #     fetching directly; load_unit_settings has already refused if a subtree is
 #     missing.
 # The env files: secrets.env (what Node gets), then proxy.env,
@@ -385,8 +385,7 @@ run_args() { # run_args <name>
       -e BLOT_SANDBOX_SOCKET=/run/blot-sandbox/broker.sock
       --device /dev/net/tun
       --mount "type=bind,source=$SANDBOX_CGROUP_DIR/$unit-browser,target=/sandbox-browser-cgroup"
-      # the variable keeps the airlock's name; the proxy is the jail's now
-      -e "BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:$proxy_port"
+      -e "BLOT_EGRESS_PROXY_URL=http://127.0.0.1:$proxy_port"
     )
   fi
 }

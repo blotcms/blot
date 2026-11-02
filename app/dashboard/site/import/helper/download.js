@@ -1,4 +1,4 @@
-const airlock = require("helper/airlock");
+const egress = require("helper/egress");
 const lifecycle = require("../lifecycle");
 
 // Each import processes assets sequentially. Keep per-asset memory and total
@@ -25,7 +25,7 @@ module.exports = async function download(url, options = {}) {
   }
   const timer = setTimeout(abort, timeout);
   try {
-    const response = await airlock.fetch(url, {
+    const response = await egress.fetch(url, {
       ...fetchOptions,
       signal: controller.signal,
       size: maxBytes,
