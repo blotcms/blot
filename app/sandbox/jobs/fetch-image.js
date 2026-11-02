@@ -229,7 +229,7 @@ async function fetchURL(url, conditional) {
     const status = res.statusCode;
 
     if (status >= 300 && status < 400 && status !== 304 && res.headers.location) {
-      res.resume();
+      res.destroy();
       if (redirects >= MAX_REDIRECTS) throw new FetchError("too many redirects");
       let next;
       try {
@@ -242,12 +242,12 @@ async function fetchURL(url, conditional) {
     }
 
     if (status === 304) {
-      res.resume();
+      res.destroy();
       return { status, headers: cacheHeaders(res) };
     }
 
     if (status < 200 || status > 299) {
-      res.resume();
+      res.destroy();
       throw new FetchError(String(status), { status });
     }
 
