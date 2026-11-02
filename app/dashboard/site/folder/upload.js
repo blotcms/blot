@@ -1,7 +1,8 @@
 const fs = require("fs-extra");
 const path = require("path");
 const clients = require("clients");
-const storage = require("storage/folder");
+const storage = require("storage/folder"); // reads only
+const blogFolder = require("clients/folder");
 const establishSyncLock = require("sync/establishSyncLock");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 
@@ -174,14 +175,6 @@ const removeTempFiles = async (uploads) => {
   );
 };
 
-const writeClientFile = (client, blogID, relativePath, contents) =>
-  new Promise((resolve, reject) => {
-    client.write(blogID, relativePath, contents, (err) => {
-      if (err) return reject(err);
-      resolve();
-    });
-  });
-
 // N.B. In production this POST runs on green while the page you are redirected
 // to renders on blue (proxy/config/http.conf, $dashboard_upstream).
 // Don't rely on in-process cache invalidation here; see dashboard/site/index.js.
@@ -303,12 +296,15 @@ module.exports = async (req, res, next) => {
             await storage.stat(req.blog.id, destination).catch((err) => {
               if (!(err instanceof storage.NotFoundError)) throw err;
             });
-
-            const contents = await fs.readFile(entry.upload.file.path);
-            await writeClientFile(client, req.blog.id, entry.relativePath, contents);
-          } else {
-            await storage.writeFrom(req.blog.id, destination, entry.upload.file.path);
           }
+
+          // A client is given the contents (read into memory); a blog with
+          // no client has the temp file copied in without buffering it
+          await blogFolder.writeFrom(
+            req.blog,
+            client ? entry.relativePath : destination,
+            entry.upload.file.path
+          );
         } catch (err) {
           const errorResult = {
             path: entry.relativePath,

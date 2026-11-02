@@ -1,6 +1,6 @@
 const path = require("path");
-const clients = require("clients");
-const storage = require("storage/folder");
+const storage = require("storage/folder"); // reads only
+const blogFolder = require("clients/folder");
 const establishSyncLock = require("sync/establishSyncLock");
 const folderMiddleware = require("./index");
 
@@ -22,14 +22,6 @@ const escapesFolder = (relativePath) => {
 
   return normalized === ".." || normalized.startsWith("../");
 };
-
-const removeClientPath = (client, blogID, relativePath) =>
-  new Promise((resolve, reject) => {
-    client.remove(blogID, relativePath, (err) => {
-      if (err) return reject(err);
-      resolve();
-    });
-  });
 
 // N.B. In production this POST runs on green while the page you are redirected
 // to renders on blue (proxy/config/http.conf, $dashboard_upstream).
@@ -116,16 +108,7 @@ module.exports = async (req, res) => {
       if (!(err instanceof storage.NotFoundError)) throw err;
     });
 
-    const connectedClient =
-      (req.blog.client && typeof req.blog.client.remove === "function"
-        ? req.blog.client
-        : clients[req.blog.client]) || null;
-
-    if (connectedClient) {
-      await removeClientPath(connectedClient, req.blog.id, normalizedPath);
-    } else {
-      await storage.remove(blogID, target);
-    }
+    await blogFolder.remove(req.blog, normalizedPath);
 
     await folder.update(`/${normalizedPath}`);
 
