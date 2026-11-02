@@ -112,7 +112,8 @@ case "$cmd" in
   *blockdev*) echo "268435456 bytes (268 MB, 256 MiB) copied, 1.0 s, 268 MB/s" ;;
   *"host.sh prewarm"*) printf 'prewarm=%s\nprewarm_percent=10\nprewarm_duration_s=5\n' "$(cat "$W/prewarm" 2> /dev/null || echo running)" ;;
   *".blot-data-volume"*) cat "$W/marker" 2> /dev/null || echo vol-0e ;;
-  *"aws sts"*) [ -z "${STUB_NO_BACKUP_KEY:-}" ] ;;
+  *"aws sts"*) [ -z "${STUB_NO_BACKUP_KEY:-}" ] && { [ -z "${STUB_AWS_AFTER_COPY:-}" ] || [ -e "$W/aws-copied" ]; } ;;
+  *'tar -C "$HOME" -xf -'*) cat > /dev/null; touch "$W/aws-copied" ;;
   *"curl -sS"*"cdn.blot.test"*"/layout.css"*) echo "${STUB_STATIC:-200}" ;;
   *"curl -sS"*) echo "${STUB_PROBE:-200}" ;;
   *"tar -C"*) cat > /dev/null ;;
@@ -502,9 +503,14 @@ run --drill app old new
 has "after that nothing is forced" "$CALLS" "force= skip_write=1"
 ready_for_switch
 echo None > "$W/tag"; rm "$W/units.new"
-run --production app old new
+STUB_AWS_AFTER_COPY=1 run --production app old new
 status_is "a production app works" 0
 has "it copies the backup key from the old Redis" "$CALLS" 'tar -C "$HOME" -cf - .aws'
+ready_for_switch
+echo None > "$W/tag"; rm "$W/units.new"
+run --production app old new
+status_is "a production app with working credentials works" 0
+lacks "it leaves them alone, as an old host on an instance profile has no key to copy" "$CALLS" 'tar -C "$HOME" -cf - .aws'
 ready_for_switch
 echo None > "$W/tag"; rm "$W/units.new"
 STUB_NO_BACKUP_KEY=1 run --production app old new

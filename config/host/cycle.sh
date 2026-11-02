@@ -515,7 +515,11 @@ copy_env() {
 copy_backup_config() {
   [ "$MODE" = production ] || { echo "Drill: no backup credentials copied"; return 0; }
   local bucket
-  if on "$OLD_REDIS" 'test -d "$HOME/.aws"'; then
+  # Not over working credentials: an old host on an instance profile has no key
+  # here to copy, so the operator's own key on the new host would be lost.
+  if on "$NEW" "aws sts get-caller-identity > /dev/null 2>&1"; then
+    echo "$NEW's AWS credentials work: not copying $OLD_REDIS's over them"
+  elif on "$OLD_REDIS" 'test -d "$HOME/.aws"'; then
     on "$OLD_REDIS" 'tar -C "$HOME" -cf - .aws' | pipe_to "$NEW" 'umask 077; tar -C "$HOME" -xf -'
   fi
   bucket=$(on "$OLD_REDIS" "sudo cat /etc/blot-redis/offsite-bucket 2> /dev/null" || true)

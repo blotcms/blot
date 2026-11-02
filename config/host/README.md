@@ -304,6 +304,9 @@ looking at the hosts, so after a failure fix the cause and run it again. Check
   seconds) between steps, through whichever host has the Redis master, and
   lifts it through the new host. It keeps the old host's disk read-only, the old
   units stopped but not removed, and its Redis a replica of the new one.
+- **Backup credentials.** `app` copies `~/.aws` from the old Redis host unless the
+  new host's already work. A Redis host on an instance profile has no key there,
+  so put the `blot` key in `~ec2-user/.aws` as `[default]` on the new host first.
 - **`settle`** forces a rolling deploy of the same image, because a plain one
   skips units already on it, and that restart is what runs the steps that failed
   on the replica. It then retags the volumes: a rollback is simplest before that.
