@@ -1254,6 +1254,168 @@ describe("storage/folder", function () {
       });
     });
 
+    describe("the content cache", function () {
+      var contentCache = require("storage/folder/cache");
+      var maxFileBytes;
+
+      beforeEach(function () {
+        maxFileBytes = config.folder_cache.max_file_bytes;
+      });
+
+      afterEach(function () {
+        config.folder_cache.max_file_bytes = maxFileBytes;
+      });
+
+      // Counts the downloads of one file's object
+      function countGets(blogID, path) {
+        var get = spyOn(s3, "get").and.callThrough();
+
+        return function () {
+          return get.calls.allArgs().filter(function (args) {
+            return args[0] === blogID + "/folder" + path;
+          }).length;
+        };
+      }
+
+      it("downloads a file once for ensureLocal, into the cache", async function () {
+        await folder.write(this.blog.id, "/a.txt", "cached");
+
+        var gets = countGets(this.blog.id, "/a.txt");
+        var first = await folder.ensureLocal(this.blog.id, "/a.txt");
+        var second = await folder.ensureLocal(this.blog.id, "/a.txt");
+
+        expect(second).toEqual(first);
+        expect(first.indexOf(config.folder_cache.directory)).toEqual(0);
+        expect(await fs.readFile(second, "utf8")).toEqual("cached");
+        expect(gets()).toEqual(1);
+      });
+
+      it("reads from S3 when the cache's disk is full", async function () {
+        await folder.write(this.blog.id, "/a.txt", "from S3");
+
+        var full = Object.assign(new Error("no space left on device"), { code: "ENOSPC" });
+
+        spyOn(contentCache(), "use").and.returnValue(Promise.reject(full));
+
+        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("from S3");
+      });
+
+      it("reads and streams a small file from the cache after the first time", async function () {
+        await folder.write(this.blog.id, "/a.txt", "0123456789");
+
+        var gets = countGets(this.blog.id, "/a.txt");
+
+        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("0123456789");
+        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("0123456789");
+        expect(await slurp(folder.createReadStream(this.blog.id, "/a.txt", { start: 2, end: 4 }))).toEqual("234");
+        expect(await slurp(folder.createReadStream(this.blog.id, "/a.txt", { start: 50 }))).toEqual("");
+        expect(gets()).toEqual(1);
+      });
+
+      it("reads a file over the size limit straight from S3 each time", async function () {
+        config.folder_cache.max_file_bytes = 2;
+
+        await folder.write(this.blog.id, "/big.txt", "too big");
+
+        var gets = countGets(this.blog.id, "/big.txt");
+
+        expect((await folder.read(this.blog.id, "/big.txt")).toString()).toEqual("too big");
+        expect((await folder.read(this.blog.id, "/big.txt")).toString()).toEqual("too big");
+        expect(gets()).toEqual(2);
+      });
+
+      it("downloads the new version once a file changes", async function () {
+        await folder.write(this.blog.id, "/a.txt", "one");
+
+        var gets = countGets(this.blog.id, "/a.txt");
+
+        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("one");
+
+        await folder.write(this.blog.id, "/a.txt", "two");
+
+        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("two");
+        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("two");
+        expect(gets()).toEqual(2);
+      });
+
+      it("reads S3 directly when it holds bytes the index does not describe", async function () {
+        await folder.write(this.blog.id, "/a.txt", "old");
+
+        // As if a write had reached S3 but not yet the index
+        await s3.putBuffer(this.blog.id + "/folder/a.txt", Buffer.from("new"));
+
+        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("new");
+        expect((await rejection(folder.ensureLocal(this.blog.id, "/a.txt"))).code).toEqual("ECHANGED");
+      });
+
+      it("removes the blog's cached copies with its folder", async function () {
+        await folder.write(this.blog.id, "/a.txt", "x");
+
+        var local = await folder.ensureLocal(this.blog.id, "/a.txt");
+
+        await folder.removeAll(this.blog.id);
+
+        expect(await fs.pathExists(local)).toBe(false);
+      });
+
+      it("counts hits and misses", async function () {
+        await folder.write(this.blog.id, "/a.txt", "x");
+
+        var before = contentCache().stats();
+
+        await folder.read(this.blog.id, "/a.txt");
+        await folder.read(this.blog.id, "/a.txt");
+
+        var after = contentCache().stats();
+
+        expect(after.misses - before.misses).toEqual(1);
+        expect(after.hits - before.hits).toEqual(1);
+      });
+
+      describe("when serving", function () {
+        var state = {};
+
+        useServer(state);
+
+        it("serves a small file from the cache, with validators from the index", async function () {
+          await folder.write(state.blogID, "/a.txt", "hello");
+
+          var gets = countGets(state.blogID, "/a.txt");
+          var open = spyOn(s3, "open").and.callThrough();
+
+          var first = await fetch(state.origin + "/a.txt");
+          var second = await fetch(state.origin + "/a.txt", { headers: { "If-None-Match": first.headers.get("etag") } });
+
+          expect(await first.text()).toEqual("hello");
+          expect(first.headers.get("etag")).toEqual('"' + sha1("hello") + '"');
+          expect(second.status).toEqual(304);
+          expect(gets()).toEqual(1);
+          expect(open).not.toHaveBeenCalled();
+        });
+
+        it("serves a cached file with no extension as HTML, as S3 would", async function () {
+          await folder.write(state.blogID, "/page", "<p>hello</p>");
+
+          var res = await fetch(state.origin + "/page");
+
+          expect(await res.text()).toEqual("<p>hello</p>");
+          expect(res.headers.get("content-type")).toMatch(/^text\/html/);
+        });
+
+        it("streams a file over the size limit from S3", async function () {
+          config.folder_cache.max_file_bytes = 2;
+
+          await folder.write(state.blogID, "/big.txt", "too big");
+
+          var open = spyOn(s3, "open").and.callThrough();
+          var res = await fetch(state.origin + "/big.txt");
+
+          expect(await res.text()).toEqual("too big");
+          expect(open).toHaveBeenCalled();
+        });
+      });
+    });
+
     describe("path and commit", function () {
       it("stages a tool's file in the tmp directory and uploads it on commit", async function () {
         var place = await folder.path(this.blog.id, "/tool/out.txt");
