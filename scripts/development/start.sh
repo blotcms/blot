@@ -113,6 +113,12 @@ if [ "${BLOT_USE_TOXIPROXY:-true}" = "true" ]; then
   export BLOT_REDIS_HOST="${BLOT_REDIS_HOST:-toxiproxy}"
 fi
 
+# Each rebuild leaves the old image dangling and grows the build cache; trim both
+# so Docker.raw doesn't creep up. Tagged images and the last week's cache stay.
+echo "[start] Pruning dangling Docker images and week-old build cache"
+docker image prune -f >/dev/null 2>&1 || true
+docker builder prune -f --filter until=168h >/dev/null 2>&1 || true
+
 STACK_STARTED=1
 compose up --build -d
 
