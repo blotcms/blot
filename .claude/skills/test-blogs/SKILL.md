@@ -83,8 +83,8 @@ git clone -q "$(cat $R)" "$SCRATCH/gittest" >/dev/null 2>&1   # SCRATCH = sessio
 cd "$SCRATCH/gittest"
 # add skilltest-{ts}/..., then:
 git add -A && git -c user.name=skilltest -c user.email=skilltest@localhost commit -qm "skilltest-{ts}"
-git -c credential.helper= push -q "$(cat $R)" HEAD 2>&1 | sed 's#https\?://[^ ]*#<remote>#g'
-git ls-remote "$(cat $R)" HEAD 2>&1 | sed 's#https\?://[^ ]*#<remote>#g' | cut -c1-12   # matches `git rev-parse HEAD`?
+git -c credential.helper= push -q "$(cat $R)" HEAD 2>&1 | sed -E 's#https?://[^ ]*#<remote>#g'
+git ls-remote "$(cat $R)" HEAD 2>&1 | sed -E 's#https?://[^ ]*#<remote>#g' | cut -c1-12   # matches `git rev-parse HEAD`?
 ```
 
 Redirect or redact all git output, since errors can echo the remote URL. Do
@@ -179,3 +179,8 @@ Newest last. Add one dated entry per run.
 - Blogs / content: `skilltest-1793557573/post.md` and a non-ASCII name in a folder with a space, on gittest, on `f12cfad6a`.
 - Result: add, edit, rename and delete each showed within 1s of the push. A push to another branch was refused with Blot's message, not `HTTP 400`, and made no ref. Cleanup: gone after 1s. Public pages only: `inspect.js` was not run.
 - Odd: none.
+
+### 2026-11-02 — Blot's own writes as plumbing on the bare repo (#2333), after the host cycle
+- Blogs / content: `skilltest-1793606175/post.md` and a non-ASCII name in a folder with a space, then a draft at `skilltest-1793606217/drafts/post.md`, on gittest, on `4a505d627`.
+- Result: add, edit, rename and delete each showed within 1s, and a branch push was refused with Blot's message and made no ref. The draft made Blot commit `drafts/post.md.preview.html` 2s after the push, on top of the push, with the usual identity and "Updated ..." message; a pull brought it, and `git fsck --strict` passed. Cleanup of both left nothing.
+- Odd: the redaction `sed 's#https\?://...'` is GNU syntax and does nothing in macOS's sed, so remote URLs were never redacted; switched to `sed -E 's#https?://...'`. Git strips the credentials from the URLs it prints, so nothing secret was shown.
