@@ -157,7 +157,7 @@ const MIB = 1024 * 1024;
     // parts in flight, one being cut, and one just read, never a stream's worth
     expect(worstLead).toBeLessThanOrEqual(5 * MIB * 4 + 2 * MIB);
     expect(sent.parts - before.parts).toBe(8);
-    expect(await store.head("big.pack")).toEqual({ size: total });
+    expect((await store.head("big.pack")).size).toBe(total);
     expect((await store.read("big.pack", 7 * MIB + 3, 10)).equals(chunk.subarray(3, 13))).toBe(true);
   });
 

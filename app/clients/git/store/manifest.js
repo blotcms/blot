@@ -54,8 +54,9 @@
 // forward for a later manifest, and falls back to LISTing manifests/ if the
 // hint is missing, damaged or names something which doesn't exist.
 //
-// Old manifests are not deleted here; that belongs with the second part of
-// compaction, with trimming snapshots and the sweep of orphan packs.
+// Old manifests are not deleted here: sweep.js does that, keeping the newest
+// ones and any written recently. Snapshots are trimmed from the old end by
+// compacted() (see trimSnapshots), never by a push.
 const crypto = require("crypto");
 const {
   CorruptError,
@@ -330,9 +331,14 @@ function advance(base, { refs, packs = [], historyPieces = [], head = base.head,
 // the pack latest in the list, and with every pack self-contained any copy is
 // right, so keeping the list in seq order is all that matters.
 //
+// The snapshots are trimmed to `limits` (SNAPSHOT_LIMITS unless given; see
+// trimSnapshots), from the old end, and `peeled` keeps only the tags the
+// snapshots left still name. The newest snapshot is the refs as they are, so
+// what the advertisement needs is always kept.
+//
 // Throws StaleManifestError if `base` no longer lists a pack in `remove` or a
 // piece in `removePieces`: someone else compacted them away first.
-function compacted(base, { remove = [], add = null, history, removePieces = [] }) {
+function compacted(base, { remove = [], add = null, history, removePieces = [], limits = {} }) {
   const listed = new Map(base.packs.map((pack) => [pack.name, pack]));
   const gone = remove.filter((name) => !listed.has(name));
   if (gone.length) throw new StaleManifestError("The manifest no longer lists " + gone.join(", "));
@@ -358,14 +364,49 @@ function compacted(base, { remove = [], add = null, history, removePieces = [] }
   }
 
   const dropped = new Set(removePieces);
+  const snapshots = trimSnapshots(base.snapshots, limits);
   return {
     ...base,
     seq: base.seq + 1,
     writer: crypto.randomBytes(16).toString("hex"),
     packs,
+    snapshots,
+    ...(base.peeled !== undefined ? { peeled: keepPeeled(base.peeled, snapshots) } : {}),
     history: history === undefined ? base.history : history,
     historyPieces: pieces.filter((piece) => !dropped.has(piece.name)),
   };
+}
+
+// How many snapshots a manifest keeps, and how many bytes of them, once
+// compaction trims it (see trimSnapshots). A snapshot is about 100 bytes for a
+// blog with a ref or two, so 1000 of them is about 100 KB; the byte cap is for
+// a repository with many refs, where each snapshot is large. At least `min`
+// are kept whatever their size, so a client a few pushes behind still fetches
+// only what it lacks.
+const SNAPSHOT_LIMITS = { maxSnapshots: 1000, maxSnapshotBytes: 1024 * 1024, minSnapshots: 8 };
+
+// The bytes a snapshot takes, as JSON without the manifest's indentation
+function snapshotBytes(snapshot) {
+  return Buffer.byteLength(JSON.stringify(snapshot));
+}
+
+// The newest of `snapshots` that fit the limits: at most maxSnapshots, then as
+// many more dropped from the old end as it takes to bring them under
+// maxSnapshotBytes, but never fewer than minSnapshots (nor than there are).
+// Only the old end is ever trimmed. Fetch sends the packs above the newest
+// snapshot a client provably has, so trimming old snapshots only lowers what a
+// client far behind can prove, which makes it fetch everything (as a clone
+// does); it never makes fetch send too little.
+function trimSnapshots(snapshots, limits = {}) {
+  const { maxSnapshots, maxSnapshotBytes, minSnapshots } = { ...SNAPSHOT_LIMITS, ...limits };
+  let start = Math.max(0, snapshots.length - maxSnapshots);
+  let bytes = 0;
+  for (let i = start; i < snapshots.length; i++) bytes += snapshotBytes(snapshots[i]);
+  while (bytes > maxSnapshotBytes && snapshots.length - start > Math.min(minSnapshots, maxSnapshots)) {
+    bytes -= snapshotBytes(snapshots[start]);
+    start++;
+  }
+  return start === 0 ? snapshots : snapshots.slice(start);
 }
 
 // The peeled targets of the tags some snapshot names. A snapshot is how long a
@@ -374,6 +415,15 @@ function keepPeeled(peeled, snapshots) {
   const named = new Set();
   for (const snapshot of snapshots) for (const oid of Object.values(snapshot.refs)) named.add(oid);
   return Object.fromEntries(Object.entries(peeled).filter(([tag]) => named.has(tag)));
+}
+
+// The names of every pack a manifest needs kept: its packs, its history pack
+// and its history pieces. Each is a .pack and .idx, and a .rev for most.
+function packsNamed(m) {
+  const names = m.packs.map((pack) => pack.name);
+  if (m.history) names.push(m.history.name);
+  for (const piece of m.historyPieces || []) names.push(piece.name);
+  return names;
 }
 
 // Packs are uploaded before the manifest that names them. This checks it,
@@ -512,4 +562,19 @@ async function swap({ store, lock, base, next, uploaded = [] }) {
   });
 }
 
-module.exports = { VERSION, empty, validate, parse, serialize, read, advance, compacted, swap };
+module.exports = {
+  VERSION,
+  MAX_BYTES,
+  SNAPSHOT_LIMITS,
+  empty,
+  validate,
+  parse,
+  serialize,
+  read,
+  advance,
+  compacted,
+  trimSnapshots,
+  snapshotBytes,
+  packsNamed,
+  swap,
+};
