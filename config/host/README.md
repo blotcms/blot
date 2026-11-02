@@ -316,6 +316,12 @@ looking at the hosts, so after a failure fix the cause and run it again. Check
   old data volume is kept, for you to delete.
 - **Hours.** Every phase refuses from 15 minutes before the 01:00 and 05:00 UTC
   hours until they end (wildcard renewal, file cleanup), unless `--any-time`.
+- **Traffic.** There is no real quiet time. Over a week of access logs in late
+  October 2026 (requests, without health probes), the busiest hours were 16:00-20:00
+  UTC at about 10% over the daily mean, and the quietest 00:00-02:00 and 04:00-06:00
+  at about 10% under it. The busiest hour moved around from day to day, so pick a
+  time for the jobs above, not for traffic. To measure it again, count requests per
+  hour in `/var/instance-ssd/logs/access.log*`.
 
 **Rollback** before the promotion: `resize.sh --host <old> move thaw`. After it,
 the short path is only for a switch that has accepted no writes (the new host
