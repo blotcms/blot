@@ -4,8 +4,10 @@
 // - the camelCase retrieve aliases ({{allEntries}}, {{#encodeJSON}}, ...)
 //   become their snake_case names
 // - {{cssURL}} / {{css_url}} / {{blog.cssURL}} and the scriptURL forms become
-//   the URL they produced, /style.css?cache={{blog.cacheID}}&amp;extension=.css
-//   (and the script.js equivalent), so nothing a blog serves changes
+//   the URL they produced, /style.css?cache={{cacheID}}&amp;extension=.css
+//   (and the script.js equivalent), so nothing a blog serves changes. Blog
+//   fields are top-level locals, so {{blog.cacheID}} (written by an earlier
+//   run of this script) never resolved and becomes {{cacheID}} too
 //
 // It also deletes the cssURL and scriptURL fields stored on each blog, which
 // the engine no longer sets or reads. Old code writes them again whenever a
@@ -73,7 +75,7 @@ const ASSET_URLS = {
 // models/blog/url, with the cache ID read at render time
 function assetURL(kind, open, close) {
   const view = kind === "css" ? "/style.css" : "/script.js";
-  return view + "?cache=" + open + "blog.cacheID" + close + "&amp;extension=." + kind;
+  return view + "?cache=" + open + "cacheID" + close + "&amp;extension=." + kind;
 }
 
 // Returns { text, changes }. Follows set-delimiter tags ({{=<% %>=}}), so
@@ -142,6 +144,9 @@ function rewrite(text, ownLocals) {
     if (ALIASES[first] && !ownLocals.has(first)) {
       renamed = [ALIASES[first], ...segments.slice(1)].join(".");
       changes.push(first + " -> " + ALIASES[first]);
+    } else if (name === "blog.cacheID" && sigil !== "#" && sigil !== "^" && sigil !== "/") {
+      renamed = "cacheID";
+      changes.push("blog.cacheID -> cacheID");
     } else if (ASSET_URLS[name] && (sigil === "" || sigil === "&" || triple)) {
       changes.push(name + " -> url");
       result = assetURL(ASSET_URLS[name], open, close);
@@ -209,6 +214,12 @@ async function viewUpdates(id, name, template) {
     partials[partial] = result.text;
     changes.push(...result.changes);
     partialsChanged = true;
+  }
+
+  const unhandled = changes.filter((c) => c.startsWith("unhandled"));
+  if (unhandled.length) {
+    unhandled.forEach(count);
+    console.log("needs a hand edit:", id, name, unhandled.join(", "));
   }
 
   if (!updates.content && !partialsChanged) return null;
