@@ -1,4 +1,4 @@
-const { parseCrop } = require("../crop");
+const { parseCrop } = require("sandbox/jobs/crop");
 
 describe("normalized crop parsing", function () {
   it("treats blank coordinates as no crop", function () {

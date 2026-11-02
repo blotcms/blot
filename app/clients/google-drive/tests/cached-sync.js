@@ -18,7 +18,6 @@ function harness(count = 1) {
     ...file,
     fingerprint: "local-" + file.id
   }));
-  let cursor = "";
   const state = {
     files,
     local,
@@ -49,10 +48,6 @@ function harness(count = 1) {
         },
         set: async () => {},
         remove: async () => {},
-        getMigrationCursor: async () => cursor,
-        setMigrationCursor: async value => {
-          cursor = value;
-        },
         getVerifiedContents: async ids => {
           state.batches.push(ids);
           return ids.map(id => records.get(id));
@@ -105,7 +100,6 @@ function harness(count = 1) {
     "./util/localReaddir": async () => local,
     "./util/transformDriveItems": require("../sync/util/transformDriveItems"),
     "./util/truncateToSecond": require("../sync/util/truncateToSecond"),
-    "./util/migrationBudget": require("../sync/util/migrationBudget"),
     "./util/comparePaths": require("../sync/util/comparePaths"),
   };
   const module = {
@@ -195,41 +189,14 @@ describe("Drive verified content cache", function() {
     expect(await h.run()).toBeTruthy();
     expect(h.downloads).toEqual(["1"]);
   });
-  it("bounds legacy migration and advances beyond a repeatedly failing prefix", async function() {
+  it("verifies every unverified equal-size file in one sync", async function() {
     const h = harness(70);
-    h.failDownload = true;
     expect(await h.run()).toBeTruthy();
-    expect(h.downloads).toEqual(Array.from({
-      length: 32
-    }, (_, i) => String(i)));
-    expect(h.finished).toContain("deferred");
+    expect(h.downloads.length).toBe(70);
+    expect(h.finished).toBe("Finished processing folder");
     h.downloads = [];
     expect(await h.run()).toBeTruthy();
-    expect(h.downloads).toEqual(Array.from({
-      length: 32
-    }, (_, i) => String(i + 32)));
-    h.downloads = [];
-    expect(await h.run()).toBeTruthy();
-    expect(h.downloads).toEqual(["64", "65", "66", "67", "68", "69"]);
-    h.failDownload = false;
-    h.downloads = [];
-    expect(await h.run()).toBeTruthy();
-    expect(h.downloads[0]).toBe("0");
-  });
-  it("stops at the byte limit and eventually verifies an oversized file alone", async function() {
-    const h = harness(3);
-    [40, 80, 1].forEach((size, i) => {
-      h.files[i].size = size * 1024 * 1024;
-      h.local[i].size = h.files[i].size;
-    });
-    expect(await h.run()).toBeTruthy();
-    expect(h.downloads).toEqual(["0"]);
-    h.downloads = [];
-    expect(await h.run()).toBeTruthy();
-    expect(h.downloads).toEqual(["1"]);
-    h.downloads = [];
-    expect(await h.run()).toBeTruthy();
-    expect(h.downloads).toEqual(["2"]);
+    expect(h.downloads).toEqual([]);
   });
   it("rebuilds again after failed update or cache persistence, then warms", async function() {
     const h = harness();

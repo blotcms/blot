@@ -1,7 +1,7 @@
 const sharp = require("sharp");
 const fs = require("fs");
 const path = require("path");
-const { SHAPES, CLIP_PATHS, normalizeShape, applyShape } = require("../image-mask");
+const { SHAPES, CLIP_PATHS, normalizeShape, applyShape } = require("sandbox/jobs/image-mask");
 
 describe("profile photo shapes", function () {
   it("defaults to square and rejects unknown shapes", function () {

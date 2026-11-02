@@ -196,9 +196,9 @@ HTML templates for user-facing pages:
 - For each local file/folder not present remotely, deletes it (unless it matches an ignore pattern).
 - Updates the folder metadata database with new mappings.
 
-**Migrating existing folders:** Equal-size files without verification records are warmed incrementally, at most 32 files and 64 MiB per sync. A single larger file may run alone so it is not permanently excluded. A persistent cursor follows sorted depth-first paths and advances even when verification fails, preventing a failing prefix from starving later files. Deferred counts appear in sync progress. Warming includes a one-time verification and rebuild for each migrated file before its successful result is cached. Those files retain the previous size-only behavior until a subsequent sync verifies them; a manual resync can advance the migration. Missing/different-size files and changes to previously verified files are handled immediately. A full cursor wrap can defer earlier failed files until the next run.
+A file with a remote MD5 but no verification record is verified (and rebuilt) on the next sync, however many there are.
 
-Manual resync preserves verified records and its cursor while rebuilding path mappings, then prunes orphaned records in Redis batches after a successful traversal. Ordinary resets and removals clear the appropriate verification data. Verification and cursors are blog-specific; the preexisting remote ID/path mapping remains Drive-folder-specific.
+Manual resync preserves verified records while rebuilding path mappings, then prunes orphaned records in Redis batches after a successful traversal. Ordinary resets and removals clear the appropriate verification data. Verification is blog-specific; the preexisting remote ID/path mapping remains Drive-folder-specific.
 
 ### Write/Remove/Disconnect
 

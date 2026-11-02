@@ -32,6 +32,9 @@ starts `SANDBOX_`, and it never falls back to in-process.
 - `to-png` converts an image (HEIC, AVIF, TIFF...) to PNG.
 - `exif` exiftool on stdin, reduced to the fields asked for. It spawns
   `/usr/bin/perl /usr/bin/exiftool` directly; in-process it honours `EXIFTOOL_PATH`.
+- `template-image` a template image setting: a decode check, then the original
+  and its thumbnails, cropped and cut to a shape (`image-mask.js`, `crop.js`).
+- `favicon` a template's favicon set, one ICO and a few PNGs.
 
 Callers write any output files themselves: the jail can't reach the data mount.
 Args are JSON and every job checks them, since they come from the less trusted side.
@@ -148,7 +151,11 @@ neither is anything run by `docker exec`.
 - **Job cgroups are outside the unit's.** The host makes
   `/sys/fs/cgroup/blot-sandbox/<unit>` (`config/host/host/setup.sh`) and the
   deploy binds it at `/sandbox-cgroup` with `--cgroupns=host`; `--cgroupns=private`
-  can't move a job into it.
+  can't move a job into it. So their limits add to the units' on the host.
+- **Jobs go first when the host runs out of memory.** The broker's shell sets
+  `oom_score_adj` to 1000 before it execs nsjail, so a job is killed before the
+  units' Node; only Redis's BGSAVE child, also 1000 and larger, goes ahead of
+  it. Set as root, the job's uid can't lower it. The proxy jail is left alone.
 - **The seccomp profile** (`proxy/deploy/sandbox-seccomp.json`) is Docker's
   default plus `clone`, `mount`, `umount2`, `pivot_root` and `sethostname`, so
   nsjail can build the jail, and `setns` and `unshare` for pasta. Nothing else is added: not `--privileged`, not
