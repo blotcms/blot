@@ -92,7 +92,7 @@ function log(fields) {
 }
 
 // An error's message, with the blog's repository path and handle taken out
-function describe(err, ctx) {
+function scrub(err, ctx) {
   let message = String((err && (err.message || err)) || "unknown error");
   if (ctx) {
     message = message.split(ctx.gitDir).join("<repo>");
@@ -118,9 +118,11 @@ function countsOf(measured) {
 function s3ObjectStore(blogID) {
   const s3 = require("storage/s3");
 
+  s3.assertConfigured();
+
   return createS3Store({
     client: { send: (command) => s3.client().send(command) },
-    bucket: s3.bucket(),
+    bucket: config.storage.bucket,
     prefix: "git/" + blogID + "/",
   });
 }
@@ -403,14 +405,14 @@ async function runMirror(ctx, task) {
     // now; if that is refused too, the store has something mirroring cannot
     // put right.
     if (result.outcome === "refused" && attempt < 2) {
-      log({ ...fields, detail: describe(why, ctx) + " (retrying from the store's refs)" });
+      log({ ...fields, detail: scrub(why, ctx) + " (retrying from the store's refs)" });
       continue;
     }
 
     log({
       ...fields,
       outcome: result.outcome === "refused" ? "mismatch" : result.outcome,
-      detail: describe(why, ctx),
+      detail: scrub(why, ctx),
     });
     return false;
   }
@@ -434,7 +436,8 @@ async function runImport(ctx, ebs, extra) {
       log({ blog: blogID, op: "import", outcome: "raced", detail: err.code, ...extra });
       return null;
     }
-    throw err;
+    log({ blog: blogID, op: "import", outcome: "error", ...extra, detail: scrub(err, ctx) });
+    return false;
   }
 
   const result = measured.result;
@@ -449,7 +452,7 @@ async function runImport(ctx, ebs, extra) {
     objects: result.pack && result.pack.objects,
     packBytes: result.pack && result.pack.size,
     skipped: result.skipped && result.skipped.length ? result.skipped.length : undefined,
-    detail: result.error ? describe(result.error, ctx) : undefined,
+    detail: result.error ? scrub(result.error, ctx) : undefined,
   });
 
   return result.outcome === "imported";
@@ -518,7 +521,7 @@ async function runWrite(ctx, task) {
   const out = { ...fields, outcome: result.outcome, ...countsOf(measured), refs: 1, seq: result.seq };
 
   if (result.outcome === "unknown") {
-    log({ ...out, detail: describe(result.error, ctx) });
+    log({ ...out, detail: scrub(result.error, ctx) });
     return "mirror";
   }
 
@@ -551,7 +554,7 @@ async function runCompact(ctx) {
     piecesIn: stats.piecesIn,
     historySkipped: stats.historySkipped || undefined,
     snapshotsTrimmed: stats.snapshotsTrimmed || undefined,
-    detail: result.error ? describe(result.error, ctx) : undefined,
+    detail: result.error ? scrub(result.error, ctx) : undefined,
   });
 }
 
@@ -612,7 +615,7 @@ async function drain(blogID, state) {
         next = (await runMirror(ctx, task)) ? "compact" : null;
       }
     } catch (err) {
-      log({ blog: blogID, op: task.type === "write" ? "write" : task.op, outcome: "error", detail: describe(err, ctx) });
+      log({ blog: blogID, op: task.type === "write" ? "write" : task.op, outcome: "error", detail: scrub(err, ctx) });
     } finally {
       active.set(blogID, active.get(blogID) - 1);
       if (!active.get(blogID)) active.delete(blogID);
@@ -662,7 +665,7 @@ function requestCompact(blogID, state, ctx) {
       try {
         await runCompact(ctx);
       } catch (err) {
-        log({ blog: blogID, op: "compact", outcome: "error", detail: describe(err, ctx) });
+        log({ blog: blogID, op: "compact", outcome: "error", detail: scrub(err, ctx) });
       }
     } while (state.compactAgain);
 
@@ -677,7 +680,7 @@ function pushed(blogID, ebsMs) {
   try {
     requestMirror(blogID, { op: "push", ebsMs });
   } catch (err) {
-    log({ blog: blogID, op: "push", outcome: "error", detail: describe(err) });
+    log({ blog: blogID, op: "push", outcome: "error", detail: scrub(err) });
   }
 }
 
@@ -706,7 +709,7 @@ function committed(blogID, change, result, ebsMs) {
     state.queue.push(task);
     start(blogID, state);
   } catch (err) {
-    log({ blog: blogID, op: "write", outcome: "error", detail: describe(err) });
+    log({ blog: blogID, op: "write", outcome: "error", detail: scrub(err) });
   }
 }
 

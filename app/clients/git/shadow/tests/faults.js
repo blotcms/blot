@@ -114,8 +114,9 @@ describe("git store shadow mode: failures, coalescing and switching off", functi
 
       // On for other blogs only
       config.git_store.shadow = "blog_none, blog_other";
-      await this.local.writeAndPush("/c.txt", "C");
       await commit(this, { path: "/d.txt", contents: "D" });
+      await this.local.pull();
+      await this.local.writeAndPush("/c.txt", "C");
 
       await shadow.idle(this.blog.id);
 
@@ -146,7 +147,7 @@ describe("git store shadow mode: failures, coalescing and switching off", functi
 
     it("mirrors pushes and writes", async function () {
       var s3 = require("storage/s3");
-      var store = createS3Store({ client: s3.client(), bucket: s3.bucket(), prefix: "git/" + this.blog.id + "/" });
+      var store = createS3Store({ client: s3.client(), bucket: config.storage.bucket, prefix: "git/" + this.blog.id + "/" });
 
       await this.local.writeAndPush("/a.txt", "A");
       await this.local.writeAndPush("/b.txt", "B");
