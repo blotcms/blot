@@ -1,0 +1,42 @@
+# A simulated S3 (MinIO) behind toxiproxy, for scripts/git/measure-packs.js.
+# Self-contained: its own project name and ports, no volumes (MinIO's data is
+# thrown away with the container), so it cannot touch the development stack.
+# Images are pinned as in .github/actions/start-minio.
+#
+#   S3 directly          http://127.0.0.1:19200  (used to load a repository)
+#   S3 through toxiproxy http://127.0.0.1:19210  (used to measure)
+#   toxiproxy API        http://127.0.0.1:18480
+#
+#   docker compose -f scripts/git/measure-packs/docker-compose.yml up -d --wait
+#   node scripts/git/measure-packs.js
+#   docker compose -f scripts/git/measure-packs/docker-compose.yml down -v
+name: blot-measure-packs
+
+services:
+  minio:
+    image: alpine/minio:RELEASE.2025-10-15T17-29-55Z@sha256:cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4
+    user: root
+    command: server /data --address :9000
+    environment:
+      - MINIO_ROOT_USER=measure
+      - MINIO_ROOT_PASSWORD=measure-secret
+    ports:
+      - "127.0.0.1:19200:9000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9000/minio/health/live"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.12.0
+    command: ["-host", "0.0.0.0", "-config", "/config/toxiproxy.json"]
+    ports:
+      - "127.0.0.1:18480:8474"
+      - "127.0.0.1:19210:8666"
+    volumes:
+      - "./toxiproxy.json:/config/toxiproxy.json:ro"
+    depends_on:
+      minio:
+        condition: service_healthy
