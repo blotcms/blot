@@ -1,43 +1,29 @@
-const fs = require("fs");
 const path = require("path");
 const eachBlogOrOneBlog = require("../each/eachBlogOrOneBlog");
 const getConfirmation = require("../util/getConfirmation");
 const createClient = require("clients/dropbox/util/createClient");
-const localPath = require("helper/localPath");
+const folder = require("storage/folder");
 
 const posixJoin = path.posix.join;
 
 const walkLocalGitFolder = async (blogID, templateFolder, templateName) => {
-  const gitPath = localPath(blogID, path.join("/", templateFolder, templateName, ".git"));
+  const gitPath = path.join("/", templateFolder, templateName, ".git");
 
   try {
-    const stats = await fs.promises.stat(gitPath);
-    if (!stats.isDirectory()) return null;
+    const stats = await folder.stat(blogID, gitPath);
+    if (!stats.isDirectory) return null;
   } catch (err) {
     if (err.code === "ENOENT") return null;
     throw err;
   }
 
+  // walk yields paths from the blog's folder; report them from the .git folder
+  const depth = gitPath.split("/").filter(Boolean).length;
   const files = [];
 
-  const walk = async (currentPath, relativePath = "") => {
-    const entries = await fs.promises.readdir(currentPath, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const absoluteChild = path.join(currentPath, entry.name);
-      const relativeChild = relativePath
-        ? path.posix.join(relativePath, entry.name)
-        : entry.name;
-
-      if (entry.isDirectory()) {
-        await walk(absoluteChild, relativeChild);
-      } else {
-        files.push(relativeChild);
-      }
-    }
-  };
-
-  await walk(gitPath);
+  for await (const file of folder.walk(blogID, gitPath)) {
+    files.push(file.split("/").filter(Boolean).slice(depth).join("/"));
+  }
 
   return files;
 };
@@ -69,18 +55,17 @@ const readTemplateDirectories = async (blogID) => {
   const candidates = ["/Templates", "/templates"];
 
   for (const candidate of candidates) {
-    const directory = localPath(blogID, candidate);
     let entries;
 
     try {
-      entries = await fs.promises.readdir(directory, { withFileTypes: true });
+      entries = await folder.listNames(blogID, candidate);
     } catch (err) {
       if (err.code === "ENOENT") continue;
       throw err;
     }
 
     entries
-      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .filter((entry) => entry.isDirectory && !entry.name.startsWith("."))
       .forEach((entry) => {
         templateFolders.push({
           folder: candidate.replace(/^\//, ""),

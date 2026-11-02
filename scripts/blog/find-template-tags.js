@@ -15,12 +15,12 @@
 // -s/-e/-r only apply when searching every blog: start at the Nth blog, end at
 // the Nth blog (1-based positions in the list), or reverse the order.
 
-const fs = require("fs-extra");
 const getBlog = require("../get/blog");
 const eachBlog = require("../each/blog");
 const progress = require("../each/progress");
 const Entries = require("models/entries");
 const Entry = require("models/entry");
+const folder = require("storage/folder");
 const localPath = require("helper/localPath");
 const { relative } = require("path");
 
@@ -68,10 +68,9 @@ async function scan(blog) {
 
     let tags;
     try {
-      const file = localPath(blog.id, path);
-      const stat = await fs.stat(file);
-      if (!stat.isFile() || stat.size > MAX_BYTES) continue;
-      const buffer = await fs.readFile(file);
+      const stat = await folder.stat(blog.id, path);
+      if (stat.isDirectory || stat.size > MAX_BYTES) continue;
+      const buffer = await folder.read(blog.id, path);
       // A NUL byte means binary data, not text, whatever the extension.
       if (buffer.includes(0)) continue;
       tags = buffer.toString("utf8").match(TAG);
@@ -110,6 +109,8 @@ function summarise(blog, user, files) {
   };
 }
 
+// The path is only printed, for the operator to cat, so this is the one place
+// which still names the file on the local disk.
 // Double-quoted for the shell, so escape the characters it treats specially.
 function catCommand(blogID, path) {
   const file = relative(process.cwd(), localPath(blogID, path));
