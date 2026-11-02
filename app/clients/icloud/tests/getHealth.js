@@ -53,19 +53,6 @@ describe("icloud getHealth", function () {
     expect(typeof result.issues[0].since).toBe("number");
   });
 
-  it("classifies a legacy deleted-folder string without a stored code", async function () {
-    const key = database._key(this.blog.id);
-    const client = require("models/client");
-    await client.hSet(key, "setupComplete", JSON.stringify(true));
-    await client.hSet(key, "error", JSON.stringify(BLOG_DIRECTORY_DELETED));
-    await client.sAdd(database._globalSetKey(), this.blog.id);
-
-    const result = await getHealth(this.blog.id);
-
-    expect(result.issues[0].code).toBe(health.CODES.SOURCE_MISSING);
-    expect(result.issues[0].since).toBeUndefined();
-  });
-
   it("reports TRANSFER_INCOMPLETE when the initial transfer failed", async function () {
     await database.store(this.blog.id, {
       setupComplete: false,

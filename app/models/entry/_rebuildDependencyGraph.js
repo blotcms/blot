@@ -1,7 +1,6 @@
 var client = require("models/client");
 var keys = require("./key");
 var dependentsKey = keys.dependents;
-var dependentsExactCaseKey = keys.dependentsExactCase;
 var _ = require("lodash");
 
 // The purpose of this function is to store the
@@ -13,9 +12,7 @@ var _ = require("lodash");
 // not an entry) we can rebuild this entry.
 //
 // Keys are lowercased (see key.js), so two dependencies which differ only by
-// case share one set. Sets written before that live under an exact-case key:
-// every save re-adds the entry to the lowercased key and removes it from the
-// legacy one, so rebuilding an entry migrates it.
+// case share one set.
 
 module.exports = function (blogID, entry, previous_dependencies, callback) {
   var removed_dependencies = [];
@@ -47,24 +44,12 @@ module.exports = function (blogID, entry, previous_dependencies, callback) {
   );
 
   removed_dependencies.forEach(function (path) {
-    _.uniq([
-      dependentsKey(blogID, path),
-      dependentsExactCaseKey(blogID, path),
-    ]).forEach(function (key) {
-      if (!wantedKeys.has(key)) multi.sRem(key, entry.path);
-    });
+    var key = dependentsKey(blogID, path);
+    if (!wantedKeys.has(key)) multi.sRem(key, entry.path);
   });
 
-  // Added every time, not just for new dependencies: it is idempotent and
-  // moves entries saved before keys were lowercased onto the new key.
-  current_dependencies.forEach(function (path) {
-    var key = dependentsKey(blogID, path);
-    var legacyKey = dependentsExactCaseKey(blogID, path);
-
+  wantedKeys.forEach(function (key) {
     multi.sAdd(key, entry.path);
-
-    if (legacyKey !== key && !wantedKeys.has(legacyKey))
-      multi.sRem(legacyKey, entry.path);
   });
 
   multi.exec().then(function () {

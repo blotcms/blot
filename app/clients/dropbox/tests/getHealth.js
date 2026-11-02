@@ -72,20 +72,6 @@ describe("dropbox getHealth", function () {
     );
   });
 
-  it("maps a legacy 409 without error_source to SOURCE_MISSING", function (done) {
-    const blogID = this.blog.id;
-    save.call(this, { error_code: 409 }, async function (err) {
-      if (err) return done.fail(err);
-      try {
-        const result = await getHealth(blogID);
-        expect(result.issues[0].code).toBe(health.CODES.SOURCE_MISSING);
-        done();
-      } catch (e) {
-        done.fail(e);
-      }
-    });
-  });
-
   it("does not surface a stale 500", function (done) {
     const blogID = this.blog.id;
     save.call(this, { error_code: 500 }, async function (err) {

@@ -43,7 +43,8 @@
 //      (the manifest's `peeled`, which the advertisement gives as a "^{}" line).
 //   5. Build the .rev file, and a small pack of just the push's commits (a
 //      history piece, which the manifest lists and compaction merges later).
-//   6. Upload the pack, its .idx and .rev, and the history piece.
+//   6. Upload the pack, its .idx and .rev, and the history piece and its .idx
+//      (a piece is read whole, so it has no .rev).
 //   7. Swap the manifest. Only a swap that landed is reported as a success.
 //
 // Scratch space is released in every case, before receive() resolves.
@@ -562,17 +563,17 @@ async function peelTags({ repo, local, types }) {
   return peeled;
 }
 
-// Uploads a pack with its index and reverse index
-async function uploadPack(store, piece) {
+// Uploads a pack with its index and, unless it is a history piece (which is
+// only ever read whole, so nothing wants its reverse index), its reverse
+// index, all at once. Every upload has ended, one way or the other, before this
+// settles, so none is still reading a file from scratch when it is deleted.
+async function uploadPack(store, piece, { rev = true } = {}) {
   const stream = fs.createReadStream(piece.packFile);
   stream.on("error", () => {}); // the upload sees it too, by reading the stream
-  try {
-    await store.put(packKey(piece.name), stream);
-  } finally {
-    stream.destroy();
-  }
-  await store.put(idxKey(piece.name), piece.idx);
-  await store.put(revKey(piece.name), piece.rev);
+  const puts = [store.put(packKey(piece.name), stream).finally(() => stream.destroy()), store.put(idxKey(piece.name), piece.idx)];
+  if (rev) puts.push(store.put(revKey(piece.name), piece.rev));
+  const failed = (await Promise.allSettled(puts)).find((put) => put.status === "rejected");
+  if (failed) throw failed.reason;
 }
 
 // The manifest entry for an uploaded pack
@@ -807,7 +808,7 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, base
 
   // Every upload ends before this returns, so none is still reading a file
   // from scratch when scratch is deleted
-  const uploads = await Promise.allSettled([...added.packs, ...added.pieces].map((piece) => uploadPack(store, piece)));
+  const uploads = await Promise.allSettled([...added.packs, ...added.pieces].map((piece) => uploadPack(store, piece, { rev: added.packs.includes(piece) })));
   const failed = uploads.find((upload) => upload.status === "rejected");
   if (failed) throw failed.reason;
   return added;
@@ -871,7 +872,7 @@ async function swap({ store, cache, lock, commands, added }) {
     peeled: added.peeled,
   });
 
-  await manifest.swap({ store, lock, base: current, next });
+  await manifest.swap({ store, lock, base: current, next, uploaded: [...added.packs, ...added.pieces].map((piece) => piece.name) });
   return next;
 }
 

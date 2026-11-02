@@ -9,16 +9,9 @@ const {
   normalizeErrorFields,
   shouldSkipBackgroundSync,
   isSetupInProgress,
-  backfillPatch,
 } = require("../error");
 
 describe("icloud error classification", function () {
-  it("maps the deleted-folder sentinel to SOURCE_MISSING", function () {
-    expect(classify({ error: BLOG_DIRECTORY_DELETED, setupComplete: true })).toBe(
-      health.CODES.SOURCE_MISSING
-    );
-  });
-
   it("prefers a stored errorCode over the message", function () {
     expect(
       classify({
@@ -28,10 +21,10 @@ describe("icloud error classification", function () {
     ).toBe(health.CODES.TRANSFER_INCOMPLETE);
   });
 
-  it("ignores unknown errorCode values and falls back to the account state", function () {
+  it("ignores unknown errorCode values", function () {
     expect(
       classify({ error: BLOG_DIRECTORY_DELETED, errorCode: "NOPE" })
-    ).toBe(health.CODES.SOURCE_MISSING);
+    ).toBeNull();
   });
 
   it("does not treat setup failures as sync health", function () {
@@ -45,32 +38,6 @@ describe("icloud error classification", function () {
     expect(isSetupError(account)).toBe(true);
     expect(classify(account)).toBeNull();
     expect(resolveIssue(account)).toBeNull();
-  });
-
-  it("infers the code for legacy rows from how far setup got", function () {
-    // after setup, the only writer is the watcher; anything else is generic
-    expect(classify({ setupComplete: true, error: "Something else" })).toBe(
-      health.CODES.SYNC_ERROR
-    );
-    // the macserver accepted the link, so the transfer is what failed
-    expect(
-      classify({
-        setupComplete: false,
-        acceptedSharingLink: true,
-        error: "Transfer failed",
-      })
-    ).toBe(health.CODES.TRANSFER_INCOMPLETE);
-    // the link was never accepted
-    expect(
-      classify({
-        setupComplete: false,
-        acceptedSharingLink: false,
-        error: "Invalid sharing link",
-      })
-    ).toBeNull();
-    expect(
-      isSetupError({ setupComplete: false, error: "Invalid sharing link" })
-    ).toBe(true);
   });
 
   it("builds an issue with the shared message and errorSince", function () {
@@ -231,29 +198,5 @@ describe("icloud error classification", function () {
     expect(
       isSetupInProgress({ setupComplete: true, transferringToiCloud: true })
     ).toBe(true);
-  });
-
-  it("builds a backfill patch only for errors without a known code", function () {
-    expect(
-      backfillPatch({ setupComplete: true, error: BLOG_DIRECTORY_DELETED })
-    ).toEqual({ errorCode: health.CODES.SOURCE_MISSING });
-    expect(
-      backfillPatch({ setupComplete: false, error: "Invalid sharing link" })
-    ).toEqual({ errorCode: SETUP_FAILED });
-    expect(
-      backfillPatch({
-        setupComplete: false,
-        acceptedSharingLink: true,
-        error: "Transfer failed",
-      })
-    ).toEqual({ errorCode: health.CODES.TRANSFER_INCOMPLETE });
-    expect(
-      backfillPatch({
-        error: BLOG_DIRECTORY_DELETED,
-        errorCode: health.CODES.SOURCE_MISSING,
-      })
-    ).toBeNull();
-    expect(backfillPatch({ setupComplete: true })).toBeNull();
-    expect(backfillPatch(null)).toBeNull();
   });
 });

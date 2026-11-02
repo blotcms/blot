@@ -31,9 +31,9 @@ function isKnownCode(code) {
   );
 }
 
-// The code for an account whose error was written without one: rows from
-// before errorCode existed, and status posts from a macserver that hasn't
-// been redeployed. Only the watcher's sentinel is recognisable by text. For
+// The code for an error written without one: status posts from a macserver
+// that hasn't been redeployed. database.store() fills it in, so stored rows
+// always have one. Only the watcher's sentinel is recognisable by text. For
 // anything else, where the account got to tells us which stage failed: after
 // setup the shared folder exists, and acceptedSharingLink (stored from the
 // macserver's status post) means setup got as far as the transfer.
@@ -55,8 +55,7 @@ function resolveCode(account) {
   // A stray errorCode with no error is left by a writer that cleared only
   // `error` (an older process during a deploy): there is no error.
   if (!account || !account.error) return null;
-  if (isKnownCode(account.errorCode)) return account.errorCode;
-  return inferCode(account);
+  return isKnownCode(account.errorCode) ? account.errorCode : null;
 }
 
 // The health code for the stored error, or null when there is nothing to
@@ -135,14 +134,6 @@ function isSetupInProgress(account) {
   return account.setupComplete !== true && Boolean(account.sharingLink);
 }
 
-// Returns a patch to write, or null when the row already matches. Only the
-// code: errorSince is when we noticed, which the backfill can't know.
-function backfillPatch(account) {
-  if (!account || !account.error) return null;
-  if (isKnownCode(account.errorCode)) return null;
-  return { errorCode: inferCode(account) };
-}
-
 module.exports = {
   BLOG_DIRECTORY_DELETED,
   SETUP_FAILED,
@@ -153,5 +144,4 @@ module.exports = {
   normalizeErrorFields,
   shouldSkipBackgroundSync,
   isSetupInProgress,
-  backfillPatch,
 };
