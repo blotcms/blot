@@ -1,7 +1,7 @@
 const cleanupFiles = require("./cleanup-files");
 const { isAjaxRequest } = require("./ajax-response");
 const { validate, normalizeShape } = require("../../../../build/thumbnail/template-image");
-const { parseCrop } = require("../../../../build/thumbnail/crop");
+const { parseCrop } = require("sandbox/jobs/crop");
 
 const first = (files) => Array.isArray(files && files.image)
   ? files.image[0]

@@ -1,4 +1,3 @@
-const sharp = require("sharp");
 const { basename } = require("path");
 const assets = require("storage/assets");
 const Template = require("models/template");
@@ -10,8 +9,8 @@ const { createFavicon } = require("./upload-favicon");
 const writeChangeToFolder = require("./writeChangeToFolder");
 const previewReload = require("helper/publishPreviewReload");
 const { isAjaxRequest } = require("./ajax-response");
-const { generate, regenerate, MAX_PIXELS, normalizeShape } = require("../../../../build/thumbnail/template-image");
-const { normalizedCrop } = require("../../../../build/thumbnail/crop");
+const { generate, regenerate, normalizeShape } = require("../../../../build/thumbnail/template-image");
+const { normalizedCrop } = require("sandbox/jobs/crop");
 
 const ASSETS = "_template_assets";
 const directory = (blog) => assets.path(blog.id, ASSETS);
@@ -22,13 +21,12 @@ const update = (blog, slug, locals) => new Promise((resolve, reject) => Template
 const sync = (blog, template) => new Promise((resolve, reject) => writeChangeToFolder(blog, template, {}, (error) => error ? reject(error) : resolve()));
 const operations = { update, sync };
 
-async function saveProfileImageFavicon(req, file, source, crop) {
+async function saveProfileImageFavicon(req, file, crop) {
   const templateSlug = req.templateFork
     ? req.template.id.split(":").slice(1).join(":")
     : req.params.templateSlug;
   return createFavicon(req.blog, req.template, templateSlug, file.path, crop, {
     onFileProcessed: () => cleanupFiles({ favicon: file }),
-    source,
     shape: req.body.photo_shape,
   });
 }
@@ -247,15 +245,9 @@ module.exports = async function uploadImage(req, res, next) {
       : res.message(req.body.redirect || res.locals.base, "Updated photo");
   }
 
-  // wantsFavicon also derives a separately-cropped favicon from this same
-  // file below; sharing one decoded sharp() source across both avoids
-  // reading and decoding the upload from disk twice.
-  const source = wantsFavicon ? sharp(file.path, { pages: 1, limitInputPixels: MAX_PIXELS }) : null;
-
   let made;
   try {
     made = await generate(file.path, directory(req.blog), cropFields, {
-      source,
       shape: mask,
       // A profile photo keeps its whole image so the crop can be edited later
       editable: key === "profile_image",
@@ -293,7 +285,7 @@ module.exports = async function uploadImage(req, res, next) {
   await removeAssetsIfUnreferenced(req, previous);
   if (wantsFavicon) {
     try {
-      await saveProfileImageFavicon(req, file, source, cropFields);
+      await saveProfileImageFavicon(req, file, cropFields);
     } catch (error) {
       await cleanupFiles({ favicon: file });
       previewReload.publish(req.blog.id);

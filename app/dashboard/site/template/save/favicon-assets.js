@@ -1,11 +1,10 @@
 const fs = require("fs-extra");
 const os = require("os");
 const { join } = require("path");
-const sharp = require("sharp");
-const toIco = require("to-ico");
 const { v4: uuid } = require("uuid");
-const { normalizeShape, applyShape } = require("../../../../build/thumbnail/image-mask");
-const { parseCrop, orientedDimensions } = require("../../../../build/thumbnail/crop");
+const sandbox = require("sandbox");
+const { normalizeShape } = require("sandbox/jobs/image-mask");
+const { parseCrop, orientedDimensions } = require("sandbox/jobs/crop");
 
 const ICO_SIZES = [16, 32, 48];
 const PNG_SIZES = { png16: 16, png32: 32, appleTouch: 180 };
@@ -31,50 +30,34 @@ function cropFor(metadata, crop) {
   return { left: Math.floor((width - side) / 2), top: Math.floor((height - side) / 2), width: side, height: side };
 }
 
-// `source`, when passed, is a sharp() instance already opened on sourcePath
-// (e.g. by a profile-photo upload that also generates thumbnails from the
-// same file) - cloning it avoids decoding the same file from disk twice.
-async function generate(sourcePath, outputDirectory, crop, { source: input, shape: requestedShape } = {}) {
+// The image is decoded and the set made in the sandbox (app/sandbox/jobs/favicon.js)
+async function generate(sourcePath, outputDirectory, crop, { shape: requestedShape } = {}) {
   const shape = normalizeShape(requestedShape);
   let metadata;
   try {
-    metadata = await (input ? input.clone() : sharp(sourcePath, { pages: 1 })).metadata();
+    metadata = (await sandbox.run("metadata", {}, { path: sourcePath })).meta;
   } catch (_) {
     throw badRequest("Please choose an image for your favicon");
   }
 
   const extraction = cropFor(metadata, crop);
+  const { outputs } = await sandbox.run(
+    "favicon",
+    { extract: extraction, shape, ico: ICO_SIZES, png: Object.values(PNG_SIZES) },
+    { path: sourcePath }
+  );
+
   const id = uuid();
   const prefix = `favicon-${id}`;
+  const files = [[`${prefix}.ico`, outputs[0]]].concat(
+    Object.values(PNG_SIZES).map((size, i) => [`${prefix}-${size}.png`, outputs[i + 1]])
+  );
   const workDirectory = await fs.mkdtemp(join(os.tmpdir(), "blot-favicon-"));
 
   try {
-    // rotate() with no argument bakes in the EXIF orientation before we crop,
-    // so the extraction rectangle lines up with what the user saw. ensureAlpha()
-    // guarantees 4-channel input: to-ico@1.1.5 mis-encodes 24-bit PNGs (e.g. a
-    // straight RGB JPEG upload) into a malformed ICO otherwise.
-    const source = (input ? input.clone() : sharp(sourcePath, { pages: 1 })).rotate().ensureAlpha().extract(extraction).png();
-    const render = async (size) => {
-      const { data, info } = await source.clone().resize(size, size, {
-        fit: "cover",
-        position: sharp.strategy.entropy,
-      }).png().toBuffer({ resolveWithObject: true });
-      return applyShape(data, info.width, info.height, shape).png().toBuffer();
-    };
-    const icoBuffers = await Promise.all(ICO_SIZES.map(render));
-    await fs.writeFile(join(workDirectory, `${prefix}.ico`), await toIco(icoBuffers));
-    await Promise.all(Object.entries(PNG_SIZES).map(async ([name, size]) => {
-      await fs.writeFile(join(workDirectory, `${prefix}-${size}.png`), await render(size));
-    }));
-
+    await Promise.all(files.map(([name, data]) => fs.writeFile(join(workDirectory, name), data)));
     await fs.ensureDir(outputDirectory);
-    await Promise.all([
-      fs.move(join(workDirectory, `${prefix}.ico`), join(outputDirectory, `${prefix}.ico`)),
-      ...Object.values(PNG_SIZES).map((size) =>
-        fs.move(join(workDirectory, `${prefix}-${size}.png`), join(outputDirectory, `${prefix}-${size}.png`))
-      ),
-    ]);
-
+    await Promise.all(files.map(([name]) => fs.move(join(workDirectory, name), join(outputDirectory, name))));
     return { id, prefix, crop: extraction };
   } finally {
     await fs.remove(workDirectory);
