@@ -815,6 +815,10 @@ const removed = new Map();
 // nothing (contextFor).
 let removeAgainMs = 5 * 60 * 1000;
 
+// The second passes waiting to run, so _reset() can cancel them: a spec's
+// disconnect would otherwise reach into a spec running minutes later
+const removeAgainTimers = new Set();
+
 // Deletes every object under the blog's prefix, a few at a time
 async function deleteCopy(blogID) {
   if (makeObjectStore === s3ObjectStore && !(config.storage && config.storage.bucket)) return null;
@@ -869,6 +873,7 @@ async function removeBlog(blogID) {
   await deleteAndLog(blogID, 1);
 
   const again = setTimeout(() => {
+    removeAgainTimers.delete(again);
     require("models/blog").get({ id: blogID }, async (err, blog) => {
       // Back on git: its new copy is not ours to delete
       if (err || !blog || blog.client !== "git") await deleteAndLog(blogID, 2);
@@ -876,6 +881,7 @@ async function removeBlog(blogID) {
     });
   }, removeAgainMs);
 
+  removeAgainTimers.add(again);
   if (again.unref) again.unref();
 }
 
@@ -921,6 +927,8 @@ function _reset() {
   cache = null;
   removed.clear();
   outcomes.clear();
+  removeAgainTimers.forEach((timer) => clearTimeout(timer));
+  removeAgainTimers.clear();
   Object.keys(stats).forEach((key) => (stats[key] = 0));
 }
 
