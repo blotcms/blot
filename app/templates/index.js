@@ -8,7 +8,6 @@ var Mustache = require("mustache");
 var fs = require("fs-extra");
 var async = require("async");
 var Blog = require("models/blog");
-var blogKey = require("models/blog/key");
 var _ = require("lodash");
 var chokidar = require("chokidar");
 var parseTemplate = require("models/template/parseTemplate");
@@ -379,14 +378,22 @@ function build(directory, callback) {
               if (err) return callback(err);
 
               buildViews(id, snapshot.definitions, function (buildViewsErr) {
-                // Every valid view has already been persisted by buildViews
-                // regardless of buildViewsErr, so the cache of every blog on
-                // this template must still be flushed to make the rebuilt
-                // template visible - a broken view elsewhere shouldn't leave
-                // views stuck stale.
-                bumpCacheIDForTemplateUsers(id, {
-                  everyBlog: config.environment === "development",
-                }, function (err) {
+                // No blog in production uses a SITE template: Blog.set forks
+                // one into the blog's own copy, which doesn't change with it.
+                // In development the watcher rebuilds inside a running
+                // process, where a preview of this template on any blog
+                // caches its views by that blog's cacheID, so every blog's
+                // cache is flushed there. Every valid view has already been
+                // persisted by buildViews regardless of buildViewsErr, so a
+                // broken view elsewhere shouldn't leave views stuck stale.
+                var bump =
+                  config.environment === "development"
+                    ? bumpCacheIDForEveryBlog
+                    : function (id, done) {
+                        done();
+                      };
+
+                bump(id, function (err) {
                   if (err) return callback(err);
                   if (buildViewsErr) return callback(buildViewsErr);
                   if (config.environment !== "development") return callback();
@@ -721,31 +728,18 @@ function templateDirectories(directory) {
     });
 }
 
-// Only blogs whose template is this one render it. A fork is a copy with its
-// own ID, so it doesn't change when the template it came from does. In
-// development the watcher rebuilds inside a running process, so every blog is
-// bumped there: a preview of this template on another blog caches its views
-// by that blog's cacheID too.
-function bumpCacheIDForTemplateUsers(templateID, options, callback) {
+function bumpCacheIDForEveryBlog(templateID, callback) {
   Blog.getAllIDs(function (err, ids) {
     if (err) return callback(err);
     async.eachSeries(
       ids,
       function (blogID, next) {
-        client
-          .hGet(blogKey.info(blogID), "template")
-          .then(function (blogTemplateID) {
-            if (blogTemplateID !== templateID && !options.everyBlog)
-              return next();
+        Blog.set(blogID, { cacheID: Date.now() }, function (err) {
+          if (err) return next(err);
 
-            Blog.set(blogID, { cacheID: Date.now() }, function (err) {
-              if (err) return next(err);
-
-              debug("..", templateID, "flushed for blog", blogID);
-              next();
-            });
-          })
-          .catch(next);
+          debug("..", templateID, "flushed for blog", blogID);
+          next();
+        });
       },
       callback
     );
@@ -975,4 +969,3 @@ function applyForkPackageOverlay(templateID, overlay, callback) {
 }
 
 module.exports = main;
-module.exports.bumpCacheIDForTemplateUsers = bumpCacheIDForTemplateUsers;
