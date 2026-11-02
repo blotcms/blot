@@ -10,6 +10,13 @@ describe("update when Redis is unavailable", function () {
 
   global.test.blog();
 
+  // The blog's folder on disk, which these specs change directly
+  let blogDirectory;
+
+  beforeEach(function () {
+    blogDirectory = this.blogDirectory;
+  });
+
   beforeEach(function () {
     this.fake = global.test.fake;
     this.checkEntry = global.test.CheckEntry(this.blog.id);
@@ -33,7 +40,7 @@ describe("update when Redis is unavailable", function () {
     sync(blogID, function (err, folder, done) {
       if (err) return testDone.fail(err);
 
-      fs.outputFileSync(folder.path + path, content, "utf-8");
+      fs.outputFileSync(blogDirectory + path, content, "utf-8");
 
       folder.update(path, function (err) {
         expect(isRedisUnavailableError(err)).toBe(true);
@@ -66,12 +73,12 @@ describe("update when Redis is unavailable", function () {
     sync(blogID, function (err, folder, done) {
       if (err) return testDone.fail(err);
 
-      fs.outputFileSync(folder.path + path, content, "utf-8");
+      fs.outputFileSync(blogDirectory + path, content, "utf-8");
 
       folder.update(path, function (err) {
         if (err) return testDone.fail(err);
 
-        fs.removeSync(folder.path + path);
+        fs.removeSync(blogDirectory + path);
         spyOn(Entry, "drop").and.callFake(function (blogID, path, callback) {
           callback(writeFreeze());
         });
@@ -107,12 +114,12 @@ describe("update when Redis is unavailable", function () {
     sync(blogID, function (err, folder, done) {
       if (err) return testDone.fail(err);
 
-      fs.outputFileSync(folder.path + path, content, "utf-8");
+      fs.outputFileSync(blogDirectory + path, content, "utf-8");
 
       folder.update(path, function (err) {
         if (err) return testDone.fail(err);
 
-        fs.removeSync(folder.path + path);
+        fs.removeSync(blogDirectory + path);
         spyOn(redis, "mGet").and.callFake(function () {
           return Promise.reject(writeFreeze());
         });
@@ -152,8 +159,8 @@ describe("update when Redis is unavailable", function () {
     sync(blogID, function (err, folder, done) {
       if (err) return testDone.fail(err);
 
-      fs.outputFileSync(folder.path + badPath, this.fake.file(), "utf-8");
-      fs.outputFileSync(folder.path + goodPath, this.fake.file(), "utf-8");
+      fs.outputFileSync(blogDirectory + badPath, this.fake.file(), "utf-8");
+      fs.outputFileSync(blogDirectory + goodPath, this.fake.file(), "utf-8");
 
       folder.update(badPath, function (err) {
         expect(err).toBeFalsy();
