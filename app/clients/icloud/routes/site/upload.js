@@ -1,6 +1,5 @@
-const localPath = require("helper/localPath");
 const establishSyncLock = require("sync/establishSyncLock");
-const fs = require("fs-extra");
+const storage = require("storage/folder");
 const { handleSyncLockError } = require("../lock");
 const { handleRedisUnavailable } = require("../unavailable");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
@@ -12,11 +11,11 @@ const stampLastSync = require("./stampLastSync");
 // otherwise find it already current and never build the entry. Removing it,
 // rather than restoring what was there, also lets a resync notice the change:
 // it compares sizes, which an edit can leave unchanged.
-async function updateOrRollBack(folder, filePath, pathOnDisk) {
+async function updateOrRollBack(blogID, folder, filePath) {
   try {
     await folder.update(filePath);
   } catch (err) {
-    if (isRedisUnavailableError(err)) await fs.remove(pathOnDisk);
+    if (isRedisUnavailableError(err)) await storage.remove(blogID, filePath);
     throw err;
   }
 }
@@ -44,7 +43,6 @@ module.exports = async function (req, res) {
 
     await stampLastSync(blogID);
 
-    const pathOnDisk = localPath(blogID, filePath);
     const incomingContents = isPlaceholderUpload
       ? Buffer.alloc(0)
       : Buffer.isBuffer(req.body)
@@ -52,11 +50,11 @@ module.exports = async function (req, res) {
       : Buffer.from(req.body);
 
     const isFileAlreadyCurrent = async () => {
-      if (!(await fs.pathExists(pathOnDisk))) {
+      if (!(await storage.exists(blogID, filePath))) {
         return false;
       }
 
-      const existingContents = await fs.readFile(pathOnDisk);
+      const existingContents = await storage.read(blogID, filePath);
       return existingContents.equals(incomingContents);
     };
 
@@ -83,13 +81,13 @@ module.exports = async function (req, res) {
       if (isPlaceholderUpload) {
         folder.status("Saving placeholder " + filePath);
 
-        await fs.outputFile(pathOnDisk, Buffer.alloc(0));
+        await storage.write(blogID, filePath, Buffer.alloc(0));
 
-        await updateOrRollBack(folder, filePath, pathOnDisk);
+        await updateOrRollBack(blogID, folder, filePath);
         folder.status("Updated placeholder " + filePath);
 
         console.warn(
-          `Placeholder created for oversized source file at: ${pathOnDisk}`,
+          `Placeholder created for oversized source file at: ${filePath}`,
           {
             blogID,
             filePath,
@@ -107,15 +105,15 @@ module.exports = async function (req, res) {
 
       // Ensure the directory exists and write the binary data to the file
       // Write the binary data (req.body is raw binary)
-      await fs.outputFile(pathOnDisk, incomingContents);
+      await storage.write(blogID, filePath, incomingContents);
 
       // Call the folder's update method to register the file change
-      await updateOrRollBack(folder, filePath, pathOnDisk);
+      await updateOrRollBack(blogID, folder, filePath);
 
       // Set the folder status to reflect the upload action
       folder.status("Updated " + filePath);
 
-      console.log(`File successfully written to: ${pathOnDisk}`);
+      console.log(`File successfully written to: ${filePath}`);
       res.status(200).send(`File successfully uploaded for blogID: ${blogID}`);
     } finally {
       // Release the sync lock
