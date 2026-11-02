@@ -178,7 +178,8 @@ describe("git store receive", function () {
 
       const entries = fx.listEntries({ pack: await store.get(packKey(piece.name)), idx: await store.get(idxKey(piece.name)) });
       expect(entries.map((e) => [e.oid, e.type])).toEqual([[tip, "commit"]]);
-      expect((await store.get(revKey(piece.name))).length).toBe(12 + 4 + 40);
+      // A piece is read whole, so it has no reverse index
+      expect(await store.head(revKey(piece.name))).toBeNull();
     });
 
     it("makes a one-file push in a small, fixed number of requests", async function () {
@@ -193,14 +194,14 @@ describe("git store receive", function () {
       expect(used.lists).toBe(0);
       expect(used.putIfAbsents).toBe(1);
 
-      // The pack, its index and reverse index, the history piece's three, and the hint
-      expect(used.puts).toBe(7);
+      // The pack, its index and reverse index, the history piece and its index, and the hint
+      expect(used.puts).toBe(6);
 
       // Everything else is looking: manifests, index lookups for the bases and
       // for the objects the new commit's tree changed, and the entries read
       // for the bases. None of it grows with the repository's history.
       const reading = used.heads + used.reads + used.gets;
-      expect(reading).toBeLessThanOrEqual(32);
+      expect(reading).toBeLessThanOrEqual(18);
     });
 
     it("accepts a push which carries no objects", async function () {

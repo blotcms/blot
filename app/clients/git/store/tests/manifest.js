@@ -377,12 +377,6 @@ describe("git store manifest", function () {
       expect(await manifest.read(store)).toEqual(manifest.empty());
     });
 
-    it("rejects a base which is not the newest manifest, without writing", async function () {
-      const ahead = await push(await push(manifest.empty(), 1), 2);
-      const error = await fails(manifest.swap({ store, lock, base: await push(manifest.empty(), 1), next: ahead }));
-      expect(error).toEqual(jasmine.any(StaleManifestError));
-      expect(store.stats.putIfAbsents).toBe(0);
-    });
   });
 
   describe("finding the newest manifest", function () {

@@ -30,9 +30,9 @@
 // (the store's putIfAbsent): exactly one writer can create a given number, so
 // of two pushes built on the same manifest one fails, however long either has
 // stalled and whatever the lock did. The host's lock is not what makes it safe.
-// swap() still takes it, because it stops two pushes from the same base doing
-// wasted work and gives the loser its answer early, but a swap which lost the
-// lock, or never had it, is stopped all the same by the create.
+// swap() still takes it, because it keeps two pushes from the same base from
+// creating the same manifest at once, but a swap which lost the lock, or never
+// had it, is stopped all the same by the create.
 //
 // A create which lands but loses its response (or whose retry, by the SDK or
 // by us, finds the key taken) looks like a lost race. So swap() does not guess:
@@ -287,8 +287,10 @@ function advance(base, { refs, packs = [], historyPieces = [], head = base.head,
 }
 
 // Packs are uploaded before the manifest that names them. This checks it,
-// rather than trusting every caller to have done it.
-async function assertUploaded(store, base, next) {
+// rather than trusting every caller to have done it. A caller which has just
+// seen its own uploads of a pack's .pack and .idx succeed can name the pack in
+// `uploaded`, and its HEADs are skipped.
+async function assertUploaded(store, base, next, uploaded) {
   const known = new Set(base.packs.map((pack) => pack.name));
   const added = next.packs.filter((pack) => !known.has(pack.name));
   const knownPieces = new Set((base.historyPieces || []).map((piece) => piece.name));
@@ -296,6 +298,7 @@ async function assertUploaded(store, base, next) {
   if (next.history && !(base.history && base.history.name === next.history.name)) added.push(next.history);
 
   for (const pack of added) {
+    if (uploaded.has(pack.name)) continue;
     for (const [key, size] of [[packKey(pack.name), pack.size], [idxKey(pack.name), pack.idxSize]]) {
       const found = await store.head(key);
       if (!found || found.size !== size) {
@@ -367,9 +370,15 @@ async function confirm(store, next, cause) {
 // `lock(fn)` is the host's per-repository lock: it runs fn while holding the
 // lock and resolves with fn's result. It need only be held for this call. It
 // is not what makes the swap safe (a lock can expire under a process which
-// has stalled); it keeps pushes from the same base from all doing the work,
-// and lets a push whose base has moved find out before it writes.
-async function swap({ store, lock, base, next }) {
+// has stalled); it only keeps pushes from the same base from creating the
+// same manifest at once.
+//
+// `uploaded` (optional) lists the names of packs and history pieces whose
+// .pack and .idx this caller has just uploaded, whose PUTs it saw succeed, at
+// the sizes `next` names. Anything `next` adds and `uploaded` does not list
+// is still checked with a HEAD for each file, so a caller which has not
+// uploaded its packs itself gets the same guarantee as before.
+async function swap({ store, lock, base, next, uploaded = [] }) {
   if (typeof lock !== "function") throw new Error("swap needs the host's lock function");
   validate(base);
   validate(next);
@@ -382,21 +391,14 @@ async function swap({ store, lock, base, next }) {
     throw new ManifestTooLargeError("The manifest is " + bytes.length + " bytes; the most that can be read back is " + MAX_BYTES);
   }
 
-  await assertUploaded(store, base, next);
+  await assertUploaded(store, base, next, new Set(uploaded));
 
   return lock(async () => {
-    // Early exit for a base which has already moved on (or never was the
-    // newest): the manifest after it exists, or it doesn't. Only advice; a
-    // swap which passes this is still decided by the create below. If the
-    // manifest after the base is there it may be this very swap, landed on an
-    // earlier try, so it is checked rather than assumed to be someone else's.
-    const [hasBase, hasNext] = await Promise.all([
-      base.seq === 0 ? true : store.head(manifestKey(base.seq)),
-      store.head(manifestKey(next.seq)),
-    ]);
-    if (!hasBase) throw new StaleManifestError("The manifest moved on from seq " + base.seq);
-
-    let landed = hasNext ? await confirm(store, next, null) : null;
+    // Nothing is looked at first: if the manifest after the base is already
+    // there, the create below answers "already exists", and reading it back
+    // says whether it is this very swap, landed on an earlier try, or another
+    // writer's, which is a StaleManifestError.
+    let landed = null;
 
     if (!landed) {
       let created;
