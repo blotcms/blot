@@ -4,7 +4,10 @@ describe("sandbox alerts", function () {
   const config = require("config");
 
   // A fresh copy for each spec: the module keeps when it last emailed, and
-  // other specs in this process (./client.js) make the client report failures
+  // other specs in this process (./client.js) make the client report failures.
+  // The shared one goes back afterwards, for the specs that spy on it.
+  const file = require.resolve("../alerts");
+  const shared = require.cache[file];
   let alerts;
 
   const error = (code) => Object.assign(new Error(code), { code });
@@ -16,11 +19,12 @@ describe("sandbox alerts", function () {
     preview = config.preview;
     config.preview = false;
     spyOn(email, "SANDBOX_ALERT");
-    delete require.cache[require.resolve("../alerts")];
+    delete require.cache[file];
     alerts = require("../alerts");
   });
 
   afterEach(function () {
+    require.cache[file] = shared;
     config.preview = preview;
   });
 
