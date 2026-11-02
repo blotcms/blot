@@ -61,10 +61,6 @@ function harness(options) {
           remove: async function (id) {
             removedIds.push(id);
           },
-          getMigrationCursor: async function () {
-            return "";
-          },
-          setMigrationCursor: async function () {},
           reset: async function () {
             resets += 1;
           },
@@ -130,7 +126,6 @@ function harness(options) {
     },
     "./util/transformDriveItems": require("../sync/util/transformDriveItems"),
     "./util/truncateToSecond": require("../sync/util/truncateToSecond"),
-    "./util/migrationBudget": require("../sync/util/migrationBudget"),
     "./util/comparePaths": require("../sync/util/comparePaths"),
   };
 
