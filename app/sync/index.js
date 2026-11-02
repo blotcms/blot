@@ -2,7 +2,6 @@ const { inspect } = require("util");
 const buildFromFolder = require("models/template").buildFromFolder;
 const Blog = require("models/blog");
 const Update = require("./update");
-const localPath = require("helper/localPath");
 const renames = require("./renames");
 const folderLock = require("./lock");
 const messenger = require("./messenger");
@@ -143,16 +142,9 @@ function start(blogID, callback) {
       };
       return originalUpdate.call(originalUpdate, path, wrappedCallback);
     };
-    let path = localPath(blogID, "/");
-
-    // Right now localPath returns a path with a trailing slash for some
-    // crazy reason. This means that we need to remove the trailing
-    // slash for this to work properly. In future, you should be able
-    // to remove this line when localPath works properly.
-    if (path.slice(-1) === "/") path = path.slice(0, -1);
-
+    // There is no path to the blog's folder here: clients read and write it
+    // through storage/folder, by blogID
     const folder = {
-      path,
       update: function () {
         changes = true;
         _update.apply(_update, arguments);

@@ -192,7 +192,10 @@ describe("git client sync: paths and file contents", function () {
     await expectBlogFiles(this, files);
   });
 
-  it("keeps the executable bit, and a change of it", async function () {
+  // The blog folder has no executable bit (it is written through
+  // storage/folder, which keeps no modes), so an executable file arrives as a
+  // plain one, and a push which changes only the mode is still synced
+  it("writes an executable file, and a change of its mode, as a plain file", async function () {
     var path = "/mode/run.sh";
 
     await this.local.write(path, "#!/bin/sh\necho hello\n");
@@ -206,7 +209,8 @@ describe("git client sync: paths and file contents", function () {
 
     await this.local.push();
 
-    expect((await fs.stat(this.blogDirectory + path)).mode & 0o100).toBe(0o100);
+    expect(await helpers.blogFile(this, path)).toEqual(Buffer.from("#!/bin/sh\necho hello\n"));
+    expect((await fs.stat(this.blogDirectory + path)).mode & 0o111).toBe(0);
 
     // Only the mode changes, the content does not
     await fs.chmod(this.local.path(path), 0o644);

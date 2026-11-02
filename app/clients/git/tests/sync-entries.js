@@ -99,4 +99,43 @@ describe("git client sync: entries", function () {
     expect(entry).toBeDefined();
     expect(entry.deleted).toBe(true);
   });
+
+  // Blot names a file by its path in NFC (storage/folder normalises every
+  // path), and git keeps a name in whatever form it was committed. A file
+  // pushed with a name in NFD is written, built, changed and removed under its
+  // NFC name, so its entry is at the path Blot uses and nothing is left over.
+  it("builds, rebuilds and deletes the entry of a file named in NFD under its NFC path", async function () {
+    var nfd = "/entries/nfd-cafe\u0301.txt";
+    var nfc = nfd.normalize("NFC");
+
+    expect(nfc).not.toBe(nfd);
+
+    await this.local.writeAndPush(nfd, "# Café\n\nThe first version of the body");
+
+    var names = await fs.readdir(this.blogDirectory + "/entries");
+
+    expect(names).toContain("nfd-caf\u00e9.txt");
+    expect(names).not.toContain("nfd-cafe\u0301.txt");
+    expect((await helpers.blogFile(this, nfc)).toString()).toContain("The first version of the body");
+
+    var first = await helpers.entry(this.blog.id, nfc);
+
+    expect(first).toBeDefined();
+    expect(first.path).toBe(nfc);
+    expect(first.deleted).toBe(false);
+    expect(first.html).toContain("The first version of the body");
+
+    await this.local.writeAndPush(nfd, "# Café\n\nThe second version of the body");
+
+    expect((await helpers.blogFile(this, nfc)).toString()).toContain("The second version of the body");
+    expect((await helpers.entry(this.blog.id, nfc)).html).toContain("The second version of the body");
+
+    await this.local.remove(nfd);
+    await this.local.commit("Delete the post named in NFD");
+    await this.local.push();
+
+    expect(await helpers.blogHas(this, nfc)).toBe(false);
+    expect(await fs.readdir(this.blogDirectory + "/entries")).not.toContain("nfd-caf\u00e9.txt");
+    expect((await helpers.entry(this.blog.id, nfc)).deleted).toBe(true);
+  });
 });
