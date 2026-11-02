@@ -142,7 +142,11 @@ async function readRefs(children, gitDir) {
     const [ref, oid, type] = line.split(" ");
     if (!OID.test(oid)) throw coded("The repository does not use SHA-1 object IDs: " + ref + " is " + oid, "EFORMAT");
 
-    if (!/^refs\/(heads|tags)\//.test(ref)) skipped.push({ ref, why: "only branches and tags are imported" });
+    // git's output is decoded as UTF-8, which turns bytes that are not into
+    // U+FFFD, so two different names could arrive as one. A name with U+FFFD
+    // in it is skipped, whether it was decoded that way or really has one.
+    if (ref.includes("\uFFFD")) skipped.push({ ref, why: "a name that is not valid UTF-8" });
+    else if (!/^refs\/(heads|tags)\//.test(ref)) skipped.push({ ref, why: "only branches and tags are imported" });
     else if (!REF.test(ref) || ref.includes("..")) skipped.push({ ref, why: "the store does not accept this ref name" });
     else if (ref.startsWith("refs/heads/") && type !== "commit") skipped.push({ ref, why: "a branch which does not point at a commit" });
     else {
@@ -285,12 +289,25 @@ async function packCommits({ children, repo, dir, tips, config }) {
 // directory of the repository it runs in, and the source is never written;
 // the source's replace refs, grafts, shallow file and config do not apply; and
 // the output lands in scratch whatever else the source holds.
-async function scratchRepo(children, dir, gitDir) {
+async function scratchRepo(children, dir, objects) {
   const repo = path.join(dir, "repo.git");
   await runGit(children, ["init", "-q", "--bare", repo], { gitDir: repo });
   await fsp.mkdir(path.join(repo, "objects", "info"), { recursive: true });
-  await fsp.writeFile(path.join(repo, "objects", "info", "alternates"), path.resolve(gitDir, "objects") + "\n");
+  await fsp.writeFile(path.join(repo, "objects", "info", "alternates"), objects + "\n");
   return repo;
+}
+
+// The source's object directory, which for a linked worktree's directory is
+// the common repository's, not gitDir/objects
+async function objectsDir(children, gitDir) {
+  let common;
+  try {
+    // --path-format needs git 2.31
+    common = (await sourceGit(children, gitDir, ["rev-parse", "--path-format=absolute", "--git-common-dir"])).trim();
+  } catch (err) {
+    common = path.resolve(gitDir);
+  }
+  return path.join(common, "objects");
 }
 
 function fileExists(file) {
@@ -402,8 +419,8 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
   };
 
   // A shallow source has commits whose parents it does not have
-  if (await fileExists(path.join(gitDir, "shallow"))) {
-    throw coded("The repository is shallow (" + path.join(gitDir, "shallow") + "), so its history is incomplete. Only a complete repository can be imported.", "ESHALLOW");
+  if ((await sourceGit(new Set(), gitDir, ["rev-parse", "--is-shallow-repository"])).trim() === "true") {
+    throw coded("The repository is shallow, so its history is incomplete. Only a complete repository can be imported.", "ESHALLOW");
   }
 
   const base = await manifest.read(store);
@@ -426,6 +443,7 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
     }
 
     const tips = [...new Set(Object.values(refs))];
+    const objectDir = await objectsDir(children, gitDir);
 
     // Scratch: a reservation from the cache (which fails with NoRoomError if
     // the repository could not fit in it), or a directory of the host's own
@@ -433,7 +451,7 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
       await fsp.mkdir(scratchDir, { recursive: true });
       dir = await fsp.mkdtemp(path.join(scratchDir, "import-"));
     } else {
-      const alternates = await fileExists(path.join(gitDir, "objects", "info", "alternates"));
+      const alternates = await fileExists(path.join(objectDir, "info", "alternates"));
       const need = estimateBytes !== null ? estimateBytes : await estimate(children, gitDir, tips, cache.maxBytes, alternates);
       try {
         reservation = await cache.reserve(need);
@@ -444,7 +462,7 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
       dir = reservation.dir;
     }
 
-    const repo = await scratchRepo(children, dir, gitDir);
+    const repo = await scratchRepo(children, dir, objectDir);
     const { peeled, peeledType } = await peelTags(children, repo, refs, kinds);
     const commitTips = [...new Set(Object.keys(refs).flatMap((ref) => (kinds[ref] === "commit" ? [refs[ref]] : peeledType[refs[ref]] === "commit" ? [peeled[refs[ref]]] : [])))];
 

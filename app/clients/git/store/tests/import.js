@@ -548,6 +548,49 @@ describe("git store import", function () {
       expect((await verifyImport({ store: env.store, cache: env.cache, gitDir: dir })).refs).toBe(7);
     });
 
+    it("imports from a linked worktree's directory, whose objects are in the common repository", async function () {
+      const main = path.join(root, "wt-main-" + ++counter);
+      fx.git(root, ["clone", "-q", "--no-hardlinks", path.join(rich, ".git"), main]);
+      const linked = path.join(root, "wt-linked-" + counter);
+      fx.git(main, ["worktree", "add", "-q", "-b", "elsewhere", linked]);
+      const admin = fs.readFileSync(path.join(linked, ".git"), "utf8").replace(/^gitdir: /, "").trim();
+      expect(fs.existsSync(path.join(admin, "objects"))).toBe(false);
+
+      const env = setup({ maxBytes: 64 * MiB });
+      const result = await run(env, admin);
+      expect(result.outcome).toBe("imported");
+      expect(result.refs["refs/heads/elsewhere"]).toBe(fx.text(linked, ["rev-parse", "HEAD"]));
+      expect(result.refs["refs/heads/master"]).toBe(fx.text(main, ["rev-parse", "master"]));
+      expect(result.head).toBe("refs/heads/elsewhere");
+      scratchIsEmpty(env);
+    });
+
+    it("skips every one of refs whose names differ only in bytes that are not UTF-8", async function () {
+      const dir = copyOfRich("odd-names");
+      const tip = fx.text(dir, ["rev-parse", "master"]);
+      const lines = [
+        Buffer.concat([Buffer.from(tip + " refs/tags/x"), Buffer.from([0xff]), Buffer.from("\n")]),
+        Buffer.concat([Buffer.from(tip + " refs/tags/x"), Buffer.from([0xef, 0xbf, 0xbd]), Buffer.from("\n")]),
+      ];
+      const packed = path.join(dir, "packed-refs");
+      fs.appendFileSync(packed, Buffer.concat(lines));
+      // git has to take them, or there is nothing to test
+      const listed = fx.git(dir, ["for-each-ref", "--format=%(refname)", "refs/tags"]);
+      if (!listed.includes(Buffer.from([0x78, 0xff])) || !listed.includes(Buffer.from([0x78, 0xef, 0xbf, 0xbd]))) {
+        pending("this git does not accept ref names that are not UTF-8");
+        return;
+      }
+
+      const env = setup();
+      const result = await run(env, dir);
+      const odd = result.skipped.filter((skip) => skip.why === "a name that is not valid UTF-8");
+      expect(odd.length).toBe(2);
+      expect(Object.keys(result.refs).filter((ref) => ref.startsWith("refs/tags/x"))).toEqual([]);
+      expect(Object.keys(result.refs).length).toBe(7);
+      // verify reads the source the same way and agrees
+      expect((await verifyImport({ store: env.store, cache: env.cache, gitDir: dir })).refs).toBe(7);
+    });
+
     it("does not write to the source, even a temporary file: it works on a read-only copy", async function () {
       const dir = copyOfRich("readonly");
       const chmod = (mode) => {
