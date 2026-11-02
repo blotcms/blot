@@ -30,7 +30,7 @@ const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-// The same as check-redis-host.js's MAXMEMORY_ALERT: 80% of maxmemory still
+// Before check-redis-host.js's MAXMEMORY_ALERT (90%): 80% of maxmemory still
 // leaves room, and the first step is usually raising maxmemory, not a host cycle.
 const MEMORY_WARNING = 0.8;
 const RESIZE_URL =

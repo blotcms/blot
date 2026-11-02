@@ -208,8 +208,8 @@ production instance.
 
 ### Increasing the Redis server size
 
-Do this when the daily email says **resize now** or the alert fires (both at
-80% of `maxmemory`); with `noeviction`, writes fail at the
+Do this when the daily email says **resize now** (80% of `maxmemory`) or the
+alert fires (90%); with `noeviction`, writes fail at the
 limit. Redis shares the host's RAM with the units, so first try raising
 `maxmemory` (check what the units and a background save's copy-on-write
 leave; `REDIS_MAXMEMORY` at bootstrap, or `/etc/redis6/blot-memory.conf`). If
@@ -359,8 +359,8 @@ the master) emails the admin address `REDIS_HOST_ALERT` when:
 
 - the kernel's TCP memory count reaches 50% of `tcp_mem[1]` (where TCP memory
   pressure starts), or `TCPMemoryPressures` rises;
-- Redis's memory reaches 80% of `maxmemory` (`noeviction`, so writes fail at
-  the limit);
+- Redis's memory reaches 90% of `maxmemory` (`noeviction`, so writes fail at
+  the limit; the daily email warns from 80%);
 - `maxmemory` is 0 on a host marked active by `/etc/blot-redis/active`;
 - the TCP memory sample is over 20 minutes old;
 - the last background save failed (`stop-writes-on-bgsave-error no`, so Redis
