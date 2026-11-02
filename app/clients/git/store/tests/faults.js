@@ -335,9 +335,13 @@ describe("git store against a misbehaving object store", function () {
       fx.remove(workDir);
     });
 
-    async function open({ cache = null } = {}) {
+    // `byRange` gives the reader a cache too small for it to read the index
+    // whole (idx.js), so it reads it by range as a big index is
+    let caches = 0;
+    async function open({ cache = null, byRange = false } = {}) {
       const store = faults(createMemoryStore());
       const entry = await fx.upload(store, pack, oracle.size);
+      if (byRange) cache = createCache({ dir: workDir + "/range-cache-" + ++caches, maxBytes: 8 * pack.idx.length });
       return { store, entry, reader: createReader({ store, cache, packs: [entry] }) };
     }
 
@@ -355,15 +359,19 @@ describe("git store against a misbehaving object store", function () {
       return errors;
     }
 
-    for (const [what, key] of [["pack", /\.pack$/], ["index", /\.idx$/]]) {
+    for (const [what, key, op, byRange] of [
+      ["ranged reads of the pack", /\.pack$/, "read", false],
+      ["ranged reads of the index", /\.idx$/, "read", true],
+      ["the GET of the whole index", /\.idx$/, "get", false],
+    ]) {
       for (const [how, truncate] of [
         ["to nothing", 0],
         ["by half", (body) => body.length >> 1],
         ["by a byte", (body) => Math.max(body.length - 1, 0)],
       ]) {
-        it("never gives wrong bytes when ranged reads of the " + what + " are cut short " + how, async function () {
-          const { store, reader } = await open();
-          store.inject("read", { key, times: Infinity, truncate });
+        it("never gives wrong bytes when " + what + " are cut short " + how, async function () {
+          const { store, reader } = await open({ byRange });
+          store.inject(op, { key, times: Infinity, truncate });
 
           const errors = await readAll(reader);
           for (const err of errors) expect(err).toEqual(jasmine.any(CorruptError));
@@ -380,9 +388,8 @@ describe("git store against a misbehaving object store", function () {
       expect(error).toEqual(jasmine.any(CorruptError));
     });
 
-    it("does not keep a cut-short index read in the cache", async function () {
-      const cache = createCache({ dir: workDir + "/cache", maxBytes: 50 * 1024 * 1024 });
-      const { store, reader } = await open({ cache });
+    it("does not keep a cut-short ranged index read in the cache", async function () {
+      const { store, reader } = await open({ byRange: true });
       store.inject("read", { key: /\.idx$/, truncate: (body) => body.length >> 1 });
 
       const [id, want] = [...oracle.entries()][0];
@@ -393,20 +400,47 @@ describe("git store against a misbehaving object store", function () {
       expect((await readAll(reader)).length).toBe(0);
     });
 
+    it("does not keep a cut-short or damaged whole index in the cache, nor in memory", async function () {
+      const cache = createCache({ dir: workDir + "/cache", maxBytes: 50 * 1024 * 1024 });
+      const { store, entry, reader } = await open({ cache });
+      store.inject("get", { key: /\.idx$/, truncate: (body) => body.length >> 1 });
+
+      const [id, want] = [...oracle.entries()][0];
+      expect(await fails(reader.read(id))).toEqual(jasmine.any(CorruptError));
+
+      // The right length, and a flipped bit: its own checksum catches it
+      const damaged = Buffer.from(pack.idx);
+      damaged[2000] ^= 0x10;
+      store.inject("get", { key: /\.idx$/, result: damaged });
+      expect(await fails(reader.read(id))).toEqual(jasmine.any(CorruptError));
+
+      const again = await reader.read(id);
+      expect(again.data.equals(want.data)).toBe(true);
+      expect((await readAll(reader)).length).toBe(0);
+
+      // A new reader takes the index from the cache, and it is the good one
+      const before = store.calls.length;
+      const next = createReader({ store, cache, packs: [entry] });
+      expect((await readAll(next)).length).toBe(0);
+      expect(store.calls.slice(before).filter((call) => call.endsWith(".idx"))).toEqual([]);
+    });
+
     it("shares one fetch of an index between lookups which need it at the same time", async function () {
-      const idxReads = (store) => store.calls.filter((call) => call.startsWith("read ") && call.endsWith(".idx")).length;
+      const idxCalls = (store) => store.calls.filter((call) => call.endsWith(".idx")).length;
       const [id] = [...oracle.keys()];
 
-      const alone = await open();
-      await alone.reader.read(id);
-      const one = idxReads(alone.store);
+      for (const byRange of [false, true]) {
+        const alone = await open({ byRange });
+        await alone.reader.read(id);
+        const one = idxCalls(alone.store);
 
-      const together = await open();
-      together.store.inject("read", { key: /\.idx$/, times: Infinity, delay: 20 });
-      const results = await Promise.all(Array.from({ length: 10 }, () => together.reader.read(id)));
+        const together = await open({ byRange });
+        together.store.inject(byRange ? "read" : "get", { key: /\.idx$/, times: Infinity, delay: 20 });
+        const results = await Promise.all(Array.from({ length: 10 }, () => together.reader.read(id)));
 
-      expect(results.every((got) => got.data.equals(oracle.get(id).data))).toBe(true);
-      expect(idxReads(together.store)).toBe(one);
+        expect(results.every((got) => got.data.equals(oracle.get(id).data))).toBe(true);
+        expect(idxCalls(together.store)).toBe(one);
+      }
     });
 
     it("refuses an index which is not the length the manifest says", async function () {

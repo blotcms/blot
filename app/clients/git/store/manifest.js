@@ -275,14 +275,44 @@ async function readHint(store) {
   }
 }
 
-// The seq of the newest manifest found by starting at the hint and looking
-// forward, or null if there is no usable hint or it is too far behind
-async function walkFromHint(store) {
-  let seq = await readHint(store);
-  if (seq === null) return null;
+// The highest seq whose bytes this process keeps for `store`, or null
+function newestKept(store) {
+  const bySeq = kept.get(store);
+  if (!bySeq || !bySeq.size) return null;
+  return Math.max(...bySeq.keys());
+}
 
+// The newest manifest found by starting at the hint and looking forward, as
+// { seq, loading }, or null if there is no usable hint or it is too far
+// behind. `loading`, when there is one, is load() of that seq already under
+// way (settled as { found } or { err }).
+//
+// Two things run alongside the hint's GET, so the usual read waits on one
+// round trip, or two:
+//
+// - With bytes kept for seq K (the manifest this process last read or
+//   swapped in), a HEAD for K + 1. If it is missing and the hint is not past
+//   K, K is the newest, as surely as when the hint names K itself: the same
+//   HEAD is what read() would have asked next. (load() still checks K is
+//   there if the store has not confirmed it for a while.)
+// - Otherwise the GET of the manifest the hint names starts with the HEAD
+//   for the one after it, rather than after it.
+async function walkFromHint(store, now) {
+  const keptSeq = newestKept(store);
+  const [hint, afterKept] = await Promise.all([readHint(store), keptSeq === null ? null : store.head(manifestKey(keptSeq + 1))]);
+  if (hint === null) return null;
+  if (keptSeq !== null && hint <= keptSeq && !afterKept) return { seq: keptSeq };
+
+  let seq = hint;
   for (let steps = 0; steps < WALK_LIMIT; steps++) {
-    if (!(await store.head(manifestKey(seq + 1)))) return seq;
+    const loading =
+      steps === 0
+        ? load(store, seq, now).then(
+            (found) => ({ found }),
+            (err) => ({ err })
+          )
+        : null;
+    if (!(await store.head(manifestKey(seq + 1)))) return { seq, loading };
     seq++;
   }
   return null;
@@ -318,10 +348,13 @@ async function listNewest(store) {
 async function read(store, { clock = Date.now } = {}) {
   const now = clock();
   const stamp = ({ m, confirmed }) => (readAt.set(m, confirmed), m);
-  const hinted = await walkFromHint(store);
+  const hinted = await walkFromHint(store, now);
   if (hinted !== null) {
     try {
-      return stamp(await load(store, hinted, now));
+      if (!hinted.loading) return stamp(await load(store, hinted.seq, now));
+      const { found, err } = await hinted.loading;
+      if (err) throw err;
+      return stamp(found);
     } catch (err) {
       if (!(err instanceof NotFoundError)) throw err;
     }
@@ -595,7 +628,7 @@ async function confirm(store, next, cause) {
 // what make "since then" more than this read: they count from the read that
 // last fetched or checked them, which is never more than RECONFIRM_AFTER ago,
 // so a kept manifest the sweep has since deleted is found gone, not built on.
-async function swap({ store, lock, base, next, uploaded = [], clock = Date.now }) {
+async function swap({ store, lock, base, next, uploaded = [], clock = Date.now, waitForHint = true }) {
   if (typeof lock !== "function") throw new Error("swap needs the host's lock function");
   validate(base);
   validate(next);
@@ -638,10 +671,12 @@ async function swap({ store, lock, base, next, uploaded = [], clock = Date.now }
     readAt.set(next, landedAt);
 
     // The swap has happened. The hint only saves the next reader some looking,
-    // so a failure to write it is not a failure to swap.
-    try {
-      await store.put(LATEST_KEY, Buffer.from(JSON.stringify({ seq: next.seq }) + "\n"));
-    } catch (err) {}
+    // so a failure to write it is not a failure to swap. A caller which passes
+    // `waitForHint: false` (a push, Blot's commit) is answered without waiting
+    // for it: until it lands, a reader starting from the old hint looks one
+    // manifest further forward.
+    const hint = store.put(LATEST_KEY, Buffer.from(JSON.stringify({ seq: next.seq }) + "\n")).catch(() => {});
+    if (waitForHint) await hint;
 
     return next;
   });
