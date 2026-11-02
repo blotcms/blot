@@ -121,10 +121,12 @@ The core initialization and watching logic:
 5. **Watch lifecycle**: Watchers are stored in a per-blog registry and cleaned up when the blog is switched to a different client or deleted.
 
 ### write.js
-Uses `fs-extra.outputFile()` to write files. Validates the path against `shouldIgnoreFile()` to prevent writing to system or temporary files.
+Writes through `storage/folder`. Validates the path against `shouldIgnoreFile()` to prevent writing to system or temporary files.
 
 ### remove.js
-Uses `fs-extra.remove()` to delete files or directories.
+Removes files or directories through `storage/folder`; a missing path is a no-op.
+
+`setup.js` is the exception: chokidar needs a real directory, so it watches the blog folder through `localPath`, and a blog on the Local client must stay on the local-disk backend of `storage/folder`.
 
 ### disconnect.js
 Sets the blog's `client` field to an empty string in the Blog model, causing the master process to stop watching the folder on next server start.
