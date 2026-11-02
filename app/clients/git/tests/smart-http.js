@@ -262,7 +262,8 @@ describe("git client smart HTTP reads", function () {
             String(stdout || "")
               .split("\n")
               .filter(function (line) {
-                return /git[ -]upload-pack/.test(line) && line.indexOf(directory) !== -1;
+                // With or without the limiter's settings in front (git -c a=b ...)
+                return /git(-|(\s+-c\s+\S+)*\s+)upload-pack/.test(line) && line.indexOf(directory) !== -1;
               })
           );
         });

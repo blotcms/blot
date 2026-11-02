@@ -7,15 +7,32 @@ const CLASSES = [
   ["domain", /^domain:/],
   ["handle", /^handle:/],
   ["template", /^template:[^:]+:[^:]+:info$/], // template IDs are owner:slug
+  ["patterns", /^template:[^:]+:[^:]+:url_patterns$/],
+  ["owners", /^template:owned_by:[^:]+$/],
+  ["session", /^sess:/],
+  ["user", /^user:[^:]+:info$/],
   ["url", /^blog:[^:]+:url:/],
   ["entry", /^blog:[^:]+:entry:/],
   ["tags", /^blog:[^:]+:tags:/],
   ["list", /^blog:/],
 ];
 
-// Small, hot keys read on nearly every request. Entries and URLs are left out
-// because a big blog (or a crawler) would flood the cache and evict these.
-const ALLOWED = new Set(["info", "domain", "handle", "template"]);
+// Small, hot keys read on nearly every blog or dashboard request, rarely
+// written, and no more numerous than blogs, templates, users or sessions.
+// Keys named after a request path (entries, entry and template URLs,
+// redirects) are left out: crawlers and scanners would flood the cache and
+// evict these, and Redis tracks every key read, even a missing one, until it
+// is written, so they would also refill the server's tracking table.
+const ALLOWED = new Set([
+  "info",
+  "domain",
+  "handle",
+  "template",
+  "patterns",
+  "owners",
+  "session",
+  "user",
+]);
 
 function classify(key) {
   key = String(key);
@@ -35,6 +52,14 @@ function classifyKeys(keys) {
     : { cache: true, className: classes[0] };
 }
 
+// Redis invalidates a key on every connection tracking it, including the one
+// which wrote it, but sends that push after the reply to the write. The client
+// can act on the reply before the push has been read (they can arrive in
+// separate chunks, which happens under load), so a read straight after our own
+// write could be served the value cached before it. The client therefore
+// forgets allowlisted keys itself as it sends a write (see forgetWrittenKeys,
+// wired up by models/redis); the push which follows only repeats that.
+
 // Client-side cache which only caches (and asks the server to track) an
 // allowlist of keys. Tracking runs in OPTIN mode, so the server remembers a
 // key for this connection only after CLIENT CACHING YES precedes the read.
@@ -43,6 +68,30 @@ class AllowlistClientSideCache extends redis.BasicClientSideCache {
     super(options);
     // Cumulative per-class counters: { info: { hits, misses, bypass } }
     this.classStats = {};
+    // True while a read is being sent, so it is not mistaken for a write
+    this.sendingRead = false;
+  }
+
+  // Drops the cached values for every allowlisted key named in a command's
+  // arguments, as the command is sent. Called for every command except the
+  // cached reads, so any write (a plain command, a script or a MULTI) counts.
+  // A read in flight when this runs is not cached when its reply arrives, and
+  // a read sent afterwards reaches Redis behind the write on this connection.
+  forgetWrittenKeys(args) {
+    if (this.sendingRead || !Array.isArray(args)) return;
+    for (const arg of args) {
+      if (typeof arg === "string" && ALLOWED.has(classify(arg)))
+        redis.BasicClientSideCache.prototype.invalidate.call(this, arg);
+    }
+  }
+
+  sendRead(fn) {
+    this.sendingRead = true;
+    try {
+      return fn();
+    } finally {
+      this.sendingRead = false;
+    }
   }
 
   trackingOn() {
@@ -63,7 +112,7 @@ class AllowlistClientSideCache extends redis.BasicClientSideCache {
       this.count(className, "bypass");
       // Same as the base class's miss path: transform the raw reply, but
       // neither read from nor write to the cache.
-      const reply = await fn();
+      const reply = await this.sendRead(fn);
       return transformReply
         ? transformReply(reply, parser.preserve, typeMapping)
         : reply;
@@ -77,8 +126,10 @@ class AllowlistClientSideCache extends redis.BasicClientSideCache {
       // Both commands go onto the client's write queue in this one
       // synchronous tick, so nothing can slip between them on the wire, and
       // Redis applies CACHING YES to the next command: the read.
-      client.sendCommand(["CLIENT", "CACHING", "YES"]).catch(() => {});
-      return fn();
+      return this.sendRead(() => {
+        client.sendCommand(["CLIENT", "CACHING", "YES"]).catch(() => {});
+        return fn();
+      });
     };
 
     const result = await super.handleCache(

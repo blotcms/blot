@@ -9,6 +9,14 @@ describe("models/redis-cache", function () {
       "template:SITE:blog:info": "template",
       "template:blog_123:my-theme:info": "template",
       "template:SITE:blog:view:entry.html": "other",
+      "template:SITE:blog:url_patterns": "patterns",
+      "template:SITE:blog:url:/": "other",
+      "template:SITE:blog:all_views": "other",
+      "template:owned_by:SITE": "owners",
+      "template:owned_by:blog_123": "owners",
+      "sess:abc123": "session",
+      "user:user_123:info": "user",
+      "user:user_123:paypal_cancel_email:sub_1": "other",
       "blog:blog_123:url:/foo": "url",
       "blog:blog_123:entry:/foo.txt": "entry",
       "blog:blog_123:tags:all": "tags",
@@ -30,6 +38,21 @@ describe("models/redis-cache", function () {
       className: "info",
     });
     expect(Cache.classifyKeys(["blog:x:info", "domain:a.com"]).cache).toBe(true);
+    [
+      "template:SITE:blog:url_patterns",
+      "template:owned_by:SITE",
+      "sess:abc",
+      "user:user_1:info",
+    ].forEach(function (key) {
+      expect(Cache.classifyKeys([key]).cache).toBe(true, key);
+    });
+    [
+      "template:SITE:blog:url:/wp-login.php",
+      "template:SITE:blog:view:entry.html",
+      "blog:x:redirect:/a",
+    ].forEach(function (key) {
+      expect(Cache.classifyKeys([key]).cache).toBe(false, key);
+    });
     expect(Cache.classifyKeys(["blog:x:info", "blog:x:entry:/a"])).toEqual({
       cache: false,
       className: "entry",
@@ -59,13 +82,62 @@ describe("models/redis-cache", function () {
       expect(classStats.entry).toEqual({ hits: 0, misses: 0, bypass: 2 });
 
       // The server only tracks the key if CACHING YES reached it right
-      // before the read, so a write must invalidate the cached value. Redis
-      // pushes the invalidation on this connection ahead of the SET reply.
+      // before the read, so a write must invalidate the cached value.
       await client.set(id + ":info", "c");
       expect(await client.get(id + ":info")).toBe("c");
     } finally {
       await client.del([id + ":info", id + ":entry:/a"]);
       await client.quit();
     }
+  });
+
+  // Redis sends the invalidation for a key after the reply to the write which
+  // changed it, and a busy connection can deliver the two in separate reads,
+  // so the code awaiting the write runs before the invalidation does. Reading
+  // straight after a write then returned the value cached before it (a new
+  // template's metadata read as missing). Dropping the pushes here leaves the
+  // client's own bookkeeping as the only thing keeping the cache honest.
+  describe("with the server's invalidations arriving late", function () {
+    const createRedisClient = require("models/redis");
+    let client, id;
+
+    beforeEach(async function () {
+      client = createRedisClient();
+      await client.connect();
+      client.clientSideCache.invalidate = function () {};
+      id = "template:blog_cachespec" + Date.now() + ":late:info";
+    });
+
+    afterEach(async function () {
+      await client.del(id);
+      await client.quit();
+    });
+
+    it("reads its own write", async function () {
+      expect(await client.hGetAll(id)).toEqual({});
+      await client.hSet(id, { a: "1" });
+      expect(await client.hGetAll(id)).toEqual({ a: "1" });
+    });
+
+    it("reads its own write made in a MULTI", async function () {
+      expect(await client.hGetAll(id)).toEqual({});
+      await client.multi().hSet(id, { a: "1" }).exec();
+      expect(await client.hGetAll(id)).toEqual({ a: "1" });
+    });
+
+    it("reads its own write made by a script", async function () {
+      expect(await client.hGetAll(id)).toEqual({});
+      await client.eval("return redis.call('HSET', KEYS[1], 'a', '1')", {
+        keys: [id],
+      });
+      expect(await client.hGetAll(id)).toEqual({ a: "1" });
+    });
+
+    it("does not cache a read which a write overtook", async function () {
+      const read = client.hGetAll(id);
+      await client.hSet(id, { a: "1" });
+      await read;
+      expect(await client.hGetAll(id)).toEqual({ a: "1" });
+    });
   });
 });

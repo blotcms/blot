@@ -28,10 +28,10 @@
 const dns = require('dns').promises;
 // The domain-setup check connects to an A-record this function resolved
 // itself and sends Host: <hostname>. It goes through the egress proxy
-// (helper/airlock.getViaIP, app/sandbox/README.md) so the egress filter
+// (helper/egress.getViaIP, app/sandbox/README.md) so the egress filter
 // rejects an A-record that resolves to an internal address, while still
 // pinning the exact resolved IP rather than letting the proxy re-resolve.
-const airlock = require('helper/airlock');
+const egress = require('helper/egress');
 const { parse } = require('tldts');
 
 const VERIFICATION_TIMEOUT_MS = 5000;
@@ -177,7 +177,7 @@ async function validate({ hostname, handle, ourIP, ourIPv6, ourHost }) {
         : null;
 
     try {
-        const response = await airlock.getViaIP(aRecordIPs[0], '/verify/domain-setup', {
+        const response = await egress.getViaIP(aRecordIPs[0], '/verify/domain-setup', {
             host: hostname,
             ...(controller
                 ? { signal: controller.signal }

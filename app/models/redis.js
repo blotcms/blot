@@ -41,13 +41,43 @@ function connectionOptions() {
   return { url, socket };
 }
 
+// Makes the client drop cached keys as it sends a command which names them,
+// rather than waiting for Redis to push the invalidation, which follows the
+// write's reply and can be read after the code awaiting the reply has already
+// run (see models/redis-cache). Covers single commands and scripts
+// (sendCommand), and MULTI and pipelines, which bypass it.
+function forgetOwnWrites(client, cache) {
+  // The object createClient returns hands its commands to the client it wraps
+  // (_self), which then calls its own sendCommand, so patch that one
+  const target = client._self || client;
+  const sendCommand = target.sendCommand;
+  target.sendCommand = function (args, options) {
+    cache.forgetWrittenKeys(args);
+    return sendCommand.call(this, args, options);
+  };
+
+  ["_executeMulti", "_executePipeline"].forEach(function (name) {
+    const execute = target[name];
+    target[name] = function (commands, ...rest) {
+      for (const command of commands) cache.forgetWrittenKeys(command.args);
+      return execute.call(this, commands, ...rest);
+    };
+  });
+}
+
+// The client-side cache serves the blog, domain, handle and template reads
+// the render path makes on every request, including the cacheIDs the render
+// caches are keyed on. Kept on production evidence, see "Client-side
+// caching" in config/redis/README.md.
 // Pass { clientSideCache: false } for a client which never reads cacheable
 // keys (the pubsub subscriber), so Redis does not track anything for it.
 function createRedisClient({ clientSideCache: useCache = true } = {}) {
   const clientSideCache = useCache
     ? new AllowlistClientSideCache({
         ttl: 0,
-        maxEntries: 3333,
+        // Room for every allowlisted class (models/redis-cache) at once:
+        // template URL patterns add about one entry per template in use
+        maxEntries: 5000,
         evictPolicy: "LRU",
       })
     : undefined;
@@ -61,7 +91,10 @@ function createRedisClient({ clientSideCache: useCache = true } = {}) {
     clientSideCache,
   });
 
-  if (clientSideCache) clientSideCaches.set(client, clientSideCache);
+  if (clientSideCache) {
+    clientSideCaches.set(client, clientSideCache);
+    forgetOwnWrites(client, clientSideCache);
+  }
   createRedisClient.failFastOnceReady(client);
 
   client.on("error", function (err) {

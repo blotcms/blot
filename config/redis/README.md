@@ -435,6 +435,44 @@ on `hourly/*`, `daily/*` and `weekly/*` (restore), and `s3:PutObject` on the sam
 - Redis has no auth or TLS (the security group is the protection), no AOF, and
   is still Redis 6; those are separate pieces of work.
 
+## Client-side caching
+
+The app's shared client (`app/models/redis.js`) keeps a small client-side cache
+of an allowlist of keys, using RESP3 `CLIENT TRACKING` in OPTIN mode
+(`app/models/redis-cache.js`): blog info, domain, handle, template metadata
+and URL patterns, template owner sets, dashboard sessions and user records.
+The render path reads the blog record, the template metadata and URL patterns,
+and the cacheIDs the render caches are keyed on, on every blog request; the
+dashboard reads the session and the user on every request. Most of those reads
+are served locally. A write through the same client drops the keys it names
+from that client's cache as it is sent, because Redis pushes the
+invalidation after the write's reply; every other process's cache learns of
+the write from that push. Keys named after a request path (entries, entry and
+template URLs, redirects) stay out: Redis tracks every key a client reads,
+even a missing one, until it is written, so crawler and scanner paths would
+refill the tracking table. Measured on production in November 2026, which is
+why it was kept:
+
+- Hit rates were roughly 70-85% per process, saving a few sequential round
+  trips per blog request. An uncached read over the Unix socket is cheap from
+  an idle process (tens of microseconds), but a miss in a busy app process
+  waits for the event loop, and there it averaged a few milliseconds.
+- The server's tracking table stays small, a percent or two of
+  `tracking-table-max-keys`, because OPTIN tracks only the allowlisted keys.
+  It sat at the cap in October 2026 because, until mid-October, the client
+  tracked every key it read; those keys outlived the switch to OPTIN.
+- Redis keeps a disconnected client's entries until the key is written, so
+  `tracking_total_items` (key and client pairs) grows by roughly the live
+  cache size with each deploy and shrinks as blogs are written. That is
+  expected and costs little memory.
+
+`tracking-table-max-keys` is left at its default. Each unit logs
+`redis_tracking_total_keys` and the per-class hit counters in its `[STATS]`
+lines. If the key count ever climbs toward the cap, or a node-redis upgrade
+breaks `AllowlistClientSideCache` (it overrides `handleCache` and wraps the
+client's `sendCommand`, `_executeMulti` and `_executePipeline`), dropping
+client-side caching is a reasonable answer: the reads it saves are cheap.
+
 ## Notes
 
 - `redis6-check-rdb` from the package does not work (Redis chooses its mode from

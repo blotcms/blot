@@ -303,7 +303,7 @@
   "app/documentation/tests/index.js": 37.063,
   "app/documentation/tests/redis-unavailable.js": 5.311,
   "app/helper": 107,
-  "app/helper/airlock/tests.js": 0.031,
+  "app/helper/egress/tests.js": 0.031,
   "app/helper/express-mustache/tests/index.js": 0.052,
   "app/helper/express-mustache/tests/parse.js": 0.002,
   "app/helper/lock/tests/cron.js": 2.94,

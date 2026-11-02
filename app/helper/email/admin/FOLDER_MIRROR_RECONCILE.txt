@@ -1,0 +1,29 @@
+Folder mirror: {{{summary}}}
+
+{{#full}}The daily check compared {{checked}} blogs with their folders on disk.{{/full}}{{^full}}The hourly repair went through the blogs whose mirror write had failed.{{/full}}
+
+{{#hasDrifted}}
+**Differed from the disk and were repaired** (found by the daily check)
+
+`{{{drifted}}}`
+
+{{/hasDrifted}}
+{{#hasErrored}}
+**Still wrong after a repair** (left in the dirty set, so the hourly run tries again)
+
+`{{{errored}}}`
+
+{{/hasErrored}}
+{{#hasSkipped}}
+**Have no folder on disk** (their copy in S3 was left alone)
+
+`{{{skipped}}}`
+
+{{/hasSkipped}}
+{{#hasLocked}}{{locked}} blogs were locked by a sync and are tried again next time.{{/hasLocked}}
+
+**What to do**
+
+- **Differed** needs nothing if it is a few blogs: the run repaired them. Blogs differing on every daily check mean the mirror is missing writes, so look for `[storage/folder mirror] failed` in the logs and for changes made outside Blot.
+- **Still wrong** means the repair itself failed. The log has the reason: `logs green | grep "storage/folder reconcile"`. Run `node scripts/storage/backfill-folder.js --blog <blogID>` in a container as the user who owns the blog folders to see it.
+- **No folder on disk** is more likely a disk problem than an empty blog. Check the volume is mounted before anything else.

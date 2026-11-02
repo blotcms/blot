@@ -118,7 +118,11 @@ module.exports = function readFromFolder (blogID, dir, callback) {
             },
             function (err) {
               if (err) return callback(err);
-              setMetadata(id, { errors }, function (err) {
+              // A template read from the blog's folder is edited there, with
+              // or without a package.json: every sync rebuilds it from these
+              // files, so dashboard saves must be written back to them
+              // (dashboard/site/template/save/writeChangeToFolder.js)
+              setMetadata(id, { errors, localEditing: true }, function (err) {
                 if (err) return callback(err);
                 if (enabled === true) {
                   Blog.set(blogID, { template: id }, function (err) {

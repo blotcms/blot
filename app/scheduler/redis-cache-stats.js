@@ -4,10 +4,11 @@ const getClientSideCacheStats =
   require("models/redis").getClientSideCacheStats;
 
 // The server's side of client-side caching: keys it tracks for any client.
-// It can sit near tracking-table-max-keys with far more keys than the live
-// clients cache (Redis keeps keys for clients which have since disconnected
-// until they are written or trimmed), and at the cap it evicts entries and
-// sends invalidations. sendCommand keeps INFO off the client-side cache.
+// Redis keeps keys for clients which have since disconnected until they are
+// written, so it can hold more than the live clients cache; at
+// tracking-table-max-keys it evicts entries and sends invalidations. With
+// OPTIN tracking it stays far below that cap (config/redis/README.md).
+// sendCommand keeps INFO off the client-side cache.
 async function logTrackingStats() {
   try {
     const info = await redisClient.sendCommand(["INFO", "stats"]);
