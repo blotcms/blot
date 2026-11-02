@@ -45,7 +45,12 @@
 //      history piece, which the manifest lists and compaction merges later).
 //   6. Upload the pack, its .idx and .rev, and the history piece and its .idx
 //      (a piece is read whole, so it has no .rev).
-//   7. Swap the manifest. Only a swap that landed is reported as a success.
+//   7. Swap the manifest. Only a swap that landed is reported as a success. A
+//      swap lost to another writer is tried again on the manifest that won
+//      (up to three attempts in all): if a ref the push updates moved, the
+//      push is refused; if the other writer changed other refs, or only packs
+//      (compaction), the push is applied to the new manifest, with nothing
+//      uploaded again.
 //
 // Scratch space is released in every case, before receive() resolves.
 //
@@ -912,26 +917,45 @@ async function reachedAgain({ store, cache, current, commands, added }) {
   return tips.every((oid) => reached.has(oid)) ? [] : current.packs;
 }
 
+// How many times the swap is tried in all, as commit.js does
+const ATTEMPTS = 3;
+
 // Applies the commands to the newest manifest and swaps it in. The base may
-// have moved since the push began (another push, Blot's own commit); that is
-// fine as long as the refs the commands name have not.
+// have moved since the push began (another push, Blot's own commit,
+// compaction); that is fine as long as the refs the commands name have not.
+// A swap lost to another writer's create is tried again on the manifest that
+// won: the commands are checked against it, and only if a ref this push
+// updates really moved is the push refused. The packs are already uploaded, so
+// a retry is manifest work only (a read, perhaps the history for reachedAgain,
+// and the create). Everything that depends on the base, `reachedAgain` and the
+// manifest `advance` builds, is worked out again on the new one; what comes
+// from the push alone (`added`, with its `peeled` targets, which are facts about
+// immutable objects) is not. An uncontended push never gets here twice.
 async function swap({ store, cache, lock, commands, added }) {
-  const current = await manifest.read(store);
-  const refs = applied(current, commands);
-  const behind = staleRefs(current, commands) || nameConflicts(refs, commands);
-  if (behind) throw behind;
+  const uploaded = [...added.packs, ...added.pieces].map((piece) => piece.name);
 
-  const again = await reachedAgain({ store, cache, current, commands, added });
-  const next = manifest.advance(current, {
-    refs,
-    head: current.head || (refs[MASTER] ? MASTER : null),
-    packs: (again.length ? again : added.packs).map(entryOf),
-    historyPieces: added.pieces.map(entryOf),
-    peeled: added.peeled,
-  });
+  for (let attempt = 1; ; attempt++) {
+    const current = await manifest.read(store);
+    const refs = applied(current, commands);
+    const behind = staleRefs(current, commands) || nameConflicts(refs, commands);
+    if (behind) throw behind;
 
-  await manifest.swap({ store, lock, base: current, next, uploaded: [...added.packs, ...added.pieces].map((piece) => piece.name) });
-  return next;
+    const again = await reachedAgain({ store, cache, current, commands, added });
+    const next = manifest.advance(current, {
+      refs,
+      head: current.head || (refs[MASTER] ? MASTER : null),
+      packs: (again.length ? again : added.packs).map(entryOf),
+      historyPieces: added.pieces.map(entryOf),
+      peeled: added.peeled,
+    });
+
+    try {
+      await manifest.swap({ store, lock, base: current, next, uploaded });
+      return next;
+    } catch (err) {
+      if (!(err instanceof StaleManifestError) || attempt >= ATTEMPTS) throw err;
+    }
+  }
 }
 
 module.exports = receive;
