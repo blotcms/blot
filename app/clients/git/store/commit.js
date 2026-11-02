@@ -85,6 +85,8 @@ const manifest = require("./manifest");
 const createReader = require("./reader");
 const { parseCommit } = require("./objects");
 const { buildRev } = require("./rev");
+const { noteSize } = require("./pack");
+const { rememberWhole } = require("./idx");
 
 const MASTER = "refs/heads/master";
 
@@ -109,7 +111,6 @@ const FIRST_RESERVE = 1 * MiB;
 const RESERVE_STEP = 8 * MiB;
 
 const TYPE_CODE = { commit: 1, tree: 2, blob: 3 };
-const TYPE_NAME = { 1: "commit", 2: "tree" };
 
 const DIRECTORY = "40000";
 
@@ -430,21 +431,18 @@ async function deflateToScratch(chunks, size, { scratch, limit }) {
 // Commits and trees are read through the cache: the commit made last time and
 // the trees along a path are the ones the next commit wants, and they never
 // change, so a cached one needs no check beyond its hash.
+//
+// The reader keeps them in the cache by ID (see reader.js), checked against
+// their ID when they come back.
 function createObjects({ store, cache, packs }) {
   const repo = createReader({ store, cache, packs });
-  const cacheKey = (oid) => store.id + "/obj/" + oid;
-  const put = (oid, type, body) => cache.put(cacheKey(oid), Buffer.concat([Buffer.from([TYPE_CODE[type]]), body])).catch(() => false);
 
   return {
-    put,
+    put: (oid, type, body) => repo.remember(oid, type, body),
     async read(oid, wanted) {
-      const hit = await cache.get(cacheKey(oid)).catch(() => null);
-      if (hit && hit.length > 0 && TYPE_NAME[hit[0]] === wanted && hashObject(wanted, hit.subarray(1)) === oid) return hit.subarray(1);
-
       const found = await repo.read(oid);
       if (!found) throw new CorruptError("The repository has no object " + oid);
       if (found.type !== wanted) throw new CorruptError("Object " + oid + " is a " + found.type + ", not a " + wanted);
-      await put(oid, found.type, found.data);
       return found.data;
     },
   };
@@ -563,6 +561,11 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
         const failed = results.find((result) => result.status === "rejected");
         if (failed) throw failed.reason;
         uploaded = { pack, piece };
+
+        // This process uploaded them, so it knows their size, and the next
+        // reader of the pack needs no request for its index
+        for (const p of [pack, piece]) noteSize(store, packKey(p.name), p.size);
+        await rememberWhole({ cache, namespace: store.id, key: idxKey(pack.name), idx: pack.idx });
       }
 
       const next = manifest.advance(base, {
@@ -573,7 +576,7 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
       });
 
       try {
-        await manifest.swap({ store, lock, base, next, uploaded: [uploaded.pack.name, uploaded.piece.name] });
+        await manifest.swap({ store, lock, base, next, uploaded: [uploaded.pack.name, uploaded.piece.name], waitForHint: false });
       } catch (err) {
         if (err instanceof OutcomeUnknownError) return { outcome: "unknown", commit: built.commit, parent, changed: null, seq: next.seq, error: err };
         if (!(err instanceof StaleManifestError)) throw err;

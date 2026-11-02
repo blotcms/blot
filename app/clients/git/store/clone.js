@@ -40,6 +40,8 @@ const { finished } = require("stream/promises");
 const { once } = require("events");
 const { idxKey, packKey } = require("./layout");
 const { readRanges } = require("./ranges");
+const { chooseWhole, loadWhole } = require("./idx");
+const { mapLimit } = require("./limit");
 const { parseHeader } = require("./pack");
 const inflateStream = require("./inflate");
 const pktline = require("./pktline");
@@ -60,6 +62,8 @@ const PREFETCH_PACKS = 2;
 const SMALL_PACK = 8 * 1024 * 1024;
 
 const MERGE_BUDGET = 8 * 1024 * 1024;
+// How many whole indexes are fetched at once (each is one GET)
+const INDEX_CONCURRENCY = 64;
 const MIN_SLICE = 64;
 const MAX_SLICE = 16384;
 
@@ -121,10 +125,10 @@ function chunks(run, key, from, to) {
 
 // A pack offset from a 4-byte index value, which for a pack over 2 GB points
 // into the table of 8-byte offsets after the offsets
-async function resolveOffset(run, pack, raw) {
+async function resolveOffset(run, pack, raw, whole = null) {
   if (!(raw & 0x80000000)) return raw;
   const at = FANOUT + pack.objects * 28 + (raw & 0x7fffffff) * 8;
-  const bytes = await run.store.read(idxKey(pack.name), at, 8);
+  const bytes = whole ? whole.subarray(at, Math.min(at + 8, whole.length - 40)) : await run.store.read(idxKey(pack.name), at, 8);
   if (bytes.length !== 8) throw new CorruptError(idxKey(pack.name) + " is truncated");
   const offset = Number(bytes.readBigUInt64BE(0));
   if (!Number.isSafeInteger(offset)) throw new CorruptError(idxKey(pack.name) + " has an offset out of range");
@@ -143,13 +147,41 @@ async function planSkips(run, packs) {
   if (packs.length < 2) return skips.map(finishSkips);
 
   const slice = Math.max(MIN_SLICE, Math.min(MAX_SLICE, Math.floor((run.mergeBudget || MERGE_BUDGET) / (packs.length * 24))));
-  const cursors = packs.map((pack, index) => ({ pack, index, next: 0, ids: null, offsets: null, at: 0, count: 0, done: false }));
+  const cursors = packs.map((pack, index) => ({ pack, index, next: 0, ids: null, offsets: null, at: 0, count: 0, done: false, whole: null }));
+
+  // The indexes small enough to be read whole (idx.js) are, all at once: from
+  // the cache, or with one GET each, which then goes in the cache for the
+  // next clone, lookup or push. The rest are read a slice at a time, and so is
+  // everything when there is no cache: a clone reads each index once, so
+  // reading it whole only pays when it is kept.
+  const whole = run.cache ? chooseWhole(packs, run.cache) : new Set();
+  await mapLimit(
+    cursors.filter((cursor) => whole.has(cursor.pack.name)),
+    INDEX_CONCURRENCY,
+    async (cursor) => {
+      stopped(run);
+      const key = idxKey(cursor.pack.name);
+      cursor.whole = await loadWhole({ store: run.store, key, size: cursor.pack.idxSize, cache: run.cache, namespace: run.store.id });
+      if (cursor.whole.readUInt32BE(FANOUT - 4) !== cursor.pack.objects) {
+        throw new CorruptError(key + " does not hold the " + cursor.pack.objects + " objects the manifest says");
+      }
+    }
+  );
 
   async function refill(cursor) {
     stopped(run);
     const { pack } = cursor;
     if (cursor.next >= pack.objects) {
       cursor.done = true;
+      return;
+    }
+    if (cursor.whole) {
+      // All of it at once: it is in memory already
+      cursor.ids = cursor.whole.subarray(FANOUT, FANOUT + pack.objects * 20);
+      cursor.offsets = cursor.whole.subarray(FANOUT + pack.objects * 24, FANOUT + pack.objects * 28);
+      cursor.at = 0;
+      cursor.count = pack.objects;
+      cursor.next = pack.objects;
       return;
     }
     const count = Math.min(slice, pack.objects - cursor.next);
@@ -205,7 +237,7 @@ async function planSkips(run, packs) {
     const id = idOf(cursor);
 
     if (last && last.equals(id)) {
-      const offset = await resolveOffset(run, cursor.pack, cursor.offsets.readUInt32BE(cursor.at * 4));
+      const offset = await resolveOffset(run, cursor.pack, cursor.offsets.readUInt32BE(cursor.at * 4), cursor.whole);
       skips[cursor.index].push({ offset, oid: Buffer.from(id) });
     } else {
       last = Buffer.from(id);
@@ -622,9 +654,9 @@ function createLimiter({ max, maxWaiting = 0 }) {
 // an error status; otherwise `out` has been ended (after an error packet, when
 // there is a sideband to carry it) or destroyed. A client which went away is a
 // ClientGoneError: reading stopped as soon as it was known.
-async function clone({ store, manifest, packs = manifest.packs, out, prelude, sideband = null, limiter = null, chunkSize = CHUNK_SIZE, mergeBudget, keepaliveAfter = KEEPALIVE_AFTER, progress = true }) {
+async function clone({ store, cache = null, manifest, packs = manifest.packs, out, prelude, sideband = null, limiter = null, chunkSize = CHUNK_SIZE, mergeBudget, keepaliveAfter = KEEPALIVE_AFTER, progress = true }) {
   const controller = new AbortController();
-  const run = { store, signal: controller.signal, chunkSize, mergeBudget };
+  const run = { store, cache, signal: controller.signal, chunkSize, mergeBudget };
   const stats = { objects: 0, bytes: 0, skipped: 0, rewritten: 0, toRef: 0 };
   const release = limiter ? await limiter.acquire() : () => {};
   let started = false;
@@ -822,6 +854,7 @@ async function serve({ store, cache, manifest, body, out, limiter, chunkSize, me
   const sideband = capabilities.includes("side-band-64k") ? "side-band-64k" : capabilities.includes("side-band") ? "side-band" : null;
   const sent = await clone({
     store,
+    cache,
     manifest,
     packs,
     out,
