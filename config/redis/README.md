@@ -153,7 +153,9 @@ leaves the old host replicating from the new one, which is what rollback needs.
 the new config with a throwaway Redis, installs it, applies what Redis allows
 with `CONFIG SET` (never `CONFIG REWRITE`) and lists the settings that need a
 restart (for example `tcp-backlog`, and `LimitNOFILE` of the running process).
-It will not lower `maxmemory` below the memory in use. It prints a warning if
+It will not lower `maxmemory` below the memory in use. On the production
+host, which Redis shares with the units, always pass the shared limit
+(`REDIS_MAXMEMORY=6gb`): without it setup applies 70% of RAM. It prints a warning if
 an existing sysctl file (e.g. `99-sysctl.conf`) sets a key that would override
 `90-blot-redis.conf` at boot.
 

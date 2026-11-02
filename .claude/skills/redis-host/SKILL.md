@@ -269,12 +269,15 @@ ssh blot 'redis6-cli ROLE | head -n 1; ls /etc/blot-redis/active'
 Right after a promotion the new host needs one or two 5-minute runs. If
 `ROLE` is not `master` or Redis refuses the write (`OOM`, `MISCONF`,
 frozen), it is that problem, not cron. If cron is dead or the file is gone,
-`config/redis/bootstrap.sh blot` re-applies it (propose, do not run).
+`REDIS_MAXMEMORY=6gb config/redis/bootstrap.sh blot` re-applies it (propose,
+do not run). Always pass `REDIS_MAXMEMORY` on the production host: without it
+setup takes 70% of RAM and raises Redis into the units' share.
 
 ### maxmemory not set
 
 `ssh blot 'redis6-cli CONFIG GET maxmemory; cat /etc/redis6/blot-memory.conf'`.
-Fix: `config/redis/bootstrap.sh blot`, which writes the file and applies it
+Fix: `REDIS_MAXMEMORY=6gb config/redis/bootstrap.sh blot` (the shared host's
+limit; never leave it out, or setup takes 70% of RAM), which writes the file and applies it
 with `CONFIG SET` without a restart (propose it; the README, "Running
 bootstrap on a live host").
 
