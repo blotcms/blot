@@ -63,7 +63,39 @@ class OutcomeUnknownError extends StoreError {
   }
 }
 
+// A request which is not valid git protocol
+class ProtocolError extends StoreError {
+  constructor(message) {
+    super(message, "PROTOCOL");
+  }
+}
+
+// A valid request for something this store does not do (shallow clones, filters)
+class UnsupportedError extends StoreError {
+  constructor(message) {
+    super(message, "UNSUPPORTED");
+  }
+}
+
+// Too many clones are running or waiting; the host should answer "try again"
+class BusyError extends StoreError {
+  constructor(message) {
+    super(message, "BUSY");
+  }
+}
+
+// The client went away, so the transfer was abandoned. Not a fault.
+class ClientGoneError extends StoreError {
+  constructor(message) {
+    super(message, "CLIENT_GONE");
+  }
+}
+
 module.exports = {
+  ProtocolError,
+  UnsupportedError,
+  BusyError,
+  ClientGoneError,
   OutcomeUnknownError,
   ManifestTooLargeError,
   StoreError,

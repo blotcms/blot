@@ -160,4 +160,4 @@ function openPack({ store, key, size, name }) {
   return { name, size, open, read };
 }
 
-module.exports = { openPack, isDelta };
+module.exports = { openPack, isDelta, parseHeader };
