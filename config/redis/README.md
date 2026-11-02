@@ -438,15 +438,20 @@ on `hourly/*`, `daily/*` and `weekly/*` (restore), and `s3:PutObject` on the sam
 ## Client-side caching
 
 The app's shared client (`app/models/redis.js`) keeps a small client-side cache
-of blog info, domain, handle and template metadata keys, using RESP3
-`CLIENT TRACKING` in OPTIN mode (`app/models/redis-cache.js`). The render path
-reads these on every blog request (the blog record, the template metadata,
-and the cacheIDs the render caches are keyed on), and most of those reads are
-served locally. A write through the same client drops the keys it names from
-that client's cache as it is sent, because Redis pushes the invalidation
-after the write's reply; every other process's cache learns of the write from
-that push. Measured on production in November 2026, which is why it was
-kept:
+of an allowlist of keys, using RESP3 `CLIENT TRACKING` in OPTIN mode
+(`app/models/redis-cache.js`): blog info, domain, handle, template metadata
+and URL patterns, template owner sets, dashboard sessions and user records.
+The render path reads the blog record, the template metadata and URL patterns,
+and the cacheIDs the render caches are keyed on, on every blog request; the
+dashboard reads the session and the user on every request. Most of those reads
+are served locally. A write through the same client drops the keys it names
+from that client's cache as it is sent, because Redis pushes the
+invalidation after the write's reply; every other process's cache learns of
+the write from that push. Keys named after a request path (entries, entry and
+template URLs, redirects) stay out: Redis tracks every key a client reads,
+even a missing one, until it is written, so crawler and scanner paths would
+refill the tracking table. Measured on production in November 2026, which is
+why it was kept:
 
 - Hit rates were roughly 70-85% per process, saving a few sequential round
   trips per blog request. An uncached read over the Unix socket is cheap from

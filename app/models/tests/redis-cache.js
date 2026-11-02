@@ -9,6 +9,14 @@ describe("models/redis-cache", function () {
       "template:SITE:blog:info": "template",
       "template:blog_123:my-theme:info": "template",
       "template:SITE:blog:view:entry.html": "other",
+      "template:SITE:blog:url_patterns": "patterns",
+      "template:SITE:blog:url:/": "other",
+      "template:SITE:blog:all_views": "other",
+      "template:owned_by:SITE": "owners",
+      "template:owned_by:blog_123": "owners",
+      "sess:abc123": "session",
+      "user:user_123:info": "user",
+      "user:user_123:paypal_cancel_email:sub_1": "other",
       "blog:blog_123:url:/foo": "url",
       "blog:blog_123:entry:/foo.txt": "entry",
       "blog:blog_123:tags:all": "tags",
@@ -30,6 +38,21 @@ describe("models/redis-cache", function () {
       className: "info",
     });
     expect(Cache.classifyKeys(["blog:x:info", "domain:a.com"]).cache).toBe(true);
+    [
+      "template:SITE:blog:url_patterns",
+      "template:owned_by:SITE",
+      "sess:abc",
+      "user:user_1:info",
+    ].forEach(function (key) {
+      expect(Cache.classifyKeys([key]).cache).toBe(true, key);
+    });
+    [
+      "template:SITE:blog:url:/wp-login.php",
+      "template:SITE:blog:view:entry.html",
+      "blog:x:redirect:/a",
+    ].forEach(function (key) {
+      expect(Cache.classifyKeys([key]).cache).toBe(false, key);
+    });
     expect(Cache.classifyKeys(["blog:x:info", "blog:x:entry:/a"])).toEqual({
       cache: false,
       className: "entry",

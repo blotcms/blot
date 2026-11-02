@@ -75,7 +75,9 @@ function createRedisClient({ clientSideCache: useCache = true } = {}) {
   const clientSideCache = useCache
     ? new AllowlistClientSideCache({
         ttl: 0,
-        maxEntries: 3333,
+        // Room for every allowlisted class (models/redis-cache) at once:
+        // template URL patterns add about one entry per template in use
+        maxEntries: 5000,
         evictPolicy: "LRU",
       })
     : undefined;
