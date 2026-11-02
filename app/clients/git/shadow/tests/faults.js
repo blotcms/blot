@@ -149,8 +149,11 @@ describe("git store shadow mode: failures, coalescing and switching off", functi
       var s3 = require("storage/s3");
       var store = createS3Store({ client: s3.client(), bucket: config.storage.bucket, prefix: "git/" + this.blog.id + "/" });
 
+      // The import, then a push through receive, then a write
       await this.local.writeAndPush("/a.txt", "A");
+      await shadow.idle(this.blog.id);
       await this.local.writeAndPush("/b.txt", "B");
+      await shadow.idle(this.blog.id);
       await commit(this, { path: "/c.txt", contents: "C" });
 
       await setup.expectMirrored(this, store);
