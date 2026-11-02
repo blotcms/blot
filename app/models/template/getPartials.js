@@ -105,7 +105,7 @@ module.exports = function getPartials(
 
     var wrapped = wrapFolderLinks(
       view.content,
-      Object.assign({ viewName: view.name, viewType: view.type }, wrapOptions)
+      Object.assign({ viewName: view.name }, wrapOptions)
     );
 
     if (wrapped.targets.length) mergeRetrieve(retrieve, { cdn: wrapped.targets });

@@ -71,7 +71,7 @@ function hasMustache(value) {
 }
 
 function viewKind(options) {
-  const type = options.viewType || mime.lookup(options.viewName || "") || "text/html";
+  const type = mime.lookup(options.viewName || "") || "text/html";
 
   if (type === "text/html") return "html";
   if (type === "text/css") return "css";
@@ -528,7 +528,6 @@ function rewriteCandidate(ctx, from, to) {
 
 // content: the view's template text
 // options.viewName: the view's name, e.g. "style.css"
-// options.viewType: legacy explicit content type of the view, if any
 // options.hosts: the blog's own hostnames (blog/lib/blogHosts)
 function resolveFolderLinks(content, options) {
   return wrapFolderLinks(content, options).content;

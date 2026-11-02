@@ -66,7 +66,7 @@ module.exports = function getFullView(blogID, templateID, viewName, callback) {
           if (wrapOptions) {
             var wrapped = wrapFolderLinks(
               view.content,
-              Object.assign({ viewName: view.name, viewType: view.type }, wrapOptions)
+              Object.assign({ viewName: view.name }, wrapOptions)
             );
 
             source = wrapped.content;
@@ -81,7 +81,7 @@ module.exports = function getFullView(blogID, templateID, viewName, callback) {
             view.locals,
             allPartials,
             view.retrieve,
-            view.type || mime.lookup(view.name) || "text/html",
+            mime.lookup(view.name) || "text/html",
             source,
             usesBacklinks,
           ];

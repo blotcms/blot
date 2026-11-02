@@ -43,6 +43,5 @@ module.exports = {
   cacheID: 0,
   flags: {
     google_drive_beta: false,
-    deleted_entries_sanitized: false,
   },
 };
