@@ -558,11 +558,50 @@ cert_sweep() {
     echo "$3 ${fp:-none}"' _ "$SITE_IP" "$port" {} | sort
 }
 
+# The fingerprint of the certificate stored for a domain (the first in
+# ssl:<domain>:latest's fullchain_pem, the one the proxy serves), or nothing.
+# Read with awk and sed, as no JSON tool is guaranteed on the host.
+stored_cert_fp() { # stored_cert_fp <domain>
+  redis_cli --raw get "ssl:$1:latest" 2>/dev/null \
+    | awk '{ if (match($0, /"fullchain_pem":"[^"]*"/)) print substr($0, RSTART + 17, RLENGTH - 18) }' \
+    | sed 's/\\n/\n/g' | openssl x509 -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2
+}
+
+# The fingerprint of the certificate served for a domain, or nothing
+served_cert_fp() { # served_cert_fp <domain> [port]
+  echo | timeout 5 openssl s_client -connect "$SITE_IP:${2:-443}" -servername "$1" 2>/dev/null \
+    | openssl x509 -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2
+}
+
+# A domain whose certificate looked changed or missing after the swap is
+# looked at again, a few times: it passes if it is back to the certificate it
+# had (it missed one handshake), or now serves the one Redis holds for it (it
+# was renewed during the deploy, as hundreds of certificates are each day).
+# Anything else, such as no certificate or one Redis doesn't have, fails.
+cert_recovered() { # cert_recovered <domain> <fingerprint before> [port]
+  local attempt now
+  for attempt in 1 2 3; do
+    now=$(served_cert_fp "$1" "${3:-443}")
+    [ "$now" = "$2" ] && { log "  $1 serves its certificate again"; return 0; }
+    [ -n "$now" ] && [ "$now" = "$(stored_cert_fp "$1")" ] && { log "  $1 was renewed during the deploy and serves the new certificate"; return 0; }
+    [ "$attempt" = 3 ] || sleep "${PROXY_CERT_RECHECK_DELAY:-5}"
+  done
+  return 1
+}
+
 # Every domain that presented a certificate before must present the same one
-# now. (A domain with none before is not held against the replacement.)
-certs_unchanged() { # certs_unchanged <baseline> <now>
+# now, or the one it was renewed to meanwhile. (A domain with none before is
+# not held against the replacement.) Only a handful are looked at again: many
+# changed at once is a broken replacement, not renewals.
+certs_unchanged() { # certs_unchanged <baseline> <now> [port]
   local bad
   bad=$(comm -23 <(printf '%s\n' "$1" | grep -v ' none$' | sort) <(printf '%s\n' "$2" | sort) | drop_expired)
+  if [ -n "$bad" ] && [ "$(printf '%s\n' "$bad" | wc -l)" -le 10 ]; then
+    bad=$(printf '%s\n' "$bad" | while read -r domain fp; do
+      [ -n "$domain" ] || continue
+      cert_recovered "$domain" "$fp" "${3:-443}" || echo "$domain $fp"
+    done)
+  fi
   [ -z "$bad" ] || {
     log "custom-domain certificates changed or went missing ($(printf '%s\n' "$bad" | wc -l | tr -d ' ')): first few, as they were:"
     printf '%s\n' "$bad" | head -5 | while read -r line; do log "  $line"; done
@@ -718,7 +757,7 @@ live_checks() { # live_checks <expected-snapshot | ""> [port]
   fi
   served_cert_matches_wildcard "${2:-443}" \
     || { log "the certificate served is not the wildcard certificate in Redis (or $CERT_DIR/letsencrypt-domain.pem if Redis has none)"; return 1; }
-  if [ -n "${CERT_BASELINE:-}" ]; then certs_unchanged "$CERT_BASELINE" "$(cert_sweep "${2:-443}")" || return 1; fi
+  if [ -n "${CERT_BASELINE:-}" ]; then certs_unchanged "$CERT_BASELINE" "$(cert_sweep "${2:-443}")" "${2:-443}" || return 1; fi
   purge_reachable || return 1
   redis_reachable || return 1
   upstreams_reachable || return 1
