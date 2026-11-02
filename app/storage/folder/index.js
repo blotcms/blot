@@ -89,7 +89,8 @@ module.exports = {
 
   // Resolves to a real local path holding the file, for tools which read from
   // a path (hashing, sharp, pandoc). Read-only by contract: the caller must
-  // not modify or delete it, because on S3 it is a cache entry.
+  // not modify or delete it, because on S3 it is a cache entry, which may be
+  // evicted once it is no longer recent, so use the path straight away.
   ensureLocal: delegate("ensureLocal"),
 
   mkdir: delegate("mkdir"),

@@ -503,12 +503,34 @@ directory with nothing in it, and every metadata read (`stat`, `list`,
 (see its README). Writes go to S3 first and the index after, with the SHA-1
 computed as the bytes upload; removes delete from S3 first. `move` is copy
 plus delete. `path` returns a staging path under the tmp directory which
-`commit` uploads, and `ensureLocal` downloads to the tmp directory, named by
-the file's SHA-1, until the content cache exists. Nothing in the app or its
+`commit` uploads. Bytes are read through the content cache (`cache.js`,
+below). Nothing in the app or its
 config selects it: `useBackend` in `index.js` switches every blog at once
 and is only for specs, which run `app/storage/tests/folder.js` against both
 backends (on MinIO for S3). `scripts/storage/rebuild-file-index.js` rebuilds
 a blog's index from a listing of the bucket. Per-blog selection is Phase D.
+
+The content cache (`cache.js`) keeps the bytes the S3 backend has read on
+the instance store, under `config.folder_cache.directory` (by default
+`{tmp}/storage-folder-cache`, which the tmp pruner leaves alone). An entry is
+`blogs/{blogID}/{id}/{name}`, where `id` is the SHA-1 of the path and the
+file's version (its SHA-1 from the index, or size and modified time where the
+index has none), so a changed file has a new key and a copy is never stale.
+Downloads go to `tmp/` in the cache, are checked against the index's size and
+SHA-1, and are renamed into place, so nothing ever sees a partial or wrong
+file; concurrent gets of one entry in a process share a download. It is an
+LRU bounded by `max_bytes`, with recency kept as each entry's mtime, so the
+order survives a restart: the directory is rescanned at startup and every few
+minutes, which is also how processes sharing the directory see each other's
+entries (the cap is a soft one between scans). The same check evicts more
+when the disk has under `min_free_percent` free. Nothing is evicted while
+pinned in this process (`use`) or within a minute of its last use in any
+process, which is what keeps a path from `ensureLocal` alive while a tool
+opens it. `ensureLocal` caches any size; `read`, `createReadStream` and
+`serve` go through the cache for files up to `max_file_bytes` and stream
+bigger ones from S3. `stats()` counts hits, misses, bytes, evictions and
+downloads. Still to do: a pin for long-running tools which keep a path from
+`ensureLocal`, and filling the cache on write.
 
 What it keeps from today:
 
@@ -531,7 +553,7 @@ What it does not do yet:
   folder-link version tokens), and so has everything else: nothing outside
   `app/storage` reaches a blog's folder directly, which
   `scripts/tests/ci/check-folder-access.js` enforces.
-- There is no content cache (dual writing and the backfill are below). `stat` with
+- Dual writing and the backfill are below. `stat` with
   `{ hash: true }` (Dropbox's content hash) reads the whole file on disk, and
   downloads it on S3, whose index holds only the SHA-1.
 - On disk, `commit` does nothing but check for symlinks, because the path
