@@ -34,6 +34,8 @@ packs/pack-<40 hex>.rev  (written by receive)
 
 - **`receive.js`**: receiving a push. See below.
 
+- **`treediff.js`, `materialize.js`, `folderSink.js`**: diffing two trees by range and bringing a folder from one commit to another. See below.
+
 - **`layout.js`, `errors.js`, `limit.js`**: key names, error classes (each with a `code`), and a concurrency limiter.
 
 ## Receiving a push
@@ -56,6 +58,28 @@ The refusals are `receivePack.js`'s: only master may be a branch, master cannot 
 
 Blot's own writes (a preview file, a template file) are one commit, one pack and one manifest swap each. Grouping several writes into one commit, pack or swap was considered and rejected on 2 Nov 2026. Writes are infrequent and small, setup does not use `client.write` because `create.js` makes its own batches, and the one slow case is a large dashboard upload, which compaction and manifest pruning clean up afterwards. Do not add grouping without new evidence that writes are frequent or large.
 
+## Materializing a folder
+
+`materialize({ reader, from, to, sink, concurrency, maxSize, symlinks, log })` brings a folder from one commit to another and resolves with `{ written, removed, skipped }`. `from` and `to` are commit IDs, or null for the empty tree. `treediff.js` (`diffTrees`, an async generator) finds the changes: it reads the two trees by range and skips a subtree whose ID is the same on both sides without reading it, so the cost follows the size of the change. It holds one directory's entries and a few of the directories below it, never a listing of the repository. Each change is `{ path, oldMode, oldOid, newMode, newOid, valid }`. Blobs go to the sink through `reader.stream`, up to `concurrency` (default 8) at a time, and are checked against their ID as they go. `materialize.js` documents the rules at its top. They are the rules of the materializer on EBS (`app/clients/git/materialize.js`), so the same commits give the same folder: only 100644 and 100755 files are written, raw and without `.gitattributes` filters; a link or submodule is never written, but a file or link it replaced is removed; a path with an empty, `.` or `..` name, a `.git` name in any case, or a name that is not UTF-8 is skipped and logged; names are kept byte for byte, with no Unicode normalization. `symlinks: true` is the one addition, for a sink that wants links written, and Blot does not use it.
+
+**The order is one a sink can apply as it goes.** Within a directory everything that goes away comes before anything that comes in, so a file that becomes a directory (or the reverse) and two names that differ only by case are safe. `materialize` also never runs a removal while a write is in flight, or a write while a removal is, which settles the cases that span directories on a case-insensitive folder.
+
+**A blob stored as a delta is resolved in memory.** `reader.stream` can only stream an object stored whole. A delta goes through `read` with the reader's size cap (`maxSize`, 64 MB by default, or the option here), and a blob over it fails the whole call with a `TooLargeError` that names the path and the blob. It never writes a wrong or partial file. Git usually stores the newest version of a large file whole, so this is mostly a large file as it was before a later edit.
+
+**A failure part way leaves the sink partly applied, and the host runs the same range again.** `materialize` stops starting work at the first failure, waits for what is running, and throws it. Running the range again is idempotent: a write replaces the file, a removal of something already gone does nothing, so it ends where an uninterrupted run would, however far the first got. The host records the last applied commit only after `materialize` resolves, and the store does not record it.
+
+### Sinks
+
+A sink has `write(path, stream, { mode, size })`, `remove(path)` and `symlink(path, target)`. Paths are relative with `/` between names and are already safe; `mode` is `0o644` or `0o755`; the stream is a Readable of exactly `size` bytes. `folderSink.js` (`createFolderSink({ root })`) is the local folder: it replaces a link or directory in the way, never follows a link, makes directories as needed, removes the directories a removal leaves empty, and writes a file to a temporary name before renaming it into place.
+
+An S3 sink (`{blogID}/folder/` through `app/storage/folder`, later) has to do the same things its way:
+
+- **Do not publish a file until its stream has ended without error.** The stream throws at its end if the bytes are not the blob, so an upload must be aborted (a multipart upload aborted, a single PUT never completed) rather than finished when the stream errors. A key may only ever hold a whole, checked file.
+- **`write` replaces.** A PUT over an existing key is that. There are no directories to make, and none to remove, so `remove` is a DELETE and an absent key is not an error.
+- **A path that was a file and is now a directory** (or the reverse) is two different sets of keys, so there is nothing to replace; `materialize` removes the old keys first.
+- **Be safe to run twice, and to call concurrently,** up to `concurrency` writes at once. Never be asked for a removal and a write together.
+- The mode is metadata the sink may keep (`x-amz-meta-mode`, say) or ignore, as long as the executable bit comes back out the same.
+
 ## Where an entry ends
 
 The `.idx` gives where an entry starts, not where it ends. There are two ways to find the end: a `.rev` file (the pack's offsets in order), or inflating the entry and seeing where its zlib stream stops. This store inflates.
@@ -72,8 +96,8 @@ Reads are bounded. Ranged reads are at most the caller's range (merged reads are
 
 ## Specs
 
-`tests/` builds repositories with real `git` (delta chains, `OFS_DELTA` and `REF_DELTA` packs, a thin pack completed with `index-pack --fix-thin`, objects in several packs, a tag) and compares every object read through the store with `git cat-file`. `tests/helpers/faults.js` wraps any object store to fail on a schedule (an error after the write landed or before it, a truncated body, a delay, a stale answer), and `tests/faults.js` uses it for ambiguous swaps, cut-short reads, a push which dies between its uploads and a stale hint. `tests/receive.js` pushes with a real `git push` (through the small smart-HTTP server in `tests/helpers/receiveServer.js`) and calls `receive` directly with packs built by git, against the memory store and the fault-injecting one; it asserts the request counts of a one-file push. `tests/s3.js` runs the S3 store against the MinIO the test runner starts (`.github/actions/start-minio`); without `BLOT_STORAGE_ENDPOINT` it is skipped and says so. The cache specs run at caps of a few hundred bytes.
+`tests/` builds repositories with real `git` (delta chains, `OFS_DELTA` and `REF_DELTA` packs, a thin pack completed with `index-pack --fix-thin`, objects in several packs, a tag) and compares every object read through the store with `git cat-file`. `tests/helpers/faults.js` wraps any object store to fail on a schedule (an error after the write landed or before it, a truncated body, a delay, a stale answer), and `tests/faults.js` uses it for ambiguous swaps, cut-short reads, a push which dies between its uploads and a stale hint. `tests/receive.js` pushes with a real `git push` (through the small smart-HTTP server in `tests/helpers/receiveServer.js`) and calls `receive` directly with packs built by git, against the memory store and the fault-injecting one; it asserts the request counts of a one-file push. `tests/s3.js` runs the S3 store against the MinIO the test runner starts (`.github/actions/start-minio`); without `BLOT_STORAGE_ENDPOINT` it is skipped and says so. `tests/treediff.js` and `tests/materialize.js` build history by plumbing (`tests/helpers/repo.js`) and compare every diff with `git diff-tree` and every folder with `git checkout`, for the cases in the materializer on EBS's specs; `materialize.js` also checks the request counts of a one-file change, a re-run after a failure, and the memory of a 48 MB blob in a process of its own. The cache specs run at caps of a few hundred bytes.
 
 ## Not here yet
 
-Streaming clone and fetch, materializing a folder, Blot's own commits, compaction (and so the history pack itself, and `.rev` files for packs compaction writes), and the rewrite script. They build on the pieces above. Cache keys include the object store's `id`, so one cache can serve many repositories.
+Streaming clone and fetch, Blot's own commits, compaction (and so the history pack itself, and `.rev` files for packs compaction writes), and the rewrite script. They build on the pieces above. Cache keys include the object store's `id`, so one cache can serve many repositories.
