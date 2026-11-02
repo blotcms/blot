@@ -12,11 +12,13 @@ describe("sandbox alerts", function () {
   beforeEach(function () {
     preview = config.preview;
     config.preview = false;
+    alerts.reset();
     spyOn(email, "SANDBOX_ALERT");
   });
 
   afterEach(function () {
     config.preview = preview;
+    alerts.reset();
   });
 
   it("emails a burst of crashes once, counted, and skips bad input", async function () {
