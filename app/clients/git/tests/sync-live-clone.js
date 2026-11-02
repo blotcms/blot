@@ -37,6 +37,35 @@ describe("git client sync (implementation-specific: the live clone)", function (
     expect(await helpers.blogFile(this, "/pushed.txt")).toEqual(Buffer.from("Pushed"));
   });
 
+  it("starts no gc or maintenance in the live clone when it fetches", async function () {
+    var git = await liveClone(this);
+
+    // Every fetch keeps its own pack, and more than one pack is over gc's
+    // limit, so a fetch which started gc (in the foreground here) would have
+    // repacked them into one before it returned
+    await git.raw(["config", "fetch.unpackLimit", "1"]);
+    await git.raw(["config", "gc.autoPackLimit", "1"]);
+    await git.raw(["config", "gc.autoDetach", "false"]);
+    await git.raw(["config", "maintenance.autoDetach", "false"]);
+
+    async function packs() {
+      var output = await git.raw(["count-objects", "-v"]);
+      return Number(/^packs: (\d+)$/m.exec(output)[1]);
+    }
+
+    var before = await packs();
+
+    await this.local.writeAndPush("/pushed.txt", "Pushed");
+    await this.local.writeAndPush("/pushed.txt", "Pushed again");
+
+    expect(await cloneHead(git)).toBe(await this.local.remoteHead());
+
+    // At least one new pack per push's fetch, none merged
+    expect(await packs()).toBeGreaterThanOrEqual(before + 2);
+    expect(await fs.pathExists(this.blogDirectory + "/.git/objects/info/commit-graph")).toBe(false);
+    expect(await fs.pathExists(this.blogDirectory + "/.git/objects/info/commit-graphs")).toBe(false);
+  });
+
   it("syncs when the live clone is behind master", async function () {
     var git = await liveClone(this);
     var first = await cloneHead(git);

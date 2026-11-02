@@ -160,7 +160,13 @@ function followLiveClone(git, handle, commit, callback) {
   pointOriginAtBareRepo(git, handle, function (err) {
     if (err) return callback(err);
 
-    git.raw(["fetch", "--all"], function (err) {
+    // No automatic gc or maintenance afterwards. A fetch of a few objects from
+    // a local repository leaves them loose, so over many syncs and Blot writes
+    // a clone passes gc's threshold, and then every fetch starts a detached
+    // repack of the whole clone. Git 2.54 lets those overlap, and on 2 Nov
+    // 2026 that left seven full copies of a 5 GB clone (#2259). Nothing reads
+    // the clone's objects, so they are never packed.
+    git.raw(["-c", "gc.auto=0", "-c", "maintenance.auto=false", "fetch", "--all"], function (err) {
       if (err) return callback(err);
 
       git.raw(["reset", "--mixed", "--quiet", commit], function (err) {
