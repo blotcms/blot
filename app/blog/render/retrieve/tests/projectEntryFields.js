@@ -22,10 +22,7 @@ describe("projectEntryFields", function () {
   it("strips every heavy field when the view references only light fields", function () {
     var entries = [entry(), entry({ id: "2", url: "/two" })];
 
-    projectEntryFields(entries, { allEntries: { fields: { title: true, url: true } } }, [
-      "allEntries",
-      "all_entries",
-    ]);
+    projectEntryFields(entries, { all_entries: { fields: { title: true, url: true } } }, ["all_entries"]);
 
     entries.forEach(function (e) {
       expect(e.title).toBeDefined();
@@ -43,57 +40,27 @@ describe("projectEntryFields", function () {
 
     projectEntryFields(
       entries,
-      { allEntries: { fields: { html: true, title: true } } },
-      ["allEntries", "all_entries"]
+      { all_entries: { fields: { html: true, title: true } } },
+      ["all_entries"]
     );
 
     expect(entries[0].html).toBe("<p>one</p>");
     expect(entries[0].summary).toBeUndefined();
   });
 
-  it("resolves fields from an aliased retrieve key", function () {
-    var entries = [entry()];
-
-    projectEntryFields(entries, { all_entries: { fields: { title: true } } }, [
-      "allEntries",
-      "all_entries",
-    ]);
-
-    expect(entries[0].html).toBeUndefined();
-  });
-
-  it("unions referenced fields across aliases", function () {
-    var entries = [entry()];
-
-    projectEntryFields(
-      entries,
-      {
-        allEntries: { fields: { title: true } },
-        all_entries: { fields: { html: true } },
-      },
-      ["allEntries", "all_entries"]
-    );
-
-    expect(entries[0].html).toBe("<p>one</p>");
-    expect(entries[0].teaser).toBeUndefined();
-  });
-
   it("does nothing for legacy boolean retrieve metadata", function () {
     var entries = [entry()];
 
-    projectEntryFields(entries, { allEntries: true }, ["allEntries", "all_entries"]);
+    projectEntryFields(entries, { all_entries: true }, ["all_entries"]);
 
     expect(entries[0].html).toBe("<p>one</p>");
     expect(entries[0].summary).toBe("one summary");
   });
 
-  it("does nothing for non-field access such as allEntries.length", function () {
+  it("does nothing for non-field access such as all_entries.length", function () {
     var entries = [entry()];
 
-    projectEntryFields(entries, { allEntries: { length: true } }, [
-      "allEntries",
-      "all_entries",
-    ]);
+    projectEntryFields(entries, { all_entries: { length: true } }, ["all_entries"]);
 
     expect(entries[0].html).toBe("<p>one</p>");
   });
@@ -101,22 +68,7 @@ describe("projectEntryFields", function () {
   it("does nothing when the local is not referenced at all", function () {
     var entries = [entry()];
 
-    projectEntryFields(entries, { recentEntries: { fields: { title: true } } }, [
-      "allEntries",
-      "all_entries",
-    ]);
-
-    expect(entries[0].html).toBe("<p>one</p>");
-  });
-
-  it("is conservative when one of several aliases lacks field metadata", function () {
-    var entries = [entry()];
-
-    projectEntryFields(
-      entries,
-      { allEntries: { fields: { title: true } }, all_entries: true },
-      ["allEntries", "all_entries"]
-    );
+    projectEntryFields(entries, { recent_entries: { fields: { title: true } } }, ["all_entries"]);
 
     expect(entries[0].html).toBe("<p>one</p>");
   });
@@ -125,21 +77,21 @@ describe("projectEntryFields", function () {
     var entries = [
       entry({
         id: "2",
-        html: "{{#allEntries}}{{{summary}}}{{/allEntries}}",
+        html: "{{#all_entries}}{{{summary}}}{{/all_entries}}",
       }),
       entry({ id: "3" }),
     ];
 
     projectEntryFields(
       entries,
-      { allEntries: { fields: { html: true, title: true } } },
-      ["allEntries", "all_entries"]
+      { all_entries: { fields: { html: true, title: true } } },
+      ["all_entries"]
     );
 
     // Entry content is data, not a template, so tags in `html` do not keep
     // other heavy fields around for a second render pass. `html` itself stays
     // because the view references it.
-    expect(entries[0].html).toBe("{{#allEntries}}{{{summary}}}{{/allEntries}}");
+    expect(entries[0].html).toBe("{{#all_entries}}{{{summary}}}{{/all_entries}}");
     expect(entries[0].summary).toBeUndefined();
     expect(entries[0].body).toBeUndefined();
     expect(entries[1].summary).toBeUndefined();
@@ -149,27 +101,27 @@ describe("projectEntryFields", function () {
 
   it("still projects when a retained light field contains Mustache tags", function () {
     var entries = [
-      entry({ id: "2", title: "{{#allEntries}}{{summary}}{{/allEntries}}" }),
+      entry({ id: "2", title: "{{#all_entries}}{{summary}}{{/all_entries}}" }),
     ];
 
     projectEntryFields(
       entries,
-      { allEntries: { fields: { title: true } } },
-      ["allEntries", "all_entries"]
+      { all_entries: { fields: { title: true } } },
+      ["all_entries"]
     );
 
-    expect(entries[0].title).toBe("{{#allEntries}}{{summary}}{{/allEntries}}");
+    expect(entries[0].title).toBe("{{#all_entries}}{{summary}}{{/all_entries}}");
     expect(entries[0].summary).toBeUndefined();
     expect(entries[0].html).toBeUndefined();
   });
 
-  it("projects a single entry object in place (latestEntry)", function () {
+  it("projects a single entry object in place (latest_entry)", function () {
     var single = entry();
 
     var returned = projectEntryFields(
       single,
-      { latestEntry: { fields: { title: true } } },
-      ["latestEntry", "latest_entry"]
+      { latest_entry: { fields: { title: true } } },
+      ["latest_entry"]
     );
 
     expect(returned).toBe(single);
@@ -181,25 +133,23 @@ describe("projectEntryFields", function () {
   it("leaves a single entry object untouched for legacy metadata", function () {
     var single = entry();
 
-    projectEntryFields(single, { latestEntry: true }, ["latestEntry"]);
+    projectEntryFields(single, { latest_entry: true }, ["latest_entry"]);
 
     expect(single.html).toBe("<p>one</p>");
   });
 
   it("tolerates an empty single entry object", function () {
     expect(
-      projectEntryFields({}, { latestEntry: { fields: { title: true } } }, [
-        "latestEntry",
-      ])
+      projectEntryFields({}, { latest_entry: { fields: { title: true } } }, ["latest_entry"])
     ).toEqual({});
   });
 
   it("tolerates empty and non-array input", function () {
-    expect(projectEntryFields([], { allEntries: { fields: {} } }, ["allEntries"])).toEqual(
+    expect(projectEntryFields([], { all_entries: { fields: {} } }, ["all_entries"])).toEqual(
       []
     );
-    expect(projectEntryFields(undefined, {}, ["allEntries"])).toBeUndefined();
-    expect(projectEntryFields([entry()], undefined, ["allEntries"])[0].html).toBe(
+    expect(projectEntryFields(undefined, {}, ["all_entries"])).toBeUndefined();
+    expect(projectEntryFields([entry()], undefined, ["all_entries"])[0].html).toBe(
       "<p>one</p>"
     );
   });

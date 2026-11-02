@@ -54,7 +54,7 @@ describe("date integration tests", function () {
   
       const view = {
         name: "entries.html",
-        content: `{{#allEntries}}{{#formatDate}}${resultFormat}{{/formatDate}}{{/allEntries}}`
+        content: `{{#all_entries}}{{#formatDate}}${resultFormat}{{/formatDate}}{{/all_entries}}`
       };
   
       Template.create(test.blog.id, templateName, {}, function (err) {

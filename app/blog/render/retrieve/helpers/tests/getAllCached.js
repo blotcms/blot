@@ -72,7 +72,7 @@ describe("getAllCached", function () {
   }
 
   function retrieveWith(fields) {
-    return { allEntries: { fields } };
+    return { all_entries: { fields } };
   }
 
   const NARROW = retrieveWith({ title: true });
@@ -104,9 +104,9 @@ describe("getAllCached", function () {
       ).toEqual(["body"]);
     });
 
-    it("unions the heavy fields of allEntries and archives, in HEAVY_FIELDS order", function () {
+    it("unions the heavy fields of all_entries and archives, in HEAVY_FIELDS order", function () {
       const keep = getAllCached._heavyFieldsToKeep({
-        allEntries: { fields: { summary: true } },
+        all_entries: { fields: { summary: true } },
         archives: { fields: { html: true } },
       });
 
@@ -115,7 +115,7 @@ describe("getAllCached", function () {
 
     it("keeps every heavy field when a referenced local has no fields map", function () {
       [{}, true, { length: true }].forEach(function (value) {
-        expect(getAllCached._heavyFieldsToKeep({ allEntries: value })).toEqual(
+        expect(getAllCached._heavyFieldsToKeep({ all_entries: value })).toEqual(
           ALL_HEAVY
         );
         expect(getAllCached._heavyFieldsToKeep({ archives: value })).toEqual(
@@ -123,13 +123,13 @@ describe("getAllCached", function () {
         );
         expect(
           getAllCached._heavyFieldsToKeep({
-            allEntries: value,
+            all_entries: value,
             archives: { fields: { title: true } },
           })
         ).toEqual(ALL_HEAVY);
         expect(
           getAllCached._heavyFieldsToKeep({
-            allEntries: { fields: { title: true } },
+            all_entries: { fields: { title: true } },
             archives: value,
           })
         ).toEqual(ALL_HEAVY);
@@ -146,7 +146,7 @@ describe("getAllCached", function () {
       expect(
         getAllCached._heavyFieldsToKeep({
           posts: { fields: { html: true } },
-          allEntries: { fields: { title: true } },
+          all_entries: { fields: { title: true } },
         })
       ).toEqual([]);
     });
