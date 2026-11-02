@@ -285,6 +285,27 @@ module.exports = {
     endpoint: process.env.BLOT_STORAGE_ENDPOINT || "",
   },
 
+  // The git object store (app/clients/git/store) in shadow mode
+  // (app/clients/git/shadow): the repositories on disk stay the source of
+  // truth, and every push and every one of Blot's commits is also mirrored
+  // into the storage bucket, under git/{blogID}/, to compare on real traffic.
+  git_store: {
+    // Off unless set: "all", or a comma-separated list of blog IDs
+    shadow: process.env.BLOT_GIT_STORE_SHADOW || "",
+    // The store's local cache and scratch space. In production tmp is on the
+    // host's instance store (/var/instance-ssd/tmp), which is where this
+    // belongs: nothing in it needs to survive. Each process takes a
+    // directory of its own inside it.
+    cache_directory:
+      process.env.BLOT_GIT_STORE_CACHE_DIRECTORY ||
+      (process.env.BLOT_TMP_DIRECTORY || BLOT_DATA_DIRECTORY + "/tmp") +
+        "/git-store",
+    // The budget of each process's cache, scratch space included
+    cache_bytes:
+      parseInt(process.env.BLOT_GIT_STORE_CACHE_BYTES, 10) ||
+      1024 * 1024 * 1024,
+  },
+
   mailgun: {
     key: process.env.BLOT_MAILGUN_KEY,
     domain: "blot.im",
