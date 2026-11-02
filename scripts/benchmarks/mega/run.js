@@ -50,6 +50,9 @@ const CACHE_STATS = [
   "models/entries/catalog",
 ];
 
+// How long the small sites are browsed while the mega sites resync
+const BUSY_MS = 10000;
+
 const loop = monitorEventLoopDelay({ resolution: 10 });
 loop.enable();
 
@@ -152,12 +155,17 @@ async function main() {
   metrics.victim_solo_p50_ms = percentile(solo.ms, 0.5);
   metrics.victim_solo_p95_ms = percentile(solo.ms, 0.95);
 
+  // A fixed window, not a fixed number of mega rounds: a faster head would
+  // otherwise shorten the window and sample different requests
   loop.reset();
-  const busy = await victimLoad(request, victims, () => megaLoad(request, sites, urls));
+  const mega = megaLoad(request, sites, urls, performance.now() + BUSY_MS);
+  const busy = await victimLoad(request, victims, () => sleep(BUSY_MS));
   metrics.victim_busy_p50_ms = percentile(busy.ms, 0.5);
   metrics.victim_busy_p95_ms = percentile(busy.ms, 0.95);
   metrics.victim_busy_max_ms = Math.max(...busy.ms);
   metrics.busy_block_ms = loop.max / 1e6;
+  // The round in flight when the window closed still finishes, unsampled
+  const megaRounds = await mega;
 
   // 6. Memory: the most the heap held above its post-seed baseline, and what
   // stays after a collection (mostly what the caches keep)
@@ -180,6 +188,8 @@ async function main() {
     seedSeconds,
     shape: shapeSummary(sites),
     metrics: round(metrics),
+    // Higher is better, so not a metric: how many mega rounds the window held
+    megaRounds,
     timings,
     caches: caches && caches.byCache,
   };
@@ -349,9 +359,11 @@ async function victimLoad(request, victims, until) {
 }
 
 // The mega sites resync and get browsed: each round bumps both cacheIDs,
-// then renders their heaviest pages and two previews at once
-async function megaLoad(request, sites, urls) {
-  for (let round = 0; round < 4; round++) {
+// then renders their heaviest pages and two previews at once. Rounds start
+// until the deadline (a performance.now() time); resolves to how many ran.
+async function megaLoad(request, sites, urls, deadline) {
+  let round = 0;
+  for (; performance.now() < deadline; round++) {
     await bump(sites.catalog.blog);
     await bump(sites.heavy.blog);
     const work = [];
@@ -363,6 +375,7 @@ async function megaLoad(request, sites, urls) {
     }
     await Promise.all(work);
   }
+  return round;
 }
 
 // --- reporting --------------------------------------------------------------
