@@ -36,7 +36,7 @@ describe("recent_entries", function () {
 
     const result = await run({
       blog: { id: "blog-1" },
-      retrieve: { recentEntries: { fields: { title: true } } },
+      retrieve: { recent_entries: { fields: { title: true } } },
     });
 
     // The template only referenced `title`, so the unreferenced heavy `html`
@@ -149,7 +149,7 @@ describe("recent_entries cache", function () {
 
     const req = makeReq(
       { id: "blog-1", cacheID: 100 },
-      { recentEntries: { fields: { title: true } } }
+      { recent_entries: { fields: { title: true } } }
     );
 
     await run(req);

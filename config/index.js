@@ -33,30 +33,23 @@ const reverse_proxies = process.env.BLOT_REVERSE_PROXY_URLS
   ? ["http://127.0.0.1:80"]
   : [];
 
-// See the "airlock" config block below. This is a warning, not a thrown
-// error: a misconfigured/down airlock must not crash every container on
-// boot. It does NOT mean user-controlled URLs are fetched directly -
-// helper/airlock fails those operations closed in production (the post
-// builds without the image, the domain check errors) rather than falling
-// back to an unprotected fetch. The warning just flags that this container
-// missed the env vars, so those features are broken until it is redeployed:
-//   - BLOT_AIRLOCK_BROWSER_URL unset: the production image ships no Chromium
-//     of its own (see the Dockerfile), and helper/screenshot will not fall
-//     back to a local launch for a user URL - bookmark-link screenshots
-//     cannot run at all.
-//   - BLOT_AIRLOCK_PROXY_URL unset: remote-image downloads and user-domain
-//     checks error out (fail closed) instead of fetching directly.
+// See the "airlock" and "sandbox" config blocks below. This is a warning, not a
+// thrown error: a unit deployed without the sandbox must not crash on boot. It
+// does NOT mean user-controlled URLs are fetched directly - helper/airlock
+// and helper/screenshot fail those operations closed in production (the post
+// builds without the image or screenshot, the domain check errors) rather
+// than falling back to an unprotected fetch. The warning just flags that this
+// container was deployed without BLOT_SANDBOX=1 (proxy/deploy/common.sh), so
+// those features are broken until it is redeployed with it.
 if (
   environment === "production" &&
-  !(process.env.BLOT_AIRLOCK_BROWSER_URL && process.env.BLOT_AIRLOCK_PROXY_URL)
+  !(process.env.BLOT_AIRLOCK_PROXY_URL && process.env.BLOT_SANDBOX_SOCKET)
 ) {
   console.warn(
-    "WARNING: BLOT_AIRLOCK_BROWSER_URL / BLOT_AIRLOCK_PROXY_URL are not both " +
-      "set in production. Without BLOT_AIRLOCK_BROWSER_URL, bookmark-link " +
-      "screenshots will fail (the prod image has no local Chromium). Without " +
-      "BLOT_AIRLOCK_PROXY_URL, remote-image downloads and user-domain checks " +
-      "fail closed (no unprotected fetch). Both stay broken until this " +
-      "container is redeployed. See config/airlock/README.md."
+    "WARNING: this production container has no sandbox (BLOT_SANDBOX_SOCKET, " +
+      "BLOT_AIRLOCK_PROXY_URL). Bookmark-link screenshots, remote-image " +
+      "downloads and user-domain checks fail closed until it is redeployed " +
+      "with BLOT_SANDBOX=1. See app/sandbox/README.md."
   );
 }
 
@@ -188,21 +181,19 @@ module.exports = {
     bin: process.env.BLOT_PANDOC_PATH || "pandoc",
   },
 
-  // The "airlock" container (config/airlock) is the single egress point for
-  // fetching untrusted, user-supplied URLs: bookmark-link screenshots and
-  // remote images referenced in posts. When these are unset the app talks to
-  // the network directly - fine for local development, but with no SSRF
-  // protection (see the production warning above). See config/airlock/README.md.
+  // The single egress point for fetching untrusted, user-supplied URLs (remote
+  // images in posts, imports, domain checks): the forward proxy in the
+  // sandbox's proxy jail in each unit. Named after the airlock container it
+  // replaced (#2257). When unset the app talks to the network directly - fine
+  // for local development, but with no SSRF protection (see the production
+  // warning above). See app/sandbox/README.md.
   airlock: {
-    // Chromium DevTools endpoint, e.g. http://airlock:9222 - consumed by
-    // app/helper/screenshot.
-    browser_url: process.env.BLOT_AIRLOCK_BROWSER_URL || null,
-    // HTTP(S) forward proxy, e.g. http://airlock:8888 - consumed by
+    // HTTP(S) forward proxy, e.g. http://127.0.0.1:18988 - consumed by
     // app/helper/transformer/download and every other user-controlled fetch
     // via helper/airlock.
     proxy: process.env.BLOT_AIRLOCK_PROXY_URL || null,
     // When true (production), helper/airlock refuses a user-controlled fetch
-    // that isn't going through the airlock instead of falling back to a
+    // that isn't going through the proxy instead of falling back to a
     // direct one. Read this rather than re-deriving from environment.
     required: environment === "production",
   },
@@ -212,8 +203,8 @@ module.exports = {
   // app/sandbox runs its jobs in-process.
   sandbox: {
     socket: process.env.BLOT_SANDBOX_SOCKET || "",
-    // Screenshots run as a sandbox job, not in the airlock. Only with a broker.
-    browser: !!process.env.BLOT_SANDBOX_SOCKET && process.env.BLOT_SANDBOX_BROWSER === "1",
+    // Screenshots run as a sandbox job whenever there is a broker.
+    browser: !!process.env.BLOT_SANDBOX_SOCKET,
   },
 
   paypal: {

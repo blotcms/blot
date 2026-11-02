@@ -16,7 +16,7 @@
 #
 # The proxy/deploy scripts are copied from this checkout on every run, so the
 # host never runs a stale copy, together with unit-settings.env, written here
-# from scripts/deploy/constants.js (the units' memory, cpus, heaps and airlock
+# from scripts/deploy/constants.js (the units' memory, cpus, heaps and sandbox
 # ports). They go over ssh with tar rather than scp: ec2-user's ~/.bashrc cds
 # to /var/www/blot, and scp's sftp server runs through it, so relative scp
 # targets land in the wrong directory.
@@ -81,7 +81,7 @@ node "$ROOT/scripts/deploy/unit-settings.js" | ssh "$TARGET" '
 # Settings of blue-green.sh that config/host/cycle.sh uses. It runs on the host,
 # so ssh has to carry them.
 REMOTE_ENV=""
-for name in PROXY_DEPLOY_IGNORE_PAUSE PROXY_DEPLOY_FORCE PROXY_VERIFY_SKIP_REDIS_WRITE PROXY_AIRLOCK_IMAGE PROXY_ALLOW_ACME_CA; do
+for name in PROXY_DEPLOY_IGNORE_PAUSE PROXY_DEPLOY_FORCE PROXY_VERIFY_SKIP_REDIS_WRITE PROXY_ALLOW_ACME_CA; do
   [ -z "${!name:-}" ] || REMOTE_ENV="$REMOTE_ENV$name=$(printf %q "${!name}") "
 done
 

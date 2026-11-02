@@ -117,10 +117,6 @@ function readPins() {
   // The app and proxy images must share one node:alpine base (the proxy
   // builds OpenResty on it); a drift means one of them is behind.
   for (const problem of require("./check-base-image").problems()) add("action", "Base image: " + problem);
-
-  const airlock = read("config/airlock/Dockerfile") || "";
-  const a = airlock.match(/^FROM\s+alpine:([\w.]+)/m);
-  if (a) pins.airlockAlpine = a[1];
 }
 
 // ---- checks ---------------------------------------------------------------
@@ -178,16 +174,7 @@ async function checkNode() {
 
 async function checkAlpine() {
   await source("endoflife.date alpine-linux", async () => {
-    const rows = await eolApi("alpine-linux");
-    if (pins.airlockAlpine) {
-      const cycle = pins.airlockAlpine.split(".").slice(0, 2).join(".");
-      const r = rows.find((x) => String(x.cycle) === cycle);
-      if (!r) return add("watch", "Alpine " + cycle + " (airlock) not found on endoflife.date");
-      eolStatus("Alpine " + cycle + " (airlock image)", r.eol);
-      if (cmp(rows[0].latest, r.latest) > 0) {
-        add("watch", "Alpine: newest is " + rows[0].latest + "; airlock pinned to " + cycle + " (latest patch " + r.latest + ")");
-      }
-    }
+    await eolApi("alpine-linux");
     add("ok", "Alpine app-image base comes from the node:*-alpine image (tracks the Node pin)");
   });
 }

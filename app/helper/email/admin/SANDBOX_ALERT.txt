@@ -12,4 +12,4 @@ Memory peaks and kills of the sandbox's cgroups:
 
 $ unit-mem-summary.sh
 
-To turn a part of the sandbox off, remove its flag (BLOT_SANDBOX_BROWSER or BLOT_SANDBOX_PROXY, or BLOT_SANDBOX for all of it) from /etc/blot/proxy.env and deploy a new commit. See app/sandbox/README.md.
+Turning the sandbox off (BLOT_SANDBOX in /etc/blot/proxy.env, then a deploy of a new commit) runs image and document jobs in Node again, but leaves production with no browser and no egress proxy: screenshots, remote images and domain checks then fail. See app/sandbox/README.md.

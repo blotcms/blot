@@ -6,15 +6,14 @@ directory instead runs the **real** script against **real** Docker and Redis,
 in `.github/workflows/proxy-deploy-e2e.yml`.
 
 The units are stand-ins: the real proxy image plus a stub in place of the app
-(`unit/`), labelled `im.blot.kind=unit` as `blue-green.sh` requires, with a
-stand-in airlock. What this does not cover is the app itself (building and
+(`unit/`), labelled `im.blot.kind=unit` as `blue-green.sh` requires. What this does not cover is the app itself (building and
 booting the real unit image is `unit-image.yml`'s job, `proxy/unit/smoke.sh`):
-the real verify-container checks, the real airlock, node-a and node-b starting
+the real verify-container checks, the real sandbox, node-a and node-b starting
 from the real image, and the memory limit holding the real heaps.
 
 The `unit-deploy-e2e` job starts with no unit running, so the first scenario is
 the fresh start `blue-green.sh` does when nothing is serving (both units,
-`blot-blue` and `blot-green`, and their airlocks), and the rest go from there:
+`blot-blue` and `blot-green`), and the rest go from there:
 a re-run that must change nothing, a deploy that replaces blue and then green
 under load with no failed request, and the failures a deploy must roll back
 from. (The one-off move from the bare-metal OpenResty to
@@ -35,7 +34,7 @@ with the bare-metal stand-in this harness used to need.)
 - `unit-setup.sh` - the host side of a unit deploy: `/run/blot`, the data and
   tmp directories, `unit-settings.env` and `secrets.env`.
 - `unit/` - the stand-in unit (`Dockerfile`, `supervisor.sh`, `stub-node.js`,
-  `verify.js`) and the stand-in airlock (`airlock.Dockerfile`).
+  `verify.js`).
   `build-unit-image.sh` builds a unit on a proxy image from a source tree.
 
 ## Deploying an image under load

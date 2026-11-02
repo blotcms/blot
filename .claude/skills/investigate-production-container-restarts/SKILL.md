@@ -10,8 +10,10 @@ Blot runs two units, `blot-blue` and `blot-green` (see
 holding OpenResty and two Node processes: `node-a` (blogs, dashboard reads) and
 `node-b` (the worker: webhooks, `/clients`, writes and sync). Their log lines are
 labelled `blue/node-a`, `blue/node-b`, `green/node-a` and `green/node-b`. Each unit
-has its own egress sidecar, `blot-blue-airlock` and `blot-green-airlock`, which is
-not part of either unit.
+runs its untrusted work (image decoding, screenshots, fetches) in an nsjail
+sandbox inside it (`app/sandbox`); the separate airlock containers are gone
+(#2257). A sandbox job killed at its memory limit is not a restart: look for
+`broker: job=` lines and the `SANDBOX_ALERT` email.
 
 Every container runs `docker create --restart unless-stopped`, so **Docker
 itself will silently restart a crashed container** — a restart is not

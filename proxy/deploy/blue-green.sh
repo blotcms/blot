@@ -14,8 +14,6 @@
 # other image is refused. A unit
 #   - is created with the arguments in run_args, and is healthy only when its
 #     proxy, node-a and node-b all answer;
-#   - has its own airlock, blot-<unit>-airlock, which is replaced just before
-#     the unit is created;
 #   - passes the app's verify-container checks (blue, deployed first, before
 #     green is touched).
 # Every step is safe to run again. To roll back, deploy an older unit image.
@@ -243,9 +241,6 @@ trap '' HUP PIPE
 # socket. Restart policy `no` until it has passed (see the top).
 bring_up() {
   log "Starting $1 from $NEW_IMAGE"
-  # the unit's airlock first: it is reached on 127.0.0.1 and the canary
-  # checks it. The unit is stopped (or new) here, so nothing uses it.
-  ensure_airlock "$(unit_of "$1")" || die "the airlock for $1 did not come up"
   PURGE_CONTAINER="$1"
   run_args "$1"
   docker create --restart no "${RUN_ARGS[@]}" "$NEW_IMAGE" >/dev/null
@@ -287,9 +282,6 @@ replace_unit() {
   local u="$1" name other prev
   name="$(unit_name "$u")"; other="$(unit_name "$(other_unit "$u")")"; prev="$name-previous"
   if [ "${PROXY_DEPLOY_FORCE:-}" != 1 ] && running "$name" && [ "$(container_image_id "$name")" = "$NEW_IMAGE_ID" ] && healthy "$name"; then
-    # The unit is current, but its airlock may not be (an earlier run found no
-    # airlock image for this commit, or was cut off): bring it to the target.
-    ensure_airlock "$u" || die "the airlock for $name did not come up"
     log "$name already runs $NEW_IMAGE and is healthy: nothing to do"
     return 0
   fi
@@ -347,8 +339,16 @@ case "$MODE" in
 esac
 
 prune_old_images "$NEW_IMAGE" || true
-# superseded airlock images too: the units' airlocks keep the one they run, and
-# rmi refuses any image a container uses
-airlock_in_use="$(docker inspect -f '{{.Config.Image}}' "$(airlock_name blue)" 2>/dev/null || true)"
-[ -z "$airlock_in_use" ] || prune_old_images "$airlock_in_use" || true
+# The units' airlock containers, which the sandbox replaced (#2257), and their
+# images. A rollback to a commit from before that deploys with that commit's
+# scripts, which start them again. Best effort. Remove this once no host has one.
+for airlock in blot-blue-airlock blot-green-airlock; do
+  if exists "$airlock"; then
+    log "Removing $airlock: the sandbox in each unit replaces it"
+    docker rm -f "$airlock" >/dev/null 2>&1 || true
+  fi
+done
+docker images ghcr.io/blotcms/blot-airlock --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
+  | while read -r ref; do docker rmi "$ref" >/dev/null 2>&1 || true; done || true
+docker network rm blotnet >/dev/null 2>&1 || true
 log "Done: $(unit_name blue) and $(unit_name green) run $NEW_IMAGE"

@@ -1,7 +1,7 @@
 const render = require("../../main");
 
 // Plugin public JS/CSS (notably analytics/public.js) is a Mustache template
-// over `plugins.*`. Templates include it with {{{appJS}}} / {{{appCSS}}}, which
+// over `plugins.*`. Templates include it with {{{app_js}}} / {{{app_css}}}, which
 // inserts the string as data and does not re-parse it. Render it here so
 // provider sections and tracking IDs resolve without walking every local.
 module.exports = function renderPluginAssets(source, req, res) {

@@ -17,7 +17,7 @@
 #              on): the root process that starts nsjail jails for the app
 #              (proxy/unit/sandbox/broker.js), under its own restart loop. It
 #              never stops the unit: while it is down, sandbox jobs fail closed.
-#   proxy jail only if BLOT_SANDBOX_PROXY is 1 as well: the forward proxy the app's
+#   proxy jail with the broker: the forward proxy the app's
 #              fetches of user-supplied URLs go through, in a jail
 #              (proxy/unit/sandbox/proxy.js), under its own restart loop. While
 #              it is down those fetches fail.
@@ -147,7 +147,7 @@ if [ -n "${BLOT_SANDBOX_SOCKET:-}" ]; then
 fi
 
 proxy_loop=
-if [ -n "${BLOT_SANDBOX_SOCKET:-}" ] && [ "${BLOT_SANDBOX_PROXY:-}" = 1 ]; then
+if [ -n "${BLOT_SANDBOX_SOCKET:-}" ]; then
   run_sandbox proxy.js "proxy jail" &
   proxy_loop=$!
 fi
