@@ -70,7 +70,7 @@ function createS3Store({
   async function head(key) {
     try {
       const out = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: full(key) }));
-      return { size: out.ContentLength };
+      return { size: out.ContentLength, lastModified: out.LastModified ? out.LastModified.getTime() : null };
     } catch (err) {
       if (isMissing(err)) return null;
       throw err;
@@ -297,7 +297,7 @@ function createS3Store({
         })
       );
       for (const item of out.Contents || []) {
-        yield { key: item.Key.slice(prefix.length), size: item.Size };
+        yield { key: item.Key.slice(prefix.length), size: item.Size, lastModified: item.LastModified ? item.LastModified.getTime() : null };
       }
       token = out.IsTruncated ? out.NextContinuationToken : undefined;
     } while (token);

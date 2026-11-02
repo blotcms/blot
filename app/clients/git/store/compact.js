@@ -18,13 +18,22 @@
 //                 pieces (default 16)
 //   maxBytes      the most bytes of .pack and .idx one merge takes in
 //                 (default a quarter of the cache's budget)
+//   clock         the clock manifest.read and swap time the base by (a
+//                 merge held past manifest.MAX_BASE_AGE is built again on a
+//                 fresh read, as a swap lost to a push is); for specs
 //   pack          git pack-objects' settings, over PACK_CONFIG below; they
 //                 are passed on the command line, so no system config applies
+//   maxSnapshots, maxSnapshotBytes, minSnapshots
+//                 how many ref snapshots the manifest keeps (manifest.js's
+//                 SNAPSHOT_LIMITS: 1000, 1 MiB, at least 8). Every swap this
+//                 makes trims to them; past them by `snapshotSlack` (10%) a
+//                 swap is made for that alone, merging nothing
 //
 // The steps, in the order they run:
 //
 //   1. Read the newest manifest and plan (plan() below): which packs to merge,
-//      and whether to rebuild the history pack. Nothing to do resolves at once.
+//      whether to rebuild the history pack, and whether the snapshots are due
+//      a trim. Nothing to do resolves at once; a trim alone goes to step 6.
 //   2. Reserve scratch space from the cache for the inputs and the output, and
 //      stream the inputs' .pack and .idx files into a throwaway bare repository
 //      there.
@@ -45,7 +54,8 @@
 // (after a crash between the uploads and the swap, say) uploads the same bytes
 // to the same keys, which is harmless. Nothing is deleted: the old packs stay
 // in the store, so a clone or fetch that started on the old manifest reads on
-// undisturbed. Removing packs no kept manifest names is part 2 (the sweep).
+// undisturbed. Removing packs no kept manifest names is sweep.js's job, run
+// on a schedule of its own.
 //
 // compact() resolves with
 //
@@ -62,7 +72,7 @@
 //   history   the new history pack's name, or null if it was not rebuilt
 //   stats     { ms, attempts, packsIn, bytesIn, objectsIn, bytesOut, objectsOut,
 //               piecesIn, historyBytesIn, historyBytesOut, commits,
-//               historySkipped }. historySkipped is null, or why the history
+//               historySkipped, snapshotsTrimmed }. historySkipped is null, or why the history
 //               was due a rebuild but was left this run: "too large" (its
 //               inputs are over maxBytes) or "no room" (the cache had no room
 //               left for them once the packs had theirs)
@@ -84,7 +94,7 @@ const { buildRev } = require("./rev");
 
 const MiB = 1024 * 1024;
 
-const DEFAULTS = { keepRecent: 4, maxPacks: 32, factor: 2, minPieces: 16, maxBytes: 256 * MiB };
+const DEFAULTS = { keepRecent: 4, maxPacks: 32, factor: 2, minPieces: 16, maxBytes: 256 * MiB, snapshotSlack: 1.1 };
 
 // compact() takes no more than this share of the cache's budget for the inputs
 // of a merge, unless maxBytes is given. Scratch holds them and the output.
@@ -127,7 +137,7 @@ const PACK_CONFIG = {
 
 // What to do with manifest `m`, without reading anything: resolves
 //
-//   { packs: [names to merge], history: true | false }
+//   { packs: [names to merge], history: true | false, trim: true | false }
 //
 // or null when there is nothing worth doing.
 //
@@ -155,8 +165,14 @@ const PACK_CONFIG = {
 // history reads with a request of its own. Once there are `minPieces` of them
 // they are merged into the history pack, which costs a read and a write of the
 // whole history pack (commits only, a few hundred bytes each).
+//
+// Snapshots. Every push adds one, and every swap compaction makes trims them
+// to the limits (manifest.trimSnapshots). So that they are trimmed even when
+// no pack is worth merging, a trim alone is worth a swap once they are past
+// the limits by `snapshotSlack` (10%): a manifest-only swap, about one in a
+// hundred pushes at the count limit.
 function plan(m, options = {}) {
-  const { keepRecent, maxPacks, factor, minPieces, maxBytes } = { ...DEFAULTS, ...options };
+  const { keepRecent, maxPacks, factor, minPieces, maxBytes, snapshotSlack } = { ...DEFAULTS, ...options };
 
   // Only packs that can still be merged count towards maxPacks. One whose
   // .pack and .idx are half of maxBytes or more stays as it is from then on
@@ -194,7 +210,27 @@ function plan(m, options = {}) {
 
   const packs = taken.length >= 2 ? taken.map((pack) => pack.name) : [];
   const history = (m.historyPieces || []).length >= Math.max(1, minPieces);
-  return packs.length || history ? { packs, history } : null;
+  const trim = snapshotsDue(m, options, snapshotSlack);
+  return packs.length || history || trim ? { packs, history, trim } : null;
+}
+
+// The limits on snapshots in `options` (manifest.js's SNAPSHOT_LIMITS for
+// those not given)
+function snapshotLimits(options) {
+  const limits = { ...manifest.SNAPSHOT_LIMITS };
+  for (const name of Object.keys(limits)) if (options[name] !== undefined) limits[name] = options[name];
+  return limits;
+}
+
+// Whether trimming to the limits, loosened by `slack`, would drop a snapshot
+function snapshotsDue(m, options, slack) {
+  const limits = snapshotLimits(options);
+  const loose = {
+    ...limits,
+    maxSnapshots: Math.floor(limits.maxSnapshots * slack),
+    maxSnapshotBytes: Math.floor(limits.maxSnapshotBytes * slack),
+  };
+  return manifest.trimSnapshots(m.snapshots, loose).length < m.snapshots.length;
 }
 
 // ---- Git in scratch ---------------------------------------------------
@@ -346,7 +382,7 @@ const entryOf = ({ name, size, idxSize, objects }) => ({ name, size, idxSize, ob
 
 // ---- Compaction -------------------------------------------------------
 
-async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, ...options }) {
+async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, clock = Date.now, ...options }) {
   const packConfig = { ...PACK_CONFIG, ...pack };
   if (typeof lock !== "function") throw new Error("compact needs the host's lock function");
 
@@ -364,10 +400,12 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, ...
     historyBytesOut: 0,
     commits: 0,
     historySkipped: null,
+    snapshotsTrimmed: 0,
   };
+  const limits = snapshotLimits(options);
   const result = (outcome, extra) => ({ outcome, seq: null, merged: [], into: null, history: null, ...extra, stats: { ...stats, ms: Date.now() - started } });
 
-  const base = await manifest.read(store);
+  const base = await manifest.read(store, { clock });
   const maxBytes = options.maxBytes !== undefined ? options.maxBytes : cache.maxBytes > 0 ? Math.max(0, Math.floor((cache.maxBytes - SLACK) / CACHE_SHARE)) : DEFAULTS.maxBytes;
   const chosen = plan(base, { ...options, maxBytes });
   if (!chosen) return result("nothing", { seq: base.seq });
@@ -387,7 +425,65 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, ...
   // holds up the packs: past maxBytes, or with no room left in the cache once
   // the packs have theirs, it is skipped this run
   if (historyInputs.length && inputBytes(historyInputs) > maxBytes) skipHistory("too large");
-  if (!packInputs.length && !historyInputs.length) return result("nothing", { seq: base.seq });
+
+  // Swaps in the manifest with `merged` (the merged pack, or null) in place of
+  // `packInputs`, and `history` (or null) in place of the old history pack and
+  // `pieceInputs`, trimming the snapshots as it goes. A swap lost to a push or
+  // a commit is built again on the newer manifest, since those only add.
+  async function swapIn({ merged, history, packInputs, pieceInputs }) {
+    const names = {
+      merged: packInputs.map((pack) => pack.name),
+      into: merged ? merged.name : null,
+      history: history ? history.name : null,
+    };
+    const uploaded = [merged, history].filter(Boolean).map((pack) => pack.name);
+    const through = Math.max(base.history ? base.history.through : 0, ...pieceInputs.map((piece) => piece.seq));
+
+    // Whether `current` still lists everything this compaction merged: pushes
+    // and commits only add packs and pieces, so a manifest that has moved on is
+    // usually built on again. If an input is gone, someone compacted first.
+    const stillListed = (current) => {
+      const packs = new Set(current.packs.map((pack) => pack.name));
+      const pieces = new Set((current.historyPieces || []).map((piece) => piece.name));
+      const sameHistory = (current.history && current.history.name) === (base.history && base.history.name);
+      return names.merged.every((name) => packs.has(name)) && (!history || (sameHistory && pieceInputs.every((piece) => pieces.has(piece.name))));
+    };
+
+    let current = base;
+    for (let attempt = 1; ; attempt++) {
+      stats.attempts = attempt;
+      if (!stillListed(current)) return result("superseded", { seq: current.seq });
+
+      const next = manifest.compacted(current, {
+        remove: names.merged,
+        add: merged ? entryOf(merged) : null,
+        ...(history ? { history: { ...entryOf(history), through }, removePieces: pieceInputs.map((piece) => piece.name) } : {}),
+        limits,
+      });
+      stats.snapshotsTrimmed = current.snapshots.length - next.snapshots.length;
+
+      // A trim alone which another compaction has already made
+      if (!merged && !history && !stats.snapshotsTrimmed) return result("nothing", { seq: current.seq });
+
+      try {
+        await manifest.swap({ store, lock, base: current, next, uploaded, clock });
+        return result("compacted", { seq: next.seq, ...names });
+      } catch (err) {
+        if (err instanceof OutcomeUnknownError) return result("unknown", { seq: next.seq, ...names, error: err });
+        if (!(err instanceof StaleManifestError)) throw err;
+        if (attempt >= attempts) {
+          throw Object.assign(new Error("The manifest moved " + attempts + " times while compacting"), { code: "EMOVED" });
+        }
+      }
+      current = await manifest.read(store, { clock });
+    }
+  }
+
+  // Only the snapshots to trim: a swap of the manifest, with nothing to fetch
+  const trimOnly = () =>
+    chosen.trim ? swapIn({ merged: null, history: null, packInputs: [], pieceInputs: [] }) : result("nothing", { seq: base.seq });
+
+  if (!packInputs.length && !historyInputs.length) return trimOnly();
 
   // The inputs, and an output about as big as them, with room to spare
   const reservation = await cache.reserve(2 * inputBytes(packInputs) + SLACK);
@@ -402,7 +498,7 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, ...
         skipHistory("no room");
       }
     }
-    if (!packInputs.length && !historyInputs.length) return result("nothing", { seq: base.seq });
+    if (!packInputs.length && !historyInputs.length) return await trimOnly();
 
     stats.packsIn = packInputs.length;
     stats.bytesIn = packInputs.reduce((sum, pack) => sum + pack.size, 0);
@@ -443,47 +539,7 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, ...
     const failed = uploads.find((upload) => upload.status === "rejected");
     if (failed) throw failed.reason;
 
-    const names = {
-      merged: packInputs.map((pack) => pack.name),
-      into: merged ? merged.name : null,
-      history: history ? history.name : null,
-    };
-    const uploaded = [merged, history].filter(Boolean).map((pack) => pack.name);
-    const through = Math.max(base.history ? base.history.through : 0, ...pieceInputs.map((piece) => piece.seq));
-
-    // Whether `current` still lists everything this compaction merged: pushes
-    // and commits only add packs and pieces, so a manifest that has moved on is
-    // usually built on again. If an input is gone, someone compacted first.
-    const stillListed = (current) => {
-      const packs = new Set(current.packs.map((pack) => pack.name));
-      const pieces = new Set((current.historyPieces || []).map((piece) => piece.name));
-      const sameHistory = (current.history && current.history.name) === (base.history && base.history.name);
-      return names.merged.every((name) => packs.has(name)) && (!history || (sameHistory && pieceInputs.every((piece) => pieces.has(piece.name))));
-    };
-
-    let current = base;
-    for (let attempt = 1; ; attempt++) {
-      stats.attempts = attempt;
-      if (!stillListed(current)) return result("superseded", { seq: current.seq });
-
-      const next = manifest.compacted(current, {
-        remove: names.merged,
-        add: merged ? entryOf(merged) : null,
-        ...(history ? { history: { ...entryOf(history), through }, removePieces: pieceInputs.map((piece) => piece.name) } : {}),
-      });
-
-      try {
-        await manifest.swap({ store, lock, base: current, next, uploaded });
-        return result("compacted", { seq: next.seq, ...names });
-      } catch (err) {
-        if (err instanceof OutcomeUnknownError) return result("unknown", { seq: next.seq, ...names, error: err });
-        if (!(err instanceof StaleManifestError)) throw err;
-        if (attempt >= attempts) {
-          throw Object.assign(new Error("The manifest moved " + attempts + " times while compacting"), { code: "EMOVED" });
-        }
-      }
-      current = await manifest.read(store);
-    }
+    return await swapIn({ merged, history, packInputs, pieceInputs });
   } finally {
     for (const child of children) child.kill("SIGKILL");
     await reservation.release().catch((err) => console.error("Git store: could not remove scratch space", err));
@@ -493,6 +549,7 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, ...
 module.exports = compact;
 module.exports.plan = plan;
 module.exports.DEFAULTS = DEFAULTS;
+module.exports.snapshotLimits = snapshotLimits;
 module.exports.PACK_CONFIG = PACK_CONFIG;
 // For import.js, which runs git and proves its packs in the same way
 module.exports.git = { runGit, idsOf, assertContains };

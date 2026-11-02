@@ -250,7 +250,7 @@ describe("git store import", function () {
 
       expect(await env.store.head(revKey(imported.packs[0].name))).not.toBeNull();
       expect(await env.store.head(revKey(imported.history.name))).toBeNull();
-      expect(await env.store.head(packKey(imported.history.name))).toEqual({ size: imported.history.size });
+      expect((await env.store.head(packKey(imported.history.name))).size).toBe(imported.history.size);
     });
 
     it("reads every object back through the store as git has it", async function () {
@@ -412,6 +412,24 @@ describe("git store import", function () {
       expect(error.code).toBe("EMOVED");
       expect(attempts).toBe(1);
       expect((await manifest.read(env.inner)).refs).toEqual({});
+      scratchIsEmpty(env);
+    });
+
+    it("reads again and swaps when it took longer than a swap allows a base to be held", async function () {
+      const env = setup();
+      let now = Date.now();
+      let slept = false;
+      const late = (fn) => {
+        if (!slept) now += manifest.MAX_BASE_AGE + 1;
+        slept = true;
+        return lock(fn);
+      };
+      const result = await importRepo({ store: env.store, cache: env.cache, lock: late, gitDir: path.join(rich, ".git"), clock: () => now });
+      expect(result.outcome).toBe("imported");
+      expect(result.seq).toBe(1);
+      const current = await manifest.read(env.inner);
+      expect(current.seq).toBe(1);
+      expect(current.refs).toEqual(result.refs);
       scratchIsEmpty(env);
     });
 
