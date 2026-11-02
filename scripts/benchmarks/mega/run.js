@@ -45,9 +45,13 @@ const CACHE_STATS = [
   "blog/render/retrieve/tagged",
   "blog/render/retrieve/all_entries",
   "blog/render/retrieve/helpers/getAllCached",
-  // Where those two caches live once they moved into the models
+  // Where those caches live once they moved into the models
   "models/template/fullViewCache",
   "models/entries/catalog",
+  "models/entries/cachedPage",
+  "models/entries/cachedRecent",
+  "models/tags/cachedList",
+  "models/tags/cachedTagged",
 ];
 
 // How long the small sites are browsed while the mega sites resync

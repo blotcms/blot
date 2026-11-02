@@ -1,4 +1,4 @@
-const { compactTags, expandTags } = require("../helpers/compactTags");
+const { compactTags, expandTags } = require("../compact");
 
 describe("compactTags", function () {
   it("compacts null placeholders from Tags.list", function () {

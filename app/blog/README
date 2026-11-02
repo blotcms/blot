@@ -108,12 +108,14 @@ Either `?debug=true` or `?json=true` returns the fully assembled render context 
 
 Each file in this directory is a named retriever. The retrieve system (`render/retrieve/index.js`) accepts a map of local names that the view template declares it needs. It fetches matching retrievers in parallel via `Promise.all`. Retrievers are async or sync functions wrapped by `lib/asRetriever.js` so unit tests can still use `(req, res, callback)` while production awaits them.
 
+Caching: the template-independent reads are cached inside the models, per blog `cacheID` (`Entries.getCatalog`, `Entries.getCachedPage`, `Entries.getCachedRecent`, `Tags.getCachedList`, `Tags.getCachedTagged`; see `models/README`), and the retrievers pass them the heavy entry fields (`html`, `body`, ...) the view renders, so the rest are never stored. Only `all_entries` and `archives` keep caches here, because what they store is already augmented for one template (`render/load/augmentedEntries.js`). `total_posts`, `latest_entry` and `popular_tags` are a few cheap Redis reads and aren't cached.
+
 | Local name(s) | Source file | What it provides |
 |---|---|---|
 | `active` | `active.js` | Lambda that returns `"active"` if the current URL matches `this.url` or `this.slug`. |
 | `absolute_urls` | `absolute_urls.js` | Lambda that rewrites relative `href`/`src` attributes to absolute URLs. Used in RSS feeds. |
 | `all_entries` | `all_entries.js` | All published entries for the blog. |
-| `all_tags` | `all_tags.js` | All tags, sorted alphabetically, with entry counts. |
+| `all_tags` | `all_tags.js` | All tags, sorted alphabetically, with entry counts (`Tags.getCachedList`). |
 | `app_css` | `app_css.js` | Concatenated CSS from enabled blog plugins. Mustache in plugin CSS is evaluated against `plugins` at retrieve time (templates insert the result with `{{{app_css}}}`). |
 | `app_js` | `app_js.js` | Concatenated JS from enabled blog plugins. Mustache in plugin JS (e.g. analytics tracking IDs) is evaluated against `plugins` at retrieve time (templates insert the result with `{{{app_js}}}`). |
 | `archives` | `archives.js` | All entries grouped by year and month (for archive views). |
@@ -128,13 +130,13 @@ Each file in this directory is a named retriever. The retrieve system (`render/r
 | `is` / `is_active` | `is.js`, `is_active.js` | Boolean helpers for conditional rendering. |
 | `latest_entry` | `latest_entry.js` | The most recently published entry. |
 | `plugin` | `plugin.js` | CSS and JS URLs for individually requested plugins. |
-| `popular_tags` | `popular_tags.js` | Tags sorted by entry count (top 100), cached with an LRU cache keyed by `blogID` and `cacheID`. |
-| `posts` | `posts.js` | A paginated page of entries, respecting template `sort_by`, `sort_order`, `page_size`, and `path_prefix` locals. |
-| `recent_entries` | `recent_entries.js` | A small list of recent entries (`Entries.getRecent`). |
+| `popular_tags` | `popular_tags.js` | Tags sorted by entry count (top 100). |
+| `posts` | `posts.js` | A paginated page of entries, respecting template `sort_by`, `sort_order`, `page_size`, and `path_prefix` locals (`Entries.getCachedPage`, or `Tags.getCachedTagged` with a tag). |
+| `recent_entries` | `recent_entries.js` | A small list of recent entries (`Entries.getCachedRecent`). |
 | `rgb` | `rgb.js` | Lambda that converts a CSS color value to an RGB component string (e.g. `255, 128, 0`) for use in `rgba()`. |
 | `search_query` | `search_query.js` | The current search query string from `req.query.q`. |
 | `search_results` | `search_results.js` | Entry search results for the current query. |
-| `tagged` | `tagged.js` | Entries matching one or more tag slugs, with pagination. Supports intersection of multiple tags. Page size is controlled by template `tagged_page_size` or `page_size`. |
+| `tagged` | `tagged.js` | Entries matching one or more tag slugs, with pagination. Supports intersection of multiple tags. Page size is controlled by template `tagged_page_size` or `page_size` (`Tags.getCachedTagged`). |
 | `total_posts` | `total_posts.js` | Total published entry count. |
 | `updated` | `updated.js` | Lambda/string for the blog's last-updated timestamp (`blog.cacheID`), formatted with `moment-timezone`. |
 
@@ -273,10 +275,10 @@ The `static/` directory contains global assets served to all blogs under paths s
 | Module | Used by |
 |---|---|
 | `models/blog` | `vhosts.js`, `render/view.js` |
-| `models/entry` | `draft.js`, `entry.js`, `search.js`, `render/retrieve/tagged.js`, `render/load/augment.js` |
+| `models/entry` | `draft.js`, `entry.js`, `search.js`, `render/load/augment.js` |
 | `models/entries` | `entries.js`, `draft.js`, `entry.js`, `random.js`, `render/retrieve/` |
 | `models/template` | `loadTemplate.js`, `view.js`, `render/middleware.js`, `render/view.js` |
-| `models/tags` | `render/retrieve/all_tags.js`, `render/retrieve/tagged.js`, `render/retrieve/popular_tags.js`, `render/load/augment.js` |
+| `models/tags` | `render/retrieve/all_tags.js`, `render/retrieve/posts.js`, `render/retrieve/tagged.js`, `render/retrieve/popular_tags.js`, `render/load/augment.js` |
 | `models/redirects` | `error.js` |
 | `models/user` | `routes/verify.js` |
 | `models/redis` | `draft.js` |
