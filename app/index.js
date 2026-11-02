@@ -85,10 +85,11 @@ drain.install();
 
 if (config.worker_child) {
   // Under memory pressure the kernel should kill this worker, not the web
-  // process that forked it (and would fork it again). Raising our own score
-  // needs no privilege; outside Linux there is no such file.
+  // process that forked it (and would fork it again). 900, not 1000: sandbox
+  // jobs (proxy/unit/sandbox/jail.js) and Redis's BGSAVE child go first. Raising
+  // our own score needs no privilege; outside Linux there is no such file.
   try {
-    fs.writeFileSync("/proc/self/oom_score_adj", "1000");
+    fs.writeFileSync("/proc/self/oom_score_adj", "900");
   } catch (err) {
     if (err.code !== "ENOENT") {
       console.error(clfdate(), "Could not raise oom_score_adj", err.message);
