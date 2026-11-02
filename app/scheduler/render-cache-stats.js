@@ -9,16 +9,13 @@ const clfdate = require("helper/clfdate");
 const caches = [
   require("blog/render/main")._stats,
   require("models/template/fullViewCache")._stats,
-  require("blog/render/retrieve/popular_tags")._stats,
-  require("blog/render/retrieve/posts")._stats,
+  require("models/entries/cachedPage")._stats,
   require("blog/render/retrieve/archives")._stats,
-  require("blog/render/retrieve/all_tags")._stats,
-  require("blog/render/retrieve/tagged")._stats,
-  require("blog/render/retrieve/recent_entries")._stats,
-  require("blog/render/retrieve/latest_entry")._stats,
+  require("models/tags/cachedList")._stats,
+  require("models/tags/cachedTagged")._stats,
+  require("models/entries/cachedRecent")._stats,
   require("blog/render/retrieve/all_entries")._stats,
   require("models/entries/catalog")._stats,
-  require("blog/render/retrieve/total_posts")._stats,
 ];
 
 // The evictIdle and hitAge counters are bucketed by time: under 1s, 1m, 10m,

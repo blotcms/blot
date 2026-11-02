@@ -22,11 +22,11 @@ const { cloneDeep, prepareCacheValue } = require("models/cache/clone");
 const cacheStats = require("models/cache/stats");
 const client = require("models/client");
 const blogKey = require("models/blog/key");
-const HEAVY_FIELDS = require("models/template/util/projectableEntryFields");
+const { HEAVY_FIELDS, keepFields, stripHeavyFields } = require("./heavyFields");
 
 const entriesCache = createRenderCache("entries", {
   max: 200,
-  // Byte-capped like the posts/popular_tags caches: a single large blog's
+  // Byte-capped like the posts/tagged caches: a single large blog's
   // full catalog must not evict every other blog sharing this process.
   maxSize: 100 * 1024 * 1024,
   sizeCalculation: (value) => value.size,
@@ -71,21 +71,6 @@ function cloneEntries(value) {
   );
 }
 
-// Deletes, in place, the heavy fields not in `keep`.
-function stripHeavyFields(entries, keep) {
-  const strip = HEAVY_FIELDS.filter((field) => !keep.includes(field));
-  if (!strip.length) return entries;
-
-  for (const entry of entries) {
-    if (!entry || typeof entry !== "object") continue;
-    for (const field of strip) {
-      if (entry[field] !== undefined) delete entry[field];
-    }
-  }
-
-  return entries;
-}
-
 // Resolves on the next macrotask, so the last batch of parsed entries isn't
 // followed by cloning and sizing the whole catalog in the same tick.
 function yieldToEventLoop() {
@@ -102,9 +87,7 @@ function getAll(blogID) {
 
 async function getCatalog(blogID, options = {}) {
   const log = options.log || function () {};
-  const keep = HEAVY_FIELDS.filter(
-    (field) => !options.keep || options.keep.includes(field)
-  );
+  const keep = keepFields(options.keep);
   const cacheID =
     options.cacheID !== undefined
       ? options.cacheID

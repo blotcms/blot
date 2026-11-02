@@ -11,6 +11,10 @@ All storage is backed by Redis. This module does not write entry objects directl
 | File | Purpose |
 |------|---------|
 | `index.js` | Public module surface. Implements all exported functions using Redis sorted-set operations and delegates individual entry retrieval to `models/entry`. |
+| `catalog.js` | `getCatalog`: every entry, cached per blog `cacheID` for rendering. |
+| `cachedPage.js` | `getCachedPage`: `getPage`, cached per blog `cacheID` for rendering (the `posts` cache). |
+| `cachedRecent.js` | `getCachedRecent`: `getRecent`, cached per blog `cacheID` for rendering (the `recentEntries` cache). |
+| `heavyFields.js` | The heavy entry fields (`html`, `body`, ...) the cached reads can strip, and the helpers that strip them. |
 | `pathIndex.js` | Manages the lexicographic index (`blog:{blogID}:entries:lex`) used for path-prefix filtering. Exposes key-name helpers and a `backfillIndex` function for repairing a diverged index. |
 | `tests.js` | Jasmine test suite covering the public API. Uses `global.test.blog()` for test setup and spies on `Entry.get` and `Entry.set` where full build pipeline execution is not required. |
 
@@ -98,6 +102,23 @@ Every entry of the blog, like `getAll`, but cached in this process per blog `cac
 - `options.log` — `req.log`, told whether the lookup was a hit, a miss or waited on another call's read.
 
 Don't use it in code that writes back what it read (sync, `Fix()`, scripts): a write is only visible here once the blog's `cacheID` has been bumped. Use `getAll`.
+
+### `getCachedPage(blogID, [options])`
+
+`getPage`, cached in this process per blog `cacheID` (`cachedPage.js`), for rendering. Resolves to `{ entries, pagination }`, a copy the caller may change; rejects as `getPage` does (a `400` for an invalid page number).
+
+- `options.pageNumber`, `pageSize`, `sortBy`, `order`, `pathPrefix` — as for `getPage`, keyed as given, so an unset page size never shares a page with an explicit one.
+- `options.keep` — the heavy fields to keep, as for `getCatalog`. A stored page only serves calls that keep the same fields.
+- `options.cacheID`, `options.log` — as for `getCatalog`.
+
+### `getCachedRecent(blogID, [options])`
+
+`getRecent`, cached in this process per blog `cacheID` (`cachedRecent.js`), for rendering. Resolves to a copy the caller may change. An empty result is never stored, since `getRecent` also resolves `[]` on some Redis failures.
+
+- `options.limit` — how many of the entries the caller needs; only those are copied.
+- `options.cacheID`, `options.log` — as for `getCatalog`.
+
+Don't use `getCachedPage` or `getCachedRecent` in code that writes back what it read (sync, `Fix()`, scripts), for the same reason as `getCatalog`: use `getPage` and `getRecent`.
 
 ### `getAllIDs(blogID, callback)`
 
@@ -239,8 +260,8 @@ The lex index is only updated incrementally by `_assign.js` when the ready flag 
 | Consumer | Functions used |
 |----------|----------------|
 | `app/blog/entries.js` | `getPage` — serves the paginated entries list view |
-| `app/blog/render/retrieve/posts.js` | `getPage` — provides posts to template rendering |
-| `app/blog/render/retrieve/recent_entries.js` | `getRecent` |
+| `app/blog/render/retrieve/posts.js` | `getCachedPage` — provides posts to template rendering |
+| `app/blog/render/retrieve/recent_entries.js` | `getCachedRecent` |
 | `app/blog/render/retrieve/all_entries.js` | `getCatalog` (via `helpers/getAllCached.js`) |
 | `app/blog/render/retrieve/total_posts.js` | `getTotal` |
 | `app/blog/render/retrieve/archives.js` | `getCatalog` (via `helpers/getAllCached.js`) |

@@ -1,6 +1,6 @@
-describe("fetchTaggedEntries sort ordering", function () {
+describe("tags.tagged sort ordering", function () {
   const Tags = require("models/tags");
-  const fetchTaggedEntries = require("../fetchTaggedEntries");
+  const fetchTaggedEntries = require("../tagged");
 
   // The tag's sorted set is scored by dateStamp; Redis reads it newest-first
   // with REV, or oldest-first with rev:false. Model that here.

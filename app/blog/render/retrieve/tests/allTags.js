@@ -85,15 +85,11 @@ describe("all tags", function () {
 
 describe("all_tags cache", function () {
   const Tags = require("models/tags");
-  const allTagsPath = require.resolve("../all_tags");
+  const allTags = require("../all_tags");
+  const cachedList = require("models/tags/cachedList");
 
-  function loadAllTags() {
-    delete require.cache[allTagsPath];
-    return require("../all_tags");
-  }
-
-  afterEach(function () {
-    delete require.cache[allTagsPath];
+  beforeEach(function () {
+    cachedList._clear();
   });
 
   function makeReq(blog) {
@@ -105,8 +101,6 @@ describe("all_tags cache", function () {
   }
 
   it("reuses cached tags for identical cacheIDs and path_prefix", function (done) {
-    const allTags = loadAllTags();
-
     spyOn(Tags, "list").and.callFake(function (blogID, options, callback) {
       callback(null, [{ name: "abc", slug: "abc", entries: ["1"] }]);
     });
@@ -122,8 +116,6 @@ describe("all_tags cache", function () {
   });
 
   it("refetches when cacheID changes", function (done) {
-    const allTags = loadAllTags();
-
     spyOn(Tags, "list").and.callFake(function (blogID, options, callback) {
       callback(null, [{ name: "abc", slug: "abc", entries: ["1"] }]);
     });
@@ -137,8 +129,6 @@ describe("all_tags cache", function () {
   });
 
   it("keys the cache on path_prefix as well as cacheID", function (done) {
-    const allTags = loadAllTags();
-
     spyOn(Tags, "list").and.callFake(function (blogID, options, callback) {
       callback(null, [{ name: "abc", slug: "abc", entries: ["1"] }]);
     });
@@ -154,8 +144,6 @@ describe("all_tags cache", function () {
   });
 
   it("does not confuse a numeric path_prefix (no filter) with the equivalent string (a real filter)", function (done) {
-    const allTags = loadAllTags();
-
     // models/tags/list.js's normalizePathPrefix treats a non-string as "no
     // filter" but normalizes the string "1" into "/1" - a naive String()
     // cache key would turn both into the same "1" and let one view's tags
@@ -185,8 +173,6 @@ describe("all_tags cache", function () {
   });
 
   it("returns isolated copies so caller mutations do not taint cache", function (done) {
-    const allTags = loadAllTags();
-
     spyOn(Tags, "list").and.callFake(function (blogID, options, callback) {
       callback(null, [{ name: "abc", slug: "abc", entries: ["1"] }]);
     });
@@ -204,8 +190,6 @@ describe("all_tags cache", function () {
   });
 
   it("shares the cache with preview requests", function (done) {
-    const allTags = loadAllTags();
-
     spyOn(Tags, "list").and.callFake(function (blogID, options, callback) {
       callback(null, [{ name: "abc", slug: "abc", entries: ["1"] }]);
     });
@@ -222,8 +206,6 @@ describe("all_tags cache", function () {
   });
 
   it("restores all_tags_total_posts from the cache on a hit", function (done) {
-    const allTags = loadAllTags();
-
     spyOn(Tags, "list").and.callFake(function (blogID, options, callback) {
       callback(null, [
         { name: "abc", slug: "abc", entries: ["1", "2"] },

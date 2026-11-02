@@ -1,9 +1,10 @@
 const recentEntries = require("../recent_entries");
 const Entries = require("models/entries");
+const cachedRecent = require("models/entries/cachedRecent");
 
 describe("recent_entries", function () {
   beforeEach(function () {
-    recentEntries._clear();
+    cachedRecent._clear();
   });
 
   function run(req) {
@@ -19,7 +20,7 @@ describe("recent_entries", function () {
       callback([{ id: "/a.txt", title: "A", html: "<p>A</p>" }]);
     });
 
-    const result = await run({ blog: { id: "blog-1" }, retrieve: {} });
+    const result = await run({ blog: { id: "blog-1", cacheID: 1 }, retrieve: {} });
 
     expect(Entries.getRecent).toHaveBeenCalledWith(
       "blog-1",
@@ -35,7 +36,7 @@ describe("recent_entries", function () {
     });
 
     const result = await run({
-      blog: { id: "blog-1" },
+      blog: { id: "blog-1", cacheID: 1 },
       retrieve: { recent_entries: { fields: { title: true } } },
     });
 
@@ -50,7 +51,7 @@ describe("recent_entries", function () {
     });
 
     const result = await run({
-      blog: { id: "blog-1" },
+      blog: { id: "blog-1", cacheID: 1 },
       retrieve: { recent_entries: { fields: { title: true } } },
     });
 
@@ -61,9 +62,10 @@ describe("recent_entries", function () {
 describe("recent_entries cache", function () {
   const recentEntries = require("../recent_entries");
   const Entries = require("models/entries");
+  const cachedRecent = require("models/entries/cachedRecent");
 
   beforeEach(function () {
-    recentEntries._clear();
+    cachedRecent._clear();
   });
 
   function run(req) {
@@ -194,6 +196,7 @@ describe("recent_entries rendering", function () {
 describe("recent_entries feed length", function () {
   const recentEntries = require("../recent_entries");
   const Entries = require("models/entries");
+  const cachedRecent = require("models/entries/cachedRecent");
 
   function run(req) {
     return new Promise((resolve, reject) => {
@@ -211,7 +214,7 @@ describe("recent_entries feed length", function () {
   }
 
   async function entriesFor(viewName) {
-    recentEntries._clear();
+    cachedRecent._clear();
     if (!jasmine.isSpy(Entries.getRecent)) {
       spyOn(Entries, "getRecent").and.callFake(function (blogID, options, callback) {
         callback(thirty());
