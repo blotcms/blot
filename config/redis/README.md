@@ -243,7 +243,8 @@ one until `finish` (about a day after `settle`).
   long start/stop timeouts, `OOMScoreAdjust=-900`, `OOMPolicy=continue` and
   `CPUWeight=1000`). On a shared host the kill order under memory pressure is
   the BGSAVE child (`oom-score-adj-values` in `redis.conf` lifts it to 1000),
-  then the app, and never Redis; Redis also wins the CPU when it is contended.
+  then sandbox jobs (also 1000, smaller), then `node-b` (900), then `node-a`,
+  and never Redis; Redis also wins the CPU when it is contended.
   `OOMPolicy=continue` keeps that promise: under systemd's default a killed child
   stops the whole service. A killed child still fails the save. That is why
   `stop-writes-on-bgsave-error` is `no`: with `yes` the rehearsal measured over
