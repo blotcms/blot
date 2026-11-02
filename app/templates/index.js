@@ -16,6 +16,8 @@ var updateCdnManifest = require("models/template/util/updateCdnManifest");
 var TEMPLATES_DIRECTORY = require("path").resolve(__dirname + "/source");
 var TEMPLATES_OWNER = "SITE";
 
+const client = require("models/client");
+const fingerprintFiles = require("helper/fingerprintFiles");
 const redisSubscriber = require("helper/redisSubscriber");
 const lock = require("helper/lock");
 
@@ -83,8 +85,62 @@ const BUILD_LOCK_OPTIONS = {
   },
 };
 
+// Comparing every template with its stored copy takes seconds of CPU, which
+// in development is spent again on each restart and slows the first requests
+// after it, though a restart rarely changes a template. So with skipUnchanged,
+// a pass leaves a fingerprint of its inputs beside its output in Redis, and the
+// next one stops there if they match. Worktree previews share that Redis and
+// have their own files, so build() drops the fingerprint: any other write
+// (a watcher, a pass without skipUnchanged) must not leave one that describes
+// templates which are no longer there.
+const BUILD_FINGERPRINT_KEY = "templates:build:fingerprint";
+const BUILD_INPUTS = [
+  TEMPLATES_DIRECTORY,
+  __filename,
+  require("path").resolve(__dirname + "/../models/template"),
+  require("path").resolve(__dirname + "/../blog/static/fonts/index.json"),
+  require("path").resolve(__dirname + "/../blog/static/syntax-highlighter/index.json"),
+];
+
+async function buildIfChanged(options, callback) {
+  let fingerprint = null;
+  let failed = false;
+
+  try {
+    fingerprint = await fingerprintFiles(BUILD_INPUTS);
+
+    if ((await client.get(BUILD_FINGERPRINT_KEY)) === fingerprint) {
+      debug("Templates unchanged since the last build");
+      return callback(null);
+    }
+
+    await client.del(BUILD_FINGERPRINT_KEY);
+  } catch (e) {
+    console.error("[templates] build fingerprint unavailable: " + e.message);
+    fingerprint = null;
+  }
+
+  const onError = () => {
+    failed = true;
+  };
+
+  buildLocked({ ...options, onError }, async function (err) {
+    if (!err && !failed && fingerprint) {
+      try {
+        await client.set(BUILD_FINGERPRINT_KEY, fingerprint);
+      } catch (e) {
+        console.error("[templates] build fingerprint not saved: " + e.message);
+      }
+    }
+
+    callback(err);
+  });
+}
+
 function main(options, callback) {
-  buildLocked(options, function (err) {
+  const run = options.skipUnchanged ? buildIfChanged : buildLocked;
+
+  run(options, function (err) {
     if (err) return callback(err);
 
     if (options.watch) {
@@ -165,6 +221,7 @@ function buildAll(directory, options, callback) {
         } else {
           console.error("Error building: " + dirs[i]);
           console.error(result.error.stack);
+          if (options.onError) options.onError();
         }
       }
     });
@@ -176,6 +233,10 @@ function buildAll(directory, options, callback) {
 // Path to a directory containing template files
 function build(directory, callback) {
   debug("..", require("path").basename(directory), directory);
+
+  client.del(BUILD_FINGERPRINT_KEY).catch(function (e) {
+    console.error("[templates] build fingerprint not cleared: " + e.message);
+  });
 
   var templatePackage;
   var name, template, description, id;

@@ -17,6 +17,8 @@ services:
       - BLOT_REDIS_HOST=redis
       # Only tags log lines
       - CONTAINER_NAME=blot-container-${SLOT}
+      # Survives nodemon restarts, so each one recompiles only what changed
+      - NODE_COMPILE_CACHE=/tmp/node-compile-cache
       # Skips the scheduler, sync clients and the start email
       - BLOT_PREVIEW=true
       # Slots build and watch SITE templates from this worktree's
@@ -39,7 +41,7 @@ services:
       - ${WORKTREE_ROOT}/tests:/usr/src/app/tests
       - ${WORKTREE_ROOT}/scripts:/usr/src/app/scripts
       - ${WORKTREE_ROOT}/config:/usr/src/app/config
-    command: npx --node-options="--max-old-space-size=500 --trace-deprecation" nodemon /usr/src/app/app/index.js --watch /usr/src/app/app -e js,html,css --ignore /usr/src/app/app/documentation/data --ignore /usr/src/app/app/documentation/output --ignore /usr/src/app/app/views --ignore /usr/src/app/app/views-built  --ignore /usr/src/app/app/clients/*/views --ignore /usr/src/app/app/templates/folders --ignore /usr/src/app/app/templates/source
+    command: npx --node-options="--max-old-space-size=500 --trace-deprecation" nodemon /usr/src/app/app/index.js --watch /usr/src/app/app -e js,html,css --ignore /usr/src/app/app/documentation/data --ignore /usr/src/app/app/documentation/output --ignore /usr/src/app/app/views --ignore /usr/src/app/app/views-built  --ignore /usr/src/app/app/clients/*/views --ignore /usr/src/app/app/templates/folders --ignore /usr/src/app/app/templates/source --ignore "**/tests/**"
 
 networks:
   default:
