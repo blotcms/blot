@@ -356,6 +356,10 @@ async function reconcileBlog(blogID, check, report) {
       // No folder on disk: never emptied in S3, but not repairable either
       report.skipped.push(blogID);
     } else {
+      // Thrown before or during the check (S3 or Redis briefly failing, say):
+      // put in the dirty set, so the hourly run tries again rather than the
+      // next daily one
+      await client.sAdd(DIRTY_KEY, blogID).catch(function () {});
       report.errored.push(blogID);
       console.error(clfdate(), LOG_PREFIX, "failed blog=" + blogID, ((err && err.code) || "") + " " + ((err && err.message) || err));
     }

@@ -124,6 +124,20 @@ describe("storage/folder reconcile", function () {
     expect(sent).toEqual([]);
   });
 
+  it("marks a blog dirty when its daily check throws, so the hourly run retries it", async function () {
+    await unmirrored(this.blog.id);
+
+    spyOn(require("storage/s3"), "listEntries").and.callFake(async function* () {
+      throw new Error("S3 listing failed");
+    });
+    spyOn(console, "error");
+
+    var report = await run("full");
+
+    expect(report.errored).toContain(this.blog.id);
+    expect(await isDirty(this.blog.id)).toBe(true);
+  });
+
   it("keeps a blog dirty and says so when its repair fails", async function () {
     await unmirrored(this.blog.id);
     await client.sAdd(mirror.DIRTY_KEY, this.blog.id);
