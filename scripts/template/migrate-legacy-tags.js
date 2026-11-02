@@ -26,9 +26,8 @@
 const { promisify } = require("util");
 const client = require("models/client");
 const Template = require("models/template");
-const Blog = require("models/blog");
-const clients = require("clients");
 const folder = require("storage/folder");
+const clientFolder = require("clients/folder");
 const folderLock = require("sync/lock");
 const determineTemplateFolder = require("models/template/determineTemplateFolder");
 const joinpath = require("path").join;
@@ -44,7 +43,6 @@ const option = (flag, fallback) => {
 const LIMIT = option("--limit", 0);
 const CONCURRENCY = option("--concurrency", 4);
 const setView = promisify(Template.setView);
-const getBlog = promisify((id, callback) => Blog.get({ id }, callback));
 const templateFolder = promisify(determineTemplateFolder);
 
 const ALIASES = {
@@ -147,6 +145,8 @@ function rewrite(text, ownLocals) {
     } else if (name === "blog.cacheID" && sigil !== "#" && sigil !== "^" && sigil !== "/") {
       renamed = "cacheID";
       changes.push("blog.cacheID -> cacheID");
+    } else if (ASSET_URLS[name] && ownLocals.has(first)) {
+      // A local the template defines itself wins over the blog's asset URL
     } else if (ASSET_URLS[name] && (sigil === "" || sigil === "&" || triple)) {
       changes.push(name + " -> url");
       result = assetURL(ASSET_URLS[name], open, close);
@@ -223,6 +223,10 @@ async function viewUpdates(id, name, template) {
   }
 
   if (!updates.content && !partialsChanged) return null;
+  if (partialsChanged && template.localEditing) {
+    count("local-editing views with partial changes");
+    console.log("partials changed in a locally edited template:", id, name);
+  }
 
   // setView drops file-backed partial markers that aren't in the content
   // or in updates.partials, so always pass the whole map back
@@ -283,8 +287,6 @@ async function applyBlog(owner, views, templates, progress) {
 async function writeViews(owner, id, template, names) {
   count("templates written to folder");
   try {
-    const blog = await getBlog(owner);
-    const syncClient = blog && blog.client && clients[blog.client];
     const dir = joinpath(await templateFolder(owner), template.slug);
 
     for (const name of names) {
@@ -295,8 +297,7 @@ async function writeViews(owner, id, template, names) {
       const existing = await folder.read(owner, path).catch(() => null);
       if (existing && existing.toString("utf-8") === content) continue;
 
-      if (syncClient) await promisify(syncClient.write)(owner, path, content);
-      await folder.write(owner, path, content);
+      await clientFolder.write(owner, path, content);
       count("view files written");
     }
   } catch (err) {
