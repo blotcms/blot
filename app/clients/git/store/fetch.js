@@ -120,7 +120,7 @@ async function negotiate({ store, cache, manifest, haves, limiter = null, maxWal
   if (direct || !haves.length) {
     const tips = new Set();
     for (const snapshot of manifest.snapshots) for (const oid of Object.values(snapshot.refs)) tips.add(tipOf(manifest, oid));
-    return { floor: direct, commons: once(haves.filter((oid) => tips.has(oid))), ready: direct > 0, walked: 0, graph };
+    return settled({ floor: direct, commons: once(haves.filter((oid) => tips.has(oid))), walked: 0, graph });
   }
 
   const history = await graph();
@@ -129,7 +129,16 @@ async function negotiate({ store, cache, manifest, haves, limiter = null, maxWal
   const commons = once(haves.filter((oid) => history.has(oid)));
   const reached = ancestors(history, commons, maxWalk);
   const floor = newestProvable(manifest, (oid) => reached.has(oid));
-  return { floor, commons, ready: floor > 0, walked: reached.size, graph };
+  return settled({ floor, commons, walked: reached.size, graph });
+}
+
+// A snapshot with no refs is proven by any haves at all, even none. That is
+// true (the client has all of nothing) but there is no common commit to
+// acknowledge, so the server could not say what it is ready on, and the client
+// has not shown it has anything. Without a common commit the floor is 0.
+function settled(found) {
+  if (!found.commons.length) found.floor = 0;
+  return { ...found, ready: found.floor > 0 };
 }
 
 // Whether the annotated tags in `wants` are in `packs`, with what they point
@@ -180,4 +189,4 @@ async function choosePacks({ store, cache, manifest, wants, negotiation }) {
   return { packs, floor: negotiation.floor };
 }
 
-module.exports = { negotiate, choosePacks, MAX_WALK };
+module.exports = { negotiate, choosePacks, ancestors, MAX_WALK };

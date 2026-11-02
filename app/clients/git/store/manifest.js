@@ -283,7 +283,10 @@ async function read(store) {
 }
 
 // The manifest which follows `base` after a push: `refs` are all the refs now,
-// `packs` the packs the push added and `historyPieces` the history pieces it
+// `packs` the packs the push added (one the manifest already lists is moved to
+// the end with this push's seq: its objects were made reachable again by this
+// push, and a pack's seq is the push that last made its objects needed, which
+// fetch relies on) and `historyPieces` the history pieces it
 // added (all already uploaded), `head` and `history` are changed only if
 // given. The ref snapshot for the push is recorded. `peeled` adds the peeled
 // targets of annotated tags the push put in refs; the manifest keeps the ones
@@ -294,6 +297,7 @@ async function read(store) {
 function advance(base, { refs, packs = [], historyPieces = [], head = base.head, history = base.history, peeled = {} }) {
   const seq = base.seq + 1;
   const snapshots = [...base.snapshots, { seq, refs: { ...refs } }];
+  const moved = new Set(packs.map((pack) => pack.name));
   const records = base.peeled !== undefined || base.snapshots.length === 0;
   return {
     ...base,
@@ -301,7 +305,7 @@ function advance(base, { refs, packs = [], historyPieces = [], head = base.head,
     writer: crypto.randomBytes(16).toString("hex"),
     head,
     refs: { ...refs },
-    packs: [...base.packs, ...packs.map((pack) => ({ ...pack, seq }))],
+    packs: [...base.packs.filter((pack) => !moved.has(pack.name)), ...packs.map((pack) => ({ ...pack, seq }))],
     snapshots,
     ...(records ? { peeled: keepPeeled({ ...base.peeled, ...peeled }, snapshots) } : {}),
     history,

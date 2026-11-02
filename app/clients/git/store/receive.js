@@ -82,6 +82,8 @@ const createReader = require("./reader");
 const { parseCommit, parseTree, parseTag, isDirectory, isGitlink } = require("./objects");
 const { scanPack } = require("./packscan");
 const { buildRev } = require("./rev");
+const { readHistory } = require("./history");
+const { ancestors } = require("./fetch");
 
 const ZERO = "0".repeat(40);
 const MASTER = "refs/heads/master";
@@ -619,7 +621,7 @@ async function receive({ store, cache, lock, commands, pack = null, limit = DEFA
     if (behind) throw behind;
 
     const added = await prepare({ store, cache, commands, incoming, limit, sizeHint, base, children, stats, baseLimit, hold: (r) => (reservation = r), say });
-    const next = await swap({ store, lock, commands, added });
+    const next = await swap({ store, cache, lock, commands, added });
 
     stats.packs = added.packs.map((piece) => piece.name);
     say("Push saved.");
@@ -819,20 +821,48 @@ async function historyPiece(scratch, reservation, gitDir, commits) {
   return describePack(packFile, path.join(reservation.dir, "history.idx"));
 }
 
+// The packs to list again (with this push's seq) because the push makes
+// objects reachable that no ref reached, which stay in whatever older pack
+// holds them. A pack's seq is the push that last made its objects needed, and
+// fetch sends the packs above a client's place by it. A push with a pack makes
+// the same demand of the client (it sends what the refs it was shown did not
+// reach), and a pack already listed is moved by manifest.advance. A push with no
+// pack is the case left: a tip that is not a ref now and not an ancestor of one
+// was last reachable some time ago. Which pack holds it is not known without
+// reading, so all the packs are listed again, which costs the next fetch a
+// clone and is rare (tagging a commit on a branch that was force pushed away).
+async function reachedAgain({ store, cache, current, commands, added }) {
+  if (added.packs.length) return [];
+
+  const live = new Set(Object.values(current.refs));
+  const tips = commands.filter((command) => command.new !== ZERO && !live.has(command.new)).map((command) => command.new);
+  if (!tips.length) return [];
+
+  const peel = (oid) => (current.peeled && current.peeled[oid]) || oid;
+  // A tag object that is not a ref now is not reached by anything else
+  if (tips.some((oid) => added.peeled[oid])) return current.packs;
+
+  const graph = await readHistory({ store, cache, manifest: current });
+  if (!graph) return current.packs;
+
+  const reached = ancestors(graph, [...live].map(peel), Infinity);
+  return tips.every((oid) => reached.has(oid)) ? [] : current.packs;
+}
+
 // Applies the commands to the newest manifest and swaps it in. The base may
 // have moved since the push began (another push, Blot's own commit); that is
 // fine as long as the refs the commands name have not.
-async function swap({ store, lock, commands, added }) {
+async function swap({ store, cache, lock, commands, added }) {
   const current = await manifest.read(store);
   const refs = applied(current, commands);
   const behind = staleRefs(current, commands) || nameConflicts(refs, commands);
   if (behind) throw behind;
 
-  const has = new Set(current.packs.map((pack) => pack.name));
+  const again = await reachedAgain({ store, cache, current, commands, added });
   const next = manifest.advance(current, {
     refs,
     head: current.head || (refs[MASTER] ? MASTER : null),
-    packs: added.packs.filter((piece) => !has.has(piece.name)).map(entryOf),
+    packs: (again.length ? again : added.packs).map(entryOf),
     historyPieces: added.pieces.map(entryOf),
     peeled: added.peeled,
   });

@@ -100,6 +100,26 @@ describe("git store history", function () {
     expect(store.stats.gets).toBe(0);
   });
 
+  it("gives up on commits that inflate past the budget, before inflating the rest", async function () {
+    const { entry, pack } = await upload(commits);
+    const entries = fx.listEntries(pack);
+    const manifest = manifestOf(null, [entry]);
+
+    // The size of the commits once inflated (verify-pack gives a delta's own size),
+    // many times the pack
+    const sizes = fx.text(repo, ["cat-file", "--batch-check=%(objectsize)"], commits.join("\n") + "\n").split("\n").map(Number);
+    const expanded = sizes.reduce((sum, n) => sum + n, 0);
+    expect(entry.size).toBeLessThan(expanded / 10);
+
+    expect(await readHistory({ store, manifest, maxExpanded: expanded - 1 })).toBe(null);
+    expect((await readHistory({ store, manifest, maxExpanded: expanded * 2 })).size).toBe(commits.length);
+
+    // A budget of one commit stops at the first or second entry
+    const inflates = spyOn(zlib, "inflateSync").and.callThrough();
+    expect(await readHistory({ store, manifest, maxExpanded: entries[0].size + 1 })).toBe(null);
+    expect(inflates.calls.count()).toBeLessThanOrEqual(2);
+  });
+
   it("refuses a pack that is not what the manifest says, or not commits", async function () {
     const { entry, pack } = await upload(commits.slice(0, 4));
     const wrong = { ...entry, size: entry.size + 1 };

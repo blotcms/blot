@@ -765,9 +765,9 @@ function acknowledgement({ commons, ready, done, early, detailed }) {
   if (done) {
     lines.push(detailed && commons.length ? "ACK " + last + "\n" : "NAK\n");
   } else {
-    if (detailed && ready) lines.push("ACK " + last + " ready\n");
+    if (detailed && ready && last) lines.push("ACK " + last + " ready\n");
     lines.push("NAK\n");
-    if (early) lines.push("ACK " + last + "\n");
+    if (early && last) lines.push("ACK " + last + "\n");
   }
   return Buffer.concat(lines.map((line) => pktline.packet(line)));
 }
@@ -812,7 +812,7 @@ async function serve({ store, cache, manifest, body, out, limiter, chunkSize, me
     : { floor: 0, commons: [], ready: false, walked: 0 };
   const facts = { commons: negotiation.commons.length, ready: negotiation.ready, walked: negotiation.walked };
 
-  const early = !request.done && detailed && negotiation.ready && capabilities.includes("no-done");
+  const early = !request.done && detailed && negotiation.ready && negotiation.commons.length > 0 && capabilities.includes("no-done");
   if (!request.done && !early) {
     out.end(acknowledgement({ ...negotiation, detailed }));
     return { negotiated: true, floor: negotiation.floor, ...facts };

@@ -12,7 +12,8 @@
 // other. An entry may be a delta (git sometimes deltifies commits), against
 // an earlier entry of the same pack: the history packs are self-contained, as
 // every pack is. What is read is held in memory, so a repository whose history
-// is over `maxBytes` of packs gets null instead: the caller sends everything,
+// is over `maxBytes` of packs, or `maxExpanded` bytes once inflated, gets null
+// instead: the caller sends everything,
 // which is slow but never wrong.
 //
 // The packs are immutable, so the bytes are kept in the cache by name. A miss
@@ -21,7 +22,7 @@ const crypto = require("crypto");
 const zlib = require("zlib");
 const { packKey } = require("./layout");
 const { parseHeader } = require("./pack");
-const { applyDelta } = require("./delta");
+const { applyDelta, resultSize } = require("./delta");
 const { parseCommit } = require("./objects");
 const { CorruptError } = require("./errors");
 const { mapLimit } = require("./limit");
@@ -34,8 +35,25 @@ const MAX_ENTRY_HEADER = 32;
 
 const MAX_BYTES = 64 * 1024 * 1024;
 
+// The most the commits may add up to once inflated, however small they are
+// compressed. Commit messages compress very well, so the packs' size does not
+// bound this.
+const MAX_EXPANDED = 256 * 1024 * 1024;
+
+class OverBudget extends Error {}
+
+// Takes `bytes` from the budget ({ left }), and stops the read when it is gone
+function spend(budget, bytes) {
+  budget.left -= bytes;
+  if (budget.left < 0) throw new OverBudget();
+}
+
 // The commits in a pack of commits, added to `into` (a Map of ID -> parents)
-function readCommits(buffer, name, into) {
+//
+// Every entry's size is spent from `budget` from its header, before it is
+// inflated, and a delta's result from the delta's header, before it is applied,
+// so a pack that would expand past the budget stops at once with OverBudget.
+function readCommits(buffer, name, into, budget) {
   if (buffer.length < PACK_HEADER + TRAILER || buffer.toString("latin1", 0, 4) !== "PACK" || buffer.readUInt32BE(4) !== 2) {
     throw new CorruptError(name + " is not a version 2 pack");
   }
@@ -50,6 +68,7 @@ function readCommits(buffer, name, into) {
     if (at >= end) throw new CorruptError(name + " is cut short");
 
     const entry = parseHeader(buffer.subarray(at, Math.min(at + MAX_ENTRY_HEADER, end)), at);
+    spend(budget, entry.size);
     const inflated = zlib.inflateSync(buffer.subarray(at + entry.length, end), { info: true, maxOutputLength: Math.max(entry.size, 1) });
     if (inflated.buffer.length !== entry.size) throw new CorruptError(name + " has an entry that is not the size its header says");
 
@@ -57,6 +76,7 @@ function readCommits(buffer, name, into) {
     if (entry.baseOffset !== undefined || entry.baseOid !== undefined) {
       const base = entry.baseOffset !== undefined ? byOffset.get(entry.baseOffset) : byOid.get(entry.baseOid);
       if (!base) throw new CorruptError(name + " has a delta whose base is not an earlier entry");
+      spend(budget, resultSize(inflated.buffer));
       object = { type: base.type, data: applyDelta(base.data, inflated.buffer) };
     }
     if (object.type !== "commit") throw new CorruptError(name + " holds something other than commits");
@@ -87,13 +107,19 @@ async function bytesOf({ store, cache, pack }) {
 }
 
 // Every commit of the repository's history, or null when it is too big to hold
-async function readHistory({ store, cache = null, manifest, maxBytes = MAX_BYTES }) {
+async function readHistory({ store, cache = null, manifest, maxBytes = MAX_BYTES, maxExpanded = MAX_EXPANDED }) {
   const packs = [...(manifest.history ? [manifest.history] : []), ...(manifest.historyPieces || [])];
   if (packs.reduce((sum, pack) => sum + pack.size, 0) > maxBytes) return null;
 
   const commits = new Map();
   const sources = await mapLimit(packs, CONCURRENCY, (pack) => bytesOf({ store, cache, pack }));
-  sources.forEach((bytes, index) => readCommits(bytes, packs[index].name, commits));
+  const budget = { left: maxExpanded };
+  try {
+    sources.forEach((bytes, index) => readCommits(bytes, packs[index].name, commits, budget));
+  } catch (err) {
+    if (err instanceof OverBudget) return null;
+    throw err;
+  }
 
   return { size: commits.size, has: (oid) => commits.has(oid), parents: (oid) => commits.get(oid) };
 }

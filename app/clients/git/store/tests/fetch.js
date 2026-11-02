@@ -14,6 +14,7 @@ const manifest = require("../manifest");
 const createCache = require("../cache");
 const createMemoryStore = require("../objectStore/memory");
 const { serve } = require("../clone");
+const receive = require("../receive");
 const { negotiate } = require("../fetch");
 const { advertise } = require("../advertise");
 
@@ -156,6 +157,14 @@ describe("git store fetch", function () {
       client.first = first;
     }
     return clients;
+  }
+
+  // A client made from the pusher's repository as it is now, and pointed at the store
+  async function clientFromWork(name) {
+    const target = path.join(dir, name);
+    ok(await runGit(["clone", "-q", "--no-tags", "file://" + work, target]));
+    fx.git(target, ["remote", "set-url", "origin", server.url]);
+    return target;
   }
 
   const lastResult = () => server.results[server.results.length - 1];
@@ -330,6 +339,111 @@ describe("git store fetch", function () {
       expectMirror(client);
     });
 
+  });
+
+  describe("history that is restored", function () {
+    beforeEach(() => setup());
+    afterEach(teardown);
+
+    // Push A, push B, force push back to A, clone, force push B again. The
+    // second push of B is the same pack as the first, which is already listed.
+    it("sends what a client needs when a force push makes an old pack reachable again", async function () {
+      await pushWork("master");
+      const a = fx.text(work, ["rev-parse", "HEAD"]);
+      const b = addCommit();
+      await pushWork("master");
+      fx.git(work, ["reset", "-q", "--hard", a]);
+      await pushWork("-f", "master");
+
+      // A clone of the store would be sent every pack, B's too; this client has A and no more
+      const client = await clientFromWork("client");
+      expect(fx.text(client, ["rev-parse", "HEAD"])).toBe(a);
+
+      const packs = latest.packs.length;
+      fx.git(work, ["reset", "-q", "--hard", b]);
+      await pushWork("-f", "master");
+
+      // The pack is listed once, as the last, with the seq of the push that made it reachable
+      expect(latest.packs.length).toBe(packs);
+      expect(latest.packs[latest.packs.length - 1].seq).toBe(latest.seq);
+      expect(new Set(latest.packs.map((pack) => pack.name)).size).toBe(latest.packs.length);
+
+      ok(await gitIn(client, "fetch", "origin"));
+      expect(lastResult().floor).toBe(latest.seq - 1);
+      expect(lastResult().packs).toBe(1);
+      expectMirror(client, { tags: false });
+      ok(await gitIn(client, ...IDENTITY, "pull", "--no-rebase", "--no-edit"));
+      expect(fx.text(client, ["rev-parse", "HEAD"])).toBe(b);
+
+      // And a clone, which keeps one copy of each object
+      expectMirror(await clone("fresh"));
+    });
+
+    it("lists the packs again when a push with no pack makes an unreachable commit reachable", async function () {
+      await pushWork("master");
+      const a = fx.text(work, ["rev-parse", "HEAD"]);
+      const b = addCommit();
+      await pushWork("master");
+      fx.git(work, ["reset", "-q", "--hard", a]);
+      await pushWork("-f", "master");
+      const client = await clientFromWork("client");
+
+      const tag = (oid, ref) => receive({ store, cache, lock: createLock(), commands: [{ old: "0".repeat(40), new: oid, ref }], pack: null });
+
+      // A commit that master reaches needs nothing moved
+      const before = (await refresh()).packs;
+      expect((await tag(a, "refs/tags/at-a")).outcome).toBe("ok");
+      expect((await refresh()).packs).toEqual(before);
+
+      // One that no ref reaches may be in any pack
+      expect((await tag(b, "refs/tags/at-b")).outcome).toBe("ok");
+      await refresh();
+      expect(latest.packs.map((pack) => pack.name)).toEqual(before.map((pack) => pack.name));
+      expect(latest.packs.every((pack) => pack.seq === latest.seq)).toBe(true);
+
+      ok(await gitIn(client, "fetch", "--tags", "origin"));
+      expect(fx.text(client, ["rev-parse", "refs/tags/at-b"])).toBe(b);
+      expectMirror(client);
+    });
+  });
+
+  describe("a snapshot with no refs", function () {
+    beforeEach(() => setup());
+    afterEach(teardown);
+
+    // Only a tag, then the tag deleted, then master: the snapshot between has no refs
+    it("is not taken to be proven by a client that has nothing in common", async function () {
+      await pushWork("refs/tags/v1");
+      await pushWork(":refs/tags/v1");
+      expect(latest.snapshots[latest.snapshots.length - 1].refs).toEqual({});
+      await pushWork("master");
+
+      const stranger = path.join(dir, "stranger");
+      fs.mkdirSync(stranger);
+      fx.git(stranger, ["init", "-q", "-b", "main"]);
+      fs.writeFileSync(path.join(stranger, "file"), "unrelated\n");
+      fx.git(stranger, ["add", "-A"]);
+      fx.git(stranger, ["commit", "-q", "-m", "Unrelated"]);
+
+      ok(await gitIn(stranger, "fetch", server.url, "refs/heads/master:refs/remotes/origin/master"));
+      expect(lastResult().floor).toBe(0);
+      expect(lastResult().packs).toBe(latest.packs.length);
+      fx.git(stranger, ["fsck", "--strict", "--no-dangling"]);
+      expect(fx.text(stranger, ["rev-parse", "refs/remotes/origin/master"])).toBe(latest.refs["refs/heads/master"]);
+    });
+
+    it("never acknowledges nothing", async function () {
+      await pushWork("refs/tags/v1");
+      await pushWork(":refs/tags/v1");
+      await pushWork("master");
+
+      for (const caps of [CAPS, "multi_ack_detailed side-band-64k ofs-delta"]) {
+        const out = new PassThrough();
+        const written = collect(out);
+        await serve({ store, cache, manifest: latest, body: request({ wants: [latest.refs["refs/heads/master"]], haves: ["e".repeat(40)], caps }), out });
+        expect((await written).toString("latin1")).not.toContain("undefined");
+      }
+    });
   });
 
   describe("a client which lacks a tip that has always been in the refs", function () {
