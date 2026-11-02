@@ -8,6 +8,7 @@ var Mustache = require("mustache");
 var fs = require("fs-extra");
 var async = require("async");
 var Blog = require("models/blog");
+var blogKey = require("models/blog/key");
 var _ = require("lodash");
 var chokidar = require("chokidar");
 var parseTemplate = require("models/template/parseTemplate");
@@ -379,10 +380,11 @@ function build(directory, callback) {
 
               buildViews(id, snapshot.definitions, function (buildViewsErr) {
                 // Every valid view has already been persisted by buildViews
-                // regardless of buildViewsErr, so every blog's cache must
-                // still be flushed to make the rebuilt template visible - a
-                // broken view elsewhere shouldn't leave views stuck stale.
-                bumpCacheIDForEveryBlog(id, function (err) {
+                // regardless of buildViewsErr, so the cache of every blog on
+                // this template must still be flushed to make the rebuilt
+                // template visible - a broken view elsewhere shouldn't leave
+                // views stuck stale.
+                bumpCacheIDForTemplateUsers(id, function (err) {
                   if (err) return callback(err);
                   if (buildViewsErr) return callback(buildViewsErr);
                   if (config.environment !== "development") return callback();
@@ -717,18 +719,27 @@ function templateDirectories(directory) {
     });
 }
 
-function bumpCacheIDForEveryBlog(templateID, callback) {
+// Only blogs whose template is this one render it. A fork is a copy with its
+// own ID, so it doesn't change when the template it came from does.
+function bumpCacheIDForTemplateUsers(templateID, callback) {
   Blog.getAllIDs(function (err, ids) {
     if (err) return callback(err);
     async.eachSeries(
       ids,
       function (blogID, next) {
-        Blog.set(blogID, { cacheID: Date.now() }, function (err) {
-          if (err) return next(err);
+        client
+          .hGet(blogKey.info(blogID), "template")
+          .then(function (blogTemplateID) {
+            if (blogTemplateID !== templateID) return next();
 
-          debug("..", templateID, "flushed for blog", blogID);
-          next();
-        });
+            Blog.set(blogID, { cacheID: Date.now() }, function (err) {
+              if (err) return next(err);
+
+              debug("..", templateID, "flushed for blog", blogID);
+              next();
+            });
+          })
+          .catch(next);
       },
       callback
     );
@@ -958,3 +969,4 @@ function applyForkPackageOverlay(templateID, overlay, callback) {
 }
 
 module.exports = main;
+module.exports.bumpCacheIDForTemplateUsers = bumpCacheIDForTemplateUsers;
