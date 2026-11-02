@@ -67,6 +67,11 @@ const COALESCE = 64 * 1024;
 
 const MAX_REQUEST = 1024 * 1024;
 
+// After this long planning, a side-band client is told the clone is under way
+const KEEPALIVE_AFTER = 5000;
+const KEEPALIVE = Buffer.from("0005\x01", "latin1");
+const PROGRESS = pktline.packet(Buffer.concat([Buffer.from([2]), Buffer.from("Preparing your repository...\n")]));
+
 const SIDEBAND_MAX = { "side-band-64k": 65515, "side-band": 995 };
 
 const CONTENT_TYPE = "application/x-git-upload-pack-result";
@@ -130,6 +135,8 @@ async function resolveOffset(run, pack, raw) {
 // { offsets: sorted pack offsets, oids: the 20-byte IDs in the same order }.
 // Of an object's copies the newest pack's is kept, which is the one the reader
 // reads too.
+// Keeping one copy across packs is only safe while every pack is
+// self-contained (see "Clone" in the README).
 async function planSkips(run, packs) {
   const skips = packs.map(() => []);
   if (packs.length < 2) return skips.map(finishSkips);
@@ -611,12 +618,19 @@ function createLimiter({ max, maxWaiting = 0 }) {
 // an error status; otherwise `out` has been ended (after an error packet, when
 // there is a sideband to carry it) or destroyed. A client which went away is a
 // ClientGoneError: reading stopped as soon as it was known.
-async function clone({ store, manifest, out, prelude, sideband = null, limiter = null, chunkSize = CHUNK_SIZE, mergeBudget }) {
+async function clone({ store, manifest, out, prelude, sideband = null, limiter = null, chunkSize = CHUNK_SIZE, mergeBudget, keepaliveAfter = KEEPALIVE_AFTER, progress = true }) {
   const controller = new AbortController();
   const run = { store, signal: controller.signal, chunkSize, mergeBudget };
   const stats = { objects: 0, bytes: 0, skipped: 0, rewritten: 0, toRef: 0 };
   const release = limiter ? await limiter.acquire() : () => {};
   let started = false;
+  let timer = null;
+
+  // A client which left while it queued is not worth planning for
+  if (out.destroyed) {
+    release();
+    throw new ClientGoneError("The client went away");
+  }
 
   // Rejects if the client goes away; nothing waits on it unless a write does
   const gone = new Promise((resolve, reject) => {
@@ -630,11 +644,38 @@ async function clone({ store, manifest, out, prelude, sideband = null, limiter =
   out.on("error", ignore);
 
   try {
-    const thePlan = await plan(run, manifest.packs);
+    // Planning a big repository can take long enough for a proxy to give up on
+    // a response which has said nothing. So after `keepaliveAfter` ms a
+    // side-band client is sent the prelude, one line of progress (unless it
+    // asked for none) and then an empty band 1 packet every so often, which
+    // git ignores. From then on a failure can only be reported on band 3.
+    let sentPrelude = false;
+    if (sideband && keepaliveAfter > 0) {
+      const beat = () => {
+        if (!out.destroyed && !out.writableEnded) out.write(KEEPALIVE);
+      };
+      timer = setTimeout(() => {
+        if (out.destroyed || out.writableEnded) return;
+        sentPrelude = true;
+        started = true;
+        if (prelude) out.write(prelude);
+        if (progress) out.write(PROGRESS);
+        beat();
+        timer = setInterval(beat, keepaliveAfter);
+      }, keepaliveAfter);
+    }
+
+    let thePlan;
+    try {
+      thePlan = await plan(run, manifest.packs);
+    } finally {
+      clearTimeout(timer);
+      clearInterval(timer);
+    }
     stats.objects = thePlan.total;
 
     const max = sideband ? SIDEBAND_MAX[sideband] : 0;
-    if (prelude) await write(out, prelude, gone);
+    if (prelude && !sentPrelude) await write(out, prelude, gone);
     started = true;
 
     for await (const piece of packStream(run, thePlan, stats)) {
@@ -718,7 +759,7 @@ function tips(manifest) {
 //
 // A ProtocolError (the request isn't git) is thrown before anything is written,
 // so the host can answer 400. A BusyError is too (503).
-async function serve({ store, manifest, body, out, limiter, chunkSize, mergeBudget }) {
+async function serve({ store, manifest, body, out, limiter, chunkSize, mergeBudget, keepaliveAfter }) {
   const request = parseRequestOrRefuse(body);
   const refusal = request.refusal || check(manifest, request);
 
@@ -738,7 +779,12 @@ async function serve({ store, manifest, body, out, limiter, chunkSize, mergeBudg
   }
 
   const sideband = request.capabilities.includes("side-band-64k") ? "side-band-64k" : request.capabilities.includes("side-band") ? "side-band" : null;
-  return clone({ store, manifest, out, prelude: nak, sideband, limiter, chunkSize, mergeBudget });
+  return clone({ store, manifest, out, prelude: nak, sideband, limiter,
+    chunkSize,
+    mergeBudget,
+    keepaliveAfter,
+    progress: !request.capabilities.includes("no-progress"),
+  });
 }
 
 function parseRequestOrRefuse(body) {

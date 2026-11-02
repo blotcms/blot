@@ -21,7 +21,7 @@ async function collect(stream) {
 
 // Options: store, manifest (a function returning the manifest to serve),
 // limiter and chunkSize (passed to serve)
-async function startServer({ store, manifest, limiter, chunkSize }) {
+async function startServer({ store, manifest, limiter, chunkSize, keepaliveAfter }) {
   const results = [];
   const errors = [];
   const requests = [];
@@ -40,7 +40,7 @@ async function startServer({ store, manifest, limiter, chunkSize }) {
         if (req.headers["content-encoding"] === "gzip") body = zlib.gunzipSync(body);
 
         res.setHeader("content-type", RESULT_TYPE);
-        results.push(await serve({ store, manifest: manifest(), body, out: res, limiter, chunkSize }));
+        results.push(await serve({ store, manifest: manifest(), body, out: res, limiter, chunkSize, keepaliveAfter }));
         return;
       }
 

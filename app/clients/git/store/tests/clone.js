@@ -526,6 +526,85 @@ describe("git store clone", function () {
     });
   });
 
+  describe("a plan which takes a while", function () {
+    const pkt = (text) => (text.length + 4).toString(16).padStart(4, "0") + text;
+    const request = (caps) => Buffer.from(pkt("want " + fixture.head + " " + caps + "\n") + "0000" + pkt("done\n"));
+
+    // Index reads are held for 600 ms, and a client is told after 100
+    async function held(options = {}) {
+      const repo = await repository(overlapping(), { wrap: faults });
+      repo.store.inject("read", { key: /\.idx$/, delay: 600, times: 100, ...options });
+      return repo;
+    }
+
+    async function asked(repo, caps, extra = {}) {
+      const out = new PassThrough();
+      const written = collect(out);
+      const result = await serve({ store: repo.store, manifest: repo.manifest, body: request(caps), out, keepaliveAfter: 100, ...extra });
+      return { result, bytes: await written };
+    }
+
+    it("sends keepalives and a line of progress, then the pack", async function () {
+      const { bytes } = await asked(await held(), "side-band-64k ofs-delta");
+      const text = bytes.toString("latin1");
+
+      expect(text.startsWith("0008NAK\n")).toBe(true);
+      expect(text).toContain("\x02Preparing your repository...");
+      expect(text.split("0005\x01").length).toBeGreaterThan(1);
+    });
+
+    it("sends no progress line to a client which asked for none, but still keepalives", async function () {
+      const { bytes } = await asked(await held(), "side-band-64k ofs-delta no-progress");
+      const text = bytes.toString("latin1");
+
+      expect(text).not.toContain("Preparing");
+      expect(text.split("0005\x01").length).toBeGreaterThan(1);
+    });
+
+    it("sends nothing extra when the plan is quick", async function () {
+      const repo = await repository(overlapping());
+      const { bytes } = await asked(repo, "side-band-64k ofs-delta", { keepaliveAfter: 60000 });
+      expect(bytes.toString("latin1")).not.toContain("Preparing");
+      expect(bytes.subarray(0, 8).toString()).toBe("0008NAK\n");
+    });
+
+    it("is cloned by git, which accepts the keepalives, and fscks", async function () {
+      const repo = await held();
+      const { server, dir, cloned } = await cloneWithGit(repo, { keepaliveAfter: 100 });
+
+      expect(server.errors).toEqual([]);
+      expect(cloned.code).toBe(0);
+      expect((await runGit(["fsck", "--strict"], { cwd: dir })).code).toBe(0);
+      expect(objectIds(dir)).toEqual(origin);
+    });
+
+    it("fails the git client, which keeps nothing, when the plan then fails", async function () {
+      const repo = await held({ before: new Error("ECONNRESET") });
+      const { server, dir, cloned } = await cloneWithGit(repo, { keepaliveAfter: 100 });
+
+      expect(server.errors.length).toBe(1);
+      expect(cloned.code).not.toBe(0);
+      expect(fs.existsSync(dir)).toBe(false);
+    });
+
+    it("does not plan for a client which left while it waited its turn", async function () {
+      const limiter = createLimiter({ max: 1, maxWaiting: 1 });
+      const holder = await limiter.acquire();
+      const repo = await repository(overlapping(), { wrap: faults });
+      const out = new PassThrough();
+
+      const waiting = clone({ store: repo.store, manifest: repo.manifest, out, limiter }).catch((err) => err);
+      await sleep(10);
+      out.destroy();
+      await sleep(10);
+      holder();
+
+      expect((await waiting) instanceof ClientGoneError).toBe(true);
+      expect(repo.store.calls.length).toBe(0);
+      expect(limiter.stats()).toEqual({ active: 0, waiting: 0 });
+    });
+  });
+
   describe("the limiter", function () {
     it("runs at most `max` at once, queues up to `maxWaiting`, and refuses the rest", async function () {
       const limiter = createLimiter({ max: 2, maxWaiting: 1 });
