@@ -17,8 +17,9 @@
 // partials are both rewritten; locally edited templates are written back to
 // the blog's folder.
 //
-// Dry run by default: prints each view it would change. --apply writes.
+// Dry run by default. --apply writes; --verbose lists each view.
 // Usage: node scripts/template/migrate-legacy-tags.js [--apply] [--verbose]
+//   [--limit N] [--concurrency N]
 
 const { promisify } = require("util");
 const client = require("models/client");
@@ -28,6 +29,13 @@ const redisKeys = require("../util/redisKeys");
 
 const APPLY = process.argv.includes("--apply");
 const VERBOSE = process.argv.includes("--verbose");
+const option = (flag, fallback) => {
+  const i = process.argv.indexOf(flag);
+  return i === -1 ? fallback : Number(process.argv[i + 1]);
+};
+// --limit N saves at most N views, to time a batch
+const LIMIT = option("--limit", 0);
+const CONCURRENCY = option("--concurrency", 4);
 const setView = promisify(Template.setView);
 const writeToFolderAsync = promisify(writeToFolder);
 
@@ -166,6 +174,85 @@ async function blogAssetFields() {
   });
 }
 
+// The updates a view needs, read fresh, or null if it needs none
+async function viewUpdates(id, name, template) {
+  const key = "template:" + id + ":view:" + name;
+  if ((await client.type(key)) !== "hash") return null;
+
+  const [content, partialsJSON, localsJSON] = await client.hmGet(key, [
+    "content",
+    "partials",
+    "locals",
+  ]);
+  if (typeof content !== "string") return null;
+
+  const ownLocals = new Set([...template.locals, ...Object.keys(parseJSON(localsJSON))]);
+  const updates = { name };
+  const changes = [];
+
+  const main = rewrite(content, ownLocals);
+  if (main.text !== content) updates.content = main.text;
+  changes.push(...main.changes);
+
+  const partials = parseJSON(partialsJSON);
+  let partialsChanged = false;
+  for (const partial in partials) {
+    if (typeof partials[partial] !== "string") continue;
+    const result = rewrite(partials[partial], ownLocals);
+    if (result.text === partials[partial]) continue;
+    partials[partial] = result.text;
+    changes.push(...result.changes);
+    partialsChanged = true;
+  }
+
+  if (!updates.content && !partialsChanged) return null;
+
+  // setView drops file-backed partial markers that aren't in the content
+  // or in updates.partials, so always pass the whole map back
+  updates.partials = partials;
+  return { updates, changes };
+}
+
+// Every changed view bumps its blog's cacheID and rebuilds the template's CDN
+// manifest, so a blog's views are saved one at a time, a few blogs at once.
+async function applyBlog(views, templates, progress) {
+  const rewritten = new Set();
+
+  for (const { id, name } of views) {
+    if (LIMIT && progress.done >= LIMIT) break;
+    const template = templates.get(id);
+    const result = await viewUpdates(id, name, template);
+    if (!result) continue;
+    try {
+      await setView(id, result.updates);
+      rewritten.add(id);
+      count("views saved");
+    } catch (err) {
+      process.exitCode = 1;
+      count("views failed");
+      console.log("Failed to save view", id, name, err.message);
+    }
+    if (++progress.done % 500 === 0) {
+      const minutes = (Date.now() - progress.start) / 60000;
+      console.log(`${progress.done} of ${progress.total} views saved in ${minutes.toFixed(1)} min`);
+    }
+  }
+
+  for (const id of rewritten) {
+    const template = templates.get(id);
+    if (!template.localEditing) continue;
+    count("templates written to folder");
+    try {
+      await writeToFolderAsync(template.owner, id);
+    } catch (err) {
+      // Redis is already migrated, so a re-run won't find this template:
+      // retry it by hand with writeToFolder(owner, id)
+      process.exitCode = 1;
+      console.log("Failed to write template to folder", template.owner, id, err.message);
+    }
+  }
+}
+
 async function main() {
   await blogAssetFields();
 
@@ -187,7 +274,10 @@ async function main() {
     });
   });
 
-  const rewritten = new Map();
+  // Owner -> views to rewrite. Only names are kept; content is re-read when
+  // each view is saved.
+  const byOwner = new Map();
+  let total = 0;
 
   await redisKeys("template:*:view:*", async (key) => {
     const rest = key.slice("template:".length);
@@ -196,70 +286,31 @@ async function main() {
     const name = rest.slice(i + ":view:".length);
     const template = templates.get(id);
     if (!template) return;
-    if ((await client.type(key)) !== "hash") return;
 
-    const [content, partialsJSON, localsJSON] = await client.hmGet(key, [
-      "content",
-      "partials",
-      "locals",
-    ]);
-    if (typeof content !== "string") return;
+    const result = await viewUpdates(id, name, template);
+    if (!result) return;
 
-    const ownLocals = new Set([...template.locals, ...Object.keys(parseJSON(localsJSON))]);
-    const changes = [];
-    const updates = { name };
-
-    const main = rewrite(content, ownLocals);
-    if (main.text !== content) updates.content = main.text;
-    changes.push(...main.changes);
-
-    const partials = parseJSON(partialsJSON);
-    let partialsChanged = false;
-    for (const partial in partials) {
-      if (typeof partials[partial] !== "string") continue;
-      const result = rewrite(partials[partial], ownLocals);
-      if (result.text === partials[partial]) continue;
-      partials[partial] = result.text;
-      changes.push(...result.changes);
-      partialsChanged = true;
-    }
-
-    if (!updates.content && !partialsChanged) {
-      if (changes.length) changes.forEach((c) => count("reported only: " + c));
-      return;
-    }
-
-    // setView drops file-backed partial markers that aren't in the content
-    // or in updates.partials, so always pass the whole map back
-    updates.partials = partials;
-
-    count("views rewritten");
-    changes.forEach(count);
-    console.log((APPLY ? "rewriting:" : "would rewrite:"), id, name, [...new Set(changes)].join(", "));
-    if (VERBOSE && updates.content) console.log(updates.content.slice(0, 2000));
-
-    if (!APPLY) return;
-    try {
-      await setView(id, updates);
-      rewritten.set(id, template);
-    } catch (err) {
-      process.exitCode = 1;
-      count("views failed");
-      console.log("Failed to save view", id, name, err.message);
-    }
+    total++;
+    count("views to rewrite");
+    result.changes.forEach(count);
+    if (VERBOSE) console.log("would rewrite:", id, name, [...new Set(result.changes)].join(", "));
+    if (!byOwner.has(template.owner)) byOwner.set(template.owner, []);
+    byOwner.get(template.owner).push({ id, name });
   });
 
-  for (const [id, template] of rewritten) {
-    if (!template.localEditing) continue;
-    count("templates written to folder");
-    try {
-      await writeToFolderAsync(template.owner, id);
-    } catch (err) {
-      // Redis is already migrated, so a re-run won't find this template:
-      // retry it by hand with writeToFolder(owner, id)
-      process.exitCode = 1;
-      console.log("Failed to write template to folder", template.owner, id, err.message);
-    }
+  counts["blogs with views to rewrite"] = byOwner.size;
+
+  if (APPLY) {
+    const progress = { done: 0, total: LIMIT || total, start: Date.now() };
+    const queue = [...byOwner.values()];
+    const worker = async () => {
+      while (queue.length && !(LIMIT && progress.done >= LIMIT)) {
+        await applyBlog(queue.shift(), templates, progress);
+      }
+    };
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+    const minutes = (Date.now() - progress.start) / 60000;
+    console.log(`${progress.done} views saved in ${minutes.toFixed(1)} min`);
   }
 
   console.log(APPLY ? "Applied:" : "Dry run, nothing written:");
