@@ -52,8 +52,9 @@ its own), `redis-host` (Redis, which shares the host), and the host cycle in
 7. **After `finish` released an old volume on the host, deploy the app before
    the next resize.** The release breaks the running containers' link to host
    mounts until they are recreated (README, "After it").
-8. Public repo: volume and snapshot IDs are fine in commits; no account IDs,
-   key names or ssh details, and sizes only as percentages here.
+8. Public repo: no production instance, volume or snapshot IDs, account IDs,
+   key names or ssh details in commits, PRs or issues (drill IDs are fine), and
+   sizes only as percentages here.
 
 ## What to expect at production scale
 
