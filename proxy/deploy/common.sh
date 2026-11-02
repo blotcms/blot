@@ -288,7 +288,9 @@ reset_cache_dir() { # reset_cache_dir <host dir> <image>
   docker run --rm --user 0 --entrypoint sh -v "$dir":/cache --memory "$TRANSIENT_MEMORY" "$image" -c '
     set -e; cd /cache; mkdir -p "$1"
     for e in .[!.]* ..?* *; do
-      { [ -e "$e" ] || [ -L "$e" ]; } && [ "$e" != .trash ] && mv "$e" "$1/"
+      # .proxy-temp stays: a running OpenResty writes responses there, and does
+      # not recreate it (reverse-proxy-fill.conf).
+      { [ -e "$e" ] || [ -L "$e" ]; } && [ "$e" != .trash ] && [ "$e" != .proxy-temp ] && mv "$e" "$1/"
     done
     exit 0' sh "$trash" >/dev/null || return 1
   # all of .trash, so what an interrupted earlier reset left goes too

@@ -227,7 +227,7 @@ say "Cron"
 # deploy.sh installs the script itself.
 put /etc/cron.d/blot-docker-health 0644 root:root <<'EOF2'
 # Installed by config/host/host/setup.sh
-* * * * * root /usr/local/bin/check_docker_health.sh >/dev/null 2>&1
+* * * * * root /usr/local/bin/check_docker_health.sh >> /home/ec2-user/docker-health-check.log 2>&1
 EOF2
 
 say "Services"
