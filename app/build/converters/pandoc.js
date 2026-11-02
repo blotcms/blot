@@ -7,11 +7,13 @@
 // are local paths, sent after the document. media is [{ name, data }]: what
 // pandoc extracted from a docx or odt, which the caller writes itself, named
 // relative to dir, the directory the HTML's image paths start with. A document
-// pandoc can't convert rejects with "Pandoc exited ...".
+// pandoc can't convert rejects with "Pandoc exited ...", and pandoc killed by
+// the jail's memory limit with code SANDBOX_KILLED, which emails the admin.
 
 const fs = require("fs-extra");
 const { extname } = require("path");
 const sandbox = require("sandbox");
+const alerts = require("sandbox/alerts");
 
 // A media name pandoc gave: relative, with no empty, . or .. parts
 function isMediaName(name) {
@@ -42,10 +44,17 @@ async function pandoc(args, input, files = {}) {
 
   if (meta.error) {
     const { code, signal, timedOut, ms, stderr } = meta.error;
-    throw new Error(
+    const err = new Error(
       "Pandoc exited with code " + code + (signal ? " (" + signal + ")" : "") +
         " in " + ms + "ms" + (timedOut ? " (timed out)" : "") + ": " + stderr
     );
+    // A kill the job didn't send is the jail's memory limit, not the document.
+    // The job survives it, so the broker can't report it: this does.
+    if (signal && !timedOut) {
+      err.code = "SANDBOX_KILLED";
+      alerts.jobFailed("pandoc", err);
+    }
+    throw err;
   }
 
   const media = meta.media;

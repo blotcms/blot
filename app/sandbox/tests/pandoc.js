@@ -110,6 +110,23 @@ describe("sandbox pandoc job", function () {
       expect(html).toContain("First book");
     });
 
+    it("reports pandoc killed by something other than its timeout", async function () {
+      const alerts = require("sandbox/alerts");
+      spyOn(alerts, "jobFailed");
+      const run = spyOn(sandbox, "run");
+      const error = { code: null, signal: "SIGKILL", ms: 5, stderr: "" };
+
+      run.and.returnValue(Promise.resolve({ meta: { error: Object.assign({ timedOut: false }, error) }, outputs: [] }));
+      const killed = await rejection(pandoc({ from: "docx" }, Buffer.from("")));
+      expect(killed.code).toEqual("SANDBOX_KILLED");
+      expect(alerts.jobFailed).toHaveBeenCalledWith("pandoc", killed);
+
+      run.and.returnValue(Promise.resolve({ meta: { error: Object.assign({}, error, { timedOut: true }) }, outputs: [] }));
+      const timedOut = await rejection(pandoc({ from: "docx" }, Buffer.from("")));
+      expect(timedOut.code).toBeUndefined();
+      expect(alerts.jobFailed.calls.count()).toEqual(1);
+    });
+
     it("refuses media names that leave the directory", async function () {
       const run = spyOn(sandbox, "run");
       for (const name of ["../x.png", "/x.png", "a//b.png", "a/./b.png", ""]) {

@@ -9,8 +9,9 @@
 // lengths are in the args (markdown only). outputs[0] is the HTML and the rest
 // are the media pandoc extracted from a docx or odt, named in meta.media
 // relative to meta.dir, the directory the HTML's image paths start with.
-// A document pandoc can't convert, or a timeout, is meta.error, not a failure;
-// pandoc killed by anything else (the jail's memory limit) is a failure.
+// A document pandoc can't convert, a timeout, or pandoc killed by anything else
+// (the jail's memory limit) is meta.error, not a failure: the caller tells the
+// last apart, since the broker would only call it "failed".
 
 const fs = require("fs");
 const os = require("os");
@@ -207,8 +208,6 @@ function pandoc(args, stdin) {
       clearTimeout(timer);
       const ms = Date.now() - started;
       if (code === 0) return resolve({ html: Buffer.concat(stdout) });
-      // A kill we didn't send is the jail's memory limit, not the document
-      if (signal && !timedOut) return reject(new Error("pandoc was killed by " + signal));
       resolve({ error: { code, signal, timedOut, ms, stderr } });
     });
     child.stdin.end(stdin);

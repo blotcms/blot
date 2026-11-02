@@ -43,15 +43,20 @@ starts `SANDBOX_`, and it never falls back to in-process.
   the rest are the media pandoc extracted from a docx or odt, named in
   `meta.media`; the converters write them to the blog's assets. A document
   pandoc can't convert, or its 10s timeout, is `meta.error`, so it fails the
-  build like any bad file without being a sandbox failure; pandoc killed for
-  any other reason (the jail's memory limit) fails the job. It spawns
+  build like any bad file without being a sandbox failure. pandoc killed for
+  any other reason (the jail's memory limit) is `meta.error` too, since the job
+  survives it; the caller rejects with `SANDBOX_KILLED` and reports it to
+  `alerts.js`, because the broker would only see "failed". It spawns
   `/usr/local/bin/pandoc`, bound on its own; in-process it honours
   `BLOT_PANDOC_PATH`. The callouts Lua filter is `jobs/callouts.lua`. It has
   the usual 512 MiB and 128 MiB `/tmp`, under the unit's sandbox subtree's cap,
   and caps pandoc's heap at 400M so that most documents too large for it fail as
   pandoc errors. A very large docx or odt (tens of MB of images, which sit in
-  `/tmp` and in Node as well as in pandoc) can still exceed the jail and fail
-  the job. That is accepted: sandbox failures email the admin (#2391).
+  `/tmp` and in Node as well as in pandoc) can still exceed the jail. That is
+  accepted: it emails the admin.
+- `unzip` a zip archive into its files, one output each. It refuses absolute and
+  upward paths, symlinks, too many records, too many bytes and too high a ratio
+  (a bad archive is a `meta.error`, not a thrown error). Output stops at 60 MiB.
 
 Callers write any output files themselves: the jail can't reach the data mount.
 Args are JSON and every job checks them, since they come from the less trusted side.
@@ -147,6 +152,15 @@ no-new-privs comes with it, so no setuid program works under Node. The broker an
 the proxy jail start separately, as they must. OpenResty isn't filtered, and
 neither is anything run by `docker exec`.
 
+## Alerts
+
+`alerts.js` emails the admin (`SANDBOX_ALERT`) when a job is killed, times out,
+is cut short or answers nonsense, when the broker can't be reached or its queue
+is full, and, checked every five minutes from each web process, when the unit's
+fetch proxy (the airlock's or the jail's) stops answering or lets the metadata
+address through. A job that fails on bad input isn't reported. At most one
+email per process every ten minutes, with counts for what happened in between.
+
 ## Why
 
 - **The broker is root-owned.** A jail with its own uid and cgroups has to be
@@ -172,8 +186,8 @@ neither is anything run by `docker exec`.
   can't move a job into it. So their limits add to the units' on the host.
 - **Jobs go first when the host runs out of memory.** The broker's shell sets
   `oom_score_adj` to 1000 before it execs nsjail, so a job is killed before the
-  units' Node; only Redis's BGSAVE child, also 1000 and larger, goes ahead of
-  it. Set as root, the job's uid can't lower it. The proxy jail is left alone.
+  units' Node: `node-b` sets itself to 900 (`app/index.js`) and `node-a` stays
+  at 0. Only Redis's BGSAVE child, also 1000 and larger, goes ahead of it. Set as root, the job's uid can't lower it. The proxy jail is left alone.
 - **The seccomp profile** (`proxy/deploy/sandbox-seccomp.json`) is Docker's
   default plus `clone`, `mount`, `umount2`, `pivot_root` and `sethostname`, so
   nsjail can build the jail, and `setns` and `unshare` for pasta. Nothing else is added: not `--privileged`, not

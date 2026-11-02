@@ -19,10 +19,11 @@ const JOBS = [
   "template-image",
   "favicon",
   "pandoc",
+  "unzip",
 ];
 
 // The jobs that don't use sharp
-const WITHOUT_SHARP = ["exif", "pandoc"];
+const WITHOUT_SHARP = ["exif", "pandoc", "unzip"];
 
 function readStdin() {
   return new Promise((resolve, reject) => {

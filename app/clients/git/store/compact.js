@@ -494,3 +494,5 @@ module.exports = compact;
 module.exports.plan = plan;
 module.exports.DEFAULTS = DEFAULTS;
 module.exports.PACK_CONFIG = PACK_CONFIG;
+// For import.js, which runs git and proves its packs in the same way
+module.exports.git = { runGit, idsOf, assertContains };

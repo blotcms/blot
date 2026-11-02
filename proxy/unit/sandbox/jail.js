@@ -97,6 +97,16 @@ const JOBS = {
     maxInputBytes: 256 * MiB,
     maxOutputBytes: 64 * MiB,
   },
+  // A zip archive, read into its files (app/sandbox/jobs/unzip.js): the
+  // archive in memory, then every file. The output stops under the 64 MiB a
+  // reply may hold (app/sandbox/index.js), with the file names.
+  unzip: {
+    command: node("unzip"),
+    memoryBytes: 512 * MiB,
+    timeSeconds: 30,
+    maxInputBytes: 64 * MiB,
+    maxOutputBytes: 60 * MiB,
+  },
   // Spawns perl, which runs exiftool, reading the image from stdin
   exif: {
     command: node("exif"),
@@ -247,8 +257,8 @@ function networkArgs({ config, binds, timeSeconds, nofile, env, command }) {
 
 // Under host-wide memory pressure the kernel kills the process with the highest
 // score. A job fails closed and is cheap to lose, so it goes before the units'
-// Node (0), level with Redis's BGSAVE child (1000, config/redis/redis.conf),
-// which is larger and so still goes first. Raising it needs no privilege, the
+// Node (node-b 900, app/index.js; node-a 0), level with Redis's BGSAVE child
+// (1000, config/redis/redis.conf), which is larger and so still goes first. Raising it needs no privilege, the
 // jail inherits it, and the job's uid can't lower it again. The proxy jail
 // keeps the unit's: it is small and serves every fetch.
 const OOM_SCORE_ADJ = 1000;
