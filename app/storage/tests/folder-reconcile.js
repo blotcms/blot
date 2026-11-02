@@ -127,8 +127,11 @@ describe("storage/folder reconcile", function () {
   it("marks a blog dirty when its daily check throws, so the hourly run retries it", async function () {
     await unmirrored(this.blog.id);
 
-    spyOn(require("storage/s3"), "listEntries").and.callFake(async function* () {
-      throw new Error("S3 listing failed");
+    // callFake wants a plain function, so it returns the failing generator
+    spyOn(require("storage/s3"), "listEntries").and.callFake(function () {
+      return (async function* () {
+        throw new Error("S3 listing failed");
+      })();
     });
     spyOn(console, "error");
 
