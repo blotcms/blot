@@ -1,0 +1,279 @@
+// Rewrites customer template views off two legacy template features, so the
+// engine can stop supporting them:
+//
+// - the camelCase retrieve aliases ({{allEntries}}, {{#encodeJSON}}, ...)
+//   become their snake_case names
+// - {{cssURL}} / {{css_url}} / {{blog.cssURL}} and the scriptURL forms become
+//   the URL they produced, /style.css?cache={{blog.cacheID}}&amp;extension=.css
+//   (and the script.js equivalent), so nothing a blog serves changes
+//
+// It also deletes the cssURL and scriptURL fields stored on each blog, which
+// the engine no longer sets or reads. Old code writes them again whenever a
+// blog's cacheID changes, so run it with --apply once more after deploying.
+//
+// Only Mustache tags are touched, never text, comments or partial names. An
+// alias a template or view defines as its own local is left alone, and tags
+// after a set-delimiter tag are read with the new delimiters. Content and stored
+// partials are both rewritten; locally edited templates are written back to
+// the blog's folder.
+//
+// Dry run by default: prints each view it would change. --apply writes.
+// Usage: node scripts/template/migrate-legacy-tags.js [--apply] [--verbose]
+
+const { promisify } = require("util");
+const client = require("models/client");
+const Template = require("models/template");
+const writeToFolder = require("models/template/writeToFolder");
+const redisKeys = require("../util/redisKeys");
+
+const APPLY = process.argv.includes("--apply");
+const VERBOSE = process.argv.includes("--verbose");
+const setView = promisify(Template.setView);
+const writeToFolderAsync = promisify(writeToFolder);
+
+const ALIASES = {
+  absoluteURLs: "absolute_urls",
+  allEntries: "all_entries",
+  allTags: "all_tags",
+  appCSS: "app_css",
+  appJS: "app_js",
+  encodeJSON: "encode_json",
+  encodeURIComponent: "encode_uri_component",
+  encodeXML: "encode_xml",
+  isActive: "is_active",
+  latestEntry: "latest_entry",
+  plugin_css: "app_css",
+  plugin_js: "app_js",
+  recentEntries: "recent_entries",
+};
+
+const ASSET_URLS = {
+  cssURL: "css",
+  css_url: "css",
+  "blog.cssURL": "css",
+  scriptURL: "js",
+  script_url: "js",
+  "blog.scriptURL": "js",
+};
+
+// models/blog/url, with the cache ID read at render time
+function assetURL(kind, open, close) {
+  const view = kind === "css" ? "/style.css" : "/script.js";
+  return view + "?cache=" + open + "blog.cacheID" + close + "&amp;extension=." + kind;
+}
+
+// Returns { text, changes }. Follows set-delimiter tags ({{=<% %>=}}), so
+// tags written with custom delimiters are rewritten in those delimiters.
+// ownLocals: names the template or view defines itself, never renamed.
+function rewrite(text, ownLocals) {
+  const changes = [];
+  const stack = [];
+  let open = "{{";
+  let close = "}}";
+  let pos = 0;
+  let out = "";
+
+  while (pos < text.length) {
+    const start = text.indexOf(open, pos);
+    if (start === -1) break;
+
+    const triple = text[start + open.length] === "{";
+    const innerStart = start + open.length + (triple ? 1 : 0);
+    const end = text.indexOf((triple ? "}" : "") + close, innerStart);
+    if (end === -1) break;
+    const tagEnd = end + (triple ? 1 : 0) + close.length;
+    const inner = text.slice(innerStart, end);
+    const whole = text.slice(start, tagEnd);
+
+    out += text.slice(pos, start);
+    pos = tagEnd;
+
+    const set = !triple && /^=\s*(\S+)\s+(\S+)\s*=$/.exec(inner);
+    if (set) {
+      open = set[1];
+      close = set[2];
+      out += whole;
+      continue;
+    }
+
+    out += rewriteTag(whole, inner, triple, (n) =>
+      triple ? open + "{" + n + "}" + close : open + n + close
+    );
+  }
+
+  return { text: out + text.slice(pos), changes };
+
+  function rewriteTag(whole, inner, triple, wrap) {
+    let sigil = "";
+
+    if (!triple) {
+      sigil = /^\s*([#^/&>!<$]?)/.exec(inner)[1];
+      if (sigil === "!" || sigil === ">" || sigil === "<" || sigil === "$") return whole;
+    }
+
+    const m = /^(\s*[#^/&]?\s*)([^\s]+?)(\s*)$/.exec(inner);
+    if (!m) return whole;
+    const [, prefix, name, suffix] = m;
+
+    if (sigil === "/") {
+      const top = stack.pop();
+      if (top && top.renamed && top.name === name) return wrap(prefix + top.renamed + suffix);
+    }
+
+    const segments = name.split(".");
+    const first = segments[0];
+    let renamed = null;
+    let result = whole;
+
+    if (ALIASES[first] && !ownLocals.has(first)) {
+      renamed = [ALIASES[first], ...segments.slice(1)].join(".");
+      changes.push(first + " -> " + ALIASES[first]);
+    } else if (ASSET_URLS[name] && (sigil === "" || sigil === "&" || triple)) {
+      changes.push(name + " -> url");
+      result = assetURL(ASSET_URLS[name], open, close);
+    } else if (ASSET_URLS[name] && sigil !== "/") {
+      changes.push("unhandled section " + name);
+    }
+
+    if (renamed) result = wrap(prefix + renamed + suffix);
+    if (sigil === "#" || sigil === "^") stack.push({ name, renamed });
+    return result;
+  }
+}
+
+function parseJSON(value) {
+  try {
+    const parsed = JSON.parse(value || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (err) {
+    return {};
+  }
+}
+
+const counts = {};
+function count(name) {
+  counts[name] = (counts[name] || 0) + 1;
+}
+
+async function blogAssetFields() {
+  await redisKeys("blog:*:info", async (key) => {
+    if (key.split(":").length !== 3) return;
+    if ((await client.type(key)) !== "hash") return;
+    const [css, js] = await client.hmGet(key, ["cssURL", "scriptURL"]);
+    if (css === null && js === null) return;
+    count("blogs with cssURL/scriptURL fields");
+    if (APPLY) await client.hDel(key, ["cssURL", "scriptURL"]);
+  });
+}
+
+async function main() {
+  await blogAssetFields();
+
+  const templates = new Map();
+
+  await redisKeys("template:*:info", async (key) => {
+    if ((await client.type(key)) !== "hash") return;
+    const id = key.slice("template:".length, -":info".length);
+    const [owner, localEditing, locals] = await client.hmGet(key, [
+      "owner",
+      "localEditing",
+      "locals",
+    ]);
+    if (!owner || owner === "SITE") return;
+    templates.set(id, {
+      owner,
+      localEditing: localEditing === "true",
+      locals: Object.keys(parseJSON(locals)),
+    });
+  });
+
+  const rewritten = new Map();
+
+  await redisKeys("template:*:view:*", async (key) => {
+    const rest = key.slice("template:".length);
+    const i = rest.indexOf(":view:");
+    const id = rest.slice(0, i);
+    const name = rest.slice(i + ":view:".length);
+    const template = templates.get(id);
+    if (!template) return;
+    if ((await client.type(key)) !== "hash") return;
+
+    const [content, partialsJSON, localsJSON] = await client.hmGet(key, [
+      "content",
+      "partials",
+      "locals",
+    ]);
+    if (typeof content !== "string") return;
+
+    const ownLocals = new Set([...template.locals, ...Object.keys(parseJSON(localsJSON))]);
+    const changes = [];
+    const updates = { name };
+
+    const main = rewrite(content, ownLocals);
+    if (main.text !== content) updates.content = main.text;
+    changes.push(...main.changes);
+
+    const partials = parseJSON(partialsJSON);
+    let partialsChanged = false;
+    for (const partial in partials) {
+      if (typeof partials[partial] !== "string") continue;
+      const result = rewrite(partials[partial], ownLocals);
+      if (result.text === partials[partial]) continue;
+      partials[partial] = result.text;
+      changes.push(...result.changes);
+      partialsChanged = true;
+    }
+
+    if (!updates.content && !partialsChanged) {
+      if (changes.length) changes.forEach((c) => count("reported only: " + c));
+      return;
+    }
+
+    // setView drops file-backed partial markers that aren't in the content
+    // or in updates.partials, so always pass the whole map back
+    updates.partials = partials;
+
+    count("views rewritten");
+    changes.forEach(count);
+    console.log((APPLY ? "rewriting:" : "would rewrite:"), id, name, [...new Set(changes)].join(", "));
+    if (VERBOSE && updates.content) console.log(updates.content.slice(0, 2000));
+
+    if (!APPLY) return;
+    try {
+      await setView(id, updates);
+      rewritten.set(id, template);
+    } catch (err) {
+      process.exitCode = 1;
+      count("views failed");
+      console.log("Failed to save view", id, name, err.message);
+    }
+  });
+
+  for (const [id, template] of rewritten) {
+    if (!template.localEditing) continue;
+    count("templates written to folder");
+    try {
+      await writeToFolderAsync(template.owner, id);
+    } catch (err) {
+      // Redis is already migrated, so a re-run won't find this template:
+      // retry it by hand with writeToFolder(owner, id)
+      process.exitCode = 1;
+      console.log("Failed to write template to folder", template.owner, id, err.message);
+    }
+  }
+
+  console.log(APPLY ? "Applied:" : "Dry run, nothing written:");
+  for (const [name, n] of Object.entries(counts).sort()) console.log(" ", name, n);
+  if (!Object.keys(counts).length) console.log("  nothing to do");
+}
+
+if (require.main === module) {
+  main()
+    .then(() => process.exit())
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}
+
+module.exports = { rewrite };

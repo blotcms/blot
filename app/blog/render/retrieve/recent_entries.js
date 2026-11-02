@@ -7,7 +7,7 @@ const cacheStats = require("../../lib/cacheStats");
 const fetchCached = require("../../lib/fetchCached");
 const { Uncacheable } = require("../../lib/uncacheableFetch");
 
-const ALIASES = ["recentEntries", "recent_entries"];
+const ALIASES = ["recent_entries"];
 
 // The RSS feed view is fetched by pollers far more often than pages are, so
 // it carries fewer entries than the 30 other views get.

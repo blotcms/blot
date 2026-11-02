@@ -14,7 +14,7 @@ module.exports = async function loadView(req, res) {
   req.log("Augmenting entries");
 
   await eachEntry(res.locals, async (entry) => {
-    // Cached catalog locals (allEntries, archives) arrive already augmented
+    // Cached catalog locals (all_entries, archives) arrive already augmented
     // by augmentEntries during retrieve, which logs its own pass.
     if (!entry.__augmented) total++;
     await augment(req, res, entry, backlinks);

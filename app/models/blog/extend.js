@@ -1,6 +1,5 @@
 var PUBLIC = require("./scheme").PUBLIC;
 var config = require("config");
-var url = require("./url");
 var protocol = "https";
 var punycode = require("helper/punycode");
 var imageExif = require("./util/imageExif");
@@ -54,16 +53,12 @@ module.exports = function extend(blog) {
   }
 
   blog.blogURL = protocol + "://" + blog.handle + "." + config.host;
-  blog.cssURL = blog.cssURL || url.css(blog.cacheID);
-  blog.scriptURL = blog.scriptURL || url.js(blog.cacheID);
 
   // Exposed to templates..
   blog.locals = {
     feedURL: blog.feedURL,
     blogURL: blog.blogURL,
     siteURL: blog.blogURL,
-    cssURL: blog.cssURL,
-    scriptURL: blog.scriptURL,
   };
 
   blog.locals.imageExif = blog.imageExif;

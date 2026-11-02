@@ -7,7 +7,7 @@ const cacheStats = require("../../lib/cacheStats");
 const fetchCached = require("../../lib/fetchCached");
 const { Uncacheable } = require("../../lib/uncacheableFetch");
 
-const ALIASES = ["latestEntry", "latest_entry"];
+const ALIASES = ["latest_entry"];
 
 const latestEntryCache = createRenderCache("latestEntry", {
   max: 1000,

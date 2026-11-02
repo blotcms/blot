@@ -107,34 +107,32 @@ Either `?debug=true` or `?json=true` returns the fully assembled render context 
 
 ### `render/retrieve/`
 
-Each file in this directory is a named retriever. The retrieve system (`render/retrieve/index.js`) accepts a map of local names that the view template declares it needs. It fetches matching retrievers in parallel via `Promise.all`. Retrievers are async or sync functions wrapped by `lib/asRetriever.js` so unit tests can still use `(req, res, callback)` while production awaits them. Retrievers are registered under both snake_case and camelCase aliases where applicable. Public template examples in this README use snake_case naming, while camelCase aliases continue to work for backward compatibility.
+Each file in this directory is a named retriever. The retrieve system (`render/retrieve/index.js`) accepts a map of local names that the view template declares it needs. It fetches matching retrievers in parallel via `Promise.all`. Retrievers are async or sync functions wrapped by `lib/asRetriever.js` so unit tests can still use `(req, res, callback)` while production awaits them.
 
 | Local name(s) | Source file | What it provides |
 |---|---|---|
 | `active` | `active.js` | Lambda that returns `"active"` if the current URL matches `this.url` or `this.slug`. |
-| `absolute_urls` / `absoluteURLs` | `absolute_urls.js` | Lambda that rewrites relative `href`/`src` attributes to absolute URLs. Used in RSS feeds. |
-| `all_entries` / `allEntries` | `all_entries.js` | All published entries for the blog. |
-| `all_tags` / `allTags` | `all_tags.js` | All tags, sorted alphabetically, with entry counts. |
-| `app_css` / `appCSS` / `plugin_css` | `app_css.js` | Concatenated CSS from enabled blog plugins. Mustache in plugin CSS is evaluated against `plugins` at retrieve time (templates insert the result with `{{{appCSS}}}`). |
-| `app_js` / `appJS` / `plugin_js` | `app_js.js` | Concatenated JS from enabled blog plugins. Mustache in plugin JS (e.g. analytics tracking IDs) is evaluated against `plugins` at retrieve time (templates insert the result with `{{{appJS}}}`). |
+| `absolute_urls` | `absolute_urls.js` | Lambda that rewrites relative `href`/`src` attributes to absolute URLs. Used in RSS feeds. |
+| `all_entries` | `all_entries.js` | All published entries for the blog. |
+| `all_tags` | `all_tags.js` | All tags, sorted alphabetically, with entry counts. |
+| `app_css` | `app_css.js` | Concatenated CSS from enabled blog plugins. Mustache in plugin CSS is evaluated against `plugins` at retrieve time (templates insert the result with `{{{app_css}}}`). |
+| `app_js` | `app_js.js` | Concatenated JS from enabled blog plugins. Mustache in plugin JS (e.g. analytics tracking IDs) is evaluated against `plugins` at retrieve time (templates insert the result with `{{{app_js}}}`). |
 | `archives` | `archives.js` | All entries grouped by year and month (for archive views). |
 | `asset` | `asset.js` | Single asset lookup by path. |
 | `avatar_url` | `avatar_url.js` | URL for the blog's avatar image. |
 | `cdn` | `cdn.js` | Lambda/string for CDN URL generation. Used as `{{#cdn}}/path{{/cdn}}` (section) or `{{cdn}}` (origin string). Skips CDN rewriting on preview subdomains. |
-| `css_url` | `css_url.js` | The blog's compiled template CSS URL (`blog.cssURL`). |
-| `encode_json` / `encodeJSON` | `encode_json.js` | Lambda that JSON-encodes rendered content. |
-| `encode_uri_component` / `encodeURIComponent` | `encode_uri_component.js` | Lambda that URI-encodes rendered content. |
-| `encode_xml` / `encodeXML` | `encode_xml.js` | Lambda that sanitizes HTML for XML inclusion (RSS). Resolves relative URLs and strips `<script>` tags. |
+| `encode_json` | `encode_json.js` | Lambda that JSON-encodes rendered content. |
+| `encode_uri_component` | `encode_uri_component.js` | Lambda that URI-encodes rendered content. |
+| `encode_xml` | `encode_xml.js` | Lambda that sanitizes HTML for XML inclusion (RSS). Resolves relative URLs and strips `<script>` tags. |
 | `feed_url` | `feed_url.js` | The blog's RSS feed URL. |
 | `folder` | `folder.js` | Files in the blog's folder. |
-| `is` / `is_active` / `isActive` | `is.js`, `is_active.js` | Boolean helpers for conditional rendering. |
-| `latest_entry` / `latestEntry` | `latest_entry.js` | The most recently published entry. |
+| `is` / `is_active` | `is.js`, `is_active.js` | Boolean helpers for conditional rendering. |
+| `latest_entry` | `latest_entry.js` | The most recently published entry. |
 | `plugin` | `plugin.js` | CSS and JS URLs for individually requested plugins. |
 | `popular_tags` | `popular_tags.js` | Tags sorted by entry count (top 100), cached with an LRU cache keyed by `blogID` and `cacheID`. |
 | `posts` | `posts.js` | A paginated page of entries, respecting template `sort_by`, `sort_order`, `page_size`, and `path_prefix` locals. |
-| `recent_entries` / `recentEntries` | `recent_entries.js` | A small list of recent entries (`Entries.getRecent`). |
+| `recent_entries` | `recent_entries.js` | A small list of recent entries (`Entries.getRecent`). |
 | `rgb` | `rgb.js` | Lambda that converts a CSS color value to an RGB component string (e.g. `255, 128, 0`) for use in `rgba()`. |
-| `script_url` | `script_url.js` | The blog's compiled template JS URL (`blog.scriptURL`). |
 | `search_query` | `search_query.js` | The current search query string from `req.query.q`. |
 | `search_results` | `search_results.js` | Entry search results for the current query. |
 | `tagged` | `tagged.js` | Entries matching one or more tag slugs, with pagination. Supports intersection of multiple tags. Page size is controlled by template `tagged_page_size` or `page_size`. |
