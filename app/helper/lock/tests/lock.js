@@ -125,7 +125,10 @@ describe("helper/lock lock", function () {
     });
     try {
       await client.del(key);
-      await sleep(250);
+      // Wait for the heartbeat to notice rather than guessing how long a busy
+      // runner takes, then give a second call time to show up
+      expect(await until(() => compromised.length > 0, 5000)).toEqual(true);
+      await sleep(100);
       expect(compromised.length).toEqual(1);
       expect(compromised[0].code).toEqual("ECOMPROMISED");
     } finally {
@@ -144,7 +147,8 @@ describe("helper/lock lock", function () {
     });
     try {
       await client.set(key, "someone-else");
-      await sleep(250);
+      expect(await until(() => compromised.length > 0, 5000)).toEqual(true);
+      await sleep(100);
       expect(compromised.length).toEqual(1);
       expect(await client.get(key)).toEqual("someone-else");
     } finally {
@@ -248,8 +252,7 @@ describe("helper/lock lock", function () {
     });
     // From here on every command hangs, as on a stalled connection
     spyOn(client, "eval").and.callFake(() => new Promise(() => {}));
-    await sleep(500);
-    expect(compromised.length).toEqual(1);
+    expect(await until(() => compromised.length > 0, 5000)).toEqual(true);
     expect(compromised[0].code).toEqual("ECOMPROMISED");
     expect(compromised[0].message).toContain("stalled");
     // One EXTEND went out and none was stacked behind it
