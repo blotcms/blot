@@ -91,7 +91,6 @@ case "$cmd" in
   *"docker ps -q"*) [ ! -e "$W/units.$m" ] || echo abc123 ;;
   *"docker inspect"*"State.Health"*) [ -e "$W/units.$m" ] && echo healthy ;;
   *"docker inspect"*"Config.Env"*) [ -e "$W/units.$m" ] && cat "$W/env.$m" ;;
-  *"docker inspect"*"Config.Image"*airlock*) echo ghcr.io/blotcms/blot-airlock:older ;;
   *"docker inspect"*"Config.Image"*) cat "$W/image.$m" ;;
   *"docker inspect"*) echo running ;;
   *"docker stop"*) rm -f "$W/units.$m" ;;
@@ -210,7 +209,7 @@ echo master > "$W/role.new"; echo slave > "$W/role.old"; echo 10.0.0.2 > "$W/mas
 EOF
 cat > "$TMP/tree/scripts/deploy/units.sh" << 'EOF'
 #!/bin/bash
-echo "units.sh $* target=$BLOT_DEPLOY_TARGET ignore_pause=${PROXY_DEPLOY_IGNORE_PAUSE:-} force=${PROXY_DEPLOY_FORCE:-} skip_write=${PROXY_VERIFY_SKIP_REDIS_WRITE:-} airlock=${PROXY_AIRLOCK_IMAGE:-}" >> "$W/calls"
+echo "units.sh $* target=$BLOT_DEPLOY_TARGET ignore_pause=${PROXY_DEPLOY_IGNORE_PAUSE:-} force=${PROXY_DEPLOY_FORCE:-} skip_write=${PROXY_VERIFY_SKIP_REDIS_WRITE:-}" >> "$W/calls"
 [ -z "${STUB_UNITS_FAIL:-}" ] || exit 1
 touch "$W/units.new"
 grep -q '^BLOT_REDIS_SOCKET=/run/blot/redis/redis.sock$' "$W/etc.new/secrets.env" && echo '["BLOT_REDIS_SOCKET=/run/blot/redis/redis.sock"]' > "$W/env.new"
@@ -462,7 +461,7 @@ has "deploys pause on the new host" "$CALLS" "ssh new [new]: sudo mkdir -p /etc/
 before "pause before anything starts" "deploy-paused" "units.sh"
 before "the certificate before the units" "wildcard-cert.sh new" "units.sh"
 before "docker starts before the units" "systemctl start docker" "units.sh"
-has "the old host's image, skipping the write check, past the pause" "$CALLS" "units.sh $OLD_SHA target=new ignore_pause=1 force=1 skip_write=1 airlock=ghcr.io/blotcms/blot-airlock:older"
+has "the old host's image, skipping the write check, past the pause" "$CALLS" "units.sh $OLD_SHA target=new ignore_pause=1 force=1 skip_write=1"
 has "the socket goes in the new secrets.env" "$(cat "$W/etc.new/secrets.env")" "BLOT_REDIS_SOCKET=/run/blot/redis/redis.sock"
 has "and the new proxy.env" "$(cat "$W/etc.new/proxy.env")" "PROXY_REDIS_HOST=unix:/run/blot/redis/redis.sock"
 lacks "replacing the old value" "$(cat "$W/etc.new/proxy.env")" "PROXY_REDIS_HOST=10.0.0.200"
@@ -606,7 +605,7 @@ before "promote, then the markers" "promote.sh --yes direct new" "ssh new [new]:
 has "the old Redis loses its active marker" "$CALLS" "ssh direct [old]: sudo rm -f /etc/blot-redis/active"
 has "the Elastic IP goes to the new instance" "$CALLS" "--allocation-id eipalloc-0a --instance-id $NEW_ID --allow-reassociation"
 has "the old units stop through --old-direct" "$CALLS" "ssh direct [old]: sudo bash -c"
-has "and the airlocks" "$CALLS" "blot-blue-airlock blot-green-airlock"
+has "and any airlocks a host still has" "$CALLS" "docker ps -q --filter name=-airlock | xargs -r docker stop"
 lacks "they are only stopped" "$CALLS" "docker rm"
 has "the freeze goes through the new host" "$CALLS" "ssh new [new]: sudo docker exec blot-blue node scripts/read-only.js off"
 lacks "move thaw is for rollback" "$CALLS" "move thaw"

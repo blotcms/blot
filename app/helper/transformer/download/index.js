@@ -10,8 +10,8 @@ const tidy = require("./tidy");
 const invalid = require("./invalid");
 
 // Remote assets referenced in posts are user-controlled URLs, so they are
-// fetched through the shared "airlock" container's forward proxy
-// (config/airlock, see helper/airlock). The airlock's nftables egress filter
+// fetched through the forward proxy in the sandbox's proxy jail (see
+// helper/airlock and app/sandbox/README.md). The jail's nftables egress filter
 // is what blocks a URL - or a redirect from one - that resolves to an
 // internal address, on the real connection IP, so DNS-rebinding does not
 // help an attacker. In production assertProxyReady() throws if the proxy
@@ -37,7 +37,7 @@ module.exports = function (url, headers, callback) {
   const invalidReason = invalid(url);
   if (invalidReason) return callback(invalidReason);
 
-  // Fail closed: in production this must go through the airlock proxy. If it
+  // Fail closed: in production this must go through the egress proxy. If it
   // isn't configured, error out rather than fetch the user URL directly.
   try {
     assertProxyReady("transformer/download");

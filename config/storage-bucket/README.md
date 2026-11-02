@@ -62,7 +62,7 @@ fall back on.
 
 **Why a key and not an instance profile.** The containers can't reach the
 host's instance credentials unless the metadata service's hop limit is raised
-to 2, which the app host deliberately doesn't do (`config/airlock/README.md`):
+to 2, which the app host deliberately doesn't do:
 a request forgery in the app could then read role credentials that can write
 and delete the public bucket. A key scoped to this bucket gives the app the
 same access without that exposure. See `app/storage/README` §3.

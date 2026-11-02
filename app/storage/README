@@ -155,7 +155,7 @@ at sync/build time instead.
   app containers use a key scoped to the storage bucket
   (`BLOT_AWS_KEY`/`BLOT_AWS_SECRET`). Reaching instance credentials from a
   container on Docker's bridge network needs the metadata service's hop limit
-  raised to 2, and the app host keeps it at 1 (`config/airlock/README.md`) so
+  raised to 2, and the app host keeps it at 1 so
   a server-side request forgery in the app can't read role credentials, which
   here could write and delete the public bucket. A scoped key in the host's
   env file grants the same access without that exposure, and B2 (if it

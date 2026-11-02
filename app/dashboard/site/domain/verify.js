@@ -27,8 +27,8 @@
 
 const dns = require('dns').promises;
 // The domain-setup check connects to an A-record this function resolved
-// itself and sends Host: <hostname>. It goes through the airlock's proxy
-// (helper/airlock.getViaIP, config/airlock/README.md) so the egress filter
+// itself and sends Host: <hostname>. It goes through the egress proxy
+// (helper/airlock.getViaIP, app/sandbox/README.md) so the egress filter
 // rejects an A-record that resolves to an internal address, while still
 // pinning the exact resolved IP rather than letting the proxy re-resolve.
 const airlock = require('helper/airlock');

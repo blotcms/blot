@@ -29,7 +29,7 @@ const {
   ENV_FILE_ON_SERVER,
   DATA_DIRECTORY_ON_SERVER,
   DATA_DIRECTORY_ON_CONTAINER,
-  AIRLOCK,
+  SANDBOX,
   SOCKET_DIRECTORY,
   TMP_DIRECTORY,
 } = require("../deploy/constants");
@@ -41,11 +41,12 @@ const REPO_ROOT = path.resolve(__dirname, "../..");
 // (ghcr.io/blotcms/blot:<sha>, the unit image).
 const UNIT_CONTAINER = "blot-blue";
 const UNIT_IMAGE = "ghcr.io/blotcms/blot";
-// The probe joins that unit's airlock on blotnet (the unit's own airlock is
-// published on the host only, so a container on bridge cannot reach it).
+// With the airlock option the probe sends its fetches of user-supplied URLs
+// through that unit's proxy jail, which listens on the host's loopback only,
+// so the probe joins the host network. It has no browser: the sandbox's is the
+// unit's own, so a probe's screenshots fail closed.
 const AIRLOCK_ENV = {
-  BLOT_AIRLOCK_BROWSER_URL: `http://${AIRLOCK.units.blue.name}:9222`,
-  BLOT_AIRLOCK_PROXY_URL: `http://${AIRLOCK.units.blue.name}:8888`,
+  BLOT_AIRLOCK_PROXY_URL: `http://127.0.0.1:${SANDBOX.units.blue.proxyPort}`,
 };
 const APP_ROOT_IN_CONTAINER = "/usr/src/app";
 const REMOTE_ROOT = "/tmp/blot-probe";
@@ -114,8 +115,8 @@ function parseMemoryMB(value) {
 //   heapProf      --heap-prof, written to /out
 //   nodeFlags     extra node flags, e.g. ["--expose-gc"]
 //   writableData  mount the data directory read-write (default read-only)
-//   airlock       connect the container to the airlock network before it
-//                 starts and pass the airlock env vars, as the deploy does
+//   airlock       run on the host network with blot-blue's proxy jail as the
+//                 egress proxy, as a unit has (no browser: see AIRLOCK_ENV)
 //   mounts        extra -v specs, e.g. ["/var/instance-ssd/logs:/logs:ro"]
 //   env           extra environment variables, { NAME: value }; these come
 //                 last, so they win over the ones set here
@@ -236,6 +237,7 @@ async function runProbe({
     "docker create",
     `--name ${name}`,
     "--restart no",
+    ...(airlock ? ["--network host"] : []),
     `--env-file ${ENV_FILE_ON_SERVER}`,
     ...Object.entries(environment).map(([key, value]) => `-e ${shellQuote(`${key}=${value}`)}`),
     `-v ${DATA_DIRECTORY_ON_SERVER}:${DATA_DIRECTORY_ON_CONTAINER}${writableData ? "" : ":ro"}`,
@@ -261,19 +263,17 @@ async function runProbe({
     ...node.map(shellQuote),
   ].join(" ");
 
-  // Mirrors the deploy (proxy/deploy/common.sh): the airlock network is
-  // connected after create and before start. The unit image's entrypoint is
-  // its supervisor, so run node under tini (the image's init) instead.
+  // The unit image's entrypoint is its supervisor, so run node under tini (the
+  // image's init) instead.
   const remoteCommand = [
     `${dockerCreate} > /dev/null`,
-    ...(airlock ? [`docker network connect ${AIRLOCK.network} ${name}`] : []),
     `docker start -a ${name}`,
   ].join(" && ");
 
   console.log(`\nImage ${image}${release ? await describePull(image) : ""}`);
   console.log(
     `Container ${name}: memory ${memory}, cpus ${cpus}, heap limit ${oldSpace}MB,` +
-      ` data ${writableData ? "READ-WRITE" : "read-only"}${airlock ? ", airlock network" : ""}`
+      ` data ${writableData ? "READ-WRITE" : "read-only"}${airlock ? ", host network and the proxy jail" : ""}`
   );
   console.log(`Host: ${availableMB}MB memory available, ${freeMB}MB free for ${REMOTE_ROOT} (${fsType})`);
   if (fsType === "tmpfs") {

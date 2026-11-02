@@ -62,7 +62,7 @@ jobs:
   # (proxy/deploy/e2e/unit): building and booting the real unit image is
   # unit-image.yml's job (proxy/unit/smoke.sh), and it is not available to this
   # workflow in time. So what this does not cover is the app itself: the real
-  # verify-container checks, the real airlock (its egress filter and Chromium),
+  # verify-container checks, the real sandbox (its jails, egress filter and Chromium),
   # node-a and node-b starting from the real image, and the memory limit holding
   # the real heaps. The "unit" images are in different repositories because
   # blue-green.sh removes the other tags of the repository it deploys.
@@ -77,7 +77,6 @@ jobs:
       PROXY_AUTOSSL_VOLUME: blot-e2e-auto-ssl
       PROXY_SKIP_CERT_SWEEP: "1" # no Pebble/lua-resty-auto-ssl storage in this harness - see README.md
       PROXY_HEALTH_TIMEOUT: "40"
-      PROXY_AIRLOCK_IMAGE: blot-airlock-stub:e2e
       PROXY_IMAGE: blot-proxy:e2e
       UNIT_A: a.test/blot-unit:e2e
       UNIT_B: b.test/blot-unit:e2e
@@ -138,13 +137,12 @@ jobs:
           LOG_TO_STDOUT: "false" # the deploy script refuses an image that logs to stdout
           FETCH_CDN_IPS: "false"
 
-      - name: Build the proxy image, the three stand-in units and the stand-in airlock
+      - name: Build the proxy image and the three stand-in units
         run: |
           bash proxy/build/image.sh "$PROXY_IMAGE"
           docker build -f proxy/deploy/e2e/unit/Dockerfile -t "$UNIT_A" proxy/deploy/e2e/unit
           docker build -f proxy/deploy/e2e/unit/Dockerfile --label e2e.variant=b -t "$UNIT_B" proxy/deploy/e2e/unit
           docker build -f proxy/deploy/e2e/unit/Dockerfile --build-arg BREAK=a -t "$UNIT_BROKEN" proxy/deploy/e2e/unit
-          docker build -f proxy/deploy/e2e/unit/airlock.Dockerfile -t "$PROXY_AIRLOCK_IMAGE" proxy/deploy/e2e/unit
 
       - name: Set up the harness (Redis, stub upstream, certs) and the unit's host directories
         run: |
@@ -173,15 +171,13 @@ jobs:
             docker exec blot-$u printenv BLOT_SOCKET | grep -qx "/run/blot/$u-a.sock"
             docker exec blot-$u printenv BLOT_WORKER_MAX_OLD_SPACE_SIZE | grep -qx 750
             docker exec blot-$u printenv BLOT_RELEASE_ID | grep -qx e2e
-            [ "$(docker inspect -f '{{.State.Running}}' blot-$u-airlock)" = true ]
           done
-          # one airlock per unit, each published on loopback at its own ports
-          [ "$(docker port blot-blue-airlock 9222/tcp)" = 127.0.0.1:19222 ]
-          [ "$(docker port blot-green-airlock 9222/tcp)" = 127.0.0.1:19223 ]
-          [ "$(docker port blot-blue-airlock 8888/tcp)" = 127.0.0.1:18888 ]
-          [ "$(docker port blot-green-airlock 8888/tcp)" = 127.0.0.1:18889 ]
-          docker exec blot-blue printenv BLOT_AIRLOCK_BROWSER_URL | grep -qx http://127.0.0.1:19222
-          docker exec blot-green printenv BLOT_AIRLOCK_PROXY_URL | grep -qx http://127.0.0.1:18889
+          # no airlock any more (#2257), and without BLOT_SANDBOX no proxy or browser
+          if docker inspect blot-blue-airlock >/dev/null 2>&1 \
+            || docker exec blot-blue printenv BLOT_AIRLOCK_BROWSER_URL \
+            || docker exec blot-green printenv BLOT_AIRLOCK_PROXY_URL; then
+            echo "an airlock, or a browser or proxy URL without the sandbox" >&2; exit 1
+          fi
           code=$(curl -sS -o /dev/null -w '%{http_code}' --connect-to "$BLOT_HOST:443:127.0.0.1:443" "https://$BLOT_HOST/")
           [ "$code" = 200 ]
           # a fresh start empties the cache directory (the
@@ -189,13 +185,13 @@ jobs:
           [ ! -e "$PROXY_DISK_CACHE_DIR/warm-1" ]
 
       # ---- 2. a re-run with the image both units run: a no-op ------------------
-      - name: A re-run leaves both units and their airlocks alone
+      - name: A re-run leaves both units alone
         run: |
           set -euo pipefail
-          before=$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' blot-blue blot-green blot-blue-airlock blot-green-airlock)
+          before=$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' blot-blue blot-green)
           bash proxy/deploy/blue-green.sh "$UNIT_A" | tee rerun.log
           grep -q "nothing to do" rerun.log
-          [ "$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' blot-blue blot-green blot-blue-airlock blot-green-airlock)" = "$before" ]
+          [ "$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' blot-blue blot-green)" = "$before" ]
 
       # ---- 3. a steady deploy replaces blue, then green ------------------------
       # UNIT_B is a different image, so both units are replaced, one at a time
@@ -331,7 +327,7 @@ jobs:
       - name: Logs
         if: always()
         run: |
-          for c in blot-blue blot-green blot-blue-previous blot-green-previous blot-blue-airlock blot-green-airlock blot-e2e-stub blot-e2e-redis; do
+          for c in blot-blue blot-green blot-blue-previous blot-green-previous blot-e2e-stub blot-e2e-redis; do
             echo "=== $c ==="; docker logs --tail 100 "$c" 2>&1 || true
           done
           # LOG_TO_STDOUT=false, so `docker logs` above is near-empty for the
@@ -362,7 +358,6 @@ jobs:
       PROXY_AUTOSSL_VOLUME: blot-e2e-auto-ssl
       PROXY_SKIP_CERT_SWEEP: "1" # see proxy/deploy/e2e/README.md
       PROXY_HEALTH_TIMEOUT: "40"
-      PROXY_AIRLOCK_IMAGE: blot-airlock-stub:e2e
       E2E_UPSTREAMS_FROM_ENV: "1"
       IMAGE_A: a.test/blot-unit-sl:e2e
       IMAGE_B: b.test/blot-unit-sl:e2e
@@ -406,11 +401,10 @@ jobs:
           npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
           echo "GENDEPS_MODULES=$RUNNER_TEMP/gendeps/node_modules" >> "$GITHUB_ENV"
 
-      - name: Build the two stand-in units and the stand-in airlock
+      - name: Build the two stand-in units
         run: |
           bash proxy/deploy/e2e/build-unit-image.sh . "$IMAGE_A"
           bash proxy/deploy/e2e/build-unit-image.sh . "$IMAGE_B" --label e2e.variant=b
-          docker build -f proxy/deploy/e2e/unit/airlock.Dockerfile -t "$PROXY_AIRLOCK_IMAGE" proxy/deploy/e2e/unit
 
       - name: Set up the harness (Redis, stub upstream, certs) and the unit's host directories
         run: |
@@ -426,7 +420,7 @@ jobs:
       - name: Logs
         if: always()
         run: |
-          for c in blot-blue blot-green blot-blue-airlock blot-green-airlock blot-e2e-stub blot-e2e-redis; do
+          for c in blot-blue blot-green blot-e2e-stub blot-e2e-redis; do
             echo "=== $c ==="; docker logs --tail 100 "$c" 2>&1 || true
           done
           echo "=== $PROXY_LOG_DIR/error.log (tail) ==="

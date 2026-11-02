@@ -24,7 +24,7 @@ node scripts/security/check-advisories.js --days 7 --npm --dependabot
 ```
 
 It reads the pins from `Dockerfile` (Node, Pandoc), `proxy/Dockerfile`
-(OpenResty, nginx) and `config/airlock/Dockerfile` (Alpine), fetches public
+(OpenResty, nginx), fetches public
 sources (each independently, 15s timeout; a failure shows as "source
 unavailable" and the rest continue), and prints three sections: **ACTION
 NEEDED**, **WATCH**, **OK**. Exit code 1 if anything is in ACTION NEEDED.
@@ -96,7 +96,7 @@ ssh macserver "node -v; sw_vers"
 
 - **Runtime pin bump**: open a PR bumping the pin everywhere it lives:
   `Dockerfile`, `proxy/Dockerfile` (OpenResty/nginx ARGs, with the new
-  `OPENRESTY_SHA256`), `config/airlock/Dockerfile`, the `node-version` pins in
+  `OPENRESTY_SHA256`), the `node-version` pins in
   `.github/workflows/*.yml`, `BLOT_NODE_VERSION` in `config/environment.sh`,
   and `config/node/scripts/setup-ec2-user.sh`. Follow the PR rules in
   `CLAUDE.md`: if hosts or the macserver need manual steps (re-run Node setup

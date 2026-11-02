@@ -262,8 +262,8 @@ say "Firewall for Redis"
 # redis.conf has bind 0.0.0.0, protected-mode no and no password, and replication
 # needs TCP, so only loopback and the VPC may reach port 6379. EC2 delivers
 # traffic for the public address to the private one, so `bind` cannot help: the
-# rule matches on source. Docker bridges are dropped too, on purpose: the
-# airlocks are untrusted. Units on --network host arrive over lo.
+# rule matches on source. Docker bridges are dropped too, on purpose: nothing on
+# them is trusted. Units on --network host arrive over lo.
 # The file replaces only its own table, in one transaction (the first line
 # creates it if missing, so the delete never fails), so a re-run leaves no gap.
 # Never `flush ruleset`: fail2ban and docker keep rules in the same nftables.
