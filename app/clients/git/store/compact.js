@@ -18,6 +18,9 @@
 //                 pieces (default 16)
 //   maxBytes      the most bytes of .pack and .idx one merge takes in
 //                 (default a quarter of the cache's budget)
+//   clock         the clock manifest.read and swap time the base by (a
+//                 merge held past manifest.MAX_BASE_AGE is built again on a
+//                 fresh read, as a swap lost to a push is); for specs
 //   pack          git pack-objects' settings, over PACK_CONFIG below; they
 //                 are passed on the command line, so no system config applies
 //   maxSnapshots, maxSnapshotBytes, minSnapshots
@@ -379,7 +382,7 @@ const entryOf = ({ name, size, idxSize, objects }) => ({ name, size, idxSize, ob
 
 // ---- Compaction -------------------------------------------------------
 
-async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, ...options }) {
+async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, clock = Date.now, ...options }) {
   const packConfig = { ...PACK_CONFIG, ...pack };
   if (typeof lock !== "function") throw new Error("compact needs the host's lock function");
 
@@ -402,7 +405,7 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, ...
   const limits = snapshotLimits(options);
   const result = (outcome, extra) => ({ outcome, seq: null, merged: [], into: null, history: null, ...extra, stats: { ...stats, ms: Date.now() - started } });
 
-  const base = await manifest.read(store);
+  const base = await manifest.read(store, { clock });
   const maxBytes = options.maxBytes !== undefined ? options.maxBytes : cache.maxBytes > 0 ? Math.max(0, Math.floor((cache.maxBytes - SLACK) / CACHE_SHARE)) : DEFAULTS.maxBytes;
   const chosen = plan(base, { ...options, maxBytes });
   if (!chosen) return result("nothing", { seq: base.seq });
@@ -463,7 +466,7 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, ...
       if (!merged && !history && !stats.snapshotsTrimmed) return result("nothing", { seq: current.seq });
 
       try {
-        await manifest.swap({ store, lock, base: current, next, uploaded });
+        await manifest.swap({ store, lock, base: current, next, uploaded, clock });
         return result("compacted", { seq: next.seq, ...names });
       } catch (err) {
         if (err instanceof OutcomeUnknownError) return result("unknown", { seq: next.seq, ...names, error: err });
@@ -472,7 +475,7 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, ...
           throw Object.assign(new Error("The manifest moved " + attempts + " times while compacting"), { code: "EMOVED" });
         }
       }
-      current = await manifest.read(store);
+      current = await manifest.read(store, { clock });
     }
   }
 

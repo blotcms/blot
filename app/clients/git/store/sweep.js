@@ -13,7 +13,7 @@
 //   keepManifests   the newest manifests always kept (default 20)
 //   recoveryWindow  manifests written in this long are kept too (default 7
 //                   days), and so the packs they name, so one can be put
-//                   back by hand
+//                   back by hand; at least two days (see MIN_RECOVERY_WINDOW)
 //
 // Manifests. manifests/<n>.json is deleted when n is at least keepManifests
 // below the newest seq and it was written longer than recoveryWindow ago.
@@ -80,6 +80,12 @@ const DEFAULTS = { grace: DAY, keepManifests: 20, recoveryWindow: 7 * DAY };
 // A grace shorter than this could catch a push between its uploads and its
 // swap, so it is refused
 const MIN_GRACE = HOUR;
+
+// A manifest swap refuses a base read more than manifest.MAX_BASE_AGE (a day)
+// ago, so the seq a writer creates was never one deleted here as long as only
+// manifests older than that are deleted. Twice it leaves a day for the host's
+// and the store's clocks to disagree.
+const MIN_RECOVERY_WINDOW = 2 * manifest.MAX_BASE_AGE;
 
 const EXTS = ["pack", "idx", "rev"];
 
@@ -177,7 +183,7 @@ async function deleteMarked(s, { name, mark, newest }) {
 async function sweep({ store, now = Date.now(), grace = DEFAULTS.grace, keepManifests = DEFAULTS.keepManifests, recoveryWindow = DEFAULTS.recoveryWindow }) {
   if (!Number.isSafeInteger(keepManifests) || keepManifests < 1) throw new Error("keepManifests must be a whole number, at least 1");
   if (!(grace >= MIN_GRACE)) throw new Error("grace must be at least " + MIN_GRACE + " ms");
-  if (!(recoveryWindow >= 0)) throw new Error("recoveryWindow must not be negative");
+  if (!(recoveryWindow >= MIN_RECOVERY_WINDOW)) throw new Error("recoveryWindow must be at least " + MIN_RECOVERY_WINDOW + " ms");
 
   const s = counting(store);
   const stats = { manifestsDeleted: 0, packsMarked: 0, packsDeleted: 0, packsSpared: 0, pending: 0, bytesFreed: 0, requests: s.requests };
@@ -335,4 +341,5 @@ async function sweep({ store, now = Date.now(), grace = DEFAULTS.grace, keepMani
 module.exports = sweep;
 module.exports.DEFAULTS = DEFAULTS;
 module.exports.MIN_GRACE = MIN_GRACE;
+module.exports.MIN_RECOVERY_WINDOW = MIN_RECOVERY_WINDOW;
 module.exports.deleteMarked = (store, options) => deleteMarked(counting(store), options);

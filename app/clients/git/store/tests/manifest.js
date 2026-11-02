@@ -324,6 +324,79 @@ describe("git store manifest", function () {
       return manifest.advance(base, { refs: { "refs/heads/master": oid(n) }, packs: [pack] });
     }
 
+    describe("a base held too long", function () {
+      let now;
+      const clock = () => now;
+
+      beforeEach(async function () {
+        now = 1000;
+        const first = await push(await manifest.read(store, { clock }), 1);
+        await manifest.swap({ store, lock, base: (await manifest.read(store, { clock })), next: first, clock });
+      });
+
+      it("is refused, before any request, once it was read more than MAX_BASE_AGE ago", async function () {
+        const base = await manifest.read(store, { clock });
+        const next = await push(base, 2);
+
+        now += manifest.MAX_BASE_AGE + 1;
+        const before = { ...store.stats };
+        const error = await fails(manifest.swap({ store, lock, base, next, clock }));
+        expect(error).toEqual(jasmine.any(StaleManifestError));
+        expect(store.stats).toEqual(before);
+        expect(lock.calls).toBe(1);
+
+        // Read again, it goes through
+        const fresh = await manifest.read(store, { clock });
+        await manifest.swap({ store, lock, base: fresh, next: await push(fresh, 2), clock });
+        expect((await manifest.read(store)).seq).toBe(2);
+      });
+
+      it("is accepted up to MAX_BASE_AGE", async function () {
+        const base = await manifest.read(store, { clock });
+        const next = await push(base, 2);
+        now += manifest.MAX_BASE_AGE;
+        await manifest.swap({ store, lock, base, next, clock });
+        expect((await manifest.read(store)).seq).toBe(2);
+      });
+
+      it("is refused, writing nothing, when it grows too old waiting for the lock", async function () {
+        const base = await manifest.read(store, { clock });
+        const next = await push(base, 2);
+        const slow = (fn) => {
+          now += manifest.MAX_BASE_AGE + 1;
+          return lock(fn);
+        };
+        const before = store.stats.putIfAbsents;
+        expect(await fails(manifest.swap({ store, lock: slow, base, next, clock }))).toEqual(jasmine.any(StaleManifestError));
+        expect(store.stats.putIfAbsents).toBe(before);
+        expect(await store.head(manifestKey(2))).toBe(null);
+      });
+
+      it("counts from the swap for the manifest a swap returns", async function () {
+        const base = await manifest.read(store, { clock });
+        now += manifest.MAX_BASE_AGE - 10;
+        const next = await manifest.swap({ store, lock, base, next: await push(base, 2), clock });
+        now += manifest.MAX_BASE_AGE - 10;
+        await manifest.swap({ store, lock, base: next, next: await push(next, 3), clock });
+        now += manifest.MAX_BASE_AGE + 1;
+        expect(await fails(manifest.swap({ store, lock, base: next, next: await push(next, 3), clock }))).toEqual(jasmine.any(StaleManifestError));
+      });
+
+      it("passes for a base read() did not return, such as the empty manifest a new repository starts from", async function () {
+        const fresh = createMemoryStore();
+        const empty = await manifest.read(fresh, { clock });
+        expect(empty.seq).toBe(0);
+        const first = manifest.advance(empty, { refs: { "refs/heads/master": oid(1) } });
+        await manifest.swap({ store: fresh, lock, base: empty, next: first, clock });
+
+        // Built by hand: no read time, so it is not timed
+        const byHand = { ...(await manifest.read(fresh)) };
+        now += 10 * manifest.MAX_BASE_AGE;
+        await manifest.swap({ store: fresh, lock, base: byHand, next: manifest.advance(byHand, { refs: byHand.refs }), clock });
+        expect((await manifest.read(fresh)).seq).toBe(2);
+      });
+    });
+
     it("stops a writer which stalled with its lock expired while another swap landed", async function () {
       const first = await push(manifest.empty(), 1);
       await manifest.swap({ store, lock, base: manifest.empty(), next: first });

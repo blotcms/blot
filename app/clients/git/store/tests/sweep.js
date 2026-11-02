@@ -472,6 +472,36 @@ describe("git store sweep", function () {
     });
   });
 
+  describe("a writer that stalled past the sweep", function () {
+    it("cannot create a manifest in the hole the sweep left below the newest", async function () {
+      const lockOf = (fn) => fn();
+      await pushOf();
+      // The writer reads seq 1, and stalls
+      const stalled = await manifest.read(store, { clock: () => clock });
+      const theirs = manifest.advance(stalled, { refs: { [MASTER]: oid(7) } });
+
+      // Others push 30 times, and a week and more later the sweep deletes the
+      // old manifests, seq 2 among them
+      for (let i = 0; i < 30; i++) await pushOf();
+      at(9 * DAY);
+      expect((await run()).manifestsDeleted).toBe(1 + 30 - 20);
+      expect(inner.objects.has(manifestKey(2))).toBe(false);
+
+      // The writer wakes: its base is too old, so nothing is written, and the
+      // newest manifest is untouched
+      const error = await fails(manifest.swap({ store, lock: lockOf, base: stalled, next: theirs, clock: () => clock }));
+      expect(error && error.name).toBe("StaleManifestError");
+      expect(inner.objects.has(manifestKey(2))).toBe(false);
+      expect((await manifest.read(store)).seq).toBe(31);
+    });
+
+    it("requires a recovery window well over the age a swap allows its base", async function () {
+      expect(sweep.MIN_RECOVERY_WINDOW).toBeGreaterThanOrEqual(2 * manifest.MAX_BASE_AGE);
+      expect((await fails(run({ recoveryWindow: manifest.MAX_BASE_AGE }))).message).toMatch(/recoveryWindow/);
+      await run({ recoveryWindow: sweep.MIN_RECOVERY_WINDOW });
+    });
+  });
+
   describe("requests", function () {
     it("costs a LIST and a GET when there is nothing to do", async function () {
       const named = await upload();

@@ -543,6 +543,25 @@ describe("git store compaction", function () {
       expectMirror(await clone("after"));
     });
 
+    it("reads again and retries when its merge took longer than a swap allows a base to be held", async function () {
+      let now = Date.now();
+      const clock = () => now;
+      const slow = async (fn) => {
+        if (!slow.done) {
+          slow.done = true;
+          now += manifest.MAX_BASE_AGE + 1;
+        }
+        return lock(fn);
+      };
+      const result = await compact({ store, cache, lock: slow, clock });
+      expect(result.outcome).toBe("compacted");
+      expect(result.stats.attempts).toBe(2);
+      await refresh();
+      expect(latest.seq).toBe(result.seq);
+      await expectObjects();
+      expectMirror(await clone("after"));
+    });
+
     it("is superseded when another compaction removes its inputs first", async function () {
       let winner;
       const result = await compact({ store, cache, lock: raceOnce(async () => (winner = await compact({ store, cache, lock }))) });

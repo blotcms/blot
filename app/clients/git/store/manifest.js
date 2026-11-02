@@ -81,6 +81,16 @@ const MAX_HINT_BYTES = 1024;
 // the hint as stale and LISTs instead
 const WALK_LIMIT = 8;
 
+// How long a writer may hold a manifest from read() as the base of a swap.
+// The sweep deletes old manifests, which reopens their numbers; this is what
+// stops a writer that stalled from creating a manifest in such a hole (see
+// swap() below). sweep.js requires its recovery window to be well above it.
+const MAX_BASE_AGE = 24 * 60 * 60 * 1000;
+
+// When this process read each manifest read() returned, by the object
+// itself, by its own clock. Never part of the manifest's bytes.
+const readAt = new WeakMap();
+
 // A manifest with a given number never changes, so its bytes can be kept for
 // good, by store. Only which number is the newest is ever asked of the store.
 const KEPT = 8;
@@ -270,18 +280,33 @@ async function listNewest(store) {
 // process already holds its bytes. The hint can only make read() look in the
 // wrong place, never return the wrong manifest: whatever it names, read() looks
 // forward for newer ones, and if what it names isn't there, LISTs instead.
-async function read(store) {
+//
+// The manifest returned is stamped with when it was read (`clock`, Date.now
+// unless given), which is the time swap() goes by when it is a base.
+async function read(store, { clock = Date.now } = {}) {
+  const stamp = (m) => (readAt.set(m, clock()), m);
   const hinted = await walkFromHint(store);
   if (hinted !== null) {
     try {
-      return await load(store, hinted);
+      return stamp(await load(store, hinted));
     } catch (err) {
       if (!(err instanceof NotFoundError)) throw err;
     }
   }
 
   const newest = await listNewest(store);
-  return newest === 0 ? empty() : load(store, newest);
+  return stamp(newest === 0 ? empty() : await load(store, newest));
+}
+
+// Throws StaleManifestError if `base` was read (or swapped in) by this process
+// more than MAX_BASE_AGE ago. A base read() did not return (built by hand, or
+// a copy) has no time and passes; every writer here swaps the very object
+// read() gave it.
+function assertFresh(base, clock) {
+  const at = readAt.get(base);
+  if (at !== undefined && clock() - at > MAX_BASE_AGE) {
+    throw new StaleManifestError("The manifest seq " + base.seq + " was read too long ago to build on; read it again");
+  }
 }
 
 // The manifest which follows `base` after a push: `refs` are all the refs now,
@@ -518,11 +543,21 @@ async function confirm(store, next, cause) {
 // the sizes `next` names. Anything `next` adds and `uploaded` does not list
 // is still checked with a HEAD for each file, so a caller which has not
 // uploaded its packs itself gets the same guarantee as before.
-async function swap({ store, lock, base, next, uploaded = [] }) {
+//
+// A base read more than MAX_BASE_AGE ago (by `clock`, Date.now unless given)
+// is refused with StaleManifestError, before any request and again just
+// before the create, so the writer reads again through its usual stale path.
+// That is what keeps the conditional create safe once the sweep deletes old
+// manifests: read() returned the newest manifest k, so k + 1 did not exist
+// then, and any k + 1 there is now was written since, less than a day ago.
+// The sweep deletes only manifests older than its recovery window (at least
+// two days), so the key this create targets was never one it deleted.
+async function swap({ store, lock, base, next, uploaded = [], clock = Date.now }) {
   if (typeof lock !== "function") throw new Error("swap needs the host's lock function");
   validate(base);
   validate(next);
   if (next.seq !== base.seq + 1) throw new StaleManifestError("The new manifest does not follow the one it was built on");
+  assertFresh(base, clock);
 
   // A manifest is immutable, so one read() would refuse could never be fixed
   // and would leave the repository unreadable: it is never written
@@ -540,6 +575,9 @@ async function swap({ store, lock, base, next, uploaded = [] }) {
     // writer's, which is a StaleManifestError.
     let landed = null;
 
+    // Waiting for the lock and the HEADs above take time too
+    assertFresh(base, clock);
+
     if (!landed) {
       let created;
       try {
@@ -551,6 +589,9 @@ async function swap({ store, lock, base, next, uploaded = [] }) {
       if (created === false) landed = await confirm(store, next, null);
     }
     remember(store, next.seq, landed || bytes);
+    // next + 1 did not exist when this create landed, so `next` is as fresh a
+    // base as one just read
+    readAt.set(next, clock());
 
     // The swap has happened. The hint only saves the next reader some looking,
     // so a failure to write it is not a failure to swap.
@@ -565,6 +606,7 @@ async function swap({ store, lock, base, next, uploaded = [] }) {
 module.exports = {
   VERSION,
   MAX_BYTES,
+  MAX_BASE_AGE,
   SNAPSHOT_LIMITS,
   empty,
   validate,
