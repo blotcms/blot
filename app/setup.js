@@ -27,6 +27,10 @@ const log = (...args) =>
 
 async function runPostListenTasks() {
   log("Running post-listen tasks asynchronously");
+
+  // Node writes this cache at exit, which nodemon's restart signal skips
+  if (process.env.NODE_COMPILE_CACHE) require("module").flushCompileCache();
+
   const logError = (message, error) => {
     console.error(clfdate(), "Setup:", message, error || "");
   };
@@ -39,7 +43,8 @@ async function runPostListenTasks() {
   log("Building templates after listen");
   try {
     await new Promise((resolve, reject) => {
-      templates({ watch: config.environment === "development" }, (err) =>
+      const development = config.environment === "development";
+      templates({ watch: development, skipUnchanged: development }, (err) =>
         err ? reject(err) : resolve()
       );
     });
