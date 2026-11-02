@@ -181,8 +181,11 @@ function createBroker(options = {}) {
       const ms = Date.now() - started;
 
       let error = failure;
+      // nsjail exits 128 + the signal when the job inside it was killed, as the
+      // kernel does at the jail's memory limit, so that is killed too, not a
+      // job that failed on its input
       if (!error && code !== 0) {
-        error = signal ? "killed" : "failed";
+        error = signal || code > 128 ? "killed" : "failed";
         if (ms >= job.timeSeconds * 1000) error = "timeout";
       }
       if (error) {

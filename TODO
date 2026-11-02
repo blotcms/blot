@@ -271,8 +271,8 @@ Improve about section
 - Fix incomplete passages, spelling errors, and inconsistent use of “I” and “we.”
 
 Fix performance bugs on various sites:
-- anchor and re-enable site
-- nashp (improve speed)
+- anchor and re-enable site: slow from entry size, not count; every cacheID bump reads full entries for `posts` (page size 100) and `getAllCached` just to print titles/URLs. Modelled as the "heavy" site in the mega benchmark (scripts/benchmarks/mega, findings in data/mega-shape/findings.md)
+- nashp (improve speed): every page pulls the whole catalog unprojected plus all tags, and previews of its many templates skip the catalog caches. Modelled as the "catalog" site in the mega benchmark
 - jaysjay (especially archives)
   - entry pages take ~3.8s on every render, warm or cold: ~1000 Redis commands / 18MB per render while loading entries (render-probe, 2026-10-06)
 - heydingus /search 0.5-0.8s warm (search_results reads ~10MB per query); its template emits `…/null` links that crawlers 404 on
