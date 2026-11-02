@@ -5,6 +5,8 @@
 //   manifests/latest.json        a hint at the newest seq, nothing more
 //   packs/pack-<40 hex>.pack
 //   packs/pack-<40 hex>.idx
+//   packs/pack-<40 hex>.rev      the pack's entries in pack order (see rev.js),
+//                                written when a pack is received
 //
 // Packs are immutable and named by content, so a name never refers to two
 // different packs and a pack is uploaded once. A numbered manifest is
@@ -34,6 +36,11 @@ function idxKey(name) {
   return "packs/" + name + ".idx";
 }
 
+function revKey(name) {
+  assertPackName(name);
+  return "packs/" + name + ".rev";
+}
+
 function manifestKey(seq) {
   if (!Number.isSafeInteger(seq) || seq < 1 || String(seq).length > SEQ_DIGITS) throw new Error("Invalid manifest seq: " + seq);
   return MANIFEST_PREFIX + String(seq).padStart(SEQ_DIGITS, "0") + ".json";
@@ -45,4 +52,4 @@ function manifestSeq(key) {
   return match ? Number(match[1]) : null;
 }
 
-module.exports = { MANIFEST_PREFIX, LATEST_KEY, PACK_NAME, manifestKey, manifestSeq, packKey, idxKey };
+module.exports = { MANIFEST_PREFIX, LATEST_KEY, PACK_NAME, manifestKey, manifestSeq, packKey, idxKey, revKey };
