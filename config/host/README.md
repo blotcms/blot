@@ -50,8 +50,11 @@ store, so it survives deploys; about 30 days are kept). Each cron run takes four
 samples 15 seconds apart. Per sample there is one line per container
 (`blot-blue`, `blot-green`, and the sandbox cgroups) with `anon`, `file`, `shmem`,
 `limit` and `oom_kill` from the container's cgroup (v1 or v2), `node_max` (the
-biggest node process) and `top=comm:bytes` (the biggest non-node process, i.e. a
-pandoc/git/exiftool spike), `peak` (the cgroup's high-water mark, v2 only), and
+biggest node process), `node_a`, `node_b` and `node_other` (the two app
+processes and any other node, such as a script run with `docker exec`), `git`
+and `git_n` (the summed RSS and count of the unit's git processes, which share
+its limit) and `top=comm:bytes` (the biggest other process, i.e. a
+pandoc/exiftool spike), `peak` (the cgroup's high-water mark, v2 only), and
 one `name=host` line with `mem_available`. Where the host has a sandbox subtree
 (#2257) there are also `name=blot-sandbox-<unit>` and
 `name=blot-sandbox-<unit>-browser` lines: jobs are short, so read their `peak`
