@@ -62,4 +62,35 @@ describe("dashboard session store", function () {
       await client.del(["sess:" + sid]);
     }
   });
+
+  // Sessions are written and read back by different requests that can follow
+  // each other closely (log in, then the redirect). Even if Redis's
+  // invalidation arrives after the write's reply, the client has already
+  // dropped the key it wrote (models/redis).
+  it("reads its own session writes with the server's invalidations late", async function () {
+    const { RedisStore } = require("connect-redis");
+    const createRedisClient = require("models/redis");
+    const lateClient = createRedisClient();
+    await lateClient.connect();
+    lateClient.clientSideCache.invalidate = function () {};
+    const lateStore = new RedisStore({ client: lateClient, disableTouch: true, ttl: () => MAX_AGE_MS / 1000 });
+    const sid = "sessionspec-late" + Date.now();
+    const call = (method, ...args) =>
+      new Promise((resolve, reject) =>
+        lateStore[method](sid, ...args, (err, data) => (err ? reject(err) : resolve(data)))
+      );
+    const cookie = { expires: new Date(Date.now() + MAX_AGE_MS) };
+    try {
+      expect(await call("get")).toBeNull();
+      await call("set", { cookie, uid: "a" });
+      expect((await call("get")).uid).toBe("a");
+      await call("set", { cookie, uid: "b" });
+      expect((await call("get")).uid).toBe("b");
+      await call("destroy");
+      expect(await call("get")).toBeNull();
+    } finally {
+      await lateClient.del(["sess:" + sid]);
+      await lateClient.quit();
+    }
+  });
 });
