@@ -1,6 +1,6 @@
 # Sandbox
 
-Runs jobs on untrusted bytes (image metadata and web pages so far) in an [nsjail](https://github.com/google/nsjail)
+Runs jobs on untrusted bytes (images, their metadata and web pages so far) in an [nsjail](https://github.com/google/nsjail)
 jail instead of in the app's Node process, which holds the secrets and the blog
 data mount. Design and phases: #2257.
 
@@ -23,6 +23,18 @@ starts `SANDBOX_`, and it never falls back to in-process.
 - `jobs/` the job code, which runs in the jail (`jobs/main.js`) or in-process.
 - `proxy/unit/sandbox/` the root broker, the table of jobs and the nsjail
   command line (`jail.js`), and the seccomp policy.
+
+## Jobs
+
+- `metadata` format, size and orientation of an image.
+- `thumbnail` the thumbnail sizes of one image, static or animated; one output per size.
+- `resize` shrinks an image to fit inside a square, in its own format.
+- `to-png` converts an image (HEIC, AVIF, TIFF...) to PNG.
+- `exif` exiftool on stdin, reduced to the fields asked for. It spawns
+  `/usr/bin/perl /usr/bin/exiftool` directly; in-process it honours `EXIFTOOL_PATH`.
+
+Callers write any output files themselves: the jail can't reach the data mount.
+Args are JSON and every job checks them, since they come from the less trusted side.
 
 ## Protocol
 

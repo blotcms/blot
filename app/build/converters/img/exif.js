@@ -1,9 +1,7 @@
 // exif.js — exiftool-backed, path-based
 
-const { execFile } = require("node:child_process");
 const fs = require("node:fs/promises");
-
-const EXIFTOOL = process.env.EXIFTOOL_PATH || "exiftool";
+const sandbox = require("sandbox");
 
 const BASIC_WHITELIST = [
   "Make",
@@ -26,23 +24,13 @@ const FULL_WHITELIST = [
   "GPSAltitude",
 ];
 
-function execExifTool(filePath, extraArgs = []) {
-  return new Promise((resolve) => {
-    const args = [
-      "-j", // JSON
-      filePath,
-      ...extraArgs,
-    ];
-    execFile(EXIFTOOL, args, (err, stdout) => {
-      if (err) return resolve(null);
-      try {
-        const parsed = JSON.parse(stdout);
-        resolve(Array.isArray(parsed) && parsed.length ? parsed[0] : null);
-      } catch {
-        resolve(null);
-      }
-    });
-  });
+// exiftool runs in the sandbox's exif job, which returns just these fields.
+// Any failure, sandbox or exiftool, is null.
+function execExifTool(filePath, fields) {
+  return sandbox.run("exif", { fields }, { path: filePath }).then(
+    (result) => result.meta,
+    () => null
+  );
 }
 
 async function parseExif(filePath, mode = "off") {
@@ -52,7 +40,10 @@ async function parseExif(filePath, mode = "off") {
   try {
     const stat = await fs.stat(filePath).catch(() => null);
     if (!stat || !stat.isFile() || stat.size === 0) return {};
-    const raw = await execExifTool(filePath);
+    const raw = await execExifTool(
+      filePath,
+      mode === "full" ? FULL_WHITELIST : BASIC_WHITELIST
+    );
 
     const result = {};
 
