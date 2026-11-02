@@ -2,6 +2,7 @@ describe("dropbox resetToBlot", function () {
   const fs = require("fs-extra");
   const { join } = require("path");
   const { blog_folder_dir } = require("config");
+  const storage = require("storage/folder");
 
   const resetPath = require.resolve("../sync/reset-to-blot");
   const createClientPath = require.resolve("../util/createClient");
@@ -82,8 +83,8 @@ describe("dropbox resetToBlot", function () {
       },
     };
     require.cache[downloadPath] = {
-      exports: function (_client, source, destination, callback) {
-        fs.outputFile(destination, "hello").then(() => callback(null), callback);
+      exports: function (_client, source, id, destination, callback) {
+        storage.write(id, destination, "hello").then(() => callback(null), callback);
       },
     };
     delete require.cache[resetPath];
@@ -112,9 +113,9 @@ describe("dropbox resetToBlot", function () {
 
   it("counts a file it could not download, and carries on with the rest", async function () {
     load({ "/": [file("a.txt"), file("b.txt")] });
-    require.cache[downloadPath].exports = function (_client, source, destination, callback) {
+    require.cache[downloadPath].exports = function (_client, source, id, destination, callback) {
       if (source === "/a.txt") return callback(new Error("download exploded"));
-      fs.outputFile(destination, "hello").then(() => callback(null), callback);
+      storage.write(id, destination, "hello").then(() => callback(null), callback);
     };
     // reset-to-blot promisified the download stub when it loaded
     delete require.cache[resetPath];

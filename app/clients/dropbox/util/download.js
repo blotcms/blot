@@ -1,4 +1,4 @@
-const fs = require("fs-extra");
+const folder = require("storage/folder");
 const { v4: uuid } = require("uuid");
 const clfdate = require("helper/clfdate");
 const retry = require("./retry");
@@ -11,7 +11,7 @@ const {
   exceedsFilesystemPathLimits,
 } = require("./constants");
 
-async function download(client, source, destination, callback) {
+async function download(client, source, blogID, destination, callback) {
   const id = uuid();
   const prefix = () =>
     clfdate() + " clients:dropbox:download:" + id.slice(0, 6);
@@ -21,7 +21,7 @@ async function download(client, source, destination, callback) {
 
   // The destination path can never become writeable between attempts, so
   // check it locally before fetching anything from Dropbox. Without this,
-  // we'd download the full file every time only to fail on fs.outputFile.
+  // we'd download the full file every time only to fail on the write.
   if (exceedsFilesystemPathLimits(destination)) {
     console.log(
       prefix(),
@@ -58,7 +58,7 @@ async function download(client, source, destination, callback) {
         "skipping download because file extension is unsupported",
         metadataPath
       );
-      await fs.outputFile(destination, "");
+      await folder.write(blogID, destination, "");
       if (timedOut) return;
       return cleanup();
     }
@@ -71,14 +71,14 @@ async function download(client, source, destination, callback) {
         ">",
         MAX_FILE_SIZE
       );
-      await fs.outputFile(destination, "");
+      await folder.write(blogID, destination, "");
       if (timedOut) return;
       return cleanup();
     }
 
     const { result } = await client.filesDownload({ path: source });
     if (timedOut) return;
-    await fs.outputFile(destination, result.fileBinary);
+    await folder.write(blogID, destination, result.fileBinary);
     if (timedOut) return;
   } catch (err) {
     return cleanup(err);

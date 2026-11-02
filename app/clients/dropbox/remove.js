@@ -1,8 +1,7 @@
 var debug = require("debug")("blot:clients:dropbox:remove");
 var createClient = require("./util/createClient");
 var join = require("path").join;
-var fs = require("fs-extra");
-var localPath = require("helper/localPath");
+var folder = require("storage/folder");
 var retry = require("./util/retry");
 var persistError = require("./util/persistError");
 var { SOURCES } = require("./util/classifyError");
@@ -14,7 +13,7 @@ var waitForErrorTimeout = require("./util/waitForErrorTimeout");
 // if we fail to remove the file from Dropbox, then we do not
 // remove the file from Blot's folder for this blog.
 function remove(blogID, path, callback) {
-  var pathOnDropbox, pathOnBlot;
+  var pathOnDropbox;
 
   debug("Blog:", blogID, "Removing", path);
 
@@ -26,8 +25,6 @@ function remove(blogID, path, callback) {
     }
 
     pathOnDropbox = join(account.folder || "/", path);
-
-    pathOnBlot = localPath(blogID, path);
 
     client
       .filesDelete({
@@ -49,7 +46,7 @@ function remove(blogID, path, callback) {
         return Promise.resolve();
       })
       .then(function () {
-        return fs.remove(pathOnBlot);
+        return folder.remove(blogID, path);
       })
       .then(function () {
         callback(null);
