@@ -193,10 +193,13 @@ async function sweep({ store, now = Date.now(), grace = DEFAULTS.grace, keepMani
   const manifests = new Map(); // seq -> { key, size, lastModified }
   const packs = new Map(); // name -> { ext: { size, lastModified } }
   let recordListed = false;
+  // A loop, not Math.max(...): a listing can be longer than a call's arguments
+  let listedNewest = 0;
   for await (const item of s.list("")) {
     const seq = manifestSeq(item.key);
     if (seq !== null) {
       manifests.set(seq, item);
+      if (seq > listedNewest) listedNewest = seq;
       continue;
     }
     const file = packFile(item.key);
@@ -209,7 +212,6 @@ async function sweep({ store, now = Date.now(), grace = DEFAULTS.grace, keepMani
     // Anything else is not the sweep's to touch
   }
 
-  const listedNewest = Math.max(0, ...manifests.keys());
   const doomed = [...manifests]
     .filter(([seq, item]) => seq <= listedNewest - keepManifests && Number.isFinite(item.lastModified) && item.lastModified < now - recoveryWindow)
     .map(([seq]) => seq)

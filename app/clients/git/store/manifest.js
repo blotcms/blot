@@ -87,14 +87,23 @@ const WALK_LIMIT = 8;
 // swap() below). sweep.js requires its recovery window to be well above it.
 const MAX_BASE_AGE = 24 * 60 * 60 * 1000;
 
-// When this process read each manifest read() returned, by the object
-// itself, by its own clock. Never part of the manifest's bytes.
+// For each manifest read() returned (by the object itself), when the store
+// last showed it to be the newest, by this process's clock. Never part of the
+// manifest's bytes. swap() times a base by it.
 const readAt = new WeakMap();
 
-// A manifest with a given number never changes, so its bytes can be kept for
-// good, by store. Only which number is the newest is ever asked of the store.
+// A manifest with a given number never changes, so its bytes can be kept, by
+// store, with when the store last confirmed it (`confirmed`, the start of the
+// read() that fetched or checked it). Only which number is the newest is ever
+// asked of the store.
 const KEPT = 8;
 const kept = new WeakMap();
+
+// A kept manifest the store has not confirmed for this long is checked again
+// (a HEAD) before read() returns it: the sweep may have deleted it since. Half
+// of MAX_BASE_AGE, so a base is never older than a day and a half by the
+// store's last word on it (see swap()).
+const RECONFIRM_AFTER = MAX_BASE_AGE / 2;
 
 const OID = /^[0-9a-f]{40}$/;
 const WRITER = /^[0-9a-zA-Z_-]{1,64}$/;
@@ -210,25 +219,43 @@ function parse(buffer) {
   return validate(m);
 }
 
-function remember(store, seq, bytes) {
+function remember(store, seq, bytes, confirmed) {
   let bySeq = kept.get(store);
   if (!bySeq) kept.set(store, (bySeq = new Map()));
   bySeq.delete(seq);
-  bySeq.set(seq, bytes);
+  bySeq.set(seq, { bytes, confirmed });
   if (bySeq.size > KEPT) bySeq.delete(bySeq.keys().next().value);
 }
 
-// The manifest with this number. Throws NotFoundError if there isn't one.
-async function load(store, seq) {
+function forget(store, seq) {
   const bySeq = kept.get(store);
-  let bytes = bySeq && bySeq.get(seq);
-  if (!bytes) {
-    bytes = await store.get(manifestKey(seq), { maxBytes: MAX_BYTES });
-    remember(store, seq, bytes);
+  if (bySeq) bySeq.delete(seq);
+}
+
+// The manifest with this number, and when the store last confirmed it is
+// there: { m, confirmed }. Bytes kept from an earlier read are used if the
+// store confirmed them within RECONFIRM_AFTER, and otherwise kept after a HEAD
+// says the manifest is still there. `now` is the time to record for a
+// confirmation made here. Throws NotFoundError if there isn't one.
+async function load(store, seq, now) {
+  const bySeq = kept.get(store);
+  let entry = bySeq && bySeq.get(seq);
+  if (entry && now - entry.confirmed > RECONFIRM_AFTER) {
+    if (await store.head(manifestKey(seq))) {
+      entry.confirmed = now;
+    } else {
+      forget(store, seq);
+      throw new NotFoundError("No such key: " + manifestKey(seq));
+    }
   }
-  const m = parse(bytes);
+  if (!entry) {
+    const bytes = await store.get(manifestKey(seq), { maxBytes: MAX_BYTES });
+    remember(store, seq, bytes, now);
+    entry = { bytes, confirmed: now };
+  }
+  const m = parse(entry.bytes);
   if (m.seq !== seq) fail(manifestKey(seq) + " says it is seq " + m.seq);
-  return m;
+  return { m, confirmed: entry.confirmed };
 }
 
 // The seq latest.json names, or null if it is missing or isn't a seq
@@ -281,25 +308,31 @@ async function listNewest(store) {
 // wrong place, never return the wrong manifest: whatever it names, read() looks
 // forward for newer ones, and if what it names isn't there, LISTs instead.
 //
-// The manifest returned is stamped with when it was read (`clock`, Date.now
-// unless given), which is the time swap() goes by when it is a base.
+// The manifest returned is stamped with when the store last showed it to be
+// the newest (by `clock`, Date.now unless given), which is the time swap()
+// goes by when it is a base: the start of this read when its bytes were
+// fetched or checked here, or the start of the read that did so when they
+// were kept, at most RECONFIRM_AFTER ago. Kept bytes past that are checked
+// with a HEAD, and a manifest gone since (the sweep deleted it, and the hint
+// still names it) is a miss, and the LIST finds the newest.
 async function read(store, { clock = Date.now } = {}) {
-  const stamp = (m) => (readAt.set(m, clock()), m);
+  const now = clock();
+  const stamp = ({ m, confirmed }) => (readAt.set(m, confirmed), m);
   const hinted = await walkFromHint(store);
   if (hinted !== null) {
     try {
-      return stamp(await load(store, hinted));
+      return stamp(await load(store, hinted, now));
     } catch (err) {
       if (!(err instanceof NotFoundError)) throw err;
     }
   }
 
   const newest = await listNewest(store);
-  return stamp(newest === 0 ? empty() : await load(store, newest));
+  return stamp(newest === 0 ? { m: empty(), confirmed: now } : await load(store, newest, now));
 }
 
-// Throws StaleManifestError if `base` was read (or swapped in) by this process
-// more than MAX_BASE_AGE ago. A base read() did not return (built by hand, or
+// Throws StaleManifestError if the store last showed `base` to be the newest
+// (a read, or the swap that made it) more than MAX_BASE_AGE ago. A base read() did not return (built by hand, or
 // a copy) has no time and passes; every writer here swaps the very object
 // read() gave it.
 function isFresh(base, clock = Date.now) {
@@ -548,14 +581,20 @@ async function confirm(store, next, cause) {
 // is still checked with a HEAD for each file, so a caller which has not
 // uploaded its packs itself gets the same guarantee as before.
 //
-// A base read more than MAX_BASE_AGE ago (by `clock`, Date.now unless given)
-// is refused with StaleManifestError, before any request and again just
-// before the create, so the writer reads again through its usual stale path.
-// That is what keeps the conditional create safe once the sweep deletes old
-// manifests: read() returned the newest manifest k, so k + 1 did not exist
-// then, and any k + 1 there is now was written since, less than a day ago.
-// The sweep deletes only manifests older than its recovery window (at least
-// two days), so the key this create targets was never one it deleted.
+// A base the store last showed to be the newest more than MAX_BASE_AGE ago
+// (by `clock`, Date.now unless given; see read()) is refused with
+// StaleManifestError, before any request and again just before the create,
+// so the writer reads again through its usual stale path. That is what keeps
+// the conditional create safe once the sweep deletes old manifests. When the
+// store showed k to be the newest (k + 1 missing, k there), k + 1 had never
+// existed: the sweep deletes in order, so it never deletes k + 1 while k is
+// still there. So any k + 1 there is, or was and has been deleted, was written
+// since then, which is at most MAX_BASE_AGE before the create. The sweep only
+// deletes manifests older than its recovery window (at least two days), so the
+// key this create targets was never one it deleted. Bytes kept in memory are
+// what make "since then" more than this read: they count from the read that
+// last fetched or checked them, which is never more than RECONFIRM_AFTER ago,
+// so a kept manifest the sweep has since deleted is found gone, not built on.
 async function swap({ store, lock, base, next, uploaded = [], clock = Date.now }) {
   if (typeof lock !== "function") throw new Error("swap needs the host's lock function");
   validate(base);
@@ -592,10 +631,11 @@ async function swap({ store, lock, base, next, uploaded = [], clock = Date.now }
       }
       if (created === false) landed = await confirm(store, next, null);
     }
-    remember(store, next.seq, landed || bytes);
     // next + 1 did not exist when this create landed, so `next` is as fresh a
     // base as one just read
-    readAt.set(next, clock());
+    const landedAt = clock();
+    remember(store, next.seq, landed || bytes, landedAt);
+    readAt.set(next, landedAt);
 
     // The swap has happened. The hint only saves the next reader some looking,
     // so a failure to write it is not a failure to swap.

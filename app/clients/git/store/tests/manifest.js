@@ -382,6 +382,30 @@ describe("git store manifest", function () {
         expect(await fails(manifest.swap({ store, lock, base: next, next: await push(next, 3), clock }))).toEqual(jasmine.any(StaleManifestError));
       });
 
+      it("makes no request for the manifest it keeps in memory within 12 hours, and one HEAD after", async function () {
+        const stats = () => ({ ...store.stats });
+        const diff = (before) => Object.fromEntries(Object.entries(store.stats).map(([k, v]) => [k, v - before[k]]).filter(([, v]) => v));
+
+        now += 11 * 60 * 60 * 1000;
+        let before = stats();
+        const warm = await manifest.read(store, { clock });
+        expect(warm.seq).toBe(1);
+        // The hint, and a HEAD for the next seq
+        expect(diff(before)).toEqual({ gets: 1, bytesRead: jasmine.any(Number), heads: 1 });
+
+        // Its time is the read that last asked the store, not this one
+        now += manifest.MAX_BASE_AGE - 11 * 60 * 60 * 1000 + 1;
+        expect(await fails(manifest.swap({ store, lock, base: warm, next: await push(warm, 2), clock }))).toEqual(jasmine.any(StaleManifestError));
+
+        // Past 12 hours it is checked with a HEAD, and counts from then
+        before = stats();
+        const checked = await manifest.read(store, { clock });
+        expect(diff(before)).toEqual({ gets: 1, bytesRead: jasmine.any(Number), heads: 2 });
+        now += manifest.MAX_BASE_AGE - 1;
+        await manifest.swap({ store, lock, base: checked, next: await push(checked, 2), clock });
+        expect((await manifest.read(store)).seq).toBe(2);
+      });
+
       it("passes for a base read() did not return, such as the empty manifest a new repository starts from", async function () {
         const fresh = createMemoryStore();
         const empty = await manifest.read(fresh, { clock });

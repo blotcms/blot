@@ -74,17 +74,17 @@ describe("git store sweep", function () {
 
   // A push naming `packs`, or of refs alone
   async function pushOf(packs = [], historyPieces = []) {
-    const base = await manifest.read(store);
+    const base = await manifest.read(store, { clock: () => clock });
     const next = manifest.advance(base, { refs: { [MASTER]: oid(base.seq + 1) }, head: MASTER, packs, historyPieces });
-    await manifest.swap({ store, lock, base, next });
+    await manifest.swap({ store, lock, base, next, clock: () => clock });
     return next;
   }
 
   // A compaction of `remove` into `add`
   async function compaction(remove, add, { history, removePieces } = {}) {
-    const base = await manifest.read(store);
+    const base = await manifest.read(store, { clock: () => clock });
     const next = manifest.compacted(base, { remove: remove.map((p) => p.name), add, history, removePieces });
-    await manifest.swap({ store, lock, base, next });
+    await manifest.swap({ store, lock, base, next, clock: () => clock });
     return next;
   }
 
@@ -495,6 +495,36 @@ describe("git store sweep", function () {
       expect((await manifest.read(store)).seq).toBe(31);
     });
 
+    it("cannot build on a manifest it kept in memory once the sweep has deleted it, with the hint still naming it", async function () {
+      const clocked = { clock: () => clock };
+      // Process A writes seq 1 and keeps its bytes
+      const a = { ...inner };
+      const first = await manifest.read(a, clocked);
+      await manifest.swap({ store: a, lock, base: first, next: manifest.advance(first, { refs: { [MASTER]: oid(1) } }), ...clocked });
+
+      // Others push 30 times; the hint lags at 1
+      for (let i = 0; i < 30; i++) await pushOf();
+      await inner.put(LATEST_KEY, Buffer.from(JSON.stringify({ seq: 1 })));
+
+      at(9 * DAY);
+      expect((await run()).manifestsDeleted).toBe(11);
+      expect(inner.objects.has(manifestKey(1))).toBe(false);
+
+      // A reads again: seq 1 is in its memory, but gone from the store
+      const base = await manifest.read(a, clocked);
+      expect(base.seq).toBe(31);
+      await manifest.swap({ store: a, lock, base, next: manifest.advance(base, { refs: { [MASTER]: oid(2) } }), ...clocked });
+      expect(inner.objects.has(manifestKey(2))).toBe(false);
+      expect((await manifest.read(createMemoryStoreCopy())).seq).toBe(32);
+    });
+
+    // Another process, holding nothing in memory
+    function createMemoryStoreCopy() {
+      const other = createMemoryStore();
+      for (const [key, bytes] of inner.objects) other.objects.set(key, bytes);
+      return other;
+    }
+
     it("requires a recovery window well over the age a swap allows its base", async function () {
       expect(sweep.MIN_RECOVERY_WINDOW).toBeGreaterThanOrEqual(2 * manifest.MAX_BASE_AGE);
       expect((await fails(run({ recoveryWindow: manifest.MAX_BASE_AGE }))).message).toMatch(/recoveryWindow/);
@@ -503,6 +533,21 @@ describe("git store sweep", function () {
   });
 
   describe("requests", function () {
+    it("finds the newest of a listing of 150,000 manifests", async function () {
+      const named = await upload();
+      const top = await pushOf([named]);
+      // Stand-ins for the manifests below; only the newest is read
+      for (let seq = 2; seq <= 150000; seq++) inner.objects.set(manifestKey(seq), Buffer.from("{}"));
+      const newest = { ...top, seq: 150001, snapshots: [{ seq: 150001, refs: top.refs }], packs: top.packs.map((p) => ({ ...p, seq: 150001 })) };
+      await store.put(manifestKey(150001), manifest.serialize(newest));
+
+      at(30 * HOUR);
+      const result = await run();
+      expect(result.requests.gets).toBe(1);
+      expect(result.manifestsDeleted).toBe(0);
+      expect(whole(named)).toBe(true);
+    });
+
     it("costs a LIST and a GET when there is nothing to do", async function () {
       const named = await upload();
       await pushOf([named]);
