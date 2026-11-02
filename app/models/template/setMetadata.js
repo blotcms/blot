@@ -4,9 +4,9 @@ var getMetadata = require("./getMetadata");
 var serialize = require("./util/serialize");
 var metadataModel = require("./metadataModel");
 var ensure = require("helper/ensure");
-var Blog = require("models/blog");
 var injectLocals = require("./injectLocals");
 var updateCdnManifest = require("./util/updateCdnManifest");
+var cacheID = require("./util/cacheID");
 var serializeRedisHashValues = require("models/redisHashSerializer");
 
 module.exports = function setMetadata(id, updates, callback) {
@@ -40,6 +40,12 @@ module.exports = function setMetadata(id, updates, callback) {
 
     var owner = metadata.owner;
 
+    // Never write back the cacheID read above: a setView between that read
+    // and this write may have replaced it, and restoring the old one would
+    // let renders reuse views cached before that save (see util/cacheID).
+    delete metadata.cacheID;
+    if (changes) metadata.cacheID = cacheID.create();
+
     metadata = serializeRedisHashValues(serialize(metadata, metadataModel));
 
     (async function () {
@@ -54,19 +60,12 @@ module.exports = function setMetadata(id, updates, callback) {
           });
         }
 
-        var shouldBumpCache = owner !== "SITE";
-        var regenerateManifest = function () {
+        cacheID.bumpBlogIfInstalled(owner, id, function (cacheErr) {
+          if (cacheErr) return callback(cacheErr);
           updateCdnManifest(id, function (manifestErr) {
             if (manifestErr) return callback(manifestErr);
             callback(null, changes);
           });
-        };
-
-        if (!shouldBumpCache) return regenerateManifest();
-
-        Blog.set(owner, { cacheID: Date.now() }, function (cacheErr) {
-          if (cacheErr) return callback(cacheErr);
-          regenerateManifest();
         });
       } catch (redisErr) {
         callback(redisErr);

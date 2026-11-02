@@ -5,7 +5,11 @@ const fetchCached = require("../lib/fetchCached");
 const { createRenderCache, timeClone } = require("../lib/cacheMetrics");
 
 // This cache is safe because the key includes blog/template/view identity,
-// plus blog.cacheID which changes whenever render-relevant blog data changes.
+// plus blog.cacheID, which changes whenever render-relevant blog data
+// changes, and the template's own cacheID, which changes whenever the
+// template does (models/template/util/cacheID). A blog's cacheID is only
+// bumped for changes to the template it has installed, so the template's is
+// what keeps previews of its other templates fresh.
 const fullViewCache = createRenderCache("fullView", {
   max: 1000,
   // Bound by bytes too: unbounded-size views (large templates/partials)
@@ -31,11 +35,13 @@ function createCacheKey(blog, template, viewName) {
   const blogID = blog && blog.id;
   const cacheID = blog && blog.cacheID;
   const templateID = template && template.id;
+  const templateCacheID = template && template.cacheID;
 
   return JSON.stringify({
     blogID: String(blogID),
     cacheID: String(cacheID),
     templateID: String(templateID),
+    templateCacheID: String(templateCacheID),
     viewName: String(viewName),
   });
 }

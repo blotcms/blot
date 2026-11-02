@@ -5,7 +5,7 @@ var setMultipleViews = require("./setMultipleViews");
 var getMetadata = require("./getMetadata");
 var setMetadata = require("./setMetadata");
 var updateCdnManifest = require("./util/updateCdnManifest");
-var Blog = require("models/blog");
+var cacheID = require("./util/cacheID");
 
 module.exports = function clone(fromID, toID, metadata, callback) {
   ensure(fromID, "string")
@@ -77,18 +77,12 @@ module.exports = function clone(fromID, toID, metadata, callback) {
 
           // Regenerate CDN manifest with new template ID to ensure
           // hashes reflect the new template and files are stored on disk.
-          // Bump blog cache first so any cached full views are not reused.
-          var regenerateManifest = function () {
-            updateCdnManifest(toID, callback);
-          };
-
-          if (!metadata.owner || metadata.owner === "SITE") {
-            return regenerateManifest();
-          }
-
-          Blog.set(metadata.owner, { cacheID: Date.now() }, function (cacheErr) {
+          // Its views and metadata were saved with new template cacheIDs, so
+          // no cached full views are reused; the blog's own is bumped first
+          // if it has the clone installed.
+          cacheID.bumpBlogIfInstalled(metadata.owner, toID, function (cacheErr) {
             if (cacheErr) return callback(cacheErr);
-            regenerateManifest();
+            updateCdnManifest(toID, callback);
           });
         });
       });

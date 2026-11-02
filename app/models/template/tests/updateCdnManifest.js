@@ -68,11 +68,10 @@ describe("updateCdnManifest", function () {
     const metadata1 = await getMetadataAsync(test.template.id);
     const oldHash = metadata1.cdn["style.css"];
 
-    // Prime full-view-cache for the current blog cacheID
+    // Prime full-view-cache for the current blog and template cacheIDs. The
+    // template isn't installed, so only its own cacheID changes on the save
+    // below, and that alone must stop the manifest reusing the cached view.
     await renderView(test.template.id, "style.css");
-
-    // Ensure Date.now() advances so Blog.set writes a new cacheID.
-    await new Promise((resolve) => setTimeout(resolve, 2));
 
     await setViewAsync(test.template.id, {
       name: "style.css",

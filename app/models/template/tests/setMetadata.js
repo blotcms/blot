@@ -6,6 +6,7 @@ describe("template", function () {
   const setMetadata = promisify(require("../index").setMetadata);
   const getMetadata = promisify(require("../index").getMetadata);
   const getBlog = promisify(require("models/blog").get);
+  const setBlog = promisify(require("models/blog").set);
 
   it("sets a template's metadata", async function () {
     var updates = { description: "A test template description" };
@@ -14,12 +15,39 @@ describe("template", function () {
     expect(template.description).toEqual(updates.description);
   });
 
-  it("updates the cache ID of the blog which owns a template after updating", async function () {
-    var initialCacheID = this.blog.cacheID;
+  it("updates the cache ID of the blog which has the template installed after updating", async function () {
+    await setBlog(this.blog.id, { template: this.template.id });
+    var initialCacheID = (await getBlog({ id: this.blog.id })).cacheID;
     var updates = { description: "Updated template description" };
     await setMetadata(this.template.id, updates);
     const blog = await getBlog({ id: this.template.owner });
     expect(blog.cacheID).not.toEqual(initialCacheID);
+  });
+
+  it("leaves the owner blog's cache ID alone when the template is not installed", async function () {
+    var initialCacheID = (await getBlog({ id: this.blog.id })).cacheID;
+    await setMetadata(this.template.id, { description: "Not installed" });
+    const blog = await getBlog({ id: this.template.owner });
+    expect(blog.cacheID).toEqual(initialCacheID);
+  });
+
+  it("gives the template a new cache ID when its metadata changes", async function () {
+    const before = (await getMetadata(this.template.id)).cacheID;
+    await setMetadata(this.template.id, { description: "Changed" });
+    const after = (await getMetadata(this.template.id)).cacheID;
+    expect(after).toEqual(jasmine.any(String));
+    expect(after).not.toEqual(before);
+
+    await setMetadata(this.template.id, { description: "Changed" });
+    expect((await getMetadata(this.template.id)).cacheID).toEqual(after);
+  });
+
+  it("never writes a template cache ID it was given or had read", async function () {
+    const client = require("models/client");
+    const key = require("../key");
+    await client.hSet(key.metadata(this.template.id), "cacheID", "newer");
+    await setMetadata(this.template.id, { cacheID: "older" });
+    expect((await getMetadata(this.template.id)).cacheID).not.toEqual("older");
   });
 
   it("it will inject the font styles when you simply supply an id", async function () {

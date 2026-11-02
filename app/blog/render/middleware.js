@@ -239,8 +239,14 @@ module.exports = function attachRenderView(req, res, _next) {
         req.log("Sending response");
         res.header(CONTENT_TYPE, viewType);
         // This lets browsers send 'If-Modified-Since' requests
-        // to check if the page has changed since the last time
-        res.header("Last-Modified", new Date(blog.cacheID).toUTCString());
+        // to check if the page has changed since the last time. Not on
+        // previews: saving a template the blog hasn't installed leaves the
+        // blog's cacheID alone (models/template/util/cacheID), so the date
+        // would vouch for a preview that has changed. The ETag still lets
+        // them revalidate.
+        if (!req.preview) {
+          res.header("Last-Modified", new Date(blog.cacheID).toUTCString());
+        }
         // Templates can expose CSS/JS through this same path (view.js routes
         // any URL to whatever view matches, not just pages) - only count
         // actual HTML page renders, not asset requests with very different
