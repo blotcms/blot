@@ -47,23 +47,6 @@ var DEFAULT_MONO_FONT = fonts
     return font;
   })[0];
 
-if (require.main === module) {
-  // if this script is run directly in the terminal
-  // in the development environment without the flag
-  // --no-watch, we want to watch the templates directory for changes
-  // and rebuild the templates when they change.
-  let watch =
-    config.environment === "development" &&
-    !process.argv.includes("--no-watch");
-
-  console.log("Building templates... watch=" + watch);
-  main({ watch }, function (err) {
-    if (err) throw err;
-    console.log("Done building templates.");
-    if (!watch) process.exit();
-  });
-}
-
 // Every process may call this at startup. Template.drop followed by a
 // rebuild isn't atomic, so a second process comparing mid-rebuild would see
 // missing views and rebuild too. The build pass therefore runs under a Redis
@@ -969,3 +952,21 @@ function applyForkPackageOverlay(templateID, overlay, callback) {
 }
 
 module.exports = main;
+
+// Last, so every const above is initialised before main() runs
+if (require.main === module) {
+  // if this script is run directly in the terminal
+  // in the development environment without the flag
+  // --no-watch, we want to watch the templates directory for changes
+  // and rebuild the templates when they change.
+  let watch =
+    config.environment === "development" &&
+    !process.argv.includes("--no-watch");
+
+  console.log("Building templates... watch=" + watch);
+  main({ watch }, function (err) {
+    if (err) throw err;
+    console.log("Done building templates.");
+    if (!watch) process.exit();
+  });
+}

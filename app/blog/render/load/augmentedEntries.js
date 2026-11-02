@@ -1,4 +1,4 @@
-// Catalog-sized locals (allEntries, archives) hold every entry on the blog.
+// Catalog-sized locals (all_entries, archives) hold every entry on the blog.
 // Deep-cloning that list out of the LRU and re-running augment() on every
 // entry for every render cost ~1s of blocked event loop and a full copy of
 // the catalog per request on a ~900-post blog, plus two Redis round trips

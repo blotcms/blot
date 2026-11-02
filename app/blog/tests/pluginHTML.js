@@ -65,82 +65,82 @@ describe("pluginHTML", function () {
         expect(await areThereComments('/page-whitespace-yes')).toBe(true, 'comments should appear on pages with whitespace around yes');
     });
 
-    it("injects google analytics into appJS", async function () {
+    it("injects google analytics into app_js", async function () {
 
         const plugins = {...this.blog.plugins, analytics: {enabled: true, options: {provider: {Google: true}, trackingID: 'UA-12345678-9'}}};
         await this.blog.update({plugins})
 
-        await this.template({ "script.js": "{{{appJS}}}" });
+        await this.template({ "script.js": "{{{app_js}}}" });
 
         const body = await this.text('/script.js');
         expect(body).toContain('www.google-analytics.com/analytics.js');
         expect(body).toContain(`var GAID = '${plugins.analytics.options.trackingID}';`);
     });
 
-    it("injects clicky analytics into appJS", async function () {
+    it("injects clicky analytics into app_js", async function () {
         
         const plugins = {...this.blog.plugins, analytics: {enabled: true, options: {provider: {Clicky: true}, trackingID: '123456789'}}};
         await this.blog.update({plugins})
 
-        await this.template({ "script.js": "{{{appJS}}}" });
+        await this.template({ "script.js": "{{{app_js}}}" });
 
         const body = await this.text('/script.js');
         expect(body).toContain('http://in.getclicky.com');
         expect(body).toContain(`clicky.init(${plugins.analytics.options.trackingID})`);
     });
 
-    it("injects heap analytics into appJS", async function () {
+    it("injects heap analytics into app_js", async function () {
         
         const plugins = {...this.blog.plugins, analytics: {enabled: true, options: {provider: {Heap: true}, trackingID: '123456789'}}}; 
         await this.blog.update({plugins})
 
-        await this.template({ "script.js": "{{{appJS}}}" });
+        await this.template({ "script.js": "{{{app_js}}}" });
 
         const body = await this.text('/script.js');
         expect(body).toContain('heapanalytics.com');
         expect(body).toContain(`heap.load("${plugins.analytics.options.trackingID}")`);
     });
 
-    it("injects simple analytics into appJS", async function () {
+    it("injects simple analytics into app_js", async function () {
         
         const plugins = {...this.blog.plugins, analytics: {enabled: true, options: {provider: {SimpleAnalytics: true}}}}; 
         await this.blog.update({plugins})
 
-        await this.template({ "script.js": "{{{appJS}}}" });
+        await this.template({ "script.js": "{{{app_js}}}" });
 
         const body = await this.text('/script.js');
         expect(body).toContain('simpleanalyticscdn.com');
     });
 
-    it("injects plausible analytics into appJS", async function () {
+    it("injects plausible analytics into app_js", async function () {
         
         const plugins = {...this.blog.plugins, analytics: {enabled: true, options: {provider: {Plausible: true}}}}; 
         await this.blog.update({plugins})
 
-        await this.template({ "script.js": "{{{appJS}}}" });
+        await this.template({ "script.js": "{{{app_js}}}" });
 
         const body = await this.text('/script.js');
         expect(body).toContain('plausible.io/js/plausible.js');
     });
 
-    it("injects fathom analytics into appJS", async function () {
+    it("injects fathom analytics into app_js", async function () {
         
         const plugins = {...this.blog.plugins, analytics: {enabled: true, options: {provider: {Fathom: true}, trackingID: '123456789'}}}; 
         await this.blog.update({plugins})
 
-        await this.template({ "script.js": "{{{appJS}}}" });
+        await this.template({ "script.js": "{{{app_js}}}" });
 
         const body = await this.text('/script.js');
         expect(body).toContain('cdn.usefathom.com');
         expect(body).toContain(`fathom('set', 'siteId', '${plugins.analytics.options.trackingID}');`);
     });
 
-    it("injects cloudflare analytics into appJS", async function () {
+    it("injects cloudflare analytics into app_js", async function () {
         
         const plugins = {...this.blog.plugins, analytics: {enabled: true, options: {provider: {Cloudflare: true}, trackingID: '123456789'}}};
         await this.blog.update({plugins})
         
-        await this.template({ "script.js": "{{{appJS}}}" });
+        await this.template({ "script.js": "{{{app_js}}}" });
 
         const body = await this.text('/script.js');
         expect(body).toContain('cloudflareinsights.com');
@@ -148,23 +148,23 @@ describe("pluginHTML", function () {
 
     }); 
 
-    it("injects KaTeX CSS into appCSS", async function () {
+    it("injects KaTeX CSS into app_css", async function () {
         
         const plugins = {...this.blog.plugins, katex: {enabled: true}};
         await this.blog.update({plugins})
 
-        await this.template({ "style.css": "{{{appCSS}}}" });
+        await this.template({ "style.css": "{{{app_css}}}" });
 
         const body = await this.text('/style.css');
         expect(body).toContain('.katex');
     });
 
-    it("injects image zoom CSS and JS into appCSS and appJS", async function () {
+    it("injects image zoom CSS and JS into app_css and app_js", async function () {
         
         const plugins = {...this.blog.plugins, zoom: {enabled: true}};
         await this.blog.update({plugins})
 
-        await this.template({ "style.css": "{{{appCSS}}}", "script.js": "{{{appJS}}}" });
+        await this.template({ "style.css": "{{{app_css}}}", "script.js": "{{{app_js}}}" });
 
         const bodyCSS = await this.text('/style.css');
         expect(bodyCSS).toContain('.zoom-img');

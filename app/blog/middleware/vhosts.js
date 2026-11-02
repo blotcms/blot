@@ -106,18 +106,11 @@ module.exports = async function vhosts(req, res, next) {
 
       // construct the template ID
       blog.template = previewTemplate;
-
-      // don't use the deployed asset for preview subdomains
-      blog.cssURL = Blog.url.css(blog.cacheID);
-      blog.scriptURL = Blog.url.js(blog.cacheID);
     } else {
       req.preview = false;
     }
 
     // Load in pretty and shit...
-    // this must follow preview
-    // since cssURL and scriptURL
-    // for subdomains.
     blog = Blog.extend(blog);
 
     blog.locals = blog.locals || {};

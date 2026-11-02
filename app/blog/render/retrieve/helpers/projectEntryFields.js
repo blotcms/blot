@@ -24,10 +24,10 @@
 var HEAVY_FIELDS = ["html", "body", "teaser", "teaserBody", "summary"];
 
 // Given the full retrieve object and the alias keys a retrieve module answers
-// to (e.g. ["allEntries", "all_entries"]), work out the union of referenced
+// to (e.g. ["all_entries"]), work out the union of referenced
 // entry fields. Returns null when projection must be skipped: either no alias
 // is referenced, or an alias is referenced without a `fields` map (an empty
-// `{}`, or non-field access such as `allEntries.length`).
+// `{}`, or non-field access such as `all_entries.length`).
 function resolveFields(retrieve, keys) {
   if (!retrieve || typeof retrieve !== "object") return null;
 
