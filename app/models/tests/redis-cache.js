@@ -59,13 +59,62 @@ describe("models/redis-cache", function () {
       expect(classStats.entry).toEqual({ hits: 0, misses: 0, bypass: 2 });
 
       // The server only tracks the key if CACHING YES reached it right
-      // before the read, so a write must invalidate the cached value. Redis
-      // pushes the invalidation on this connection ahead of the SET reply.
+      // before the read, so a write must invalidate the cached value.
       await client.set(id + ":info", "c");
       expect(await client.get(id + ":info")).toBe("c");
     } finally {
       await client.del([id + ":info", id + ":entry:/a"]);
       await client.quit();
     }
+  });
+
+  // Redis sends the invalidation for a key after the reply to the write which
+  // changed it, and a busy connection can deliver the two in separate reads,
+  // so the code awaiting the write runs before the invalidation does. Reading
+  // straight after a write then returned the value cached before it (a new
+  // template's metadata read as missing). Dropping the pushes here leaves the
+  // client's own bookkeeping as the only thing keeping the cache honest.
+  describe("with the server's invalidations arriving late", function () {
+    const createRedisClient = require("models/redis");
+    let client, id;
+
+    beforeEach(async function () {
+      client = createRedisClient();
+      await client.connect();
+      client.clientSideCache.invalidate = function () {};
+      id = "template:blog_cachespec" + Date.now() + ":late:info";
+    });
+
+    afterEach(async function () {
+      await client.del(id);
+      await client.quit();
+    });
+
+    it("reads its own write", async function () {
+      expect(await client.hGetAll(id)).toEqual({});
+      await client.hSet(id, { a: "1" });
+      expect(await client.hGetAll(id)).toEqual({ a: "1" });
+    });
+
+    it("reads its own write made in a MULTI", async function () {
+      expect(await client.hGetAll(id)).toEqual({});
+      await client.multi().hSet(id, { a: "1" }).exec();
+      expect(await client.hGetAll(id)).toEqual({ a: "1" });
+    });
+
+    it("reads its own write made by a script", async function () {
+      expect(await client.hGetAll(id)).toEqual({});
+      await client.eval("return redis.call('HSET', KEYS[1], 'a', '1')", {
+        keys: [id],
+      });
+      expect(await client.hGetAll(id)).toEqual({ a: "1" });
+    });
+
+    it("does not cache a read which a write overtook", async function () {
+      const read = client.hGetAll(id);
+      await client.hSet(id, { a: "1" });
+      await read;
+      expect(await client.hGetAll(id)).toEqual({ a: "1" });
+    });
   });
 });
