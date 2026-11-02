@@ -419,6 +419,15 @@ async function findMissing({ repo, fresh, local, listed }) {
     return local.get(oid) || repo.read(oid);
   }
 
+  async function readParent(oid) {
+    try {
+      return await anyObject(oid);
+    } catch (err) {
+      if (err instanceof TooLargeError) return null;
+      throw err;
+    }
+  }
+
   async function entriesOf(oid) {
     if (!trees.has(oid)) {
       const found = await anyObject(oid);
@@ -444,8 +453,9 @@ async function findMissing({ repo, fresh, local, listed }) {
     toCheck.add(commit.tree);
     expect(commit.tree, "tree");
 
-    // Merges are compared with their first parent
-    const parent = commit.parents[0] ? await anyObject(commit.parents[0]) : null;
+    // Merges are compared with their first parent. One too large to read just
+    // means the new tree is checked in full, not that the push fails.
+    const parent = commit.parents[0] ? await readParent(commit.parents[0]) : null;
     level.push({ a: parent && parent.type === "commit" ? parseCommit(parent.data).tree : null, b: commit.tree });
   }
 

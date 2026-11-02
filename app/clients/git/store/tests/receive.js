@@ -369,6 +369,18 @@ describe("git store receive", function () {
       expect((await manifest.read(store)).refs[MASTER]).toBe(big);
     });
 
+    it("takes a commit on top of a stored parent too large to read", async function () {
+      const tree = fx.text(src, ["rev-parse", fixture.head + "^{tree}"]);
+      const big = fx.text(src, ["commit-tree", tree, "-p", fixture.head], "x".repeat(65 * MiB) + "\n");
+      expect((await direct([update(big)], fx.packRevs(src, [big], [fixture.head], { thin: true }))).outcome).toBe("ok");
+
+      const child = fx.text(src, ["commit-tree", tree, "-p", big], "After\n");
+      const result = await direct([update(child, MASTER, big)], fx.packRevs(src, [child], [big], { thin: true }));
+
+      expect(result.outcome).toBe("ok");
+      expect((await manifest.read(store)).refs[MASTER]).toBe(child);
+    });
+
     it("fails, and does not crash, when the scratch file cannot be written while the next chunk is awaited", async function () {
       // incoming.pack is a directory, so opening it for writing fails at once
       const broken = {
