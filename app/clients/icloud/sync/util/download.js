@@ -1,8 +1,7 @@
 const config = require("config");
 const MAC_SERVER_ADDRESS = config.icloud.server_address;
 const MACSERVER_AUTH = config.icloud.secret; // The Macserver Authorization secret from config
-const localPath = require("helper/localPath");
-const fs = require("fs-extra");
+const folder = require("storage/folder");
 const fetch = require("../../util/rateLimitedFetchWithRetriesAndTimeout");
 
 const DOWNLOAD_TIMEOUT_MS = 60 * 1000;
@@ -19,7 +18,5 @@ module.exports = async (blogID, path) => {
     readBody: true,
     headers: { Authorization: MACSERVER_AUTH, blogID, pathBase64 },
   });
-  const pathOnDisk = localPath(blogID, path);
-  await fs.outputFile(pathOnDisk, buffer);
-  return pathOnDisk;
+  await folder.write(blogID, path, buffer);
 };

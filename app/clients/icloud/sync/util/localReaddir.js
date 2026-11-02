@@ -1,26 +1,15 @@
-const fs = require("fs-extra");
-const { join } = require("path");
+const folder = require("storage/folder");
 
-const localreaddir = async (dir) => {
-  const contents = await fs.readdir(dir);
+// A symlink is not listed (storage/folder never follows one); a directory has
+// no size.
+const localreaddir = async (blogID, dir) => {
+  const contents = await folder.listAll(blogID, dir);
 
-  const result = await Promise.all(
-    contents.map(async (name) => {
-      const path = join(dir, name);
-      const stat = await fs.stat(path);
-
-      const isDirectory = stat.isDirectory();
-      const size = stat.size;
-
-      return {
-        name,
-        isDirectory,
-        size: isDirectory ? undefined : size,
-      };
-    })
-  );
-
-  return result;
+  return contents.map(({ name, isDirectory, size }) => ({
+    name,
+    isDirectory,
+    size: isDirectory ? undefined : size,
+  }));
 };
 
 module.exports = localreaddir;

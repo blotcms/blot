@@ -170,7 +170,6 @@ function extraFolderTargets(metadata, views, hosts) {
 
     wrapFolderLinks(view.content, {
       viewName: view.name || viewName,
-      viewType: view.type,
       hosts,
     }).targets.forEach(add);
 

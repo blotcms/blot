@@ -1,7 +1,5 @@
-const localPath = require("helper/localPath");
 const establishSyncLock = require("sync/establishSyncLock");
-const fs = require("fs-extra");
-const path = require("path");
+const storage = require("storage/folder");
 const { handleSyncLockError } = require("../lock");
 const { handleRedisUnavailable } = require("../unavailable");
 const stampLastSync = require("./stampLastSync");
@@ -20,10 +18,7 @@ module.exports = async function (req, res) {
 
     await stampLastSync(blogID);
 
-    // Compute the local file path on disk before taking the lock
-    const pathOnDisk = localPath(blogID, filePath);
-
-    if (!(await fs.pathExists(pathOnDisk))) {
+    if (!(await storage.exists(blogID, filePath))) {
       console.warn(`File not found (pre-lock): ${filePath}`);
       return res.sendStatus(204);
     }
@@ -34,41 +29,22 @@ module.exports = async function (req, res) {
     const { done, folder } = await establishSyncLock(blogID);
 
     try {
-      if (!(await fs.pathExists(pathOnDisk))) {
+      if (!(await storage.exists(blogID, filePath))) {
         console.warn(`File not found (locked): ${filePath}`);
         return res.sendStatus(204);
       }
 
-      console.log(`Deleting file at: ${pathOnDisk}`);
+      console.log(`Deleting file at: ${filePath}`);
 
       const pathsToUpdate = [filePath];
-      const stat = await fs.lstat(pathOnDisk);
+      const stat = await storage.stat(blogID, filePath);
 
-      if (stat.isDirectory()) {
-        const collectChildPaths = async (directoryPath) => {
-          const entries = await fs.readdir(directoryPath, { withFileTypes: true });
-          const childPaths = [];
-
-          for (const entry of entries) {
-            const entryPath = path.join(directoryPath, entry.name);
-            childPaths.push(entryPath);
-
-            if (entry.isDirectory()) {
-              childPaths.push(...(await collectChildPaths(entryPath)));
-            }
-          }
-
-          return childPaths;
-        };
-
-        const childPathsOnDisk = await collectChildPaths(pathOnDisk);
-
-        for (const childPathOnDisk of childPathsOnDisk) {
-          const relativeChildPath = path.join(
-            filePath,
-            path.relative(pathOnDisk, childPathOnDisk)
-          );
-          pathsToUpdate.push(relativeChildPath);
+      if (stat.isDirectory) {
+        // Directories before what is inside them
+        for await (const childPath of storage.walk(blogID, filePath, {
+          directories: true,
+        })) {
+          pathsToUpdate.push(childPath);
         }
 
         console.log(
@@ -81,7 +57,7 @@ module.exports = async function (req, res) {
       // gone, so the macserver's retry is told there is nothing to delete and
       // the entries (for a folder, those of the files inside it) stay until a
       // resync or Fix(). Accepted: it needs Redis to fail in the middle of a delete.
-      await fs.remove(pathOnDisk); // Removes the file or directory
+      await storage.remove(blogID, filePath); // Removes the file or directory
 
       // Call the folder's update method to register the file deletion
       for (const pathToUpdate of pathsToUpdate) {
@@ -90,7 +66,7 @@ module.exports = async function (req, res) {
         folder.status("Removed " + pathToUpdate);
       }
 
-      console.log(`Successfully deleted: ${pathOnDisk}`);
+      console.log(`Successfully deleted: ${filePath}`);
       return res.status(200).send(`Successfully deleted for blogID: ${blogID}`);
     } finally {
       // Release the sync lock

@@ -169,7 +169,7 @@ describe("entries", function () {
         }
     });
 
-    it("exposes totalEntries in pagination data", async function () {
+    it("exposes total_entries in pagination data", async function () {
 
         const totalEntries = 5;
         const page_size = 2;
@@ -178,15 +178,15 @@ describe("entries", function () {
             await this.write({path: `/${i}.txt`, content: `Hello, ${i}!`});
         }
 
-        await this.template({ "entries.html": "{{pagination.current}}/{{pagination.total}}/{{pagination.page_size}}/{{pagination.total_entries}}/{{pagination.pageSize}}" }, {
+        await this.template({ "entries.html": "{{pagination.current}}/{{pagination.total}}/{{pagination.page_size}}/{{pagination.total_entries}}" }, {
             locals: {page_size}
         });
 
         const body = await this.text('/page/1');
-        expect(body).toContain('1/3/2/5/2');
+        expect(body).toContain('1/3/2/5');
 
         const body2 = await this.text('/page/3');
-        expect(body2).toContain('3/3/2/5/2');
+        expect(body2).toContain('3/3/2/5');
     });
 
     it("does not populate {{#entries}} on a non-listing custom view", async function () {

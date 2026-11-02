@@ -1,15 +1,12 @@
-const localPath = require("helper/localPath");
-const fs = require("fs-extra");
+const folder = require("storage/folder");
 const remoteDelete = require("./sync/util/remoteDelete");
 
 module.exports = async (blogID, path, callback) => {
-  const pathOnBlot = localPath(blogID, path);
-
   try {
-    await fs.remove(pathOnBlot);
+    await folder.remove(blogID, path);
     await remoteDelete(blogID, path);
   } catch (error) {
-    console.error(`Error removing ${pathOnBlot}:`, error);
+    console.error(`Error removing ${path}:`, error);
     return callback(error);
   }
 

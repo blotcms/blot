@@ -156,16 +156,6 @@ describe("resolveFolderLinks", function () {
         input
       );
     });
-
-    it("honours an explicit legacy view type", function () {
-      expect(
-        resolveFolderLinks("a{background:url(/a.png)}", {
-          viewName: "style",
-          viewType: "text/css",
-          hosts,
-        })
-      ).toBe(`a{background:url(${wrap("/a.png")})}`);
-    });
   });
 
   describe("mustache values", function () {

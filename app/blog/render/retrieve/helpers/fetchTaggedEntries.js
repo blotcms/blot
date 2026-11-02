@@ -11,11 +11,8 @@ function buildPagination(current, pageSize, totalEntries) {
   const next = total > 0 && current < total ? current + 1 : null;
   return {
     current,
-    pageSize,
     page_size: pageSize,
     total,
-    totalEntries,
-    // Prefer snake_case in public payloads; keep camelCase for legacy compatibility.
     total_entries: totalEntries,
     previous,
     next,

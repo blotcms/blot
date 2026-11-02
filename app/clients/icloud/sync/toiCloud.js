@@ -1,5 +1,4 @@
 const { join } = require("path");
-const localPath = require("helper/localPath");
 const clfdate = require("helper/clfdate");
 const CheckWeCanContinue = require("./util/checkWeCanContinue");
 const remoteUpload = require("./util/remoteUpload");
@@ -37,7 +36,7 @@ module.exports = async (blogID, publish, update, { skipDeletions = false, abortO
   const walk = async (dir) => {
     const [remoteContents, localContents] = await Promise.all([
       remoteReaddir(blogID, dir),
-      localReaddir(localPath(blogID, dir)),
+      localReaddir(blogID, dir),
     ]);
 
     for (const { name } of remoteContents) {
