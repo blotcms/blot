@@ -1,5 +1,5 @@
-var fs = require("fs-extra");
-var localPath = require("helper/localPath");
+var { callbackify } = require("util");
+var folder = require("storage/folder");
 var Blog = require("models/blog");
 var User = require("models/user");
 var debug = require("debug")("blot:clients:git:disconnect");
@@ -56,7 +56,7 @@ module.exports = function disconnect(blogID, callback) {
           // Remove the live clone, the .git directory in the blog folder,
           // which blogs made before Blot stopped committing in it have.
           // Remove this with the live clones.
-          fs.remove(localPath(blogID, "/.git"), function (err) {
+          callbackify(folder.remove)(blogID, "/.git", function (err) {
             if (err) return callback(err);
 
             // A later connection starts its own history
