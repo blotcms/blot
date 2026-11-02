@@ -90,7 +90,7 @@ has "launch passes both security groups" "$RUN" "--security-group-ids sg-0d1c2c2
 has "launch requires IMDSv2" "$RUN" "HttpTokens=required,HttpPutResponseHopLimit=1"
 has "launch sets termination protection" "$RUN" "--disable-api-termination"
 has "launch uses the AMI's root device" "$RUN" '"DeviceName":"/dev/xvda"'
-has "launch defaults the root to 200 GB gp3" "$RUN" '"VolumeSize":200,"VolumeType":"gp3"'
+has "launch defaults the root to 40 GB gp3" "$RUN" '"VolumeSize":40,"VolumeType":"gp3"'
 has "launch names the host app-*" "$RUN" "Key=Name,Value=app-"
 has "launch tags the provisioner" "$RUN" "Key=HostProvisionedBy,Value=config/host/launch.sh"
 lacks "no instance profile by default" "$RUN" "--iam-instance-profile"
