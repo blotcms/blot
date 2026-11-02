@@ -47,10 +47,14 @@ app/blog/
 ├── render/               The Mustache rendering pipeline. See below.
 ├── static/               Global static assets served to all blogs (fonts, icons, katex, syntax highlighter).
 ├── tests/                Integration tests for all route handlers.
-├── benchmarks/           Blog-serving benchmarks (run via benchmarks.yml).
 └── views/                HTML error page used for template parse errors (template-error.html).
     Other blog error HTML lives in app/views/.
 ```
+
+Blog-serving benchmarks live in `scripts/benchmarks/` (see its README). Run
+the mega-site benchmark (`scripts/benchmarks/mega/README.md`) before merging
+changes to how renders read or cache entries: it reproduces the blogs whose
+renders block every other blog on the process.
 
 Historical top-level files (`vhosts.js`, `entry.js`, …) were removed once
 nothing required them; use `middleware/` and `routes/` paths instead.

@@ -15,7 +15,7 @@ comment. It only reports; it never fails.
   writes the table to the run summary.
 - On a pull request: add the `mega-benchmark` label.
 - Locally, in the dev image against a throwaway Redis (it flushes nothing,
-  but it writes about 110 MB):
+  but it writes about 110 MB and leaves it there):
 
   ```bash
   node --expose-gc --max-old-space-size=1800 scripts/benchmarks/mega/run.js \
@@ -24,6 +24,15 @@ comment. It only reports; it never fails.
   ```
 
   `--max-old-space-size=1800` is the heap production's node-a has.
+
+## When to run it
+
+Before merging anything that changes how a render reads or caches entries:
+the render caches in `app/blog/render` (and their replacement in
+`app/models`), `Entries.getAll` / `Entry.get`, field projection
+(`projectEntryFields`, `hardenProjectedRetrieve`), `getFullView`, the
+preview path, or what bumps a blog's `cacheID`. Run it twice: one run's
+markers can be noise.
 
 ## The sites
 
@@ -42,6 +51,28 @@ no build runs and both sides get identical data.
   after a cacheID bump reads 100 full entries for their titles, and
   `/archives` and `/sitemap.xml` read the whole catalog to print URLs.
 - **small** ×4: 60 entries each on the default template, the other blogs.
+
+Each site models one way a real blog hurt everyone else on its process:
+
+- **catalog** is cost per page. The catalog isn't big, but every page pulls
+  all of it unprojected, plus every tag, and the owner keeps many templates,
+  so template-editor previews (which skip the catalog caches) refill it on
+  every request.
+- **heavy** is entry size. Few entries, but enormous ones: each cacheID bump
+  makes `posts` and `getAllCached` read and parse full entries just to print
+  titles and URLs, and one `MGET` batch can carry tens of MB.
+
+### Where the shapes came from
+
+Read-only scans of production on 2 Nov 2026. The per-blog findings (which
+blogs, their real sizes, what in each template triggers the cost, and a first
+full-scale local run on master) are in `data/mega-shape/findings.md` in the
+main checkout, gitignored with the raw `scan.json` and `templates.json`: the
+repo is public, so blog names and real sizes stay out of it. To refresh the
+profile, rerun an equivalent scan (a throwaway script from the scratchpad,
+copied into a production container and run read-only as uid 1000, asking the
+operator before every command; filter Redis keys by `TYPE` first), update
+the findings there, and round the new shape into `profile.js`.
 
 ## What it measures
 
@@ -69,3 +100,16 @@ Medians of the runs, with their range. 🔺 marks a metric at least 15% worse
 whose head runs all came out above every base run; 🟢 the reverse. Anything
 unmarked is within noise, so a real change should show up as a marker in the
 same direction on a rerun.
+
+## What it doesn't cover
+
+- One Node process and one Redis client: it shows a mega site blocking other
+  blogs' requests on its event loop, not a huge `MGET` stalling Redis for
+  the other processes.
+- Backlinks, search, builds and syncs, and the proxy cache in front of blogs
+  (every request here reaches the renderer).
+- Absolute numbers: a GitHub runner is slower and noisier than production.
+  Compare base with head; use the findings above for scale.
+
+To add a metric, set it on the `metrics` object in `run.js`, then add a row
+to `METRICS` in [`compare.js`](compare.js) (every metric is lower-is-better).
