@@ -37,3 +37,41 @@ describe("git store in-memory object store", function () {
     expect(createMemoryStore().id).not.toBe(createMemoryStore().id);
   });
 });
+
+describe("git store local directory object store", function () {
+  timeout(30 * 1000);
+
+  const fs = require("fs");
+  const fx = require("./helpers/fixture");
+  const createFsStore = require("../objectStore/fs");
+  let dir;
+
+  beforeEach(function () {
+    dir = fx.tempDir();
+  });
+
+  afterEach(function () {
+    fx.remove(dir);
+  });
+
+  for (const [name, run] of cases) {
+    it(name, async function () {
+      await run(createFsStore({ root: dir }));
+    });
+  }
+
+  it("keeps nothing but objects in the directory", async function () {
+    const store = createFsStore({ root: dir });
+    await store.put("a/b", Buffer.from("x"));
+    await store.putIfAbsent("a/c", Buffer.from("y"));
+    await store.putIfAbsent("a/c", Buffer.from("z"));
+    expect(fs.readdirSync(dir + "/.tmp")).toEqual([]);
+    expect(fs.readdirSync(dir + "/a").sort()).toEqual(["b", "c"]);
+  });
+
+  it("refuses a key outside its directory", async function () {
+    const store = createFsStore({ root: dir });
+    await expectAsync(store.put("../escape", Buffer.from("x"))).toBeRejected();
+    await expectAsync(store.get(".tmp/x")).toBeRejected();
+  });
+});
