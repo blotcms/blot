@@ -142,7 +142,7 @@ async function main() {
   );
   for (const [handle, url] of victims) await request(handle, url);
 
-  const solo = await victimLoad(request, victims, () => wait(4000));
+  const solo = await victimLoad(request, victims, () => sleep(4000));
   metrics.victim_solo_p50_ms = percentile(solo.ms, 0.5);
   metrics.victim_solo_p95_ms = percentile(solo.ms, 0.95);
 
@@ -172,7 +172,7 @@ async function main() {
     label: args.label || null,
     scale: SCALE,
     seedSeconds,
-    shape: describe(sites),
+    shape: shapeSummary(sites),
     metrics: round(metrics),
     timings,
     caches: caches && caches.byCache,
@@ -402,7 +402,7 @@ function cacheCounters() {
   return found ? { ...totals, byCache } : null;
 }
 
-function describe(sites) {
+function shapeSummary(sites) {
   const sum = (entries, field) =>
     entries.reduce((total, e) => total + (e[field] || "").length, 0);
   return Object.fromEntries(
@@ -441,7 +441,7 @@ function median(values) {
   return percentile(values, 0.5);
 }
 
-function wait(ms) {
+function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 

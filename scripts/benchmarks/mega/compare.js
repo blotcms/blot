@@ -128,7 +128,7 @@ function short(sha) {
 
 function doneBody({ baseRuns, headRuns, baseSha, headSha, runUrl }) {
   const shape = (headRuns[0] || baseRuns[0] || {}).shape || {};
-  const describe = (name) =>
+  const summary = (name) =>
     shape[name]
       ? `${shape[name].entries} entries, ${shape[name].htmlMB} MB of HTML, ${shape[name].previews} templates`
       : "?";
@@ -144,7 +144,7 @@ function doneBody({ baseRuns, headRuns, baseSha, headSha, runUrl }) {
     "",
     table(baseRuns, headRuns),
     "",
-    `<sub>catalog: ${describe("catalog")}. heavy: ${describe("heavy")}. ` +
+    `<sub>catalog: ${summary("catalog")}. heavy: ${summary("heavy")}. ` +
       "Shapes in `scripts/benchmarks/mega/profile.js`." +
       (runUrl ? ` [Run](${runUrl}).` : "") +
       "</sub>",
