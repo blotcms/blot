@@ -54,7 +54,8 @@
 // forward for a later manifest, and falls back to LISTing manifests/ if the
 // hint is missing, damaged or names something which doesn't exist.
 //
-// Old manifests are not deleted here; that belongs with compaction.
+// Old manifests are not deleted here; that belongs with the second part of
+// compaction, with trimming snapshots and the sweep of orphan packs.
 const crypto = require("crypto");
 const {
   CorruptError,
@@ -313,6 +314,60 @@ function advance(base, { refs, packs = [], historyPieces = [], head = base.head,
   };
 }
 
+// The manifest which follows `base` after a compaction: the packs named in
+// `remove` are replaced by `add` (one pack holding every object they held), and
+// the history pieces named in `removePieces` by `history` (a history pack
+// holding every commit of the old one and of those pieces). Refs, head,
+// snapshots and peeled are unchanged, and no snapshot is added: the refs did
+// not change, so no client's place moved.
+//
+// The merged pack takes the largest seq any of the removed packs has in
+// `base`. A pack's seq is the last swap which made any of its objects needed
+// (fetch sends the packs above a client's place by it), and the merged pack
+// holds the objects of every removed pack, so it is the newest of theirs. It
+// goes where that seq belongs in the list, which is ordered by seq, after the
+// packs with the same seq: the reader and clone read the copy of an object in
+// the pack latest in the list, and with every pack self-contained any copy is
+// right, so keeping the list in seq order is all that matters.
+//
+// Throws StaleManifestError if `base` no longer lists a pack in `remove` or a
+// piece in `removePieces`: someone else compacted them away first.
+function compacted(base, { remove = [], add = null, history, removePieces = [] }) {
+  const listed = new Map(base.packs.map((pack) => [pack.name, pack]));
+  const gone = remove.filter((name) => !listed.has(name));
+  if (gone.length) throw new StaleManifestError("The manifest no longer lists " + gone.join(", "));
+  if (remove.length && !add) throw new Error("A compaction which removes packs must add the pack they were merged into");
+
+  const pieces = base.historyPieces || [];
+  const pieceNames = new Set(pieces.map((piece) => piece.name));
+  const goneByPiece = removePieces.filter((name) => !pieceNames.has(name));
+  if (goneByPiece.length) throw new StaleManifestError("The manifest no longer lists the history pieces " + goneByPiece.join(", "));
+
+  let packs = base.packs;
+  if (add) {
+    const removed = new Set(remove);
+    // The merged pack can only already be listed if it is the very pack some
+    // earlier push or compaction made of the same objects; it is listed once,
+    // with the newer seq of the two
+    const same = listed.get(add.name);
+    const seq = Math.max(...remove.map((name) => listed.get(name).seq), same ? same.seq : 0);
+    packs = base.packs.filter((pack) => !removed.has(pack.name) && pack.name !== add.name);
+    let at = packs.length;
+    while (at > 0 && packs[at - 1].seq > seq) at--;
+    packs = [...packs.slice(0, at), { name: add.name, size: add.size, idxSize: add.idxSize, objects: add.objects, seq }, ...packs.slice(at)];
+  }
+
+  const dropped = new Set(removePieces);
+  return {
+    ...base,
+    seq: base.seq + 1,
+    writer: crypto.randomBytes(16).toString("hex"),
+    packs,
+    history: history === undefined ? base.history : history,
+    historyPieces: pieces.filter((piece) => !dropped.has(piece.name)),
+  };
+}
+
 // The peeled targets of the tags some snapshot names. A snapshot is how long a
 // tag can still be asked for, so it is how long its target is wanted.
 function keepPeeled(peeled, snapshots) {
@@ -457,4 +512,4 @@ async function swap({ store, lock, base, next, uploaded = [] }) {
   });
 }
 
-module.exports = { VERSION, empty, validate, parse, serialize, read, advance, swap };
+module.exports = { VERSION, empty, validate, parse, serialize, read, advance, compacted, swap };
