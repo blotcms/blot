@@ -2,7 +2,7 @@ const { PassThrough, Readable } = require("stream");
 const fs = require("fs-extra");
 const os = require("os");
 const path = require("path");
-const airlock = require("helper/airlock");
+const egress = require("helper/egress");
 const download = require("../download");
 const lifecycle = require("../../lifecycle");
 
@@ -14,7 +14,7 @@ describe("bounded import downloads", function () {
   it("aborts a stalled body at its deadline", async function () {
     const body = new PassThrough();
     let signal;
-    spyOn(airlock, "fetch").and.callFake(async (url, options) => {
+    spyOn(egress, "fetch").and.callFake(async (url, options) => {
       signal = options.signal;
       return response(body);
     });
@@ -27,7 +27,7 @@ describe("bounded import downloads", function () {
 
   it("aborts before headers arrive", async function () {
     let signal;
-    spyOn(airlock, "fetch").and.callFake((url, options) => {
+    spyOn(egress, "fetch").and.callFake((url, options) => {
       signal = options.signal;
       return new Promise((resolve, reject) => {
         signal.addEventListener("abort", () => reject(lifecycle.cancelled()));
@@ -41,7 +41,7 @@ describe("bounded import downloads", function () {
 
   it("enforces actual bytes without Content-Length", async function () {
     const body = Readable.from([Buffer.from("123"), Buffer.from("456")]);
-    spyOn(airlock, "fetch").and.returnValue(Promise.resolve(response(body)));
+    spyOn(egress, "fetch").and.returnValue(Promise.resolve(response(body)));
     let error;
     try { await download("https://example.com/large", { maxBytes: 5 }); } catch (e) { error = e; }
     expect(error.message).toContain("byte limit");
@@ -49,7 +49,7 @@ describe("bounded import downloads", function () {
   });
 
   it("preserves small bodies and headers", async function () {
-    spyOn(airlock, "fetch").and.returnValue(Promise.resolve(response(
+    spyOn(egress, "fetch").and.returnValue(Promise.resolve(response(
       Readable.from([Buffer.from("abc")]), { "content-type": "application/pdf" }
     )));
     const result = await download("https://example.com/small");
@@ -61,7 +61,7 @@ describe("bounded import downloads", function () {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "import-limit-"));
     const state = lifecycle.create(directory);
     state.bytes = 1024 * 1024 * 1024 - 1;
-    spyOn(airlock, "fetch").and.callFake(async () => response(Readable.from([Buffer.from("ab")])));
+    spyOn(egress, "fetch").and.callFake(async () => response(Readable.from([Buffer.from("ab")])));
     try {
       let error;
       try { await state.run(() => download("https://example.com/asset")); } catch (e) { error = e; }
@@ -77,7 +77,7 @@ describe("bounded import downloads", function () {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "import-cancel-"));
     const state = lifecycle.create(directory);
     const body = new PassThrough();
-    spyOn(airlock, "fetch").and.callFake(async () => {
+    spyOn(egress, "fetch").and.callFake(async () => {
       await fs.outputFile(path.join(directory, "cancelled.txt"), "true");
       return response(body);
     });

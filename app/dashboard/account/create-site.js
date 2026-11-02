@@ -5,8 +5,8 @@ var _ = require("lodash");
 var prettyPrice = require("helper/prettyPrice");
 var config = require("config");
 // The SSL-cert warmup below fetches the new blog's URL, which is a user-set
-// custom domain when one is configured; route it through the airlock proxy.
-var fetch = require("helper/airlock").fetch;
+// custom domain when one is configured; route it through the egress proxy.
+var fetch = require("helper/egress").fetch;
 var stripe = require("stripe")(config.stripe.secret);
 var User = require("models/user");
 var Email = require("helper/email");

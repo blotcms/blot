@@ -11,7 +11,7 @@ var boundedDownload = require("./download");
 var lifecycle = require("../lifecycle");
 
 function download(url, callback) {
-  boundedDownload(url, { airlockLabel: "import/download_images" })
+  boundedDownload(url, { egressLabel: "import/download_images" })
     .then(async ({ data, headers }) => {
       lifecycle.check();
       const { meta } = await sandbox.run("metadata", {}, data);
