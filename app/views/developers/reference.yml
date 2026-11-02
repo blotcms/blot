@@ -392,7 +392,7 @@
         {{/all_entries}}
     - name: Pagination
       type: section
-      description: "Pagination is applied on tagged routes (`/tagged/:slug` and `/tagged/:slug/page/:page`) and on entry list routes that set `page_size`. Templates receive a `pagination` object with `current`, `previous`, `next`, `total`, `page_size`, and `total_entries` (with legacy camelCase aliases like `pageSize` still available for compatibility). Defaults and limits: `page_size` uses a baseline of `5` with valid values `1-100`; tagged routes prefer `tagged_page_size` over `page_size`, and use an effective default of `100` when unset, invalid, or outside `1-500`."
+      description: "Pagination is applied on tagged routes (`/tagged/:slug` and `/tagged/:slug/page/:page`) and on entry list routes that set `page_size`. Templates receive a `pagination` object with `current`, `previous`, `next`, `total`, `page_size`, and `total_entries`. Defaults and limits: `page_size` uses a baseline of `5` with valid values `1-100`; tagged routes prefer `tagged_page_size` over `page_size`, and use an effective default of `100` when unset, invalid, or outside `1-500`."
       example: |
         {{#pagination.next}}
         <a href="/tagged/{{slug}}/page/{{pagination.next}}">Older</a>
