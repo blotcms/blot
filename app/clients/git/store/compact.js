@@ -214,6 +214,15 @@ function plan(m, options = {}) {
   return packs.length || history || trim ? { packs, history, trim } : null;
 }
 
+// The options compact() plans with, given its cache: `options` with maxBytes
+// defaulting to a share of the cache's budget. A host which runs plan() on a
+// manifest it already holds, to skip compact() when there is nothing to do,
+// passes these so the two agree.
+function planOptions(cache, options = {}) {
+  const maxBytes = options.maxBytes !== undefined ? options.maxBytes : cache && cache.maxBytes > 0 ? Math.max(0, Math.floor((cache.maxBytes - SLACK) / CACHE_SHARE)) : DEFAULTS.maxBytes;
+  return { ...options, maxBytes };
+}
+
 // The limits on snapshots in `options` (manifest.js's SNAPSHOT_LIMITS for
 // those not given)
 function snapshotLimits(options) {
@@ -406,8 +415,9 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, clo
   const result = (outcome, extra) => ({ outcome, seq: null, merged: [], into: null, history: null, ...extra, stats: { ...stats, ms: Date.now() - started } });
 
   const base = await manifest.read(store, { clock });
-  const maxBytes = options.maxBytes !== undefined ? options.maxBytes : cache.maxBytes > 0 ? Math.max(0, Math.floor((cache.maxBytes - SLACK) / CACHE_SHARE)) : DEFAULTS.maxBytes;
-  const chosen = plan(base, { ...options, maxBytes });
+  const planned = planOptions(cache, options);
+  const maxBytes = planned.maxBytes;
+  const chosen = plan(base, planned);
   if (!chosen) return result("nothing", { seq: base.seq });
 
   const byName = new Map(base.packs.map((pack) => [pack.name, pack]));
@@ -548,6 +558,7 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, clo
 
 module.exports = compact;
 module.exports.plan = plan;
+module.exports.planOptions = planOptions;
 module.exports.DEFAULTS = DEFAULTS;
 module.exports.snapshotLimits = snapshotLimits;
 module.exports.PACK_CONFIG = PACK_CONFIG;

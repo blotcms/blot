@@ -29,13 +29,26 @@
 //            mirror is queued instead, and the mismatch is logged.
 //
 // After an operation which changed the store, compaction runs in the
-// background, one at a time per blog, and runs once more if asked again while
-// it ran. The sweep is not run here.
+// background if compact.plan finds something to do in the manifest that
+// operation swapped in, one at a time per blog, and once more if asked again
+// while it ran. The sweep is not run here.
 //
 // Each operation logs one line (see log() below):
 //
 //   [git-store-shadow] blog=<id> op=push|write|import|compact outcome=...
-//     storeMs=... ebsMs=... requests=... bytesUp=... bytesDown=... refs=...
+//     storeMs=... [receiveMs=...|commitMs=...] ebsMs=... requests=...
+//     bytesUp=... bytesDown=... refs=...
+//
+// storeMs is all the store's side took (for a push, reading its manifest and
+// making the pack from the EBS repository too). The figures to compare are:
+//
+//   push    ebsMs (receivePack's start to the refs moving on EBS) with
+//           receiveMs (the store's receive, from the pack's first byte to the
+//           swap landing). Neither includes the client's upload.
+//   write   ebsMs (the EBS ref lock and plumbing.commitFile) with commitMs
+//           (the store's commit() alone)
+//
+// requests, bytesUp and bytesDown count all of storeMs's requests.
 //
 // with outcome=mismatch and a detail= for anything mirroring cannot explain.
 // Blog handles and emails are kept out of the logs: IDs only.
@@ -75,7 +88,7 @@ const STDERR_BYTES = 4096;
 
 // ---- Logging ----------------------------------------------------------------
 
-const ORDER = ["blog", "op", "outcome", "storeMs", "ebsMs", "requests", "bytesUp", "bytesDown", "refs"];
+const ORDER = ["blog", "op", "outcome", "storeMs", "receiveMs", "commitMs", "ebsMs", "requests", "bytesUp", "bytesDown", "refs"];
 
 function value(v) {
   const text = String(v);
@@ -336,10 +349,26 @@ async function runMirror(ctx, task) {
         pack = packFor(gitDir, tips, have);
       }
 
+      // receiveMs, the figure to compare with a push to EBS, is receive's
+      // own time: from the pack's first byte (or the call, with no pack) to
+      // the swap landing. What git took to start making the pack is left out;
+      // a client's push to EBS is timed from when its request arrives.
+      let firstByte = null;
+      const source = pack
+        ? (async function* () {
+            for await (const chunk of pack.stream) {
+              if (firstByte === null) firstByte = Date.now();
+              yield chunk;
+            }
+          })()
+        : null;
+
       try {
-        const result = await receive({ store, cache, lock, commands, pack: pack ? pack.stream : null });
+        const called = Date.now();
+        const result = await receive({ store, cache, lock, commands, pack: source });
+        const receiveMs = Date.now() - (firstByte === null ? called : firstByte);
         const git = pack ? await pack.done() : null;
-        return { result, git };
+        return { result, git, receiveMs };
       } catch (err) {
         if (pack) await pack.done();
         throw err;
@@ -353,7 +382,9 @@ async function runMirror(ctx, task) {
 
       // Another process imported it first: push onto what it imported
       if (imported === null && attempt < 2) continue;
-      return !!imported;
+
+      // An import is one pack: nothing to compact
+      return null;
     }
 
     if (plan.unmirrorable.length) {
@@ -367,15 +398,16 @@ async function runMirror(ctx, task) {
 
     if (!outcome) {
       log({ blog: blogID, op: "push", outcome: "same", ...countsOf(measured), refs: 0, ...extra });
-      return false;
+      return null;
     }
 
-    const { result, git: packed } = outcome;
+    const { result, git: packed, receiveMs } = outcome;
     const fields = {
       blog: blogID,
       op: "push",
       outcome: result.outcome,
       ...countsOf(measured),
+      receiveMs,
       refs: plan.commands.length,
       ...extra,
       attempt: attempt > 1 ? attempt : undefined,
@@ -387,7 +419,7 @@ async function runMirror(ctx, task) {
 
     if (result.outcome === "ok") {
       log(fields);
-      return true;
+      return { compact: result.manifest };
     }
 
     // A pack git could not make explains whatever receive said about it
@@ -414,7 +446,7 @@ async function runMirror(ctx, task) {
       outcome: result.outcome === "refused" ? "mismatch" : result.outcome,
       detail: scrub(why, ctx),
     });
-    return false;
+    return null;
   }
 }
 
@@ -482,17 +514,43 @@ async function runWrite(ctx, task) {
     return "mirror";
   }
 
-  // The store must be where EBS was, or the commit would be built on the
-  // wrong parent. Read outside the measurement, which is of the write itself.
-  const base = await manifest.read(store);
-  const master = base.refs[MASTER] || null;
+  const change = task.change;
+  const removing = change.contents === null || change.contents === undefined;
+
+  // storeMs is the whole of the store's side: the read of its master and the
+  // commit. commitMs, the figure to compare with the EBS commit (ebsMs), is
+  // the store's commit() alone.
+  const measured = await measure(async () => {
+    // The store must be where EBS was, or the commit would be built on the
+    // wrong parent
+    const base = await manifest.read(store);
+    const master = base.refs[MASTER] || null;
+
+    if (base.seq === 0 || master !== (ebs.parent || null)) return { base, master };
+
+    const started = Date.now();
+    const result = await storeCommit({
+      store,
+      cache,
+      lock,
+      path: change.path,
+      contents: removing ? undefined : change.contents,
+      remove: removing,
+      identity: { name: author.name, email: author.email },
+      now: author.seconds * 1000,
+    });
+
+    return { base, master, result, commitMs: Date.now() - started };
+  });
+
+  const { base, master, result, commitMs } = measured.result;
 
   if (base.seq === 0) {
     log({ ...fields, outcome: "skipped", detail: "the store is empty" });
     return "mirror";
   }
 
-  if (master !== (ebs.parent || null)) {
+  if (!result) {
     // A mirror since the write landed already brought it over
     if (master === ebs.commit || (await isAncestor(gitDir, ebs.commit, master))) {
       log({ ...fields, outcome: "already", storeMaster: master, ebsCommit: ebs.commit });
@@ -503,22 +561,7 @@ async function runWrite(ctx, task) {
     return "mirror";
   }
 
-  const change = task.change;
-  const removing = change.contents === null || change.contents === undefined;
-  const measured = await measure(() =>
-    storeCommit({
-      store,
-      cache,
-      lock,
-      path: change.path,
-      contents: removing ? undefined : change.contents,
-      remove: removing,
-      identity: { name: author.name, email: author.email },
-      now: author.seconds * 1000,
-    })
-  );
-  const result = measured.result;
-  const out = { ...fields, outcome: result.outcome, ...countsOf(measured), refs: 1, seq: result.seq };
+  const out = { ...fields, outcome: result.outcome, ...countsOf(measured), commitMs, refs: 1, seq: result.seq };
 
   if (result.outcome === "unknown") {
     log({ ...out, detail: scrub(result.error, ctx) });
@@ -531,14 +574,14 @@ async function runWrite(ctx, task) {
   }
 
   log(out);
-  return "compact";
+  return { compact: result.manifest };
 }
 
 // ---- Compaction --------------------------------------------------------
 
-async function runCompact(ctx) {
+async function runCompact(ctx, options) {
   const { blogID, store, cache, lock } = ctx;
-  const measured = await measure(() => compact({ store, cache, lock }));
+  const measured = await measure(() => compact({ store, cache, lock, ...options }));
   const result = measured.result;
   const stats = result.stats || {};
 
@@ -564,7 +607,7 @@ async function runCompact(ctx) {
 const blogs = new Map();
 
 // For specs: how many operations have run, and whether two ever overlapped
-const stats = { mirrors: 0, writes: 0, compactions: 0, overlaps: 0 };
+const stats = { mirrors: 0, writes: 0, compactions: 0, compactionsSkipped: 0, overlaps: 0 };
 const active = new Map();
 
 function stateOf(blogID) {
@@ -612,7 +655,7 @@ async function drain(blogID, state) {
         next = await runWrite(ctx, task);
       } else {
         stats.mirrors++;
-        next = (await runMirror(ctx, task)) ? "compact" : null;
+        next = await runMirror(ctx, task);
       }
     } catch (err) {
       log({ blog: blogID, op: task.type === "write" ? "write" : task.op, outcome: "error", detail: scrub(err, ctx) });
@@ -622,7 +665,7 @@ async function drain(blogID, state) {
     }
 
     if (next === "mirror") requestMirror(blogID, { op: "push", reason: "write" });
-    if (next === "compact" && ctx) requestCompact(blogID, state, ctx);
+    if (next && next.compact && ctx) requestCompact(blogID, state, ctx, next.compact);
 
     task.resolve();
   }
@@ -652,7 +695,18 @@ function requestMirror(blogID, { op = "push", ebsMs, reason } = {}) {
   return task.done;
 }
 
-function requestCompact(blogID, state, ctx) {
+// Compacts in the background, if the manifest the operation just swapped in
+// (and so already holds) has anything worth doing: compact.plan decides that
+// locally, with the options compact() itself would use, so a push or a write
+// in the steady state costs no compaction request at all.
+function requestCompact(blogID, state, ctx, current) {
+  const options = compact.planOptions(ctx.cache);
+
+  if (!current || !compact.plan(current, options)) {
+    stats.compactionsSkipped++;
+    return;
+  }
+
   if (state.compacting) {
     state.compactAgain = true;
     return;
@@ -663,7 +717,7 @@ function requestCompact(blogID, state, ctx) {
       state.compactAgain = false;
       stats.compactions++;
       try {
-        await runCompact(ctx);
+        await runCompact(ctx, options);
       } catch (err) {
         log({ blog: blogID, op: "compact", outcome: "error", detail: scrub(err, ctx) });
       }

@@ -54,6 +54,55 @@ describe("git store shadow mode: failures, coalescing and switching off", functi
     });
   });
 
+  describe("counting every request", function () {
+    var OPS = ["head", "read", "get", "stream", "put", "putIfAbsent", "delete", "list"];
+
+    setup({
+      objectStore: function (blogID) {
+        var ctx = this;
+        var store = (ctx.stores[blogID] = ctx.stores[blogID] || createMemoryStore());
+        var counted = Object.assign({}, store, { id: store.id });
+
+        ctx.calls = ctx.calls || { count: 0 };
+        OPS.forEach(function (op) {
+          counted[op] = function () {
+            ctx.calls.count++;
+            return store[op].apply(store, arguments);
+          };
+        });
+
+        return counted;
+      },
+    });
+
+    it("makes no compaction request for pushes and writes with nothing to compact", async function () {
+      await this.local.writeAndPush("/a.txt", "A");
+      await shadow.idle(this.blog.id);
+      await this.local.writeAndPush("/b.txt", "B");
+      await shadow.idle(this.blog.id);
+      await this.local.writeAndPush("/c.txt", "C");
+      await shadow.idle(this.blog.id);
+      await commit(this, { path: "/d.txt", contents: "D" });
+      await shadow.idle(this.blog.id);
+
+      expect(shadow.stats.compactions).toBe(0);
+      expect(shadow.stats.compactionsSkipped).toBe(3);
+      expect(this.shadowLines("compact").length).toBe(0);
+
+      // Every request the store was asked is one an import, push or write
+      // logged
+      var logged = this.shadowLines().reduce(function (sum, line) {
+        var match = / requests=(\d+) /.exec(line);
+        return sum + (match ? Number(match[1]) : 0);
+      }, 0);
+
+      expect(this.shadowLines("import").length).toBe(1);
+      expect(this.shadowLines("push").length).toBe(2);
+      expect(this.shadowLines("write").length).toBe(1);
+      expect(this.calls.count).toBe(logged);
+    });
+  });
+
   describe("with a slow object store", function () {
     setup({
       objectStore: function (blogID) {

@@ -28,7 +28,7 @@ describe("git store shadow mode: mirroring", function () {
     var pushes = this.shadowLines("push");
     expect(pushes.length).toBe(1);
     expect(pushes[0]).toContain("outcome=ok");
-    expect(pushes[0]).toMatch(/ storeMs=\d+ ebsMs=\d+ requests=\d+ bytesUp=\d+ bytesDown=\d+ refs=1 /);
+    expect(pushes[0]).toMatch(/ storeMs=\d+ receiveMs=\d+ ebsMs=\d+ requests=\d+ bytesUp=\d+ bytesDown=\d+ refs=1 /);
     expect(current.refs["refs/heads/master"]).toBe(await this.local.head());
 
     // Blog handles stay out of the logs
@@ -124,7 +124,7 @@ describe("git store shadow mode: mirroring", function () {
 
     expect(writes.length).toBe(1);
     expect(writes[0]).toContain("outcome=ok");
-    expect(writes[0]).toMatch(/ storeMs=\d+ ebsMs=\d+ requests=\d+ bytesUp=\d+ bytesDown=\d+ refs=1 /);
+    expect(writes[0]).toMatch(/ storeMs=\d+ commitMs=\d+ ebsMs=\d+ requests=\d+ bytesUp=\d+ bytesDown=\d+ refs=1 /);
     expect(current.refs["refs/heads/master"]).toBe(setup.ebsRefs(this.gitDir)["refs/heads/master"]);
 
     await commit(this, { path: "/Drafts/hello.txt", contents: null });
@@ -160,18 +160,24 @@ describe("git store shadow mode: mirroring", function () {
   it("compacts in the background after mirroring", async function () {
     await this.local.writeAndPush("/a.txt", "A");
 
-    for (var i = 0; i < 6; i++) await this.local.writeAndPush("/" + i + ".txt", String(i));
+    // A push each, so each has a pack and a seq of its own: once more than
+    // keepRecent (4) pushes are past, the small packs are worth merging
+    for (var i = 0; i < 7; i++) {
+      await shadow.idle(this.blog.id);
+      await this.local.writeAndPush("/" + i + ".txt", String(i));
+    }
 
     await setup.expectMirrored(this);
 
     var compactions = this.shadowLines("compact");
     expect(compactions.length).toBeGreaterThan(0);
     compactions.forEach(function (line) {
-      expect(line).toMatch(/outcome=(compacted|nothing) storeMs=\d+ requests=\d+ /);
+      expect(line).toMatch(/outcome=(compacted|nothing|superseded) storeMs=\d+ requests=\d+ /);
     });
+    expect(compactions.some((line) => / outcome=compacted /.test(line))).toBe(true);
 
     // An import's pack and one for each push since, less what was merged
     var current = await manifest.read(this.stores[this.blog.id]);
-    expect(current.packs.length).toBeLessThanOrEqual(7);
+    expect(current.packs.length).toBeLessThan(8);
   });
 });
