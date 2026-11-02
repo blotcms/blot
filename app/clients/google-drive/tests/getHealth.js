@@ -98,18 +98,6 @@ describe("google drive getHealth", function () {
     );
   });
 
-  it("lazily classifies legacy prose-only trash rows", async function () {
-    const result = await load({
-      error:
-        "The Google Drive folder used to sync this site has been moved to the trash. Please select a new folder to continue syncing.",
-      folderId: null,
-    })("blog");
-
-    expect(result.state).toBe(health.STATES.ERROR);
-    expect(result.issues[0].code).toBe(health.CODES.SOURCE_MISSING);
-    expect(result.issues[0].since).toBeUndefined();
-  });
-
   it("uses the shared default copy when only errorCode is stored", async function () {
     const result = await load({
       errorCode: health.CODES.SOURCE_MISSING,

@@ -93,28 +93,16 @@ function isSetupError(error) {
   return typeof error === "string" && error.trim() === SETUP_ERROR;
 }
 
-function classifyFromProse(error) {
-  if (typeof error !== "string" || !error.trim()) return null;
-  if (isSetupError(error)) return null;
-
-  if (/moved to the trash/i.test(error)) return health.CODES.SOURCE_MISSING;
-  if (/has been deleted/i.test(error)) return health.CODES.SOURCE_MISSING;
-  if (/no longer accessible/i.test(error)) return health.CODES.SOURCE_MISSING;
-
-  return null;
-}
-
 function classify(account) {
-  if (!account) return null;
-
   if (
+    account &&
     account.errorCode &&
     Object.prototype.hasOwnProperty.call(health.CODES, account.errorCode)
   ) {
     return account.errorCode;
   }
 
-  return classifyFromProse(account.error);
+  return null;
 }
 
 function sourceMissingFields(account, message, now) {
@@ -156,34 +144,14 @@ function clearHealthErrorFields() {
   };
 }
 
-// Returns a patch to write, or null when the row already matches.
-function backfillPatch(account) {
-  if (!account) return null;
-
-  const fromProse = classifyFromProse(account.error);
-
-  if (fromProse) {
-    if (account.errorCode === fromProse) return null;
-    return { errorCode: fromProse };
-  }
-
-  if (isSetupError(account.error) && account.errorCode) {
-    return { errorCode: null, errorSince: null };
-  }
-
-  return null;
-}
-
 module.exports = {
   SETUP_ERROR,
   MESSAGES,
   classify,
-  classifyFromProse,
   sourceMissingFields,
   lostFolderMessage,
   clearAllErrorFields,
   clearHealthErrorFields,
-  backfillPatch,
   isLostFolderError,
   isTransientDriveError,
   isQuotaError,
