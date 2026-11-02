@@ -16,6 +16,8 @@
 //   limit      the most bytes of pack accepted (default 2 GiB)
 //   progress   progress(message), called as each stage starts, with a line
 //              for the blog's owner; see sideband.js for streaming it. Optional.
+//   baseLimit  the largest delta base stored as a delta that is resolved
+//              (default 256 MiB); a base stored whole has no limit
 //   sizeHint   how big the pack is expected to be (the Content-Length), so
 //              the reservation starts near the right size; optional
 //
@@ -68,6 +70,8 @@ const fsp = require("fs/promises");
 const { once } = require("events");
 const path = require("path");
 const zlib = require("zlib");
+const { pipeline } = require("stream/promises");
+const { Readable } = require("stream");
 const { spawn } = require("child_process");
 const { NoRoomError, StaleManifestError, OutcomeUnknownError, CorruptError, TooLargeError } = require("./errors");
 const { packKey, idxKey, revKey } = require("./layout");
@@ -92,6 +96,13 @@ const RESERVE_STEP = 8 * MiB;
 
 // How many objects are fetched or checked at once
 const CONCURRENCY = 8;
+
+// A base which is stored whole is streamed to scratch whatever its size. One
+// stored as a delta has to be resolved in memory, so those are read up to
+// SMALL_BASE with several at once; any larger is read on its own, up to
+// `baseLimit` (default DEFAULT_BASE_LIMIT), and past that the push is refused.
+const SMALL_BASE = 16 * MiB;
+const DEFAULT_BASE_LIMIT = 256 * MiB;
 
 // The commits, trees and tags of a push are held in memory to be checked.
 // This is far more than any real push has.
@@ -279,25 +290,57 @@ async function writeIncoming(incoming, reservation, cache, file, limit) {
 }
 
 // Writes the objects `oids` that the store has as loose objects under `dir`,
-// which index-pack reads as an alternate to complete the thin pack. Resolves
-// with { fetched: Set of IDs, bytes }.
-async function fetchBases(repo, oids, dir, reservation) {
+// which index-pack reads as an alternate to complete the thin pack. Each is
+// deflated as it streams, so a large base costs no more memory than a small
+// one (apart from one stored as a delta: see SMALL_BASE). Resolves with
+// { fetched: Set of IDs, bytes }.
+async function fetchBases(repo, oids, dir, reservation, baseLimit) {
   const fetched = new Set();
+  const large = [];
   let bytes = 0;
 
-  await mapLimit(oids, CONCURRENCY, async (oid) => {
-    const found = await repo.read(oid);
+  async function fetchOne(oid, cap) {
+    const found = await repo.stream(oid, { maxSize: cap });
     if (!found) return;
 
     // Room for the loose copy here, and for the copy index-pack appends to the pack
-    await reservation.extend(2 * found.data.length + 1024);
+    await reservation.extend(2 * found.size + 1024);
     const file = path.join(dir, oid.slice(0, 2), oid.slice(2));
     await fsp.mkdir(path.dirname(file), { recursive: true });
-    await fsp.writeFile(file, zlib.deflateSync(Buffer.concat([Buffer.from(found.type + " " + found.data.length + "\0"), found.data]), { level: 1 }));
+    await pipeline(
+      Readable.from(
+        (async function* () {
+          yield Buffer.from(found.type + " " + found.size + "\0");
+          yield* found.data;
+        })()
+      ),
+      zlib.createDeflate({ level: 1 }),
+      fs.createWriteStream(file)
+    );
 
     fetched.add(oid);
-    bytes += found.data.length;
+    bytes += found.size;
+  }
+
+  await mapLimit(oids, CONCURRENCY, async (oid) => {
+    try {
+      await fetchOne(oid, Math.min(SMALL_BASE, baseLimit));
+    } catch (err) {
+      if (!(err instanceof TooLargeError)) throw err;
+      large.push(oid);
+    }
   });
+
+  for (const oid of large) {
+    try {
+      await fetchOne(oid, baseLimit);
+    } catch (err) {
+      if (!(err instanceof TooLargeError)) throw err;
+      throw new Refused(
+        "the push builds on a file which Blot stores in a form it can only use up to " + formatSize(baseLimit) + ", and this one is larger."
+      );
+    }
+  }
 
   return { fetched, bytes };
 }
@@ -359,10 +402,20 @@ async function loadObjects(scratch, gitDir, oids) {
 // The IDs which the new objects point at and which are not in the new pack
 // either, and which the repository does not have. `fresh` are the objects the
 // push brought (Map(oid -> { type, size })), `local` the data of its commits,
-// trees and tags, and `present` every ID in the new pack (the fetched bases
-// too). Only what the pack adds is checked: see the top of this file.
-async function findMissing({ repo, fresh, local, present }) {
+// trees and tags, and `listed` every object in the new pack (the fetched bases
+// too, as Map(oid -> { type })). Only what the pack adds is checked: see the
+// top of this file. Resolves with { missing, wrong }: the IDs that are
+// nowhere, and those which are in the pack but are not the kind of object
+// they are linked as (index-pack does not check links). What lies outside the
+// pack is not read for its type: it was checked when it was stored.
+async function findMissing({ repo, fresh, local, listed }) {
   const toCheck = new Set();
+  const expected = new Map();
+  const expect = (oid, type) => {
+    if (!expected.has(oid)) expected.set(oid, new Set());
+    expected.get(oid).add(type);
+  };
+  const entryType = (entry) => (isDirectory(entry) ? "tree" : "blob");
   const visited = new Set();
   const trees = new Map();
 
@@ -380,12 +433,20 @@ async function findMissing({ repo, fresh, local, present }) {
 
   let level = [];
   for (const [oid, { type }] of fresh) {
-    if (type === "tag") toCheck.add(parseTag(local.get(oid).data).object);
+    if (type === "tag") {
+      const tag = parseTag(local.get(oid).data);
+      toCheck.add(tag.object);
+      expect(tag.object, tag.type);
+    }
     if (type !== "commit") continue;
 
     const commit = parseCommit(local.get(oid).data);
-    commit.parents.forEach((parent) => toCheck.add(parent));
+    commit.parents.forEach((parent) => {
+      toCheck.add(parent);
+      expect(parent, "commit");
+    });
     toCheck.add(commit.tree);
+    expect(commit.tree, "tree");
 
     // Merges are compared with their first parent
     const parent = commit.parents[0] ? await anyObject(commit.parents[0]) : null;
@@ -408,6 +469,7 @@ async function findMissing({ repo, fresh, local, present }) {
         if (isGitlink(entry) || (was && was.oid === entry.oid && was.mode === entry.mode)) continue;
 
         toCheck.add(entry.oid);
+        expect(entry.oid, entryType(entry));
         // A tree which is not in the pack is in the repository, and so closed
         if (isDirectory(entry) && fresh.has(entry.oid)) next.push({ a: was && isDirectory(was) ? was.oid : null, b: entry.oid });
       }
@@ -420,14 +482,20 @@ async function findMissing({ repo, fresh, local, present }) {
   // it needs to) has not been compared with anything, so all of it is checked
   for (const [oid, { type }] of fresh) {
     if (type !== "tree" || visited.has(oid)) continue;
-    for (const entry of parseTree(local.get(oid).data)) if (!isGitlink(entry)) toCheck.add(entry.oid);
+    for (const entry of parseTree(local.get(oid).data)) {
+      if (isGitlink(entry)) continue;
+      toCheck.add(entry.oid);
+      expect(entry.oid, entryType(entry));
+    }
   }
 
+  const wrong = [...expected].filter(([oid, types]) => listed.has(oid) && (types.size > 1 || !types.has(listed.get(oid).type))).map(([oid]) => oid);
+
   const missing = [];
-  await mapLimit([...toCheck].filter((oid) => !present.has(oid)), CONCURRENCY, async (oid) => {
+  await mapLimit([...toCheck].filter((oid) => !listed.has(oid)), CONCURRENCY, async (oid) => {
     if (!(await repo.has(oid))) missing.push(oid);
   });
-  return missing;
+  return { missing, wrong };
 }
 
 // Why each ref update's new tip can't be taken, as { ref: reason }: it isn't
@@ -489,7 +557,7 @@ function answer(commands, { outcome, status = "ok", problems = {}, messages = []
   return { outcome, status, results, messages, ...extra };
 }
 
-async function receive({ store, cache, lock, commands, pack = null, limit = DEFAULT_LIMIT, sizeHint = 0, progress = null }) {
+async function receive({ store, cache, lock, commands, pack = null, limit = DEFAULT_LIMIT, sizeHint = 0, baseLimit = DEFAULT_BASE_LIMIT, progress = null }) {
   // A host's callback must never be able to fail a push
   const say = (message) => {
     try {
@@ -502,6 +570,13 @@ async function receive({ store, cache, lock, commands, pack = null, limit = DEFA
   let reservation = null;
 
   try {
+    // Git's 0000 probe, sent before a large request, has no commands. It is
+    // answered, and touches nothing: no manifest, no scratch space.
+    if (!commands.length) {
+      await incoming.drain();
+      return answer(commands, { outcome: "ok", extra: { stats } });
+    }
+
     const problems = refusals(commands);
     if (Object.keys(problems).length) throw new Refused("ok", problems);
     if (sizeHint > limit) throw new Refused("the push is larger than the " + formatSize(limit) + " Blot accepts");
@@ -511,7 +586,7 @@ async function receive({ store, cache, lock, commands, pack = null, limit = DEFA
     const behind = staleRefs(base, commands);
     if (behind) throw behind;
 
-    const added = await prepare({ store, cache, commands, incoming, limit, sizeHint, base, children, stats, hold: (r) => (reservation = r), say });
+    const added = await prepare({ store, cache, commands, incoming, limit, sizeHint, base, children, stats, baseLimit, hold: (r) => (reservation = r), say });
     const next = await swap({ store, lock, commands, added });
 
     stats.packs = added.packs.map((piece) => piece.name);
@@ -564,7 +639,7 @@ function staleRefs(current, commands) {
 // Everything up to the upload: the pack in scratch, completed and checked, its
 // history piece, and both uploaded. Resolves with { packs, pieces } to name in
 // the manifest (none, for a push of refs only).
-async function prepare({ store, cache, commands, incoming, limit, sizeHint, base, children, stats, hold, say }) {
+async function prepare({ store, cache, commands, incoming, limit, sizeHint, base, children, stats, baseLimit, hold, say }) {
   const added = { packs: [], pieces: [] };
   const needsPack = commands.some((command) => command.new !== ZERO);
   const reservation = await cache.reserve(Math.min(limit, Math.max(sizeHint, FIRST_RESERVE), Math.floor(cache.maxBytes / 2)));
@@ -579,7 +654,6 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, base
   await incoming.drain();
 
   let fresh = new Map();
-  let present = new Set();
   let local = new Map();
   let listed = new Map();
 
@@ -600,7 +674,7 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, base
       const basesDir = path.join(reservation.dir, "bases");
       await fsp.mkdir(basesDir, { recursive: true });
       if (wanted.length) say(wanted.length >= 100 ? "Fetching " + wanted.length + " files the push builds on..." : "Fetching files the push builds on...");
-      const bases = await fetchBases(repo, wanted, basesDir, reservation);
+      const bases = await fetchBases(repo, wanted, basesDir, reservation, baseLimit);
       stats.basesFetched = bases.fetched.size;
 
       // The pack index-pack writes holds the pack, its bases and an index
@@ -623,7 +697,6 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, base
       const packFile = files.find((file) => file.endsWith(".pack"));
 
       listed = await listObjects(scratch, gitDir);
-      present = new Set(listed.keys());
       fresh = new Map([...listed].filter(([oid]) => !bases.fetched.has(oid)));
       stats.objects = fresh.size;
 
@@ -634,7 +707,10 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, base
       local = await loadObjects(scratch, gitDir, checked.map(([oid]) => oid));
 
       say("Checking the new commits...");
-      const missing = await findMissing({ repo, fresh, local, present });
+      const { missing, wrong } = await findMissing({ repo, fresh, local, listed });
+      if (wrong.length) {
+        throw new Refused("ok", Object.fromEntries(commands.filter((c) => c.new !== ZERO).map((c) => [c.ref, "the push links to an object of the wrong type"])));
+      }
       if (missing.length) {
         throw new Refused("ok", Object.fromEntries(commands.filter((c) => c.new !== ZERO).map((c) => [c.ref, "missing necessary objects"])));
       }

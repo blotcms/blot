@@ -61,10 +61,14 @@ describe("git store receive", function () {
     await manifest.swap({ store: target, lock, base, next });
   }
 
-  async function setup({ wrap = (s) => s, maxBytes = 64 * MiB, limit } = {}) {
+  async function setup({ wrap = (s) => s, maxBytes = 64 * MiB, limit, prepare } = {}) {
     dir = fx.tempDir();
     src = path.join(dir, "src");
     fixture = fx.buildFixture(src, { commits: 4, large: false });
+    if (prepare) {
+      prepare(src);
+      fixture.head = fx.text(src, ["rev-parse", "HEAD"]);
+    }
     store = wrap(createMemoryStore());
     cache = createCache({ dir: path.join(dir, "cache"), maxBytes });
     lock = createLock();
@@ -280,6 +284,60 @@ describe("git store receive", function () {
       expectNoScratch();
     });
 
+    it("answers git's empty probe without touching the store or the cache", async function () {
+      const before = JSON.stringify(store.stats);
+      const result = await direct([], null);
+
+      expect(result.outcome).toBe("ok");
+      expect(result.results).toEqual([]);
+      expect(JSON.stringify(store.stats)).toBe(before);
+      expect(fs.existsSync(path.join(dir, "cache", "scratch"))).toBe(false);
+      expect((await manifest.read(store)).seq).toBe(1);
+    });
+
+    // A raw object, written as given, which git's own commands would not make
+    const forge = (type, body) => fx.git(src, ["hash-object", "-t", type, "-w", "--stdin", "--literally"], body).toString().trim();
+    const forgeCommit = (tree, parent) =>
+      forge("commit", "tree " + tree + "\n" + (parent ? "parent " + parent + "\n" : "") + "author A <a@example.com> 1 +0000\ncommitter A <a@example.com> 1 +0000\n\nForged\n");
+    const packOf = (...oids) => fx.git(src, ["pack-objects", "--stdout", "-q"], oids.join("\n") + "\n");
+
+    async function expectWrongType(tip, pack) {
+      const before = await manifest.read(store);
+      const puts = store.stats.puts;
+      const result = await direct([update(tip)], pack);
+
+      expect(result.outcome).toBe("refused");
+      // git's own object check may stop it first; either way it is refused
+      expect(result.results[0].error).toMatch(/wrong type|unpacker error/);
+      expect(await manifest.read(store)).toEqual(before);
+      expect(store.stats.puts).toBe(puts);
+      expectNoScratch();
+    }
+
+    it("refuses a commit whose tree is not a tree", async function () {
+      const blob = forge("blob", "just a file\n");
+      const tip = forgeCommit(blob, fixture.head);
+      await expectWrongType(tip, packOf(tip, blob));
+    });
+
+    it("refuses a commit whose parent is not a commit", async function () {
+      const tree = fx.text(src, ["rev-parse", fixture.head + "^{tree}"]);
+      const tip = forgeCommit(tree, tree);
+      await expectWrongType(tip, packOf(tip, tree));
+    });
+
+    it("refuses a directory entry which is a blob, and a file entry which is a tree", async function () {
+      const blob = forge("blob", "just a file\n");
+      const inner = forge("tree", Buffer.concat([Buffer.from("100644 f\0"), Buffer.from(blob, "hex")]));
+
+      for (const mode of ["40000", "100644"]) {
+        const target = mode === "40000" ? blob : inner;
+        const tree = forge("tree", Buffer.concat([Buffer.from(mode + " x\0"), Buffer.from(target, "hex")]));
+        const tip = forgeCommit(tree, fixture.head);
+        await expectWrongType(tip, packOf(tip, tree, target, ...(target === inner ? [blob] : [])));
+      }
+    });
+
     it("refuses a stale base: the ref has moved since the client looked", async function () {
       const a = commit("a");
       const b = commit("b");
@@ -406,6 +464,70 @@ describe("git store receive", function () {
       expect(small.stats().reservedBytes).toBe(0);
       expect(fs.readdirSync(path.join(dir, "small", "scratch"))).toEqual([]);
       expect((await manifest.read(store)).refs[MASTER]).toBe(fixture.head);
+    });
+  });
+
+  describe("a base bigger than the default cap", function () {
+    beforeEach(() =>
+      setup({
+        maxBytes: 1024 * MiB,
+        prepare: (dir) => {
+          // 70 MiB which compresses to almost nothing, so the spec costs no disk
+          fs.writeFileSync(path.join(dir, "huge.txt"), hugeFile(0));
+          fx.git(dir, ["add", "-A"]);
+          fx.git(dir, ["commit", "-q", "-m", "Add a huge file"]);
+        },
+      })
+    );
+    afterEach(teardown);
+
+    function hugeFile(edit) {
+      const line = Buffer.from("this line of the huge file is the same on every row of it......\n");
+      const data = Buffer.alloc(70 * MiB);
+      for (let at = 0; at < data.length; at += line.length) line.copy(data, at, 0, Math.min(line.length, data.length - at));
+      if (edit) data.write("EDITED " + edit, 35 * MiB);
+      return data;
+    }
+
+    it("streams it to scratch, and the push is accepted", async function () {
+      expect(Number(fx.text(src, ["cat-file", "-s", fixture.head + ":huge.txt"]))).toBeGreaterThan(64 * MiB);
+
+      const tip = commit("work", () => fs.writeFileSync(path.join(src, "huge.txt"), hugeFile(1)));
+      const pack = thin(tip);
+      expect(pack.length).toBeLessThan(MiB);
+
+      const result = await direct([update(tip)], pack);
+      expect(result.outcome).toBe("ok");
+      expect(result.stats.basesFetched).toBeGreaterThan(0);
+      expect((await manifest.read(store)).refs[MASTER]).toBe(tip);
+      expectNoScratch();
+    });
+  });
+
+  describe("a base stored as a delta", function () {
+    beforeEach(() => setup());
+    afterEach(teardown);
+
+    it("is refused, saying which limit was hit, when it is over the limit", async function () {
+      // An older version of the file is a delta in the stored pack
+      const [stored] = fx.readPacks(src);
+      const deltas = new Set(fx.listEntries(stored).filter((entry) => entry.depth > 0).map((entry) => entry.oid));
+      const old = fixture.commits.slice(0, -1).find((c) => deltas.has(fx.text(src, ["rev-parse", c + ":docs/big.txt"])));
+      expect(old).toBeDefined();
+
+      fx.git(src, ["checkout", "-q", "-B", "x", old]);
+      fs.writeFileSync(path.join(src, "docs", "big.txt"), fs.readFileSync(path.join(src, "docs", "big.txt"), "utf8").replace("line 5 ", "line 5 changed "));
+      fx.git(src, ["commit", "-q", "-am", "On an old version"]);
+      const tip = fx.text(src, ["rev-parse", "HEAD"]);
+      const pack = fx.packRevs(src, [tip], [old], { thin: true });
+
+      const refused = await direct([update(tip)], pack, { baseLimit: 10 });
+      expect(refused.outcome).toBe("refused");
+      expect(refused.status).toMatch(/can only use up to 1 MB, and this one is larger/);
+      expectNoScratch();
+
+      // With room for it, the same push is fine
+      expect((await direct([update(tip)], pack)).outcome).toBe("ok");
     });
   });
 

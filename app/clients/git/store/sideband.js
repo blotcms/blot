@@ -68,10 +68,15 @@ function createResponse(res, { capabilities = "", commands = [], keepaliveMs = 5
     timer.unref();
   }
 
+  // The first call is after the request has been read, so nothing goes out
+  // early. A quiet client gets no message, but its connection still gets the
+  // keepalives (git sends `quiet` whenever stderr is not a terminal).
   function progress(message) {
-    if (!sideband || quiet || ended) return;
-    stats.progress++;
-    band(2, Buffer.from(oneLine(message) + "\n"));
+    if (!sideband || ended) return;
+    if (!quiet) {
+      stats.progress++;
+      band(2, Buffer.from(oneLine(message) + "\n"));
+    }
     touch();
   }
 

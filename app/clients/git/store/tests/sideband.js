@@ -172,6 +172,17 @@ describe("git store progress", function () {
       expect(pushed.stderr).not.toMatch(/error|fatal/i);
     });
 
+    it("keeps a quiet push alive through a silent stage, without showing anything", async function () {
+      faulty.inject("put", { key: /\.pack$/, delay: 1000 });
+
+      const pushed = await push(src, ["-q", server.url, "work:master"]);
+      expect(pushed.code).toBe(0);
+      expect(pushed.stderr).not.toContain("remote:");
+      expect(server.responses[0].stats.progress).toBe(0);
+      expect(server.responses[0].stats.keepalives).toBeGreaterThan(2);
+      expect(server.results[0].outcome).toBe("ok");
+    });
+
     it("shows nothing from a quiet push", async function () {
       const pushed = await push(src, ["-q", server.url, "work:master"]);
       expect(pushed.code).toBe(0);
