@@ -372,10 +372,11 @@ describe("git store receive", function () {
     it("takes a commit on top of a stored parent too large to read", async function () {
       const tree = fx.text(src, ["rev-parse", fixture.head + "^{tree}"]);
       const big = fx.text(src, ["commit-tree", tree, "-p", fixture.head], "x".repeat(65 * MiB) + "\n");
-      expect((await direct([update(big)], fx.packRevs(src, [big], [fixture.head], { thin: true }))).outcome).toBe("ok");
+      const roomy = { cache: createCache({ dir: path.join(dir, "roomy"), maxBytes: 1024 * MiB }) };
+      expect((await direct([update(big)], fx.packRevs(src, [big], [fixture.head], { thin: true }), roomy)).outcome).toBe("ok");
 
       const child = fx.text(src, ["commit-tree", tree, "-p", big], "After\n");
-      const result = await direct([update(child, MASTER, big)], fx.packRevs(src, [child], [big], { thin: true }));
+      const result = await direct([update(child, MASTER, big)], fx.packRevs(src, [child], [big], { thin: true }), roomy);
 
       expect(result.outcome).toBe("ok");
       expect((await manifest.read(store)).refs[MASTER]).toBe(child);
