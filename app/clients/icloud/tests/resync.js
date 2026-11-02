@@ -69,15 +69,6 @@ describe("icloud resync", function () {
     expect(syncFromiCloud).not.toHaveBeenCalled();
   });
 
-  it("refuses when the folder is missing on a legacy row without a code", async function () {
-    const { resync } = load({
-      setupComplete: true,
-      error: "Blog directory deleted",
-    });
-
-    expect((await rejection(resync("blog"))).code).toBe("ICLOUD_FOLDER_MISSING");
-  });
-
   it("refuses after a failed initial transfer so unsent local files are not removed", async function () {
     const { resync, syncFromiCloud } = load({
       setupComplete: false,

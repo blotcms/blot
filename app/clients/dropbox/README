@@ -474,7 +474,7 @@ Sync records only failures the user must act on, tagged with `error_source` so `
 - **Oversized files** (>100 MB): Placeholder files created; download skipped.
 - **Case-only renames** (e.g., `foo` → `FOO`): Detected and injected as delete + create to maintain consistency on case-sensitive file systems.
 
-`getHealth` reads these fields and returns the shared `{state, issues}` shape. A successful sync, setup, or reset clears `error_code`, `error_source`, and `error_since`. Disconnect drops the account row. Legacy rows without `error_source` still map 401 → reauth and 409 → folder missing, because apply never persisted errors historically.
+`getHealth` reads these fields and returns the shared `{state, issues}` shape. A successful sync, setup, or reset clears `error_code`, `error_source`, and `error_since`. Disconnect drops the account row.
 
 ## Important Limitations and Constraints
 
