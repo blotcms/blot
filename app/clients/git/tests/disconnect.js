@@ -142,7 +142,7 @@ describe("git client disconnect", function () {
     it("removes its repository even if its folder is already gone", async function () {
       var blog = await connectedBlog(this);
 
-      await fs.remove(require("helper/localPath")(blog.id, "/"));
+      await fs.remove(require("path").join(require("config").blog_folder_dir, blog.id));
 
       otherBlog = null;
       await removeBlog(blog.id);

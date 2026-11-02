@@ -1,5 +1,5 @@
 const fs = require("fs-extra");
-const localPath = require("helper/localPath");
+const localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
 
 const uploadPath = require.resolve("../upload");
 const establishSyncLockPath = require.resolve("sync/establishSyncLock");

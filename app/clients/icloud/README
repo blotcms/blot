@@ -180,7 +180,6 @@ Exported from `index.js`:
 
 - `models/blog` - Blog model for querying and updating blog metadata.
 - `models/client` - Redis client for persistent storage of iCloud account data.
-- `helper/localPath` - Computes local file paths given blogID and relative path.
 - `helper/email` - Sends notifications for server errors and sync issues (including resyncs the macserver requested that found changes).
 - `helper/clfdate` - Formats log timestamps.
 - `clients/util/shouldIgnoreFile` - Determines if a file should be excluded from sync (e.g., .DS_Store).

@@ -1,7 +1,4 @@
 const { join } = require("path");
-// Only for the shared helpers below (countLocalFiles, localDescendants), which
-// still walk a real directory
-const localPath = require("helper/localPath");
 const folder = require("storage/folder");
 const clfdate = require("helper/clfdate");
 const download = require("./util/download");
@@ -38,7 +35,7 @@ module.exports = async (blogID, publish, update) => {
 
   const checkWeCanContinue = CheckWeCanContinue(blogID);
   const progress = createProgress(
-    await countLocalFiles(localPath(blogID, "/")),
+    await countLocalFiles(blogID, "/"),
     publish
   );
   const summary = {
@@ -105,7 +102,7 @@ module.exports = async (blogID, publish, update) => {
       // A directory removed in one remove call still accounts for every
       // file total counted inside it, so current must advance by that many.
       const removedCount = isLocalDirectory
-        ? await countLocalFiles(localPath(blogID, path))
+        ? await countLocalFiles(blogID, path)
         : 1;
 
       if (shouldIgnoreFile(path)) {
@@ -132,7 +129,7 @@ module.exports = async (blogID, publish, update) => {
         await checkWeCanContinue();
         progress.publish("Removing local item", path, false, removedCount);
         const descendants = isLocalDirectory
-          ? await localDescendants(localPath(blogID, path), path)
+          ? await localDescendants(blogID, path)
           : [];
         await folder.remove(blogID, path);
         summary.removed += 1;
@@ -226,10 +223,7 @@ module.exports = async (blogID, publish, update) => {
                 if (existsLocally && existsLocally.isDirectory) {
                   // A directory sits where the file belongs: clear it, and
                   // tell Blot about everything that was inside it.
-                  descendants = await localDescendants(
-                    localPath(blogID, path),
-                    path
-                  );
+                  descendants = await localDescendants(blogID, path);
                   await folder.remove(blogID, path);
                 }
                 await folder.write(blogID, path, "");

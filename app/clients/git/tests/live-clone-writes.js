@@ -14,7 +14,7 @@ describe("git client writes and the live clone (implementation-specific)", funct
   var remove = util.promisify(require("clients/git/remove"));
   var repo = require("clients/git/repo");
   var Blog = require("models/blog");
-  var localPath = require("helper/localPath");
+  var localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
   var liveClone = require("./setup/liveClone");
   var helpers = require("./setup/helpers");
 

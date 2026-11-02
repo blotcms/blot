@@ -822,4 +822,59 @@ describe("storage/folder", function () {
       await fs.remove(join(this.blogDirectory, "../escaped.txt"));
     });
   });
+
+  // These paths are resolved by folder.path against the blog's folder: a
+  // trailing slash is kept for the root only, "." and ".." are resolved, and
+  // nothing can climb out of the folder.
+  describe("path resolution", function () {
+    var BLOG_ID = "XYZ";
+    var BLOG_DIR = require("config").blog_folder_dir;
+
+    function resolved(path) {
+      return folder.path(BLOG_ID, path);
+    }
+
+    it("resolves root of blog folder when passed an empty string", async function () {
+      expect(await resolved("")).toEqual(`${BLOG_DIR}/${BLOG_ID}/`);
+    });
+
+    it("resolves a local path", async function () {
+      expect(await resolved("/foo")).toEqual(`${BLOG_DIR}/${BLOG_ID}/foo`);
+    });
+
+    it("resolves root of blog folder with trailing slash", async function () {
+      expect(await resolved("/")).toEqual(`${BLOG_DIR}/${BLOG_ID}/`);
+    });
+
+    it("resolves paths with a dot and a slash", async function () {
+      expect(await resolved("./bar")).toEqual(`${BLOG_DIR}/${BLOG_ID}/bar`);
+    });
+
+    it("resolves a local path without leading slash", async function () {
+      expect(await resolved("foo")).toEqual(`${BLOG_DIR}/${BLOG_ID}/foo`);
+    });
+
+    it("resolves a local path with trailing slash", async function () {
+      expect(await resolved("foo/")).toEqual(`${BLOG_DIR}/${BLOG_ID}/foo`);
+    });
+
+    it("resolves a local path with dots inside the blog folder", async function () {
+      expect(await resolved("/foo/bar/../baz")).toEqual(
+        `${BLOG_DIR}/${BLOG_ID}/foo/baz`
+      );
+    });
+
+    it("will not resolve a local path with dots outside the blog folder", async function () {
+      expect(await resolved("/foo/bar/../baz/../../../")).toEqual(
+        `${BLOG_DIR}/${BLOG_ID}/`
+      );
+      expect(await resolved("/../../")).toEqual(`${BLOG_DIR}/${BLOG_ID}/`);
+    });
+
+    it("will not resolve a local path outside the blog folder", async function () {
+      expect(await resolved("/Users/David/Projects/blot/blogs")).toEqual(
+        `${BLOG_DIR}/${BLOG_ID}/Users/David/Projects/blot/blogs`
+      );
+    });
+  });
 });

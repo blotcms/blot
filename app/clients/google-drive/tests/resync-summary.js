@@ -20,7 +20,6 @@ function harness(files) {
       remove: async () => {},
       mkdir: async () => {},
     },
-    "helper/localPath": (_, path) => path,
     "../database": {
       blog: {
         get: async () => ({

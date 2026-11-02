@@ -2,7 +2,6 @@ const migrationBudget = require("./util/migrationBudget");
 const comparePaths = require("./util/comparePaths");
 const folder = require("storage/folder");
 const { join } = require("path");
-const localPath = require("helper/localPath");
 const database = require("../database");
 const {
   MESSAGES,
@@ -80,7 +79,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
   let deferred = 0;
   const checkWeCanContinue = CheckWeCanContinue(blogID, account);
   const progress = createProgress(
-    await countLocalFiles(localPath(blogID, "/")),
+    await countLocalFiles(blogID, "/"),
     publish
   );
 
@@ -159,7 +158,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       // A directory removed in one remove call still accounts for every
       // file total counted inside it, so current must advance by that many.
       const removedCount = isLocalDirectory
-        ? await countLocalFiles(localPath(blogID, path))
+        ? await countLocalFiles(blogID, path)
         : 1;
 
       if (shouldIgnoreFile(path)) {
@@ -182,7 +181,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
           "which does not exist remotely"
         );
         const descendants = isLocalDirectory
-          ? await localDescendants(localPath(blogID, path), path)
+          ? await localDescendants(blogID, path)
           : [];
         await folder.remove(blogID, path);
         summary.removed += 1;
@@ -221,7 +220,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
         if (existsLocally && existsLocally.isDirectory) {
           await checkWeCanContinue();
           console.log("Removing directory", path, "which is a file remotely");
-          const descendants = await localDescendants(localPath(blogID, path), path);
+          const descendants = await localDescendants(blogID, path);
           await folder.remove(blogID, path);
           summary.removed += 1;
           await update(path);

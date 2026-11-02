@@ -1,5 +1,5 @@
 const fs = require("fs-extra");
-const localPath = require("helper/localPath");
+const localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
 
 // The hourly sweep only walks blogs the macserver pushed to in the last hour,
 // so the routes it drives must stamp lastSync - and nothing else may.

@@ -9,7 +9,7 @@ describe("write", function () {
   var repo = require("clients/git/repo");
   var Git = require("./setup/git");
   var fs = require("fs-extra");
-  var localPath = require("helper/localPath");
+  var localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
 
   it("should return an error if there is no bare repo, and leave the blog folder alone", function (done) {
     var blogID = this.blog.id;

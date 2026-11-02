@@ -165,7 +165,7 @@ function Transformer(blogID, name) {
     // "../../<other blog id>/secret.jpg" must not be able to climb out of
     // this blog's own static directory. resolve("/", src) strips any "../"
     // and yields an absolute path, which join() then re-roots under the
-    // blog's folder - the same containment trick helper/localPath uses.
+    // blog's folder - the same containment trick storage/folder uses.
     tasks.push(function (next) {
       callbackify(assets.ensureLocal)(
         blogID,

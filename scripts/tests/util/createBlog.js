@@ -1,6 +1,7 @@
 var Blog = require("models/blog");
 var randomString = require("./randomString");
-var localPath = require("helper/localPath");
+var config = require("config");
+var { join } = require("path");
 const folder = require("storage/folder");
 const { promisify } = require("util");
 const rebuild = promisify(require("sync/rebuild"));
@@ -45,7 +46,7 @@ function attempt(context, attemptIndex, done) {
       return done(err instanceof Error ? err : new Error(err.handle));
     }
 
-    context.blogDirectory = localPath(blog.id, "/");
+    context.blogDirectory = join(config.blog_folder_dir, blog.id, "/");
 
     if (context.blogDirectory.slice(-1) === "/")
       context.blogDirectory = context.blogDirectory.slice(0, -1);

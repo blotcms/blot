@@ -40,7 +40,7 @@ describe("Blog.remove", function () {
   it("removes the blog's folder and nothing beside it", function (done) {
     var test = this;
     var fs = require("fs-extra");
-    var localPath = require("helper/localPath");
+    var localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
     var folder = localPath(test.blog.id, "/");
     var other = localPath(test.blog.id + "0", "/");
 
@@ -64,7 +64,7 @@ describe("Blog.remove", function () {
     var test = this;
 
     require("fs-extra").removeSync(
-      require("helper/localPath")(test.blog.id, "/")
+      require("path").join(require("config").blog_folder_dir, test.blog.id)
     );
 
     remove(test.blog.id, done);

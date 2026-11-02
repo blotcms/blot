@@ -24,7 +24,7 @@ process.argv = process.argv.filter((arg, i) => i < 2 || arg !== "--write");
 
 const fs = require("fs-extra");
 const { promisify } = require("util");
-const localPath = require("helper/localPath");
+const storage = require("storage/folder");
 const Git = require("clients/git/git");
 const database = require("clients/git/database");
 const Sync = require("sync");
@@ -99,7 +99,7 @@ async function seed(blog) {
 
   counts.gitBlogs++;
 
-  const directory = localPath(blog.id, "/");
+  const directory = await storage.path(blog.id, "/");
   const file = directory + "/.git/blot-unapplied-paths.json";
 
   if (!(await fs.pathExists(directory + "/.git"))) {

@@ -1,6 +1,6 @@
 const fs = require("fs-extra");
 const { join } = require("path");
-const localPath = require("helper/localPath");
+const localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
 const folder = require("storage/folder");
 
 const fromiCloudPath = require.resolve("../fromiCloud");

@@ -22,17 +22,11 @@ at sync/build time instead.
 - `config/index.js` derives `blog_folder_dir` (`/blogs`) off
   `BLOT_DATA_DIRECTORY`. There is no longer a static files directory: generated
   assets are in the storage bucket (`config.storage`).
-- [`app/helper/localPath.js`](app/helper/localPath.js) resolves
-  `(blogID, relativePath)` to an absolute path but does no IO — every caller
-  does its own raw `fs`/`fs-extra` call. About 65 files in `app/` require
-  `localPath`, 28 of them in sync clients (`app/clients/*`), and 7 more
-  read `blog_folder_dir` directly (`app/blog/routes/assets.js`,
-  `app/cdn/index.js`, `app/models/blog/remove.js`,
-  `app/models/redirects/conflicts.js`,
-  `app/models/template/util/updateCdnManifest.js`,
-  `app/dashboard/site/export.js`, `build/plugins/folderAssets`). Add about 20
-  scripts and the test helpers (`scripts/tests/util/createBlog.js`), which
-  most specs that need a blog folder go through.
+- A blog's folder is `blog_folder_dir/<blogID>`. Only `app/storage/folder`
+  (the local-disk backend) builds paths into it: `helper/localPath` is gone
+  and `scripts/tests/ci/check-folder-access.js` fails CI for any other
+  non-spec file which names `blog_folder_dir`, apart from a short allowlist
+  of scripts which work on the disk itself.
 - Per-blog asset IO all goes through `app/storage/assets.js`: `path`, `url`,
   `commit`, `write`, `writeFrom`, `read`, `exists`, `list`, `walk`,
   `createReadStream`, `ensureLocal`, `serve`, `remove`, `removeAll`, and a
@@ -409,8 +403,9 @@ should consolidate into one storage-layer method, exposed explicitly
   - **B, `app/storage/folder` on a local-disk backend.** Call sites move area
     by area (request-time readers, build, sync core, dashboard, models and
     templates, then each sync client), each PR behaviour-neutral. It ends with
-    a lint check that nothing outside `app/storage` uses `localPath` or
-    `blog_folder_dir`, and the deletion of `helper/localPath`. Git blogs stop
+    a lint check (`scripts/tests/ci/check-folder-access.js`) that nothing outside
+    `app/storage` uses `blog_folder_dir`, and the deletion of `helper/localPath`
+    (both done). Git blogs stop
     holding a live `.git` in the folder here.
   - **C, S3 backend, index and cache, with disk still authoritative.**
     Dual writes (disk first), a backfill (`scripts/storage/backfill-folder.js`,
@@ -499,12 +494,12 @@ or uses `.listAll()` for small directories.
 `path` + `commit`, `ensureLocal`, `mkdir`, `rmdir`, `remove`, `move`, `stat`,
 `exists`, `list`, `listNames`, `listAll`, `walk`, `resolveCaseInsensitive` and `removeAll`.
 `index.js` is the public surface and documents each function; `local.js` is
-the only backend, and keeps the folder on disk exactly as `helper/localPath`
-resolves it today.
+the only backend, and keeps the folder on disk exactly as the app has always resolved it.
 
 What it keeps from today:
 
-- Paths resolve through `helper/localPath`, so `..` cannot leave the blog's
+- Paths are normalised by `helper/pathNormalizer` and resolved against the
+  blog's folder (`local.js`), so `..` cannot leave the blog's
   folder, and a name is normalised the way it always has been.
 - The no-symlink policy (`helper/assertNoSymlinks`) guards every read and
   write (code `ELOOP`), and `list` and `walk` skip symlinks. That check goes
@@ -519,8 +514,9 @@ What it does not do yet:
   (`dashboard/site/folder`, upload, download and export), and so has the
   build (`build/` with its converters and wikilinks, `folderAssets`,
   `helper/transformer`, and `helper/contentVersion.fromFolder` for the
-  folder-link version tokens); `helper/localPath` and `blog_folder_dir` are still used directly
-  everywhere else.
+  folder-link version tokens), and so has everything else: nothing outside
+  `app/storage` reaches a blog's folder directly, which
+  `scripts/tests/ci/check-folder-access.js` enforces.
 - There is no S3 backend, no Redis index and no content cache. `stat` with
   `{ hash: true }` reads the whole file here; on S3 the hash comes from the
   index.

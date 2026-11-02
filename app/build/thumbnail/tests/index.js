@@ -7,7 +7,7 @@ describe("thumbnail", function () {
   global.test.tmp();
 
   var he = require("he");
-  var localPath = require("helper/localPath");
+  var localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
   var fs = require("fs-extra");
   var sharp = require("sharp");
   var assets = require("storage/assets");
