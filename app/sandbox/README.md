@@ -102,6 +102,19 @@ allows. A URL for `127.0.0.1:8888` gets a refusal from tinyproxy. pasta shares
 the job's uid outside the namespace, so the filter can't tell the two apart, and
 the most a URL can do is hold one of its 64 connections, as any slow server can.
 
+## Node's filter
+
+With the sandbox on, the unit's seccomp profile gives the whole container `clone`
+with namespace flags, `mount`, `umount2`, `pivot_root`, `sethostname`, `setns` and
+`unshare`, so nsjail and pasta can build jails. Node needs none of them, and
+creating a user namespace is the usual first step of a kernel exploit. So the
+supervisor starts Node under a second filter (`proxy/unit/sandbox/node-filter.js`,
+written when the image is built) that refuses them, and refuses 32-bit calls and
+`clone3`, whose flags seccomp can't read. Everything Node spawns inherits it, and
+no-new-privs comes with it, so no setuid program works under Node. The broker and
+the proxy jail start separately, as they must. OpenResty isn't filtered, and
+neither is anything run by `docker exec`.
+
 ## Why
 
 - **The broker is root-owned.** A jail with its own uid and cgroups has to be

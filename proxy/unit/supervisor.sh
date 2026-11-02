@@ -7,7 +7,9 @@
 #              container exits, non-zero, so Docker restarts it; its listening
 #              sockets (reuseport) go with it, and the other unit takes over.
 #   node-a     `node app/index.js`, which forks node-b (helper/workerChild)
-#              and supervises it. If node-a exits it is started again after a
+#              and supervises it. With the sandbox on, both start under a
+#              seccomp filter that keeps the calls the sandbox needs from them
+#              (proxy/unit/sandbox/node-filter.js). If node-a exits it is started again after a
 #              delay that doubles from 1s to 30s and resets once it has run
 #              for 60s. OpenResty is not touched.
 #
@@ -33,6 +35,7 @@
 
 OPENRESTY=/usr/local/openresty/bin/openresty
 BROKER_BACKOFF=2
+NODE_FILTER=/usr/local/lib/blot-sandbox/node.seccomp
 MIN_BACKOFF=1
 MAX_BACKOFF=30
 STABLE=60
@@ -66,6 +69,13 @@ reap() {
 # Keeps node-a running. Runs in its own process so the backoff never delays
 # watching OpenResty; SIGTERM ends it, and node-a with it.
 run_node() {
+  # Left unquoted below, so with the sandbox off it adds nothing. A filter that
+  # won't load stops Node, which the deploy's checks then catch.
+  filter=
+  if [ -n "${BLOT_SANDBOX_SOCKET:-}" ]; then
+    filter="/bin/setpriv --no-new-privs --seccomp-filter $NODE_FILTER"
+  fi
+
   child=
   stopping=
   trap 'stopping=1; [ -n "$child" ] && kill -TERM "$child" 2>/dev/null' TERM
@@ -74,7 +84,7 @@ run_node() {
   while [ -z "$stopping" ]; do
     started=$(date +%s)
     # OpenResty's master stays root; the app does not
-    HOME=/home/node su-exec ec2-user:ec2-user node app/index.js &
+    HOME=/home/node $filter su-exec ec2-user:ec2-user node app/index.js &
     child=$!
     echo "supervisor: started node-a pid=$child"
     reap "$child"
