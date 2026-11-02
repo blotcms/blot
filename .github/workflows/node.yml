@@ -16,6 +16,9 @@ on:
   pull_request:
     branches:
       - "master"
+      # Temporary: the git store shadow mode integration branch (#2259), so
+      # its sub-PRs get checks. Remove when that branch merges.
+      - "claude/git-store-shadow"
   # Coverage (COLLECT_COVERAGE below), and the merged test timings
   schedule:
     - cron: "17 3 * * *"

@@ -16,6 +16,7 @@ var dataDir = require("./dataDir");
 var checkGitRepoExists = require("./checkGitRepoExists");
 var smartHttp = require("./smartHttp");
 var database = require("./database");
+var shadow = require("./shadow/hook");
 
 // Set with onPush
 var pushed = function () {};
@@ -61,6 +62,12 @@ function receiveHooks(blogID) {
     },
     accepted: function (master, prepared) {
       pushed(blogID, master.old, master.new, prepared);
+    },
+    // Mirrors the push into the git store in the background (shadow/index.js)
+    applied: function (ms) {
+      shadow(blogID, function (mirror) {
+        mirror.pushed(blogID, ms);
+      });
     },
   };
 }
@@ -248,11 +255,14 @@ async function commitChange(blogID, change) {
     await folder.write(blogID, path, contents);
   }
 
+  var started = Date.now();
   var release = await holdRefLock(blogID);
   var result;
+  var commitMs;
 
   try {
     result = await plumbing.commitFile(bareRepoDirectory, change);
+    commitMs = Date.now() - started;
   } finally {
     try {
       await release();
@@ -265,6 +275,11 @@ async function commitChange(blogID, change) {
   if (!result.commit) return;
 
   debug("Blog:", blogID, "Committed", path);
+
+  // Mirrors the commit into the git store in the background (shadow/index.js)
+  shadow(blogID, function (mirror) {
+    mirror.committed(blogID, change, result, commitMs);
+  });
 
   plumbing.collect(bareRepoDirectory);
 
