@@ -512,10 +512,9 @@ describe("tags work on sites", function () {
     expect(result.pagination).toEqual(
       jasmine.objectContaining({
         current: 1,
-        pageSize: 1,
         page_size: 1,
         total: 2,
-        totalEntries: 2,
+        total_entries: 2,
         previous: null,
         next: 2,
       })

@@ -56,7 +56,7 @@ All state is stored in Redis. There is no relational database or document store 
 |------|-------------|
 | `util/makeID.js` | Derives a stable template ID from an owner string and a name by slugifying the name and joining with `":"`. Example: `"abc123:my-theme"`. |
 | `util/serialize.js` | Converts `object` and `array` typed fields in a model instance to JSON strings before writing to Redis hashes. |
-| `util/deserialize.js` | Converts JSON-stringified and boolean fields back to their native types after reading from Redis hashes, and drops the retired `isPublic` field. Other undeclared fields, including a view's legacy `type`, are kept. |
+| `util/deserialize.js` | Converts JSON-stringified and boolean fields back to their native types after reading from Redis hashes. |
 | `util/generateCdnUrl.js` | Constructs a CDN URL for a rendered view asset given a view name and content hash. Uses a three-level directory structure derived from the first four characters of the hash. |
 | `util/updateCdnManifest.js` | Recomputes the CDN manifest for a template: resolves `{{#cdn}}` targets that are files in the owner blog's folder, renders each view that is a `{{#cdn}}` target, hashes the output, stores the result on disk and in Redis, cleans up stale hashes, and writes the updated manifest into the template's metadata. Also maintains the reverse index of the folder files the template depends on. Skips SITE-owned templates and templates not currently installed on their owner blog. |
 | `util/resolveFolderLinks.js` | Wraps literal links to files in the blog's folder in a view's text in `{{#cdn}}`. A Mustache-safe tokenizer over the raw text; `wrapFolderLinks` also returns the targets it added, for `getFullView`, `getPartials` and `updateCdnManifest`. |
