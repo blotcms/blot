@@ -1,22 +1,28 @@
 # Redis host
 
 Config as code and a few small scripts to build, load and check Blot's Redis
-host (Amazon Linux 2023 arm64, `redis6` 6.2.x, RDB persistence, backups to S3).
+(`redis6` 6.2.x on Amazon Linux 2023 arm64, RDB persistence, backups to S3).
 Everything runs from the operator's Mac over ssh; nothing here is used by the
 app. Part of blotcms/blot#2041.
 
-Production Redis is one host built by these scripts: an x2gd.medium (one
-vCPU) running Amazon Linux 2023 arm64 and `redis6` 6.2.x, with ssh on port 22,
-key-only. Its primary private IP is 172.30.0.163, but nothing connects to
-that: the app containers (`BLOT_REDIS_HOST`), the OpenResty proxy (`REDIS_IP`)
-and the certificate scripts all use the floating private IP 172.30.0.200,
-which stays on the current host (nothing moves it by script any more; the
-units stop needing it when they move to a combined host with Redis, #2261).
-Hourly, daily and weekly RDB backups go to
-`s3://blot-redis-backups` from `/etc/cron.d/blot-redis`, and only on the host
-marked by `/etc/blot-redis/active`. To resize, launch a replica of the
-live host on a new instance type and promote it (see "Increasing the Redis
-server size"). The hand-built host that served Redis until 8 Oct 2026 is gone.
+Production Redis runs on the one production host, together with both units
+(`blot-blue`, `blot-green`), an m6gd.xlarge on Amazon Linux 2023 since
+2 November 2026 (#2261). There is no separate Redis host, no floating IP and no
+Redis traffic over the network: the units reach it over the Unix socket
+`/run/blot/redis/redis.sock` (`BLOT_REDIS_SOCKET`, and
+`PROXY_REDIS_HOST=unix:/run/blot/redis/redis.sock` for the proxy), and ssh is
+`ssh blot`. TCP 6379 stays on for replicas and is closed to everything else by
+the host's firewall (see "Building a new host" in `config/host/README.md`).
+Hourly, daily and weekly RDB backups go to `s3://blot-redis-backups` from
+`/etc/cron.d/blot-redis`, and only on the host marked by
+`/etc/blot-redis/active`.
+
+The host is built and replaced with the host cycle (`config/host/cycle.sh`,
+described in `config/host/README.md`), which uses these scripts: `launch.sh`'s
+bootstrap and `promote.sh` to move Redis to the new host, and
+`restore.sh` for disaster recovery. A bigger or newer host is a host cycle,
+not a Redis-only change. The old two-host setup (a separate Redis instance,
+the floating IP, `cutover.sh`) is gone.
 
 ## Files
 
@@ -34,15 +40,19 @@ server size"). The hand-built host that served Redis until 8 Oct 2026 is gone.
 | `bin/redis-mem-log.sh`, `bin/tcpmem-log.sh` | Memory logging every 5 minutes (cron). |
 
 `SSH_OPTS` (for example `SSH_OPTS="-i $HOME/key.pem"`) adds ssh options to
-every script, or use a `~/.ssh/config` alias as `<ssh-host>` (`redis` is the
-Redis host, `blot` the app host).
+every script, or use a `~/.ssh/config` alias as `<ssh-host>` (`blot` is the
+production host).
 
 ## Building a new host
 
+For production use `config/host/cycle.sh` (`launch`, `replicate`), which builds
+the combined host and makes its Redis a replica. These steps are for a
+standalone Redis, such as a drill or a recovery rehearsal.
+
 1. `./launch.sh --type <instance-type> --from latest --key ~/key.pem`
    (`--from <backup-name>` for a specific backup, or `--from replica:<ip>` to
-   replicate from a running Redis: give the live host's own private IP, not the
-   floating IP, and it first raises that host's replica output buffer to
+   replicate from a running Redis: give the live host's own private IP, and
+   it first raises that host's replica output buffer to
    `redis.conf`'s value so a multi-GB sync under load does not loop; on a
    bootstrapped master it already is). The full sync costs the master one
    extra save: on 8 Oct a ~63ms fork and a ~33s save, with no visible effect
@@ -78,7 +88,8 @@ Then promote it with `promote.sh` (next section).
 
 Promotes the replica on the new host with `FAILOVER` and moves the backup
 marker. It does not move any IP: clients that should follow the new master
-reach it by their own means (a combined host's units use their own Redis).
+reach it by their own means (the units use the Redis on their own host, over
+the socket). `cycle.sh switch` runs it as part of a host cycle.
 The dry run makes every check and prints the plan and the rollback command; it
 changes nothing. The real run asks for `yes`. It has no time-of-day rule, since
 when to switch is the host cycle's job.
@@ -142,7 +153,9 @@ leaves the old host replicating from the new one, which is what rollback needs.
 the new config with a throwaway Redis, installs it, applies what Redis allows
 with `CONFIG SET` (never `CONFIG REWRITE`) and lists the settings that need a
 restart (for example `tcp-backlog`, and `LimitNOFILE` of the running process).
-It will not lower `maxmemory` below the memory in use. It prints a warning if
+It will not lower `maxmemory` below the memory in use. On the production
+host, which Redis shares with the units, always pass the shared limit
+(`REDIS_MAXMEMORY=6gb`): without it setup applies 70% of RAM. It prints a warning if
 an existing sysctl file (e.g. `99-sysctl.conf`) sets a key that would override
 `90-blot-redis.conf` at boot.
 
@@ -152,9 +165,11 @@ it says so. `maxmemory` is about 70% of RAM, computed at bootstrap
 
 ## Disaster recovery
 
-This is for a Redis on a host of its own. Where Redis shares the app host, losing the host loses
-the app and its data volume too: use "Recovery" in `config/host/README.md` (`cycle.sh restore`),
-which restores Redis with `restore.sh` as one of its steps.
+Redis shares the host with the app, so losing the host loses the app and its
+data volume too: use "Recovery" in `config/host/README.md` (`cycle.sh restore`),
+which restores Redis with `restore.sh` as one of its steps and then does the
+data volume and the units. The steps below are the Redis part by hand, and what
+a rehearsal of it looks like.
 
 For when the master is gone (instance lost, data unusable) and no replica can
 take over with `promote.sh`. Everything written since the newest backup's
@@ -163,36 +178,23 @@ with the clients' folders.
 
 1. `./launch.sh --list --profile <aws-profile>` and pick the newest backup
    (its times are in your Mac's local time; the names are UTC hours).
-2. `./launch.sh --type x2gd.medium --from <backup-name> --key ~/key.pem --profile <aws-profile>`
-   (or a larger type). In the 8 Oct drills this took about 2.5 minutes for the
+2. `./launch.sh --type <instance-type> --from <backup-name> --key ~/key.pem --profile <aws-profile>`
+   (the production host's type or larger). In the 8 Oct drills this took about 2.5 minutes for the
    full dataset: ~75s to ssh and bootstrap, ~50s download and RDB check, ~13s
    load.
 3. Check it on the host: `redis6-cli ROLE` is master, `DBSIZE` is about what
    it was on the old master, `INFO memory` is well under `maxmemory`, and
    the `ssl:*:latest` count (`redis6-cli --scan --pattern 'ssl:*:latest' | wc -l`)
    is about what it was, or the proxy re-issues the missing certificates.
-4. Move the floating IP (`172.30.0.200` today) to it. Stop the interface's
-   refresh timer and add the address on the host first, so it answers the
-   moment the VPC moves it (the timer rebuilds the addresses from instance
-   metadata every ~60s and would drop one AWS doesn't list yet), then start
-   the timer again once AWS lists it:
-   ```
-   ssh <new> 'sudo systemctl stop refresh-policy-routes@ens5.timer'
-   ssh <new> 'sudo ip addr add <floating-ip>/32 dev ens5 noprefixroute'
-   aws ec2 assign-private-ip-addresses --network-interface-id <new-eni> \
-     --private-ip-addresses <floating-ip> --allow-reassignment
-   aws ec2 describe-network-interfaces --network-interface-ids <new-eni> \
-     --query 'NetworkInterfaces[0].PrivateIpAddresses[].PrivateIpAddress'
-   ssh <new> 'sudo systemctl start refresh-policy-routes@ens5.timer'
-   ```
-   If the old master comes back, make sure it no longer has the address
-   (stop it, or `sudo ip addr del <floating-ip>/32 dev ens5` there).
+4. Point the app at it. In production this is `cycle.sh restore`, which also
+   restores the data volume and units and moves the Elastic IP; there is no
+   floating IP to move.
 5. Turn on its backups: `sudo touch /etc/blot-redis/active`,
    then `sudo -u ec2-user /usr/local/bin/backup.sh hourly` for a first upload.
    A host launched with `--drill` also has `/etc/blot-redis/drill`, which
    makes `backup.sh` skip silently: remove it first if a drill host goes live.
-6. Check the app: every client in `redis6-cli CLIENT LIST` has
-   `laddr=<floating-ip>`, `/redis-health` is fine, and expect
+6. Check the app: the units' clients in `redis6-cli CLIENT LIST` are on the
+   Unix socket (`laddr=/run/blot/redis/redis.sock`), `/redis-health` is fine, and expect
    `[LOCK COMPROMISED]` container restarts from the outage. Then run sync
    validation for the blogs, since Redis lost what changed after the snapshot.
 
@@ -200,7 +202,7 @@ To rehearse it, run steps 1-3 with `launch.sh --drill` (it never uploads
 backups). To also exercise `promote.sh`, make the drill host a replica of the
 live master (`redis6-cli REPLICAOF <master-primary-ip> 6379` on it) and run
 `promote.sh --dry-run`, then `REPLICAOF NO ONE`. Then write down the
-commands for 4-5 with the drill host's interface, and terminate the host by
+commands for 5 for the drill host, and terminate the host by
 its instance ID, after checking it has the `BlotDrill` tag and is not a
 production instance.
 
@@ -208,26 +210,18 @@ production instance.
 
 Do this when the daily email says **resize now** (memory at 70% of
 `maxmemory`) or the 80% alert fires; with `noeviction`, writes fail at the
-limit. On a host shared with the units, first try raising `maxmemory` (the
-host's RAM is shared, so check what the units and a background save's
-copy-on-write leave). Resizing means a new host and `promote.sh`; the
-instance is not stopped and resized in place. Until the move to the combined
-host (#2261) the units still use the floating IP, so a Redis-only replacement
-must also move that IP by hand, as in step 4 of Disaster recovery.
-
-1. Launch the bigger host as a replica of the current master. Give the
-   master's **primary private IP**, not the floating IP:
-   `./launch.sh --type <bigger-type> --from replica:<current-master-primary-ip> --key ~/key.pem`
-   (`--dry-run` first). It keeps the arm64 architecture, so pick a bigger
-   size in the same family (the current host's type is in the EC2 console).
-2. Check it: `master_link_status:up` on the new host, `DBSIZE` close to the old
-   host's, `maxmemory` what you expect for its RAM, and the sample from
-   `tcpmem-log.sh` arrives (`GET blot:redis-host:tcpmem` has `ram_total`).
-3. `./promote.sh --dry-run <current-master> <new-host>`, then the same without
-   `--dry-run`. Do not deploy or restart the proxy around it.
-4. Afterwards the old host replicates from the new one. Keep it for a few days,
-   then terminate it (by instance ID; production instances have termination
-   protection).
+limit. Redis shares the host's RAM with the units, so first try raising
+`maxmemory` (check what the units and a background save's copy-on-write
+leave; `REDIS_MAXMEMORY` at bootstrap, or `/etc/redis6/blot-memory.conf`). If
+the host itself is too small, that is a host cycle onto a bigger instance, not
+a Redis-only change: `config/host/cycle.sh --type <bigger-type> ... launch`,
+then the phases in `config/host/README.md` ("Host cycle"). It keeps the arm64
+architecture, so pick a bigger size in the same family. Check on the new host
+before `switch`: `master_link_status:up`, `DBSIZE` close to the old host's,
+`maxmemory` what you expect for its RAM, and the sample from `tcpmem-log.sh`
+arrives (`GET blot:redis-host:tcpmem` has `ram_total`). Do not deploy or
+restart the proxy around the promotion. The old host replicates from the new
+one until `finish` (about a day after `settle`).
 
 ## What gets installed
 
@@ -344,7 +338,7 @@ stops the local prune.
 
 To restore from B2, with the read key's profile on your machine (here
 `blot-b2-read`, set up like `blot-b2` above), pass the bucket, whose name is
-not in the repo (it is in `/etc/blot-redis/offsite-bucket` on the Redis host):
+not in the repo (it is in `/etc/blot-redis/offsite-bucket` on the host):
 
 ```
 restore.sh --offsite blot-b2-read s3://<bucket> <ssh-host> latest
@@ -427,7 +421,7 @@ For the operator running `launch.sh`: `ssm:GetParameter` on
 `/aws/service/ami-amazon-linux-latest/*`; `ec2:RunInstances` (on the launch
 template and the resources it uses), `ec2:CreateTags`, `ec2:DescribeInstances`,
 `ec2:ModifyInstanceAttribute`; `iam:PassRole` if the template has an instance
-profile. For the Redis host (instance profile, or keys in `~ec2-user/.aws`): `s3:ListBucket` on `blot-redis-backups`, `s3:GetObject`
+profile. For the host's backups (keys in `~ec2-user/.aws`; the combined host has no instance profile on purpose, since the units use host networking and could read the instance metadata service): `s3:ListBucket` on `blot-redis-backups`, `s3:GetObject`
 on `hourly/*`, `daily/*` and `weekly/*` (restore), and `s3:PutObject` on the same
 (backups; no delete or overwrite rights are needed).
 

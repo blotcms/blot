@@ -1,6 +1,6 @@
 ---
 name: check-security-advisories
-description: Daily cheap check that no runtime or OS Blot depends on (Node.js, Alpine, OpenResty/nginx, Pandoc, Amazon Linux 2 on the app/proxy host, Amazon Linux 2023 and redis6 on the Redis host, the macserver's Node) is behind on a security release or past end-of-life. Runs scripts/security/check-advisories.js, which reads the version pins from the repo and compares them with nodejs.org, endoflife.date, nginx.org, GitHub and the Amazon Linux security bulletins; only if something is flagged does it verify against official sources, judge real exposure, optionally (with the operator's approval, one command at a time) check what is actually running in production, and propose a pin-bump PR. Designed to be run by a small model or a scheduled routine. Appends a one-line dated entry to this skill's findings log. Use when asked to check security advisories, whether a Node/nginx/OpenResty/Alpine/Amazon Linux security release is out, whether we are behind or end-of-life, or when a third-party email (e.g. from Stripe) says one of our dependencies is vulnerable.
+description: Daily cheap check that no runtime or OS Blot depends on (Node.js, Alpine, OpenResty/nginx, Pandoc, Amazon Linux 2023 and redis6 on the one production host, the macserver's Node) is behind on a security release or past end-of-life. Runs scripts/security/check-advisories.js, which reads the version pins from the repo and compares them with nodejs.org, endoflife.date, nginx.org, GitHub and the Amazon Linux security bulletins; only if something is flagged does it verify against official sources, judge real exposure, optionally (with the operator's approval, one command at a time) check what is actually running in production, and propose a pin-bump PR. Designed to be run by a small model or a scheduled routine. Appends a one-line dated entry to this skill's findings log. Use when asked to check security advisories, whether a Node/nginx/OpenResty/Alpine/Amazon Linux security release is out, whether we are behind or end-of-life, or when a third-party email (e.g. from Stripe) says one of our dependencies is vulnerable.
 ---
 
 # Check security advisories
@@ -33,12 +33,13 @@ gap in daily runs). `--npm` adds `npm audit --omit=dev`; `--dependabot` adds
 open Dependabot alerts via `gh`.
 
 What it covers: Node (security releases newer than the pin, EOL), Alpine EOL,
-Amazon Linux 2 / 2023 EOL and recent critical/important bulletins (watched
+Amazon Linux 2023 EOL and recent critical/important bulletins (watched
 packages: kernel, docker, containerd, runc, openssh, openssl, glibc, sudo,
 redis6, systemd, curl), nginx advisories against the pinned nginx version,
-newest OpenResty tag, newest Pandoc. The Redis host (AL2023 + `redis6`, see
-`config/redis/host/setup.sh`) is not version-pinned, so only the bulletin feed
-covers it.
+newest OpenResty tag, newest Pandoc. The production host (AL2023, running `redis6` and both
+units, see `config/host/README.md` and `config/redis/host/setup.sh`) is not
+version-pinned, so only the bulletin feed covers it. Amazon Linux 2 is no longer
+checked: no host runs it since 2 November 2026.
 
 Compare with the last findings-log entry. If exit code is 0 **and** WATCH has
 nothing new, append a one-line "all clear" entry and stop.
@@ -67,10 +68,10 @@ Then judge actual exposure for Blot:
   matter if we compile the module in or use the feature (HTTP/3, AIO, alias +
   rewrite, ...). Check `proxy/config/` before deciding a "Vulnerable" range is
   a real hit.
-- **App/proxy host** (Amazon Linux 2): kernel, docker, containerd, runc,
-  openssh, sudo, glibc. Host patching is manual (see below).
-- **Redis host** (AL2023): not internet-facing; kernel/redis6/openssl matter
-  less, but patch on the normal cadence.
+- **Production host** (Amazon Linux 2023, one host running the units and
+  `redis6`): kernel, docker, containerd, runc, openssh, sudo, glibc. It is
+  internet-facing through the proxy; Redis on it is not (a firewall closes
+  6379). Host patching is manual (see below).
 - **macserver** runs Node under pm2 on a Mac, outside the repo pins; it has
   its own Node version (`ssh macserver "node -v"`) and needs its own bump.
 
@@ -87,7 +88,7 @@ ssh blot "docker exec blot-green node -v"     # and blot-blue
 ssh blot "cat /etc/os-release; uname -r; docker version --format '{{.Server.Version}}'"
 ssh blot "docker ps --format '{{.Names}}'"              # the proxies are blot-blue and blot-green
 ssh blot "docker exec blot-blue openresty -v"           # and blot-green
-ssh redis "cat /etc/os-release; redis6-server --version; dnf -q check-update --security | head"
+ssh blot "redis6-server --version; dnf -q check-update --security | head"
 ssh macserver "node -v; sw_vers"
 ```
 
@@ -101,11 +102,15 @@ ssh macserver "node -v; sw_vers"
   `CLAUDE.md`: if hosts or the macserver need manual steps (re-run Node setup
   on the host, `npm i -g`/nvm on the macserver, deploying the proxy), add a
   **Deployment plan** section and the `manual-deploy` label.
-- **Host OS patches** (AL2/AL2023 `yum`/`dnf update`, reboot for a kernel) are
-  manual and need the operator's approval for each command; see
-  `config/host/README.md` and `.claude/skills/redis-host/SKILL.md`.
-- **EOL**: put a compact line in the root `TODO` and tell the operator. Amazon
-  Linux 2 and Alpine 3.20 are already past EOL; migrations are tracked there,
+- **Host OS patches** (AL2023 `dnf update`) are manual and need the operator's
+  approval for each command; see `config/host/README.md` and
+  `.claude/skills/redis-host/SKILL.md`. **A fix that needs a reboot (a kernel
+  update, for example) is not applied until there are several hosts sharing
+  load**: with one host a reboot is downtime (`config/host/README.md`,
+  "Reboots"). Flag it to the operator with the advisory and its exposure, and
+  let them decide for a specific critical one. Updates that need no reboot can
+  be proposed as usual.
+- **EOL**: put a compact line in the root `TODO` and tell the operator. Alpine 3.20 is already past EOL; migrations are tracked there,
   not re-raised daily.
 - Third-party "your X is vulnerable" emails (Stripe, etc.): never follow their
   links; verify with the official sources above and treat the email only as a
