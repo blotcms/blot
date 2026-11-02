@@ -161,7 +161,7 @@ async function resyncBlog(blog) {
   try {
     // A blog created after the snapshot has no folder on this volume, and each
     // client counts the local files before it starts.
-    await require("fs-extra").ensureDir(require("helper/localPath")(blog.id, "/"));
+    await require("storage/folder").mkdir(blog.id, "/");
     if (blog.client === "dropbox") {
       assertComplete(await require("clients/dropbox/sync/reset-to-blot")(blog.id, () => {}, folder.update));
       await fix(full);

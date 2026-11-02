@@ -13,39 +13,38 @@
 // load the demo folders.
 
 const { promisify } = require("util");
-const fs = require("fs-extra");
-const { join, relative, sep } = require("path");
+const { posix } = require("path");
 
 const sync = require("sync");
-const localPath = require("helper/localPath");
+const folder = require("storage/folder");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 
 // Directories that never contain entries. Templates are built by
 // buildFromFolder on sync release, and .verification / .git are ours.
 const SKIP_DIRECTORIES = new Set([".git", ".verification", "node_modules"]);
 
-async function walk(root, directory = root, found = []) {
+async function walk(blogID, directory = "/", found = []) {
   let items;
 
   try {
-    items = await fs.readdir(directory, { withFileTypes: true });
+    items = await folder.listNames(blogID, directory);
   } catch (e) {
     return found;
   }
 
   for (const item of items) {
-    const full = join(directory, item.name);
+    const full = posix.join(directory, item.name);
 
-    if (item.isDirectory()) {
+    if (item.isDirectory) {
       if (SKIP_DIRECTORIES.has(item.name)) continue;
-      await walk(root, full, found);
+      await walk(blogID, full, found);
       continue;
     }
 
     if (shouldIgnoreFile(item.name)) continue;
 
     // Blot wants leading slashes and forward slashes.
-    found.push("/" + relative(root, full).split(sep).join("/"));
+    found.push(full);
   }
 
   return found;
@@ -85,14 +84,12 @@ function rescanOnce(blogID) {
       if (err) return reject(err);
 
       const update = promisify(folder.update);
-      const root = localPath(blogID, "/");
-
       let paths = [];
       let updated = 0;
       let failed = 0;
 
       try {
-        paths = await walk(root);
+        paths = await walk(blogID);
 
         for (const path of paths) {
           try {
