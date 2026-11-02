@@ -1,0 +1,82 @@
+# models/file
+
+The metadata index of a blog's folder: a record for every file and every directory in it, so the S3 backend of `storage/folder` can stat, list, walk and resolve case without asking S3. It is a sibling of `models/entry`, and a file and its entry join on the same path string. See [#2258](https://github.com/blotcms/blot/issues/2258) ("Metadata index (Redis): `models/file`").
+
+- `storage/folder`'s S3 backend (`app/storage/folder/s3.js`) is its only writer. Nothing else calls the write functions. The local-disk backend, which every blog still uses, does not touch it.
+- It is derived from S3: the backend writes to S3 first and to the index after, so a crash leaves the index behind S3, never ahead. It can be rebuilt from a full listing at any time (`rebuild`, and `scripts/storage/rebuild-file-index.js`).
+- Writes read what they need, then apply everything in one `multi()`/`exec()`. That is only safe because each blog has one writer at a time, the sync lock (`app/sync/lock.js`). No Lua and no `WATCH`.
+
+---
+
+## Records
+
+`{ type: "file" | "dir", size, modified, sha1 }`: size in bytes, modified in milliseconds since the epoch, sha1 the SHA-1 of the file's bytes in hex. A directory has size 0 and no hash. `sha1` is `""` when it isn't known, which only a rebuild without hashing produces.
+
+Paths are normalised with `helper/pathNormalizer`, exactly as entry keys are (`models/entry/key.js`): a leading slash, no trailing slash, no double slashes, NFC. The folder itself is `/`, always exists, and has no record of its own (`get` returns a directory with `modified` 0).
+
+---
+
+## Redis keys
+
+No key per file. There is a hash and a lookup per directory, and two keys per blog. Every key starts `blog:{blogID}:file`, so blog deletion's `blog:{blogID}:*` sweep takes it with the rest.
+
+| Key | Type | Contents |
+|-----|------|----------|
+| `blog:{blogID}:file:dir:{dirPath}` | hash | child name → packed record `type\|size\|modified\|sha1` |
+| `blog:{blogID}:file:lower:{dirPath}` | hash | lowercased child name → the child names that fold to it, joined by `/` and sorted |
+| `blog:{blogID}:file:paths` | sorted set | every path below the root, all at score 0, for `ZRANGEBYLEX` subtree queries |
+| `blog:{blogID}:file:totals` | hash | `bytes`, `files`: the folder's totals, for the storage quota |
+
+For a folder holding `/Posts/a.txt` (5 bytes), `/posts/b.txt` (3 bytes) and an empty directory `/drafts`:
+
+```
+blog:X:file:dir:/          Posts  -> d|0|1700000000000|
+                           posts  -> d|0|1700000000000|
+                           drafts -> d|0|1700000000000|
+blog:X:file:lower:/        posts  -> Posts/posts
+                           drafts -> drafts
+blog:X:file:dir:/Posts     a.txt  -> f|5|1700000000000|aaf4c61d...
+blog:X:file:lower:/Posts   a.txt  -> a.txt
+blog:X:file:dir:/posts     b.txt  -> f|3|1700000000000|e9d71f5e...
+blog:X:file:lower:/posts   b.txt  -> b.txt
+blog:X:file:paths          /Posts /Posts/a.txt /drafts /posts /posts/b.txt
+blog:X:file:totals         bytes -> 8, files -> 2
+```
+
+The packing is the record type's first letter (`f` or `d`), then size, modified and sha1, separated by `|`. A name may contain `|`, but it is only ever a field, never part of a value. No name can contain `/`, so it separates the names in the lowercased lookup. An empty directory has no hash of its own; its record in its parent's hash is what makes it exist.
+
+Case-insensitive resolution looks each segment up in its directory's lowercased lookup. Names which differ only by case (`/Posts` and `/posts`) share one field, so neither hides the other: the exact name wins, otherwise the first in sorted order, by `helper/caseSensitivePath.pick` over the stored names. Each segment is resolved on its own, without going back to try a sibling, as on disk.
+
+Subtree queries use the bounds `[/dir/` and `(/dir0` (`0` is the character after `/`), so `/dir b` and `/dir0` stay out.
+
+---
+
+## Functions
+
+All return promises.
+
+| Function | |
+|----------|---|
+| `get(blogID, path)` | The record, or null |
+| `list(blogID, dir, { cursor, limit })` | One `HSCAN` page of a directory, unsorted: `{ entries: [{ name, ...record }], cursor }`, cursor null after the last. Null if dir is not a directory |
+| `listAll(blogID, dir)` | Every entry of a directory, sorted by name (code-unit order), or null |
+| `subtree(blogID, dir, { pageSize })` | Async iterator over every path below dir, in byte order of the whole path |
+| `resolveCaseInsensitive(blogID, path)` | The stored spelling of path, or null |
+| `totals(blogID)` | `{ bytes, files }` |
+| `set(blogID, path, record)`, `setMany(blogID, [{ path, ...record }])` | Record paths, giving every ancestor without a record a directory record (S3 has implicit directories). Refuses a path below a file (ENOTDIR), a file over a directory (EISDIR) and a directory over a file (EEXIST) |
+| `remove(blogID, path)` | Forget a file, or a directory and its whole subtree. Resolves to the removed record, or null |
+| `removeAll(blogID)` | Forget the whole folder |
+| `rebuild(blogID, records)` | Replace the index with records from a full listing (an iterable or async iterable). Resolves to `{ files, dirs, bytes }` |
+
+Removing a directory goes through its subtree deepest first, a page at a time, so each file's size is still in its parent's hash when the totals are corrected. If it stops part way, what is left is consistent apart from a lowercased lookup which may still name a child already gone, until its directory goes too.
+
+---
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `index.js` | The functions above |
+| `key.js` | Key names, and the path normalisation |
+| `record.js` | Packs and parses records |
+| `tests/` | Specs, against real Redis |
