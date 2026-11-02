@@ -299,7 +299,7 @@ describe("storage/folder shadow reads", function () {
       await setUp(this.blog.id);
       await folder.read(this.blog.id, "/a.txt");
       await folder.read(this.blog.id, "/a.txt");
-      await folder.stat(this.blog.id, "/missing");
+      await folder.exists(this.blog.id, "/missing");
       await shadow.idle();
       await shadow.flush();
 
@@ -321,7 +321,7 @@ describe("storage/folder shadow reads", function () {
       expect(summary.ops.read.sampled).toEqual(2);
       expect(summary.ops.read.mismatchRate).toEqual(0);
       expect(summary.ops.read.s3.p50).not.toBeNull();
-      expect(summary.ops.stat.sampled).toEqual(1);
+      expect(summary.ops.exists.sampled).toEqual(1);
       // The first read of a.txt misses the content cache, the second hits
       expect(summary.cache.hits + summary.cache.misses).toBeGreaterThan(0);
       expect(report.format(summary)).toContain("read");
