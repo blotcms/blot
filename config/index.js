@@ -256,6 +256,13 @@ module.exports = {
     secret: process.env.BLOT_YOUTUBE_SECRET,
   },
 
+  // Which blogs' folder writes are mirrored to the storage bucket and
+  // models/file after they land on disk (app/storage/folder/mirror.js,
+  // #2258 Phase C): "off" (the default), "all", or blog IDs separated by
+  // commas, e.g. "blog_abc,blog_def". Disk stays authoritative either way.
+  // Read on every write, so it can be changed in place by specs.
+  folder_mirror: process.env.BLOT_FOLDER_MIRROR || "off",
+
   // Credentials for the S3 client in app/storage/s3.js. When these aren't
   // set the AWS SDK's default provider chain is used instead.
   aws: {
