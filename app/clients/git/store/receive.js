@@ -23,10 +23,12 @@
 //
 // The steps, in the order they run:
 //
-//   1. Refuse commands which are not allowed (only master, and tags) and
-//      pushes whose old values are already out of date, before reading the pack.
+//   1. Refuse commands which are not allowed (only master, and tags), before
+//      reading the pack.
 //   2. Stream the pack into scratch space reserved from the cache, so the
-//      git disk budget stays one number. Stop at the limit.
+//      git disk budget stays one number. Stop at the limit. The manifest is
+//      read meanwhile, and a push whose old values are out of date is refused
+//      once the pack is in, before anything is checked.
 //   3. Find the objects the pack's deltas build on which it does not contain
 //      (it is a thin pack), fetch them from the store in a batch, and have
 //      `git index-pack --fix-thin --fsck-objects` complete and index the pack
@@ -45,8 +47,10 @@
 //      history piece, which the manifest lists and compaction merges later).
 //   6. Upload the pack, its .idx and .rev, and the history piece and its .idx
 //      (a piece is read whole, so it has no .rev).
-//   7. Swap the manifest. Only a swap that landed is reported as a success. A
-//      swap lost to another writer is tried again on the manifest that won
+//   7. Swap the manifest, built on the one read in step 2 (the conditional
+//      create decides whether it is still the newest). Only a swap that
+//      landed is reported as a success. A swap lost to another writer is
+//      tried again on the manifest that won
 //      (up to three attempts in all): if a ref the push updates moved, the
 //      push is refused; if the other writer changed other refs, or only packs
 //      (compaction), the push is applied to the new manifest, with nothing
@@ -82,12 +86,14 @@ const { Readable } = require("stream");
 const { spawn } = require("child_process");
 const { NoRoomError, StaleManifestError, OutcomeUnknownError, CorruptError, TooLargeError } = require("./errors");
 const { packKey, idxKey, revKey } = require("./layout");
-const { mapLimit } = require("./limit");
+const { mapLimit, createSemaphore } = require("./limit");
 const manifest = require("./manifest");
 const createReader = require("./reader");
 const { parseCommit, parseTree, parseTag, isDirectory, isGitlink } = require("./objects");
 const { scanPack } = require("./packscan");
 const { buildRev } = require("./rev");
+const { noteSize } = require("./pack");
+const { rememberWhole } = require("./idx");
 const { readHistory } = require("./history");
 const { ancestors } = require("./fetch");
 
@@ -472,12 +478,29 @@ async function loadObjects(scratch, gitDir, oids) {
 // nowhere, and those which are not the kind of object they are linked as
 // (index-pack does not check links). Outside the pack that is a read of the
 // object's header, not of its contents.
+//
+// An object outside the pack is looked up as soon as something links to it,
+// while the walk goes on, rather than in a round of its own at the end.
 async function findMissing({ repo, fresh, local, listed }) {
-  const toCheck = new Set();
   const expected = new Map();
-  const expect = (oid, type) => {
+  const outside = new Map();
+  const turn = createSemaphore(CONCURRENCY);
+  const need = (oid, type) => {
     if (!expected.has(oid)) expected.set(oid, new Set());
     expected.get(oid).add(type);
+    if (listed.has(oid) || outside.has(oid)) return;
+
+    const lookup = (async () => {
+      const done = await turn();
+      try {
+        return { type: await repo.typeOf(oid) };
+      } catch (err) {
+        return { err };
+      } finally {
+        done();
+      }
+    })();
+    outside.set(oid, lookup);
   };
   const entryType = (entry) => (isDirectory(entry) ? "tree" : "blob");
   const visited = new Set();
@@ -508,18 +531,13 @@ async function findMissing({ repo, fresh, local, listed }) {
   for (const [oid, { type }] of fresh) {
     if (type === "tag") {
       const tag = parseTag(local.get(oid).data);
-      toCheck.add(tag.object);
-      expect(tag.object, tag.type);
+      need(tag.object, tag.type);
     }
     if (type !== "commit") continue;
 
     const commit = parseCommit(local.get(oid).data);
-    commit.parents.forEach((parent) => {
-      toCheck.add(parent);
-      expect(parent, "commit");
-    });
-    toCheck.add(commit.tree);
-    expect(commit.tree, "tree");
+    commit.parents.forEach((parent) => need(parent, "commit"));
+    need(commit.tree, "tree");
 
     // Merges are compared with their first parent. One too large to read just
     // means the new tree is checked in full, not that the push fails.
@@ -542,8 +560,7 @@ async function findMissing({ repo, fresh, local, listed }) {
         const was = before.get(entry.name);
         if (isGitlink(entry) || (was && was.oid === entry.oid && was.mode === entry.mode)) continue;
 
-        toCheck.add(entry.oid);
-        expect(entry.oid, entryType(entry));
+        need(entry.oid, entryType(entry));
         // A tree which is not in the pack is in the repository, and so closed
         if (isDirectory(entry) && fresh.has(entry.oid)) next.push({ a: was && isDirectory(was) ? was.oid : null, b: entry.oid });
       }
@@ -558,8 +575,7 @@ async function findMissing({ repo, fresh, local, listed }) {
     if (type !== "tree" || visited.has(oid)) continue;
     for (const entry of parseTree(local.get(oid).data)) {
       if (isGitlink(entry)) continue;
-      toCheck.add(entry.oid);
-      expect(entry.oid, entryType(entry));
+      need(entry.oid, entryType(entry));
     }
   }
 
@@ -567,11 +583,12 @@ async function findMissing({ repo, fresh, local, listed }) {
 
   // Outside the pack: there, and the kind of object it is linked as
   const missing = [];
-  await mapLimit([...toCheck].filter((oid) => !listed.has(oid)), CONCURRENCY, async (oid) => {
-    const type = await repo.typeOf(oid);
+  for (const [oid, lookup] of outside) {
+    const { type, err } = await lookup;
+    if (err) throw err;
     if (!type) missing.push(oid);
     else if (expected.get(oid).size > 1 || !expected.get(oid).has(type)) wrong.push(oid);
-  });
+  }
   return { missing, wrong };
 }
 
@@ -683,13 +700,14 @@ async function receive({ store, cache, lock, commands, pack = null, limit = DEFA
     if (Object.keys(problems).length) throw new Refused("ok", problems);
     if (sizeHint > limit) throw new Refused("the push is larger than the " + formatSize(limit) + " Blot accepts");
 
-    // Work out of date before it is done: the pack is still read, below
-    const base = await manifest.read(store);
-    const behind = staleRefs(base, commands) || nameConflicts(applied(base, commands), commands);
-    if (behind) throw behind;
+    // The manifest is read while the pack arrives. Work out of date is found
+    // before anything is checked; the pack is still read to the end.
+    const reading = manifest.read(store);
+    reading.catch(() => {});
 
-    const added = await prepare({ store, cache, commands, incoming, limit, sizeHint, base, children, stats, smallBase, hold: (r) => (reservation = r), say });
-    const next = await swap({ store, cache, lock, commands, added });
+    const { base, added, repo, local } = await prepare({ store, cache, commands, incoming, limit, sizeHint, reading, children, stats, smallBase, hold: (r) => (reservation = r), say });
+    const next = await swap({ store, cache, lock, commands, added, base });
+    await remember({ store, cache, repo, added, local });
 
     stats.packs = added.packs.map((piece) => piece.name);
     say("Push saved.");
@@ -777,19 +795,37 @@ function staleRefs(current, commands) {
 // Everything up to the upload: the pack in scratch, completed and checked, its
 // history piece, and both uploaded. Resolves with { packs, pieces } to name in
 // the manifest (none, for a push of refs only).
-async function prepare({ store, cache, commands, incoming, limit, sizeHint, base, children, stats, smallBase, hold, say }) {
+async function prepare({ store, cache, commands, incoming, limit, sizeHint, reading, children, stats, smallBase, hold, say }) {
   const added = { packs: [], pieces: [] };
   const needsPack = commands.some((command) => command.new !== ZERO);
   const reservation = await cache.reserve(Math.min(limit, Math.max(sizeHint, FIRST_RESERVE), Math.floor(cache.maxBytes / 2)));
   hold(reservation);
 
   const scratch = createScratch(reservation, children);
-  const repo = createReader({ store, cache, packs: base.packs, scratch: scratchFrom(reservation, cache) });
   const incomingFile = path.join(reservation.dir, "incoming.pack");
   const gitDir = path.join(reservation.dir, "repo.git");
 
   stats.bytes = needsPack ? await writeIncoming(incoming, reservation, cache, incomingFile, limit) : 0;
   await incoming.drain();
+
+  const base = await reading;
+  const behind = staleRefs(base, commands) || nameConflicts(applied(base, commands), commands);
+  if (behind) throw behind;
+
+  const repo = createReader({ store, cache, packs: base.packs, scratch: scratchFrom(reservation, cache) });
+
+  // The commits the push replaces, and their root trees, are what the check
+  // of the new commits compares with first, and each is usually the parent of
+  // a new commit, which the check looks up in the packs. All of that is read
+  // while the bases are fetched and the pack is indexed, rather than after.
+  const prefetch = Promise.all(
+    commands
+      .filter((command) => command.old !== ZERO && command.new !== ZERO)
+      .flatMap((command) => [
+        repo.typeOf(command.old),
+        repo.read(command.old).then((found) => found && found.type === "commit" && repo.read(parseCommit(found.data).tree)),
+      ])
+  ).catch(() => {});
 
   let fresh = new Map();
   let local = new Map();
@@ -845,6 +881,7 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, base
       local = await loadObjects(scratch, gitDir, checked.map(([oid]) => oid));
 
       say("Checking the new commits...");
+      await prefetch;
       const { missing, wrong } = await findMissing({ repo, fresh, local, listed });
       if (wrong.length) {
         throw new Refused("ok", Object.fromEntries(commands.filter((c) => c.new !== ZERO).map((c) => [c.ref, "the push links to an object of the wrong type"])));
@@ -864,6 +901,7 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, base
   const tips = await checkTips({ repo, commands, listed, types });
   if (Object.keys(tips).length) throw new Refused("ok", tips);
   added.peeled = await peelTags({ repo, local, types });
+  await prefetch;
 
   // Nothing is acknowledged before this, and the manifest names no pack which
   // is not uploaded: a failure here leaves the repository as it was
@@ -874,7 +912,32 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, base
   const uploads = await Promise.allSettled([...added.packs, ...added.pieces].map((piece) => uploadPack(store, piece, { rev: added.packs.includes(piece) })));
   const failed = uploads.find((upload) => upload.status === "rejected");
   if (failed) throw failed.reason;
-  return added;
+
+  // This process uploaded them, so it knows their size
+  for (const piece of [...added.packs, ...added.pieces]) noteSize(store, packKey(piece.name), piece.size);
+  return { base, added, repo, local };
+}
+
+// The most bytes of a push's commits and trees kept in the cache after it
+const REMEMBER_BYTES = 4 * MiB;
+
+// Puts what the next push, commit or diff will want in the cache: the new
+// packs' indexes, whole, and the push's commits and trees (up to
+// REMEMBER_BYTES of them), which the next push compares its own with and often
+// uses as delta bases. Each was written or checked here (index-pack wrote the
+// indexes and hashed the objects). Only called once the swap has landed: the
+// cache of objects holds only what the repository has, so a push's bases can
+// come from it (see reader.js).
+async function remember({ store, cache, repo, added, local }) {
+  const indexes = added.packs.map((piece) => rememberWhole({ cache, namespace: store.id, key: idxKey(piece.name), idx: piece.idx }));
+  let budget = REMEMBER_BYTES;
+  const objects = [];
+  for (const [oid, { type, data }] of local) {
+    if (type === "blob" || data.length > budget) continue;
+    budget -= data.length;
+    objects.push(repo.remember(oid, type, data));
+  }
+  await Promise.all([...indexes, ...objects]);
 }
 
 // A pack of just these commits, for the history pack that compaction keeps
@@ -931,11 +994,16 @@ const ATTEMPTS = 3;
 // manifest `advance` builds, is worked out again on the new one; what comes
 // from the push alone (`added`, with its `peeled` targets, which are facts about
 // immutable objects) is not. An uncontended push never gets here twice.
-async function swap({ store, cache, lock, commands, added }) {
+//
+// The first attempt builds on `base`, the manifest read as the push began,
+// whose refs were checked then: reading it again first would cost two round
+// trips on every push to save one on a push which loses a race, and the
+// create is what decides either way.
+async function swap({ store, cache, lock, commands, added, base }) {
   const uploaded = [...added.packs, ...added.pieces].map((piece) => piece.name);
 
   for (let attempt = 1; ; attempt++) {
-    const current = await manifest.read(store);
+    const current = attempt === 1 ? base : await manifest.read(store);
     const refs = applied(current, commands);
     const behind = staleRefs(current, commands) || nameConflicts(refs, commands);
     if (behind) throw behind;
@@ -950,7 +1018,7 @@ async function swap({ store, cache, lock, commands, added }) {
     });
 
     try {
-      await manifest.swap({ store, lock, base: current, next, uploaded });
+      await manifest.swap({ store, lock, base: current, next, uploaded, waitForHint: false });
       return next;
     } catch (err) {
       if (!(err instanceof StaleManifestError) || attempt >= ATTEMPTS) throw err;

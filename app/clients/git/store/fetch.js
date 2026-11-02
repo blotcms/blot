@@ -158,7 +158,9 @@ async function tagsAreSent({ store, cache, manifest, packs, wants, negotiation }
   const asked = wants.filter(isTag);
   if (!asked.length) return true;
 
-  const reader = createReader({ store, cache, packs });
+  // Only these packs count, so the cache of objects (which holds what any
+  // pack has) is not asked
+  const reader = createReader({ store, cache, packs, objectCache: false });
   for (let oid of asked) {
     for (let depth = 0; ; depth++) {
       if (depth > MAX_TAG_CHAIN) return false;
