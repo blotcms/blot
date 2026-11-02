@@ -376,7 +376,7 @@ describe("template", () => {
 		const test = this;
 		await promisify(Blog.set)(test.blog.id, { template: test.template.id });
 		const initialCacheID = (await promisify(Blog.get)({ id: test.blog.id })).cacheID;
-		const view = { name: "cache-test.html" };
+		const view = { name: "cache-test.html", content: "changed" };
 
 		await setView(test.template.id, view);
 		const blog = await promisify(Blog.get)({ id: test.template.owner });
