@@ -91,4 +91,13 @@ function watchProxy() {
   setInterval(check, PROXY_CHECK_MS).unref();
 }
 
-module.exports = { jobFailed, watchProxy, checkProxy, REPORTED };
+// For specs: forget what was counted and when the last email went, since other
+// specs' sandbox failures land here too
+function reset() {
+  if (timer) clearTimeout(timer);
+  timer = null;
+  counts.clear();
+  lastSent = 0;
+}
+
+module.exports = { jobFailed, watchProxy, checkProxy, reset, REPORTED };
