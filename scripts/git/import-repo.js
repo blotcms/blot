@@ -42,55 +42,17 @@ const path = require("path");
 
 const store = require("../../app/clients/git/store");
 const importRepo = require("../../app/clients/git/store/import");
-const createFsStore = require("../../app/clients/git/store/objectStore/fs");
-
-const FLAGS = new Set(["verify"]);
-const VALUES = new Set(["dir", "bucket", "prefix", "endpoint", "region", "scratch", "cache-mb"]);
-
-function parse(argv) {
-  const options = {};
-  const positional = [];
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (!arg.startsWith("--")) positional.push(arg);
-    else if (FLAGS.has(arg.slice(2))) options[arg.slice(2)] = true;
-    else if (VALUES.has(arg.slice(2))) {
-      if (i + 1 >= argv.length) throw new Error(arg + " needs a value");
-      options[arg.slice(2)] = argv[++i];
-    } else throw new Error("Unknown option " + arg);
-  }
-  return { options, positional };
-}
-
-function objectStore(options) {
-  if (options.dir && options.bucket) throw new Error("Give --dir or --bucket, not both");
-  if (options.dir) return createFsStore({ root: path.resolve(options.dir) });
-
-  if (!options.bucket) throw new Error("Give a target: --dir <folder> or --bucket <name>");
-  const { S3Client } = require("@aws-sdk/client-s3");
-  const key = process.env.BLOT_AWS_KEY || process.env.AWS_ACCESS_KEY_ID;
-  const secret = process.env.BLOT_AWS_SECRET || process.env.AWS_SECRET_ACCESS_KEY;
-  const client = new S3Client({
-    region: options.region || "us-east-1",
-    ...(options.endpoint ? { endpoint: options.endpoint, forcePathStyle: true } : {}),
-    // B2 and MinIO want checksums only when an operation requires one
-    requestChecksumCalculation: "WHEN_REQUIRED",
-    responseChecksumValidation: "WHEN_REQUIRED",
-    ...(options.endpoint && key && secret ? { credentials: { accessKeyId: key, secretAccessKey: secret } } : {}),
-  });
-  const prefix = options.prefix ? options.prefix.replace(/\/?$/, "/") : "";
-  return { client, store: store.createS3Store({ client, bucket: options.bucket, prefix }) };
-}
+const { parse, objectStore } = require("./target");
 
 async function main() {
-  const { options, positional } = parse(process.argv.slice(2));
+  const { options, positional } = parse(process.argv.slice(2), { flags: ["verify"], values: ["scratch", "cache-mb"] });
   if (positional.length !== 1) throw new Error("Usage: node scripts/git/import-repo.js <git-dir> (--dir <folder> | --bucket <name> [--prefix <p>]) [--scratch <dir>] [--cache-mb <n>] [--verify]");
 
   const gitDir = path.resolve(positional[0]);
   if (!fs.existsSync(gitDir)) throw new Error("No such directory: " + gitDir);
 
   const target = objectStore(options);
-  const objects = target.store || target;
+  const objects = target.store;
   const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), "git-import-cache-"));
   const cache = store.createCache({ dir: cacheDir, maxBytes: Number(options["cache-mb"] || 1024) * 1024 * 1024 });
   const lock = (fn) => fn();

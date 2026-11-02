@@ -9,6 +9,11 @@
 //     "seq": 7,                      changes by one with every swap
 //     "writer": "<32 hex>",          a random nonce, new for every manifest
 //                                    advance() makes (empty: none, at seq 0)
+//     "epoch": "<16 hex>",           set by a rewrite (rewrite.js), carried
+//                                    unchanged by every other writer. Optional:
+//                                    absent reads as "". Objects are only ever
+//                                    lost to a repository by a rewrite, so the
+//                                    cache of objects by ID is keyed by it.
 //     "head": "refs/heads/master",   the branch HEAD points at, or null
 //     "refs": { "refs/heads/master": "<oid>", ... },
 //     "packs": [                     the live packs, oldest first
@@ -145,6 +150,8 @@ function validate(m) {
   checkCount(m.seq, "seq");
   if (typeof m.writer !== "string") fail("writer must be a string");
   if (m.seq > 0 ? !WRITER.test(m.writer) : m.writer !== "") fail("writer must be a nonce (and empty only at seq 0)");
+
+  if (m.epoch !== undefined && (typeof m.epoch !== "string" || !WRITER.test(m.epoch))) fail("epoch must be a nonce when it is there");
 
   if (m.head !== null && !(typeof m.head === "string" && m.head.startsWith("refs/"))) fail("head must be a ref name or null");
   checkRefs(m.refs, "refs");
@@ -472,6 +479,74 @@ function compacted(base, { remove = [], add = null, history, removePieces = [], 
   };
 }
 
+// The epoch of manifest `m`: "" for one no rewrite has touched
+function epochOf(m) {
+  return (m && m.epoch) || "";
+}
+
+// A new epoch for a rewrite
+function newEpoch() {
+  return crypto.randomBytes(8).toString("hex");
+}
+
+// The manifest which follows `base` after a rewrite (rewrite.js): the same
+// refs, head and peeled targets, and the objects they reach in one pack
+// (`pack`, or null when there are no refs) with the new seq, the commits among
+// them in one history pack (`history`, or null when no ref reaches a commit)
+// and no history pieces. `peeled`, when given, replaces base's (the rewrite
+// works it out from the objects); either way only the tags the snapshot names
+// are kept.
+//
+// The snapshots are only the refs as they are now. An older one names commits
+// the rewrite may have dropped, and fetch must never take a client's place
+// from a snapshot whose objects are gone, so a client that does not have the
+// current tips is sent everything, as after any history rewrite.
+//
+// `epoch` is new (newEpoch()): every cache of objects by ID is keyed by it, so
+// nothing cached before the rewrite stands in for the packs after it.
+function rewritten(base, { epoch, pack = null, history = null, peeled }) {
+  if (typeof epoch !== "string" || !WRITER.test(epoch)) throw new Error("A rewrite needs a new epoch");
+  if (epoch === epochOf(base)) throw new Error("A rewrite needs an epoch other than the one it replaces");
+  const seq = base.seq + 1;
+  const entry = (p) => ({ name: p.name, size: p.size, idxSize: p.idxSize, objects: p.objects });
+  const snapshots = [{ seq, refs: { ...base.refs } }];
+  const tags = peeled !== undefined ? peeled : base.peeled;
+  return {
+    version: VERSION,
+    seq,
+    writer: crypto.randomBytes(16).toString("hex"),
+    epoch,
+    head: base.head,
+    refs: { ...base.refs },
+    packs: pack ? [{ ...entry(pack), seq }] : [],
+    snapshots,
+    ...(tags !== undefined ? { peeled: keepPeeled(tags, snapshots) } : {}),
+    history: history ? { ...entry(history), through: seq } : null,
+    historyPieces: [],
+  };
+}
+
+// What a rewrite's purge writes over each manifest older than its own: a
+// valid, empty manifest with the same seq, which names no pack. The key is
+// overwritten, never deleted, so it never stops existing: a writer holding an
+// old manifest as its base still finds the next seq taken, and its swap is
+// stale (see "Rewriting a repository" in the README). Its writer nonce starts
+// "purged-", for whoever reads one by hand.
+function tombstone(seq, epoch) {
+  return {
+    version: VERSION,
+    seq,
+    writer: "purged-" + crypto.randomBytes(8).toString("hex"),
+    ...(epoch ? { epoch } : {}),
+    head: null,
+    refs: {},
+    packs: [],
+    snapshots: [],
+    history: null,
+    historyPieces: [],
+  };
+}
+
 // How many snapshots a manifest keeps, and how many bytes of them, once
 // compaction trims it (see trimSnapshots). A snapshot is about 100 bytes for a
 // blog with a ref or two, so 1000 of them is about 100 KB; the byte cap is for
@@ -694,6 +769,10 @@ module.exports = {
   read,
   advance,
   compacted,
+  rewritten,
+  tombstone,
+  epochOf,
+  newEpoch,
   trimSnapshots,
   isFresh,
   snapshotBytes,

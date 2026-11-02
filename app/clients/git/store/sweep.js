@@ -212,10 +212,17 @@ async function sweep({ store, now = Date.now(), grace = DEFAULTS.grace, keepMani
     // Anything else is not the sweep's to touch
   }
 
-  const doomed = [...manifests]
-    .filter(([seq, item]) => seq <= listedNewest - keepManifests && Number.isFinite(item.lastModified) && item.lastModified < now - recoveryWindow)
-    .map(([seq]) => seq)
-    .sort((a, b) => a - b);
+  // Only ever the oldest: the run from the lowest seq up to the first manifest
+  // that is kept. Manifests are written in order, so that is every one old
+  // enough, except after a rewrite's purge, which writes over the manifests
+  // below its own after creating it (see rewrite.js). Deleting in order is
+  // what keeps a stale writer's create out of a hole (manifest.swap).
+  const doomed = [];
+  for (const seq of [...manifests.keys()].sort((a, b) => a - b)) {
+    const item = manifests.get(seq);
+    if (!(seq <= listedNewest - keepManifests && Number.isFinite(item.lastModified) && item.lastModified < now - recoveryWindow)) break;
+    doomed.push(seq);
+  }
   const doomedSet = new Set(doomed);
   const kept = [...manifests.keys()].filter((seq) => !doomedSet.has(seq)).sort((a, b) => b - a);
 
