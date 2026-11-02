@@ -259,10 +259,14 @@ async function rereadFile(blogID, path, range) {
     stat = await local.stat(blogID, path);
     if (stat.isDirectory) throw new NotFoundError();
   } catch (err) {
+    // Missing on disk: whether S3 has the file is all that matters, so ask
+    // its index rather than download what may be a big file
     return {
       local: outcomeOf(err),
-      s3: await attempt(function () {
-        return hashStream(s3().createReadStream(blogID, path, range));
+      s3: await attempt(async function () {
+        var found = await s3().stat(blogID, path);
+        if (found.isDirectory) throw new NotFoundError();
+        return { size: found.size };
       }),
     };
   }
@@ -554,17 +558,18 @@ async function run(op, args, first) {
     if (!verdict.s3Error) observe(op, "s3", pass.s3.ms);
   }
 
-  if (verdict.s3Error) {
-    var code = String(verdict.s3Error.code || verdict.s3Error.name || "error").replace(/[^\w-]/g, "");
+  function s3Error(err) {
+    var code = String(err.code || err.name || "error").replace(/[^\w-]/g, "");
 
     bump(op + ":s3error");
     bump(op + ":s3error:" + code);
     log(
       [blogID, op, "error", code, path].join("\0"),
-      "s3 error blog=" + blogID + " op=" + op + " path=" + JSON.stringify(path) + " error=" + code + " " + verdict.s3Error.message
+      "s3 error blog=" + blogID + " op=" + op + " path=" + JSON.stringify(path) + " error=" + code + " " + err.message
     );
-    return;
   }
+
+  if (verdict.s3Error) return s3Error(verdict.s3Error);
 
   if (!verdict.kind) return bump(op + ":matched");
 
@@ -575,13 +580,18 @@ async function run(op, args, first) {
 
   var again = compare(op, (await RUN[op](args, null)) || pass);
 
-  if (!again.skip && !again.s3Error && !again.kind) {
+  // A recheck which could not read one side confirms nothing, so the
+  // discrepancy is not counted as drift
+  if (again.skip) return bump(op + ":skipped");
+  if (again.s3Error) return s3Error(again.s3Error);
+
+  if (!again.kind) {
     bump(op + ":transient");
     bump(op + ":transient:" + kind);
     return;
   }
 
-  if (again.kind) kind = again.kind;
+  kind = again.kind;
 
   bump(op + ":mismatched");
   bump(op + ":mismatch:" + kind);

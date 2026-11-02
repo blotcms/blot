@@ -32,18 +32,35 @@ describe("storage/folder shadow reads", function () {
   });
 
   // Every read below goes through the facade, as the app's would
+  // Each shadow is drained before the next read, so none is dropped at the
+  // in-flight cap however slow the runner
   async function readEverything(blogID) {
-    await folder.read(blogID, "/a.txt");
-    await folder.stat(blogID, "/a.txt", { sha1: true });
-    await folder.stat(blogID, "/posts");
-    await folder.exists(blogID, "/a.txt");
-    await folder.list(blogID, "/");
-    await folder.listAll(blogID, "/posts");
-    await folder.listNames(blogID, "/");
-    await folder.resolveCaseInsensitive(blogID, "/POSTS/B.md");
-    await folder.ensureLocal(blogID, "/posts/b.md");
-    await consume(folder.createReadStream(blogID, "/a.txt", { start: 1, end: 3 }));
-    await shadow.idle();
+    var reads = [
+      () => folder.read(blogID, "/a.txt"),
+      () => folder.stat(blogID, "/a.txt", { sha1: true }),
+      () => folder.stat(blogID, "/posts"),
+      () => folder.exists(blogID, "/a.txt"),
+      () => folder.list(blogID, "/"),
+      () => folder.listAll(blogID, "/posts"),
+      () => folder.listNames(blogID, "/"),
+      () => folder.resolveCaseInsensitive(blogID, "/POSTS/B.md"),
+      () => folder.ensureLocal(blogID, "/posts/b.md"),
+      () => consume(folder.createReadStream(blogID, "/a.txt", { start: 1, end: 3 })),
+    ];
+
+    for (var read of reads) {
+      await read();
+      await shadow.idle();
+    }
+  }
+
+  // Resolves once a stream has closed, whether or not it failed
+  function drain(stream) {
+    return new Promise(function (resolve) {
+      stream.on("error", function () {});
+      stream.on("close", resolve);
+      stream.resume();
+    });
   }
 
   function consume(stream) {
@@ -212,6 +229,44 @@ describe("storage/folder shadow reads", function () {
     expect(count("read:transient")).toEqual(1);
     expect(count("read:transient:bytes")).toEqual(1);
     expect(count("read:mismatched")).toEqual(0);
+  });
+
+  it("asks S3's index, not its bytes, about a file missing on disk", async function () {
+    config.folder_shadow.max_compare_bytes = 3;
+
+    // Straight to S3, past the disk
+    await backend.write(this.blog.id, "/only-in-s3.txt", "hello there");
+    spyOn(console, "error");
+
+    var streams = spyOn(backend, "createReadStream").and.callThrough();
+
+    await drain(folder.createReadStream(this.blog.id, "/only-in-s3.txt"));
+    await shadow.idle();
+
+    expect(streams).not.toHaveBeenCalled();
+    expect(count("createReadStream:mismatch:extra-in-s3")).toEqual(1);
+    expect(count("createReadStream:large")).toEqual(0);
+  });
+
+  it("counts a recheck which S3 fails as an S3 error, not a mismatch", async function () {
+    await setUp(this.blog.id);
+    spyOn(console, "error");
+
+    var calls = 0;
+
+    spyOn(backend, "read").and.callFake(function () {
+      calls++;
+      if (calls === 1) return Promise.resolve(Buffer.from("stale"));
+      return Promise.reject(new Error("S3 is down"));
+    });
+
+    await folder.read(this.blog.id, "/a.txt");
+    await shadow.idle();
+
+    expect(calls).toEqual(2);
+    expect(count("read:s3error")).toEqual(1);
+    expect(count("read:mismatched")).toEqual(0);
+    expect(count("read:transient")).toEqual(0);
   });
 
   it("counts S3 errors and never passes them to the caller", async function () {
