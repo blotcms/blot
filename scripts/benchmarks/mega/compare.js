@@ -203,7 +203,10 @@ function main() {
   }
 
   const out = arg("--markdown");
-  if (out) fs.writeFileSync(out, body + "\n");
+  if (out) {
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.writeFileSync(out, body + "\n");
+  }
   console.log(body);
 
   if (pr) {

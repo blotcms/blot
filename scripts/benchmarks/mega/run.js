@@ -75,6 +75,8 @@ async function main() {
 
   gc();
   const baseHeap = process.memoryUsage().heapUsed;
+  // Seeding's own allocations aren't part of the render workload
+  heapPeak = baseHeap;
   const metrics = {};
   const timings = {};
 
