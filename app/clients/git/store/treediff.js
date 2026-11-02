@@ -28,6 +28,7 @@
 // safe if the sink waits for earlier writes before each removal (materialize
 // does).
 const { CorruptError, NotFoundError } = require("./errors");
+const { parseTree } = require("./objects");
 
 // What git calls the tree with nothing in it. It need not be stored.
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
@@ -41,36 +42,18 @@ function normalize(oid) {
 }
 
 // The entries of a tree as Map(raw name -> { name, valid, mode, oid }). The
-// names are kept as bytes (latin1 text) for matching, because parseTree
-// decodes them as UTF-8 and so cannot tell two different invalid names apart.
+// names are matched as bytes (latin1 text), because two different names which
+// are not UTF-8 decode to the same text.
 function entriesOf(data) {
   const entries = new Map();
-  const decoder = new TextDecoder("utf-8", { fatal: true });
-  let at = 0;
 
-  while (at < data.length) {
-    const space = data.indexOf(32, at);
-    const nul = space === -1 ? -1 : data.indexOf(0, space);
-    if (nul === -1 || nul + 21 > data.length) throw new CorruptError("Invalid tree: an entry is cut short");
-
-    const mode = data.toString("latin1", at, space).replace(/^0+/, "");
-    if (!/^[0-7]{5,6}$/.test(mode)) throw new CorruptError("Invalid tree: an entry has the mode " + JSON.stringify(mode));
-
-    const raw = data.subarray(space + 1, nul);
-    let name = null;
-    try {
-      name = decoder.decode(raw);
-    } catch (err) {
-      name = raw.toString("utf8");
-    }
-
-    entries.set(raw.toString("latin1"), {
-      name,
-      valid: Buffer.from(name, "utf8").equals(raw),
-      mode,
-      oid: data.toString("hex", nul + 1, nul + 21),
+  for (const entry of parseTree(data)) {
+    entries.set(entry.nameBytes.toString("latin1"), {
+      name: entry.name,
+      valid: entry.validName,
+      mode: entry.mode.replace(/^0+/, ""),
+      oid: entry.oid,
     });
-    at = nul + 21;
   }
 
   return entries;
