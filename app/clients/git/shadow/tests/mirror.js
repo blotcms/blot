@@ -218,7 +218,11 @@ describe("git store shadow mode: mirroring", function () {
         });
       });
 
-      await this.local.writeAndPush("/b.txt", "B");
+      // Blot's sync after it waits for the background lane too, so the push
+      // does not wait for it
+      await this.local.commitFiles({ "/b.txt": "B" });
+      var pushed = await this.local.tryPush();
+      expect(pushed.code).toBe(0);
 
       // Well past the mirror's start: it is waiting for the place
       await new Promise(function (resolve) {
@@ -231,6 +235,7 @@ describe("git store shadow mode: mirroring", function () {
 
       release();
       await holding;
+      await this.local.waitForSync();
       await shadow.idle(this.blog.id);
 
       var own = spy.commands(shadowOwn);

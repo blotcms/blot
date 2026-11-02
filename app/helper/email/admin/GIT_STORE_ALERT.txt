@@ -1,9 +1,9 @@
-Git store: {{summary}}
+Git store: {{{summary}}}
 
 Today's check of the git store (shadow mode, #2259) against the repositories on disk found these, each still there when checked again a minute later. The repositories on disk are the source of truth, so no blog has lost anything: this is about the store's copy. {{checked}} blogs checked, {{deepChecked}} cloned in full.
 
 {{#findings}}
-- `{{blog}}` **{{kind}}** ({{check}}): {{detail}}
+- `{{{blog}}}` **{{kind}}** ({{check}}): {{detail}}
 {{/findings}}
 
 **What to do**
