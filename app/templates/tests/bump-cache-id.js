@@ -15,9 +15,20 @@ describe("templates bumpCacheIDForTemplateUsers", function () {
     await client.hSet(key.info(onIt.id), { template: "SITE:blog", cacheID: "1" });
     await client.hSet(key.info(other.id), { template: "SITE:magazine", cacheID: "1" });
 
-    await bump("SITE:blog");
+    await bump("SITE:blog", {});
 
     expect((await get(onIt.id)).cacheID).toBeGreaterThan(1);
     expect((await get(other.id)).cacheID).toBe(1);
+  });
+
+  it("bumps every blog with everyBlog, as development does", async function () {
+    const [onIt, other] = this.blogs;
+    await client.hSet(key.info(onIt.id), { template: "SITE:blog", cacheID: "1" });
+    await client.hSet(key.info(other.id), { template: "SITE:magazine", cacheID: "1" });
+
+    await bump("SITE:blog", { everyBlog: true });
+
+    expect((await get(onIt.id)).cacheID).toBeGreaterThan(1);
+    expect((await get(other.id)).cacheID).toBeGreaterThan(1);
   });
 });

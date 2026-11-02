@@ -384,7 +384,9 @@ function build(directory, callback) {
                 // this template must still be flushed to make the rebuilt
                 // template visible - a broken view elsewhere shouldn't leave
                 // views stuck stale.
-                bumpCacheIDForTemplateUsers(id, function (err) {
+                bumpCacheIDForTemplateUsers(id, {
+                  everyBlog: config.environment === "development",
+                }, function (err) {
                   if (err) return callback(err);
                   if (buildViewsErr) return callback(buildViewsErr);
                   if (config.environment !== "development") return callback();
@@ -724,7 +726,7 @@ function templateDirectories(directory) {
 // development the watcher rebuilds inside a running process, so every blog is
 // bumped there: a preview of this template on another blog caches its views
 // by that blog's cacheID too.
-function bumpCacheIDForTemplateUsers(templateID, callback) {
+function bumpCacheIDForTemplateUsers(templateID, options, callback) {
   Blog.getAllIDs(function (err, ids) {
     if (err) return callback(err);
     async.eachSeries(
@@ -733,10 +735,7 @@ function bumpCacheIDForTemplateUsers(templateID, callback) {
         client
           .hGet(blogKey.info(blogID), "template")
           .then(function (blogTemplateID) {
-            if (
-              blogTemplateID !== templateID &&
-              config.environment !== "development"
-            )
+            if (blogTemplateID !== templateID && !options.everyBlog)
               return next();
 
             Blog.set(blogID, { cacheID: Date.now() }, function (err) {
