@@ -233,8 +233,8 @@ function networkArgs({ config, binds, timeSeconds, nofile, env, command }) {
 
 // Under host-wide memory pressure the kernel kills the process with the highest
 // score. A job fails closed and is cheap to lose, so it goes before the units'
-// Node (0), level with Redis's BGSAVE child (1000, config/redis/redis.conf),
-// which is larger and so still goes first. Raising it needs no privilege, the
+// Node (node-b 900, app/index.js; node-a 0), level with Redis's BGSAVE child
+// (1000, config/redis/redis.conf), which is larger and so still goes first. Raising it needs no privilege, the
 // jail inherits it, and the job's uid can't lower it again. The proxy jail
 // keeps the unit's: it is small and serves every fetch.
 const OOM_SCORE_ADJ = 1000;
