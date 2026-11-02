@@ -33,8 +33,6 @@ function harness(files) {
         getByPath: async () => null,
         set: async () => {},
         remove: async () => {},
-        getMigrationCursor: async () => "",
-        setMigrationCursor: async () => {},
         getVerifiedContents: async (ids) => ids.map(() => undefined),
         setVerifiedContent: async () => {},
         getApplied: async () => null,
@@ -68,7 +66,6 @@ function harness(files) {
     "./util/localReaddir": async () => local,
     "./util/transformDriveItems": require("../sync/util/transformDriveItems"),
     "./util/truncateToSecond": require("../sync/util/truncateToSecond"),
-    "./util/migrationBudget": require("../sync/util/migrationBudget"),
     "./util/comparePaths": require("../sync/util/comparePaths"),
   };
 

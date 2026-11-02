@@ -28,12 +28,6 @@
 // visible breakage is shortest. Each resync takes the blog's normal sync lock;
 // one that cannot get it is left unfinished for the next run.
 //
-// Drive only verifies the content of a few old equal-size files per walk (see
-// clients/google-drive/sync/util/migrationBudget.js), so one edited to exactly
-// the same size since the snapshot stays stale here until its next edit. Drive
-// still holds the current copy, and verifying them all would mean downloading
-// every such file in the middle of a recovery.
-//
 // It prints blog IDs and counts, no handles or emails.
 
 const fs = require("fs");
