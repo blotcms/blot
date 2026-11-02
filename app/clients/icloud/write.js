@@ -1,5 +1,4 @@
-const localPath = require("helper/localPath");
-const fs = require("fs-extra");
+const folder = require("storage/folder");
 const remoteUpload = require("./sync/util/remoteUpload");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 
@@ -9,8 +8,7 @@ module.exports = async (blogID, path, contents, callback) => {
   }
 
   try {
-    const pathOnBlot = localPath(blogID, path);
-    await fs.outputFile(pathOnBlot, contents);
+    await folder.write(blogID, path, contents);
   } catch (error) {
     console.error(`Blog: ${blogID} Error writing to ${path}:`, error);
     return callback(error);

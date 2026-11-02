@@ -1,6 +1,5 @@
-const localPath = require("helper/localPath");
 const establishSyncLock = require("sync/establishSyncLock");
-const fs = require("fs-extra");
+const storage = require("storage/folder");
 const { handleSyncLockError } = require("../lock");
 const { handleRedisUnavailable } = require("../unavailable");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
@@ -27,11 +26,10 @@ module.exports = async function (req, res) {
 
     console.log(`Creating directory for blogID: ${blogID}, path: ${dirPath}`);
 
-    const pathOnDisk = localPath(blogID, dirPath);
-    const directoryExists = await fs.pathExists(pathOnDisk);
+    const directoryExists = await storage.exists(blogID, dirPath);
 
     if (directoryExists) {
-      console.log(`Directory already exists at: ${pathOnDisk}`);
+      console.log(`Directory already exists at: ${dirPath}`);
       return res
         .status(200)
         .set("directory-created", "false")
@@ -42,13 +40,13 @@ module.exports = async function (req, res) {
     const { done, folder } = await establishSyncLock(blogID);
 
     try {
-      const directoryExistsInLock = await fs.pathExists(pathOnDisk);
+      const directoryExistsInLock = await storage.exists(blogID, dirPath);
 
-      console.log(`Creating directory at: ${pathOnDisk}`);
+      console.log(`Creating directory at: ${dirPath}`);
 
       if (!directoryExistsInLock) {
         // Ensure the directory exists
-        await fs.ensureDir(pathOnDisk); // Creates the directory if it does not exist
+        await storage.mkdir(blogID, dirPath); // Creates the directory if it does not exist
 
         // Call the folder's update method to register the directory creation.
         // If Redis cannot take it, remove the directory again: the macserver
@@ -56,7 +54,7 @@ module.exports = async function (req, res) {
         try {
           await folder.update(dirPath);
         } catch (err) {
-          if (isRedisUnavailableError(err)) await fs.rmdir(pathOnDisk).catch(() => {});
+          if (isRedisUnavailableError(err)) await storage.rmdir(blogID, dirPath).catch(() => {});
           throw err;
         }
 
@@ -64,7 +62,7 @@ module.exports = async function (req, res) {
         folder.status("Created " + dirPath);
       }
 
-      console.log(`Directory successfully created: ${pathOnDisk}`);
+      console.log(`Directory successfully created: ${dirPath}`);
       res
         .status(200)
         .set("directory-created", String(!directoryExistsInLock))

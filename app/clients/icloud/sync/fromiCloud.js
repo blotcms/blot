@@ -1,6 +1,8 @@
-const fs = require("fs-extra");
 const { join } = require("path");
+// Only for the shared helpers below (countLocalFiles, localDescendants), which
+// still walk a real directory
 const localPath = require("helper/localPath");
+const folder = require("storage/folder");
 const clfdate = require("helper/clfdate");
 const download = require("./util/download");
 const CheckWeCanContinue = require("./util/checkWeCanContinue");
@@ -95,12 +97,12 @@ module.exports = async (blogID, publish, update) => {
     const dirChangedDuringWalk = modifiedSince(dirModifiedTime, startedAt);
     const [remoteContents, localContents] = await Promise.all([
       remoteReaddir(blogID, dir),
-      localReaddir(localPath(blogID, dir)),
+      localReaddir(blogID, dir),
     ]);
 
     for (const { name, isDirectory: isLocalDirectory } of localContents) {
       const path = join(dir, name);
-      // A directory removed in one fs.remove call still accounts for every
+      // A directory removed in one remove call still accounts for every
       // file total counted inside it, so current must advance by that many.
       const removedCount = isLocalDirectory
         ? await countLocalFiles(localPath(blogID, path))
@@ -114,7 +116,7 @@ module.exports = async (blogID, publish, update) => {
           false,
           removedCount
         );
-        await fs.remove(localPath(blogID, path));
+        await folder.remove(blogID, path);
         // Not excused by dirChangedDuringWalk: this is Blot cleaning up a
         // file it should never have had, not a live edit in iCloud.
         summary.removed += 1;
@@ -132,7 +134,7 @@ module.exports = async (blogID, publish, update) => {
         const descendants = isLocalDirectory
           ? await localDescendants(localPath(blogID, path), path)
           : [];
-        await fs.remove(localPath(blogID, path));
+        await folder.remove(blogID, path);
         summary.removed += 1;
         if (dirChangedDuringWalk) summary.changedDuringWalk += 1;
         await update(path);
@@ -164,11 +166,11 @@ module.exports = async (blogID, publish, update) => {
         if (existsLocally && !existsLocally.isDirectory) {
           await checkWeCanContinue();
           progress.publish("Removing", path);
-          await fs.remove(localPath(blogID, path));
+          await folder.remove(blogID, path);
           summary.removed += 1;
           if (dirChangedDuringWalk) summary.changedDuringWalk += 1;
           publish("Creating directory", path);
-          await fs.ensureDir(localPath(blogID, path));
+          await folder.mkdir(blogID, path);
           summary.createdDirs += 1;
           if (dirChangedDuringWalk || createdLive) {
             summary.changedDuringWalk += 1;
@@ -178,7 +180,7 @@ module.exports = async (blogID, publish, update) => {
         } else if (!existsLocally) {
           await checkWeCanContinue();
           publish("Creating directory", path);
-          await fs.ensureDir(localPath(blogID, path));
+          await folder.mkdir(blogID, path);
           summary.createdDirs += 1;
           if (dirChangedDuringWalk || createdLive) {
             summary.changedDuringWalk += 1;
@@ -228,9 +230,9 @@ module.exports = async (blogID, publish, update) => {
                     localPath(blogID, path),
                     path
                   );
-                  await fs.remove(localPath(blogID, path));
+                  await folder.remove(blogID, path);
                 }
-                await fs.outputFile(localPath(blogID, path), "");
+                await folder.write(blogID, path, "");
                 summary.placeholdersCreated += 1;
                 publish("Created placeholder for oversized file", path);
                 // Register it, as the /upload placeholder route does, so the
