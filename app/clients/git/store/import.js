@@ -227,7 +227,7 @@ function has(ids, oid) {
 // ids }, after checking that its header counts what its index lists, that the
 // two belong together, and that it is self-contained (every delta base is in
 // it)
-async function describe(base, hash, label) {
+async function describePack(base, hash, label) {
   const packFile = base + "-" + hash + ".pack";
   const idx = await fsp.readFile(base + "-" + hash + ".idx");
   const handle = await fsp.open(packFile, "r");
@@ -347,7 +347,7 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
 
     // Proofs. Nothing is uploaded until all hold.
     mark = Date.now();
-    const main = await describe(path.join(dir, "all"), hash, "imported");
+    const main = await describePack(path.join(dir, "all"), hash, "imported");
     for (const ref of Object.keys(refs)) {
       if (!has(main.ids, refs[ref])) throw new CorruptError("The imported pack lacks " + refs[ref] + ", the tip of " + ref);
     }
@@ -357,7 +357,7 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
 
     let commits = null;
     if (history) {
-      commits = await describe(path.join(dir, "history"), history.hash, "history");
+      commits = await describePack(path.join(dir, "history"), history.hash, "history");
       if (commits.objects !== history.commits.length) throw new CorruptError("The history pack holds " + commits.objects + " objects for " + history.commits.length + " commits");
       for (const oid of history.commits) {
         if (!has(commits.ids, oid)) throw new CorruptError("The history pack lacks the commit " + oid);
