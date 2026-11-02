@@ -13,5 +13,4 @@ export PROXY_GLOBAL_STATIC_DIR=$E2E_ROOT/global-static
 export PROXY_UNIT_SETTINGS=$E2E_ROOT/unit-settings.env
 export PROXY_SECRETS_ENV_FILE=$E2E_ROOT/secrets.env
 export PROXY_HEALTH_TIMEOUT=40
-export PROXY_AIRLOCK_IMAGE=blot-airlock-stub:e2e
 export E2E_UPSTREAMS_FROM_ENV=1

@@ -16,12 +16,10 @@
 #                                               (see proxy.env.example); it comes
 #                                               after secrets.env
 #   PROXY_UNIT_SETTINGS    unit-settings.env next to this file  the unit's memory,
-#                                               paths and airlock ports, written
+#                                               paths and sandbox ports, written
 #                                               from scripts/deploy/constants.js
 #                                               by scripts/deploy/unit-settings.js
 #                                               (units.sh copies it across)
-#   PROXY_AIRLOCK_IMAGE    (blot-airlock:<sha>) the airlock image, if not
-#                                               the one published for the commit
 #   PROXY_DISK_CACHE_DIR   /var/instance-ssd/disk-cache  the disk cache every
 #                                               proxy container on the host shares
 #   PROXY_LOG_DIR          /var/instance-ssd/logs   fail2ban and logrotate
@@ -73,7 +71,6 @@ SANDBOX_CGROUP_DIR="${PROXY_SANDBOX_CGROUP_DIR:-/sys/fs/cgroup/blot-sandbox}"
 AUTOSSL_VOLUME="${PROXY_AUTOSSL_VOLUME:-blot-proxy-auto-ssl}"
 HEALTH_TIMEOUT="${PROXY_HEALTH_TIMEOUT:-60}"
 DRAIN_TIMEOUT="${PROXY_DRAIN_TIMEOUT:-30}"
-AIRLOCK_HEALTH_TIMEOUT="${PROXY_AIRLOCK_HEALTH_TIMEOUT:-60}"
 HEALTH_SOCK="/run/openresty/health.sock"
 LOCK_FILE="${PROXY_DEPLOY_LOCK:-/tmp/blot-proxy-deploy.lock}"
 PAUSE_FILE="${PROXY_DEPLOY_PAUSE_FILE:-/etc/blot/deploy-paused}"
@@ -221,7 +218,7 @@ load_unit_settings() {
   if [ "$(env_value "$ENV_FILE" BLOT_SANDBOX)" = 1 ]; then
     for d in $UNITS; do
       require_sandbox_cgroup "$d"
-      [ "$(env_value "$ENV_FILE" BLOT_SANDBOX_BROWSER)" != 1 ] || require_sandbox_cgroup "$d-browser"
+      require_sandbox_cgroup "$d-browser"
     done
   fi
   # the longer of the two defaults: Node has to start as well
@@ -246,7 +243,7 @@ image_is_unit() { # image_is_unit <image>
 }
 
 # The commit a unit image was built from, which is its tag: the app's
-# BLOT_RELEASE_ID, and the tag of the airlock image built beside it.
+# BLOT_RELEASE_ID.
 release_id() { # release_id <image>
   case "$1" in *@*) echo unknown ;; *:*) echo "${1##*:}" ;; *) echo unknown ;; esac
 }
@@ -316,34 +313,28 @@ sync_static() { # sync_static <image>
 # OpenResty shares :80/:443 with the other unit (reuseport), and for the Node side:
 #   - no published port: node-a serves on its socket alone (config/index.js),
 #     so two units never both want 8080
-#   - no blotnet: the airlock is reached on 127.0.0.1 at this unit's own ports
-#     (ensure_airlock)
 #   - the host's Redis, DNS and purge listener (BLOT_REVERSE_PROXY_URLS, on
 #     the host's loopback) are reached directly
 #   - the container shares the host's loopback, so nothing else may bind the
 #     ports above
 #   - with BLOT_SANDBOX=1 in proxy.env, the flags the nsjail sandbox needs
 #     (app/sandbox): the host's cgroup namespace, a seccomp profile that is
-#     Docker's default plus five syscalls, and a cgroup subtree the host
-#     made for this unit (config/host/host/setup.sh). Without it, none of them;
-#     load_unit_settings has already refused if the subtree is missing.
-#   - with BLOT_SANDBOX_BROWSER=1 as well, what the browser jail needs: /dev/net/tun
-#     for pasta, and the unit's browser cgroup
-#   - with BLOT_SANDBOX_PROXY=1 as well, /dev/net/tun, and the app's fetches go to
-#     the proxy jail in this unit, on its own port (proxy/unit/sandbox/proxy.js),
-#     not the airlock's
+#     Docker's default plus a few syscalls, the cgroup subtrees the host made
+#     for this unit (config/host/host/setup.sh), and /dev/net/tun for pasta.
+#     Screenshots run in its browser jail, and the app's fetches of untrusted
+#     URLs go through the proxy jail in this unit, on its own port
+#     (proxy/unit/sandbox/proxy.js). Without it there is neither, and production
+#     refuses those features (helper/airlock, helper/screenshot) rather than
+#     fetching directly; load_unit_settings has already refused if a subtree is
+#     missing.
 # The env files: secrets.env (what Node gets), then proxy.env,
 # then the -e settings below, each overriding the one before; load_unit_settings
 # refuses a key the two files set differently.
 run_args() { # run_args <name>
-  local name="$1" unit upper var browser_port proxy_port
+  local name="$1" unit upper var proxy_port
   unit="$(unit_of "$name")"
   upper="$(printf '%s' "$unit" | tr '[:lower:]' '[:upper:]')"
-  var="AIRLOCK_${upper}_BROWSER_PORT"; browser_port="${!var}"
-  var="AIRLOCK_${upper}_PROXY_PORT"; proxy_port="${!var}"
-  if [ "$(env_value "$ENV_FILE" BLOT_SANDBOX)" = 1 ] && [ "$(env_value "$ENV_FILE" BLOT_SANDBOX_PROXY)" = 1 ]; then
-    var="SANDBOX_${upper}_PROXY_PORT"; proxy_port="${!var}"
-  fi
+  var="SANDBOX_${upper}_PROXY_PORT"; proxy_port="${!var}"
   # Node writes a diagnostic report here if it dies of a fatal error such as V8
   # running out of heap (the data directory outlives the container)
   local node_options="--max-old-space-size=$UNIT_NODE_A_MAX_OLD_SPACE_SIZE --report-on-fatalerror --report-directory=$DATA_DIRECTORY_ON_CONTAINER/$NODE_REPORT_DIRECTORY/$name --report-exclude-env --report-exclude-network"
@@ -370,8 +361,6 @@ run_args() { # run_args <name>
     -e "NODE_OPTIONS=$node_options"
     -e "BLOT_WORKER_MAX_OLD_SPACE_SIZE=$UNIT_NODE_B_MAX_OLD_SPACE_SIZE"
     -e "BLOT_TMP_DIRECTORY=$TMP_DIRECTORY"
-    -e "BLOT_AIRLOCK_BROWSER_URL=http://127.0.0.1:$browser_port"
-    -e "BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:$proxy_port"
     # rslave: a mount made on the host at this path (swapping the data volume,
     # config/host/scripts/mount-data-volume.sh) reaches the running unit
     --mount "type=bind,source=$DATA_DIRECTORY_ON_SERVER,target=$DATA_DIRECTORY_ON_CONTAINER,bind-propagation=rslave"
@@ -394,101 +383,12 @@ run_args() { # run_args <name>
       --security-opt "seccomp=$COMMON_DIR/sandbox-seccomp.json"
       --mount "type=bind,source=$SANDBOX_CGROUP_DIR/$unit,target=/sandbox-cgroup"
       -e BLOT_SANDBOX_SOCKET=/run/blot-sandbox/broker.sock
+      --device /dev/net/tun
+      --mount "type=bind,source=$SANDBOX_CGROUP_DIR/$unit-browser,target=/sandbox-browser-cgroup"
+      # the variable keeps the airlock's name; the proxy is the jail's now
+      -e "BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:$proxy_port"
     )
-    if [ "$(env_value "$ENV_FILE" BLOT_SANDBOX_BROWSER)" = 1 ] || [ "$(env_value "$ENV_FILE" BLOT_SANDBOX_PROXY)" = 1 ]; then
-      RUN_ARGS+=(--device /dev/net/tun)
-    fi
-    if [ "$(env_value "$ENV_FILE" BLOT_SANDBOX_BROWSER)" = 1 ]; then
-      RUN_ARGS+=(--mount "type=bind,source=$SANDBOX_CGROUP_DIR/$unit-browser,target=/sandbox-browser-cgroup")
-    fi
   fi
-}
-
-# ---- the unit's airlock -----------------------------------------------------
-# Each unit has its own airlock, blot-<unit>-airlock (config/airlock). The unit
-# is on the host network and cannot join blotnet or resolve its names, so the
-# airlock keeps blotnet (its DNS and its egress filter live in its own network
-# namespace, which does not care how clients reach it) and publishes its two
-# ports on 127.0.0.1 only, at this unit's own host ports.
-
-airlock_name() { local var="AIRLOCK_$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')_NAME"; echo "${!var}"; }
-
-airlock_healthy() { # airlock_healthy <name>
-  [ "$(docker inspect -f '{{.State.Health.Status}}' "$1" 2>/dev/null)" = healthy ]
-}
-
-# The airlock image to run: the one built for this commit, else (a commit whose
-# airlock build did not publish) the one this unit's airlock already runs. Fails
-# if there is none.
-airlock_image() { # airlock_image <airlock name>
-  local want="${PROXY_AIRLOCK_IMAGE:-$AIRLOCK_REGISTRY:$RELEASE_ID}" img
-  if docker image inspect "$want" >/dev/null 2>&1 || docker pull "$want" >/dev/null 2>&1; then
-    echo "$want"; return 0
-  fi
-  if exists "$1"; then
-    img="$(docker inspect -f '{{.Config.Image}}' "$1" 2>/dev/null)"
-    [ -z "$img" ] || { echo "$img"; return 0; }
-  fi
-  return 1
-}
-
-run_airlock() { # run_airlock <unit> <image>
-  local u="$1" name var browser_port proxy_port upper
-  name="$(airlock_name "$u")"
-  upper="$(printf '%s' "$u" | tr '[:lower:]' '[:upper:]')"
-  var="AIRLOCK_${upper}_BROWSER_PORT"; browser_port="${!var}"
-  var="AIRLOCK_${upper}_PROXY_PORT"; proxy_port="${!var}"
-  docker run -d --restart unless-stopped --name "$name" \
-    --network "$AIRLOCK_NETWORK" \
-    -p "127.0.0.1:$browser_port:9222" -p "127.0.0.1:$proxy_port:8888" \
-    --cap-add=NET_ADMIN --security-opt no-new-privileges \
-    --log-driver json-file --log-opt "max-size=$LOG_MAX_SIZE" --log-opt "max-file=$LOG_MAX_FILE" --log-opt "compress=$LOG_COMPRESS" \
-    --memory="$AIRLOCK_MEMORY" --cpus="$AIRLOCK_CPUS" --cpu-shares="$AIRLOCK_CPU_SHARES" \
-    "$2" >/dev/null
-}
-
-wait_airlock_healthy() { # wait_airlock_healthy <name> <timeout>
-  local deadline=$(( $(date +%s) + $2 ))
-  until airlock_healthy "$1"; do
-    running "$1" || return 1
-    [ "$(date +%s)" -lt "$deadline" ] || return 1
-    nap 1
-  done
-}
-
-# Make sure <unit>'s airlock runs the right image and is healthy, replacing it if
-# not. Called while the unit it serves is stopped (the other unit carries the
-# traffic), so nothing is mid-screenshot. If the new one does not come up the
-# old image is run again, and this fails.
-ensure_airlock() { # ensure_airlock <unit>
-  local u="$1" name image previous
-  name="$(airlock_name "$u")"
-  image="$(airlock_image "$name")" \
-    || die "no airlock image for $RELEASE_ID ($AIRLOCK_REGISTRY:$RELEASE_ID), and no airlock container to take one from"
-  if running "$name" && [ "$(container_image_id "$name")" = "$(image_id "$image")" ] && airlock_healthy "$name"; then
-    log "$name already runs $image and is healthy"
-    return 0
-  fi
-  previous="$(docker inspect -f '{{.Config.Image}}' "$name" 2>/dev/null || true)"
-  docker network inspect "$AIRLOCK_NETWORK" >/dev/null 2>&1 || docker network create "$AIRLOCK_NETWORK" >/dev/null
-  log "Starting $name from $image"
-  docker rm -f "$name" >/dev/null 2>&1 || true
-  if run_airlock "$u" "$image" && wait_airlock_healthy "$name" "$AIRLOCK_HEALTH_TIMEOUT"; then
-    log "$name is healthy."
-    return 0
-  fi
-  log "$name did not become healthy"
-  docker logs --tail 30 "$name" >&2 || true
-  docker rm -f "$name" >/dev/null 2>&1 || true
-  if [ -n "$previous" ] && [ "$previous" != "$image" ]; then
-    log "Starting $name from the image it ran before, $previous"
-    if run_airlock "$u" "$previous" && wait_airlock_healthy "$name" "$AIRLOCK_HEALTH_TIMEOUT"; then
-      log "WARNING: $name is back on $previous"
-    else
-      log "WARNING: $name is down"
-    fi
-  fi
-  return 1
 }
 
 # Render the image's config with this host's settings and have nginx parse it.
@@ -542,7 +442,7 @@ wait_healthy() { # wait_healthy <name> <timeout> [check function, default health
 
 # The deploy-time checks of the app itself, run inside the unit
 # (scripts/deploy/verify-container): Redis, the data volume, the storage bucket,
-# the airlock, a canary blog and the dashboard log-in page rendered by this
+# the sandbox, a canary blog and the dashboard log-in page rendered by this
 # container's own node-a. Blue runs them before green is touched. As the app
 # user, uid 1000 (the image ends USER root, for OpenResty's master): run as
 # root the writable checks would pass on root-owned directories.

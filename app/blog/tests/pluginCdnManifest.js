@@ -5,10 +5,10 @@ describe("plugin CDN manifest updates", function () {
 
   it("updates CDN manifest hash for script.js when analytics plugin changes", async function () {
     
-    // Create a template with script.js that uses appJS (which includes analytics)
+    // Create a template with script.js that uses app_js (which includes analytics)
     // and make script.js a CDN target by referencing it in another view
     await this.template({
-      "script.js": "{{{appJS}}}",
+      "script.js": "{{{app_js}}}",
       "entries.html": "{{#cdn}}/script.js{{/cdn}}",
     });
 
@@ -65,7 +65,7 @@ describe("plugin CDN manifest updates", function () {
     await this.blog.update({ plugins: pluginsWithAnalytics });
 
     await this.template({
-      "script.js": "{{{appJS}}}",
+      "script.js": "{{{app_js}}}",
       "entries.html": "{{#cdn}}/script.js{{/cdn}}",
     });
 
@@ -100,7 +100,7 @@ describe("plugin CDN manifest updates", function () {
 
   it("updates CDN manifest hash when analytics provider changes", async function () {
     await this.template({
-      "script.js": "{{{appJS}}}",
+      "script.js": "{{{app_js}}}",
       "entries.html": "{{#cdn}}/script.js{{/cdn}}",
     });
 

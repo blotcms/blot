@@ -13,7 +13,7 @@ const bluesky = require("./bluesky");
 const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
 const { GLOBAL_STATIC_SUBDIRECTORIES } = require("blog/lib/staticPaths");
 
-// A plugin's public.css is appended to a blog's stylesheet by {{{appCSS}}},
+// A plugin's public.css is appended to a blog's stylesheet by {{{app_css}}},
 // after the template has been wrapped for the CDN, so its links to Blot's own
 // static files (the KaTeX fonts) would reach the origin. Point them at the
 // CDN, which serves the same paths, through the token the render middleware

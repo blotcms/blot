@@ -37,7 +37,7 @@ async function heldFolderLocks() {
     // node-redis 4 yields keys one at a time, 5 yields arrays of them
     keys.push(...[].concat(batch));
   }
-  // Not split on ":", lock names can contain one (the airlock's is a URL)
+  // Not split on ":", lock names can contain one
   return keys.map((key) => key.slice("blog:".length, -":folder-lock".length));
 }
 

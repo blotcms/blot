@@ -1,4 +1,4 @@
-Git sweep: {{summary}}
+Git sweep: {{{summary}}}
 
 {{#hasStuck}}
 **Stuck git processes** (running for more than 2 hours; a push or clone ends within the 1 hour request timeout)
@@ -12,7 +12,7 @@ Git sweep: {{summary}}
 **Stale push directories removed** ({{freed}} freed; left behind by pushes cut off by a crash or a deploy)
 
 {{#removed}}
-- `{{repository}}`: {{size}}, {{age}} old
+- `{{{repository}}}`: {{size}}, {{age}} old
 {{/removed}}
 
 {{/hasRemoved}}

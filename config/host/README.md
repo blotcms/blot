@@ -2,8 +2,8 @@
 
 Setup for the production host: one EC2 instance (an m6gd.xlarge on Amazon Linux
 2023, arm64) that runs Redis 6.2 (the `redis6` systemd service) and both units,
-`blot-blue` and `blot-green` (OpenResty and two Node processes each, with an
-airlock container). The units reach Redis over a Unix socket,
+`blot-blue` and `blot-green` (OpenResty and two Node processes each, with the
+nsjail sandbox inside). The units reach Redis over a Unix socket,
 `/run/blot/redis/redis.sock` (`BLOT_REDIS_SOCKET`, and
 `PROXY_REDIS_HOST=unix:/run/blot/redis/redis.sock` for the proxy). The
 production Elastic IP is on this host, and there is no separate Redis host or
@@ -48,10 +48,13 @@ banned IP out of ssh.
 `unit-mem-log.sh` appends to `/var/instance-ssd/logs/unit-mem.log` (instance
 store, so it survives deploys; about 30 days are kept). Each cron run takes four
 samples 15 seconds apart. Per sample there is one line per container
-(`blot-blue`, `blot-green` and their airlocks) with `anon`, `file`, `shmem`,
+(`blot-blue`, `blot-green`, and the sandbox cgroups) with `anon`, `file`, `shmem`,
 `limit` and `oom_kill` from the container's cgroup (v1 or v2), `node_max` (the
-biggest node process) and `top=comm:bytes` (the biggest non-node process, i.e. a
-pandoc/git/exiftool spike), `peak` (the cgroup's high-water mark, v2 only), and
+biggest node process), `node_a`, `node_b` and `node_other` (the two app
+processes and any other node, such as a script run with `docker exec`), `git`
+and `git_n` (the summed RSS and count of the unit's git processes, which share
+its limit) and `top=comm:bytes` (the biggest other process, i.e. a
+pandoc/exiftool spike), `peak` (the cgroup's high-water mark, v2 only), and
 one `name=host` line with `mem_available`. Where the host has a sandbox subtree
 (#2257) there are also `name=blot-sandbox-<unit>` and
 `name=blot-sandbox-<unit>-browser` lines: jobs are short, so read their `peak`
@@ -163,7 +166,7 @@ upgrades a package. It:
   proxy env file (`proxy/deploy/proxy.env.example`). It also makes
   `{blue,green}-browser` for the browser job, one Chromium at a time, capped at
   1G (no swap, the whole job killed at the limit), 512 pids, a `cpu.weight` of
-  25 and 1.5 CPUs. Those wait for `BLOT_SANDBOX_BROWSER=1`;
+  25 and 1.5 CPUs;
 - creates the `deploy` user (`scripts/deploy/setup-deploy-user.sh`);
 - with `BLOT_SSH_PORT`, sets sshd's port in `/etc/ssh/sshd_config.d/11-blot-port.conf`
   (sshd then listens on that port only);
@@ -348,7 +351,7 @@ the short path is only for a switch that has accepted no writes (the new host
 was frozen the whole time, so nothing on it is newer than the old volume):
 
 1. `config/redis/promote.sh <new> <old-redis>`.
-2. On the old host: `docker start` the airlocks and the units, and wait until
+2. On the old host: `docker start` the units, and wait until
    they are healthy. Nothing listens there until then, so moving the address
    first fails every read for that long (about 20 seconds in the rehearsal).
 3. Move the Elastic IP back to the old instance with `aws ec2 associate-address`.
@@ -373,7 +376,7 @@ quickly:
    `freeze` (this needs `settle` not to have retagged yet). The freeze stops
    writes on the new host once the final copy is done; leave it frozen.
 3. Then `config/redis/promote.sh <new> <old-redis>`.
-4. On the old host: `docker start` the airlocks and the units, and wait until
+4. On the old host: `docker start` the units, and wait until
    they are healthy.
 5. Then the Elastic IP back to the old instance.
 6. Lift the app freeze with `read-only.js off` in `blot-blue` on the old host.
@@ -523,8 +526,7 @@ attached read-only to a scratch host.
   is run from cron every minute as `/usr/local/bin/check_docker_health.sh`
   (`deploy.sh` copies it there, but does not install the cron entry; on a new
   host `host/setup.sh` does). It skips
-  `blot-blue`, `blot-green` and `blot-<unit>-previous` (whole names, so the
-  airlocks are still restarted) while a proxy deploy holds its lock, so it
+  `blot-blue`, `blot-green` and `blot-<unit>-previous` (whole names) while a proxy deploy holds its lock, so it
   cannot restart the unit that is draining.
 - Custom-domain certificates need nothing on the host: the proxy container
   renews them and refuses to serve an expired one (see `proxy/README.md`).

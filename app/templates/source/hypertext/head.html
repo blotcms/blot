@@ -22,7 +22,7 @@
     {{/favicon}}
     {{^favicon}}{{#profile_image.thumbnails.square}}<link rel="icon" href="{{{url}}}">{{/profile_image.thumbnails.square}}{{^profile_image.thumbnails.square.url}}{{#avatar}}<link rel="icon" href="{{{avatar}}}">{{/avatar}}{{/profile_image.thumbnails.square.url}}{{/favicon}}
     <link rel="preconnect" href="{{{cdn}}}" />
-    <link rel="stylesheet" href="{{{cssURL}}}">
+    <link rel="stylesheet" href="{{#cdn}}/style.css{{/cdn}}">
 
     {{#entry}}
     {{#absoluteURL}}

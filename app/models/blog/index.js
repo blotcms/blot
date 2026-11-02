@@ -13,6 +13,5 @@ module.exports = {
   serial: require("./serial"),
   set: require("./set"),
   setStatus: require("./setStatus"),
-  url: require("./url"),
   validate: require("./validate"),
 };

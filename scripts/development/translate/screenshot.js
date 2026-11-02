@@ -5,10 +5,8 @@
 // host, but inside the container that is the container itself, and nginx is a
 // different container. Verified: connection refused.
 //
-// For the same reason it cannot use the airlock (BLOT_AIRLOCK_BROWSER_URL, the
-// shared Chromium app/helper/screenshot connects to): the airlock's egress
-// filter rejects private and loopback addresses, and the local site is one, so
-// it could never load the pages this script exists to capture. It launches its
+// Nor could the sandbox's browser jail load it, if development had one: its
+// egress filter rejects private and loopback addresses. It launches its
 // own browser on the host instead: puppeteer's own download by default, or
 // whichever Chrome PUPPETEER_EXECUTABLE_PATH points at. Nothing here needs the
 // Chromium in the Docker image.

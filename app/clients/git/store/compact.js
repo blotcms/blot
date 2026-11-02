@@ -87,7 +87,7 @@ const { pipeline } = require("stream/promises");
 const { spawn } = require("child_process");
 const { StaleManifestError, OutcomeUnknownError, CorruptError, NoRoomError } = require("./errors");
 const { packKey, idxKey, revKey } = require("./layout");
-const { mapLimit } = require("./limit");
+const { mapLimit, createChildren } = require("./limit");
 const manifest = require("./manifest");
 const { scanPack } = require("./packscan");
 const { buildRev } = require("./rev");
@@ -251,9 +251,10 @@ function gitEnvironment(gitDir) {
   return { ...env, GIT_DIR: gitDir, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null", GIT_TERMINAL_PROMPT: "0" };
 }
 
-// Runs git; resolves with its stdout, or rejects with git's stderr
+// Runs git, once the host's gate lets it start (limit.js, createChildren);
+// resolves with its stdout, or rejects with git's stderr
 function runGit(children, args, { gitDir, input = "" }) {
-  return new Promise((resolve, reject) => {
+  return children.start(() => new Promise((resolve, reject) => {
     const child = spawn("git", args, { env: gitEnvironment(gitDir), stdio: ["pipe", "pipe", "pipe"] });
     const stdout = [];
     const stderr = [];
@@ -275,7 +276,7 @@ function runGit(children, args, { gitDir, input = "" }) {
       reject(new Error("git " + args.join(" ") + " failed: " + Buffer.concat(stderr).toString().trim().slice(-1000)));
     });
     child.stdin.end(input);
-  });
+  }));
 }
 
 // ---- Inputs, outputs and proofs --------------------------------------
@@ -391,7 +392,7 @@ const entryOf = ({ name, size, idxSize, objects }) => ({ name, size, idxSize, ob
 
 // ---- Compaction -------------------------------------------------------
 
-async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, clock = Date.now, ...options }) {
+async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, clock = Date.now, gate = null, ...options }) {
   const packConfig = { ...PACK_CONFIG, ...pack };
   if (typeof lock !== "function") throw new Error("compact needs the host's lock function");
 
@@ -500,7 +501,7 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, clo
 
   // The inputs, and an output about as big as them, with room to spare
   const reservation = await cache.reserve(2 * inputBytes(packInputs) + SLACK);
-  const children = new Set();
+  const children = createChildren(gate);
 
   try {
     if (historyInputs.length) {

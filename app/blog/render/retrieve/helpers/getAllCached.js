@@ -10,7 +10,7 @@ const { HEAVY_FIELDS, resolveFields } = projectEntryFields;
 // The retrieve aliases of the locals this catalog fills. all_entries.js and
 // archives.js project with these same lists.
 const ALIASES = {
-  allEntries: ["allEntries", "all_entries"],
+  allEntries: ["all_entries"],
   archives: ["archives"],
 };
 

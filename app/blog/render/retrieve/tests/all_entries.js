@@ -6,7 +6,7 @@ describe("all_entries", function () {
     await this.write({ path: "/b.txt", content: "Title: B\n\nB body" });
 
     await this.template(
-      { "list.html": `{{#allEntries}}{{title}} {{/allEntries}}` },
+      { "list.html": `{{#all_entries}}{{title}} {{/all_entries}}` },
       { views: { "list.html": { url: "/list" } } }
     );
 
@@ -19,8 +19,8 @@ describe("all_entries", function () {
 
     await this.template(
       {
-        "list.html": `{{#allEntries}}{{title}} {{/allEntries}}`,
-        "full.html": `{{#allEntries}}{{{html}}}{{/allEntries}}`,
+        "list.html": `{{#all_entries}}{{title}} {{/all_entries}}`,
+        "full.html": `{{#all_entries}}{{{html}}}{{/all_entries}}`,
       },
       {
         views: {
@@ -31,14 +31,14 @@ describe("all_entries", function () {
     );
 
     const before = await (await this.get("/list?json=1")).json();
-    expect(before.allEntries[0].html).toBeUndefined();
+    expect(before.all_entries[0].html).toBeUndefined();
 
     const rendered = await (await this.get("/full")).text();
     expect(rendered).toContain("A body");
 
     const after = await (await this.get("/list?json=1")).json();
-    expect(after.allEntries[0].title).toEqual("A");
-    expect(after.allEntries[0].html).toBeUndefined();
+    expect(after.all_entries[0].title).toEqual("A");
+    expect(after.all_entries[0].html).toBeUndefined();
   });
 
   it("keeps html for a view that only renders it from a nested partial, after a view that doesn't", async function () {
@@ -46,8 +46,8 @@ describe("all_entries", function () {
 
     await this.template(
       {
-        "list.html": `{{#allEntries}}{{title}} {{/allEntries}}`,
-        "full.html": `{{#allEntries}}{{> row.html}}{{/allEntries}}`,
+        "list.html": `{{#all_entries}}{{title}} {{/all_entries}}`,
+        "full.html": `{{#all_entries}}{{> row.html}}{{/all_entries}}`,
         "row.html": `<div>{{> content.html}}</div>`,
         "content.html": `{{{html}}}`,
       },
@@ -61,46 +61,46 @@ describe("all_entries", function () {
 
     // Fills the catalog cache without html first.
     const before = await (await this.get("/list?json=1")).json();
-    expect(before.allEntries[0].html).toBeUndefined();
+    expect(before.all_entries[0].html).toBeUndefined();
 
     const full = await (await this.get("/full?json=1")).json();
-    expect(full.allEntries[0].html).toContain("A body");
+    expect(full.all_entries[0].html).toContain("A body");
 
     const rendered = await (await this.get("/full")).text();
     expect(rendered).toMatch(/<div>[^]*A body[^]*<\/div>/);
   });
 
-  it("drops unreferenced heavy fields from allEntries locals", async function () {
+  it("drops unreferenced heavy fields from all_entries locals", async function () {
     await this.write({ path: "/a.txt", content: "Title: A\n\nA body" });
 
     await this.template(
-      { "list.html": `{{#allEntries}}{{title}} {{url}}{{/allEntries}}` },
+      { "list.html": `{{#all_entries}}{{title}} {{url}}{{/all_entries}}` },
       { views: { "list.html": { url: "/list" } } }
     );
 
     const res = await this.get("/list?json=1");
     const locals = await res.json();
 
-    expect(locals.allEntries.length).toEqual(1);
-    expect(locals.allEntries[0].title).toEqual("A");
-    expect(locals.allEntries[0].url).toBeDefined();
-    expect(locals.allEntries[0].html).toBeUndefined();
-    expect(locals.allEntries[0].body).toBeUndefined();
-    expect(locals.allEntries[0].summary).toBeUndefined();
+    expect(locals.all_entries.length).toEqual(1);
+    expect(locals.all_entries[0].title).toEqual("A");
+    expect(locals.all_entries[0].url).toBeDefined();
+    expect(locals.all_entries[0].html).toBeUndefined();
+    expect(locals.all_entries[0].body).toBeUndefined();
+    expect(locals.all_entries[0].summary).toBeUndefined();
   });
 
   it("keeps entry html when the view renders it", async function () {
     await this.write({ path: "/a.txt", content: "Title: A\n\nA body" });
 
     await this.template(
-      { "list.html": `{{#allEntries}}{{{html}}}{{/allEntries}}` },
+      { "list.html": `{{#all_entries}}{{{html}}}{{/all_entries}}` },
       { views: { "list.html": { url: "/list" } } }
     );
 
     const res = await this.get("/list?json=1");
     const locals = await res.json();
 
-    expect(locals.allEntries[0].html).toContain("A body");
+    expect(locals.all_entries[0].html).toContain("A body");
   });
 
   it("keeps entry body when it is wrapped in an encoder helper", async function () {
@@ -108,7 +108,7 @@ describe("all_entries", function () {
 
     await this.template(
       {
-        "list.html": `{{#allEntries}}{{#encode_xml}}{{{body}}}{{/encode_xml}}{{/allEntries}}`,
+        "list.html": `{{#all_entries}}{{#encode_xml}}{{{body}}}{{/encode_xml}}{{/all_entries}}`,
       },
       { views: { "list.html": { url: "/list" } } }
     );
@@ -116,7 +116,7 @@ describe("all_entries", function () {
     const res = await this.get("/list?json=1");
     const locals = await res.json();
 
-    expect(locals.allEntries[0].body).toContain("A body");
+    expect(locals.all_entries[0].body).toContain("A body");
 
     const rendered = await (await this.get("/list")).text();
     expect(rendered).toContain("A body");
@@ -126,18 +126,18 @@ describe("all_entries", function () {
     await this.write({ path: "/a.txt", content: "Title: A\n\nA body" });
 
     await this.template(
-      { "list.html": `{{#allEntries}}{{title}}{{/allEntries}}{{{snippet}}}` },
+      { "list.html": `{{#all_entries}}{{title}}{{/all_entries}}{{{snippet}}}` },
       {
         views: { "list.html": { url: "/list" } },
-        locals: { snippet: "{{#allEntries}}{{{html}}} {{/allEntries}}" },
+        locals: { snippet: "{{#all_entries}}{{{html}}} {{/all_entries}}" },
       }
     );
 
     const locals = await (await this.get("/list?json=1")).json();
-    expect(locals.allEntries[0].html).toBeUndefined();
+    expect(locals.all_entries[0].html).toBeUndefined();
 
     const rendered = await (await this.get("/list")).text();
-    expect(rendered).toContain("{{#allEntries}}{{{html}}} {{/allEntries}}");
+    expect(rendered).toContain("{{#all_entries}}{{{html}}} {{/all_entries}}");
     expect(rendered).not.toContain("A body");
   });
 
@@ -145,18 +145,18 @@ describe("all_entries", function () {
     await this.write({ path: "/a.txt", content: "Title: A\n\nA body" });
 
     await this.template(
-      { "list.html": `{{#allEntries}}{{title}}{{/allEntries}}{{{query.snippet}}}` },
+      { "list.html": `{{#all_entries}}{{title}}{{/all_entries}}{{{query.snippet}}}` },
       { views: { "list.html": { url: "/list" } } }
     );
 
     const snippet = encodeURIComponent(
-      "{{#allEntries}}{{{html}}} {{/allEntries}}"
+      "{{#all_entries}}{{{html}}} {{/all_entries}}"
     );
     const locals = await (
       await this.get("/list?json=1&snippet=" + snippet)
     ).json();
 
-    expect(locals.allEntries[0].html).toBeUndefined();
+    expect(locals.all_entries[0].html).toBeUndefined();
   });
 });
 
@@ -281,10 +281,10 @@ describe("all_entries cache", function () {
     const blog = { id: "blog-1", cacheID: 100 };
 
     const titleOnlyReq = makeReq(blog, {
-      allEntries: { fields: { title: true } },
+      all_entries: { fields: { title: true } },
     });
     const withHtmlReq = makeReq(blog, {
-      allEntries: { fields: { title: true, html: true } },
+      all_entries: { fields: { title: true, html: true } },
     });
 
     allEntries(titleOnlyReq, { locals: {} }, function (err, entries) {
@@ -310,10 +310,10 @@ describe("all_entries cache", function () {
     const blog = { id: "blog-1", cacheID: 100 };
 
     const titleOnlyReq = makeReq(blog, {
-      allEntries: { fields: { title: true } },
+      all_entries: { fields: { title: true } },
     });
     const withHtmlReq = makeReq(blog, {
-      allEntries: { fields: { title: true, html: true } },
+      all_entries: { fields: { title: true, html: true } },
     });
 
     allEntries(withHtmlReq, { locals: {} }, function (err, entries) {
@@ -453,12 +453,12 @@ describe("all_entries shared augmentation", function () {
 
     const req = makeReq();
     const res = { locals: {} };
-    res.locals.allEntries = await allEntries(req, res);
+    res.locals.all_entries = await allEntries(req, res);
     await loadView(req, res);
 
-    expect(res.locals.allEntries[0].first).toBe(true);
-    expect(res.locals.allEntries[0].last).toBe(true);
-    expect(res.locals.allEntries[0].position).toBe(1);
+    expect(res.locals.all_entries[0].first).toBe(true);
+    expect(res.locals.all_entries[0].last).toBe(true);
+    expect(res.locals.all_entries[0].position).toBe(1);
   });
 
   it("computes absoluteURL for the host each request arrived on", async function () {
@@ -577,7 +577,7 @@ describe("all_entries shared augmentation", function () {
     expect(EntryModel.getByUrl).toHaveBeenCalledTimes(1);
   });
 
-  it("surfaces an augmentation failure as a template error through retrieve(), not a page missing allEntries", async function () {
+  it("surfaces an augmentation failure as a template error through retrieve(), not a page missing all_entries", async function () {
     loadAllEntries();
     const retrievePath = require.resolve("../index");
     delete require.cache[retrievePath];
@@ -590,7 +590,7 @@ describe("all_entries shared augmentation", function () {
 
     let error;
     try {
-      await retrieve(makeReq(), { locals: {} }, { allEntries: {} });
+      await retrieve(makeReq(), { locals: {} }, { all_entries: {} });
     } catch (e) {
       error = e;
     }

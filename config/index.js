@@ -7,6 +7,9 @@ const BLOT_DIRECTORY =
   process.env.BLOT_DIRECTORY || resolve(__dirname + "/../");
 const BLOT_DATA_DIRECTORY =
   process.env.BLOT_DATA_DIRECTORY || BLOT_DIRECTORY + "/data";
+// The app's scratch space, on the host's instance store in production
+const BLOT_TMP_DIRECTORY =
+  process.env.BLOT_TMP_DIRECTORY || BLOT_DATA_DIRECTORY + "/tmp";
 const BLOT_HOST = process.env.BLOT_HOST || "localhost";
 // Unix socket the server also listens on, for the reverse proxy; empty for none
 const BLOT_SOCKET = process.env.BLOT_SOCKET || "";
@@ -33,30 +36,23 @@ const reverse_proxies = process.env.BLOT_REVERSE_PROXY_URLS
   ? ["http://127.0.0.1:80"]
   : [];
 
-// See the "airlock" config block below. This is a warning, not a thrown
-// error: a misconfigured/down airlock must not crash every container on
-// boot. It does NOT mean user-controlled URLs are fetched directly -
-// helper/airlock fails those operations closed in production (the post
-// builds without the image, the domain check errors) rather than falling
-// back to an unprotected fetch. The warning just flags that this container
-// missed the env vars, so those features are broken until it is redeployed:
-//   - BLOT_AIRLOCK_BROWSER_URL unset: the production image ships no Chromium
-//     of its own (see the Dockerfile), and helper/screenshot will not fall
-//     back to a local launch for a user URL - bookmark-link screenshots
-//     cannot run at all.
-//   - BLOT_AIRLOCK_PROXY_URL unset: remote-image downloads and user-domain
-//     checks error out (fail closed) instead of fetching directly.
+// See the "airlock" and "sandbox" config blocks below. This is a warning, not a
+// thrown error: a unit deployed without the sandbox must not crash on boot. It
+// does NOT mean user-controlled URLs are fetched directly - helper/airlock
+// and helper/screenshot fail those operations closed in production (the post
+// builds without the image or screenshot, the domain check errors) rather
+// than falling back to an unprotected fetch. The warning just flags that this
+// container was deployed without BLOT_SANDBOX=1 (proxy/deploy/common.sh), so
+// those features are broken until it is redeployed with it.
 if (
   environment === "production" &&
-  !(process.env.BLOT_AIRLOCK_BROWSER_URL && process.env.BLOT_AIRLOCK_PROXY_URL)
+  !(process.env.BLOT_AIRLOCK_PROXY_URL && process.env.BLOT_SANDBOX_SOCKET)
 ) {
   console.warn(
-    "WARNING: BLOT_AIRLOCK_BROWSER_URL / BLOT_AIRLOCK_PROXY_URL are not both " +
-      "set in production. Without BLOT_AIRLOCK_BROWSER_URL, bookmark-link " +
-      "screenshots will fail (the prod image has no local Chromium). Without " +
-      "BLOT_AIRLOCK_PROXY_URL, remote-image downloads and user-domain checks " +
-      "fail closed (no unprotected fetch). Both stay broken until this " +
-      "container is redeployed. See config/airlock/README.md."
+    "WARNING: this production container has no sandbox (BLOT_SANDBOX_SOCKET, " +
+      "BLOT_AIRLOCK_PROXY_URL). Bookmark-link screenshots, remote-image " +
+      "downloads and user-domain checks fail closed until it is redeployed " +
+      "with BLOT_SANDBOX=1. See app/sandbox/README.md."
   );
 }
 
@@ -116,7 +112,7 @@ module.exports = {
   blot_directory: BLOT_DIRECTORY,
   data_directory: BLOT_DATA_DIRECTORY,
   views_directory: BLOT_DIRECTORY + "/app/views-built",
-  tmp_directory: process.env.BLOT_TMP_DIRECTORY || BLOT_DATA_DIRECTORY + "/tmp",
+  tmp_directory: BLOT_TMP_DIRECTORY,
   log_directory:
     process.env.BLOT_LOG_DIRECTORY || BLOT_DATA_DIRECTORY + "/logs",
   blog_folder_dir: BLOT_DATA_DIRECTORY + "/blogs",
@@ -188,21 +184,38 @@ module.exports = {
     bin: process.env.BLOT_PANDOC_PATH || "pandoc",
   },
 
-  // The "airlock" container (config/airlock) is the single egress point for
-  // fetching untrusted, user-supplied URLs: bookmark-link screenshots and
-  // remote images referenced in posts. When these are unset the app talks to
-  // the network directly - fine for local development, but with no SSRF
-  // protection (see the production warning above). See config/airlock/README.md.
+  // How many git commands each Node process runs at once
+  // (app/clients/git/limiter.js). A unit runs two Node processes and git
+  // shares its memory limit with them. One git command (a few processes) takes
+  // up to about 100 MB with the settings limiter.js passes. Interactive is 4
+  // because a slow client's clone or push holds its place for the whole
+  // transfer, and a push should not wait behind two slow clones: 4 is about
+  // 400 MB at the very worst, on node-b, which serves every push, clone and
+  // fetch. Background is 2, about 200 MB at worst, though Blot's commits, most
+  // of it, take a few MB each; gc is the large background command, and only
+  // one runs at a time. So about 600 MB a process at the very worst.
+  // gc_delay is how long after a commit or push a repository waits for its
+  // gc, so a burst of writes makes one (gc.js).
+  git: {
+    interactive_processes: parseInt(process.env.BLOT_GIT_INTERACTIVE_PROCESSES) || 4,
+    background_processes: parseInt(process.env.BLOT_GIT_BACKGROUND_PROCESSES) || 2,
+    gc_processes: parseInt(process.env.BLOT_GIT_GC_PROCESSES) || 1,
+    gc_delay: parseInt(process.env.BLOT_GIT_GC_DELAY_MS) || 60 * 1000,
+  },
+
+  // The single egress point for fetching untrusted, user-supplied URLs (remote
+  // images in posts, imports, domain checks): the forward proxy in the
+  // sandbox's proxy jail in each unit. Named after the airlock container it
+  // replaced (#2257). When unset the app talks to the network directly - fine
+  // for local development, but with no SSRF protection (see the production
+  // warning above). See app/sandbox/README.md.
   airlock: {
-    // Chromium DevTools endpoint, e.g. http://airlock:9222 - consumed by
-    // app/helper/screenshot.
-    browser_url: process.env.BLOT_AIRLOCK_BROWSER_URL || null,
-    // HTTP(S) forward proxy, e.g. http://airlock:8888 - consumed by
+    // HTTP(S) forward proxy, e.g. http://127.0.0.1:18988 - consumed by
     // app/helper/transformer/download and every other user-controlled fetch
     // via helper/airlock.
     proxy: process.env.BLOT_AIRLOCK_PROXY_URL || null,
     // When true (production), helper/airlock refuses a user-controlled fetch
-    // that isn't going through the airlock instead of falling back to a
+    // that isn't going through the proxy instead of falling back to a
     // direct one. Read this rather than re-deriving from environment.
     required: environment === "production",
   },
@@ -212,8 +225,8 @@ module.exports = {
   // app/sandbox runs its jobs in-process.
   sandbox: {
     socket: process.env.BLOT_SANDBOX_SOCKET || "",
-    // Screenshots run as a sandbox job, not in the airlock. Only with a broker.
-    browser: !!process.env.BLOT_SANDBOX_SOCKET && process.env.BLOT_SANDBOX_BROWSER === "1",
+    // Screenshots run as a sandbox job whenever there is a broker.
+    browser: !!process.env.BLOT_SANDBOX_SOCKET,
   },
 
   paypal: {
@@ -255,6 +268,13 @@ module.exports = {
   youtube: {
     secret: process.env.BLOT_YOUTUBE_SECRET,
   },
+
+  // Which blogs' folder writes are mirrored to the storage bucket and
+  // models/file after they land on disk (app/storage/folder/mirror.js,
+  // #2258 Phase C): "off" (the default), "all", or blog IDs separated by
+  // commas, e.g. "blog_abc,blog_def". Disk stays authoritative either way.
+  // Read on every write, so it can be changed in place by specs.
+  folder_mirror: process.env.BLOT_FOLDER_MIRROR || "off",
 
   // Credentials for the S3 client in app/storage/s3.js. When these aren't
   // set the AWS SDK's default provider chain is used instead.
@@ -298,12 +318,28 @@ module.exports = {
     // directory of its own inside it.
     cache_directory:
       process.env.BLOT_GIT_STORE_CACHE_DIRECTORY ||
-      (process.env.BLOT_TMP_DIRECTORY || BLOT_DATA_DIRECTORY + "/tmp") +
-        "/git-store",
+      BLOT_TMP_DIRECTORY + "/git-store",
     // The budget of each process's cache, scratch space included
     cache_bytes:
       parseInt(process.env.BLOT_GIT_STORE_CACHE_BYTES, 10) ||
       1024 * 1024 * 1024,
+  },
+
+  // The content cache of the S3 backend of storage/folder
+  // (app/storage/folder/cache.js, #2258): bytes of blog files read from the
+  // bucket, kept on the instance store and bounded by max_bytes. Files over
+  // max_file_bytes are read and served straight from S3; ensureLocal caches
+  // any size. min_free_percent makes it give room back when the disk itself
+  // runs low.
+  folder_cache: {
+    directory:
+      process.env.BLOT_FOLDER_CACHE_DIRECTORY ||
+      BLOT_TMP_DIRECTORY + "/storage-folder-cache",
+    max_bytes:
+      Number(process.env.BLOT_FOLDER_CACHE_MAX_BYTES) || 50 * 1024 * 1024 * 1024,
+    max_file_bytes:
+      Number(process.env.BLOT_FOLDER_CACHE_MAX_FILE_BYTES) || 4 * 1024 * 1024,
+    min_free_percent: 10,
   },
 
   mailgun: {

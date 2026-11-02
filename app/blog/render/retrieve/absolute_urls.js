@@ -64,4 +64,3 @@ module.exports = asRetriever(function (req, res) {
 // We also want to use this function in encode_xml
 // so we export it without the callback wrapper.
 module.exports.absolute_urls = absolute_urls;
-module.exports.absoluteURLs = absolute_urls;

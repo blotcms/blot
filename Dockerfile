@@ -25,17 +25,14 @@ ENV NODE_PATH=/usr/src/app/app
 # Set the working directory in the Docker container
 WORKDIR /usr/src/app
 
-# Puppeteer is used only as a CDP client (it connect()s to the airlock's
-# Chromium), so don't let `npm install` download its ~130MB bundled browser.
-# The dev stage, which does launch() a local Chromium for tests, installs the
-# system package and points Puppeteer at it instead.
+# Don't let `npm install` download Puppeteer's ~130MB bundled browser. The
+# stages that run Chromium install Alpine's: dev (tests launch() it) and unit
+# (the sandbox's browser jail, below), and point Puppeteer at it.
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 # Install the git client and a few runtime basics. Chromium is NOT installed
-# here: production takes screenshots by connecting to the shared "airlock"
-# container's headless Chromium over the Docker network (see
-# app/helper/screenshot and config/airlock), so the prod image ships no
-# browser. The dev stage below adds Chromium back for the test suite.
+# here: production takes screenshots in the sandbox's browser jail, and the
+# unit stage adds the Chromium it runs. The dev stage adds one for the tests.
 #
 # Also configure git to handle lots of large binary files in memory-constrained
 # environments. Folded into one layer to keep the image's layer count (and so
@@ -191,8 +188,8 @@ COPY --from=dev-deps /usr/src/app/node_modules ./node_modules
 RUN node -e "require('sharp'); console.log('sharp loads against libvips ' + require('sharp').versions.vips)"
 
 # The test suite (app/site/tests) and scripts/development/translate launch a
-# local headless Chromium via Puppeteer. Production does not - it connects to
-# the airlock - so the browser and its font/nss deps live in this stage only.
+# local headless Chromium via Puppeteer. Production runs Chromium only in the
+# sandbox, from the unit stage's own install, so this one is for development.
 #
 # Alpine's chromium depends on mesa-gbm -> mesa -> llvm22-libs, which puts a
 # ~180MB libLLVM.so.22.1 (plus the 40MB libgallium software rasteriser that

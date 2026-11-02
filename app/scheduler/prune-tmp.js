@@ -7,11 +7,7 @@ const fs = require("fs-extra");
 const config = require("config");
 const path = require("path");
 const lifecycle = require("../dashboard/site/import/lifecycle");
-const {
-  STAGING_DIRECTORY,
-  FOLDER_STAGING_DIRECTORY,
-  FOLDER_DOWNLOAD_DIRECTORY,
-} = require("../storage/util");
+const { STAGING_DIRECTORY, FOLDER_STAGING_DIRECTORY } = require("../storage/util");
 
 // Nothing the app puts in tmp is meant to last this long: uploads are
 // consumed by the request that made them, and conversions by the build.
@@ -34,9 +30,7 @@ const IMPORT_DIRECTORY = "import";
 // it, so unlike the rest of tmp these are judged file by file, and kept far
 // longer than any build runs. storage/folder's S3 backend stages files the
 // same way (tmp/storage-folder-staging/{blogID}/...), so they are kept as
-// long. Its ensureLocal downloads (tmp/storage-folder/...) are judged file
-// by file too, but only kept a day, like the rest of tmp: one may be in use
-// while its directory looks old, and an old one is just downloaded again.
+// long.
 const STAGING_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Total size of the files under a path, without following symlinks
@@ -141,29 +135,33 @@ module.exports = async function pruneTmp(options) {
   const importRoot = path.join(tmpDirectory, IMPORT_DIRECTORY);
   const stagingRoot = path.join(tmpDirectory, STAGING_DIRECTORY);
   const folderStagingRoot = path.join(tmpDirectory, FOLDER_STAGING_DIRECTORY);
-  const folderDownloadRoot = path.join(tmpDirectory, FOLDER_DOWNLOAD_DIRECTORY);
-  const byFile = [importRoot, stagingRoot, folderStagingRoot, folderDownloadRoot];
+  const byFile = [importRoot, stagingRoot, folderStagingRoot];
+
+  // The folder content cache (storage/folder/cache.js) lives in tmp by
+  // default but evicts its own entries; its directory's mtime says nothing
+  // about them, so pruning it by age would empty a cache in use. That goes
+  // for any directory above it too, if it is configured deeper in tmp.
+  const folderCache = path.resolve(config.folder_cache.directory);
+  const holds = (dir, inside) => inside === dir || inside.startsWith(dir + path.sep);
 
   // The git store's cache (config.git_store) is in tmp too, but it is in use
   // for as long as the process which owns it runs, and keeps to its budget:
   // the entry which is it, or holds it, is left alone
   const gitStoreCache = path.resolve(config.git_store.cache_directory);
-  const holdsGitStoreCache = (entryPath) => {
-    const entry = path.resolve(entryPath);
-    return gitStoreCache === entry || gitStoreCache.startsWith(entry + path.sep);
-  };
 
   await prune(
     tmpDirectory,
     maxAgeMs,
     now,
     report,
-    (entryPath) => byFile.includes(entryPath) || holdsGitStoreCache(entryPath)
+    (entryPath) =>
+      byFile.includes(entryPath) ||
+      holds(path.resolve(entryPath), folderCache) ||
+      holds(path.resolve(entryPath), gitStoreCache)
   );
 
   await pruneFiles(stagingRoot, stagingMaxAgeMs, now, report);
   await pruneFiles(folderStagingRoot, stagingMaxAgeMs, now, report);
-  await pruneFiles(folderDownloadRoot, maxAgeMs, now, report);
 
   for (const blogID of await readdir(importRoot)) {
     // An import with a live lease (running.txt) has a worker on it. Imports

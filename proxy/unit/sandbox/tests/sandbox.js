@@ -154,11 +154,11 @@ test("jail: the proxy jail only starts for a unit", () => {
 });
 
 test("jail: each proxy config forwards the port the deploy gives that unit, on loopback only", () => {
-  const { AIRLOCK } = require("../../../../scripts/deploy/constants");
+  const { SANDBOX } = require("../../../../scripts/deploy/constants");
   for (const unit of ["blue", "green"]) {
     const { args } = jail.proxyCommand(unit);
     const config = fs.readFileSync(args[args.indexOf("--config") + 1], "utf8");
-    assert(config.includes(`tcp_ports: "127.0.0.1/${AIRLOCK.units[unit].sandboxProxyPort}:8888"`), unit);
+    assert(config.includes(`tcp_ports: "127.0.0.1/${SANDBOX.units[unit].proxyPort}:8888"`), unit);
   }
 });
 
@@ -236,7 +236,7 @@ test("node filter: encodes to eight bytes a line, in order", () => {
   assert.strictEqual(buffer.readUInt32LE(4), lines[0].k);
 });
 
-test("jail: the filter refuses what the airlock refuses", () => {
+test("jail: the filter refuses private, loopback and metadata ranges", () => {
   const filter = fs.readFileSync(path.join(__dirname, "../egress.nft"), "utf8");
   for (const range of ["10.0.0.0/8", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7", "fe80::/10", "::ffff:0:0/96"]) {
     assert(filter.includes(range), range);

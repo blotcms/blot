@@ -43,6 +43,8 @@ var debug = require("debug")("blot:clients:git:receivePack");
 var clfdate = require("helper/clfdate");
 var guardServices = require("./guardServices");
 var Git = require("./git");
+var limiter = require("./limiter");
+var gc = require("./gc");
 var validateTree = require("./validateTree");
 var QUARANTINE_PREFIX = require("./sweepQuarantine").PREFIX;
 
@@ -275,12 +277,19 @@ function isTrue(value) {
   return /^(true|yes|on|1)$/i.test(String(value).trim());
 }
 
-// Runs a short git command in the repository and collects its output
+// Runs a short git command in the repository and collects its output. A push
+// is interactive work (see limiter.js).
 function runGit(context, args, options) {
+  return limiter.run("interactive", function () {
+    return spawnGit(context, args, options);
+  });
+}
+
+function spawnGit(context, args, options) {
   options = options || {};
 
   return new Promise(function (resolve, reject) {
-    var child = spawn("git", args, {
+    var child = spawn("git", limiter.args(args), {
       cwd: context.directory,
       env: options.env || context.env,
       stdio: ["pipe", "pipe", "pipe"],
@@ -399,13 +408,15 @@ async function unpack(context, first, iterator, limits) {
   var written = 0;
   var chunk = first;
 
-  function start() {
+  // index-pack holds its place in the interactive lane until it has closed
+  async function start() {
     var args = ["index-pack", "--stdin", "--fix-thin"];
 
     if (limits.strict) args.push("--strict");
     if (limits.maxInputSize) args.push("--max-input-size=" + limits.maxInputSize);
 
-    var child = spawn("git", args, {
+    var release = await limiter.acquire("interactive");
+    var child = spawn("git", limiter.args(args), {
       cwd: context.directory,
       env: quarantineEnv(context),
       stdio: ["pipe", "ignore", "pipe"],
@@ -414,9 +425,12 @@ async function unpack(context, first, iterator, limits) {
     var closed = new Promise(function (resolve) {
       child.on("error", function (err) {
         stderr.add(err.message);
+        // Not started, so there is no close
+        if (child.pid === undefined) release();
         resolve({ code: 127 });
       });
       child.on("close", function (code) {
+        release();
         context.children.delete(child);
         resolve({ code: code });
       });
@@ -440,7 +454,7 @@ async function unpack(context, first, iterator, limits) {
           path.join(context.directory, "objects", QUARANTINE_PREFIX)
         );
         await fs.ensureDir(path.join(context.quarantine, "pack"));
-        start();
+        await start();
       }
 
       written += chunk.length;
@@ -538,7 +552,10 @@ async function check(context, commands) {
     if (updates[i].ref !== MASTER) continue;
 
     try {
-      await validateTree(Git(context.directory, { env: quarantineEnv(context) }), updates[i].new);
+      await validateTree(
+        Git(context.directory, { env: quarantineEnv(context), lane: "interactive" }),
+        updates[i].new
+      );
     } catch (err) {
       problems[MASTER] = oneLine(err.message);
     }
@@ -668,7 +685,9 @@ async function apply(context, commands, options) {
     // never lost, and a push which could not be recorded never happens
     if (master && options.prepare) {
       try {
-        prepared = await options.prepare(master);
+        prepared = await limiter.outside(function () {
+          return options.prepare(master);
+        });
       } catch (err) {
         console.error(clfdate(), "Git: could not record push", context.handle, err);
         return { error: "Blot could not record the push; please try again in a moment" };
@@ -681,14 +700,21 @@ async function apply(context, commands, options) {
 
     if (failure) {
       if (readied && options.abandoned) {
-        await Promise.resolve(options.abandoned(master, prepared)).catch(noop);
+        await Promise.resolve(
+          limiter.outside(function () {
+            return options.abandoned(master, prepared);
+          })
+        ).catch(noop);
       }
       return { error: failure };
     }
 
     if (master && options.accepted) {
       try {
-        options.accepted(master, prepared);
+        // The sync this starts waits for room of its own
+        limiter.outside(function () {
+          options.accepted(master, prepared);
+        });
       } catch (err) {
         console.error(clfdate(), "Git: error after push", context.handle, err);
       }
@@ -848,7 +874,12 @@ async function receive(req, res, options) {
 
     if (status === "ok" && !Object.keys(problems).length) {
       try {
-        var applied = await apply(context, commands, options);
+        // One place in the interactive lane, taken before the ref lock, for
+        // the commands run under it: none of them waits for room with the
+        // lock held
+        var applied = await limiter.run("interactive", function () {
+          return apply(context, commands, options);
+        });
 
         if (applied) {
           (applied.refs || commands.map(function (command) {
@@ -951,21 +982,9 @@ async function cleanUp(context) {
 }
 
 // What git's receive-pack does after a push: keep the repository from
-// filling up with packs
+// filling up with packs. A burst of pushes and commits makes one gc (gc.js).
 function collect(context) {
-  try {
-    var child = spawn("git", ["gc", "--auto", "--quiet"], {
-      cwd: context.directory,
-      env: context.env,
-      stdio: "ignore",
-      detached: true,
-    });
-
-    child.on("error", noop);
-    child.unref();
-  } catch (err) {
-    debug("Could not start gc", err);
-  }
+  gc.schedule(context.directory);
 }
 
 // GET /<handle>.git/info/refs?service=git-receive-pack: the refs, sorted as
@@ -974,7 +993,7 @@ async function advertise(req, res, directory) {
   res.setHeader("connection", "close");
 
   try {
-    var git = Git(directory);
+    var git = Git(directory, { lane: "interactive" });
     var output = await git.raw(["for-each-ref", "--format=%(objectname) %(refname)"]);
   } catch (err) {
     if (!fs.pathExistsSync(directory)) {

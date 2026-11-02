@@ -24,8 +24,8 @@ Requires `npm start` to be running. Refuses to run in the main checkout.
 
 Five fixed sibling hosts, `a-local.blot` … `e-local.blot`. Each claimed slot is
 one extra container, `blot-node-<slot>`, with this worktree's `app`, `config`,
-`scripts` and `tests` mounted (nodemon reloads on edit). nginx, Redis, `data/`
-and airlock are shared with the main stack.
+`scripts` and `tests` mounted (nodemon reloads on edit). nginx, Redis and `data/`
+are shared with the main stack.
 
 `BLOT_HOST=<slot>-local.blot` is all the app needs: dashboard
 (`https://a-local.blot`), CDN, blogs (`https://example.a-local.blot`) and

@@ -14,6 +14,8 @@ const fs = require("fs-extra");
 const path = require("path");
 const tempDir = require("helper/tempDir");
 const pathNormalizer = require("helper/pathNormalizer");
+const limiter = require("./limiter");
+const gc = require("./gc");
 
 const ZERO = "0".repeat(40);
 const MASTER = "refs/heads/master";
@@ -38,9 +40,18 @@ const STDERR_BYTES = 4096;
 
 // Runs git in the bare repository. Resolves with { code, stdout, stderr }
 // (stdout a Buffer) whatever the exit code is. Rejects if git can't be run.
+//
+// Blot's commits and the import of a new repository are background work (see
+// limiter.js).
 function run(directory, args, options) {
   options = options || {};
 
+  return limiter.run("background", function () {
+    return spawnGit(directory, limiter.args(args), options);
+  });
+}
+
+function spawnGit(directory, args, options) {
   return new Promise(function (resolve, reject) {
     const child = spawn("git", args, {
       cwd: options.cwd || directory,
@@ -293,21 +304,10 @@ async function commitFile(directory, change) {
 
 // What a push does when it is done, in receivePack.js: a commit leaves loose
 // objects, and a big upload is a commit per file, so without this a repository
-// only Blot writes to would never be packed. Runs by itself, nothing waits on it.
+// only Blot writes to would never be packed. Nothing waits on it, and a burst
+// of commits makes one gc (gc.js).
 function collect(directory) {
-  try {
-    const child = spawn("git", ["gc", "--auto", "--quiet"], {
-      cwd: directory,
-      env: Object.assign({}, process.env, { GIT_DIR: directory }),
-      stdio: "ignore",
-      detached: true,
-    });
-
-    child.on("error", function () {});
-    child.unref();
-  } catch (err) {
-    console.error("Git: could not start gc in", directory, err.message);
-  }
+  gc.schedule(directory);
 }
 
 module.exports = {

@@ -155,7 +155,7 @@ at sync/build time instead.
   app containers use a key scoped to the storage bucket
   (`BLOT_AWS_KEY`/`BLOT_AWS_SECRET`). Reaching instance credentials from a
   container on Docker's bridge network needs the metadata service's hop limit
-  raised to 2, and the app host keeps it at 1 (`config/airlock/README.md`) so
+  raised to 2, and the app host keeps it at 1 so
   a server-side request forgery in the app can't read role credentials, which
   here could write and delete the public bucket. A scoped key in the host's
   env file grants the same access without that exposure, and B2 (if it
@@ -503,12 +503,34 @@ directory with nothing in it, and every metadata read (`stat`, `list`,
 (see its README). Writes go to S3 first and the index after, with the SHA-1
 computed as the bytes upload; removes delete from S3 first. `move` is copy
 plus delete. `path` returns a staging path under the tmp directory which
-`commit` uploads, and `ensureLocal` downloads to the tmp directory, named by
-the file's SHA-1, until the content cache exists. Nothing in the app or its
+`commit` uploads. Bytes are read through the content cache (`cache.js`,
+below). Nothing in the app or its
 config selects it: `useBackend` in `index.js` switches every blog at once
 and is only for specs, which run `app/storage/tests/folder.js` against both
 backends (on MinIO for S3). `scripts/storage/rebuild-file-index.js` rebuilds
 a blog's index from a listing of the bucket. Per-blog selection is Phase D.
+
+The content cache (`cache.js`) keeps the bytes the S3 backend has read on
+the instance store, under `config.folder_cache.directory` (by default
+`{tmp}/storage-folder-cache`, which the tmp pruner leaves alone). An entry is
+`blogs/{blogID}/{id}/{name}`, where `id` is the SHA-1 of the path and the
+file's version (its SHA-1 from the index, or size and modified time where the
+index has none), so a changed file has a new key and a copy is never stale.
+Downloads go to `tmp/` in the cache, are checked against the index's size and
+SHA-1, and are renamed into place, so nothing ever sees a partial or wrong
+file; concurrent gets of one entry in a process share a download. It is an
+LRU bounded by `max_bytes`, with recency kept as each entry's mtime, so the
+order survives a restart: the directory is rescanned at startup and every few
+minutes, which is also how processes sharing the directory see each other's
+entries (the cap is a soft one between scans). The same check evicts more
+when the disk has under `min_free_percent` free. Nothing is evicted while
+pinned in this process (`use`) or within a minute of its last use in any
+process, which is what keeps a path from `ensureLocal` alive while a tool
+opens it. `ensureLocal` caches any size; `read`, `createReadStream` and
+`serve` go through the cache for files up to `max_file_bytes` and stream
+bigger ones from S3. `stats()` counts hits, misses, bytes, evictions and
+downloads. Still to do: a pin for long-running tools which keep a path from
+`ensureLocal`, and filling the cache on write.
 
 What it keeps from today:
 
@@ -531,7 +553,7 @@ What it does not do yet:
   folder-link version tokens), and so has everything else: nothing outside
   `app/storage` reaches a blog's folder directly, which
   `scripts/tests/ci/check-folder-access.js` enforces.
-- There is no content cache, no dual writing and no backfill. `stat` with
+- Dual writing and the backfill are below. `stat` with
   `{ hash: true }` (Dropbox's content hash) reads the whole file on disk, and
   downloads it on S3, whose index holds only the SHA-1.
 - On disk, `commit` does nothing but check for symlinks, because the path
@@ -541,3 +563,52 @@ What it does not do yet:
 - Missing files reject with `NotFoundError` (`code: "ENOENT"`), including
   streams, which emit it as `error`. Other fs errors (`EISDIR`, `EACCES`) pass
   through unchanged.
+
+### Mirroring to S3 (#2258 Phase C: write to both, disk first)
+
+For the blogs `config.folder_mirror` names, every change made through
+`storage/folder` on disk is then made in the S3 backend too: the objects under
+`{blogID}/folder/` and the `models/file` index. Disk stays authoritative and
+every read still comes from it; the copy is there for the reconcile to check
+and for shadow reads to try (the next steps of Phase C).
+
+- **The switch** is `BLOT_FOLDER_MIRROR` (`config.folder_mirror`): `off` (the
+  default), `all`, or blog IDs separated by commas (`blog_abc,blog_def`). It
+  is read on every write. With no storage bucket configured, mirroring logs
+  once and does nothing.
+- **How** (`folder/mirror.js`, called from `folder/index.js`): each mutating
+  call runs on the local backend first and, once it has succeeded, is
+  mirrored. `write` (buffer or stream) and `writeFrom` (copy or move) upload
+  the file from its place in the folder, with its modified time on disk, so a
+  stream is consumed once, by the disk, and the index's SHA-1 is computed as
+  the upload streams. `commit` makes S3 match the path on disk (a file or a
+  whole directory). `mkdir` writes a marker; `remove` and `rmdir` delete the
+  path. `move` is copy plus delete in S3, or, when S3 does not have the source
+  yet, an upload of the destination from disk. `removeAll` deletes the blog's
+  copy; it does so whenever the blog has an index, even once the blog is no
+  longer mirrored.
+- **Failures** never fail the caller: the change is on disk. The mirror logs
+  a `[storage/folder mirror] failed blog=... op=... path=... error=...` line
+  and adds the blog to the Redis set `storage:folder:mirror:dirty`, for the
+  backfill (and later the reconcile) to repair. Nothing is retried beyond
+  what `storage/s3.js` already retries per request.
+- **Locking and latency**: changes are made inside the blog's sync lock, so
+  the mirror runs under it too and the index keeps its single writer. The
+  mirror is awaited, so a blog's changes reach S3 in order, at the cost of
+  the S3 round trips on each mirrored write.
+
+**Backfill**: `scripts/storage/backfill-folder.js` brings a blog's copy in
+line with its disk: it uploads files which are missing or differ (by size,
+then modified time, then the SHA-1 when the index has one, computed on disk
+only then), writes markers for empty directories, and deletes objects and
+records for paths no longer on disk. `--dry-run` (the default) reports,
+`--apply` changes, `--verify` exits non-zero on any difference; `--blog`,
+`--from`, `--dirty` (only the blogs in the dirty set) and `--concurrency`
+(blogs at once) choose what to run over. `--apply` and `--verify` run each
+blog holding its sync lock (`app/sync/hold.js`: the lock as `sync()` takes
+it, and nothing else, so disabled blogs are included) and skip a locked
+blog, to retry with `--blog`; a blog applied without errors leaves the dirty set, before its
+lock is released. A blog in the dirty set (or named by `--blog`) which no
+longer exists has its whole copy removed: its deletion could not remove it. It is safe to
+rerun. Turn mirroring on for a blog before its backfill, so nothing written
+in between is missed.

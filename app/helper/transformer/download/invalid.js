@@ -3,7 +3,7 @@ var Url = require("url");
 
 // Cheap sanity check on a URL before we try to download it. This is NOT the
 // SSRF control - destination IP filtering (private ranges, cloud metadata,
-// DNS-rebinding) happens in the airlock container, see config/airlock.
+// DNS-rebinding) happens in the sandbox's proxy jail, see app/sandbox/README.md.
 // Rejecting credentials in the URL here just removes a common trick for
 // hiding an internal host from a naive check.
 function invalid(url) {

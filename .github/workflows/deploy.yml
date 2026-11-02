@@ -19,7 +19,6 @@ permissions:
 
 env:
   REGISTRY_URL: ghcr.io/blotcms/blot
-  AIRLOCK_REGISTRY_URL: ghcr.io/blotcms/blot-airlock
   BLOT_DEPLOY_SSH_HOST: ${{ secrets.BLOT_DEPLOY_SSH_HOST }}
   BLOT_DEPLOY_SSH_PORT: ${{ secrets.BLOT_DEPLOY_SSH_PORT }}
 
@@ -211,7 +210,6 @@ jobs:
           CUSTOM: ${{ steps.resolve.outputs.custom }}
         run: |
           IMAGE="${{ env.REGISTRY_URL }}:${TARGET_SHA}"
-          AIRLOCK_IMAGE="${{ env.AIRLOCK_REGISTRY_URL }}:${TARGET_SHA}"
           WAIT_INTERVAL=5
 
           # For the default (dispatched) commit the build workflow may still
@@ -243,28 +241,6 @@ jobs:
             fi
             echo "  not ready yet ($i/$MAX_APP_TRIES)..."; sleep $WAIT_INTERVAL
           done
-
-          # The airlock image is best-effort. build-airlock runs in parallel
-          # with the app build and is usually a little slower (Alpine +
-          # Chromium + the verify step), so give it a bounded grace window
-          # once the app image is up - but do NOT let it block the deploy:
-          # the unit deploy (proxy/deploy/common.sh) falls back to the airlock
-          # image already running when there is none for this commit, and an
-          # airlock build failure must not be able to hold up an app hotfix.
-          echo "Waiting (best-effort) for airlock image: $AIRLOCK_IMAGE"
-          AIRLOCK_AVAILABLE=false
-          for i in $(seq 1 60); do   # up to 5 min
-            if docker manifest inspect "$AIRLOCK_IMAGE" > /dev/null 2>&1; then
-              echo "✅ Airlock image found: $AIRLOCK_IMAGE"
-              AIRLOCK_AVAILABLE=true
-              break
-            fi
-            echo "  not ready yet ($i/60)..."; sleep $WAIT_INTERVAL
-          done
-
-          if [ "$AIRLOCK_AVAILABLE" = false ]; then
-            echo "::warning::Airlock image $AIRLOCK_IMAGE not available after the grace period - the deploy will run and keep the airlock images the units already have (ensure_airlock in proxy/deploy/common.sh). Re-deploy this commit once build-airlock succeeds."
-          fi
 
       - name: Deploy
         env:

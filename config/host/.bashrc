@@ -298,13 +298,13 @@ block() {
     done
 }
 
+# OOM kills since boot: what asked for memory, and which process was killed.
+# Reads the journal, since dmesg needs root on Amazon Linux 2023. Node-b has
+# oom_score_adj 900, so it is the victim when a unit's cgroup fills up; the
+# full process table is in `journalctl -k --since <time>` around the kill.
 kills() {
-    boot_time=$(date -d "$(who -b | awk '{print $3" "$4}')" +%s)
-    dmesg | grep -i "killed" | while read -r line; do
-        ts=$(echo "$line" | grep -oP '\[\K[0-9.]+')
-        human_date=$(date -d "@$(echo "$boot_time + ${ts%%.*}" | bc)" "+%Y-%m-%d %H:%M:%S")
-        echo "$line" | sed -E "s/\[[0-9.]+\]/[$human_date]/"
-    done
+    journalctl -k -o short-iso --no-pager | grep -E 'invoked oom-killer|Killed process' \
+        | sed -E 's/ [^ ]+ kernel: / /'
 }
 
 stats() {

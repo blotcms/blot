@@ -91,6 +91,7 @@ const { buildRev } = require("./rev");
 const { clone } = require("./clone");
 const { PACK_CONFIG, git: shared } = require("./compact");
 const { runGit, idsOf, assertContains } = shared;
+const { createChildren } = require("./limit");
 
 const MiB = 1024 * 1024;
 
@@ -407,7 +408,7 @@ const entryOf = ({ name, size, idxSize, objects }) => ({ name, size, idxSize, ob
 
 // ---- Import ---------------------------------------------------------------
 
-async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = null, pack = {}, estimateBytes = null, clock = Date.now }) {
+async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = null, pack = {}, estimateBytes = null, clock = Date.now, gate = null }) {
   if (typeof lock !== "function") throw new Error("importRepo needs the host's lock function");
   if (!gitDir) throw new Error("importRepo needs gitDir");
   if (!scratchDir && !(cache && typeof cache.reserve === "function")) throw new Error("importRepo needs a cache to reserve scratch space from, or a scratchDir");
@@ -422,7 +423,7 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
   };
 
   // A shallow source has commits whose parents it does not have
-  if ((await sourceGit(new Set(), gitDir, ["rev-parse", "--is-shallow-repository"])).trim() === "true") {
+  if ((await sourceGit(createChildren(gate), gitDir, ["rev-parse", "--is-shallow-repository"])).trim() === "true") {
     throw coded("The repository is shallow, so its history is incomplete. Only a complete repository can be imported.", "ESHALLOW");
   }
 
@@ -432,7 +433,7 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
   }
 
   const config = { ...PACK_CONFIG, "pack.packSizeLimit": "0", ...pack };
-  const children = new Set();
+  const children = createChildren(gate);
   let reservation = null;
   let dir = null;
 
@@ -581,11 +582,11 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
 // saying what differs. Objects the source has that no branch or tag reaches
 // are not expected to be there. `scratchDir` or `cache` as for importRepo; the
 // scratch is the size of the clone.
-async function verifyImport({ store, cache, gitDir, scratchDir = null }) {
+async function verifyImport({ store, cache, gitDir, scratchDir = null, gate = null }) {
   const current = await manifest.read(store);
   if (current.seq === 0) throw new CorruptError("The store repository is empty");
 
-  const children = new Set();
+  const children = createChildren(gate);
   let reservation = null;
   let dir;
 

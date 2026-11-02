@@ -12,46 +12,46 @@ describe("latest_entry", function () {
     });
 
     await this.template(
-      { "home.html": `{{#latestEntry}}{{title}}{{/latestEntry}}` },
+      { "home.html": `{{#latest_entry}}{{title}}{{/latest_entry}}` },
       { views: { "home.html": { url: "/home" } } }
     );
 
     expect((await (await this.get("/home")).text()).trim()).toEqual("New");
   });
 
-  it("drops unreferenced heavy fields from latestEntry", async function () {
+  it("drops unreferenced heavy fields from latest_entry", async function () {
     await this.write({ path: "/a.txt", content: "Title: A\n\nA body" });
 
     await this.template(
-      { "home.html": `{{#latestEntry}}{{title}} {{url}}{{/latestEntry}}` },
+      { "home.html": `{{#latest_entry}}{{title}} {{url}}{{/latest_entry}}` },
       { views: { "home.html": { url: "/home" } } }
     );
 
     const locals = await (await this.get("/home?json=1")).json();
 
-    expect(locals.latestEntry.title).toEqual("A");
-    expect(locals.latestEntry.url).toBeDefined();
-    expect(locals.latestEntry.html).toBeUndefined();
-    expect(locals.latestEntry.summary).toBeUndefined();
+    expect(locals.latest_entry.title).toEqual("A");
+    expect(locals.latest_entry.url).toBeDefined();
+    expect(locals.latest_entry.html).toBeUndefined();
+    expect(locals.latest_entry.summary).toBeUndefined();
   });
 
-  it("keeps latestEntry html when the view renders it", async function () {
+  it("keeps latest_entry html when the view renders it", async function () {
     await this.write({ path: "/a.txt", content: "Title: A\n\nA body" });
 
     await this.template(
-      { "home.html": `{{#latestEntry}}{{{html}}}{{/latestEntry}}` },
+      { "home.html": `{{#latest_entry}}{{{html}}}{{/latest_entry}}` },
       { views: { "home.html": { url: "/home" } } }
     );
 
     const locals = await (await this.get("/home?json=1")).json();
-    expect(locals.latestEntry.html).toContain("A body");
+    expect(locals.latest_entry.html).toContain("A body");
   });
 
   it("reuses the latest entry across requests for the same cacheID", async function () {
     await this.write({ path: "/a.txt", content: "Title: A\n\nA body" });
 
     await this.template(
-      { "home.html": `{{#latestEntry}}{{title}}{{/latestEntry}}` },
+      { "home.html": `{{#latest_entry}}{{title}}{{/latest_entry}}` },
       { views: { "home.html": { url: "/home" } } }
     );
 
@@ -141,7 +141,7 @@ describe("latest_entry cache", function () {
 
     const req = makeReq(
       { id: "blog-1", cacheID: 100 },
-      { latestEntry: { fields: { title: true } } }
+      { latest_entry: { fields: { title: true } } }
     );
 
     latestEntry(req, {}, function (err, first) {

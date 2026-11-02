@@ -93,9 +93,9 @@ which is at most its time limit.
 
 ## The browser job
 
-`screenshot` runs Chromium on a URL. It is the one job with a network, and it is
-off until the host also sets `BLOT_SANDBOX_BROWSER=1`, when `helper/screenshot`
-uses it in place of the airlock. Every URL is treated as hostile, whoever asks:
+`screenshot` runs Chromium on a URL. It is the one job with a network, and
+`helper/screenshot` uses it whenever the unit has a sandbox: since the airlock
+container went (#2257) production has no other browser. Every URL is treated as hostile, whoever asks:
 customer sites run their own template code. The job starts its own Chromium, driven
 over a pipe so there is no DevTools port, and all of it goes when the job ends.
 
@@ -123,9 +123,9 @@ is a job failure.
 
 ## The proxy jail
 
-The app's fetches of user-supplied URLs (`helper/airlock`) go through tinyproxy.
-With `BLOT_SANDBOX_PROXY=1` that is a long-running jail in the unit in place of
-the airlock's. It isn't a job, so the broker has no part in it: the supervisor
+The app's fetches of user-supplied URLs (`helper/airlock`, named after the
+airlock container this replaced) go through tinyproxy, in a long-running jail in
+the unit, whenever the unit has a sandbox. It isn't a job, so the broker has no part in it: the supervisor
 keeps `proxy/unit/sandbox/proxy.js` running, which is root like the broker, makes
 `/sandbox-cgroup/proxy` (128 MiB, 128 pids) and starts the jail.
 
@@ -157,7 +157,7 @@ neither is anything run by `docker exec`.
 `alerts.js` emails the admin (`SANDBOX_ALERT`) when a job is killed, times out,
 is cut short or answers nonsense, when the broker can't be reached or its queue
 is full, and, checked every five minutes from each web process, when the unit's
-fetch proxy (the airlock's or the jail's) stops answering or lets the metadata
+fetch proxy jail stops answering or lets the metadata
 address through. A job that fails on bad input isn't reported. At most one
 email per process every ten minutes, with counts for what happened in between.
 

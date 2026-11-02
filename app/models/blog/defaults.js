@@ -19,8 +19,6 @@ module.exports = {
     org: true,
     markdown: true,
   },
-  cssURL: "",
-  scriptURL: "",
   template: "SITE:blog",
   menu: [
     { id: Date.now() + 1 + "", label: "Home", url: "/" },

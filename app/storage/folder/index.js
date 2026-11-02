@@ -1,4 +1,5 @@
 var { NotFoundError } = require("./errors");
+var mirror = require("./mirror");
 
 // Every read and write of a blog's folder (the files its owner syncs) goes
 // through this module, the way generated assets go through storage/assets.
@@ -11,6 +12,11 @@ var { NotFoundError } = require("./errors");
 // it in the storage bucket with its metadata in models/file; it is built and
 // passes the same specs, but nothing selects it yet (#2258 Phase C). Each
 // call goes to whichever backend is current when it is made.
+//
+// Mirroring (./mirror.js, #2258 Phase C): for the blogs config.folder_mirror
+// names, every change made on disk is then made in S3 and models/file too,
+// once the disk has it. Reads still come from disk, and a failure to mirror
+// is logged and recorded for repair, never returned to the caller.
 //
 // Missing files reject with NotFoundError (code "ENOENT"). A symlink in a
 // blog folder rejects with code "ELOOP" (see local.js: the no-symlink policy
@@ -83,7 +89,8 @@ module.exports = {
 
   // Resolves to a real local path holding the file, for tools which read from
   // a path (hashing, sharp, pandoc). Read-only by contract: the caller must
-  // not modify or delete it, because on S3 it is a cache entry.
+  // not modify or delete it, because on S3 it is a cache entry, which may be
+  // evicted once it is no longer recent, so use the path straight away.
   ensureLocal: delegate("ensureLocal"),
 
   mkdir: delegate("mkdir"),
@@ -140,3 +147,23 @@ module.exports = {
   // Removes the whole folder of a blog, for blog deletion
   removeAll: delegate("removeAll"),
 };
+
+// The calls which change a folder. While the local backend is current, each
+// is mirrored once it has succeeded on disk (see ./mirror.js, which decides
+// per blog whether to and never rejects). path() changes nothing; the file a
+// tool writes there is mirrored by commit().
+var MUTATIONS = ["write", "writeFrom", "commit", "mkdir", "rmdir", "remove", "move", "removeAll"];
+
+MUTATIONS.forEach(function (name) {
+  var call = module.exports[name];
+
+  module.exports[name] = async function () {
+    var args = Array.prototype.slice.call(arguments);
+    var mirrored = backend === backends.local();
+    var result = await call.apply(null, args);
+
+    if (mirrored) await mirror(name, args);
+
+    return result;
+  };
+});

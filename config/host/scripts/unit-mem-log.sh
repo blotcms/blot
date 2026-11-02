@@ -11,11 +11,15 @@
 #
 # One line per container per sample:
 #   2026-10-30T07:20:15Z name=blot-blue anon=B file=B shmem=B limit=B oom_kill=N \
-#     node_max=B node_sum=B top=comm:B
+#     node_max=B node_sum=B node_a=B node_b=B node_other=B git=B git_n=N top=comm:B
 # anon+shmem is the memory that cannot be reclaimed; the cgroup limit also
 # counts page cache (file), so usage against limit overstates the need.
 # node_max is the biggest node process (node_sum can't tell one from two; a
-# node process shows up in comm as MainThread);
+# node process shows up in comm as MainThread); node_a and node_b are the
+# unit's two app processes (node-b is the one forked with BLOT_WORKER_CHILD),
+# node_other any other node in the unit, such as a script run with docker exec;
+# git is the summed RSS of the unit's git processes and git_n how many there
+# are, since a burst of them shares the unit's limit with node;
 # top is the biggest process that is not node/nginx/openresty/tini/sh/su-exec
 # ("-" if none), i.e. the child-process spike. limit=0 means unlimited. On
 # cgroup v2 a peak=B field is the cgroup's high-water mark, which catches what
@@ -36,7 +40,7 @@ PROC="${PROC:-/proc}"
 DOCKER="${DOCKER:-docker}"
 SAMPLES="${SAMPLES:-4}"
 INTERVAL="${INTERVAL:-15}"
-CONTAINERS="${CONTAINERS:-blot-blue blot-green blot-blue-airlock blot-green-airlock}"
+CONTAINERS="${CONTAINERS:-blot-blue blot-green}"
 
 # Cron mails any output, so stay quiet; a missing log directory means the
 # instance store isn't mounted, which is not ours to fix.
@@ -99,12 +103,21 @@ container_fields() {
   # "max" (v2) or a huge number (v1, 2^63 less a page) means unlimited
   case "$limit" in *[!0-9]* | "") limit=0 ;; esac
   [ "${#limit}" -ge 16 ] && limit=0
-  node_max=0 node_sum=0 top_comm="-" top_rss=0
+  node_max=0 node_sum=0 node_a=0 node_b=0 node_other=0 git=0 git_n=0 top_comm="-" top_rss=0
   for pid in $(cat "$dir/cgroup.procs"); do
     comm=""; read -r comm < "$PROC/$pid/comm" || continue
     bytes=$(rss "$pid"); [ -n "$bytes" ] || continue
     case "$comm" in
-      node | MainThread) node_sum=$((node_sum + bytes)); [ "$bytes" -gt "$node_max" ] && node_max=$bytes ;;
+      node | MainThread)
+        node_sum=$((node_sum + bytes)); [ "$bytes" -gt "$node_max" ] && node_max=$bytes
+        if ! tr '\0' ' ' < "$PROC/$pid/cmdline" | grep -q 'app/index\.js'; then
+          node_other=$((node_other + bytes))
+        elif tr '\0' '\n' < "$PROC/$pid/environ" | grep -qx 'BLOT_WORKER_CHILD=true'; then
+          node_b=$((node_b + bytes))
+        else
+          node_a=$((node_a + bytes))
+        fi ;;
+      git | git-*) git=$((git + bytes)); git_n=$((git_n + 1)) ;;
       nginx | openresty | tini | sh | su-exec) ;;
       *) if [ "$bytes" -gt "$top_rss" ]; then
            top_rss=$bytes; top_comm=$(printf %s "$comm" | tr ' ' _)
@@ -114,7 +127,8 @@ container_fields() {
   peak=""
   [ -r "$dir/memory.peak" ] && peak=" peak=$(cat "$dir/memory.peak")"
   echo "anon=$1 file=$2 shmem=$3 limit=$limit oom_kill=${oom:-0}" \
-    "node_max=$node_max node_sum=$node_sum top=$top_comm:$top_rss$peak"
+    "node_max=$node_max node_sum=$node_sum node_a=$node_a node_b=$node_b node_other=$node_other" \
+    "git=$git git_n=$git_n top=$top_comm:$top_rss$peak"
 }
 
 sample=0

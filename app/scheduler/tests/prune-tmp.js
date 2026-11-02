@@ -177,7 +177,7 @@ describe("scheduler prune-tmp", function () {
     });
   });
 
-  describe("storage/folder's staging and downloads", function () {
+  describe("storage/folder's staging and content cache", function () {
     it("keeps staged folder files for a week, judging each file and not its directory", async function () {
       await write(this.tmp, "storage-folder-staging/blog_1/a/new.txt", 3 * DAY);
       await write(this.tmp, "storage-folder-staging/blog_1/a/old.txt", 8 * DAY);
@@ -193,19 +193,44 @@ describe("scheduler prune-tmp", function () {
       expect(await exists(this.tmp + "/storage-folder-staging")).toBe(true);
     });
 
-    it("keeps a recent download however old its directory is", async function () {
-      await write(this.tmp, "storage-folder/blog_1/abc/new.jpg", HOUR);
-      await write(this.tmp, "storage-folder/blog_1/def/old.jpg", 2 * DAY);
+    it("leaves the content cache alone, which evicts its own entries", async function () {
+      const config = require("config");
+      const directory = config.folder_cache.directory;
 
-      const then = new Date(Date.now() - 30 * DAY);
-      await fs.utimes(this.tmp + "/storage-folder", then, then);
-      await fs.utimes(this.tmp + "/storage-folder/blog_1", then, then);
-      await fs.utimes(this.tmp + "/storage-folder/blog_1/abc", then, then);
+      config.folder_cache.directory = this.tmp + "/storage-folder-cache";
 
-      await this.run();
+      try {
+        await write(this.tmp, "storage-folder-cache/blogs/blog_1/abc/old.jpg", 30 * DAY);
 
-      expect(await exists(this.tmp + "/storage-folder/blog_1/abc/new.jpg")).toBe(true);
-      expect(await exists(this.tmp + "/storage-folder/blog_1/def/old.jpg")).toBe(false);
+        const then = new Date(Date.now() - 30 * DAY);
+        await fs.utimes(this.tmp + "/storage-folder-cache", then, then);
+
+        await this.run();
+      } finally {
+        config.folder_cache.directory = directory;
+      }
+
+      expect(await exists(this.tmp + "/storage-folder-cache/blogs/blog_1/abc/old.jpg")).toBe(true);
+    });
+
+    it("leaves alone a directory the content cache is configured inside", async function () {
+      const config = require("config");
+      const directory = config.folder_cache.directory;
+
+      config.folder_cache.directory = this.tmp + "/caches/folder";
+
+      try {
+        await write(this.tmp, "caches/folder/blogs/blog_1/abc/new.jpg", 0);
+
+        const then = new Date(Date.now() - 30 * DAY);
+        await fs.utimes(this.tmp + "/caches", then, then);
+
+        await this.run();
+      } finally {
+        config.folder_cache.directory = directory;
+      }
+
+      expect(await exists(this.tmp + "/caches/folder/blogs/blog_1/abc/new.jpg")).toBe(true);
     });
   });
 

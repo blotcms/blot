@@ -16,10 +16,36 @@ var querystring = require("querystring");
 var debug = require("debug")("blot:clients:git:smartHttp");
 var guardServices = require("./guardServices");
 var receivePack = require("./receivePack");
+var limiter = require("./limiter");
 
 var noCache = receivePack.noCache;
 
 function noop() {}
+
+// Starts upload-pack once there is room in the interactive lane (see
+// limiter.js), and holds the place until it has closed. serve(ps) sets up the
+// process; nothing is started for a client which has gone while it waited.
+function uploadPack(req, res, args, options, serve) {
+  limiter
+    .run("interactive", function () {
+      return new Promise(function (resolve) {
+        if (res.writableEnded || (req.socket && req.socket.destroyed)) return resolve();
+
+        var ps = spawn("git", limiter.args(args), options);
+
+        ps.on("close", resolve);
+        ps.on("error", function () {
+          // Not started, so there is no close
+          if (ps.pid === undefined) resolve();
+        });
+
+        serve(ps);
+      });
+    })
+    .catch(function (err) {
+      fail(res, err);
+    });
+}
 
 function env() {
   var copy = Object.assign({}, process.env);
@@ -57,26 +83,28 @@ function advertise(req, res, directory) {
     );
     noCache(res);
 
-    var ps = spawn(
-      "git",
+    uploadPack(
+      req,
+      res,
       ["upload-pack", "--stateless-rpc", "--advertise-refs", directory],
-      { env: env(), stdio: ["ignore", "pipe", "ignore"] }
+      { env: env(), stdio: ["ignore", "pipe", "ignore"] },
+      function (ps) {
+        ps.on("error", function (err) {
+          fail(res, err);
+        });
+
+        res.write(Buffer.concat([receivePack.pktLine("# service=git-upload-pack\n"), Buffer.from("0000")]));
+        ps.stdout.on("error", noop);
+        ps.stdout.pipe(res);
+
+        // The client left before the advertisement was finished
+        res.once("close", function () {
+          if (res.writableFinished) return;
+          ps.stdout.unpipe(res);
+          ps.kill();
+        });
+      }
     );
-
-    ps.on("error", function (err) {
-      fail(res, err);
-    });
-
-    res.write(Buffer.concat([receivePack.pktLine("# service=git-upload-pack\n"), Buffer.from("0000")]));
-    ps.stdout.on("error", noop);
-    ps.stdout.pipe(res);
-
-    // The client left before the advertisement was finished
-    res.once("close", function () {
-      if (res.writableFinished) return;
-      ps.stdout.unpipe(res);
-      ps.kill();
-    });
   });
 }
 
@@ -89,9 +117,16 @@ function fetch(req, res, directory) {
   res.setHeader("content-type", "application/x-git-upload-pack-result");
   noCache(res);
 
-  var ps = spawn("git", ["upload-pack", "--stateless-rpc", directory], {
-    env: env(),
+  // A client which goes while upload-pack waits for room must not leave an
+  // error nobody listens for
+  req.on("error", noop);
+
+  uploadPack(req, res, ["upload-pack", "--stateless-rpc", directory], { env: env() }, function (ps) {
+    serveFetch(req, res, ps);
   });
+}
+
+function serveFetch(req, res, ps) {
   var source = req;
   var gunzip;
   var rejected = false;
