@@ -208,8 +208,8 @@ production instance.
 
 ### Increasing the Redis server size
 
-Do this when the daily email says **resize now** (memory at 70% of
-`maxmemory`) or the 80% alert fires; with `noeviction`, writes fail at the
+Do this when the daily email says **resize now** or the alert fires (both at
+80% of `maxmemory`); with `noeviction`, writes fail at the
 limit. Redis shares the host's RAM with the units, so first try raising
 `maxmemory` (check what the units and a background save's copy-on-write
 leave; `REDIS_MAXMEMORY` at bootstrap, or `/etc/redis6/blot-memory.conf`). If
@@ -389,12 +389,13 @@ read, as extra `key=value` fields in bytes: `ram_total`, `ram_avail`,
 reserved; `disk_backups` is left out when
 `/backups` is not a mount). They are not in `~/tcpmem.log`.
 
-The daily email (`app/scheduler/daily/redis-server.js`) has one line from this
+The daily email (`app/scheduler/daily/redis-server.js`) has two lines from this
 and Redis itself:
-`Redis server: memory 27% (resize in ~47 days, 8 GB free), disk 21% (stable, 19 GB free), saved 3m ago, backed up 30m ago`
+`Redis: memory 27% (resize in ~58 days, 8 GB free), saved 3m ago, backed up 30m ago, offsite 9h ago`
+`Server: disk 21% (stable, 19 GB free), RAM 75% available (12 GB)`
 Memory is `used_memory` against `maxmemory`; disk is the root disk from the
-sample. Each is `percent (trend, free space)`: the trend is when it would reach
-its limit (70% of `maxmemory`, 80% of the disk) at the rate it grew over the
+sample, and RAM the host's available memory. Each is `percent (trend, free space)`: the trend is when it would reach
+its limit (80% of `maxmemory`, 80% of the disk) at the rate it grew over the
 last week, or "stable" if it is flat or over a year away, and left out until
 there is an earlier reading. The daily job keeps the last 8 daily readings in
 `blot:redis-host:daily-memory-history` and `blot:redis-host:daily-disk-history`

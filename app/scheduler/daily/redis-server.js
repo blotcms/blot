@@ -1,7 +1,9 @@
-// The Redis server line of the daily email (blotcms/blot#2041), one line:
+// The Redis and Server lines of the daily email (blotcms/blot#2041):
 //
-//   Redis server: memory 27% (resize in ~47 days, 8 GB free), disk 21% (stable, 19 GB free), host RAM 75% available (12 GB), saved 3m ago, backed up 30m ago
+//   Redis: memory 27% (resize in ~58 days, 8 GB free), saved 3m ago, backed up 30m ago, offsite 9h ago
+//   Server: disk 21% (stable, 19 GB free), RAM 75% available (12 GB)
 //
+// The server is the host Redis runs on, which is also the app's since #2261.
 // Redis tells us its own memory and last save, but only the Redis host can
 // read its disk and its RAM: config/redis/bin/tcpmem-log.sh stores that in its 5-minute
 // sample (SAMPLE_KEY), and config/redis/bin/backup.sh stores each upload in
@@ -28,9 +30,9 @@ const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-// check-redis-host.js emails at 80%; the daily email says to resize a bit
-// earlier, since a bigger host takes a few days to plan.
-const MEMORY_WARNING = 0.7;
+// The same as check-redis-host.js's MAXMEMORY_ALERT: 80% of maxmemory still
+// leaves room, and the first step is usually raising maxmemory, not a host cycle.
+const MEMORY_WARNING = 0.8;
 const RESIZE_URL =
   "https://github.com/blotcms/blot/blob/master/config/redis/README.md#increasing-the-redis-server-size";
 
@@ -123,11 +125,11 @@ const fullness = ({ used, total, available }) =>
 // The root disk, from the host's sample, and the instance store only if it
 // needs attention.
 function diskPart({ now, sample, diskHistory }) {
-  if (!sample) return "no sample from the Redis host";
+  if (!sample) return "no sample from the host";
 
   const age = now - sample.time;
   if (age > SAMPLE_STALE_MS) return `sample ${compact(age)} old`;
-  if (!sample.diskRoot) return "disk not reported by the Redis host";
+  if (!sample.diskRoot) return "disk not reported";
 
   let text =
     "disk " +
@@ -152,13 +154,13 @@ function diskPart({ now, sample, diskHistory }) {
 }
 
 // Available RAM of the host that took the sample (the Redis host, which is the
-// app host once they share one), not of the machine running this email.
+// app host too), not of the machine running this email.
 function ramPart({ now, sample }) {
   if (!sample || now - sample.time > SAMPLE_STALE_MS) return null;
-  if (!sample.ramTotal || sample.ramAvailable === null) return "host RAM not reported";
+  if (!sample.ramTotal || sample.ramAvailable === null) return "RAM not reported";
 
   const fraction = sample.ramAvailable / sample.ramTotal;
-  const text = `host RAM ${percent(fraction)} available (${size(sample.ramAvailable)})`;
+  const text = `RAM ${percent(fraction)} available (${size(sample.ramAvailable)})`;
   return fraction < HOST_RAM_WARNING ? `**${text}**` : text;
 }
 
@@ -188,14 +190,14 @@ function offsitePart({ now, offsite }) {
     : `offsite ${compact(age)} ago`;
 }
 
-// Turns collect()'s data into the line of the email.
-function line(data) {
-  return (
-    "Redis server: " +
-    [memoryPart(data), diskPart(data), ramPart(data), savePart(data), backupPart(data), offsitePart(data)]
-      .filter(Boolean)
-      .join(", ")
-  );
+const join = (parts) => parts.filter(Boolean).join(", ");
+
+// Turns collect()'s data into the two lines of the email.
+function lines(data) {
+  return {
+    redis: "Redis: " + join([memoryPart(data), savePart(data), backupPart(data), offsitePart(data)]),
+    server: "Server: " + join([diskPart(data), ramPart(data)]),
+  };
 }
 
 // Tomorrow's trends start from today's readings. The disk's only count when
@@ -219,20 +221,21 @@ async function main(callback, deps = {}) {
 
   try {
     const data = await collect(deps);
-    result = line(data);
+    result = lines(data);
     await saveHistory(data, deps);
   } catch (err) {
-    // Redis down or an unexpected reply: say so and let the email go out.
+    // Redis down or an unexpected reply: say so and let the email go out. The
+    // server's sample is read from Redis, so it is unavailable too.
     const reason = String((err && err.message) || err).replace(/[*`<>[\]]/g, "").slice(0, 80);
-    result = `Redis server: unavailable (${reason})`;
+    result = { redis: `Redis: unavailable (${reason})`, server: "Server: unavailable (its sample is read from Redis)" };
   }
 
-  callback(null, { redis_server: result });
+  callback(null, result);
 }
 
 module.exports = main;
 module.exports.collect = collect;
-module.exports.line = line;
+module.exports.lines = lines;
 module.exports.parseBackup = parseBackup; // from check-redis-host.js
 module.exports.BACKUP_KEY = BACKUP_KEY;
 module.exports.OFFSITE_KEY = OFFSITE_KEY;
