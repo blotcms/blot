@@ -182,6 +182,12 @@ async function choosePacks({ store, cache, manifest, wants, negotiation }) {
   const all = manifest.packs;
   if (negotiation.floor === 0) return { packs: all, floor: 0 };
 
+  // A want that is no longer a tip came from an advertisement older than the
+  // manifest (a push landed between the client's two requests). The floor may
+  // be past every pack that holds it, so send everything; this is rare.
+  const current = new Set(Object.values(manifest.refs));
+  if (wants.some((oid) => !current.has(oid))) return { packs: all, floor: 0 };
+
   const packs = all.filter((pack) => pack.seq > negotiation.floor);
   if (packs.length < all.length && !(await tagsAreSent({ store, cache, manifest, packs, wants, negotiation }))) {
     return { packs: all, floor: 0 };

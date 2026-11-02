@@ -545,12 +545,16 @@ async function peelTags({ repo, local, types }) {
 
     let oid = tip;
     for (let depth = 0; depth < MAX_PEEL; depth++) {
-      const found = local.get(oid) || (await repo.read(oid));
-      if (!found) break;
-      if (found.type !== "tag") {
+      // Only a tag is read; the object it finally points at may be any size
+      const known = local.get(oid);
+      const type = known ? known.type : await repo.typeOf(oid);
+      if (!type) break;
+      if (type !== "tag") {
         peeled[tip] = oid;
         break;
       }
+      const found = known || (await repo.read(oid));
+      if (!found) break;
       oid = parseTag(found.data).object;
     }
   }

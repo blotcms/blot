@@ -1,6 +1,7 @@
 // Annotated tags in the manifest: the peeled target recorded when a tag is
 // pushed, advertised as git's "^{}" line, and carried or dropped as snapshots
 // come and go.
+const fs = require("fs");
 const path = require("path");
 const fx = require("./helpers/fixture");
 const timeout = require("./helpers/timeout");
@@ -70,6 +71,23 @@ describe("git store peeled tags", function () {
     const current = await manifest.read(store);
     expect(current.refs["refs/tags/again"]).toBe(current.refs["refs/tags/v1"]);
     expect(Object.values(current.peeled)).toEqual([target]);
+  });
+
+  it("peels a tag at a stored object bigger than the reader will hold, reading only the tag", async function () {
+    const big = path.join(dir, "big.bin");
+    fs.writeFileSync(big, Buffer.alloc(65 * MiB));
+    const blob = fx.text(work, ["hash-object", "-w", big]);
+    fs.rmSync(big);
+
+    // The blob goes in under a plain tag; the annotated tag then comes with no blob
+    fx.git(work, ["tag", "plain", blob]);
+    expect((await push(work, [received.url, "master", "refs/tags/plain"])).code).toBe(0);
+    fx.git(work, ["tag", "-a", "annotated", "-m", "A tag of a big file", blob]);
+    const pushed = await push(work, [received.url, "refs/tags/annotated"]);
+    expect(pushed.code).toBe(0);
+
+    const current = await manifest.read(store);
+    expect(current.peeled).toEqual({ [current.refs["refs/tags/annotated"]]: blob });
   });
 
   it("forgets the target of a tag once no snapshot names it, and keeps the field valid", function () {

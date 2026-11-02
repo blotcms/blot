@@ -407,6 +407,37 @@ describe("git store fetch", function () {
     });
   });
 
+  describe("a push that lands between the advertisement and the request", function () {
+    beforeEach(() => setup());
+    afterEach(teardown);
+
+    it("sends everything for a want that is no longer a tip", async function () {
+      await pushWork("master");
+      const a = fx.text(work, ["rev-parse", "HEAD"]);
+      const client = await clientFromWork("client");
+
+      const b = addCommit();
+      await pushWork("master");
+      const advertised = latest;
+      fx.git(work, ["reset", "-q", "--hard", a]);
+      await pushWork("-f", "master");
+
+      // The client reads refs with B on master, and by its request master is A again
+      let calls = 0;
+      const racing = await startServer({ store, cache, manifest: () => (calls++ === 0 ? advertised : latest) });
+      try {
+        ok(await gitIn(client, "fetch", racing.url, "+refs/heads/*:refs/remotes/origin/*"));
+        const result = racing.results[racing.results.length - 1];
+        expect(result.floor).toBe(0);
+        expect(result.packs).toBe(latest.packs.length);
+        fx.git(client, ["fsck", "--strict", "--no-dangling"]);
+        expect(fx.text(client, ["rev-parse", "refs/remotes/origin/master"])).toBe(b);
+      } finally {
+        await racing.close();
+      }
+    });
+  });
+
   describe("a snapshot with no refs", function () {
     beforeEach(() => setup());
     afterEach(teardown);
