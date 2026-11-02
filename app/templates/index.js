@@ -378,11 +378,22 @@ function build(directory, callback) {
               if (err) return callback(err);
 
               buildViews(id, snapshot.definitions, function (buildViewsErr) {
-                // Every valid view has already been persisted by buildViews
-                // regardless of buildViewsErr, so every blog's cache must
-                // still be flushed to make the rebuilt template visible - a
+                // No blog in production uses a SITE template: Blog.set forks
+                // one into the blog's own copy, which doesn't change with it.
+                // In development the watcher rebuilds inside a running
+                // process, where a preview of this template on any blog
+                // caches its views by that blog's cacheID, so every blog's
+                // cache is flushed there. Every valid view has already been
+                // persisted by buildViews regardless of buildViewsErr, so a
                 // broken view elsewhere shouldn't leave views stuck stale.
-                bumpCacheIDForEveryBlog(id, function (err) {
+                var bump =
+                  config.environment === "development"
+                    ? bumpCacheIDForEveryBlog
+                    : function (id, done) {
+                        done();
+                      };
+
+                bump(id, function (err) {
                   if (err) return callback(err);
                   if (buildViewsErr) return callback(buildViewsErr);
                   if (config.environment !== "development") return callback();
