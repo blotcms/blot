@@ -88,7 +88,7 @@ const STDERR_BYTES = 4096;
 
 // ---- Logging ----------------------------------------------------------------
 
-const ORDER = ["blog", "op", "outcome", "storeMs", "receiveMs", "commitMs", "ebsMs", "requests", "bytesUp", "bytesDown", "refs"];
+const ORDER = ["blog", "op", "source", "outcome", "storeMs", "receiveMs", "commitMs", "ebsMs", "firstByteMs", "requests", "bytesUp", "bytesDown", "bytesSent", "refs"];
 
 function value(v) {
   const text = String(v);
@@ -190,6 +190,12 @@ function storeFor(blogID) {
   }
 
   return entry;
+}
+
+// The blog's store and the shared cache, for the test-only read route
+// (./reads.js). The same store object the writes use, so it shares its memos.
+function readContext(blogID) {
+  return { store: storeFor(blogID).store, cache: sharedCache() };
 }
 
 // Everything an operation needs: the blog's EBS repository, its store, the
@@ -899,6 +905,7 @@ module.exports = {
   mirror,
   idle,
   removeBlog,
+  readContext,
   stats,
   _setObjectStore,
   _setRemoveAgainMs,

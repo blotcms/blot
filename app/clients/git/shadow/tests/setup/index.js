@@ -59,9 +59,12 @@ function setup(options) {
       log.apply(console, arguments);
     });
 
+    // With no op, the lines of the mirror's operations: not the timing lines
+    // of reads (source=store|ebs, see reads.js), which any clone or ls-remote
+    // makes
     ctx.shadowLines = function (op) {
       return ctx.lines.filter(function (line) {
-        return !op || line.indexOf(" op=" + op + " ") !== -1;
+        return op ? line.indexOf(" op=" + op + " ") !== -1 : line.indexOf(" source=") === -1;
       });
     };
 

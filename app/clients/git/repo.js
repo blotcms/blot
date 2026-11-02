@@ -89,6 +89,11 @@ function exists(handle, callback) {
 function handleSmartHttp(req, res, blogID) {
   req.blogID = blogID;
 
+  // Times clones and fetches for comparison with the store's (shadow/reads.js)
+  shadow(blogID, function () {
+    require("./shadow/reads").timeEbs(req, res, blogID);
+  });
+
   smartHttp.handle(req, res, directory(req.gitHandle), receiveHooks(blogID));
 }
 
