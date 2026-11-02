@@ -200,6 +200,20 @@ describe("storage/folder mirror", function () {
       expect(await keys(this.blog.id)).toEqual([]);
     });
 
+    it("deletes the copy of a deleted blog the index doesn't know of, when the blog is marked", async function () {
+      await folder.write(this.blog.id, "/a.txt", "a");
+
+      // As a failed index write leaves it: the object in S3, no index, a flag
+      await File.removeAll(this.blog.id);
+      await client.sAdd(mirror.DIRTY_KEY, this.blog.id);
+      config.folder_mirror = "off";
+
+      await folder.removeAll(this.blog.id);
+
+      expect(await keys(this.blog.id)).toEqual([]);
+      expect(await isDirty(this.blog.id)).toBe(false);
+    });
+
     it("keeps the disk's change and marks the blog when S3 fails", async function () {
       spyOn(s3, "uploadFile").and.callFake(down);
       spyOn(console, "error");

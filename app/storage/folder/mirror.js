@@ -220,8 +220,11 @@ async function mirror(op, args) {
       if (op !== "removeAll") return;
 
       // A deleted blog's copy is deleted, even once it is no longer
-      // mirrored. Without one there is nothing in S3 to ask about.
-      if (!hasBucket() || !(await hasMirror(blogID))) return await redis().sRem(DIRTY_KEY, blogID);
+      // mirrored. With no index and no dirty flag there is nothing in S3 to
+      // ask about. A dirty flag counts as a copy: a failed index write can
+      // leave objects in S3 that the index doesn't know of.
+      if (!hasBucket()) return await redis().sRem(DIRTY_KEY, blogID);
+      if (!(await hasMirror(blogID)) && !(await redis().sIsMember(DIRTY_KEY, blogID))) return;
     }
 
     await OPERATIONS[op].apply(null, args);
