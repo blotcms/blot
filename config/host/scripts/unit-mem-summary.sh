@@ -1,7 +1,9 @@
 #!/bin/sh
 # Summarises unit-mem.log (written by unit-mem-log.sh): for each container the
 # sample count, first and last sample, max and p99 of anon+shmem (the memory
-# that can't be reclaimed), max node_max, max oom_kill, the cgroup's peak where
+# that can't be reclaimed), max node_max, the max of node-a, node-b, any other
+# node (docker exec scripts) and git's summed RSS with its most processes at
+# once (where the log has them), max oom_kill, the cgroup's peak where
 # it has one, and the five non-node processes with the highest peak RSS; and
 # the host's lowest mem_available. For blot-sandbox-<unit> lines (the units'
 # sandbox jobs) peak and oom_kill are the numbers to read, against limit.
@@ -27,6 +29,12 @@ function mib(b) { return sprintf("%.0f MiB", b / 1048576) }
   if (held > max[name]) max[name] = held
   print name, held | ("sort -k1,1 -k2,2n > " values)
   if (f["node_max"] + 0 > nodemax[name]) nodemax[name] = f["node_max"] + 0
+  if ("node_a" in f) split_[name] = 1
+  if (f["node_a"] + 0 > nodea[name]) nodea[name] = f["node_a"] + 0
+  if (f["node_b"] + 0 > nodeb[name]) nodeb[name] = f["node_b"] + 0
+  if (f["node_other"] + 0 > nodeo[name]) nodeo[name] = f["node_other"] + 0
+  if (f["git"] + 0 > gitmax[name]) gitmax[name] = f["git"] + 0
+  if (f["git_n"] + 0 > gitn[name]) gitn[name] = f["git_n"] + 0
   if (f["oom_kill"] + 0 > oom[name]) oom[name] = f["oom_kill"] + 0
   if (f["peak"] + 0 > peakmem[name]) peakmem[name] = f["peak"] + 0
   limit[name] = f["limit"] + 0
@@ -47,6 +55,7 @@ END {
     name = order[k]
     printf "%s: %d samples, %s to %s\n", name, n[name], first[name], last[name]
     printf "  anon+shmem max %s, p99 %s; node_max max %s; oom_kill max %d\n", mib(max[name]), mib(p99[name]), mib(nodemax[name]), oom[name]
+    if (split_[name]) printf "  node-a max %s, node-b max %s, other node max %s; git max %s in up to %d processes\n", mib(nodea[name]), mib(nodeb[name]), mib(nodeo[name]), mib(gitmax[name]), gitn[name]
     if (peakmem[name]) printf "  cgroup peak %s of limit %s\n", mib(peakmem[name]), mib(limit[name])
     cmd = "sort -k1,1nr | head -5"; fflush()
     for (key in seen) { split(key, kp, SUBSEP); if (kp[1] == name) print peak[key], kp[2] | cmd }
