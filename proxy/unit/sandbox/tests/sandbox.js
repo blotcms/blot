@@ -50,8 +50,11 @@ test("jail: every job runs its own file in main.js, within its limits", () => {
     assert(fs.existsSync(path.join(__dirname, "../../../../app/sandbox/jobs", name + ".js")));
     if (j.network) continue;
     assert.strictEqual(j.memoryBytes, 512 * 1024 * 1024);
-    assert.strictEqual(j.maxInputBytes, 256 * 1024 * 1024);
+    // a zip is read whole into memory, with its files beside it
+    assert.strictEqual(j.maxInputBytes, (name === "unzip" ? 64 : 256) * 1024 * 1024);
   }
+  assert.strictEqual(jail.JOBS.unzip.timeSeconds, 30);
+  assert.strictEqual(jail.JOBS.unzip.maxOutputBytes, 60 * 1024 * 1024);
   for (const name of ["thumbnail", "resize", "to-png"]) {
     assert.strictEqual(jail.JOBS[name].timeSeconds, 60);
     assert.strictEqual(jail.JOBS[name].maxOutputBytes, 64 * 1024 * 1024);
