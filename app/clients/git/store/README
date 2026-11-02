@@ -210,6 +210,38 @@ A pack is deleted only after it has been unnamed and unwritten for at least two 
 - **Requests.** Reading the empty repository is 2 (the missing hint and a LIST), the uploads 5, the conditional create and the hint 2: 9 whatever the repository's size (an upload of a pack bigger than a part is a request for each part on S3 besides). The result's `stats.requests` counts them.
 - **`verifyImport({ store, cache, gitDir, scratchDir? })`** is the check: it clones the store repository through `clone.js` into scratch, runs `git index-pack --strict` and `git fsck --strict` on it, and compares every branch, tag, `HEAD` and peeled tag with the source's.
 
+### Measurements: what many packs cost
+
+These numbers were taken before #2400, which reads small indexes whole and caches them as recommended below. A one-file push into 128 packs went from about 3.6 s to 1.2 s cold and 0.5 s warm with that change; its PR has the full before and after.
+
+`scripts/git/measure-packs.js` (not a spec; see its header for how to run it) pushes a synthetic repository through the real `receive` with a real `git push`, with the same 128 commits, 33,154 objects (52.8 MiB of packs, 0.9 MiB of `.idx`) and refs every time, grouped into 1, 8, 32, 64 or 128 pushes and so that many packs. Each is loaded into MinIO and every operation is run against it through toxiproxy with the real modules, counting the SDK's requests. Assumed: 25 ms (+/-5) added to every S3 response, which is a same-region first byte for a small GET, HEAD or PUT, and 60 MB/s a connection each way; the client (git, or the clone's reader) is on the same host, so only the store's latency is in the numbers. Cache 512 MiB, median of two repetitions; cold is an empty cache, warm is the same cache after an earlier operation of the same kind. A one-file change is a delta against a blob in the newest pack.
+
+| cold / warm | 1 pack | 8 | 32 | 64 | 128 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| push, ms | 1,162 / 1,244 | 1,343 / 1,657 | 2,982 / 2,862 | 4,232 / 4,244 | 6,436 / 6,327 |
+| push, requests | 43 / 68 | 212 / 213 | 596 / 614 | 1,108 / 1,113 | 1,896 / 1,909 |
+| Blot commit, ms | 540 / 515 | 558 / 693 | 1,115 / 1,370 | 1,881 / 1,767 | 2,890 / 2,827 |
+| Blot commit, requests | 24 / 30 | 86 / 84 | 236 / 244 | 448 / 446 | 787 / 778 |
+| materialize one file, ms | 791 / 753 | 1,077 / 1,165 | 1,983 / 2,123 | 3,023 / 3,301 | 4,150 / 4,704 |
+| materialize, requests | 88 / 96 | 234 / 268 | 626 / 755 | 1,129 / 1,287 | 1,843 / 2,083 |
+| clone, total ms | 758 / 629 | 1,248 / 1,120 | 1,380 / 1,300 | 1,762 / 1,663 | 2,614 / 2,455 |
+| clone, first byte ms | 106 | 194 | 239 | 273 | 369 |
+| clone, requests | 17 / 16 | 27 / 26 | 67 / 66 | 131 / 130 | 259 / 258 |
+| fetch one push behind, ms | 229 / 182 | 210 / 217 | 207 / 229 | 211 / 204 | 210 / 233 |
+| fetch, requests | 9 / 8 | 9 / 8 | 9 / 8 | 9 / 8 | 9 / 8 |
+| requests on `.idx` files: push | 20 / 42 | 184 / 185 | 568 / 586 | 1,080 / 1,085 | 1,868 / 1,881 |
+| all `.idx` read whole once, ms (requests) | 157 (4) | 152 (11) | 234 (35) | 354 (67) | 604 (131) |
+
+What it shows:
+
+- **Almost all of the extra requests are `.idx` reads by lookups.** In a push, 98% of the requests at 128 packs are on indexes: about 14.6 a pack, not 2 or 3, because a push looks up several objects (the new commits' parents and trees, each delta base) and every object whose first byte has not been read yet costs a slice from every pack. A Blot commit is about 6 a pack and materialize about 14. The reader asks 8 packs at a time (`LOOKUP_CONCURRENCY`), so these are in waves: 128 packs is 16 waves of 25 ms or more for each object.
+- **Time grows linearly with packs, at about 41 ms a pack for a push, 19 for a commit and 26 for materialize.** At the 40 to 80 packs a large repository is left with, that is 1.7 to 3.3 s more than the same repository in one pack, so a push takes two and a half to four times as long. Ten or so packs cost half a second.
+- **Warm does not help once there are several packs.** A new push touches new object IDs, whose first bytes are not cached, so the slices are read again from every pack. The cache only saves the fanouts.
+- **Clone** pays one index read per pack (4 MiB more read than the packs' own 52.8 at 128 packs, +8%) and ignores the cache for them, so cold and warm are the same. The first byte comes at 106 ms with one pack and 369 ms with 128, small next to the transfer. **Fetch one push behind is unaffected**: the floor is found from the manifest and only the new pack is read.
+- **Requests are not the cost, time is.** At S3's list price for GETs (about $0.0004 per thousand, us-west-2) 1,900 requests is $0.0008 a push. Index bytes are read inside the region and add no egress; the bytes sent to a client do not depend on the pack count.
+
+**Recommendation: no multi-pack index.** Its benefit is bounded by the one-pack column: a MIDX that covers all but the newest four packs would make a push at 64 packs about 1.4 s (1.16 s plus 4 of 63 packs' extra time) and at 128 about 1.3 s, against 4.2 and 6.4 s. But reading each `.idx` whole, once, and keeping it in the cache gets the same: 0.15 to 0.6 s cold for 8 to 128 packs (8 at a time, in the table's last row), nothing after, and a lookup is then an in-memory search with no requests, as with a single pack. The indexes of this repository are 1.7% of its packs' size; in the images that make a large repository large they are much less, so they fit the cache comfortably. A MIDX also has to be rebuilt by compaction, which reads every index to do it, and rebuilt or not the packs newer than it still have to be asked one by one. The break-even for doing something is about ten packs, where lookups cost half a second a push; a MIDX would only start to win over whole-index reads if the indexes stopped fitting the cache, which at a few percent of the pack bytes they do not near the 40 to 80 packs expected. So the next step is `idx.js` fetching a whole `.idx` when it is under a size (a few MiB) instead of the fanout and slices, which is a small change and which this run suggests is worth doing before the packs pass about ten. Raising the compaction cap for big repositories would also work, but it needs more scratch, which is the budget `maxBytes` exists to protect.
+
 ## Materializing a folder
 
 `materialize({ reader, from, to, sink, concurrency, maxSize, symlinks, log })` brings a folder from one commit to another and resolves with `{ written, removed, skipped }`. `from` and `to` are commit IDs, or null for the empty tree. `treediff.js` (`diffTrees`, an async generator) finds the changes: it reads the two trees by range and skips a subtree whose ID is the same on both sides without reading it, so the cost follows the size of the change. It holds one directory's entries and a few of the directories below it, never a listing of the repository. Each change is `{ path, oldMode, oldOid, newMode, newOid, valid }`. Blobs go to the sink through `reader.stream`, up to `concurrency` (default 8) at a time, and are checked against their ID as they go. `materialize.js` documents the rules at its top. They are the rules of the materializer on EBS (`app/clients/git/materialize.js`), so the same commits give the same folder: only 100644 and 100755 files are written, raw and without `.gitattributes` filters; a link or submodule is never written, but a file or link it replaced is removed; a path with an empty, `.` or `..` name, a `.git` name in any case, or a name that is not UTF-8 is skipped and logged; names are kept byte for byte, with no Unicode normalization. `symlinks: true` is the one addition, for a sink that wants links written, and Blot does not use it.

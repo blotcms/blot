@@ -1,0 +1,8 @@
+[
+  {
+    "name": "minio",
+    "listen": "0.0.0.0:8666",
+    "upstream": "minio:9000",
+    "enabled": true
+  }
+]
