@@ -54,7 +54,7 @@ module.exports = [
     async (store) => {
       await store.put("empty", Buffer.alloc(0));
       expect((await store.get("empty")).length).toBe(0);
-      expect(await store.head("empty")).toEqual({ size: 0 });
+      expect((await store.head("empty")).size).toBe(0);
     },
   ],
   [
@@ -69,7 +69,7 @@ module.exports = [
     "says how big an object is, or that it isn't there",
     async (store) => {
       await store.put("k", Buffer.from("12345"));
-      expect(await store.head("k")).toEqual({ size: 5 });
+      expect((await store.head("k")).size).toBe(5);
       expect(await store.head("nope")).toBeNull();
     },
   ],
@@ -148,7 +148,7 @@ module.exports = [
     async (store) => {
       const data = crypto.randomBytes(13 * MIB + 123);
       await store.put("big", chunked(data, 1000003));
-      expect(await store.head("big")).toEqual({ size: data.length });
+      expect((await store.head("big")).size).toBe(data.length);
       expect(sha(await toBuffer(store.stream("big")))).toBe(sha(data));
 
       const at = 5 * MIB - 7;
@@ -160,7 +160,7 @@ module.exports = [
     async (store) => {
       const data = crypto.randomBytes(11 * MIB + 5);
       await store.put("buffer", data);
-      expect(await store.head("buffer")).toEqual({ size: data.length });
+      expect((await store.head("buffer")).size).toBe(data.length);
       expect(sha(await store.get("buffer"))).toBe(sha(data));
     },
   ],
@@ -203,7 +203,7 @@ module.exports = [
     "creates an empty object if it is absent",
     async (store) => {
       expect(await store.putIfAbsent("empty", Buffer.alloc(0))).toBe(true);
-      expect(await store.head("empty")).toEqual({ size: 0 });
+      expect((await store.head("empty")).size).toBe(0);
       expect(await store.putIfAbsent("empty", Buffer.from("x"))).toBe(false);
     },
   ],
@@ -239,6 +239,28 @@ module.exports = [
       expect(packs.find((i) => i.key === "packs/a.pack").size).toBe(3);
       expect((await listAll(store, "")).length).toBe(3);
       expect(await listAll(store, "nothing/")).toEqual([]);
+    },
+  ],
+  [
+    "says when an object was last written, the same in a HEAD and a LIST, and later after a rewrite",
+    async (store) => {
+      const before = Date.now();
+      await store.put("packs/a.pack", Buffer.from("one"));
+      expect(await store.putIfAbsent("manifests/1.json", Buffer.from("m"))).toBe(true);
+
+      const head = await store.head("packs/a.pack");
+      // A whole number of milliseconds, near now (S3 keeps whole seconds, and
+      // its clock is not this one)
+      expect(Number.isSafeInteger(head.lastModified)).toBe(true);
+      expect(Math.abs(head.lastModified - before)).toBeLessThan(10 * 60 * 1000);
+      expect(Number.isSafeInteger((await store.head("manifests/1.json")).lastModified)).toBe(true);
+
+      const [listed] = await listAll(store, "packs/");
+      expect(Math.floor(listed.lastModified / 1000)).toBe(Math.floor(head.lastModified / 1000));
+
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+      await store.put("packs/a.pack", Buffer.from("one"));
+      expect((await store.head("packs/a.pack")).lastModified).toBeGreaterThan(head.lastModified);
     },
   ],
 ];

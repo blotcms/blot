@@ -168,7 +168,7 @@ describe('dashboard folder remove route', function () {
     expect(res.statusCode).toBe(200);
     expect(res.body.ok).toBe(true);
     expect(res.body.removed).toBe('post.md');
-    expect(storage.remove).toHaveBeenCalledWith('blog-1', '/post.md');
+    expect(storage.remove).toHaveBeenCalledWith('blog-1', 'post.md');
     expect(folderUpdate).toHaveBeenCalledWith('/post.md');
     expect(folderIndexMock.invalidateCache).toHaveBeenCalledWith(req.blog);
     expect(done).toHaveBeenCalledTimes(1);

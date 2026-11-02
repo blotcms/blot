@@ -54,8 +54,9 @@
 // forward for a later manifest, and falls back to LISTing manifests/ if the
 // hint is missing, damaged or names something which doesn't exist.
 //
-// Old manifests are not deleted here; that belongs with the second part of
-// compaction, with trimming snapshots and the sweep of orphan packs.
+// Old manifests are not deleted here: sweep.js does that, keeping the newest
+// ones and any written recently. Snapshots are trimmed from the old end by
+// compacted() (see trimSnapshots), never by a push.
 const crypto = require("crypto");
 const {
   CorruptError,
@@ -80,10 +81,29 @@ const MAX_HINT_BYTES = 1024;
 // the hint as stale and LISTs instead
 const WALK_LIMIT = 8;
 
-// A manifest with a given number never changes, so its bytes can be kept for
-// good, by store. Only which number is the newest is ever asked of the store.
+// How long a writer may hold a manifest from read() as the base of a swap.
+// The sweep deletes old manifests, which reopens their numbers; this is what
+// stops a writer that stalled from creating a manifest in such a hole (see
+// swap() below). sweep.js requires its recovery window to be well above it.
+const MAX_BASE_AGE = 24 * 60 * 60 * 1000;
+
+// For each manifest read() returned (by the object itself), when the store
+// last showed it to be the newest, by this process's clock. Never part of the
+// manifest's bytes. swap() times a base by it.
+const readAt = new WeakMap();
+
+// A manifest with a given number never changes, so its bytes can be kept, by
+// store, with when the store last confirmed it (`confirmed`, the start of the
+// read() that fetched or checked it). Only which number is the newest is ever
+// asked of the store.
 const KEPT = 8;
 const kept = new WeakMap();
+
+// A kept manifest the store has not confirmed for this long is checked again
+// (a HEAD) before read() returns it: the sweep may have deleted it since. Half
+// of MAX_BASE_AGE, so a base is never older than a day and a half by the
+// store's last word on it (see swap()).
+const RECONFIRM_AFTER = MAX_BASE_AGE / 2;
 
 const OID = /^[0-9a-f]{40}$/;
 const WRITER = /^[0-9a-zA-Z_-]{1,64}$/;
@@ -199,25 +219,43 @@ function parse(buffer) {
   return validate(m);
 }
 
-function remember(store, seq, bytes) {
+function remember(store, seq, bytes, confirmed) {
   let bySeq = kept.get(store);
   if (!bySeq) kept.set(store, (bySeq = new Map()));
   bySeq.delete(seq);
-  bySeq.set(seq, bytes);
+  bySeq.set(seq, { bytes, confirmed });
   if (bySeq.size > KEPT) bySeq.delete(bySeq.keys().next().value);
 }
 
-// The manifest with this number. Throws NotFoundError if there isn't one.
-async function load(store, seq) {
+function forget(store, seq) {
   const bySeq = kept.get(store);
-  let bytes = bySeq && bySeq.get(seq);
-  if (!bytes) {
-    bytes = await store.get(manifestKey(seq), { maxBytes: MAX_BYTES });
-    remember(store, seq, bytes);
+  if (bySeq) bySeq.delete(seq);
+}
+
+// The manifest with this number, and when the store last confirmed it is
+// there: { m, confirmed }. Bytes kept from an earlier read are used if the
+// store confirmed them within RECONFIRM_AFTER, and otherwise kept after a HEAD
+// says the manifest is still there. `now` is the time to record for a
+// confirmation made here. Throws NotFoundError if there isn't one.
+async function load(store, seq, now) {
+  const bySeq = kept.get(store);
+  let entry = bySeq && bySeq.get(seq);
+  if (entry && now - entry.confirmed > RECONFIRM_AFTER) {
+    if (await store.head(manifestKey(seq))) {
+      entry.confirmed = now;
+    } else {
+      forget(store, seq);
+      throw new NotFoundError("No such key: " + manifestKey(seq));
+    }
   }
-  const m = parse(bytes);
+  if (!entry) {
+    const bytes = await store.get(manifestKey(seq), { maxBytes: MAX_BYTES });
+    remember(store, seq, bytes, now);
+    entry = { bytes, confirmed: now };
+  }
+  const m = parse(entry.bytes);
   if (m.seq !== seq) fail(manifestKey(seq) + " says it is seq " + m.seq);
-  return m;
+  return { m, confirmed: entry.confirmed };
 }
 
 // The seq latest.json names, or null if it is missing or isn't a seq
@@ -269,18 +307,43 @@ async function listNewest(store) {
 // process already holds its bytes. The hint can only make read() look in the
 // wrong place, never return the wrong manifest: whatever it names, read() looks
 // forward for newer ones, and if what it names isn't there, LISTs instead.
-async function read(store) {
+//
+// The manifest returned is stamped with when the store last showed it to be
+// the newest (by `clock`, Date.now unless given), which is the time swap()
+// goes by when it is a base: the start of this read when its bytes were
+// fetched or checked here, or the start of the read that did so when they
+// were kept, at most RECONFIRM_AFTER ago. Kept bytes past that are checked
+// with a HEAD, and a manifest gone since (the sweep deleted it, and the hint
+// still names it) is a miss, and the LIST finds the newest.
+async function read(store, { clock = Date.now } = {}) {
+  const now = clock();
+  const stamp = ({ m, confirmed }) => (readAt.set(m, confirmed), m);
   const hinted = await walkFromHint(store);
   if (hinted !== null) {
     try {
-      return await load(store, hinted);
+      return stamp(await load(store, hinted, now));
     } catch (err) {
       if (!(err instanceof NotFoundError)) throw err;
     }
   }
 
   const newest = await listNewest(store);
-  return newest === 0 ? empty() : load(store, newest);
+  return stamp(newest === 0 ? { m: empty(), confirmed: now } : await load(store, newest, now));
+}
+
+// Throws StaleManifestError if the store last showed `base` to be the newest
+// (a read, or the swap that made it) more than MAX_BASE_AGE ago. A base read() did not return (built by hand, or
+// a copy) has no time and passes; every writer here swaps the very object
+// read() gave it.
+function isFresh(base, clock = Date.now) {
+  const at = readAt.get(base);
+  return at === undefined || clock() - at <= MAX_BASE_AGE;
+}
+
+function assertFresh(base, clock) {
+  if (!isFresh(base, clock)) {
+    throw new StaleManifestError("The manifest seq " + base.seq + " was read too long ago to build on; read it again");
+  }
 }
 
 // The manifest which follows `base` after a push: `refs` are all the refs now,
@@ -330,9 +393,14 @@ function advance(base, { refs, packs = [], historyPieces = [], head = base.head,
 // the pack latest in the list, and with every pack self-contained any copy is
 // right, so keeping the list in seq order is all that matters.
 //
+// The snapshots are trimmed to `limits` (SNAPSHOT_LIMITS unless given; see
+// trimSnapshots), from the old end, and `peeled` keeps only the tags the
+// snapshots left still name. The newest snapshot is the refs as they are, so
+// what the advertisement needs is always kept.
+//
 // Throws StaleManifestError if `base` no longer lists a pack in `remove` or a
 // piece in `removePieces`: someone else compacted them away first.
-function compacted(base, { remove = [], add = null, history, removePieces = [] }) {
+function compacted(base, { remove = [], add = null, history, removePieces = [], limits = {} }) {
   const listed = new Map(base.packs.map((pack) => [pack.name, pack]));
   const gone = remove.filter((name) => !listed.has(name));
   if (gone.length) throw new StaleManifestError("The manifest no longer lists " + gone.join(", "));
@@ -358,14 +426,49 @@ function compacted(base, { remove = [], add = null, history, removePieces = [] }
   }
 
   const dropped = new Set(removePieces);
+  const snapshots = trimSnapshots(base.snapshots, limits);
   return {
     ...base,
     seq: base.seq + 1,
     writer: crypto.randomBytes(16).toString("hex"),
     packs,
+    snapshots,
+    ...(base.peeled !== undefined ? { peeled: keepPeeled(base.peeled, snapshots) } : {}),
     history: history === undefined ? base.history : history,
     historyPieces: pieces.filter((piece) => !dropped.has(piece.name)),
   };
+}
+
+// How many snapshots a manifest keeps, and how many bytes of them, once
+// compaction trims it (see trimSnapshots). A snapshot is about 100 bytes for a
+// blog with a ref or two, so 1000 of them is about 100 KB; the byte cap is for
+// a repository with many refs, where each snapshot is large. At least `min`
+// are kept whatever their size, so a client a few pushes behind still fetches
+// only what it lacks.
+const SNAPSHOT_LIMITS = { maxSnapshots: 1000, maxSnapshotBytes: 1024 * 1024, minSnapshots: 8 };
+
+// The bytes a snapshot takes, as JSON without the manifest's indentation
+function snapshotBytes(snapshot) {
+  return Buffer.byteLength(JSON.stringify(snapshot));
+}
+
+// The newest of `snapshots` that fit the limits: at most maxSnapshots, then as
+// many more dropped from the old end as it takes to bring them under
+// maxSnapshotBytes, but never fewer than minSnapshots (nor than there are).
+// Only the old end is ever trimmed. Fetch sends the packs above the newest
+// snapshot a client provably has, so trimming old snapshots only lowers what a
+// client far behind can prove, which makes it fetch everything (as a clone
+// does); it never makes fetch send too little.
+function trimSnapshots(snapshots, limits = {}) {
+  const { maxSnapshots, maxSnapshotBytes, minSnapshots } = { ...SNAPSHOT_LIMITS, ...limits };
+  let start = Math.max(0, snapshots.length - maxSnapshots);
+  let bytes = 0;
+  for (let i = start; i < snapshots.length; i++) bytes += snapshotBytes(snapshots[i]);
+  while (bytes > maxSnapshotBytes && snapshots.length - start > Math.min(minSnapshots, maxSnapshots)) {
+    bytes -= snapshotBytes(snapshots[start]);
+    start++;
+  }
+  return start === 0 ? snapshots : snapshots.slice(start);
 }
 
 // The peeled targets of the tags some snapshot names. A snapshot is how long a
@@ -374,6 +477,15 @@ function keepPeeled(peeled, snapshots) {
   const named = new Set();
   for (const snapshot of snapshots) for (const oid of Object.values(snapshot.refs)) named.add(oid);
   return Object.fromEntries(Object.entries(peeled).filter(([tag]) => named.has(tag)));
+}
+
+// The names of every pack a manifest needs kept: its packs, its history pack
+// and its history pieces. Each is a .pack and .idx, and a .rev for most.
+function packsNamed(m) {
+  const names = m.packs.map((pack) => pack.name);
+  if (m.history) names.push(m.history.name);
+  for (const piece of m.historyPieces || []) names.push(piece.name);
+  return names;
 }
 
 // Packs are uploaded before the manifest that names them. This checks it,
@@ -468,11 +580,27 @@ async function confirm(store, next, cause) {
 // the sizes `next` names. Anything `next` adds and `uploaded` does not list
 // is still checked with a HEAD for each file, so a caller which has not
 // uploaded its packs itself gets the same guarantee as before.
-async function swap({ store, lock, base, next, uploaded = [] }) {
+//
+// A base the store last showed to be the newest more than MAX_BASE_AGE ago
+// (by `clock`, Date.now unless given; see read()) is refused with
+// StaleManifestError, before any request and again just before the create,
+// so the writer reads again through its usual stale path. That is what keeps
+// the conditional create safe once the sweep deletes old manifests. When the
+// store showed k to be the newest (k + 1 missing, k there), k + 1 had never
+// existed: the sweep deletes in order, so it never deletes k + 1 while k is
+// still there. So any k + 1 there is, or was and has been deleted, was written
+// since then, which is at most MAX_BASE_AGE before the create. The sweep only
+// deletes manifests older than its recovery window (at least two days), so the
+// key this create targets was never one it deleted. Bytes kept in memory are
+// what make "since then" more than this read: they count from the read that
+// last fetched or checked them, which is never more than RECONFIRM_AFTER ago,
+// so a kept manifest the sweep has since deleted is found gone, not built on.
+async function swap({ store, lock, base, next, uploaded = [], clock = Date.now }) {
   if (typeof lock !== "function") throw new Error("swap needs the host's lock function");
   validate(base);
   validate(next);
   if (next.seq !== base.seq + 1) throw new StaleManifestError("The new manifest does not follow the one it was built on");
+  assertFresh(base, clock);
 
   // A manifest is immutable, so one read() would refuse could never be fixed
   // and would leave the repository unreadable: it is never written
@@ -490,6 +618,9 @@ async function swap({ store, lock, base, next, uploaded = [] }) {
     // writer's, which is a StaleManifestError.
     let landed = null;
 
+    // Waiting for the lock and the HEADs above take time too
+    assertFresh(base, clock);
+
     if (!landed) {
       let created;
       try {
@@ -500,7 +631,11 @@ async function swap({ store, lock, base, next, uploaded = [] }) {
       }
       if (created === false) landed = await confirm(store, next, null);
     }
-    remember(store, next.seq, landed || bytes);
+    // next + 1 did not exist when this create landed, so `next` is as fresh a
+    // base as one just read
+    const landedAt = clock();
+    remember(store, next.seq, landed || bytes, landedAt);
+    readAt.set(next, landedAt);
 
     // The swap has happened. The hint only saves the next reader some looking,
     // so a failure to write it is not a failure to swap.
@@ -512,4 +647,21 @@ async function swap({ store, lock, base, next, uploaded = [] }) {
   });
 }
 
-module.exports = { VERSION, empty, validate, parse, serialize, read, advance, compacted, swap };
+module.exports = {
+  VERSION,
+  MAX_BYTES,
+  MAX_BASE_AGE,
+  SNAPSHOT_LIMITS,
+  empty,
+  validate,
+  parse,
+  serialize,
+  read,
+  advance,
+  compacted,
+  trimSnapshots,
+  isFresh,
+  snapshotBytes,
+  packsNamed,
+  swap,
+};

@@ -24,6 +24,40 @@ describe("callers of the sandbox when it fails", function () {
     await fs.remove(directory);
   });
 
+  it("template zip upload reports a zip the sandbox could not read as a problem with the file", async function () {
+    const unzipUpload = require("dashboard/site/template/save/unzip-upload");
+
+    let problems;
+    try {
+      await unzipUpload(path.join(directory, "template.zip"));
+    } catch (err) {
+      expect(err.status).toEqual(422);
+      problems = err.problems;
+    }
+
+    expect(sandbox.run.calls.argsFor(0)[0]).toEqual("unzip");
+    expect(problems.length).toEqual(1);
+    expect(problems[0].reason).toEqual("zip");
+  });
+
+  it("template zip upload does not blame the file when the sandbox is busy", async function () {
+    const unzipUpload = require("dashboard/site/template/save/unzip-upload");
+    sandbox.run.and.callFake(function () {
+      const err = new Error("sandbox: busy");
+      err.code = "SANDBOX_BUSY";
+      return Promise.reject(err);
+    });
+
+    let thrown;
+    try {
+      await unzipUpload(path.join(directory, "template.zip"));
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown.code).toEqual("SANDBOX_BUSY");
+  });
+
   it("thumbnail validate passes the error to its callback", function (done) {
     require("build/thumbnail/validate")(image, function (err) {
       expect(err.code).toEqual("SANDBOX_TIMEOUT");
@@ -92,6 +126,33 @@ describe("callers of the sandbox when it fails", function () {
     img.read(test.blog, "/bunny.png", function (err, html) {
       expect(err).toBe(null);
       expect(html).toContain("/bunny.png");
+      done();
+    });
+  });
+
+  it("docx converter fails to convert and writes no media", function (done) {
+    const test = this;
+    const docx = require("build/converters/docx");
+    const source = path.join(__dirname, "../../build/converters/docx/tests/image.docx");
+    fs.copySync(source, test.blogDirectory + "/image.docx");
+
+    docx.read(test.blog, "/image.docx", function (err, html) {
+      expect(err.code).toEqual("SANDBOX_TIMEOUT");
+      expect(html).toBeUndefined();
+      expect(sandbox.run.calls.argsFor(0)[0]).toEqual("pandoc");
+      done();
+    });
+  });
+
+  it("markdown converter fails to convert", function (done) {
+    const test = this;
+    const markdown = require("build/converters/markdown");
+    fs.outputFileSync(test.blogDirectory + "/post.md", "# Hello");
+
+    markdown.read(test.blog, "/post.md", function (err, html) {
+      expect(err.code).toEqual("SANDBOX_TIMEOUT");
+      expect(html).toBeUndefined();
+      expect(sandbox.run.calls.argsFor(0)[1].from).toEqual("markdown");
       done();
     });
   });

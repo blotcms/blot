@@ -84,6 +84,29 @@ const JOBS = {
     maxInputBytes: 256 * MiB,
     maxOutputBytes: 8 * MiB,
   },
+  // Spawns pandoc on one document (docx, odt, rtf, org or markdown, with a
+  // bibliography and CSL) and returns the HTML and any media it extracted.
+  // pandoc caps its own heap at 400M, so most documents too large for the
+  // jail fail as pandoc errors, and is killed after 10s by the job. A very
+  // large docx or odt (tens of MB of images: the document and its media sit
+  // in /tmp and in Node too) can still exceed the jail and fail the job.
+  pandoc: {
+    command: node("pandoc"),
+    memoryBytes: 512 * MiB,
+    timeSeconds: 30,
+    maxInputBytes: 256 * MiB,
+    maxOutputBytes: 64 * MiB,
+  },
+  // A zip archive, read into its files (app/sandbox/jobs/unzip.js): the
+  // archive in memory, then every file. The output stops under the 64 MiB a
+  // reply may hold (app/sandbox/index.js), with the file names.
+  unzip: {
+    command: node("unzip"),
+    memoryBytes: 512 * MiB,
+    timeSeconds: 30,
+    maxInputBytes: 64 * MiB,
+    maxOutputBytes: 60 * MiB,
+  },
   // Spawns perl, which runs exiftool, reading the image from stdin
   exif: {
     command: node("exif"),
@@ -120,6 +143,7 @@ const BINDS = [
   "/usr/bin",
   "/usr/share/perl5",
   "/usr/local/bin/node",
+  "/usr/local/bin/pandoc",
   "/usr/src/app/node_modules",
   "/usr/src/app/app/sandbox",
 ];

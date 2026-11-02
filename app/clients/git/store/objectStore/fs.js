@@ -7,7 +7,8 @@
 // A key is a path under `root`. An object is written to a temporary file under
 // `root/.tmp` and renamed into place, so a reader never sees half of one and a
 // stream which fails leaves nothing. putIfAbsent links the finished temporary
-// file to the key, which fails if the key exists.
+// file to the key, which fails if the key exists. lastModified is the file's
+// modification time.
 const crypto = require("crypto");
 const fsp = require("fs/promises");
 const path = require("path");
@@ -51,7 +52,7 @@ function createFsStore({ root }) {
   async function head(key) {
     try {
       const stat = await fsp.stat(file(key));
-      return stat.isFile() ? { size: stat.size } : null;
+      return stat.isFile() ? { size: stat.size, lastModified: Math.floor(stat.mtimeMs) } : null;
     } catch (err) {
       if (err.code === "ENOENT" || err.code === "ENOTDIR") return null;
       throw err;
@@ -166,7 +167,10 @@ function createFsStore({ root }) {
       if (relative === "" && entry.name === TMP) continue;
       const key = relative + entry.name;
       if (entry.isDirectory()) yield* walk(path.join(dir, entry.name), key + "/");
-      else if (entry.isFile()) yield { key, size: (await fsp.stat(path.join(dir, entry.name))).size };
+      else if (entry.isFile()) {
+        const stat = await fsp.stat(path.join(dir, entry.name));
+        yield { key, size: stat.size, lastModified: Math.floor(stat.mtimeMs) };
+      }
     }
   }
 
