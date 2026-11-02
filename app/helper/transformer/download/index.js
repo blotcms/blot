@@ -1,6 +1,6 @@
-const fetch = require("node-fetch");
 const fs = require("fs").promises;
-const { createWriteStream } = require("fs");
+const config = require("config");
+const sandbox = require("sandbox");
 const ensure = require("helper/ensure");
 const UID = require("helper/makeUid");
 const callOnce = require("helper/callOnce");
@@ -9,23 +9,20 @@ const nameFrom = require("helper/nameFrom");
 const tidy = require("./tidy");
 const invalid = require("./invalid");
 
-// Remote assets referenced in posts are user-controlled URLs, so they are
-// fetched through the forward proxy in the sandbox's proxy jail (see
-// helper/airlock and app/sandbox/README.md). The jail's nftables egress filter
-// is what blocks a URL - or a redirect from one - that resolves to an
-// internal address, on the real connection IP, so DNS-rebinding does not
-// help an attacker. In production assertProxyReady() throws if the proxy
-// isn't configured rather than letting this fall back to a direct fetch;
-// outside production the fetch goes direct.
-const { proxyAgent, assertProxyReady } = require("helper/airlock");
+// Remote assets referenced in posts are user-controlled URLs, so the sandbox's
+// fetch-image job (app/sandbox/jobs/fetch-image.js) fetches them, in a jail
+// with a filtered network, and re-encodes the image there: this process never
+// handles the bytes the server sent, compressed or not. The jail's nftables
+// egress filter is what blocks a URL - or a redirect from one - that resolves
+// to an internal address, on the real connection IP, so DNS-rebinding does
+// not help an attacker. Without a sandbox the job runs in-process and fetches
+// directly, which production refuses (config.airlock.required).
+//
+// Calls back with the path of a temporary file holding the image, which the
+// caller removes, and the response's caching headers; or with no path when the
+// cached copy is still good (fresh, or a 304).
 
-const IF_NONE_MATCH = "If-None-Match";
-const IF_MODIFIED_SINCE = "If-Modified-Since";
 const LAST_MODIFIED = "last-modified";
-const CACHE_CONTROL = "cache-control";
-
-const MAX_REDIRECTS = 5;
-const TIMEOUT = 5000; // 5s
 
 const debug = function () {}; // console.log || noop for debugging
 
@@ -37,12 +34,14 @@ module.exports = function (url, headers, callback) {
   const invalidReason = invalid(url);
   if (invalidReason) return callback(invalidReason);
 
-  // Fail closed: in production this must go through the egress proxy. If it
-  // isn't configured, error out rather than fetch the user URL directly.
-  try {
-    assertProxyReady("transformer/download");
-  } catch (e) {
-    return callback(e);
+  // Fail closed: in production the fetch must happen in the sandbox's jail,
+  // never in this process.
+  if (!config.sandbox.socket && config.airlock.required) {
+    return callback(
+      new Error(
+        "transformer/download: refusing to fetch a user-controlled URL - this unit has no sandbox (BLOT_SANDBOX). See app/sandbox/README.md."
+      )
+    );
   }
 
   // Sometimes these are null for new urls...
@@ -56,186 +55,53 @@ module.exports = function (url, headers, callback) {
 
   callback = callOnce(callback);
 
-  const path = tempDir + UID(6) + "-" + nameFrom(url);
-  const file = createWriteStream(path);
-
-  const options = {
-    headers: {
-      "User-Agent": "node-fetch",
-      ...(headers.etag && { [IF_NONE_MATCH]: headers.etag }),
-      ...(headers[LAST_MODIFIED] && {
-        [IF_MODIFIED_SINCE]: headers[LAST_MODIFIED]
-      })
-    },
-    redirect: "follow",
-    follow: MAX_REDIRECTS,
-    timeout: TIMEOUT,
-    agent: proxyAgent
+  const args = {
+    url,
+    etag: headers.etag || undefined,
+    lastModified: headers[LAST_MODIFIED] || undefined,
   };
 
-  debug("Downloading", url, "to", path, "with fetch headers:");
-  debug(print(options.headers));
+  debug("Fetching", url, "with", args);
 
-  fetch(url, options)
-    .then(res => {
-      debug("Received response:");
+  sandbox
+    .run("fetch-image", args, Buffer.alloc(0))
+    .then(async ({ meta, outputs }) => {
+      if (!meta || typeof meta !== "object") throw new Error("fetch-image: no answer");
+      // The status for a bad one, as before, or why it isn't an image
+      if (meta.error) throw new Error(meta.error);
 
-      const cacheControl = res.headers.get(CACHE_CONTROL);
-      const lastModified = res.headers.get(LAST_MODIFIED);
-      const expires = res.headers.get("expires");
-      const etag = res.headers.get("etag");
-      const age = res.headers.get("age");
-
-      headers[LAST_MODIFIED] = lastModified || headers[LAST_MODIFIED] || "";
-      headers.etag = etag || headers.etag || "";
+      const res = meta.headers || {};
+      headers[LAST_MODIFIED] = res.lastModified || headers[LAST_MODIFIED] || "";
+      headers.etag = res.etag || headers.etag || "";
       headers.expires =
-        tidy.date(expires) ||
-        tidy.expire(cacheControl, age) ||
+        tidy.date(res.expires) ||
+        tidy.expire(res.cacheControl, res.age) ||
         headers.expires ||
         "";
       headers.url = headers.url || url;
 
-      if (res.status === 304) {
-        debug("  it has 304 unchanged status");
-        file.end(); // close the file stream as we won't write anything to it
-        return { status: 304, headers };
-      }
+      if (meta.status === 304) return { headers };
 
-      if (!res.ok) {
-        debug("  it has a bad status code:", res.status);
-        // Nobody consumes the body on this path; drop it so the socket
-        // isn't held open.
-        res.body.destroy();
-        throw new Error(res.status);
-      }
+      const image = outputs[0];
+      if (!image || !image.length) throw new Error("fetch-image: no image");
 
-      debug("  updated latest response headers for status", res.status);
-
-      // node-fetch transparently decompresses gzip/deflate/br bodies but
-      // leaves Content-Length describing the *encoded* payload, so a
-      // decoded byte count can legitimately differ from it. Only use the
-      // header for the truncation check when the body is served identity.
-      var contentEncoding = res.headers.get("content-encoding");
-      var canCompareLength =
-        !contentEncoding || /^identity$/i.test(contentEncoding.trim());
-
-      var expectedLength = Number(res.headers.get("content-length"));
-      if (
-        !canCompareLength ||
-        !Number.isFinite(expectedLength) ||
-        expectedLength < 0
-      )
-        expectedLength = null;
-
-      return new Promise((resolve, reject) => {
-        var settled = false;
-        var received = 0;
-        var idleTimer = null;
-
-        function clearIdle() {
-          if (idleTimer) {
-            clearTimeout(idleTimer);
-            idleTimer = null;
-          }
-        }
-
-        // Independent streaming watchdog. We do not rely solely on
-        // res.body emitting 'error': node-fetch's `timeout` option does
-        // not arm a body timer when the stream is consumed via pipe(), and
-        // some truncated-body cases (socket destroyed after a partial
-        // chunk) can leave the PassThrough open without 'error'/'end'/
-        // 'close'. Without this, the promise never settles and the build
-        // hangs. This is the ESOCKETIMEDOUT case the old TODO referred to.
-        function armIdle() {
-          clearIdle();
-          idleTimer = setTimeout(function () {
-            onError(
-              new Error("Download stalled: no data for " + TIMEOUT + "ms")
-            );
-          }, TIMEOUT);
-        }
-
-        function cleanup() {
-          clearIdle();
-          res.body.removeListener("data", onData);
-          file.removeListener("error", onError);
-          file.removeListener("finish", onFinish);
-          // Deliberately keep the res.body 'error' listener: destroy() and
-          // late premature-close errors can still fire after we've settled,
-          // and an unhandled 'error' on the stream would crash the process.
-          // onError's `settled` guard makes the extra call a no-op.
-        }
-
-        function onError(err) {
-          if (settled) return;
-          settled = true;
-          cleanup();
-          res.body.unpipe(file);
-          // Destroy the response stream, not just unpipe it: an unpiped,
-          // unconsumed PassThrough stays paused and backpressures - and so
-          // holds open - the underlying HTTP socket, and node-fetch has
-          // already cleared its request timeout once headers arrived.
-          res.body.destroy();
-          file.destroy();
-          reject(err);
-        }
-
-        function onData(chunk) {
-          received += chunk.length;
-          armIdle();
-        }
-
-        function onFinish() {
-          if (settled) return;
-          // A body that ends short of its advertised Content-Length is a
-          // truncated download, not a success - node-fetch does not always
-          // surface this as an 'error'.
-          if (expectedLength !== null && received < expectedLength) {
-            return onError(
-              new Error(
-                "Download truncated: received " +
-                  received +
-                  " of " +
-                  expectedLength +
-                  " bytes"
-              )
-            );
-          }
-          settled = true;
-          cleanup();
-          resolve({ status: res.status, path, headers });
-        }
-
-        res.body.on("error", onError);
-        res.body.on("data", onData);
-        file.on("error", onError);
-        file.on("finish", onFinish);
-
-        armIdle();
-        res.body.pipe(file); // start piping the response body to the file
-      });
-    })
-    .then(result => {
-      if (!result) return;
-
-      if (result.status === 304) {
-        debug("Calling back with cached headers for 304 response:");
-        debug(print(result.headers));
+      const path = tempDir + UID(6) + "-" + nameFrom(url);
+      await fs.writeFile(path, image).catch((err) => {
         fs.unlink(path).catch(() => {});
-        callback(null, null, result.headers);
-        return;
-      }
-
-      debug("Calling back with path", result.path, "and res headers:");
-      debug(print(result.headers));
-      callback(null, result.path, result.headers);
+        throw err;
+      });
+      return { path, headers };
     })
-    .catch(err => {
-      debug("Download error:", err);
-      if (!file.destroyed) file.destroy();
-      fs.unlink(path).catch(() => {});
-      callback(err);
-    });
+    .then(
+      (result) => {
+        debug("Calling back with", result.path, print(result.headers));
+        callback(null, result.path || null, result.headers);
+      },
+      (err) => {
+        debug("Download error:", err);
+        callback(err);
+      }
+    );
 };
 
 function isFresh (existing) {

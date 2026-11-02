@@ -51,7 +51,7 @@ test("jail: an unknown job throws", () => {
 });
 
 test("jail: every job runs its own file in main.js, within its limits", () => {
-  assert.deepStrictEqual(Object.keys(jail.JOBS).sort(), ["exif", "favicon", "metadata", "pandoc", "resize", "screenshot", "template-image", "thumbnail", "to-png", "unzip"]);
+  assert.deepStrictEqual(Object.keys(jail.JOBS).sort(), ["exif", "favicon", "fetch-image", "metadata", "pandoc", "resize", "screenshot", "template-image", "thumbnail", "to-png", "unzip"]);
   for (const [name, j] of Object.entries(jail.JOBS)) {
     assert.deepStrictEqual(j.command.slice(-2), ["/usr/src/app/app/sandbox/jobs/main.js", name]);
     assert(fs.existsSync(path.join(__dirname, "../../../../app/sandbox/jobs", name + ".js")));
@@ -71,36 +71,71 @@ test("jail: every job runs its own file in main.js, within its limits", () => {
   assert.strictEqual(jail.JOBS.exif.maxOutputBytes, 1024 * 1024);
 });
 
-test("jail: a job with a network starts as its own uid, in its cgroup, behind the filter", () => {
-  const { file, args } = jail.command("screenshot");
-  assert.strictEqual(file, "/bin/sh");
-  assert.strictEqual(args[3], jail.BROWSER_CGROUP);
-  assert.deepStrictEqual(args.slice(4, 7), ["/sbin/su-exec", "65001:65001", jail.NSJAIL]);
-  assert(args.includes("-u") && args[args.indexOf("-u") + 1] === "65000:65001:1");
+const NETWORK_JOBS = ["screenshot", "fetch-image"];
 
-  const separator = args.indexOf("--");
-  assert.strictEqual(path.basename(args[separator + 2]), "enter-network.sh");
-  assert.deepStrictEqual(args.slice(-3), jail.JOBS.screenshot.command);
+test("jail: a job with a network starts as its own uid, in its cgroup, behind the filter", () => {
+  assert.deepStrictEqual(
+    Object.keys(jail.JOBS).filter((name) => jail.JOBS[name].network),
+    NETWORK_JOBS
+  );
+  for (const name of NETWORK_JOBS) {
+    const { file, args } = jail.command(name);
+    assert.strictEqual(file, "/bin/sh");
+    assert.strictEqual(args[3], jail.JOBS[name].cgroup);
+    assert.deepStrictEqual(args.slice(4, 7), ["/sbin/su-exec", "65001:65001", jail.NSJAIL]);
+    assert(args.includes("-u") && args[args.indexOf("-u") + 1] === "65000:65001:1");
+
+    const separator = args.indexOf("--");
+    assert.strictEqual(path.basename(args[separator + 2]), "enter-network.sh");
+    assert.deepStrictEqual(args.slice(-3), jail.JOBS[name].command);
+    // its cgroup holds one job, and is cleared after it
+    assert.strictEqual(jail.JOBS[name].maxRunning, 1);
+  }
+  assert.strictEqual(jail.JOBS.screenshot.cgroup, jail.BROWSER_CGROUP);
+});
+
+test("jail: the fetch-image job's cgroup is its own, in the unit's subtree, with limits", () => {
+  const j = jail.JOBS["fetch-image"];
+  assert.strictEqual(j.cgroup, jail.FETCH_CGROUP);
+  assert.strictEqual(path.dirname(j.cgroup), "/sandbox-cgroup");
+  assert.notStrictEqual(j.cgroup, jail.PROXY_CGROUP);
+  assert.deepStrictEqual(j.cgroupLimits, { memoryBytes: 384 * 1024 * 1024, pids: 64 });
 });
 
 test("jail: a job with a network never binds keys, data or /usr", () => {
-  const { args } = jail.command("screenshot");
-  const binds = args.filter((a, i) => args[i - 1] === "-R");
-  assert(binds.includes("/proc"));
-  for (const bind of binds) {
-    assert(!["/", "/usr", "/usr/src/app", "/etc", "/etc/ssl", "/run"].includes(bind), bind);
-    assert(!bind.startsWith("/etc/ssl/private"), bind);
-    assert(!bind.startsWith("/usr/src/app/data"), bind);
+  for (const name of NETWORK_JOBS) {
+    const { args } = jail.command(name);
+    const binds = args.filter((a, i) => args[i - 1] === "-R");
+    assert.strictEqual(binds.includes("/proc"), name === "screenshot", name);
+    for (const bind of binds) {
+      assert(!["/", "/usr", "/usr/src/app", "/etc", "/etc/ssl", "/run"].includes(bind), bind);
+      assert(!bind.startsWith("/etc/ssl/private"), bind);
+      assert(!bind.startsWith("/usr/src/app/data"), bind);
+    }
+    assert(!args.some((a) => /^(-B|--bindmount)/.test(a)), "no writable binds");
   }
-  assert(!args.some((a) => /^(-B|--bindmount)/.test(a)), "no writable binds");
+});
+
+test("jail: the fetch-image job gets only NODE_PATH, and none of the browser's binds", () => {
+  const { args } = jail.command("fetch-image");
+  assert.deepStrictEqual(
+    args.filter((a, i) => args[i - 1] === "-E"),
+    ["PATH=/usr/bin:/bin:/usr/sbin:/sbin", "NODE_PATH=/usr/src/app/node_modules"]
+  );
+  const binds = args.filter((a, i) => args[i - 1] === "-R");
+  for (const bind of ["/proc", "/usr/share/fonts", "/etc/fonts", "/etc/ssl/certs"]) {
+    assert(!binds.includes(bind), bind);
+  }
 });
 
 test("jail: every file a job with a network names exists", () => {
-  const { args } = jail.command("screenshot");
-  for (const flag of ["--config", "--seccomp_policy"]) {
-    assert(fs.existsSync(args[args.indexOf(flag) + 1]), flag);
+  for (const name of NETWORK_JOBS) {
+    const { args } = jail.command(name);
+    for (const flag of ["--config", "--seccomp_policy"]) {
+      assert(fs.existsSync(args[args.indexOf(flag) + 1]), flag);
+    }
+    assert(fs.existsSync(args[args.indexOf("--") + 2]));
   }
-  assert(fs.existsSync(args[args.indexOf("--") + 2]));
 });
 
 test("jail: the proxy jail is its own uid, in its cgroup, behind the filter, with no time limit", () => {
@@ -267,8 +302,9 @@ async function withBroker(options, fn) {
     maxRunning: options.maxRunning,
     maxQueued: options.maxQueued,
     maxQueuedMs: options.maxQueuedMs,
-    log: () => {},
+    log: options.log || (() => {}),
     clearCgroup: options.clearCgroup,
+    prepareCgroup: options.prepareCgroup,
     spawnJail: () => {
       counter++;
       return spawn("sh", ["-c", script], { stdio: ["pipe", "pipe", "ignore"] });
@@ -484,6 +520,44 @@ test("broker: what a job leaves in its cgroup is cleared when it ends, and faili
       assert.strictEqual(header.ok, true);
     }
   );
+});
+
+test("broker: makes the cgroups jobs ask for when it listens, and logs one it can't", async () => {
+  const made = [];
+  const logged = [];
+  const jobs = {
+    ...JOBS(),
+    fetch: { ...JOBS().echo, cgroup: "/some/fetch", cgroupLimits: { memoryBytes: 1, pids: 2 } },
+    broken: { ...JOBS().echo, cgroup: "/some/broken", cgroupLimits: { memoryBytes: 1, pids: 2 } },
+    browser: { ...JOBS().echo, cgroup: "/some/browser" },
+  };
+  await withBroker(
+    {
+      jobs,
+      log: (line) => logged.push(line),
+      prepareCgroup: (directory, limits) => {
+        if (directory === "/some/broken") throw Object.assign(new Error("no"), { code: "EACCES" });
+        made.push([directory, limits]);
+      },
+    },
+    async (socket) => {
+      const { header } = await request(socket, job, "x");
+      assert.strictEqual(header.ok, true);
+    }
+  );
+  assert.deepStrictEqual(made, [["/some/fetch", { memoryBytes: 1, pids: 2 }]]);
+  assert(logged.some((line) => line.includes("job=broken cannot make its cgroup: EACCES")));
+});
+
+test("cgroup: makes a jail's cgroup with its limits, and clears what an old jail left", () => {
+  const cgroup = require("../cgroup");
+  const directory = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-cgroup-")), "fetch");
+  cgroup.prepare(directory, { memoryBytes: 384 * 1024 * 1024, pids: 64 });
+  cgroup.prepare(directory, { memoryBytes: 384 * 1024 * 1024, pids: 64 });
+  assert.strictEqual(fs.readFileSync(directory + "/memory.max", "utf8"), String(384 * 1024 * 1024));
+  assert.strictEqual(fs.readFileSync(directory + "/memory.swap.max", "utf8"), "0");
+  assert.strictEqual(fs.readFileSync(directory + "/pids.max", "utf8"), "64");
+  assert.strictEqual(fs.readFileSync(directory + "/cgroup.kill", "utf8"), "1");
 });
 
 test("broker: a request that queued too long is busy, not given a jail", async () => {

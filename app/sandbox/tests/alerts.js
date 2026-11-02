@@ -34,6 +34,14 @@ describe("sandbox alerts", function () {
     expect(lines.split("\n").sort()).toEqual(["1 × job screenshot: timeout", "2 × job thumbnail: killed"]);
   });
 
+  it("emails a failed fetch-image job, which answers bad input with meta.error", async function () {
+    alerts.jobFailed("fetch-image", error("SANDBOX_FAILED"));
+    await tick();
+
+    expect(email.SANDBOX_ALERT).toHaveBeenCalledTimes(1);
+    expect(email.SANDBOX_ALERT.calls.argsFor(0)[1].lines).toBe("1 × job fetch-image: failed");
+  });
+
   describe("checkProxy", function () {
     let server;
 

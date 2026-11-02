@@ -1,6 +1,6 @@
 # Sandbox
 
-Runs jobs on untrusted bytes (images, their metadata, documents pandoc converts and web pages so far) in an [nsjail](https://github.com/google/nsjail)
+Runs jobs on untrusted bytes (images, their metadata, documents pandoc converts, web pages and remote images so far) in an [nsjail](https://github.com/google/nsjail)
 jail instead of in the app's Node process, which holds the secrets and the blog
 data mount. Design and phases: #2257.
 
@@ -57,6 +57,22 @@ starts `SANDBOX_`, and it never falls back to in-process.
 - `unzip` a zip archive into its files, one output each. It refuses absolute and
   upward paths, symlinks, too many records, too many bytes and too high a ratio
   (a bad archive is a `meta.error`, not a thrown error). Output stops at 60 MiB.
+- `fetch-image` fetches an image from a URL and re-encodes it, for the remote
+  images in posts (`helper/transformer/download`), so Node never handles the
+  bytes a server sent. It has a network: see below. Args are `{ url, etag,
+  lastModified }`; the job checks the URL (http or https, no credentials) and
+  the two conditional headers itself, and sends no others. It follows up to 5
+  redirects, each checked the same way, and gives up after 20s, or 5s without
+  data. The body is capped at 32 MiB as it arrives and again once its gzip,
+  deflate or brotli is undone, so a small bomb stops there. It must decode as a
+  JPEG, PNG, GIF or WebP of at most 50 million pixels, every frame counted, and
+  comes back in that format: JPEG and WebP at quality 90, with the EXIF
+  rotation applied and only the colour profile kept, a GIF still animated.
+  Never SVG, which sharp can only rasterise: a remote SVG stays a remote link.
+  `meta` is the status, the caching headers (`etag`, `lastModified`,
+  `expires`, `cacheControl`, `age`), the format and size; a 304 has no
+  output. Whatever the URL does is `meta.error` (with `meta.code` for a network
+  error), so the job only fails when the jail is broken, and that is alerted.
 
 Callers write any output files themselves: the jail can't reach the data mount.
 Args are JSON and every job checks them, since they come from the less trusted side.
@@ -91,15 +107,17 @@ which is at most its time limit.
 3. If it needs a binary or library the jail doesn't bind, add a read-only bind
    in `jail.js`. Never bind `/usr` or `/`.
 
-## The browser job
+## Jobs with a network
 
-`screenshot` runs Chromium on a URL. It is the one job with a network, and
-`helper/screenshot` uses it whenever the unit has a sandbox: since the airlock
+`screenshot` runs Chromium on a URL, and `helper/screenshot` uses it whenever the unit has a sandbox: since the airlock
 container went (#2257) production has no other browser. Every URL is treated as hostile, whoever asks:
 customer sites run their own template code. The job starts its own Chromium, driven
 over a pipe so there is no DevTools port, and all of it goes when the job ends.
 
-Its jail differs from the others (`networkArgs` in `proxy/unit/sandbox/jail.js`):
+`fetch-image` fetches a remote image with Node's `http` and `https`, not
+through the proxy jail: its own jail is behind the same filter.
+
+Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js`):
 
 - **The network is pasta, inside the jail's namespace,** and it is only safe with
   the filter: alone it reaches the instance metadata service and the host's
@@ -107,13 +125,18 @@ Its jail differs from the others (`networkArgs` in `proxy/unit/sandbox/jail.js`)
   sets no-new-privs before the job starts, and the job doesn't start if that fails.
   The unit needs `/dev/net/tun`, and `setns` and `unshare` in its seccomp profile.
 - **It is started by uid 65001, not root,** because pasta won't start from a root
-  nsjail. So nsjail can't make cgroups: the broker's shell joins the job to
-  `/sandbox-browser-cgroup` first (`/sys/fs/cgroup/blot-sandbox/<unit>-browser`
-  on the host), whose limits are the job's, and the broker kills what is left in
-  it afterwards. That is why one job runs at a time per unit.
-- **`/proc` is the container's, read-only.** Chromium aborts without a real one.
+  nsjail. So nsjail can't make cgroups: the broker's shell joins the job to its
+  job's cgroup first, whose limits are the job's, and the broker kills what is
+  left in it afterwards. That is why one of each runs at a time per unit. The
+  browser's is `/sandbox-browser-cgroup` (`/sys/fs/cgroup/blot-sandbox/<unit>-browser`
+  on the host). `fetch-image`'s is `/sandbox-cgroup/fetch`, in the unit's
+  sandbox subtree, so it shares that budget with the image jobs: the broker
+  makes it when it starts (`proxy/unit/sandbox/cgroup.js`), as the proxy jail
+  makes its own, with 384 MiB and 64 pids.
+- **`/proc` is the container's, read-only, for the browser job only.** Chromium aborts without a real one.
   A job can read the unit's process list and command lines, so no secret may
   ever be on a command line. Other uids' `environ`, `maps` and `fd` are denied.
+  `fetch-image` has none, and no fonts or `/etc/ssl/certs`: Node has its own CAs.
 - **Never bind `/etc/ssl`.** The unit's TLS private keys are at `/etc/ssl/private`.
 - **The seccomp policy** is `policy-browser.kafel`: the other jobs' policy with
   `socket` allowed for Unix, IPv4, IPv6 and the two netlink protocols nft uses.
@@ -158,7 +181,9 @@ neither is anything run by `docker exec`.
 is cut short or answers nonsense, when the broker can't be reached or its queue
 is full, and, checked every five minutes from each web process, when the unit's
 fetch proxy jail stops answering or lets the metadata
-address through. A job that fails on bad input isn't reported. At most one
+address through. A job that fails on bad input isn't reported, except
+`fetch-image`, which answers bad input with `meta.error`, so its failing means
+the jail is broken. At most one
 email per process every ten minutes, with counts for what happened in between.
 
 ## Why

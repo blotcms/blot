@@ -24,6 +24,9 @@ const ENTER_NETWORK = path.join(__dirname, "enter-network.sh");
 const BROWSER_CGROUP = "/sandbox-browser-cgroup";
 // The proxy jail's, in the unit's subtree. ./proxy.js makes it.
 const PROXY_CGROUP = CGROUP_MOUNT + "/proxy";
+// The fetch-image job's, in the unit's subtree too, so it shares that budget
+// with the image jobs. The broker makes it (./cgroup.js), with cgroupLimits.
+const FETCH_CGROUP = CGROUP_MOUNT + "/fetch";
 
 // pasta can't start from a root nsjail, so a jail with a network is started by
 // its own uid, which is also the job's uid outside the namespace
@@ -130,6 +133,19 @@ const JOBS = {
     maxInputBytes: 64 * 1024,
     maxOutputBytes: 32 * MiB,
   },
+  // Fetches one image from a URL and re-encodes it (remote images in posts,
+  // helper/transformer/download), behind the egress filter like the browser
+  // job but with no browser, /proc or fonts. Its cgroup holds one job.
+  "fetch-image": {
+    command: node("fetch-image"),
+    network: true,
+    cgroup: FETCH_CGROUP,
+    cgroupLimits: { memoryBytes: 384 * MiB, pids: 64 },
+    maxRunning: 1,
+    timeSeconds: 30,
+    maxInputBytes: 64 * 1024,
+    maxOutputBytes: 50 * MiB,
+  },
 };
 
 // Read-only binds, and nothing else. nsjail binds are recursive, so never bind
@@ -175,6 +191,26 @@ const BROWSER_BINDS = [
 
 // The proxy needs no Node, app code or /proc
 const PROXY_BINDS = ["/lib", "/usr/lib", "/usr/bin"];
+
+// What each job with a network adds to BINDS and NETWORK_BINDS, how many files
+// it may hold open, and its environment
+const NETWORK_JOBS = {
+  screenshot: {
+    binds: BROWSER_BINDS,
+    // Chromium needs more of these than a converter does
+    nofile: 1024,
+    env: [
+      "NODE_PATH=/usr/src/app/node_modules",
+      "HOME=/tmp",
+      "PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser",
+    ],
+  },
+  "fetch-image": {
+    binds: [],
+    nofile: 256,
+    env: ["NODE_PATH=/usr/src/app/node_modules"],
+  },
+};
 
 function job(name) {
   if (typeof name !== "string" || !Object.prototype.hasOwnProperty.call(JOBS, name)) {
@@ -288,19 +324,15 @@ function command(name) {
       args: ["-c", `${RAISE_OOM_SCORE} && exec "$@"`, "sh", NSJAIL].concat(args(name)),
     };
   }
+  const extra = NETWORK_JOBS[name];
   return inCgroup(
     j.cgroup,
     networkArgs({
       config: NETWORK_CONFIG,
-      binds: BINDS.concat(NETWORK_BINDS, BROWSER_BINDS),
+      binds: BINDS.concat(NETWORK_BINDS, extra.binds),
       timeSeconds: j.timeSeconds,
-      // Chromium needs more of these than a converter does
-      nofile: 1024,
-      env: [
-        "NODE_PATH=/usr/src/app/node_modules",
-        "HOME=/tmp",
-        "PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser",
-      ],
+      nofile: extra.nofile,
+      env: extra.env,
       command: j.command,
     }),
     { raiseOomScore: true }
@@ -326,4 +358,4 @@ function proxyCommand(unit) {
   );
 }
 
-module.exports = { JOBS, NSJAIL, BROWSER_CGROUP, PROXY_CGROUP, OOM_SCORE_ADJ, job, args, command, proxyCommand };
+module.exports = { JOBS, NSJAIL, BROWSER_CGROUP, PROXY_CGROUP, FETCH_CGROUP, OOM_SCORE_ADJ, job, args, command, proxyCommand };

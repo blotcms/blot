@@ -4,7 +4,8 @@
 //   - a job killed (over its memory), timed out, cut short or answered with
 //     nonsense, the broker unreachable, or its queue full. A job that fails on
 //     bad input ("failed") is the expected answer to a corrupt file, so it is
-//     not reported.
+//     not reported, except from a job that answers bad input with meta.error
+//     (FAILS_ONLY_WHEN_BROKEN), where it means the jail itself is broken.
 //   - from each web process (not the worker child), every five minutes, the
 //     unit's fetch proxy, the sandbox's proxy jail. It must answer,
 //     and must refuse the metadata address (tinyproxy says 500).
@@ -31,6 +32,10 @@ const REPORTED = new Set([
   "SANDBOX_TRUNCATED",
   "SANDBOX_OUTPUT_TOO_LARGE",
 ]);
+
+// Jobs that turn whatever their input does into meta.error, so a failure is
+// the jail's: its cgroup, network or filter
+const FAILS_ONLY_WHEN_BROKEN = new Set(["fetch-image"]);
 
 const counts = new Map();
 let lastSent = 0;
@@ -61,7 +66,9 @@ function report(what) {
 }
 
 function jobFailed(job, err) {
-  if (!err || !REPORTED.has(err.code)) return;
+  if (!err) return;
+  const broken = err.code === "SANDBOX_FAILED" && FAILS_ONLY_WHEN_BROKEN.has(job);
+  if (!REPORTED.has(err.code) && !broken) return;
   report(`job ${job}: ${err.code.slice("SANDBOX_".length).toLowerCase()}`);
 }
 

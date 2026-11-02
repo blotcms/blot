@@ -6,12 +6,13 @@
 // This file and its siblings are owned by root and read-only to the app (the
 // Dockerfile copies them to /usr/local/lib/blot-sandbox): root must never load
 // code from /usr/src/app, which the app can rewrite. So it requires only Node
-// built-ins and ./jail. It takes no paths, never parses job output and never
+// built-ins and its siblings. It takes no paths, never parses job output and never
 // touches the data mount.
 
 const fs = require("fs");
 const net = require("net");
 const { spawn } = require("child_process");
+const cgroup = require("./cgroup");
 const jail = require("./jail");
 
 const DIRECTORY = "/run/blot-sandbox";
@@ -30,7 +31,8 @@ const DRAIN_MS = 10 * 1000;
 const MAX_QUEUED_MS = 60 * 1000;
 
 // options: { socket, group, spawnJail(name) -> child process, jobs, maxRunning,
-// maxQueued, log }. The defaults are the real ones; tests replace spawnJail.
+// maxQueued, log, prepareCgroup }. The defaults are the real ones; tests
+// replace spawnJail.
 function createBroker(options = {}) {
   const socketPath = options.socket || SOCKET;
   const jobs = options.jobs || jail.JOBS;
@@ -49,6 +51,9 @@ function createBroker(options = {}) {
   const clearCgroup =
     options.clearCgroup ||
     ((directory) => fs.writeFileSync(directory + "/cgroup.kill", "1"));
+  // A job whose cgroup is in the unit's subtree, which nsjail can't make for
+  // a jail with a network, has its cgroup made here (./cgroup.js)
+  const prepareCgroup = options.prepareCgroup || cgroup.prepare;
 
   const running = new Set();
   const queue = [];
@@ -250,7 +255,20 @@ function createBroker(options = {}) {
     if (!failure) socket.resume();
   }
 
+  // A cgroup that can't be made fails that job's jails, not the broker
+  function prepareCgroups() {
+    for (const [name, job] of Object.entries(jobs)) {
+      if (!job.cgroup || !job.cgroupLimits) continue;
+      try {
+        prepareCgroup(job.cgroup, job.cgroupLimits);
+      } catch (e) {
+        log(`broker: job=${name} cannot make its cgroup: ${e.code || e.message}`);
+      }
+    }
+  }
+
   function listen() {
+    prepareCgroups();
     return new Promise((resolve, reject) => {
       const directory = require("path").dirname(socketPath);
       fs.mkdirSync(directory, { recursive: true, mode: 0o710 });
