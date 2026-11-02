@@ -59,7 +59,7 @@ describe("tagged block", function () {
     });
 
     // Both names alias the same tagged retrieve, so a view referencing
-    // both must not trigger a second fetchTaggedEntries/Entry.get pass.
+    // both must not trigger a second Tags.tagged/Entry.get pass.
     await this.template({
       "tagged.html":
         "{{#entries}}{{title}}-e {{/entries}}{{#tagged}}{{#entries}}{{title}}-t {{/entries}}{{/tagged}}",
@@ -490,25 +490,12 @@ describe("tagged block", function () {
 
 describe("tagged cache", function () {
   const Entry = require("models/entry");
-  const helperPath = require.resolve("../helpers/fetchTaggedEntries");
-  const taggedPath = require.resolve("../tagged");
+  const Tags = require("models/tags");
+  const tagged = require("../tagged");
+  const cachedTagged = require("models/tags/cachedTagged");
 
-  function loadTaggedWithStub(taggedStub) {
-    delete require.cache[taggedPath];
-    delete require.cache[helperPath];
-    require.cache[helperPath] = {
-      id: helperPath,
-      filename: helperPath,
-      loaded: true,
-      exports: taggedStub,
-    };
-
-    return require("../tagged");
-  }
-
-  afterEach(function () {
-    delete require.cache[taggedPath];
-    delete require.cache[helperPath];
+  beforeEach(function () {
+    cachedTagged._clear();
   });
 
   function makeReq(overrides) {
@@ -525,9 +512,7 @@ describe("tagged cache", function () {
   }
 
   it("reuses cached responses for identical inputs", function (done) {
-    const taggedSpy = jasmine
-      .createSpy("fetchTaggedEntries")
-      .and.callFake(async function () {
+    const taggedSpy = spyOn(Tags, "tagged").and.callFake(async function () {
         return {
           entryIDs: ["1", "2"],
           pagination: { page: 1, pages: 1 },
@@ -538,9 +523,6 @@ describe("tagged cache", function () {
           total: 2,
         };
       });
-
-    const tagged = loadTaggedWithStub(taggedSpy);
-    tagged._clear();
 
     spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
       callback([
@@ -561,9 +543,7 @@ describe("tagged cache", function () {
   });
 
   it("refetches when cacheID changes", function (done) {
-    const taggedSpy = jasmine
-      .createSpy("fetchTaggedEntries")
-      .and.callFake(async function () {
+    const taggedSpy = spyOn(Tags, "tagged").and.callFake(async function () {
         return {
           entryIDs: ["1"],
           pagination: {},
@@ -574,9 +554,6 @@ describe("tagged cache", function () {
           total: 1,
         };
       });
-
-    const tagged = loadTaggedWithStub(taggedSpy);
-    tagged._clear();
 
     spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
       callback([{ id: "1", dateStamp: 1, title: "First" }]);
@@ -591,7 +568,7 @@ describe("tagged cache", function () {
   });
 
   it("returns isolated copies so caller mutations do not taint cache", function (done) {
-    const tagged = loadTaggedWithStub(async function () {
+    spyOn(Tags, "tagged").and.callFake(async function () {
       return {
         entryIDs: ["1"],
         pagination: { page: 1, pages: 3, nested: { total: 10 } },
@@ -602,7 +579,6 @@ describe("tagged cache", function () {
         total: 1,
       };
     });
-    tagged._clear();
 
     spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
       callback([{ id: "1", title: "Original" }]);
@@ -623,8 +599,6 @@ describe("tagged cache", function () {
   });
 
   it("varies cache keys across invalidation and query dimensions", function () {
-    const tagged = loadTaggedWithStub(function () {});
-
     const makeKey = function ({
       cacheID,
       tag,
@@ -634,20 +608,16 @@ describe("tagged cache", function () {
       order,
       pathPrefix,
     }) {
-      return tagged._createCacheKey(
-        { blog: { id: "blog-1", cacheID }, query: { tag }, params: {}, template: { locals: {} } },
-        {
-          tags: tag,
-          sortBy,
-          order,
-          pathPrefix,
-          page,
-          limit,
-        }
+      return cachedTagged._createCacheKey(
+        "blog-1",
+        cacheID,
+        tag,
+        { limit, offset: (page - 1) * limit, sortBy, order, pathPrefix },
+        []
       );
     };
 
-    const base = makeKey({
+    const base = {
       cacheID: "v1",
       tag: "foo",
       page: 1,
@@ -655,131 +625,61 @@ describe("tagged cache", function () {
       sortBy: "date",
       order: "desc",
       pathPrefix: "/blog/",
-    });
+    };
 
-    expect(base).not.toBe(
-      makeKey({
-        cacheID: "v2",
-        tag: "foo",
-        page: 1,
-        limit: 10,
-        sortBy: "date",
-        order: "desc",
-        pathPrefix: "/blog/",
-      })
-    );
-    expect(base).not.toBe(
-      makeKey({
-        cacheID: "v1",
-        tag: "bar",
-        page: 1,
-        limit: 10,
-        sortBy: "date",
-        order: "desc",
-        pathPrefix: "/blog/",
-      })
-    );
-    expect(base).not.toBe(
-      makeKey({
-        cacheID: "v1",
-        tag: "foo",
-        page: 2,
-        limit: 10,
-        sortBy: "date",
-        order: "desc",
-        pathPrefix: "/blog/",
-      })
-    );
-    expect(base).not.toBe(
-      makeKey({
-        cacheID: "v1",
-        tag: "foo",
-        page: 1,
-        limit: 20,
-        sortBy: "date",
-        order: "desc",
-        pathPrefix: "/blog/",
-      })
-    );
-    expect(base).not.toBe(
-      makeKey({
-        cacheID: "v1",
-        tag: "foo",
-        page: 1,
-        limit: 10,
-        sortBy: "id",
-        order: "desc",
-        pathPrefix: "/blog/",
-      })
-    );
-    expect(base).not.toBe(
-      makeKey({
-        cacheID: "v1",
-        tag: "foo",
-        page: 1,
-        limit: 10,
-        sortBy: "date",
-        order: "asc",
-        pathPrefix: "/blog/",
-      })
-    );
-    expect(base).not.toBe(
-      makeKey({
-        cacheID: "v1",
-        tag: "foo",
-        page: 1,
-        limit: 10,
-        sortBy: "date",
-        order: "desc",
-        pathPrefix: "/notes/",
-      })
-    );
+    for (const change of [
+      { cacheID: "v2" },
+      { tag: "bar" },
+      { page: 2 },
+      { limit: 20 },
+      { sortBy: "id" },
+      { order: "asc" },
+      { pathPrefix: "/notes/" },
+    ]) {
+      expect(makeKey(base)).not.toBe(makeKey({ ...base, ...change }));
+    }
   });
 
   it("does not collide an unset path_prefix with the literal string \"undefined\"", function () {
-    const tagged = loadTaggedWithStub(function () {});
-
     const makeKey = (pathPrefix) =>
-      tagged._createCacheKey(
-        { blog: { id: "blog-1", cacheID: "v1" }, query: {}, params: {}, template: { locals: {} } },
-        {
-          tags: "foo",
-          sortBy: "date",
-          order: "desc",
-          pathPrefix,
-          page: 1,
-          limit: 100,
-        }
+      cachedTagged._createCacheKey(
+        "blog-1",
+        "v1",
+        "foo",
+        { sortBy: "date", order: "desc", pathPrefix, limit: 100, offset: 0 },
+        []
       );
 
     expect(makeKey(undefined)).not.toBe(makeKey("undefined"));
   });
 
   it("does not confuse a numeric path_prefix (no filter) with the equivalent string (a real filter)", function () {
-    const tagged = loadTaggedWithStub(function () {});
-
     const makeKey = (pathPrefix) =>
-      tagged._createCacheKey(
-        { blog: { id: "blog-1", cacheID: "v1" }, query: {}, params: {}, template: { locals: {} } },
-        {
-          tags: "foo",
-          sortBy: "date",
-          order: "desc",
-          pathPrefix,
-          page: 1,
-          limit: 100,
-        }
+      cachedTagged._createCacheKey(
+        "blog-1",
+        "v1",
+        "foo",
+        { sortBy: "date", order: "desc", pathPrefix, limit: 100, offset: 0 },
+        []
       );
 
-    // fetchTaggedEntries treats a non-string as "no filter" but normalizes
-    // the string "1" into "/1".
+    // Tags.tagged treats a non-string as "no filter" but normalizes the
+    // string "1" into "/1".
     expect(makeKey(1)).not.toBe(makeKey("1"));
   });
 
+  it("keys on the heavy fields kept", function () {
+    const { keepFields } = require("models/entries/heavyFields");
+    const query = { sortBy: "date", order: "desc", limit: 100, offset: 0 };
+    const key = (keep) =>
+      cachedTagged._createCacheKey("blog-1", "v1", "foo", query, keepFields(keep));
+
+    expect(key(["html", "body"])).toBe(key(["body", "html"]));
+    expect(key(["html"])).not.toBe(key(undefined));
+  });
+
   it("keys tagged_page_size separately from page_size when they resolve to different limits", function (done) {
-    const taggedSpy = jasmine
-      .createSpy("fetchTaggedEntries")
-      .and.callFake(async function (blogID, tags, options) {
+    const taggedSpy = spyOn(Tags, "tagged").and.callFake(async function (blogID, tags, options) {
         return {
           entryIDs: [],
           pagination: { page_size: options.limit },
@@ -790,9 +690,6 @@ describe("tagged cache", function () {
           total: 0,
         };
       });
-
-    const tagged = loadTaggedWithStub(taggedSpy);
-    tagged._clear();
 
     spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
       callback([]);
@@ -817,9 +714,7 @@ describe("tagged cache", function () {
   });
 
   it("does not cache a hydration miss when IDs came back but Entry.get returned none", function (done) {
-    const taggedSpy = jasmine
-      .createSpy("fetchTaggedEntries")
-      .and.callFake(async function () {
+    const taggedSpy = spyOn(Tags, "tagged").and.callFake(async function () {
         return {
           entryIDs: ["1", "2"],
           pagination: { page: 1, pages: 1 },
@@ -830,9 +725,6 @@ describe("tagged cache", function () {
           total: 2,
         };
       });
-
-    const tagged = loadTaggedWithStub(taggedSpy);
-    tagged._clear();
 
     spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
       callback([]);
@@ -848,9 +740,7 @@ describe("tagged cache", function () {
   });
 
   it("still caches a genuinely empty tag (no matching entry IDs)", function (done) {
-    const taggedSpy = jasmine
-      .createSpy("fetchTaggedEntries")
-      .and.callFake(async function () {
+    const taggedSpy = spyOn(Tags, "tagged").and.callFake(async function () {
         return {
           entryIDs: [],
           pagination: { page: 1, pages: 1 },
@@ -861,9 +751,6 @@ describe("tagged cache", function () {
           total: 0,
         };
       });
-
-    const tagged = loadTaggedWithStub(taggedSpy);
-    tagged._clear();
 
     spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
       callback([]);
@@ -878,9 +765,7 @@ describe("tagged cache", function () {
   });
 
   it("does not reuse a cached multi-tag payload when the tag order differs", function (done) {
-    const taggedSpy = jasmine
-      .createSpy("fetchTaggedEntries")
-      .and.callFake(async function (blogID, tags) {
+    const taggedSpy = spyOn(Tags, "tagged").and.callFake(async function (blogID, tags) {
         const list = Array.isArray(tags) ? tags : [tags];
         return {
           entryIDs: ["1"],
@@ -892,9 +777,6 @@ describe("tagged cache", function () {
           total: 1,
         };
       });
-
-    const tagged = loadTaggedWithStub(taggedSpy);
-    tagged._clear();
 
     spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
       callback([{ id: "1", title: "Shared" }]);

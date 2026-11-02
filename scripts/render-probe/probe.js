@@ -146,8 +146,14 @@ function instrumentRender() {
   const early = Object.keys(require.cache).filter(
     (file) =>
       file.includes("/app/blog/") ||
-      file.endsWith("/app/models/entries/catalog.js") ||
-      file.endsWith("/app/models/template/fullViewCache.js")
+      [
+        "entries/catalog",
+        "entries/cachedPage",
+        "entries/cachedRecent",
+        "tags/cachedList",
+        "tags/cachedTagged",
+        "template/fullViewCache",
+      ].some((name) => file.endsWith(`/app/models/${name}.js`))
   );
   if (early.length) console.warn("probe: blog modules loaded before instrumenting:", early);
 
@@ -743,9 +749,13 @@ async function main() {
       "blog/render/retrieve/archives",
       "blog/render/retrieve/posts",
       "blog/render/retrieve/tagged",
-      // The two above that moved into the models (--release can be older)
+      // Those above that moved into the models (--release can be older)
       "models/template/fullViewCache",
       "models/entries/catalog",
+      "models/entries/cachedPage",
+      "models/entries/cachedRecent",
+      "models/tags/cachedList",
+      "models/tags/cachedTagged",
     ]
       .filter((name) => tryResolve(name) && require(name)._stats)
       .map((name) => require(name)._stats()),
