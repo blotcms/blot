@@ -2,13 +2,12 @@ const { promisify } = require("util");
 const fs = require("fs-extra");
 const Git = require("./git");
 const database = require("./database");
-const localPath = require("helper/localPath");
+const storage = require("storage/folder");
 const repos = require("./repo");
 const plumbing = require("./plumbing");
 const clfdate = require("helper/clfdate");
 const sync = require("sync");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
-const path = require("path");
 
 const GC_INTERVAL = 100;
 const COMMIT_BATCH_SIZE = 25;
@@ -144,11 +143,14 @@ module.exports = function create(blog, callback) {
 // folder's files are added to a temporary index of the bare repository, which
 // takes the folder as its work tree, and committed from there.
 async function createRepository(blog, folder) {
-  const blogDirectory = localPath(blog.id, "/");
   const bareDirectory = repos.directory(blog.handle);
 
   report(folder, "Creating token");
-  await prepareMetadata(blog, blogDirectory);
+  await prepareMetadata(blog);
+
+  // git reads the files it adds from its work tree itself, so the import
+  // needs the blog folder on local disk. Only read from, as ensureLocal asks.
+  const blogDirectory = await storage.ensureLocal(blog.id, "/");
 
   const bareRepo = Git(bareDirectory);
 
@@ -156,7 +158,7 @@ async function createRepository(blog, folder) {
   await bareRepo.raw(["init", "--bare", "--initial-branch=master"]);
 
   const index = await plumbing.openIndex(bareDirectory, {
-    workTree: folder.path,
+    workTree: blogDirectory,
   });
   const progress = {
     filesAdded: 0,
@@ -189,26 +191,29 @@ async function createRepository(blog, folder) {
   folder.status("Repository created successfully");
 }
 
-async function prepareMetadata(blog, blogDirectory) {
+async function prepareMetadata(blog) {
   await Promise.all([
     setStatus(blog.owner, "createInProgress"),
     createToken(blog.owner),
-    assertDirectoryOwnership(blogDirectory),
-    assertNoLiveClone(blogDirectory),
+    assertDirectoryOwnership(blog.id),
+    assertNoLiveClone(blog.id),
   ]);
 }
 
 // A sync takes a .git directory in the blog folder for a live clone (see
 // sync.js) and would point its remote at the new repository, so one that is
 // not ours is not left to be taken for one. Disconnecting removes ours.
-async function assertNoLiveClone(blogDirectory) {
-  if (await fs.pathExists(path.join(blogDirectory, ".git"))) {
+async function assertNoLiveClone(blogID) {
+  if (await storage.exists(blogID, "/.git")) {
     throw new Error("The blog folder already has a .git directory");
   }
 }
 
-async function assertDirectoryOwnership(blogDirectory) {
-  const stats = await fs.stat(blogDirectory);
+// The owner of the folder on disk, which storage/folder has no notion of, so
+// this reads the real directory. It goes with the import's work tree when the
+// folder leaves the disk.
+async function assertDirectoryOwnership(blogID) {
+  const stats = await fs.stat(await storage.ensureLocal(blogID, "/"));
 
   if (stats.uid !== process.getuid()) {
     throw new Error(
@@ -246,55 +251,41 @@ function isGitIgnoreAddError(err) {
   );
 }
 
-async function countFiles(dir) {
-  const entries = (await fs.readdir(dir, { withFileTypes: true })).filter(
-    (entry) => !shouldIgnoreFile(entry.name)
-  );
+// The files of the blog folder to add, as paths relative to it ("a/b.txt"),
+// spelled as they are on disk, which is how git add must be given them. A
+// file in an ignored directory is skipped, as is an ignored file, and links
+// are not files.
+async function* filesToAdd(blogID) {
+  for await (const file of storage.walk(blogID, "/")) {
+    if (!shouldIgnoreFile(file)) yield file.slice(1);
+  }
+}
 
+async function countFiles(blogID) {
   let total = 0;
 
-  for (const entry of entries) {
-    const entryPath = path.join(dir, entry.name);
-
-    if (entry.isDirectory()) {
-      total += await countFiles(entryPath);
-    } else if (entry.isFile()) {
-      total += 1;
-    }
-  }
+  // eslint-disable-next-line no-unused-vars
+  for await (const file of filesToAdd(blogID)) total += 1;
 
   return total;
 }
 
 async function addFolder(blog, folder, index, bareRepo, progress) {
-  async function walk(dir) {
-    const entries = (await fs.readdir(dir, { withFileTypes: true }))
-      .filter((entry) => !shouldIgnoreFile(entry.name))
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    for (const entry of entries) {
-      const filePath = path.join(dir, entry.name);
-
-      if (entry.isDirectory()) {
-        await walk(filePath);
-      } else if (entry.isFile()) {
-        await stageFile(folder, index, bareRepo, progress, filePath);
-
-        if (progress.pendingFiles.length >= COMMIT_BATCH_SIZE) {
-          await commitPendingFiles(blog, index, progress);
-        }
-      }
-    }
-  }
-
   try {
     report(folder, "Counting files...");
-    progress.total = await countFiles(folder.path);
+    progress.total = await countFiles(blog.id);
     console.log(
       clfdate() + " Git: create: counted " + progress.total + " files to add"
     );
 
-    await walk(folder.path);
+    for await (const relativePath of filesToAdd(blog.id)) {
+      await stageFile(folder, index, bareRepo, progress, relativePath);
+
+      if (progress.pendingFiles.length >= COMMIT_BATCH_SIZE) {
+        await commitPendingFiles(blog, index, progress);
+      }
+    }
+
     await commitPendingFiles(blog, index, progress);
 
     // Nothing was actually staged, either because the folder was empty or
@@ -347,8 +338,7 @@ async function saveCommit(blog, index, progress, label, message) {
   progress.head = commit;
 }
 
-async function stageFile(folder, index, bareRepo, progress, filePath) {
-  const relativePath = path.relative(folder.path, filePath);
+async function stageFile(folder, index, bareRepo, progress, relativePath) {
   const current = progress.filesAdded + 1;
   const untilGc =
     GC_INTERVAL - (progress.filesAdded % GC_INTERVAL || GC_INTERVAL);

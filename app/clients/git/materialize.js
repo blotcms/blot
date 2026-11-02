@@ -3,10 +3,17 @@
 // streams the new contents of the files that did. The folder has no checkout
 // to maintain, only the files at the changed paths are touched.
 //
-// Files are written as the raw committed bytes (their mode is 0644 or 0755),
-// so .gitattributes rules such as eol and ident do not apply. Directories that
-// a removal leaves empty are removed too, as `git reset --hard` would, but
-// empty directories nothing here emptied are left alone.
+// Files are written as the raw committed bytes, so .gitattributes rules such
+// as eol and ident do not apply, and without the committed mode: the blog
+// folder has no executable bit (storage/folder). Directories that a removal
+// leaves empty are removed too, as `git reset --hard` would, but empty
+// directories nothing here emptied are left alone.
+//
+// Every read and write of the folder goes through storage/folder, which names
+// a file by its path in NFC. A name committed in another form (NFD, say) is
+// therefore written under its NFC name, and a later change or removal of the
+// same name in git acts on that same file. The paths materialize resolves
+// with are in NFC too, as Blot knows them.
 //
 // Paths come from history which may predate the checks a push goes through now,
 // so a path is only used if it is safe: no empty, "." or ".." component, and
@@ -14,14 +21,15 @@
 // folder's own .git directory is never touched. A symbolic link or file in the
 // way of a path is replaced, never followed.
 const { spawn } = require("child_process");
-const fs = require("fs-extra");
-const path = require("path");
+const { PassThrough } = require("stream");
+const storage = require("storage/folder");
 
 // What git calls the tree with nothing in it. It is known to every repository,
 // so it can be the commit to compare from when nothing has been applied yet.
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
-const MODES = { "100644": 0o644, "100755": 0o755 };
+// The modes of the files written, a regular file and an executable one
+const MODES = { "100644": true, "100755": true };
 
 const SYMLINK = "120000";
 
@@ -102,84 +110,124 @@ function safeParts(file) {
   return parts;
 }
 
-async function lstat(file) {
+function noop() {}
+
+// A blog-folder path from the parts of a path in the repository
+function join(parts) {
+  return "/" + parts.join("/");
+}
+
+// What is at a path: "directory", "file", "link" or null if nothing is. A
+// link is reported as such only when the directories above the path are
+// real ones, which the callers here have checked.
+async function kind(blogID, file) {
   try {
-    return await fs.lstat(file);
+    return (await storage.stat(blogID, file)).isDirectory ? "directory" : "file";
   } catch (err) {
-    if (err.code === "ENOENT" || err.code === "ENOTDIR") return null;
+    if (err.code === "ENOENT") return null;
+    if (err.code === "ELOOP") return "link";
     throw err;
   }
 }
 
-// The folder's directory for the first parts of a path, with each directory
-// made if it is missing. Something else in its place (a file, or a symbolic
-// link, which is not followed) is removed to make room.
-async function ensureDirectory(root, parts) {
-  let current = root;
+// Makes the directory for the first parts of a path, with each directory made
+// if it is missing. Something else in its place (a file, or a symbolic link,
+// which is not followed) is removed to make room.
+async function ensureDirectory(blogID, parts) {
+  for (let i = 1; i <= parts.length; i++) {
+    const directory = join(parts.slice(0, i));
+    const found = await kind(blogID, directory);
 
-  for (const part of parts) {
-    current = path.join(current, part);
+    if (found === "directory") continue;
+    if (found) await storage.remove(blogID, directory);
 
-    const stat = await lstat(current);
-
-    if (stat && stat.isDirectory()) continue;
-    if (stat) await fs.remove(current);
-
-    await fs.mkdir(current);
+    await storage.mkdir(blogID, directory);
   }
-
-  return current;
 }
 
 // Removes a file, then the directories that this leaves empty. A directory in
 // its place, or a symbolic link on the way to it, is not something to remove.
-async function removeFile(root, parts) {
-  let directory = root;
+async function removeFile(blogID, parts) {
+  if (parts.length > 1 && (await kind(blogID, join(parts.slice(0, -1)))) !== "directory") return;
 
-  for (const part of parts.slice(0, -1)) {
-    directory = path.join(directory, part);
+  const found = await kind(blogID, join(parts));
 
-    const stat = await lstat(directory);
+  if (!found || found === "directory") return;
 
-    if (!stat || !stat.isDirectory()) return;
-  }
-
-  const file = path.join(directory, parts[parts.length - 1]);
-  const stat = await lstat(file);
-
-  if (!stat || stat.isDirectory()) return;
-
-  await fs.unlink(file);
+  await storage.remove(blogID, join(parts));
 
   for (let i = parts.length - 1; i > 0; i--) {
+    const directory = join(parts.slice(0, i));
+    let entries;
+
     try {
-      await fs.rmdir(path.join(root, ...parts.slice(0, i)));
+      entries = await storage.listNames(blogID, directory);
     } catch (err) {
-      // Not empty, so it and the directories above it stay
-      if (err.code === "ENOTEMPTY" || err.code === "EEXIST" || err.code === "ENOENT") return;
+      if (err.code === "ENOENT") return;
       throw err;
     }
+
+    // Not empty, so it and the directories above it stay
+    if (entries.length) return;
+
+    await storage.rmdir(blogID, directory);
   }
 }
 
-// Opens the file a blob is written to, in place of whatever is there now. A new
-// file is opened exclusively so a symbolic link cannot be written through.
-async function openFile(root, parts, mode) {
-  const directory = await ensureDirectory(root, parts.slice(0, -1));
-  const file = path.join(directory, parts[parts.length - 1]);
+// Resolves once the stream can take more, or has closed
+function drained(stream) {
+  return new Promise(function (resolve) {
+    function done() {
+      stream.off("drain", done);
+      stream.off("close", done);
+      resolve();
+    }
 
-  if (await lstat(file)) await fs.remove(file);
-
-  return fs.promises.open(file, "wx", mode);
+    stream.on("drain", done);
+    stream.on("close", done);
+  });
 }
 
-async function writeAll(handle, buffer) {
-  let offset = 0;
+// Starts writing the file a blob goes to, in place of whatever is there now
+// (a symbolic link is removed, never written through). The blob is passed in
+// a chunk at a time with write, which waits until the chunk can be taken, so
+// a large blob is never held in memory. close resolves once the file is
+// written; abort gives up on it.
+async function openFile(blogID, parts) {
+  await ensureDirectory(blogID, parts.slice(0, -1));
 
-  while (offset < buffer.length) {
-    const result = await handle.write(buffer, offset, buffer.length - offset);
-    offset += result.bytesWritten;
+  const file = join(parts);
+
+  if (await kind(blogID, file)) await storage.remove(blogID, file);
+
+  const stream = new PassThrough();
+  const written = storage.write(blogID, file, stream);
+
+  // Awaited by write, close or abort; this keeps an early failure handled
+  written.catch(noop);
+
+  async function stopped() {
+    await written;
+    throw new Error("The write of " + file + " stopped");
   }
+
+  return {
+    write: async function (buffer) {
+      if (!stream.write(buffer)) {
+        await Promise.race([drained(stream), written]);
+      }
+
+      if (stream.destroyed) await stopped();
+    },
+    close: async function () {
+      stream.end();
+      await written;
+    },
+    abort: async function () {
+      stream.destroy();
+      await written.catch(noop);
+    },
+  };
 }
 
 // Writes the blobs, one after another and in the order given, to the files
@@ -245,7 +293,7 @@ async function writeBlobs(directory, oids, open) {
         if (state === "body") {
           const part = chunk.subarray(0, remaining);
 
-          if (part.length) await writeAll(handle, part);
+          if (part.length) await handle.write(part);
 
           remaining -= part.length;
           chunk = chunk.subarray(part.length);
@@ -266,7 +314,7 @@ async function writeBlobs(directory, oids, open) {
     }
   } catch (err) {
     child.kill("SIGKILL");
-    if (handle) await handle.close().catch(function () {});
+    if (handle) await handle.abort();
     throw err;
   }
 
@@ -281,9 +329,10 @@ async function writeBlobs(directory, oids, open) {
 
 // Applies the changes from one commit to the other to the folder, and
 // resolves with the paths which changed (without a leading slash), in the
-// order git lists them. folder is { path, log } as given by the sync lock.
+// order git lists them. folder is { blogID, log }, log as given by the sync
+// lock.
 async function materialize(directory, folder, from, to) {
-  const root = folder.path;
+  const blogID = folder.blogID;
   const removals = [];
   const writes = [];
   const paths = [];
@@ -297,7 +346,7 @@ async function materialize(directory, folder, from, to) {
     }
 
     if (change.newMode in MODES) {
-      writes.push({ parts: parts, mode: MODES[change.newMode], oid: change.oid });
+      writes.push({ parts: parts, oid: change.oid });
     } else if (change.oldMode in MODES || change.oldMode === SYMLINK) {
       // Gone, or something we do not write (a link or submodule) in its place.
       // A link can only be here from before pushes refused them.
@@ -306,18 +355,18 @@ async function materialize(directory, folder, from, to) {
       continue;
     }
 
-    paths.push(change.path);
+    paths.push(change.path.normalize("NFC"));
   }
 
   // Removals first: a file may become a directory of the same name, or the
   // reverse, and names may differ only by case
-  for (const parts of removals) await removeFile(root, parts);
+  for (const parts of removals) await removeFile(blogID, parts);
 
   if (writes.length)
     await writeBlobs(
       directory,
       writes.map((write) => write.oid),
-      (i) => openFile(root, writes[i].parts, writes[i].mode)
+      (i) => openFile(blogID, writes[i].parts)
     );
 
   return paths;

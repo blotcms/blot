@@ -254,6 +254,24 @@ function createCache({ dir, maxBytes }) {
       reservation.bytes += more;
     };
 
+    // Gives back part of the reservation, for work which needed the room for
+    // a while and no longer does (the scratch files of a delta being expanded)
+    reservation.shrink = function shrink(less) {
+      if (reservation.released) return;
+      if (!(less >= 0) || less > reservation.bytes) throw new Error("Cannot give back " + less + " of " + reservation.bytes + " bytes");
+      reservedBytes -= less;
+      reservation.bytes -= less;
+    };
+
+    // Gives back part of the reservation, for work which needed the room for
+    // a while and no longer does
+    reservation.shrink = function shrink(less) {
+      if (reservation.released) return;
+      if (!(less >= 0) || less > reservation.bytes) throw new Error("Cannot give back " + less + " of " + reservation.bytes + " bytes");
+      reservedBytes -= less;
+      reservation.bytes -= less;
+    };
+
     reservation.release = async function release() {
       if (reservation.released) return;
       reservation.released = true;

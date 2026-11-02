@@ -1,8 +1,13 @@
 # Proxy host setup
 
-Setup for the production proxy host (the EC2 instance that runs the two units,
-`blot-blue` and `blot-green`: OpenResty and Node in one container each). The proxy itself is not installed from
-here: deploy it with `npm run deploy-units` or the Deploy workflow (see
+Setup for the production host: one EC2 instance (an m6gd.xlarge on Amazon Linux
+2023, arm64) that runs Redis 6.2 (the `redis6` systemd service) and both units,
+`blot-blue` and `blot-green` (OpenResty and two Node processes each, with an
+airlock container). The units reach Redis over a Unix socket,
+`/run/blot/redis/redis.sock` (`BLOT_REDIS_SOCKET`, and
+`PROXY_REDIS_HOST=unix:/run/blot/redis/redis.sock` for the proxy). The
+production Elastic IP is on this host, and there is no separate Redis host or
+floating IP. The proxy itself is not installed from here: deploy it with `npm run deploy-units` or the Deploy workflow (see
 [`proxy/deploy/README.md`](../../proxy/deploy/README.md)).
 
 ```
@@ -78,6 +83,15 @@ sudo fail2ban-client status manual-permaban                        # list
 ```
 
 Moving to a new host: see [Moving to a new host](#moving-to-a-new-host).
+
+## Reboots
+
+Do not reboot the production host until there are several hosts sharing the
+load (planned). With one host a reboot is downtime: Redis and both units go
+down together. Kernel and other OS security updates that need a reboot wait for
+that, unless the operator decides otherwise for a specific critical advisory.
+Updates that do not need a reboot can be applied as usual. A new host from the
+host cycle is how the OS gets refreshed in the meantime.
 
 ## Moving to a new host
 
@@ -287,8 +301,10 @@ looking at the hosts, so after a failure fix the cause and run it again. Check
   (keeping its host key check), so they work whether or not the alias is edited;
   `-F` reaches `ProxyJump` too. Before `finish`, and for your own ssh, change
   `HostName` for `<new>` in `~/.ssh/config` to the Elastic IP.
-- **Two hosts.** With a separate Redis host pass `--old-redis`, also for later
-  phases that promote. Without it `<old>` is taken to run Redis too.
+- **Two hosts.** Only a host that still has a separate Redis host (the first
+  cycle, from before 2 November 2026) needs `--old-redis`, also for later
+  phases that promote. Without it `<old>` is taken to run Redis too, which is
+  the case now.
 - **Deploys pause** at `app` and resume at the end of `settle`: `/etc/blot/deploy-paused`
   on both hosts stops `proxy/deploy/blue-green.sh`, however a deploy was started.
   The cycle's own deploys pass `PROXY_DEPLOY_IGNORE_PAUSE=1`. If you abandon a
@@ -305,13 +321,17 @@ looking at the hosts, so after a failure fix the cause and run it again. Check
   lifts it through the new host. It keeps the old host's disk read-only, the old
   units stopped but not removed, and its Redis a replica of the new one.
 - **Backup credentials.** `app` copies `~/.aws` from the old Redis host unless the
-  new host's already work. A Redis host on an instance profile has no key there,
-  so put the `blot` key in `~ec2-user/.aws` as `[default]` on the new host first.
+  new host's already work. The host has no instance profile on purpose (the
+  units use host networking and could read the instance metadata service), so
+  backups to S3 and offsite to B2 (the `blot-b2` profile) use the keys in
+  `~ec2-user/.aws`. If the old host has none, put the `blot` key there as
+  `[default]` on the new host first.
 - **`settle`** forces a rolling deploy of the same image, because a plain one
   skips units already on it, and that restart is what runs the steps that failed
   on the replica. It then retags the volumes: a rollback is simplest before that.
 - **`finish`** terminates only the instances named with `--old-instance`, and
-  not within 3 days of `settle` (`--any-age`). It stops at termination
+  not within 3 days of `settle` unless you pass `--any-age`. Run it about a day
+  after `settle`, with `--any-age`. It stops at termination
   protection and prints the command that lifts it; that is your decision. The
   old data volume is kept, for you to delete.
 - **Hours.** Every phase refuses from 15 minutes before the 01:00 and 05:00 UTC

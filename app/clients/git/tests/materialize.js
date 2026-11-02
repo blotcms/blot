@@ -5,6 +5,10 @@
 // push is no longer allowed to: paths a real client would not send, and
 // shapes that some filesystems cannot show at once (names that differ by case).
 describe("git client: materialize", function () {
+  // A real blog: materialize writes its folder through storage/folder, by
+  // blog ID. this.folder is that folder on disk, for looking at the result.
+  global.test.blog();
+
   var fs = require("fs-extra");
   var os = require("os");
   var crypto = require("crypto");
@@ -23,13 +27,12 @@ describe("git client: materialize", function () {
   beforeEach(async function () {
     this.tmp = await fs.mkdtemp(os.tmpdir() + "/materialize-");
     this.directory = this.tmp + "/repo.git";
-    this.folder = this.tmp + "/folder";
+    this.folder = this.blogDirectory;
     this.outside = this.tmp + "/outside";
     this.index = this.tmp + "/index";
     this.logs = [];
     this.head = null;
 
-    await fs.mkdirs(this.folder);
     await fs.mkdirs(this.outside);
     await fs.mkdirs(this.directory);
     await run(this, ["init", "--bare", "--quiet"]);
@@ -133,7 +136,7 @@ describe("git client: materialize", function () {
   function apply(spec, from, to) {
     return new Promise(function (resolve, reject) {
       var folder = {
-        path: spec.folder,
+        blogID: spec.blog.id,
         log: function (message) {
           spec.logs.push(message);
         },
@@ -154,14 +157,14 @@ describe("git client: materialize", function () {
   // garbage piles up or not depending on the specs that ran first. A 1 MiB
   // semi-space collects the chunks every few MiB, whatever the size of the file.
   var MEASURE_MEMORY = `
-    var [materialize, directory, folder, from, to] = process.argv.slice(1);
+    var [materialize, directory, blogID, from, to] = process.argv.slice(1);
     var before = process.memoryUsage().rss;
     var peak = before;
     var timer = setInterval(function () {
       peak = Math.max(peak, process.memoryUsage().rss);
     }, 5);
 
-    require(materialize)(directory, { path: folder, log: function () {} }, from, to, function (err) {
+    require(materialize)(directory, { blogID: blogID, log: function () {} }, from, to, function (err) {
       clearInterval(timer);
       if (err) throw err;
       console.log(peak - before);
@@ -178,7 +181,7 @@ describe("git client: materialize", function () {
           MEASURE_MEMORY,
           require.resolve("clients/git/materialize"),
           spec.directory,
-          spec.folder,
+          spec.blog.id,
           from,
           to,
         ],
@@ -385,16 +388,19 @@ describe("git client: materialize", function () {
     expect(this.logs.join("\n")).toContain("not safe to write");
   });
 
-  it("sets the executable bit from the committed mode, and changes it", async function () {
+  // The blog folder has no executable bit (storage/folder), so an executable
+  // file is written like any other, and a change of mode alone rewrites it
+  it("writes executable files, and passes on a change of mode alone", async function () {
     var first = await commit(this, {
       "run.sh": { contents: "#!/bin/sh\n", mode: "100755" },
       "plain.txt": "Plain",
     });
 
-    await apply(this, EMPTY_TREE, first);
-
-    expect((await fs.stat(this.folder + "/run.sh")).mode & 0o111).not.toBe(0);
-    expect((await fs.stat(this.folder + "/plain.txt")).mode & 0o111).toBe(0);
+    expect(await apply(this, EMPTY_TREE, first)).toEqual(["plain.txt", "run.sh"]);
+    expect(await list(this.folder)).toEqual({
+      "plain.txt": Buffer.from("Plain"),
+      "run.sh": Buffer.from("#!/bin/sh\n"),
+    });
 
     // Only the modes change, in both directions at once
     var second = await commit(this, {
@@ -403,9 +409,65 @@ describe("git client: materialize", function () {
     });
 
     expect(await apply(this, first, second)).toEqual(["plain.txt", "run.sh"]);
-    expect((await fs.stat(this.folder + "/run.sh")).mode & 0o111).toBe(0);
-    expect((await fs.stat(this.folder + "/plain.txt")).mode & 0o111).not.toBe(0);
-    expect(await fs.readFile(this.folder + "/run.sh", "utf8")).toBe("#!/bin/sh\n");
+    expect(await list(this.folder)).toEqual({
+      "plain.txt": Buffer.from("Plain"),
+      "run.sh": Buffer.from("#!/bin/sh\n"),
+    });
+  });
+
+  // storage/folder names files in NFC. A name committed in NFD is written
+  // under its NFC name, and a later change, rename or removal of that NFD
+  // name in git acts on the same file, leaving nothing behind.
+  describe("a name which is not in NFC", function () {
+    var nfd = "cafe\u0301";
+    var nfc = nfd.normalize("NFC");
+
+    it("is written, changed and removed under its NFC name", async function () {
+      expect(nfd).not.toBe(nfc);
+
+      var first = await commit(this, { [nfd + "/" + nfd + ".txt"]: "First", "kept.txt": "Kept" });
+
+      // In git's order, by the committed bytes
+      expect(await apply(this, EMPTY_TREE, first)).toEqual([nfc + "/" + nfc + ".txt", "kept.txt"]);
+
+      // Names as they are on disk: only the NFC spelling is there
+      expect((await fs.readdir(this.folder)).sort()).toEqual(["kept.txt", nfc].sort());
+      expect(await fs.readdir(this.folder + "/" + nfc)).toEqual([nfc + ".txt"]);
+      expect(await fs.readFile(this.folder + "/" + nfc + "/" + nfc + ".txt", "utf8")).toBe("First");
+
+      var second = await commit(this, { [nfd + "/" + nfd + ".txt"]: "Second" });
+
+      expect(await apply(this, first, second)).toEqual([nfc + "/" + nfc + ".txt"]);
+      expect(await list(this.folder)).toEqual({
+        "kept.txt": Buffer.from("Kept"),
+        [nfc + "/"]: true,
+        [nfc + "/" + nfc + ".txt"]: Buffer.from("Second"),
+      });
+
+      var third = await commit(this, { [nfd + "/" + nfd + ".txt"]: null });
+
+      expect(await apply(this, second, third)).toEqual([nfc + "/" + nfc + ".txt"]);
+      expect(await list(this.folder)).toEqual({ "kept.txt": Buffer.from("Kept") });
+    });
+
+    it("is renamed to its NFC form without losing the file", async function () {
+      var first = await commit(this, { [nfd + ".txt"]: "Contents" });
+
+      await apply(this, EMPTY_TREE, first);
+
+      // The removal of the NFD name comes first, then the write of the NFC one
+      var second = await commit(this, { [nfd + ".txt"]: null, [nfc + ".txt"]: "Contents" });
+
+      await apply(this, first, second);
+
+      expect(await list(this.folder)).toEqual({ [nfc + ".txt"]: Buffer.from("Contents") });
+
+      var third = await commit(this, { [nfc + ".txt"]: null });
+
+      await apply(this, second, third);
+
+      expect(await list(this.folder)).toEqual({});
+    });
   });
 
   it("writes the same blob to several paths", async function () {
@@ -474,6 +536,8 @@ describe("git client: materialize", function () {
       expect(await apply(this, EMPTY_TREE, first)).toEqual(["fine.txt"]);
       expect(await list(this.tmp + "/outside")).toEqual({});
       expect(await fs.readdir(this.tmp)).not.toContain("pwned.txt");
+      expect(await fs.readdir(path.dirname(this.folder))).not.toContain("pwned.txt");
+      expect(await fs.readdir(path.dirname(this.folder))).not.toContain("outside");
       expect(await list(this.folder)).toEqual({ "fine.txt": Buffer.from("Fine") });
     });
 

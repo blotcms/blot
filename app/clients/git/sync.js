@@ -138,8 +138,8 @@ module.exports = function sync (blogID, gitHandle, callback) {
     if (err) return callback(err);
 
     debug("beginning sync");
-    folder.log("Checking for a live clone: " + folder.path);
-    checkGitRepoExists(folder.path, function (noClone) {
+    folder.log("Checking for a live clone");
+    checkGitRepoExists(blogID, function (noClone, blogDirectory) {
       var git = null;
       var bare;
 
@@ -147,7 +147,7 @@ module.exports = function sync (blogID, gitHandle, callback) {
       // that is not an error. Throws an error if directory does not exist.
       try {
         bare = Git(repo.directory(gitHandle));
-        if (!noClone) git = Git(folder.path);
+        if (!noClone) git = Git(blogDirectory);
       } catch (err) {
         return done(err, callback);
       }
@@ -171,7 +171,9 @@ module.exports = function sync (blogID, gitHandle, callback) {
 
               folder.log(`Comparing ${base} with ${commit}`);
 
-              materialize(repo.directory(gitHandle), folder, base, commit, function (err, modified) {
+              var target = { blogID: blogID, log: folder.log };
+
+              materialize(repo.directory(gitHandle), target, base, commit, function (err, modified) {
                 if (err) {
                   folder.log("Error updating blog folder: " + err.message);
                   debug(err);

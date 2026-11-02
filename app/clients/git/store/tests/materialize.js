@@ -18,7 +18,7 @@ const createCache = require("../cache");
 const createReader = require("../reader");
 const materialize = require("../materialize");
 const createFolderSink = require("../folderSink");
-const { TooLargeError, CorruptError, NotFoundError } = require("../errors");
+const { TooLargeError, CorruptError, NotFoundError, NoRoomError } = require("../errors");
 
 describe("git store materialize", function () {
   timeout(120 * 1000);
@@ -540,6 +540,116 @@ describe("git store materialize", function () {
       fs.rmSync(path.join(folder, "big.txt"));
       await apply(reader, null, commits[deltaAt]);
       expect(fs.readFileSync(path.join(folder, "big.txt"), "utf8")).toBe(lines(deltaAt));
+    });
+
+    // The cap is lowered rather than the blob made 64 MiB: what happens at the
+    // cap does not depend on its size
+    const CAP = 1024 * 1024;
+    const huge = (edit) => {
+      const line = Buffer.from("this line of the huge file is the same on every row of it......\n");
+      const data = Buffer.alloc(3 * 1024 * 1024);
+      for (let at = 0; at < data.length; at += line.length) line.copy(data, at, 0, Math.min(line.length, data.length - at));
+      if (edit) data.write("EDITED " + edit, 1024 * 1024);
+      return data;
+    };
+
+    it("writes a blob stored as a delta that is over the cap when the reader has scratch", async function () {
+      const first = repo.commit({ "huge.txt": huge(0), "small.txt": "small" });
+      const second = repo.commit({ "huge.txt": huge(1) });
+
+      const cache = createCache({ dir: path.join(tmp, "cache"), maxBytes: 64 * 1024 * 1024 });
+      const { reader, packs } = await repo.reader({ scratch: cache, maxSize: CAP });
+      const oid = repo.git(["rev-parse", first + ":huge.txt"]);
+      const stored = fx.listEntries(packs[0]).find((e) => e.oid === oid);
+
+      expect(stored.depth).toBeGreaterThan(0);
+
+      await apply(reader, null, first);
+      expect(Buffer.compare(fs.readFileSync(path.join(folder, "huge.txt")), huge(0))).toBe(0);
+      expect(fs.readFileSync(path.join(folder, "small.txt"), "utf8")).toBe("small");
+
+      // And onwards to the version it was a delta of
+      await apply(reader, first, second);
+      expect(Buffer.compare(fs.readFileSync(path.join(folder, "huge.txt")), huge(1))).toBe(0);
+
+      expect(cache.stats().reservedBytes).toBe(0);
+      expect(fs.readdirSync(path.join(tmp, "cache", "scratch"))).toEqual([]);
+
+      // Without scratch it is still the TooLargeError it was
+      fs.rmSync(folder, { recursive: true });
+      fs.mkdirSync(folder);
+      const plain = (await repo.reader({ maxSize: CAP })).reader;
+      const err = await failure(apply(plain, null, first));
+      expect(err instanceof TooLargeError).toBe(true);
+      expect(err.message).toContain("huge.txt");
+    });
+
+    it("writes several such blobs at once, one through scratch at a time", async function () {
+      const files = {};
+      for (let n = 0; n < 4; n++) files["huge" + n + ".txt"] = huge(0);
+      const first = repo.commit(files);
+      const edited = {};
+      for (let n = 0; n < 4; n++) edited["huge" + n + ".txt"] = huge(n + 1);
+      repo.commit(edited);
+
+      const cache = createCache({ dir: path.join(tmp, "cache"), maxBytes: 64 * 1024 * 1024 });
+      let peak = 0;
+      const timer = setInterval(() => (peak = Math.max(peak, cache.stats().reservedBytes)), 1);
+      const { reader } = await repo.reader({ scratch: cache, maxSize: CAP });
+
+      await apply(reader, null, first, { concurrency: 8 });
+      clearInterval(timer);
+
+      for (let n = 0; n < 4; n++) expect(Buffer.compare(fs.readFileSync(path.join(folder, "huge" + n + ".txt")), huge(0))).toBe(0);
+      // Two copies of one blob at the most (3 MiB each), not of all of them
+      expect(peak).toBeLessThanOrEqual(2 * 3 * 1024 * 1024 + 4096);
+      expect(cache.stats().reservedBytes).toBe(0);
+    });
+
+    describe("without the room for a delta-stored blob", function () {
+      let commit;
+
+      beforeEach(function () {
+        commit = null;
+      });
+
+      function build() {
+        repo.commit({ "huge.txt": huge(0) });
+        commit = repo.commit({ "huge.txt": huge(1) });
+        // The older one is the delta; materialize that
+        return repo.git(["rev-parse", commit + "~1"]);
+      }
+
+      it("fails with a NoRoomError when the room is taken just now, and works once it is free", async function () {
+        const first = build();
+        const cache = createCache({ dir: path.join(tmp, "cache"), maxBytes: 16 * 1024 * 1024 });
+        const { reader } = await repo.reader({ scratch: cache, maxSize: CAP });
+        const hold = await cache.reserve(14 * 1024 * 1024);
+
+        const err = await failure(apply(reader, null, first));
+        expect(err instanceof NoRoomError).toBe(true);
+        expect(fs.readdirSync(folder)).toEqual([]);
+
+        await hold.release();
+        await apply(reader, null, first);
+        expect(Buffer.compare(fs.readFileSync(path.join(folder, "huge.txt")), huge(0))).toBe(0);
+        expect(cache.stats().reservedBytes).toBe(0);
+      });
+
+      it("fails with a TooLargeError naming the path when the budget could never hold it", async function () {
+        const first = build();
+        const cache = createCache({ dir: path.join(tmp, "cache"), maxBytes: 4 * 1024 * 1024 });
+        const { reader } = await repo.reader({ scratch: cache, maxSize: CAP });
+
+        const err = await failure(apply(reader, null, first));
+
+        expect(err instanceof TooLargeError).toBe(true);
+        expect(err.message).toContain("huge.txt");
+        expect(fs.readdirSync(folder)).toEqual([]);
+        expect(cache.stats().reservedBytes).toBe(0);
+        const scratch = path.join(tmp, "cache", "scratch");
+        expect(fs.existsSync(scratch) ? fs.readdirSync(scratch) : []).toEqual([]);
+      });
     });
 
     it("ends correct when the same range is run again after a read failed part way", async function () {

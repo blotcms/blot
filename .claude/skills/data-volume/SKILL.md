@@ -1,11 +1,11 @@
 ---
 name: data-volume
-description: Grow or shrink the EBS volume that holds the app host's data directory (/var/www/blot/data), or move its contents to another host, with config/host/data-volume/resize.sh (grow in place; shrink by live rsync passes, a brief read-only freeze and a mount swap the running containers follow without a restart; `move prepare/copy/freeze/thaw/retag/status` for a snapshot, a new volume on the other host and delta rsync, stopping frozen for the host switch), release and detach the old volume afterwards with `resize.sh finish`, or rehearse the whole flow on a throwaway instance (or two, for a move) with drill.sh. Holds the guardrails (ask before every production command, drill first, tear down only by explicit ID), what to expect at production scale, and an incident log. Use when asked to resize, grow or shrink the data volume, move the data volume to another host, free disk on the app host by moving to a smaller or larger volume, detach or delete the old data volume, run a data-volume drill, or use the app's read-only freeze (scripts/read-only.js).
+description: Grow or shrink the EBS volume that holds the production host's data directory (/var/www/blot/data), or move its contents to another host, with config/host/data-volume/resize.sh (grow in place; shrink by live rsync passes, a brief read-only freeze and a mount swap the running containers follow without a restart; `move prepare/copy/freeze/thaw/retag/status` for a snapshot, a new volume on the other host and delta rsync, stopping frozen for the host switch), release and detach the old volume afterwards with `resize.sh finish`, or rehearse the whole flow on a throwaway instance (or two, for a move) with drill.sh. Holds the guardrails (ask before every production command, drill first, tear down only by explicit ID), what to expect at production scale, and an incident log. Use when asked to resize, grow or shrink the data volume, move the data volume to another host, free disk on the app host by moving to a smaller or larger volume, detach or delete the old data volume, run a data-volume drill, or use the app's read-only freeze (scripts/read-only.js).
 ---
 
 # Data volume
 
-The app host's data directory (`/var/www/blot/data`: blog folders and git repos;
+The production host's data directory (`/var/www/blot/data`: blog folders and git repos;
 generated assets live only in S3) is one XFS-formatted EBS volume. Blog folders
 are planned to move to S3 (#2258) and git repos too (#2259), after which the
 volume is removed. It is mounted by
@@ -17,7 +17,8 @@ app containers bind it with `bind-propagation=rslave` (config/host/README.md).
 skill does not repeat it: it holds the rules, what to expect, and the log.
 
 Related: `scripts/read-only.js` (the app's read-only freeze, also usable on
-its own), `redis-host` (the same style of operation for the Redis host).
+its own), `redis-host` (Redis, which shares the host), and the host cycle in
+`config/host/README.md`, which runs this script's `move` flow.
 
 ## Rules
 
@@ -51,8 +52,9 @@ its own), `redis-host` (the same style of operation for the Redis host).
 7. **After `finish` released an old volume on the host, deploy the app before
    the next resize.** The release breaks the running containers' link to host
    mounts until they are recreated (README, "After it").
-8. Public repo: volume and snapshot IDs are fine in commits; no account IDs,
-   key names or ssh details, and sizes only as percentages here.
+8. Public repo: no production instance, volume or snapshot IDs, account IDs,
+   key names or ssh details in commits, PRs or issues (drill IDs are fine), and
+   sizes only as percentages here.
 
 ## What to expect at production scale
 

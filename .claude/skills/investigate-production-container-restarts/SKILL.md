@@ -212,13 +212,13 @@ ssh blot "docker logs <container> --since <before> --until <after> 2>&1 | grep -
 - **Baseline:** count `slow heartbeat` lines per container since the
   deploy. A healthy connection logs few or none.
 
-**Then check the Redis host.** That's where the root cause has been, and
-it is a separate production host (`ssh redis`), so confirm with the user
-first:
+**Then check the host's TCP memory.** That's where the root cause has been
+(on the old separate Redis host; Redis now shares the production host, so the
+host is `ssh blot`), so confirm with the user first:
 
 ```bash
-ssh -n redis 'grep TCP: /proc/net/sockstat; cat /proc/sys/net/ipv4/tcp_mem; nstat -az TcpExtTCPMemoryPressures TcpExtTCPMemoryPressuresChrono TcpExtPruneCalled TcpExtTCPRcvQDrop TcpExtTCPOFODrop'
-ssh -n redis 'tail -20 ~/tcpmem.log'   # 5-minute history, from /etc/cron.d/blot-redis (config/redis/bin/tcpmem-log.sh)
+ssh -n blot 'grep TCP: /proc/net/sockstat; cat /proc/sys/net/ipv4/tcp_mem; nstat -az TcpExtTCPMemoryPressures TcpExtTCPMemoryPressuresChrono TcpExtPruneCalled TcpExtTCPRcvQDrop TcpExtTCPOFODrop'
+ssh -n blot 'tail -20 ~/tcpmem.log'   # 5-minute history, from /etc/cron.d/blot-redis (config/redis/bin/tcpmem-log.sh)
 ```
 
 - `sockstat`'s `mem` and `tcp_mem` are both in pages. Once `mem` is above

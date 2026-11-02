@@ -43,9 +43,15 @@
 //
 // Blobs come through reader.stream, so one stored whole is never held in
 // memory, and each is checked against its ID as it goes. One stored as a delta
-// is resolved in memory, which `maxSize` (the reader's, unless given here)
-// limits: a bigger one fails the whole call with a TooLargeError saying which
-// path, and never gives the sink a wrong or partial file.
+// is resolved in memory if it is up to `maxSize` (the reader's, unless given
+// here). A bigger one is built in files in the reader's scratch space and
+// streamed from there, so a reader made with `scratch` writes a blob of any
+// size. A reader without it fails the whole call with a TooLargeError saying
+// which path, and so does one whose scratch could never hold the blob (twice
+// its size). Neither ever gives the sink a wrong or partial file. Each blob in
+// flight holds scratch for up to two copies of itself, so `concurrency` large
+// delta-stored blobs at once need room for twice their sizes together, and a
+// reader whose scratch has less fails the call with a NoRoomError.
 //
 // A failure part way (a missing object, a sink error, a store error) leaves
 // the sink part applied and is thrown once the writes in flight have ended. The
