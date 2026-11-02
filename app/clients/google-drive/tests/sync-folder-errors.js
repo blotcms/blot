@@ -25,10 +25,11 @@ function harness(options) {
   const mappings = options.mappings || {};
 
   const stubs = {
-    "fs-extra": {
-      remove: async function (path) {
+    "storage/folder": {
+      remove: async function (blogID, path) {
         removed.push(path);
       },
+      mkdir: async function () {},
     },
     "clients/util/localDescendants": async function descendants(_, path) {
       const paths = [];
@@ -124,7 +125,7 @@ function harness(options) {
       walked = true;
       return (dirId === "folder" && options.driveItems) || [];
     },
-    "./util/localReaddir": async function (path) {
+    "./util/localReaddir": async function (blogID, path) {
       return (path === "/" && options.localItems) || [];
     },
     "./util/transformDriveItems": require("../sync/util/transformDriveItems"),

@@ -16,9 +16,9 @@ function harness(files) {
   };
 
   const stubs = {
-    "fs-extra": {
+    "storage/folder": {
       remove: async () => {},
-      ensureDir: async () => {},
+      mkdir: async () => {},
     },
     "helper/localPath": (_, path) => path,
     "../database": {
@@ -41,7 +41,7 @@ function harness(files) {
         setApplied: async () => {},
       }),
     },
-    "../util/localFingerprint": async (path) => "local-" + path,
+    "../util/localFingerprint": async (blogID, path) => "local-" + path,
     "../util/download": async (blog, drive, path, remote) => {
       state.downloads.push(remote.id);
       if (state.downloadError) throw state.downloadError;

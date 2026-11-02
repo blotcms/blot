@@ -32,7 +32,7 @@ function harness(count = 1) {
     failStore: false
   };
   const stubs = {
-    "fs-extra": {},
+    "storage/folder": {},
     "helper/localPath": (_, path) => path,
     "../database": {
       blog: {
@@ -78,7 +78,7 @@ function harness(count = 1) {
         }
       };
     },
-    "../util/localFingerprint": async path =>
+    "../util/localFingerprint": async (blogID, path) =>
       local.find(file => "/" + file.name === path)?.fingerprint || null,
     "../serviceAccount/createDriveClient": async () => ({
       files: {

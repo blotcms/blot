@@ -38,14 +38,16 @@ describe("Drive download completion", function() {
     download = load({
       "fs-extra": {
         createWriteStream: () => writer,
-        move: async () => {
-          moved = true;
-        },
         remove: async () => {
           removed = true;
         },
       },
-      "helper/localPath": () => "/test-blog/file.txt",
+      "storage/folder": {
+        writeFrom: async () => {
+          moved = true;
+        },
+      },
+      "./localFile": async () => "/test-blog/file.txt",
       "colors/safe": {
         green: x => x
       },
@@ -158,7 +160,8 @@ describe("Drive download checksum optimization", function() {
     let requested = false;
     const download = load({
       "fs-extra": {},
-      "helper/localPath": () => "/test-blog/file.txt",
+      "storage/folder": {},
+      "./localFile": async () => "/test-blog/file.txt",
       "colors/safe": {
         green: x => x
       },
