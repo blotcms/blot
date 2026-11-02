@@ -50,6 +50,27 @@ describe("rebuild dependents cleanup", function () {
     });
   });
 
+  it("does not log an error when the dependent was deleted too", async function () {
+    const imagePath = "/assets/image.png";
+    const postPath = "/post.txt";
+
+    await this.blog.write({
+      path: imagePath,
+      content: await global.test.fake.pngBuffer(),
+    });
+    await this.blog.write({ path: postPath, content: `![Alt](${imagePath})` });
+    await this.blog.rebuild();
+    await this.blog.remove(postPath);
+
+    const logged = [];
+    spyOn(console, "log").and.callFake((...args) => logged.push(args.join(" ")));
+
+    await rebuildDependentsOf(this.blog.id, imagePath);
+
+    expect(logged.some((line) => line.includes("Error rebuilding"))).toBe(false);
+    expect(logged.some((line) => line.includes("Dependent no longer exists"))).toBe(true);
+  });
+
   it("rebuilds a folder post via its source folder instead of dropping it", async function () {
     const assetPath = "/album+/cover.png";
     const sourcePath = "/album+/post.md";
@@ -122,28 +143,6 @@ describe("rebuild dependents cleanup", function () {
       expect((await getEntry(this.blog.id, postPath)).html).toContain(
         BLOT_CDN_TOKEN
       );
-    });
-
-    it("are still read from the exact-case key until the entry is rebuilt", async function () {
-      const key = Entry.key.dependents(this.blog.id, "/Doc.PDF");
-      const legacyKey = Entry.key.dependentsExactCase(this.blog.id, "/Doc.PDF");
-
-      expect(legacyKey).not.toEqual(key);
-
-      // How an entry built before keys were lowercased is recorded.
-      await client.sRem(key, postPath);
-      await client.sAdd(legacyKey, postPath);
-
-      await this.blog.write({ path: "/doc.pdf", content: "PDF" });
-      await rebuildDependentsOf(this.blog.id, "/Doc.PDF");
-
-      expect((await getEntry(this.blog.id, postPath)).html).toContain(
-        BLOT_CDN_TOKEN
-      );
-
-      // Saving the rebuilt entry moved it to the lowercased key.
-      expect(await client.sMembers(legacyKey)).toEqual([]);
-      expect(await client.sMembers(key)).toEqual([postPath]);
     });
   });
 });

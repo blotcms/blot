@@ -99,7 +99,13 @@ async function injectCaseOnlyDeletes(entries, blogID, client) {
           const resolvedPath = await folder.resolveCaseInsensitive(blogID, Path.dirname(entry.relative_path));
           localEntries = await folder.listNames(blogID, resolvedPath);
         } catch (err2) {
-          console.log(prefix(), "Error reading local directory with case-sensitive path:", err2);
+          // The folder is often just not on disk yet because its delta has not
+          // been applied, so an expected miss gets one line and no stack.
+          if (err2 && err2.code === "ENOENT") {
+            console.log(prefix(), "Local directory not found with case-sensitive path:", err2.message);
+          } else {
+            console.log(prefix(), "Error reading local directory with case-sensitive path:", err2);
+          }
           continue;
         }
       } else {

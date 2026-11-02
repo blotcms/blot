@@ -3,7 +3,6 @@ var Entry = require("models/entry");
 var client = require("models/client");
 var Blog = require("models/blog");
 var dependentsKey = Entry.key.dependents;
-var dependentsExactCaseKey = Entry.key.dependentsExactCase;
 var templateKey = require("models/template/key");
 var templateDependentsKey = templateKey.templateDependents;
 var templateManifestsPendingKey = templateKey.templateManifestsPending;
@@ -44,19 +43,9 @@ module.exports = function (blogID, path, callback) {
       try {
         // Dependents are stored under a lowercased key so a file which
         // arrives with different casing than the link that missed it still
-        // matches. Sets written before that are under the exact-case key
-        // until their entries are rebuilt (scripts/entry/rebuild-all.js), so
-        // check that too and merge.
-        const keys = Array.from(
-          new Set([
-            dependentsKey(blogID, path),
-            dependentsExactCaseKey(blogID, path),
-          ])
-        );
-        const dependent_paths = Array.from(
-          new Set(
-            (await Promise.all(keys.map((key) => client.sMembers(key)))).flat()
-          )
+        // matches.
+        const dependent_paths = await client.sMembers(
+          dependentsKey(blogID, path)
         );
 
         async.eachSeries(
@@ -72,7 +61,14 @@ module.exports = function (blogID, path, callback) {
               // rebuildEntry.
               rebuildEntry(blog, entry, function (err) {
                 if (err) {
-                  log("Error rebuilding dependent_path:", dependent_path, err);
+                  // The dependent's own source file is gone, usually deleted
+                  // in the same batch as this file. Dropping it below is the
+                  // whole fix, so don't report it as an error.
+                  if (isMissingFile(err)) {
+                    log("Dependent no longer exists:", dependent_path);
+                  } else {
+                    log("Error rebuilding dependent_path:", dependent_path, err);
+                  }
 
                   if (shouldDropDependent(err)) {
                     dropDependent(blogID, dependent_path, function (dropErr) {
@@ -130,6 +126,10 @@ async function markTemplateDependents(blogID, path, log) {
   } catch (err) {
     log("Error marking template dependents", err);
   }
+}
+
+function isMissingFile(err) {
+  return !!err && (err.code === "ENOENT" || err.name === "NotFoundError");
 }
 
 function shouldDropDependent(err) {

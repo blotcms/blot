@@ -179,3 +179,8 @@ Newest last. Add one dated entry per run.
 - Blogs / content: `skilltest-1793557573/post.md` and a non-ASCII name in a folder with a space, on gittest, on `f12cfad6a`.
 - Result: add, edit, rename and delete each showed within 1s of the push. A push to another branch was refused with Blot's message, not `HTTP 400`, and made no ref. Cleanup: gone after 1s. Public pages only: `inspect.js` was not run.
 - Odd: none.
+
+### 2026-11-02 — folder post removal on Git after the fix (#2342)
+- Blogs / content: `skilltest-1793606015-multi+/a.md` and `b.md` on gittest, on `4a505d627`.
+- Result: live after ~2s with both parts; after `git rm` of the folder, 404 after ~2s. The stale `/skilltest-1793565243-multi` from the earlier run still returned 200, since the fix only applies to new removals. Git has no Resync; the dashboard's Rebuild, which runs Fix afterwards, removed it within ~6s. Public pages only: `inspect.js` was not run.
+- Odd: none.

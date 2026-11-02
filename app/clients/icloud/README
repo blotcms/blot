@@ -29,7 +29,7 @@ The architecture separates concerns:
 
 - `database.js` - Redis-backed persistence layer for per-blog iCloud account metadata. Stores sharingLink, setupComplete state, transfer status, `lastSync` (when the macserver last pushed a change; written by `stampLastSync()` from the `/upload`, `/delete`, `/mkdir` and requested-resync routes, never by a walk Blot starts) and the stored error (`error`, `errorCode`, `errorSince`; `store()` keeps the three in step). Uses the key prefix `blot:clients:icloud-drive:`.
 
-- `error.js` - Typed error state. Codes written at the source: `SOURCE_MISSING` (macserver watcher: shared folder deleted), `TRANSFER_INCOMPLETE` (initial transfer to iCloud failed) and `SETUP_FAILED` (the sharing link was never accepted; the only code that is not a health code). Also infers a code for rows written without one, and holds the backfill patch.
+- `error.js` - Typed error state. Codes written at the source: `SOURCE_MISSING` (macserver watcher: shared folder deleted), `TRANSFER_INCOMPLETE` (initial transfer to iCloud failed) and `SETUP_FAILED` (the sharing link was never accepted; the only code that is not a health code). Also infers a code when a writer (an older macserver) sends none.
 
 - `getHealth.js` - Returns the shared client health object (`app/clients/health.js`) for a blog. `SOURCE_MISSING` and `TRANSFER_INCOMPLETE` are issues. Setup in progress is `syncing`. Setup failures are not health issues: the dashboard shows them with retry/cancel. The issue clears when the stored error is cleared (setup retry, successful transfer, a successful `fromiCloud` walk of a set-up blog other than for `SOURCE_MISSING` or an error recorded mid-walk, disconnect).
 
@@ -302,4 +302,4 @@ Disconnection failures:
 
 ## Testing error states locally
 
-`scripts/icloud/fake-error.js` writes the row each error writer would leave (folder deleted, transfer failed, setup failed, legacy rows with no `errorCode`, setup in progress) onto a connected blog, so the dashboard and `getHealth` show each state. Run `node scripts/icloud/fake-error.js modes` for the list; `run <mode> <blogID>` prints the resulting health and restores the row (`--keep` leaves it in place). `scripts/icloud/backfill-error-codes.js` writes `errorCode` onto existing rows that only have `error`; it is optional because `getHealth` infers the same code.
+`scripts/icloud/fake-error.js` writes the row each error writer would leave (folder deleted, transfer failed, setup failed, setup in progress) onto a connected blog, so the dashboard and `getHealth` show each state. Run `node scripts/icloud/fake-error.js modes` for the list; `run <mode> <blogID>` prints the resulting health and restores the row (`--keep` leaves it in place).
