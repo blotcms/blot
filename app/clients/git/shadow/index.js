@@ -378,7 +378,7 @@ async function runMirror(ctx, task) {
     const outcome = measured.result;
 
     if (outcome && outcome.imported) {
-      const imported = await runImport(ctx, ebs, extra);
+      const imported = await runImport(ctx, ebs, extra, measured);
 
       // Another process imported it first: push onto what it imported
       if (imported === null && attempt < 2) continue;
@@ -450,7 +450,9 @@ async function runMirror(ctx, task) {
   }
 }
 
-async function runImport(ctx, ebs, extra) {
+// `before` is the measurement of the mirror's read which found the store
+// empty, counted in with the import's
+async function runImport(ctx, ebs, extra, before) {
   const { blogID, gitDir, store, cache, lock } = ctx;
 
   if (!Object.keys(ebs).length) {
@@ -473,6 +475,11 @@ async function runImport(ctx, ebs, extra) {
   }
 
   const result = measured.result;
+
+  if (before) {
+    measured.ms += before.ms;
+    for (const key of Object.keys(measured.counts)) measured.counts[key] += before.counts[key];
+  }
 
   log({
     blog: blogID,
@@ -546,18 +553,18 @@ async function runWrite(ctx, task) {
   const { base, master, result, commitMs } = measured.result;
 
   if (base.seq === 0) {
-    log({ ...fields, outcome: "skipped", detail: "the store is empty" });
+    log({ ...fields, outcome: "skipped", ...countsOf(measured), detail: "the store is empty" });
     return "mirror";
   }
 
   if (!result) {
     // A mirror since the write landed already brought it over
     if (master === ebs.commit || (await isAncestor(gitDir, ebs.commit, master))) {
-      log({ ...fields, outcome: "already", storeMaster: master, ebsCommit: ebs.commit });
+      log({ ...fields, outcome: "already", ...countsOf(measured), storeMaster: master, ebsCommit: ebs.commit });
       return null;
     }
 
-    log({ ...fields, outcome: "mismatch", detail: "the store's master is not the EBS commit's parent", storeMaster: master, ebsParent: ebs.parent, ebsCommit: ebs.commit });
+    log({ ...fields, outcome: "mismatch", ...countsOf(measured), detail: "the store's master is not the EBS commit's parent", storeMaster: master, ebsParent: ebs.parent, ebsCommit: ebs.commit });
     return "mirror";
   }
 
