@@ -120,6 +120,17 @@ describe("git store compaction plan", function () {
     expect(compact.plan(manifestWith(many), { maxBytes: 10 * 1600 }).packs.length).toBe(10);
   });
 
+  it("does not count packs too big to merge towards maxPacks, so keepRecent still protects the newest", function () {
+    // 50 full packs (2000 bytes and a 1100-byte .idx, over half of maxBytes),
+    // then six small recent ones
+    const full = Array.from({ length: 50 }, (_, i) => pack(i + 1, 2000, i + 1));
+    const small = Array.from({ length: 6 }, (_, i) => pack(i + 51, 50, i + 51));
+    const chosen = compact.plan(manifestWith([...full, ...small]), { maxBytes: 5000 });
+
+    // The newest four (53 to 56) are kept; the two older small ones merge
+    expect(chosen.packs.sort()).toEqual([51, 52].map((n) => pack(n).name));
+  });
+
   it("rebuilds the history once there are enough pieces", function () {
     expect(compact.plan(manifestWith([pack(1, 1000, 1)], 15))).toBe(null);
     expect(compact.plan(manifestWith([pack(1, 1000, 1)], 16))).toEqual({ packs: [], history: true });

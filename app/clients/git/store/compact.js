@@ -11,7 +11,8 @@
 //   lock(fn)      the host's per-repository lock, passed to manifest.swap
 //   keepRecent    the packs of this many of the newest pushes are left out of
 //                 the merge (default 4), unless there are more than maxPacks
-//   maxPacks      past this many packs keepRecent is ignored (default 32)
+//   maxPacks      past this many packs that can still be merged (each under
+//                 half of maxBytes), keepRecent is ignored (default 32)
 //   factor        the geometric factor (default 2): see plan() below
 //   minPieces     the history is rebuilt once there are this many history
 //                 pieces (default 16)
@@ -127,7 +128,8 @@ const PACK_CONFIG = {
 // client provably has, so merging the newest packs into one would make a
 // client one push behind download all of them. The packs of the newest
 // `keepRecent` pushes (by seq) are left alone for that, unless there are more
-// than `maxPacks` packs, which a burst of pushes or Blot commits can make: then
+// than `maxPacks` packs that can still be merged (see Size below), which a
+// burst of pushes or Blot commits can make: then
 // the count matters more. Among the rest, sorted by size, the smallest split is
 // found such that every pack above it is at least `factor` times the size of
 // everything below it, and everything below it is merged (as `git repack
@@ -149,8 +151,15 @@ const PACK_CONFIG = {
 function plan(m, options = {}) {
   const { keepRecent, maxPacks, factor, minPieces, maxBytes } = { ...DEFAULTS, ...options };
 
+  // Only packs that can still be merged count towards maxPacks. One whose
+  // .pack and .idx are half of maxBytes or more stays as it is from then on
+  // (two such never fit in one merge), so a repository much larger than
+  // maxBytes always has many of them, and counting them would drop keepRecent
+  // on every run and send a client one push behind a merged pack every time.
+  const mergeable = m.packs.filter((pack) => pack.size + pack.idxSize < maxBytes / 2).length;
+
   let candidates = m.packs;
-  if (m.packs.length <= maxPacks && keepRecent > 0) {
+  if (mergeable <= maxPacks && keepRecent > 0) {
     const recent = new Set([...new Set(m.packs.map((pack) => pack.seq))].sort((a, b) => b - a).slice(0, keepRecent));
     candidates = m.packs.filter((pack) => !recent.has(pack.seq));
   }
