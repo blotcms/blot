@@ -38,7 +38,9 @@
 //      the parents and trees of its commits, the targets of its tags, and for
 //      a tree only the entries which differ from the same place in its
 //      commit's first parent. A root commit checks every entry. Then check that
-//      each ref update's new tip exists, even when the push carried no objects.
+//      each ref update's new tip exists, even when the push carried no objects,
+//      and for each tip that is an annotated tag find what it finally points at
+//      (the manifest's `peeled`, which the advertisement gives as a "^{}" line).
 //   5. Build the .rev file, and a small pack of just the push's commits (a
 //      history piece, which the manifest lists and compaction merges later).
 //   6. Upload the pack, its .idx and .rev, and the history piece and its .idx
@@ -81,6 +83,8 @@ const createReader = require("./reader");
 const { parseCommit, parseTree, parseTag, isDirectory, isGitlink } = require("./objects");
 const { scanPack } = require("./packscan");
 const { buildRev } = require("./rev");
+const { readHistory } = require("./history");
+const { ancestors } = require("./fetch");
 
 const ZERO = "0".repeat(40);
 const MASTER = "refs/heads/master";
@@ -509,20 +513,54 @@ async function findMissing({ repo, fresh, local, listed }) {
 }
 
 // Why each ref update's new tip can't be taken, as { ref: reason }: it isn't
-// there, or a branch doesn't point at a commit
-async function checkTips({ repo, commands, listed }) {
+// there, or a branch doesn't point at a commit. `types` (a Map) is filled with
+// the type of each new tip, so the caller does not look them up again.
+async function checkTips({ repo, commands, listed, types }) {
   const problems = {};
 
   for (const command of commands) {
     if (command.new === ZERO) continue;
 
     const type = listed.has(command.new) ? listed.get(command.new).type : await repo.typeOf(command.new);
+    types.set(command.new, type);
 
     if (!type) problems[command.ref] = "missing necessary objects";
     else if (command.ref.indexOf("refs/heads/") === 0 && type !== "commit") problems[command.ref] = "branches must point to a commit";
   }
 
   return problems;
+}
+
+// How many tags deep a tag is peeled; a longer chain is not recorded
+const MAX_PEEL = 16;
+
+// For each new tip that is an annotated tag, the object it finally points at
+// ({ tag oid: oid }), which the advertisement gives as its "^{}" line. The tag
+// is in the push (`local`) or already in the repository. A tag that cannot be
+// peeled is left out, and is advertised without a "^{}" line.
+async function peelTags({ repo, local, types }) {
+  const peeled = {};
+
+  for (const [tip, type] of types) {
+    if (type !== "tag") continue;
+
+    let oid = tip;
+    for (let depth = 0; depth < MAX_PEEL; depth++) {
+      // Only a tag is read; the object it finally points at may be any size
+      const known = local.get(oid);
+      const type = known ? known.type : await repo.typeOf(oid);
+      if (!type) break;
+      if (type !== "tag") {
+        peeled[tip] = oid;
+        break;
+      }
+      const found = known || (await repo.read(oid));
+      if (!found) break;
+      oid = parseTag(found.data).object;
+    }
+  }
+
+  return peeled;
 }
 
 // Uploads a pack with its index and, unless it is a history piece (which is
@@ -588,7 +626,7 @@ async function receive({ store, cache, lock, commands, pack = null, limit = DEFA
     if (behind) throw behind;
 
     const added = await prepare({ store, cache, commands, incoming, limit, sizeHint, base, children, stats, baseLimit, hold: (r) => (reservation = r), say });
-    const next = await swap({ store, lock, commands, added });
+    const next = await swap({ store, cache, lock, commands, added });
 
     stats.packs = added.packs.map((piece) => piece.name);
     say("Push saved.");
@@ -759,8 +797,10 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, base
     }
   }
 
-  const tips = await checkTips({ repo, commands, listed });
+  const types = new Map();
+  const tips = await checkTips({ repo, commands, listed, types });
   if (Object.keys(tips).length) throw new Refused("ok", tips);
+  added.peeled = await peelTags({ repo, local, types });
 
   // Nothing is acknowledged before this, and the manifest names no pack which
   // is not uploaded: a failure here leaves the repository as it was
@@ -786,21 +826,50 @@ async function historyPiece(scratch, reservation, gitDir, commits) {
   return describePack(packFile, path.join(reservation.dir, "history.idx"));
 }
 
+// The packs to list again (with this push's seq) because the push makes
+// objects reachable that no ref reached, which stay in whatever older pack
+// holds them. A pack's seq is the push that last made its objects needed, and
+// fetch sends the packs above a client's place by it. A push with a pack makes
+// the same demand of the client (it sends what the refs it was shown did not
+// reach), and a pack already listed is moved by manifest.advance. A push with no
+// pack is the case left: a tip that is not a ref now and not an ancestor of one
+// was last reachable some time ago. Which pack holds it is not known without
+// reading, so all the packs are listed again, which costs the next fetch a
+// clone and is rare (tagging a commit on a branch that was force pushed away).
+async function reachedAgain({ store, cache, current, commands, added }) {
+  if (added.packs.length) return [];
+
+  const live = new Set(Object.values(current.refs));
+  const tips = commands.filter((command) => command.new !== ZERO && !live.has(command.new)).map((command) => command.new);
+  if (!tips.length) return [];
+
+  const peel = (oid) => (current.peeled && current.peeled[oid]) || oid;
+  // A tag object that is not a ref now is not reached by anything else
+  if (tips.some((oid) => added.peeled[oid])) return current.packs;
+
+  const graph = await readHistory({ store, cache, manifest: current });
+  if (!graph) return current.packs;
+
+  const reached = ancestors(graph, [...live].map(peel), Infinity);
+  return tips.every((oid) => reached.has(oid)) ? [] : current.packs;
+}
+
 // Applies the commands to the newest manifest and swaps it in. The base may
 // have moved since the push began (another push, Blot's own commit); that is
 // fine as long as the refs the commands name have not.
-async function swap({ store, lock, commands, added }) {
+async function swap({ store, cache, lock, commands, added }) {
   const current = await manifest.read(store);
   const refs = applied(current, commands);
   const behind = staleRefs(current, commands) || nameConflicts(refs, commands);
   if (behind) throw behind;
 
-  const has = new Set(current.packs.map((pack) => pack.name));
+  const again = await reachedAgain({ store, cache, current, commands, added });
   const next = manifest.advance(current, {
     refs,
     head: current.head || (refs[MASTER] ? MASTER : null),
-    packs: added.packs.filter((piece) => !has.has(piece.name)).map(entryOf),
+    packs: (again.length ? again : added.packs).map(entryOf),
     historyPieces: added.pieces.map(entryOf),
+    peeled: added.peeled,
   });
 
   await manifest.swap({ store, lock, base: current, next, uploaded: [...added.packs, ...added.pieces].map((piece) => piece.name) });

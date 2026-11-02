@@ -71,8 +71,8 @@ describe("git store ref advertisement", function () {
     const [first] = lines(advertise(manifestOf([], A)));
     const names = first.capabilities.map((c) => c.split("=")[0]);
 
-    expect(names).toEqual(jasmine.arrayContaining(["side-band-64k", "ofs-delta", "agent"]));
-    for (const not of ["shallow", "deepen-since", "deepen-not", "deepen-relative", "filter", "multi_ack", "multi_ack_detailed", "no-done", "thin-pack", "include-tag", "allow-tip-sha1-in-want", "allow-reachable-sha1-in-want", "side-band"]) {
+    expect(names).toEqual(jasmine.arrayContaining(["multi_ack_detailed", "no-done", "side-band-64k", "ofs-delta", "agent"]));
+    for (const not of ["shallow", "deepen-since", "deepen-not", "deepen-relative", "filter", "multi_ack", "thin-pack", "include-tag", "allow-tip-sha1-in-want", "allow-reachable-sha1-in-want", "side-band"]) {
       expect(names).not.toContain(not);
     }
     expect(first.capabilities).toContain("object-format=sha1");
