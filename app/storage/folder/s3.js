@@ -8,12 +8,13 @@ var crypto = require("crypto");
 var { randomUUID: uuid } = require("crypto");
 var { pipeline } = require("stream/promises");
 var { PassThrough, Readable } = require("stream");
-var { join, dirname, basename, posix } = require("path");
+var { join, dirname, posix } = require("path");
 var s3 = require("../s3");
 var sendObject = require("../sendObject");
 var contentTypeFor = require("../contentType");
-var { walkLocal, createPool, FOLDER_STAGING_DIRECTORY, FOLDER_DOWNLOAD_DIRECTORY } = require("../util");
+var { walkLocal, createPool, FOLDER_STAGING_DIRECTORY } = require("../util");
 var File = require("models/file");
+var contentCache = require("./cache");
 var { NotFoundError } = require("./errors");
 
 // The S3 backend of storage/folder: a blog's folder is the objects under
@@ -24,8 +25,10 @@ var { NotFoundError } = require("./errors");
 //
 // - Metadata reads (stat, exists, list, listNames, listAll, walk,
 //   resolveCaseInsensitive) come from models/file, never from ListObjectsV2.
-//   Reads of bytes (read, createReadStream, serve, ensureLocal) fetch the
-//   object.
+//   Reads of bytes go through the content cache (./cache.js) on the host's
+//   instance store: ensureLocal for any size, and read, createReadStream and
+//   serve for files up to config.folder_cache.max_file_bytes. Bigger files
+//   are streamed straight from the object.
 // - Every write goes to S3 first and to the index after it succeeds, and
 //   every remove deletes from S3 first and from the index after, so a crash
 //   in between leaves the index behind S3, never ahead of it. The SHA-1 is
@@ -47,11 +50,9 @@ function noop() {}
 
 var DEFAULT_LIMIT = 1000;
 
-// Under config.tmp_directory: a download for ensureLocal, a file a tool is
-// writing for path() and commit(), and a stream being written to disk before
-// its upload. All are short-lived and left to the tmp pruner if a process
-// dies. A proper content cache, bounded and keyed by hash, is a later PR.
-var DOWNLOAD_DIRECTORY = FOLDER_DOWNLOAD_DIRECTORY;
+// Under config.tmp_directory: a file a tool is writing for path() and
+// commit(), and a stream being written to disk before its upload. Both are
+// short-lived and left to the tmp pruner if a process dies.
 var STAGING_DIRECTORY = FOLDER_STAGING_DIRECTORY;
 var SPOOL_DIRECTORY = "storage-folder-spool";
 
@@ -208,10 +209,70 @@ async function slurp(stream) {
   return Buffer.concat(chunks);
 }
 
+// The content cache's description of a file: its key is the blog, the path
+// and the SHA-1, or the size and modified time where the index has no hash
+function cached(blogID, path, found) {
+  return {
+    blogID: blogID,
+    path: path,
+    version: found.sha1 || found.size + "-" + found.modified,
+    size: found.size,
+    sha1: found.sha1,
+  };
+}
+
+// Opens the object for the content cache to download
+function opener(blogID, path) {
+  return function () {
+    return fromS3(async function () {
+      return (await s3.get(objectKey(blogID, path))).Body;
+    });
+  };
+}
+
+// The index record of a file small enough to read through the cache, or
+// null for one to read straight from S3. Rejects if there is no such file.
+async function smallFile(blogID, path, relPath) {
+  var found = path === "/" ? null : await File.get(blogID, path);
+
+  if (!found || found.type === "dir") throw new NotFoundError("Not a file: " + relPath);
+
+  return found.size <= config.folder_cache.max_file_bytes ? found : null;
+}
+
+// Errors from the cache's own disk, which mean the cache can't hold the file
+// right now, not that the file is unreadable
+var CACHE_DISK_ERRORS = new Set(["ENOSPC", "EDQUOT", "EROFS", "EIO", "EACCES", "EPERM"]);
+
+// Runs fn with the cached copy of a small file. S3 holding bytes the index
+// doesn't describe (ECHANGED: the index is behind a write), or the cache's
+// disk failing (full, say), resolves to undefined, so the caller reads S3
+// directly instead. An error from fn itself is passed on: by then a response
+// may have started.
+async function throughCache(blogID, path, found, fn) {
+  var failedInside = false;
+
+  try {
+    return await contentCache().use(cached(blogID, path, found), opener(blogID, path), async function (local) {
+      try {
+        return await fn(local);
+      } catch (err) {
+        failedInside = true;
+        throw err;
+      }
+    });
+  } catch (err) {
+    if (!failedInside && (err.code === "ECHANGED" || CACHE_DISK_ERRORS.has(err.code))) return undefined;
+    throw err;
+  }
+}
+
 async function read(blogID, relPath) {
   var path = locate(blogID, relPath);
+  var found = await smallFile(blogID, path, relPath);
+  var data = found && (await throughCache(blogID, path, found, (local) => fs.readFile(local)));
 
-  if (path === "/") throw new NotFoundError("Not a file: " + relPath);
+  if (data) return data;
 
   return fromS3(async function () {
     return slurp((await s3.get(objectKey(blogID, path))).Body);
@@ -245,11 +306,33 @@ function createReadStream(blogID, relPath, options) {
     range = "bytes=" + start + "-" + (end === undefined ? "" : end);
   }
 
-  (path === "/" ? Promise.reject(new NotFoundError("Not a file: " + relPath)) : s3.get(objectKey(blogID, path), { range: range }))
-    .then(function (data) {
-      if (stream.destroyed) return data.Body.destroy();
+  // A small file is read from its cached copy, held until the copy is open:
+  // after that the open file outlives an eviction
+  function fromCache(found) {
+    return throughCache(blogID, path, found, function (local) {
+      return new Promise(function (resolve, reject) {
+        var file = fs.createReadStream(local, { start: start, end: end });
 
-      source = data.Body;
+        file.on("open", function () {
+          resolve(file);
+        });
+        file.on("error", reject);
+      });
+    });
+  }
+
+  smallFile(blogID, path, relPath)
+    .then(async function (found) {
+      var file = found && (await fromCache(found));
+
+      if (file) return file;
+
+      return (await s3.get(objectKey(blogID, path), { range: range })).Body;
+    })
+    .then(function (body) {
+      if (stream.destroyed) return body.destroy();
+
+      source = body;
       source.on("error", function (err) {
         stream.destroy(err);
       });
@@ -286,11 +369,46 @@ async function serve(req, res, blogID, relPath, options) {
     throw new NotFoundError();
   }
 
+  var found = await smallFile(blogID, path, relPath);
+  var sent = found && (await throughCache(blogID, path, found, (local) => sendCached(res, local, found, options, objectKey(blogID, path))));
+
+  if (sent) return;
+
   return sendObject(req, res, objectKey(blogID, path), options, {
     notFound: function (err) {
       return new NotFoundError(err && err.message);
     },
     label: "[storage/folder] s3 stream failed blog=" + blogID + " path=" + path,
+  });
+}
+
+// Sends a cached copy with res.sendFile, which handles Range and the
+// conditional headers. The validators come from the index, not the copy's
+// own times (the cache uses those for recency), so they are the same on every
+// host and after every eviction. Resolves to true once sent.
+function sendCached(res, local, found, options, key) {
+  // The type an upload gives the object (extensionless paths are text/html),
+  // so a cached copy is served as the S3 one would be. options.headers can
+  // still override it.
+  res.setHeader("Content-Type", contentTypeFor(key));
+  res.setHeader("ETag", found.sha1 ? '"' + found.sha1 + '"' : 'W/"' + found.size + "-" + found.modified + '"');
+  res.setHeader("Last-Modified", new Date(found.modified).toUTCString());
+
+  return new Promise(function (resolve, reject) {
+    res.sendFile(
+      local,
+      {
+        maxAge: options.maxAge || 0,
+        immutable: !!options.immutable,
+        dotfiles: "allow",
+        headers: options.headers,
+      },
+      function (err) {
+        if (!err) return resolve(true);
+        if (err.status === 404 || err.code === "ENOENT") return reject(new NotFoundError(err.message));
+        reject(err);
+      }
+    );
   });
 }
 
@@ -391,64 +509,24 @@ async function commit(blogID, relPath) {
   }
 }
 
-var downloads = new Map();
-
-// Downloads the file to the tmp directory and resolves to its path. The
-// download is named by the file's SHA-1, so a copy already there is the
-// right one. This is the simplest thing which works: the bounded content
-// cache on the instance store replaces it in a later PR.
+// The path of a copy of the file in the content cache. The copy is
+// read-only, and may be evicted once it is no longer recent, so use it
+// straight away: open it, or hand it to a tool, rather than keeping the path.
 async function ensureLocal(blogID, relPath) {
   var path = locate(blogID, relPath);
-  var found = await File.get(blogID, path);
 
-  if (!found) throw new NotFoundError("No such file: " + relPath);
-  if (found.type === "dir") throw failure("EISDIR", "Is a directory: " + relPath);
+  // A second try picks up the index catching up with a write in progress
+  for (var attempt = 0; ; attempt++) {
+    var found = await File.get(blogID, path);
 
-  // Without a SHA-1 (a rebuild without hashing), the path is part of the
-  // name, so two files with the same name, size and time can't share it
-  var version =
-    found.sha1 ||
-    crypto
-      .createHash("sha1")
-      .update(path + "\n" + found.size + "\n" + found.modified)
-      .digest("hex") + "-unhashed";
-  var destination = join(config.tmp_directory, DOWNLOAD_DIRECTORY, blogID, version, basename(path));
-
-  try {
-    if ((await fs.stat(destination)).size === found.size) return destination;
-  } catch (err) {
-    if (err.code !== "ENOENT") throw err;
-  }
-
-  if (downloads.has(destination)) return downloads.get(destination);
-
-  var attempt = (async function () {
-    // Fixed length: the destination's own name could be at the limit
-    var temporary = join(dirname(destination), ".download-" + crypto.randomBytes(6).toString("hex"));
+    if (!found) throw new NotFoundError("No such file: " + relPath);
+    if (found.type === "dir") throw failure("EISDIR", "Is a directory: " + relPath);
 
     try {
-      await fs.ensureDir(dirname(destination));
-
-      var data = await fromS3(function () {
-        return s3.get(objectKey(blogID, path));
-      });
-
-      await pipeline(data.Body, fs.createWriteStream(temporary));
-      await fs.rename(temporary, destination);
-
-      return destination;
+      return await contentCache().get(cached(blogID, path, found), opener(blogID, path));
     } catch (err) {
-      await fs.remove(temporary).catch(noop);
-      throw err;
+      if (err.code !== "ECHANGED" || attempt) throw err;
     }
-  })();
-
-  downloads.set(destination, attempt);
-
-  try {
-    return await attempt;
-  } finally {
-    downloads.delete(destination);
   }
 }
 
@@ -748,17 +826,15 @@ async function resolveCaseInsensitive(blogID, relPath) {
   return found;
 }
 
-// Deletes the blog's whole folder from S3, then its index and anything it
-// left in the tmp directory
+// Deletes the blog's whole folder from S3, then its index, its cached
+// copies and anything it left in the tmp directory
 async function removeAll(blogID) {
   checkBlogID(blogID);
 
   await s3.removePrefix(root(blogID));
   await File.removeAll(blogID);
-
-  for (var directory of [DOWNLOAD_DIRECTORY, STAGING_DIRECTORY]) {
-    await fs.remove(join(config.tmp_directory, directory, blogID)).catch(noop);
-  }
+  await contentCache().removeBlog(blogID).catch(noop);
+  await fs.remove(join(config.tmp_directory, STAGING_DIRECTORY, blogID)).catch(noop);
 }
 
 async function sha1Of(key) {
