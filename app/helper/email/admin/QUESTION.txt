@@ -1,4 +1,4 @@
-Question: {{title}}
+Question: {{{title}}}
 
 From: {{email}}
 

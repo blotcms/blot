@@ -1,4 +1,4 @@
-{{count}} account{{^singular}}s{{/singular}} due for removal
+{{{count}}} account{{^singular}}s{{/singular}} due for removal
 
 The following accounts have passed their grace period and are due to be removed:
 

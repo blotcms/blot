@@ -1,4 +1,4 @@
-You are now billed {{subscription.plan.interval}}ly
+You are now billed {{{subscription.plan.interval}}}ly
 
 You changed your Blot billing interval to {{subscription.plan.interval}}ly. 
 

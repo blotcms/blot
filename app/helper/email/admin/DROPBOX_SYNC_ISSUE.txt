@@ -5,8 +5,8 @@ The hourly sync validation found problems for the following sites: changes from 
 {{#blogs}}
 **{{id}} {{handle}}**
 
-`logs green | grep "{{truncatedId}} sync_"`
-`access {{handle}}`
+`logs green | grep "{{{truncatedId}}} sync_"`
+`access {{{handle}}}`
 
 {{#hasStuckLock}}
 - folder lock held for {{lockHeldFor}} — sync may be hung

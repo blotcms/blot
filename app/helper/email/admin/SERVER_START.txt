@@ -1,4 +1,4 @@
-{{{container}}} server {{event}}
+{{{container}}} server {{{event}}}
 
 Log in to server and grep:
 
