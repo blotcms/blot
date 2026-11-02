@@ -23,6 +23,7 @@
 const { spawn } = require("child_process");
 const { PassThrough } = require("stream");
 const storage = require("storage/folder");
+const limiter = require("./limiter");
 
 // What git calls the tree with nothing in it. It is known to every repository,
 // so it can be the commit to compare from when nothing has been applied yet.
@@ -39,9 +40,16 @@ const MAX_HEADER_BYTES = 256;
 
 const STDERR_BYTES = 4096;
 
+// A sync is background work (see limiter.js)
 function run(directory, args) {
+  return limiter.run("background", function () {
+    return spawnGit(directory, args);
+  });
+}
+
+function spawnGit(directory, args) {
   return new Promise(function (resolve, reject) {
-    const child = spawn("git", args, {
+    const child = spawn("git", limiter.args(args), {
       cwd: directory,
       env: Object.assign({}, process.env, { GIT_DIR: directory }),
       stdio: ["ignore", "pipe", "pipe"],
@@ -238,8 +246,16 @@ async function openFile(blogID, parts) {
 //   <id> blob <size> NL <contents> NL
 //
 // or "<id> missing" NL if the repository does not have it.
-async function writeBlobs(directory, oids, open) {
-  const child = spawn("git", ["cat-file", "--batch"], {
+//
+// cat-file holds its place in the background lane until it has closed.
+function writeBlobs(directory, oids, open) {
+  return limiter.run("background", function () {
+    return streamBlobs(directory, oids, open);
+  });
+}
+
+async function streamBlobs(directory, oids, open) {
+  const child = spawn("git", limiter.args(["cat-file", "--batch"]), {
     cwd: directory,
     env: Object.assign({}, process.env, { GIT_DIR: directory }),
     stdio: ["pipe", "pipe", "pipe"],
@@ -315,6 +331,8 @@ async function writeBlobs(directory, oids, open) {
   } catch (err) {
     child.kill("SIGKILL");
     if (handle) await handle.abort();
+    // Counted until it has gone
+    await closed;
     throw err;
   }
 

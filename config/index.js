@@ -184,6 +184,25 @@ module.exports = {
     bin: process.env.BLOT_PANDOC_PATH || "pandoc",
   },
 
+  // How many git commands each Node process runs at once
+  // (app/clients/git/limiter.js). A unit runs two Node processes and git
+  // shares its memory limit with them. One git command (a few processes) takes
+  // up to about 100 MB with the settings limiter.js passes. Interactive is 4
+  // because a slow client's clone or push holds its place for the whole
+  // transfer, and a push should not wait behind two slow clones: 4 is about
+  // 400 MB at the very worst, on node-b, which serves every push, clone and
+  // fetch. Background is 2, about 200 MB at worst, though Blot's commits, most
+  // of it, take a few MB each; gc is the large background command, and only
+  // one runs at a time. So about 600 MB a process at the very worst.
+  // gc_delay is how long after a commit or push a repository waits for its
+  // gc, so a burst of writes makes one (gc.js).
+  git: {
+    interactive_processes: parseInt(process.env.BLOT_GIT_INTERACTIVE_PROCESSES) || 4,
+    background_processes: parseInt(process.env.BLOT_GIT_BACKGROUND_PROCESSES) || 2,
+    gc_processes: parseInt(process.env.BLOT_GIT_GC_PROCESSES) || 1,
+    gc_delay: parseInt(process.env.BLOT_GIT_GC_DELAY_MS) || 60 * 1000,
+  },
+
   // The single egress point for fetching untrusted, user-supplied URLs (remote
   // images in posts, imports, domain checks): the forward proxy in the
   // sandbox's proxy jail in each unit. Named after the airlock container it

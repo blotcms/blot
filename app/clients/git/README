@@ -35,7 +35,11 @@ When a user pushes changes from their local repository to the bare repository, B
 
 - **`guardServices.js`**: What is left of the code that wrapped pushover: the exit line (`formatExitLine`, `logExit`, used for upload-pack), a stderr tail, and `stop` for ending a git child whose client has gone.
 
-- **`git.js`**: A thin wrapper around `execFile("git", args)` for running git in one directory.`Git(directory).raw(args, [callback])`. Commands on one instance run one at a time; a command fails only if git exits non-zero and writes to stderr (so `git commit` with nothing to commit is a success); the error message is git's output.
+- **`git.js`**: A thin wrapper around `execFile("git", args)` for running git in one directory.`Git(directory).raw(args, [callback])`. Commands on one instance run one at a time; a command fails only if git exits non-zero and writes to stderr (so `git commit` with nothing to commit is a success); the error message is git's output. Commands wait for room in the background lane of `limiter.js` unless `Git(directory, { lane: "interactive" })` (a push's checks).
+
+- **`limiter.js`**: How much git each Node process runs at once, and the memory each git command may take; every git process the client starts goes through it. Two lanes with their own caps, so neither waits behind the other: interactive (a push's `index-pack` and checks, `upload-pack` for clones and fetches) and background (Blot's commits, syncs, the import of a new repository, live-clone fetches, gc; at most `gc_processes` of these are gc). A command holds its place from just before it is spawned until it has closed, and work beyond the cap queues in order (a closure and a promise each; nothing is dropped). Blot's commit and a push's ref-locked section take one place before the ref lock and run their commands in it, so neither waits for room with the lock held. Every command runs with `-c pack.threads=1 pack.windowMemory=16m pack.deltaCacheSize=16m core.deltaBaseCacheLimit=16m core.bigFileThreshold=16m core.packedGitLimit=64m core.packedGitWindowSize=16m`, about 100 MB at most for one command, and with `gc.auto=0 maintenance.auto=false` (gc itself with `gc.autoDetach=false`), so no command starts a gc of its own that would run uncounted; `git config` is left alone. Caps are in `config.git` (`BLOT_GIT_INTERACTIVE_PROCESSES`, default 4, so slow clones don't hold up a push; `BLOT_GIT_BACKGROUND_PROCESSES`, 2; `BLOT_GIT_GC_PROCESSES`, 1).
+
+- **`gc.js`**: `git gc --auto` for a bare repository after Blot's commits and users' pushes. A commit or push asks for one; it runs `config.git.gc_delay` later (`BLOT_GIT_GC_DELAY_MS`, a minute), so a burst of writes to a repository makes one gc, at most one runs per repository at a time in a process, and one asked for while it runs follows once it has finished.
 
 - **`authenticate.js`**: HTTP Basic Auth middleware using http-auth. Validates user credentials (email and token) against the blog and user models before allowing access to the push endpoint.
 
@@ -265,7 +269,7 @@ Only `master` and tags are accepted. A push with any other branch (or deleting m
 
 6. **Push Atomicity**: The sync runs after the client has been told. If Blot crashes before or during it, the follow-up written before the refs moved runs it again from the last applied commit.
 
-7. **A pack per push**: `index-pack` keeps every push's objects as a pack, where git's own receive-pack unpacked small pushes into loose objects. `git gc --auto` runs after each push, as it did, and packs the repository when there are too many.
+7. **A pack per push**: `index-pack` keeps every push's objects as a pack, where git's own receive-pack unpacked small pushes into loose objects. `git gc --auto` runs a minute after a push or Blot's commit (one for a burst of them, `gc.js`) and packs the repository when there are too many.
 
 ## Testing
 
