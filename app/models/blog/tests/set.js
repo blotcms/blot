@@ -150,8 +150,6 @@ describe("Blog.set", function () {
 
           expect(after.menu[0].label).toBe(updatedMenu[0].label);
           expect(after.cacheID).toBeGreaterThan(originalCacheID);
-          expect(after.cssURL).toContain("cache=" + after.cacheID);
-          expect(after.scriptURL).toContain("cache=" + after.cacheID);
 
           done();
         });

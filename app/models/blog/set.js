@@ -144,7 +144,7 @@ module.exports = function (blogID, blog, callback) {
         }
       }
 
-      // Check if we need to change user's css or js cache id
+      // Check if we need to bust the blog's caches
       // We sometimes manually pass in a new cache ID when we want
       // to bust the cache, e.g. in ./flushCache. A new handle or domain
       // changes which links the blog's own template views wrap in {{#cdn}}
@@ -160,11 +160,7 @@ module.exports = function (blogID, blog, callback) {
         const now = Date.now();
         const previousCacheID = Number(former.cacheID) || 0;
         latest.cacheID = Math.max(now, previousCacheID + 1);
-        latest.cssURL = `/style.css?cache=${latest.cacheID}&amp;extension=.css`;
-        latest.scriptURL = `/script.js?cache=${latest.cacheID}&amp;extension=.js`;
         changes.cacheID = true;
-        changes.cssURL = true;
-        changes.scriptURL = true;
       }
 
       // Verify that all the new info matches
@@ -216,7 +212,7 @@ module.exports = function (blogID, blog, callback) {
 
         // Also update CDN manifest when plugin settings change, since
         // plugin changes (especially analytics) affect the rendered output
-        // of views like script.js that use {{{appJS}}}
+        // of views like script.js that use {{{app_js}}}
         const shouldUpdateManifest = changes.template || changes.plugins;
 
         if (template && shouldUpdateManifest) {

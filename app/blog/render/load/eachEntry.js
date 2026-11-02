@@ -47,7 +47,7 @@ module.exports = async function eachEntry(locals, iterator) {
         continue;
       }
 
-      // A cached catalog shared across requests (allEntries, archives):
+      // A cached catalog shared across requests (all_entries, archives):
       // frozen, already augmented and already listed when it was cached.
       if (sharedValues.has(local)) {
         continue;

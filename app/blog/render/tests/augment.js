@@ -22,7 +22,7 @@ describe("augment", function () {
         await this.write({path: "/a.txt", content: "Date: 2025-01-03\n\nA"});
         await this.write({path: "/b.txt", content: "Date: 2025-02-04\n\nB"});
         await this.template({
-            'entries.html': '{{#allEntries}}{{#formatDate}}MMMM D, YYYY{{/formatDate}};{{/allEntries}}'
+            'entries.html': '{{#all_entries}}{{#formatDate}}MMMM D, YYYY{{/formatDate}};{{/all_entries}}'
         });
 
         const body = await this.text('/');
@@ -78,7 +78,7 @@ describe("augment", function () {
         await this.write({path: "/b.txt", content: "Title: B\n\n[[target]]"});
         await this.write({path: "/c.txt", content: "Title: C\n\n[[target]] [[a]]"});
         await this.template({
-            'entries.html': '{{#allEntries}}{{title}}=[{{#backlinks}}{{title}},{{/backlinks}}];{{/allEntries}}'
+            'entries.html': '{{#all_entries}}{{title}}=[{{#backlinks}}{{title}},{{/backlinks}}];{{/all_entries}}'
         });
 
         const body = await this.text('/');
@@ -93,7 +93,7 @@ describe("augment", function () {
         await this.write({path: "/target.txt", content: "Title: Target\n\nTarget body"});
         await this.write({path: "/a.txt", content: "Title: A\n\nLinked from A: [[target]]"});
         await this.template({
-            'entries.html': '{{#allEntries}}{{#backlinks}}{{{html}}}{{/backlinks}}{{/allEntries}}'
+            'entries.html': '{{#all_entries}}{{#backlinks}}{{{html}}}{{/backlinks}}{{/all_entries}}'
         });
 
         const body = await this.text('/');
@@ -105,11 +105,11 @@ describe("augment", function () {
         await this.write({path: "/target.txt", content: "Title: Target\n\nTarget body"});
         await this.write({path: "/a.txt", content: "Title: A\n\nLinked from A: [[target]]"});
         await this.template({
-            'entries.html': '{{#allEntries}}{{title}}:{{#backlinks}}{{title}} {{{url}}}{{/backlinks}};{{/allEntries}}'
+            'entries.html': '{{#all_entries}}{{title}}:{{#backlinks}}{{title}} {{{url}}}{{/backlinks}};{{/all_entries}}'
         });
 
         const locals = await (await this.get('/?json=1')).json();
-        const target = locals.allEntries.find((entry) => entry.title === 'Target');
+        const target = locals.all_entries.find((entry) => entry.title === 'Target');
 
         expect(target.backlinks.length).toEqual(1);
         expect(target.backlinks[0].title).toEqual('A');

@@ -60,7 +60,7 @@ describe("when redis is unavailable", function () {
   it("responds 503, not an incomplete page, when redis fails while listing all entries", async function () {
     await this.write({ path: "/a.txt", content: "Hello, A!" });
     await this.template({
-      "entries.html": "{{#allEntries}}{{{html}}}{{/allEntries}}",
+      "entries.html": "{{#all_entries}}{{{html}}}{{/all_entries}}",
     });
 
     const Entries = require("models/entries");
@@ -77,7 +77,7 @@ describe("when redis is unavailable", function () {
   it("responds 503, not an incomplete page, when redis fails while listing recent entries", async function () {
     await this.write({ path: "/a.txt", content: "Hello, A!" });
     await this.template({
-      "entries.html": "{{#recentEntries}}{{{html}}}{{/recentEntries}}",
+      "entries.html": "{{#recent_entries}}{{{html}}}{{/recent_entries}}",
     });
 
     const Entries = require("models/entries");

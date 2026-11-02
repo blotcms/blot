@@ -309,7 +309,7 @@ describe("archives cache", function () {
     });
   });
 
-  it("shares one getAll fetch between allEntries and archives that reference different fields", async function () {
+  it("shares one getAll fetch between all_entries and archives that reference different fields", async function () {
     const { archives } = loadArchives();
     const allEntries = require("../all_entries");
 
@@ -330,7 +330,7 @@ describe("archives cache", function () {
     const req = makeReq(
       { id: "blog-1", cacheID: 100, timeZone: "UTC" },
       {
-        allEntries: { fields: { title: true } },
+        all_entries: { fields: { title: true } },
         archives: { fields: { title: true, html: true } },
       }
     );

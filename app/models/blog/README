@@ -25,7 +25,7 @@ This module is the authoritative data layer for blog records in Blot. It defines
 | `set.js` | Validates and persists updates to a blog record. Manages side effects: domain/handle key rotation, cache busting, template forking, Git repository renaming, and CDN manifest updates. |
 | `bumpCacheID.js` | Bumps `cacheID` through `set` so render caches miss. If Redis is unavailable it retries every 5s for up to a minute in the background; the callback still fires after the first attempt. |
 | `remove.js` | Deletes a blog fully: disconnects the sync client, removes the record from the owner's user document, wipes the blog folder from disk and its generated assets from the storage bucket, and deletes all associated Redis keys. |
-| `extend.js` | Decorates an in-memory blog object with computed, template-facing properties: resolved URL, pretty URL, `cssURL`, `scriptURL`, `feedURL`, `pages`, `locals`, and `imageExif`/converter boolean flags. Does not write to Redis. |
+| `extend.js` | Decorates an in-memory blog object with computed, template-facing properties: resolved URL, pretty URL, `feedURL`, `pages`, `locals`, and `imageExif`/converter boolean flags. Does not write to Redis. |
 
 ### Status log
 
@@ -42,7 +42,6 @@ This module is the authoritative data layer for blog records in Blot. It defines
 | `getHosts.js` | Returns all `[host, blogID]` pairs across every blog — both custom domains and Blot subdomains. Used when rebuilding host-to-blog routing maps. |
 | `generateID.js` | Generates a new blog ID of the form `blog_<32-hex-chars>` using UUID v4. |
 | `flushCache.js` | Clears the on-disk response cache for a blog's current and former hostnames by calling `helper/flushCache` configured with the application's reverse proxy list. |
-| `url.js` | Produces versioned CSS and JS asset URLs (`/style.css?cache=<id>` and `/script.js?cache=<id>`). |
 
 ### Validation (`validate/`)
 
@@ -103,8 +102,6 @@ The blog schema is declared in `scheme.js`. Each field is classified along three
 | `dateFormat` | string | yes | yes |
 | `cacheID` | number | no | yes |
 | `flags` | object | yes | no |
-| `cssURL` | string | no | yes |
-| `scriptURL` | string | no | yes |
 | `roundAvatar` | boolean | yes | yes |
 | `imageExif` | string | yes | yes |
 | `converters` | object | yes | yes |
@@ -151,7 +148,7 @@ Persists updates to a blog record.
 Side effects triggered by specific changes:
 - `handle`: updates `handle:{handle}` and `domain:{handle}.{host}` keys; removes the former subdomain domain key
 - `domain`: registers both the primary and backup (`www.`/apex) domain keys; removes former domain keys
-- `template` or `plugins`: forks the template if it references a site template (`SITE:` prefix), updates the CDN manifest, and busts the asset cache (`cacheID`, `cssURL`, `scriptURL`)
+- `template` or `plugins`: forks the template if it references a site template (`SITE:` prefix), updates the CDN manifest, and busts the asset cache (`cacheID`)
 - `menu`: busts the asset cache
 - `handle` or `domain`: busts the asset cache (the blog's own template views wrap links to its hosts in `{{#cdn}}` when they render, see `models/template/getFullView`), and in the background rebuilds entries and regenerates the installed template's CDN manifest for the new hosts
 - Any handle change with `client === "git"`: renames the Git repository
@@ -175,7 +172,6 @@ Properties added:
 - `blog.previewURL` — preview subdomain URL
 - `blog.pretty.url`, `blog.pretty.label`, `blog.pretty.domain` — display-formatted URL strings (Punycode decoded for international domains)
 - `blog.feedURL` — `/feed.rss`
-- `blog.cssURL`, `blog.scriptURL` — versioned asset URLs
 - `blog.pages`, `blog.showPages`, `blog.totalPages` — menu items identified as internal pages
 - `blog.locals` — an object containing all public fields, used as the template rendering context
 - `imageExif` boolean flags (`isImageExifOff`, `isImageExifBasic`, `isImageExifFull`)
@@ -233,11 +229,6 @@ The Redis key generator. Methods:
 - `key.domain(domain)` → `"domain:{domain}"`
 - `key.ids` → `"blogs"` (the global set of all blog IDs)
 - `key.totalBlogs` → `"total:blogs"`
-
-### `url`
-
-- `url.css(cacheID)` → `/style.css?cache={cacheID}&amp;extension=.css`
-- `url.js(cacheID)` → `/script.js?cache={cacheID}&amp;extension=.js`
 
 ---
 

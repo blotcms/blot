@@ -64,7 +64,7 @@ describe("backlinks", function () {
       content: "Title: Linker\n\n[see target](/target)",
     });
     await this.template({
-      "entries.html": "{{#allEntries}}{{> links.html}}{{/allEntries}}",
+      "entries.html": "{{#all_entries}}{{> links.html}}{{/all_entries}}",
       "links.html": "{{title}}<{{#backlinks}}{{title}}{{/backlinks}}>",
     });
 
@@ -125,7 +125,7 @@ describe("backlinks", function () {
       await this.template({
         "entry.html": "{{#entry}}{{> body.html}}{{/entry}}",
         "body.html": "{{title}}",
-        "entries.html": "{{#allEntries}}{{title}};{{/allEntries}}",
+        "entries.html": "{{#all_entries}}{{title}};{{/all_entries}}",
       });
 
       const getByUrl = spyOn(Entry, "getByUrl").and.callThrough();
