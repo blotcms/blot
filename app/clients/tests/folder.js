@@ -109,9 +109,15 @@ describe("clients/folder", function () {
       );
       await setClient(this.blog.id, "routerSpecClient");
 
-      await expectAsync(
-        blogFolder.write(this.blog.id, "/g.txt", "x")
-      ).toBeRejectedWithError("client failed");
+      let error;
+
+      try {
+        await blogFolder.write(this.blog.id, "/g.txt", "x");
+      } catch (err) {
+        error = err;
+      }
+
+      expect(error && error.message).toBe("client failed");
     });
   });
 });
