@@ -1,4 +1,4 @@
-Daily update for {{date}}
+Daily update for {{{date}}}
 
 Sites: {{total_active_blogs}} sites, {{total_customers}} customers, {{sites_per_customer}} sites per customer
 

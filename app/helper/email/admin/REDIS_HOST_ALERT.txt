@@ -1,4 +1,4 @@
-Redis host: {{summary}}
+Redis host: {{{summary}}}
 
 {{#hasAlerts}}
 {{#alerts}}
