@@ -135,7 +135,8 @@ describe("git client sync: entries", function () {
     await this.local.push();
 
     expect(await helpers.blogHas(this, nfc)).toBe(false);
-    expect(await fs.readdir(this.blogDirectory + "/entries")).not.toContain("nfd-caf\u00e9.txt");
+    // /entries goes too when this was the only file left in it
+    expect(await fs.pathExists(this.blogDirectory + "/entries/nfd-caf\u00e9.txt")).toBe(false);
     expect((await helpers.entry(this.blog.id, nfc)).deleted).toBe(true);
   });
 });
