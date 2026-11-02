@@ -6,7 +6,6 @@ var MAX_FILE_SIZE = _require.MAX_FILE_SIZE;
 var hasUnsupportedExtension = _require.hasUnsupportedExtension;
 var isDotfileOrDotfolder = _require.isDotfileOrDotfolder;
 var transferIncomplete = _require.transferIncomplete;
-var hashFile = require("helper/hashFile");
 var Database = require("../database");
 var persistError = require("../util/persistError");
 var {
@@ -17,10 +16,10 @@ var {
 var Path = require("path");
 var join = Path.join;
 var Delta = require("../delta");
-var fs = require("fs-extra");
+var storage = require("storage/folder");
+var { callbackify } = require("util");
 var async = require("async");
 var Sync = require("sync");
-var caseSensitivePath = require("helper/caseSensitivePath");
 var isRedisUnavailableError = require("helper/redisUnavailable").isRedisUnavailableError;
 
 var MAX_CHECKS_WITHOUT_RESULTS = 5;
@@ -73,7 +72,7 @@ module.exports = function main(blog, callback) {
       folder.log("Constructing methods to sync changes");
 
       var delta = new Delta(client, account.folder_id, blog.id);
-      var apply = new Apply(client, folder.path, folder.log, folder.status);
+      var apply = new Apply(client, blog.id, folder.log, folder.status);
 
       var checksWithoutResults = 0;
 
@@ -212,7 +211,7 @@ module.exports = function main(blog, callback) {
   });
 };
 
-function Apply(client, blogFolder, log, status) {
+function Apply(client, blogID, log, status) {
   return function apply(changes, callback) {
     debug("Retrieved changes", changes);
 
@@ -241,7 +240,7 @@ function Apply(client, blogFolder, log, status) {
       });
 
     function remove(item, callback) {
-      determinePathOnDisk(blogFolder, item, function (err) {
+      determinePathOnDisk(blogID, item, function (err) {
 
         if (err) {
           log(item.relative_path, "Error determining path on disk for removal");
@@ -250,7 +249,7 @@ function Apply(client, blogFolder, log, status) {
 
         log(item.resolved_relative_path, "Removing from folder");
         status("Removing " + item.resolved_relative_path);
-        fs.remove(item.path_on_disk, function (err) {
+        callbackify(storage.remove)(blogID, item.resolved_relative_path, function (err) {
           if (err) {
             log(item.resolved_relative_path, "Error removing from folder", err);
             status("Error removing " + item.resolved_relative_path);
@@ -278,7 +277,7 @@ function Apply(client, blogFolder, log, status) {
     }
 
     function mkdir(item, callback) {
-      determinePathOnDisk(blogFolder, item, function (err) {
+      determinePathOnDisk(blogID, item, function (err) {
 
         if (err) {
           log(item.relative_path, "Error determining path on disk for mkdir");
@@ -287,7 +286,7 @@ function Apply(client, blogFolder, log, status) {
 
         log(item.resolved_relative_path, "Making directory in folder");
         status("Creating directory " + item.resolved_relative_path);
-        fs.ensureDir(item.path_on_disk, function (err) {
+        callbackify(storage.mkdir)(blogID, item.resolved_relative_path, function (err) {
           // we have run into an EEXIST error here when a file exists
           // where a new folder needs to be. I decided against
           // just removing the file and replacing it with a folder
@@ -316,7 +315,7 @@ function Apply(client, blogFolder, log, status) {
     // Dropbox folder might not be the root of the blog.
     function download(item, callback) {
 
-      determinePathOnDisk(blogFolder, item, function (err) {
+      determinePathOnDisk(blogID, item, function (err) {
 
         if (err) {
           log(item.relative_path, "Error determining path on disk for download");
@@ -331,8 +330,9 @@ function Apply(client, blogFolder, log, status) {
           log(item.resolved_relative_path, unsupportedMessage);
           status("Skipping unsupported file " + item.resolved_relative_path);
 
-          return fs.outputFile(
-            item.path_on_disk,
+          return callbackify(storage.write)(
+            blogID,
+            item.resolved_relative_path,
             "",
             function (err) {
               if (err) {
@@ -359,8 +359,9 @@ function Apply(client, blogFolder, log, status) {
           log(item.resolved_relative_path, message);
           status("Skipping oversized file " + item.resolved_relative_path);
 
-          return fs.outputFile(
-            item.path_on_disk,
+          return callbackify(storage.write)(
+            blogID,
+            item.resolved_relative_path,
             "",
             function (err) {
               if (err) {
@@ -382,7 +383,7 @@ function Apply(client, blogFolder, log, status) {
         
         log(item.resolved_relative_path, "Hashing any existing file contents");
 
-        hashFile(item.path_on_disk, function (
+        callbackify(contentHash)(blogID, item.resolved_relative_path, function (
           err,
           content_hash
         ) {
@@ -398,7 +399,8 @@ function Apply(client, blogFolder, log, status) {
           Download(
             client,
             item.path_display,
-            item.path_on_disk,
+            blogID,
+            item.resolved_relative_path,
             function (err) {
               if (err) {
                 log(item.resolved_relative_path, "Error downloading from dropbox", err);
@@ -411,8 +413,8 @@ function Apply(client, blogFolder, log, status) {
               // ever-longer "(Conflict met exemplaar van ...)" copies of the
               // same file until the name exceeded the filesystem's max name
               // length. We can't write a placeholder here the way we do for
-              // unsupported/oversized files above, because item.path_on_disk
-              // is itself the too-long path – any write to it fails the same
+              // unsupported/oversized files above, because
+              // item.resolved_relative_path is itself the too-long path – any write to it fails the same
               // way the download did. This only changes the log/status line;
               // the file is still never written, so its hash still never
               // matches and every subsequent webhook/hourly walk still calls
@@ -471,7 +473,21 @@ function Apply(client, blogFolder, log, status) {
   };
 }
 
-function determinePathOnDisk(blogFolder, item, callback) {
+// The hash of the file in the folder, in the form of Dropbox's content_hash,
+// or undefined if it can't be read (it isn't there, or is a folder): either
+// way the file is downloaded.
+async function contentHash(blogID, path) {
+  try {
+    return (await storage.stat(blogID, path, { hash: true })).hash;
+  } catch (err) {
+    return undefined;
+  }
+}
+
+// Sets item.resolved_relative_path to the item's path in the blog's folder,
+// spelled with the case of the folders already there: Dropbox is
+// case-insensitive but the folder is not.
+function determinePathOnDisk(blogID, item, callback) {
   const normalizedRelativePath = (item.relative_path || "").replace(/^\/+/, "");
   if (normalizedRelativePath !== item.relative_path) {
     item.relative_path = normalizedRelativePath;
@@ -480,7 +496,7 @@ function determinePathOnDisk(blogFolder, item, callback) {
   const parentDir = Path.dirname(item.relative_path);
   const filename = Path.basename(item.relative_path);
 
-  caseSensitivePath(blogFolder, parentDir, function (err, resolvedParent) {
+  callbackify(storage.resolveCaseInsensitive)(blogID, parentDir, function (err, resolvedParent) {
 
     // We don't want to fail the download just because
     // we couldn't resolve the case sensitive path – just log it and proceed.
@@ -492,30 +508,24 @@ function determinePathOnDisk(blogFolder, item, callback) {
         stack: err.stack
       });
       item.resolved_relative_path = item.relative_path;
-      item.path_on_disk = join(blogFolder, item.relative_path);
       return callback(null); // resolvedParent will be undefined, fallback logic will handle it
     }
 
     // Use resolved parent directory if available and not root
     // parentDir === '.' means the file is at the root level
-    // caseSensitivePath returns an absolute path, so we need to make it relative
+    // resolveCaseInsensitive returns a path with a leading slash, which we remove
     let resolvedRelativePath = item.relative_path;
 
     if (parentDir !== '.' && resolvedParent) {
-      // Convert absolute path to relative path using Path.relative for robustness
-      const resolvedRelativeParent = Path.relative(blogFolder, resolvedParent);
+      const resolvedRelativeParent = resolvedParent.replace(/^\/+/, '');
 
-      // Safety check: ensure resolvedParent is actually inside blogFolder
-      // Path.relative returns paths with '../' if the target is outside the base
-      // Also handle empty string case (when paths are the same)
-      if (resolvedRelativeParent && resolvedRelativeParent !== '' && !resolvedRelativeParent.startsWith('..')) {
+      // The blog's root resolves to an empty string: fall back to item.relative_path
+      if (resolvedRelativeParent) {
         resolvedRelativePath = join(resolvedRelativeParent, filename);
       }
-      // If resolvedParent is outside blogFolder or empty, fall back to item.relative_path
     }
 
     item.resolved_relative_path = resolvedRelativePath;
-    item.path_on_disk = join(blogFolder, resolvedRelativePath);
 
     callback(null);
   });

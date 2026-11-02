@@ -1,14 +1,8 @@
-const fs = require("fs-extra");
+const storage = require("storage/folder");
 const { promisify } = require("util");
 // const upload = promisify(require("clients/dropbox/util/upload"));
 const join = require("path").join;
 const clfdate = require("helper/clfdate");
-const localPath = require("helper/localPath");
-const hashFile = promisify((path, cb) => {
-  require("helper/hashFile")(path, (err, result) => {
-    cb(null, result);
-  });
-});
 const upload = promisify(require("../util/upload"));
 const {
   isDotfileOrDotfolder,
@@ -39,23 +33,22 @@ function log() {
 
 // Counts every local file and subdirectory (not the root) so folder
 // creation and file transfers both advance the progress bar.
-async function countLocalItems(localRoot, dir, signal) {
+async function countLocalItems(blogID, dir, signal) {
   abortIfRequested(signal);
 
-  const contents = await fs.readdir(join(localRoot, dir));
+  const contents = await storage.listNames(blogID, dir);
   let total = 0;
 
-  for (const name of contents) {
+  for (const { name, isDirectory } of contents) {
     abortIfRequested(signal);
 
     const path = join(dir, name);
     if (isDotfileOrDotfolder(path)) continue;
 
-    const stat = await fs.stat(join(localRoot, path));
     total += 1;
 
-    if (stat.isDirectory()) {
-      total += await countLocalItems(localRoot, path, signal);
+    if (isDirectory) {
+      total += await countLocalItems(blogID, path, signal);
     }
   }
 
@@ -66,23 +59,21 @@ async function countLocalItems(localRoot, dir, signal) {
 // lowercased path relative to the blog folder (Dropbox paths are
 // case-insensitive), so the pre-flight check below can work out how many
 // bytes this transfer will add to Dropbox.
-async function listLocalSizes(localRoot, dir, signal, sizes = new Map()) {
+async function listLocalSizes(blogID, dir, signal, sizes = new Map()) {
   abortIfRequested(signal);
 
-  const contents = await fs.readdir(join(localRoot, dir));
+  const contents = await storage.listAll(blogID, dir);
 
-  for (const name of contents) {
+  for (const { name, isDirectory, size } of contents) {
     abortIfRequested(signal);
 
     const path = join(dir, name);
     if (isDotfileOrDotfolder(path)) continue;
 
-    const stat = await fs.stat(join(localRoot, path));
-
-    if (stat.isDirectory()) {
-      await listLocalSizes(localRoot, path, signal, sizes);
+    if (isDirectory) {
+      await listLocalSizes(blogID, path, signal, sizes);
     } else {
-      sizes.set(path.toLowerCase(), stat.size);
+      sizes.set(path.toLowerCase(), size);
     }
   }
 
@@ -278,8 +269,6 @@ async function resetFromBlotWithClient(
   abortIfRequested(signal);
 
   let dropboxRoot = "/";
-  const localRoot = localPath(blogID, "/");
-
   // Load the path to the blog folder root position in Dropbox
   if (account.folder_id) {
     abortIfRequested(signal);
@@ -324,7 +313,7 @@ async function resetFromBlotWithClient(
   abortIfRequested(signal);
 
   publish("Counting files...");
-  const total = await countLocalItems(localRoot, "/", signal);
+  const total = await countLocalItems(blogID, "/", signal);
   const progress = total > 0 ? { current: 0, total: total } : null;
   log("counted " + total + " local files and folders to transfer");
 
@@ -338,7 +327,7 @@ async function resetFromBlotWithClient(
   // managed to upload as "deleted on Dropbox" and removes them from Blot.
   publish("Checking Dropbox storage space...");
   const [localSizes, freeSpaceBytes, remoteSizes] = await Promise.all([
-    listLocalSizes(localRoot, "/", signal),
+    listLocalSizes(blogID, "/", signal),
     getFreeSpaceBytes(client),
     listRemoteSizes(client, dropboxRoot, dropboxRoot, signal),
   ]);
@@ -405,7 +394,7 @@ async function resetFromBlotWithClient(
 
     const [remoteContents, localContents] = await Promise.all([
       remoteReaddir(client, join(dropboxRoot, dir), signal),
-      localReaddir(blogID, localRoot, dir, signal),
+      localReaddir(blogID, dir, signal),
     ]);
 
     abortIfRequested(signal);
@@ -481,7 +470,7 @@ async function resetFromBlotWithClient(
             abortIfRequested(signal);
             await upload(
               client,
-              join(localRoot, localItem.path_display),
+              await storage.ensureLocal(blogID, localItem.path_display),
               join(dropboxRoot, path)
             );
             abortIfRequested(signal);
@@ -493,7 +482,7 @@ async function resetFromBlotWithClient(
             abortIfRequested(signal);
             await upload(
               client,
-              join(localRoot, localItem.path_display),
+              await storage.ensureLocal(blogID, localItem.path_display),
               join(dropboxRoot, path)
             );
             abortIfRequested(signal);
@@ -584,29 +573,37 @@ async function resetFromBlotWithClient(
 //   }
 // }
 
-const localReaddir = async (blogID, localRoot, dir, signal) => {
+// A file's hash is undefined if it can't be read, which never matches Dropbox's
+const contentHash = async (blogID, path) => {
+  try {
+    return (await storage.stat(blogID, path, { hash: true })).hash;
+  } catch (e) {
+    return undefined;
+  }
+};
+
+const localReaddir = async (blogID, dir, signal) => {
   abortIfRequested(signal);
 
-  const contents = await fs.readdir(join(localRoot, dir));
+  const contents = await storage.listNames(blogID, dir);
 
   abortIfRequested(signal);
 
   return Promise.all(
-    contents.map(async (name) => {
+    contents.map(async ({ name, isDirectory }) => {
       abortIfRequested(signal);
 
-      const pathOnDisk = join(localRoot, dir, name);
-      const [content_hash, stat] = await Promise.all([
-        hashFile(pathOnDisk),
-        fs.stat(pathOnDisk),
-      ]);
+      const path_display = join(dir, name);
+      const content_hash = isDirectory
+        ? undefined
+        : await contentHash(blogID, path_display);
 
       abortIfRequested(signal);
 
       return {
         name,
-        path_display: join(dir, name),
-        is_directory: stat.isDirectory(),
+        path_display,
+        is_directory: isDirectory,
         content_hash,
       };
     })
