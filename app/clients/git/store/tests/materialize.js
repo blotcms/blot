@@ -18,7 +18,7 @@ const createCache = require("../cache");
 const createReader = require("../reader");
 const materialize = require("../materialize");
 const createFolderSink = require("../folderSink");
-const { TooLargeError, CorruptError, NotFoundError } = require("../errors");
+const { TooLargeError, CorruptError, NotFoundError, NoRoomError } = require("../errors");
 
 describe("git store materialize", function () {
   timeout(120 * 1000);
@@ -540,6 +540,66 @@ describe("git store materialize", function () {
       fs.rmSync(path.join(folder, "big.txt"));
       await apply(reader, null, commits[deltaAt]);
       expect(fs.readFileSync(path.join(folder, "big.txt"), "utf8")).toBe(lines(deltaAt));
+    });
+
+    it("writes a blob stored as a delta that is over the default cap when the reader has scratch", async function () {
+      // 70 MiB which compresses to almost nothing, edited a little in each version
+      const huge = (edit) => {
+        const line = Buffer.from("this line of the huge file is the same on every row of it......\n");
+        const data = Buffer.alloc(70 * 1024 * 1024);
+        for (let at = 0; at < data.length; at += line.length) line.copy(data, at, 0, Math.min(line.length, data.length - at));
+        if (edit) data.write("EDITED " + edit, 35 * 1024 * 1024);
+        return data;
+      };
+      const first = repo.commit({ "huge.txt": huge(0), "small.txt": "small" });
+      const second = repo.commit({ "huge.txt": huge(1) });
+
+      const cache = createCache({ dir: path.join(tmp, "cache"), maxBytes: 1024 * 1024 * 1024 });
+      const { reader, packs } = await repo.reader({ scratch: cache });
+      const oid = repo.git(["rev-parse", first + ":huge.txt"]);
+      const stored = fx.listEntries(packs[0]).find((e) => e.oid === oid);
+
+      expect(stored.depth).toBeGreaterThan(0);
+
+      await apply(reader, null, first);
+      expect(Buffer.compare(fs.readFileSync(path.join(folder, "huge.txt")), huge(0))).toBe(0);
+      expect(fs.readFileSync(path.join(folder, "small.txt"), "utf8")).toBe("small");
+
+      // And onwards to the version it was a delta of
+      await apply(reader, first, second);
+      expect(Buffer.compare(fs.readFileSync(path.join(folder, "huge.txt")), huge(1))).toBe(0);
+
+      expect(cache.stats().reservedBytes).toBe(0);
+      expect(fs.readdirSync(path.join(tmp, "cache", "scratch"))).toEqual([]);
+
+      // Without scratch it is still the TooLargeError it was
+      fs.rmSync(folder, { recursive: true });
+      fs.mkdirSync(folder);
+      const plain = (await repo.reader()).reader;
+      const err = await failure(apply(plain, null, first));
+      expect(err instanceof TooLargeError).toBe(true);
+      expect(err.message).toContain("huge.txt");
+    });
+
+    it("fails the call with a NoRoomError, and leaves nothing behind, when scratch cannot hold a delta-stored blob", async function () {
+      const noise = Array.from({ length: 4000 }, () => crypto.randomBytes(8).toString("hex"));
+      const lines = (n) => noise.map((hex, i) => "line " + i + " " + hex + (i % 100 === n ? " edited " + n : "")).join("\n") + "\n";
+      const commits = [];
+      for (let n = 0; n < 4; n++) commits.push(repo.commit({ "big.txt": lines(n) }));
+
+      const cache = createCache({ dir: path.join(tmp, "cache"), maxBytes: 20 * 1024 });
+      const { reader, packs } = await repo.reader({ scratch: cache, maxSize: 1000 });
+      const oids = commits.map((c) => repo.git(["rev-parse", c + ":big.txt"]));
+      const deltaAt = oids.findIndex((oid) => fx.listEntries(packs[0]).find((e) => e.oid === oid).depth > 0);
+
+      const err = await failure(apply(reader, null, commits[deltaAt]));
+
+      expect(deltaAt).toBeGreaterThan(-1);
+      expect(err instanceof NoRoomError).toBe(true);
+      expect(fs.readdirSync(folder)).toEqual([]);
+      expect(cache.stats().reservedBytes).toBe(0);
+      const scratch = path.join(tmp, "cache", "scratch");
+      expect(fs.existsSync(scratch) ? fs.readdirSync(scratch) : []).toEqual([]);
     });
 
     it("ends correct when the same range is run again after a read failed part way", async function () {

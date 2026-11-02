@@ -12,9 +12,17 @@
 // objects. Every object read by ID is hashed and compared with the ID it was
 // asked for, so bytes which are wrong in any way (a flipped bit, a bad offset,
 // a truncated pack, a mismatched base) are an error rather than a result.
+//
+// `stream` is the exception to maxSize when the reader has `scratch`: an
+// object stored as a delta which is too big to resolve in memory is built in
+// files on local disk instead, a link of its chain at a time (see
+// streamThroughScratch), so an object of any size costs bounded memory.
 const crypto = require("crypto");
+const fsp = require("fs/promises");
+const path = require("path");
 const { CorruptError, NotFoundError, TooLargeError } = require("./errors");
-const { applyDelta } = require("./delta");
+const { applyDelta, resultSize } = require("./delta");
+const { applyDeltaToFile, writeFile } = require("./expand");
 const { openIndex } = require("./idx");
 const { openPack, isDelta } = require("./pack");
 const { packKey, idxKey } = require("./layout");
@@ -27,13 +35,23 @@ const DEFAULT_MAX_SIZE = 64 * 1024 * 1024;
 
 const LOOKUP_CONCURRENCY = 8;
 
+// How much of a delta's data is read to see how big its result is
+const HEADER_BYTES = 32;
+
+// The chunks an object built in scratch is streamed in
+const FILE_CHUNK = 64 * 1024;
+
 function objectHasher(type, size) {
   return crypto.createHash("sha1").update(type + " " + size + "\0");
 }
 
 // `packs` are manifest pack entries ({ name, size, idxSize }), oldest first.
 // `cache` is optional: without it every lookup goes to the object store.
-function createReader({ store, cache = null, packs, maxSize = DEFAULT_MAX_SIZE }) {
+// `scratch` is optional too: an object with `reserve(bytes)` which resolves
+// with a reservation (`dir`, `extend(bytes)`, `release()`), as cache.reserve
+// does. With it, `stream` can stream a delta-stored object of any size;
+// without it such an object is limited by `maxSize`, as it always was.
+function createReader({ store, cache = null, packs, maxSize = DEFAULT_MAX_SIZE, scratch = null }) {
   const opened = packs.map((entry) => ({
     name: entry.name,
     pack: openPack({ store, key: packKey(entry.name), size: entry.size, name: entry.name }),
@@ -134,22 +152,185 @@ function createReader({ store, cache = null, packs, maxSize = DEFAULT_MAX_SIZE }
     return { type, size: data.length, data };
   }
 
+  // The size of the object a delta entry builds, from the start of its data
+  async function targetSize(entry) {
+    const iterator = entry.output[Symbol.asyncIterator]();
+    let head = Buffer.alloc(0);
+    try {
+      while (head.length < HEADER_BYTES) {
+        const next = await iterator.next();
+        if (next.done) break;
+        head = Buffer.concat([head, next.value]);
+      }
+    } finally {
+      await iterator.return();
+    }
+    return resultSize(head);
+  }
+
+  // Streams the object stored as a delta at `start` by building it in files
+  // in scratch, with memory that does not depend on its size.
+  //
+  // The chain is walked to its base, which is stored whole, and the base is
+  // written to a file. Each delta from the base outwards is then applied to the
+  // file before it, writing a new one (expand.js) and deleting the old, so
+  // there are never more than two copies on disk. The last file is streamed to
+  // the caller and deleted.
+  //
+  // Room for the files is taken from `scratch` as it becomes known: the base's
+  // size first, and then, for each link, the size of its result (it is in the
+  // delta's header) on top of the file it is applied to. Room which is not
+  // there is a NoRoomError. The reservation is released, and the files with it,
+  // on every way out: a failure here, the end of the stream, an error in it, or
+  // the consumer abandoning it (`return()` on the iterator, which `for await`
+  // does on a `break` and a Readable does when it is destroyed).
+  //
+  // The object is hashed as the file streams out, exactly as for an object
+  // stored whole: the iteration throws CorruptError at its end if what came out
+  // is not `oid`. A delta which does not fit its base, or is not valid data,
+  // fails here instead, before the stream is returned.
+  async function streamThroughScratch(oid, start) {
+    const chain = [];
+    const visited = new Set();
+    let at = start;
+    let base;
+
+    for (;;) {
+      const id = at.pack.name + ":" + at.offset;
+      if (visited.has(id) || visited.size >= MAX_CHAIN) throw new CorruptError("Delta chain does not end");
+      visited.add(id);
+
+      const entry = await at.pack.pack.open(at.offset);
+      if (!isDelta(entry)) {
+        base = entry;
+        break;
+      }
+
+      entry.output.return();
+      chain.push(at);
+      at = await baseOf(at, entry);
+    }
+
+    const reservation = await scratch.reserve(base.size);
+    let reserved = base.size;
+    let handle = null;
+    let cleaned = null;
+
+    // Idempotent
+    function cleanup() {
+      if (!cleaned) {
+        cleaned = (async () => {
+          if (handle) await handle.close().catch(() => {});
+          await reservation.release();
+        })();
+      }
+      return cleaned;
+    }
+
+    try {
+      let current = path.join(reservation.dir, "0");
+      let size = await writeFile(current, base.output);
+      if (size !== base.size) throw new CorruptError("Pack entry at " + base.offset + " is not the size its header says");
+
+      for (let i = chain.length - 1; i >= 0; i--) {
+        const entry = await chain[i].pack.pack.open(chain[i].offset);
+        const next = path.join(reservation.dir, String(chain.length - i));
+        const before = size;
+
+        size = await applyDeltaToFile({
+          source: current,
+          sourceSize: before,
+          delta: entry.output,
+          target: next,
+          // Both files exist while the delta is applied
+          room: async (target) => {
+            if (before + target > reserved) {
+              await reservation.extend(before + target - reserved);
+              reserved = before + target;
+            }
+          },
+        });
+
+        await fsp.rm(current, { force: true });
+        current = next;
+      }
+
+      handle = await fsp.open(current, "r");
+      const file = handle;
+      const length = size;
+      const hash = objectHasher(base.type, length);
+
+      async function* verified() {
+        try {
+          for (let read = 0; read < length; ) {
+            const chunk = Buffer.allocUnsafe(Math.min(FILE_CHUNK, length - read));
+            const { bytesRead } = await file.read(chunk, 0, chunk.length, read);
+            if (!bytesRead) throw new CorruptError("Object " + oid + " was cut short in scratch space");
+            read += bytesRead;
+            hash.update(chunk.subarray(0, bytesRead));
+            yield chunk.subarray(0, bytesRead);
+          }
+          if (hash.digest("hex") !== oid) throw new CorruptError("Object " + oid + " read back as a different object");
+        } finally {
+          await cleanup();
+        }
+      }
+
+      // return() on a generator which was never started doesn't run its
+      // finally, so the files are released here for a stream nobody read
+      const generator = verified();
+      let started = false;
+      const iterator = {
+        [Symbol.asyncIterator]: () => iterator,
+        next: (value) => {
+          started = true;
+          return generator.next(value);
+        },
+        async return(value) {
+          if (!started) await cleanup();
+          return generator.return(value);
+        },
+        async throw(err) {
+          if (!started) await cleanup();
+          return generator.throw(err);
+        },
+      };
+
+      return { type: base.type, size: length, data: iterator };
+    } catch (err) {
+      await cleanup();
+      throw err;
+    }
+  }
+
   // Like read, but the data is an async iterable of chunks when the object is
   // stored whole, so an object of any size costs bounded memory. The chunks
   // are hashed as they go: the iteration throws CorruptError at its end if the
   // object isn't `oid`, so the caller must not treat the data as good until
   // then. An object stored as a delta is resolved in memory, and so is
-  // limited by maxSize.
+  // limited by maxSize, unless the reader has `scratch`: then one over the
+  // limit is built in files (streamThroughScratch). Smaller ones are still
+  // resolved in memory, which is cheaper.
   async function stream(oid, { maxSize: limit = maxSize } = {}) {
     const at = await locate(oid);
     if (!at) return null;
 
     const entry = await at.pack.pack.open(at.offset);
     if (isDelta(entry)) {
-      entry.output.return();
-      const { type, data } = await resolve(at, limit);
-      check(oid, type, data);
-      return { type, size: data.length, data: (async function* () { yield data; })() };
+      if (!scratch) entry.output.return();
+      else if ((await targetSize(entry)) > limit) return streamThroughScratch(oid, at);
+
+      let resolved;
+      try {
+        resolved = await resolve(at, limit);
+      } catch (err) {
+        // The result fits but something it is built from does not
+        if (scratch && err instanceof TooLargeError) return streamThroughScratch(oid, at);
+        throw err;
+      }
+
+      check(oid, resolved.type, resolved.data);
+      return { type: resolved.type, size: resolved.data.length, data: (async function* () { yield resolved.data; })() };
     }
 
     const hash = objectHasher(entry.type, entry.size);

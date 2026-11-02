@@ -261,6 +261,23 @@ describe("git store cache", function () {
       expect(cache.stats().reservedBytes).toBe(0);
     });
 
+    it("gives back part of a reservation, and no more than it has", async function () {
+      const cache = createCache({ dir, maxBytes: 1000 });
+      const reservation = await cache.reserve(300);
+      await reservation.extend(400);
+      reservation.shrink(500);
+      expect(cache.stats().reservedBytes).toBe(200);
+      expect(() => reservation.shrink(201)).toThrow();
+
+      // The room is there to be reserved again
+      const other = await cache.reserve(800);
+      await other.release();
+
+      await reservation.release();
+      reservation.shrink(1);
+      expect(cache.stats().reservedBytes).toBe(0);
+    });
+
     it("fails clearly when the budget isn't there, and changes nothing", async function () {
       const cache = createCache({ dir, maxBytes: 1000 });
       await cache.put("a", data(34));
