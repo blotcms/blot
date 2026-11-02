@@ -29,6 +29,13 @@ test("jail: never --user, never binds /usr or /, disables /proc", () => {
   assert.deepStrictEqual(argv.slice(-3), jail.JOBS.metadata.command);
 });
 
+test("jail: binds pandoc's binary, not /usr/local/bin", () => {
+  const argv = jail.args("pandoc");
+  const binds = argv.filter((a, i) => argv[i - 1] === "-R");
+  assert(binds.includes("/usr/local/bin/pandoc"));
+  assert(!binds.includes("/usr/local/bin") && !binds.includes("/usr/local"));
+});
+
 test("jail: passes exactly one environment variable", () => {
   const argv = jail.args("metadata");
   assert.deepStrictEqual(
@@ -44,7 +51,7 @@ test("jail: an unknown job throws", () => {
 });
 
 test("jail: every job runs its own file in main.js, within its limits", () => {
-  assert.deepStrictEqual(Object.keys(jail.JOBS).sort(), ["exif", "favicon", "metadata", "resize", "screenshot", "template-image", "thumbnail", "to-png", "unzip"]);
+  assert.deepStrictEqual(Object.keys(jail.JOBS).sort(), ["exif", "favicon", "metadata", "pandoc", "resize", "screenshot", "template-image", "thumbnail", "to-png", "unzip"]);
   for (const [name, j] of Object.entries(jail.JOBS)) {
     assert.deepStrictEqual(j.command.slice(-2), ["/usr/src/app/app/sandbox/jobs/main.js", name]);
     assert(fs.existsSync(path.join(__dirname, "../../../../app/sandbox/jobs", name + ".js")));
@@ -60,6 +67,7 @@ test("jail: every job runs its own file in main.js, within its limits", () => {
     assert.strictEqual(jail.JOBS[name].maxOutputBytes, 64 * 1024 * 1024);
   }
   assert.strictEqual(jail.JOBS.exif.timeSeconds, 30);
+  assert.strictEqual(jail.JOBS.pandoc.timeSeconds, 30);
   assert.strictEqual(jail.JOBS.exif.maxOutputBytes, 1024 * 1024);
 });
 
