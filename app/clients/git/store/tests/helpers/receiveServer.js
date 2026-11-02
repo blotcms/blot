@@ -80,7 +80,7 @@ async function advertise(store, res) {
   res.end(Buffer.concat(parts));
 }
 
-async function createReceiveServer({ store, cache, lock, limit, keepaliveMs }) {
+async function createReceiveServer({ store, cache, lock, limit, keepaliveMs, gate }) {
   const results = [];
   const responses = [];
 
@@ -105,6 +105,7 @@ async function createReceiveServer({ store, cache, lock, limit, keepaliveMs }) {
         limit,
         sizeHint: Number(req.headers["content-length"] || 0),
         progress: response.progress,
+        gate,
       }).then((result) => {
         results.push(result);
         response.finish(result);

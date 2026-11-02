@@ -18,9 +18,14 @@
 // Arguments are always an array and there is no shell. There is no chaining
 // API: use raw(args), which returns a promise, or calls back with
 // (err, stdout) when given a callback.
+//
+// Every command waits for room in a lane of limiter.js, background unless
+// options.lane says "interactive" (receivePack.js does, for a push), and runs
+// with its memory settings.
 
 const { execFile } = require("child_process");
 const fs = require("fs");
+const limiter = require("./limiter");
 
 // execFile's default of 1MB is too small for `ls-tree -r -z` or `diff -z` on
 // a large repository, and simple-git had no limit. A string longer than about
@@ -48,15 +53,26 @@ module.exports = function Git(directory, options) {
   // options.env is added to this process's environment (create.js uses it to
   // set GIT_CEILING_DIRECTORIES)
   const env = options.env ? { ...process.env, ...options.env } : process.env;
+  const lane = options.lane || "background";
 
   // Each command starts when the one before it has finished
   let queue = Promise.resolve();
 
   function run(args) {
+    return limiter.run(
+      lane,
+      function () {
+        return execute(args);
+      },
+      { gc: limiter.isGc(args) }
+    );
+  }
+
+  function execute(args) {
     return new Promise(function (resolve, reject) {
       execFile(
         "git",
-        args,
+        limiter.args(args),
         { cwd: directory, env: env, encoding: "utf8", maxBuffer: MAX_BUFFER },
         function (err, stdout, stderr) {
           if (!err) return resolve(stdout);
