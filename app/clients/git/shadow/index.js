@@ -67,6 +67,9 @@ const STORES = 1000;
 const MAX_QUEUED_WRITES = 100;
 const MAX_QUEUED_BYTES = 64 * 1024 * 1024;
 
+// How long after a push or a write its mirror starts
+const START_DELAY_MS = 250;
+
 const GIT_TIMEOUT_MS = 10 * 60 * 1000;
 const STDERR_BYTES = 4096;
 
@@ -581,8 +584,9 @@ function settleIfIdle(blogID, state) {
 function start(blogID, state) {
   if (state.draining) return;
 
-  // Never in the same tick as the push or the write which asked
-  state.draining = new Promise((resolve) => setImmediate(resolve)).then(() => drain(blogID, state));
+  // Not until the push has been answered, or the write has returned, so that
+  // spawning git and the first requests never compete with their last steps
+  state.draining = new Promise((resolve) => setTimeout(resolve, START_DELAY_MS)).then(() => drain(blogID, state));
 }
 
 async function drain(blogID, state) {
