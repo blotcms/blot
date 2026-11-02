@@ -9,24 +9,72 @@
 //
 //   const store = counting(inner);
 //   const { result, counts } = await measure(() => receive({ store, ... }));
-//   counts  { requests, bytesUp, bytesDown }
+//   counts  { requests, bytesUp, bytesDown, waitMs }
 //
 // A call outside measure() is not counted. A stream is counted as it is read,
 // and an upload of a stream as it is consumed.
+//
+// It also keeps the operation's lane clock: how long it spent with a git
+// command waiting for a place in the git limiter (../limiter.js), recorded by
+// waiting() below. waitMs is the time during which at least one of the
+// operation's commands was waiting, so two waiting at once count once. The ms
+// measure() returns, and a stopwatch(), leave that time out, so the figures
+// compared with EBS are the work alone however busy the lane was.
 const { AsyncLocalStorage } = require("async_hooks");
 const { Transform, pipeline } = require("stream");
 
 const current = new AsyncLocalStorage();
 
+// tally -> { total, waiting, since }: the lane clock of an operation
+const clocks = new WeakMap();
+
 function counts() {
-  return { requests: 0, bytesUp: 0, bytesDown: 0 };
+  return { requests: 0, bytesUp: 0, bytesDown: 0, waitMs: 0 };
+}
+
+// How long the operation (the current one, or the tally's) has waited so far,
+// a wait still going on included
+function waitedSoFar(tally) {
+  tally = tally || current.getStore();
+  const clock = tally && clocks.get(tally);
+  if (!clock) return 0;
+  return clock.total + (clock.waiting ? Date.now() - clock.since : 0);
+}
+
+// A git command of the current operation starts waiting for a place. Returns
+// a function to call once it has one (calling it again does nothing).
+function waiting() {
+  const tally = current.getStore();
+  const clock = tally && clocks.get(tally);
+  if (!clock) return () => {};
+
+  if (clock.waiting++ === 0) clock.since = Date.now();
+
+  let granted = false;
+  return () => {
+    if (granted) return;
+    granted = true;
+    if (--clock.waiting === 0) clock.total += Date.now() - clock.since;
+    tally.waitMs = clock.total;
+  };
+}
+
+// Starts timing part of the current operation. Returns a function which gives
+// the ms since, less the operation's lane waits in between.
+function stopwatch() {
+  const tally = current.getStore();
+  const started = Date.now();
+  const waitedBefore = waitedSoFar(tally);
+  return () => Date.now() - started - (waitedSoFar(tally) - waitedBefore);
 }
 
 async function measure(fn) {
   const tally = counts();
-  const started = Date.now();
+  clocks.set(tally, { total: 0, waiting: 0, since: 0 });
+  const elapsed = current.run(tally, stopwatch);
   const result = await current.run(tally, fn);
-  return { result, counts: tally, ms: Date.now() - started };
+  tally.waitMs = waitedSoFar(tally);
+  return { result, counts: tally, ms: elapsed() };
 }
 
 function size(body) {
@@ -131,3 +179,5 @@ function counting(inner) {
 
 module.exports = counting;
 module.exports.measure = measure;
+module.exports.waiting = waiting;
+module.exports.stopwatch = stopwatch;

@@ -1,8 +1,25 @@
 ## Git store shadow mode
 
-Shadow mode mirrors every push and every one of Blot's own commits into the git store (`../store`, #2259) while the bare repositories on disk stay the source of truth. `index.js` has the mirroring and the format of its log lines. This file covers the test-only read route.
+Shadow mode mirrors every push and every one of Blot's own commits into the git store (`../store`, #2259) while the bare repositories on disk stay the source of truth. `index.js` has the mirroring and the format of its log lines. This file covers how its figures compare with EBS's, and the test-only read route.
 
-All of shadow mode's git (its own commands in the repository on disk, with the git client's memory settings, and the store's, through the `gate` it passes to `receive`, `compact`, `importRepo` and `verifyImport`) waits for a place in the background lane of `../limiter.js`, the mirror of a push included, so it never holds up a user's push or clone. Its `storeMs` figures include that wait. The read route below runs no git.
+All of shadow mode's git (its own commands in the repository on disk, with the git client's memory settings, and the store's, through the `gate` it passes to `receive`, `compact`, `importRepo` and `verifyImport`) waits for a place in the background lane of `../limiter.js`, the mirror of a push included, so it never holds up a user's push or clone. The read route below runs no git.
+
+## Comparing pushes and writes with EBS
+
+Each push, write, import and compaction logs one line (`index.js` has the details):
+
+    [git-store-shadow] blog=<id> op=push|write|import|compact outcome=...
+      storeMs=... [receiveMs=...|commitMs=...] ebsMs=... requests=...
+      bytesUp=... bytesDown=... refs=... waitMs=...
+
+| | EBS | Store |
+| --- | --- | --- |
+| Push | `ebsMs`: from `receivePack`'s start to the refs moving | `receiveMs`: the store's `receive`, from the pack's first byte to the swap landing |
+| Write | `ebsMs`: the EBS ref lock and `plumbing.commitFile` | `commitMs`: the store's `commit()` alone |
+
+- `waitMs` is how long the operation's git commands waited for a place in the limiter's background lane: the time during which at least one of them was waiting, so two waiting at once count once (`counting.js`, recorded by `inLane` in `index.js`).
+- `storeMs`, `receiveMs` and `commitMs` leave those waits out, so a busy lane doesn't make the store look slow. `ebsMs` never included a wait: Blot's commit is timed from the ref lock, inside its place in the lane.
+- `storeMs` is the store side's total less `waitMs`. `requests`, `bytesUp` and `bytesDown` count the S3 requests within it. The `op=verify` lines of the daily check carry `waitMs` the same way.
 
 ## The test-only read route
 
@@ -33,6 +50,6 @@ All of shadow mode's git (its own commands in the repository on disk, with the g
 - `outcome`: `ok`, `negotiated` (a round of a fetch which sent no pack), `refused` (the store would not serve what was asked), `aborted` (the client left), `busy` or `error` (with a `detail=`), or `http<status>`.
 - Compare `op` with the same `op`, and `storeMs` with `ebsMs`: both are from the request reaching the handler to the response finishing, so they include a slow client reading the pack. `firstByteMs` is from the same start to the first byte of the body: on EBS the service line, which is written before git has been asked anything, is not counted. `bytesSent` is what went to the client and should be about the same on both sides (the store may send more than the client needs, see *Fetch* in `../store/README`).
 - `requests` and `bytesDown` are what the store asked of S3 for the request (the manifest read included). EBS has nothing to compare them with; they are what the cost of a read is.
-- The `op=push` and `op=write` lines are compared as `index.js` describes.
+- The `op=push` and `op=write` lines are compared as described above.
 
 Run clone and fetch a few times from each URL: the first read of a blog after a restart has a cold cache and a cold manifest.

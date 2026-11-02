@@ -37,10 +37,14 @@
 //
 //   [git-store-shadow] blog=<id> op=push|write|import|compact outcome=...
 //     storeMs=... [receiveMs=...|commitMs=...] ebsMs=... requests=...
-//     bytesUp=... bytesDown=... refs=...
+//     bytesUp=... bytesDown=... refs=... waitMs=...
 //
 // storeMs is all the store's side took (for a push, reading its manifest and
-// making the pack from the EBS repository too). The figures to compare are:
+// making the pack from the EBS repository too), less waitMs: the time its git
+// commands spent waiting for a place in the git limiter's background lane
+// (see below). receiveMs and commitMs leave those waits out too, and ebsMs
+// never had them, so the figures compare the work alone however busy the
+// lane was. The figures to compare are:
 //
 //   push    ebsMs (receivePack's start to the refs moving on EBS) with
 //           receiveMs (the store's receive, from the pack's first byte to the
@@ -56,8 +60,9 @@
 // All of it is background work for the git limiter (../limiter.js), the
 // mirror of a push too: every git process it starts, its own in the EBS
 // repository (with the limiter's memory settings) and the store's (through
-// the gate it is given), waits for a place in the background lane. Its
-// figures include that wait.
+// the gate it is given), waits for a place in the background lane. inLane()
+// puts each wait on the operation's lane clock (counting.js): waitMs on the
+// line, and left out of the other figures.
 const path = require("path");
 const { PassThrough } = require("stream");
 const { spawn } = require("child_process");
@@ -96,7 +101,7 @@ const STDERR_BYTES = 4096;
 
 // ---- Logging ----------------------------------------------------------------
 
-const ORDER = ["blog", "op", "source", "outcome", "storeMs", "receiveMs", "commitMs", "ebsMs", "firstByteMs", "requests", "bytesUp", "bytesDown", "bytesSent", "refs"];
+const ORDER = ["blog", "op", "source", "outcome", "storeMs", "receiveMs", "commitMs", "ebsMs", "firstByteMs", "requests", "bytesUp", "bytesDown", "bytesSent", "refs", "waitMs"];
 
 function value(v) {
   const text = String(v);
@@ -134,6 +139,7 @@ function countsOf(measured) {
     requests: measured.counts.requests,
     bytesUp: measured.counts.bytesUp,
     bytesDown: measured.counts.bytesDown,
+    waitMs: measured.counts.waitMs,
   };
 }
 
@@ -239,8 +245,22 @@ async function contextFor(blogID) {
 
 // ---- Git in the EBS repository -----------------------------------------
 
+// Runs a git command once it has a place in the background lane, with the
+// time it waited for it on the operation's lane clock (counting.js), so
+// waitMs records it and storeMs, receiveMs and commitMs leave it out
+function inLane(start) {
+  const granted = counting.waiting();
+
+  return limiter
+    .run("background", () => {
+      granted();
+      return start();
+    })
+    .finally(granted);
+}
+
 // The gate the store's git goes through (see store/README, "Limiting git")
-const gate = limiter.gate("background");
+const gate = inLane;
 
 // Call only once the limiter has given the command a place
 function spawnGit(gitDir, args) {
@@ -255,7 +275,7 @@ function spawnGit(gitDir, args) {
 
 // Resolves with { code, stdout, stderr }, whatever the exit code
 function git(gitDir, args, input) {
-  return limiter.run("background", () => new Promise((resolve, reject) => {
+  return inLane(() => new Promise((resolve, reject) => {
     const child = spawnGit(gitDir, args);
     const stdout = [];
     let stderr = "";
@@ -321,7 +341,7 @@ function packFor(gitDir, tips, have) {
   let child = null;
   let stopped = false;
 
-  const closed = limiter.run("background", () => {
+  const closed = inLane(() => {
     if (stopped) return { code: 1, stderr: "stopped before it started" };
 
     child = spawnGit(gitDir, ["pack-objects", "--revs", "--stdout", "--thin", "--delta-base-offset", "-q"]);
@@ -405,21 +425,22 @@ async function runMirror(ctx, task) {
       // receiveMs, the figure to compare with a push to EBS, is receive's
       // own time: from the pack's first byte (or the call, with no pack) to
       // the swap landing. What git took to start making the pack is left out;
-      // a client's push to EBS is timed from when its request arrives.
+      // a client's push to EBS is timed from when its request arrives. Time
+      // spent waiting for a place in the git limiter is left out too.
       let firstByte = null;
       const source = pack
         ? (async function* () {
             for await (const chunk of pack.stream) {
-              if (firstByte === null) firstByte = Date.now();
+              if (firstByte === null) firstByte = counting.stopwatch();
               yield chunk;
             }
           })()
         : null;
 
       try {
-        const called = Date.now();
+        const called = counting.stopwatch();
         const result = await receive({ store, cache, lock, commands, pack: source, gate });
-        const receiveMs = Date.now() - (firstByte === null ? called : firstByte);
+        const receiveMs = (firstByte === null ? called : firstByte)();
         const git = pack ? await pack.done() : null;
         return { result, git, receiveMs };
       } catch (err) {
@@ -589,7 +610,8 @@ async function runWrite(ctx, task) {
 
     if (base.seq === 0 || master !== (ebs.parent || null)) return { base, master };
 
-    const started = Date.now();
+    // commit() runs no git today; the stopwatch leaves out any lane wait anyway
+    const elapsed = counting.stopwatch();
     const result = await storeCommit({
       store,
       cache,
@@ -601,7 +623,7 @@ async function runWrite(ctx, task) {
       now: author.seconds * 1000,
     });
 
-    return { base, master, result, commitMs: Date.now() - started };
+    return { base, master, result, commitMs: elapsed() };
   });
 
   const { base, master, result, commitMs } = measured.result;
@@ -979,6 +1001,7 @@ module.exports = {
   contextFor,
   ebsRefs,
   git,
+  gate,
   log,
   scrub,
   hasStore,

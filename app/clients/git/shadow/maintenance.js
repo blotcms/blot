@@ -37,7 +37,6 @@ const shadow = require("./index");
 const { manifest, layout } = require("../store");
 const sweep = require("../store/sweep");
 const { verifyImport } = require("../store/import");
-const limiter = require("../limiter");
 const { measure } = require("./counting");
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -247,8 +246,9 @@ async function deepCheck(ctx, scratchDir) {
   const { gitDir, store, cache } = ctx;
 
   try {
-    // Background work for the git limiter, like the rest of shadow mode
-    const result = await verifyImport({ store, cache, gitDir, scratchDir, gate: limiter.gate("background") });
+    // Background work for the git limiter, like the rest of shadow mode, with
+    // its waits on the lane clock (waitMs, and left out of storeMs)
+    const result = await verifyImport({ store, cache, gitDir, scratchDir, gate: shadow.gate });
     return { findings: [], refs: result.refs, objects: result.objects };
   } catch (err) {
     const kind = verdict(err);
@@ -287,6 +287,7 @@ function report(blogID, check, measured) {
     storeMs: measured.ms,
     requests: measured.counts.requests,
     bytesDown: measured.counts.bytesDown,
+    waitMs: measured.counts.waitMs,
     check,
     attempts: measured.attempts > 1 ? measured.attempts : undefined,
     seq: rest.seq,
