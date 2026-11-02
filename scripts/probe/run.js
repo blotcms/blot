@@ -45,8 +45,12 @@ const UNIT_IMAGE = "ghcr.io/blotcms/blot";
 // through that unit's proxy jail, which listens on the host's loopback only,
 // so the probe joins the host network. It has no browser: the sandbox's is the
 // unit's own, so a probe's screenshots fail closed.
+// A probe can run an image from before the variable was renamed (--release),
+// which reads BLOT_AIRLOCK_PROXY_URL, so it gets both.
+const EGRESS_PROXY_URL = `http://127.0.0.1:${SANDBOX.units.blue.proxyPort}`;
 const EGRESS_ENV = {
-  BLOT_EGRESS_PROXY_URL: `http://127.0.0.1:${SANDBOX.units.blue.proxyPort}`,
+  BLOT_EGRESS_PROXY_URL: EGRESS_PROXY_URL,
+  BLOT_AIRLOCK_PROXY_URL: EGRESS_PROXY_URL,
 };
 const APP_ROOT_IN_CONTAINER = "/usr/src/app";
 const REMOTE_ROOT = "/tmp/blot-probe";
