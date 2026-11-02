@@ -135,7 +135,7 @@ describe("git store reader scratch", function () {
 
   // Packs the repository as git would, and returns a reader over it which has
   // scratch (the cache), and counts what it is asked to reserve
-  async function setup({ packs, maxBytes = 64 * MiB, maxSize = CAP, scratch = true, store: given } = {}) {
+  async function setup({ packs, maxBytes = 64 * MiB, maxSize = CAP, scratch = true, scratchConcurrency, store: given } = {}) {
     if (dir) fx.remove(dir);
     dir = fx.tempDir();
     store = given || createMemoryStore();
@@ -146,12 +146,13 @@ describe("git store reader scratch", function () {
     for (const pack of packs) entries.push(await fx.upload(store, pack, 0));
 
     const counting = {
+      maxBytes,
       reserve: async (bytes) => {
         reserved.push(bytes);
         return cache.reserve(bytes);
       },
     };
-    return createReader({ store, cache, packs: entries, maxSize, scratch: scratch ? counting : null });
+    return createReader({ store, cache, packs: entries, maxSize, scratchConcurrency, scratch: scratch ? counting : null });
   }
 
   function teardown() {
@@ -400,19 +401,82 @@ describe("git store reader scratch", function () {
       expectNoScratch();
     });
 
-    it("fails with NoRoomError when scratch cannot hold the base", async function () {
-      const reader = await setup({ packs, maxBytes: 1 * MiB });
+    it("fails with NoRoomError when the room for the base is taken just now, and works once it is free", async function () {
+      const reader = await setup({ packs, maxBytes: 8 * MiB });
+      const hold = await cache.reserve(7 * MiB);
       const err = await failure(reader.stream(deepest.oid));
       expect(err).toEqual(jasmine.any(NoRoomError));
+
+      await hold.release();
+      expect((await collect((await reader.stream(deepest.oid)).data)).equals(want(deepest.oid))).toBe(true);
       expectNoScratch();
     });
 
-    it("fails with NoRoomError when scratch can hold one copy and not two", async function () {
-      const reader = await setup({ packs, maxBytes: Math.floor(deepest.size * 1.5) });
+    it("fails with NoRoomError when there is room for one copy just now and not two", async function () {
+      const reader = await setup({ packs, maxBytes: 5 * MiB });
+      const hold = await cache.reserve(2.5 * MiB);
       const err = await failure(reader.stream(deepest.oid));
       expect(err).toEqual(jasmine.any(NoRoomError));
       expect(reserved.length).toBe(1);
+
+      await hold.release();
       expectNoScratch();
+    });
+
+    it("fails with TooLargeError, naming the size, when the budget could never hold the base", async function () {
+      const reader = await setup({ packs, maxBytes: 1 * MiB });
+      const err = await failure(reader.stream(deepest.oid));
+      expect(err && err.code).toBe("TOO_LARGE");
+      expect(err.size).toBeGreaterThan(MiB);
+      expect(reserved.length).toBe(0);
+      expectNoScratch();
+    });
+
+    it("fails with TooLargeError when the budget could hold one copy and never two", async function () {
+      const reader = await setup({ packs, maxBytes: Math.floor(deepest.size * 1.5) });
+      const err = await failure(reader.stream(deepest.oid));
+      expect(err && err.code).toBe("TOO_LARGE");
+      expect(reserved.length).toBe(1);
+      expectNoScratch();
+    });
+  });
+
+  describe("several objects at once", function () {
+    let packs;
+    let big;
+
+    beforeAll(function () {
+      packs = repack();
+      blobs = describeBlobs(packs[0]);
+      big = blobs.filter((b) => b.depth > 0);
+    });
+
+    afterEach(teardown);
+
+    async function peakWith(scratchConcurrency) {
+      const reader = await setup({ packs, scratchConcurrency });
+      let peak = 0;
+      const timer = setInterval(() => (peak = Math.max(peak, cache.stats().reservedBytes)), 1);
+      const results = await Promise.all(
+        big.slice(0, 4).map(async (b) => {
+          const got = await reader.stream(b.oid);
+          return collect(got.data);
+        })
+      );
+      clearInterval(timer);
+      big.slice(0, 4).forEach((b, i) => expect(results[i].equals(want(b.oid))).toBe(true));
+      expectNoScratch();
+      return peak;
+    }
+
+    it("builds one at a time by default, so the room held is that of one", async function () {
+      const peak = await peakWith(undefined);
+      expect(peak).toBeLessThan(2 * FILE + 256 * 1024);
+    });
+
+    it("builds as many at once as it is told to", async function () {
+      const peak = await peakWith(4);
+      expect(peak).toBeGreaterThan(2 * FILE + 256 * 1024);
     });
   });
 

@@ -26,7 +26,7 @@ const { applyDeltaToFile, writeFile } = require("./expand");
 const { openIndex } = require("./idx");
 const { openPack, isDelta } = require("./pack");
 const { packKey, idxKey } = require("./layout");
-const { mapLimit } = require("./limit");
+const { mapLimit, createSemaphore } = require("./limit");
 
 // Git's own limit on a chain is 4095; anything longer is a loop or an attack
 const MAX_CHAIN = 5000;
@@ -51,7 +51,24 @@ function objectHasher(type, size) {
 // with a reservation (`dir`, `extend(bytes)`, `release()`), as cache.reserve
 // does. With it, `stream` can stream a delta-stored object of any size;
 // without it such an object is limited by `maxSize`, as it always was.
-function createReader({ store, cache = null, packs, maxSize = DEFAULT_MAX_SIZE, scratch = null }) {
+// If `scratch.maxBytes` is a number it is the whole of the room there could
+// ever be, and an object which needs more is a TooLargeError rather than a
+// NoRoomError (which means the room is taken just now). `scratchConcurrency`
+// (default 1) is how many objects may be streamed through scratch at once.
+function createReader({ store, cache = null, packs, maxSize = DEFAULT_MAX_SIZE, scratch = null, scratchConcurrency = 1 }) {
+  const scratchTurn = createSemaphore(scratchConcurrency);
+
+  // Throws TooLargeError if `bytes` of scratch could never be had
+  function mustFit(bytes, size) {
+    if (typeof scratch.maxBytes === "number" && bytes > scratch.maxBytes) {
+      const err = new TooLargeError(
+        "Building an object of " + size + " bytes needs " + bytes + " bytes of scratch space, and there can never be more than " + scratch.maxBytes
+      );
+      err.size = size;
+      throw err;
+    }
+  }
+
   const opened = packs.map((entry) => ({
     name: entry.name,
     pack: openPack({ store, key: packKey(entry.name), size: entry.size, name: entry.name }),
@@ -190,6 +207,24 @@ function createReader({ store, cache = null, packs, maxSize = DEFAULT_MAX_SIZE, 
   // is not `oid`. A delta which does not fit its base, or is not valid data,
   // fails here instead, before the stream is returned.
   async function streamThroughScratch(oid, start) {
+    const turn = await scratchTurn();
+    let given = false;
+    const release = () => {
+      if (!given) {
+        given = true;
+        turn();
+      }
+    };
+
+    try {
+      return await buildInScratch(oid, start, release);
+    } catch (err) {
+      release();
+      throw err;
+    }
+  }
+
+  async function buildInScratch(oid, start, release) {
     const chain = [];
     const visited = new Set();
     let at = start;
@@ -211,6 +246,7 @@ function createReader({ store, cache = null, packs, maxSize = DEFAULT_MAX_SIZE, 
       at = await baseOf(at, entry);
     }
 
+    mustFit(base.size, base.size);
     const reservation = await scratch.reserve(base.size);
     let reserved = base.size;
     let handle = null;
@@ -221,7 +257,11 @@ function createReader({ store, cache = null, packs, maxSize = DEFAULT_MAX_SIZE, 
       if (!cleaned) {
         cleaned = (async () => {
           if (handle) await handle.close().catch(() => {});
-          await reservation.release();
+          try {
+            await reservation.release();
+          } finally {
+            release();
+          }
         })();
       }
       return cleaned;
@@ -244,6 +284,7 @@ function createReader({ store, cache = null, packs, maxSize = DEFAULT_MAX_SIZE, 
           target: next,
           // Both files exist while the delta is applied
           room: async (target) => {
+            mustFit(before + target, Math.max(before, target));
             if (before + target > reserved) {
               await reservation.extend(before + target - reserved);
               reserved = before + target;

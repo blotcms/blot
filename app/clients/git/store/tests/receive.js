@@ -622,15 +622,16 @@ describe("git store receive", function () {
   });
 
   describe("a base stored as a delta", function () {
-    // Compresses to almost nothing, so the spec costs little disk. The size
-    // is over the 256 MiB a base stored as a delta was once limited to.
-    const SIZE = 264 * MiB;
+    // `smallBase` is lowered so that a base of a few MiB is built in scratch
+    // as one of any size is; nothing depends on how big it is
+    const SIZE = 3 * MiB;
+    const SMALL = 256 * 1024;
 
     function hugeFile(edit) {
       const line = Buffer.from("this line of the huge file is the same on every row of it......\n");
       const data = Buffer.alloc(SIZE);
       for (let at = 0; at < data.length; at += line.length) line.copy(data, at, 0, Math.min(line.length, data.length - at));
-      if (edit) data.write("EDITED " + edit, 100 * MiB);
+      if (edit) data.write("EDITED " + edit, MiB);
       return data;
     }
 
@@ -644,10 +645,10 @@ describe("git store receive", function () {
       expect(entries.find((entry) => entry.oid === oid).depth).toBeGreaterThan(0);
 
       fx.git(src, ["checkout", "-q", "-B", "x", old]);
-      fs.writeFileSync(path.join(src, "huge.txt"), hugeFile(0).fill("E", 150 * MiB, 150 * MiB + 100));
+      fs.writeFileSync(path.join(src, "huge.txt"), hugeFile(0).fill("E", 2 * MiB, 2 * MiB + 100));
       fx.git(src, ["commit", "-q", "-am", "On an old version"]);
       const tip = fx.text(src, ["rev-parse", "HEAD"]);
-      return { tip, pack: fx.packRevs(src, [tip], [old], { thin: true }), old };
+      return { tip, pack: fx.packRevs(src, [tip], [old], { thin: true }) };
     }
 
     function prepare(target) {
@@ -660,38 +661,54 @@ describe("git store receive", function () {
 
     afterEach(teardown);
 
-    // Building the repository is most of the cost, so one spec does both
-    it("is read through scratch, whatever its size, and fails cleanly where there is no room for that", async function () {
-      await setup({ maxBytes: 2048 * MiB, prepare });
+    it("is read through scratch, and counted against the push's reservation", async function () {
+      await setup({ maxBytes: 64 * MiB, prepare });
       const { tip, pack } = pushOnOldVersion();
       expect(pack.length).toBeLessThan(MiB);
 
-      // Room for the base once, not for building it
-      const tight = createCache({ dir: path.join(dir, "tight"), maxBytes: 3 * SIZE / 2 });
-      const failed = await receive({ store, cache: tight, lock, commands: [update(tip)], pack: bodyOf(pack) });
-
-      expect(failed.outcome).toBe("failed");
-      expect(failed.error.code).toBe("NO_ROOM");
-      expect(failed.messages).toContain("Nothing was pushed.");
-      expect((await manifest.read(store)).refs[MASTER]).toBe(fixture.head);
-      expect(tight.stats().reservedBytes).toBe(0);
-      expect(fs.readdirSync(path.join(dir, "tight", "scratch"))).toEqual([]);
-
-      // With room, the same push is accepted
       const reserved = [];
-      const timer = setInterval(() => reserved.push(cache.stats().reservedBytes), 5);
-      const result = await direct([update(tip)], pack);
+      const timer = setInterval(() => reserved.push(cache.stats().reservedBytes), 1);
+      const result = await direct([update(tip)], pack, { smallBase: SMALL });
       clearInterval(timer);
 
       expect(result.outcome).toBe("ok");
       expect(result.stats.basesFetched).toBeGreaterThan(0);
       expect((await manifest.read(store)).refs[MASTER]).toBe(tip);
 
-      // The base is counted against the push's reservation: the files built to
-      // resolve it (two at once) and then the copies of it index-pack makes
-      expect(Math.max(...reserved)).toBeGreaterThan(2 * SIZE);
+      // The files built to resolve it (two at once) and the copies of it
+      // index-pack makes are in the reservation together
+      expect(Math.max(...reserved)).toBeGreaterThan(3 * SIZE);
       expectNoScratch();
-    }, 5 * 60 * 1000);
+    });
+
+    it("fails the push, to be tried again, when the room is taken just now", async function () {
+      await setup({ maxBytes: 64 * MiB, prepare });
+      const { tip, pack } = pushOnOldVersion();
+      const hold = await cache.reserve(58 * MiB);
+
+      const failed = await direct([update(tip)], pack, { smallBase: SMALL });
+
+      expect(failed.outcome).toBe("failed");
+      expect(failed.error.code).toBe("NO_ROOM");
+      expect(failed.messages).toContain("Nothing was pushed.");
+      expect((await manifest.read(store)).refs[MASTER]).toBe(fixture.head);
+
+      await hold.release();
+      expectNoScratch();
+      expect((await direct([update(tip)], pack, { smallBase: SMALL })).outcome).toBe("ok");
+    });
+
+    it("refuses the push, for good, when the whole budget could never hold it", async function () {
+      await setup({ maxBytes: 5 * MiB, prepare });
+      const { tip, pack } = pushOnOldVersion();
+
+      const refused = await direct([update(tip)], pack, { smallBase: SMALL });
+
+      expect(refused.outcome).toBe("refused");
+      expect(refused.status).toMatch(/builds on a file of 3 MB which is larger than Blot can currently handle. Please contact support/);
+      expect((await manifest.read(store)).refs[MASTER]).toBe(fixture.head);
+      expectNoScratch();
+    });
   });
 
   describe("when the object store misbehaves", function () {

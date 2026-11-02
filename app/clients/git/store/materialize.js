@@ -47,7 +47,8 @@
 // here). A bigger one is built in files in the reader's scratch space and
 // streamed from there, so a reader made with `scratch` writes a blob of any
 // size. A reader without it fails the whole call with a TooLargeError saying
-// which path. Neither ever gives the sink a wrong or partial file. Each blob in
+// which path, and so does one whose scratch could never hold the blob (twice
+// its size). Neither ever gives the sink a wrong or partial file. Each blob in
 // flight holds scratch for up to two copies of itself, so `concurrency` large
 // delta-stored blobs at once need room for twice their sizes together, and a
 // reader whose scratch has less fails the call with a NoRoomError.
@@ -110,7 +111,7 @@ async function materialize({ reader, from = null, to = null, sink, concurrency =
     } catch (err) {
       if (err.code !== "TOO_LARGE") throw err;
       throw new TooLargeError(
-        "Cannot write " + file + ": blob " + change.newOid + " is stored as a delta and is too large to resolve without scratch space (" + err.message + ")"
+        "Cannot write " + file + ": blob " + change.newOid + " is stored as a delta and is too large to resolve (" + err.message + ")"
       );
     }
 
