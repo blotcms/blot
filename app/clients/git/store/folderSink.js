@@ -102,9 +102,10 @@ function createFolderSink({ root }) {
     const target = path.join(directory, parts[parts.length - 1]);
     const stat = await lstat(target);
 
-    if (!stat || stat.isDirectory()) return;
-
-    await fs.promises.unlink(target);
+    if (stat && stat.isDirectory()) return;
+    // A file already gone still has its empty directories cleaned up: a run
+    // which removed the file and then failed on a directory leaves them
+    if (stat) await fs.promises.unlink(target);
 
     for (let i = parts.length - 1; i > 0; i--) {
       try {

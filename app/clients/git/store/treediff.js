@@ -22,11 +22,10 @@
 // that goes away comes before anything that comes in: first the files which
 // are gone or become a directory, and everything under directories which are
 // gone or become a file, then the rest. So a file which turns into a directory
-// (or the reverse) is removed before its replacement is written, and so are
-// two names which differ only by case. Which of two directories that both
-// change comes first is not defined, so a case-insensitive folder is only
-// safe if the sink waits for earlier writes before each removal (materialize
-// does).
+// (or the reverse) is removed before its replacement is written. Which of two
+// directories that both change comes first is not defined. Sinks are expected
+// to be case-sensitive (a Linux folder, an S3 prefix), and nothing here makes
+// names which differ only by case safe on one that is not.
 const { CorruptError, NotFoundError } = require("./errors");
 const { parseTree } = require("./objects");
 

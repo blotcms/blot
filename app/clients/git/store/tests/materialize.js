@@ -152,7 +152,7 @@ describe("git store materialize", function () {
       await expectCheckouts(commits.slice().reverse().slice(0, 2).reverse());
     });
 
-    it("handles names which differ only by case, removing before it writes", async function () {
+    it("handles names which differ only by case, as different names", async function () {
       const commits = [
         repo.commit({ "Readme.txt": "Contents", "Dir/File.txt": "Nested" }),
         repo.commit({ "Readme.txt": null, "readme.txt": "Contents", "Dir/File.txt": null, "dir/file.txt": "Nested" }),
@@ -285,6 +285,36 @@ describe("git store materialize", function () {
       expect(listFiles(outside)).toEqual({});
       expect(fs.readdirSync(tmp).sort()).toEqual(["folder", "outside"]);
       expect(Object.keys(listFiles(folder))).toEqual(["fine.txt"]);
+    });
+
+    it("cleans up the empty directories on a re-run, if a removal failed after the file went", async function () {
+      const first = repo.commit({ "top/only/deep/file.txt": "Only", "kept.txt": "Kept" });
+      const second = repo.commit({ "top/only/deep/file.txt": null });
+      const { reader } = await repo.reader();
+
+      await apply(reader, null, first);
+
+      // The file is unlinked, then the first rmdir fails
+      const original = fs.promises.rmdir;
+      let failed = false;
+      spyOn(fs.promises, "rmdir").and.callFake(async (...args) => {
+        if (failed) return original(...args);
+        failed = true;
+        throw Object.assign(new Error("EIO"), { code: "EIO" });
+      });
+
+      let error;
+      try {
+        await apply(reader, first, second);
+      } catch (err) {
+        error = err;
+      }
+      expect(error && error.code).toBe("EIO");
+      expect(fs.existsSync(path.join(folder, "top/only/deep"))).toBe(true);
+
+      // The same range again finds the file gone and still removes them
+      await apply(reader, first, second);
+      expect(listFiles(folder)).toEqual(repo.checkout(second));
     });
 
     it("refuses an unsafe path itself if a sink is given one", async function () {
