@@ -503,7 +503,7 @@ information-only, and `detect-regression.js` will not open an issue.
 - **Larger dedicated runner** — a fixed-size runner would cut variance enough to
   consider a soft gate; add it as another matrix row.
 - **GC / event-loop-lag metrics** during the render phase.
-- **Multi-tag / `sort=id` burst** — `fetchTaggedEntries.js` pulls a tag's
+- **Multi-tag / `sort=id` burst** — `models/tags/tagged.js` pulls a tag's
   whole entry-ID list and sorts it locally for `id`-sort and multi-tag
   intersection queries (`/tagged/a+b`), instead of paginating in Redis like
   the single-tag date-sort path does. Lower priority than the bursts already

@@ -82,7 +82,7 @@ function checkProxy(proxy) {
 }
 
 function watchProxy() {
-  const proxy = config.airlock && config.airlock.proxy;
+  const proxy = config.egress && config.egress.proxy;
   if (!proxy) return;
   const check = async () => {
     const problem = await checkProxy(proxy);

@@ -57,6 +57,75 @@ describe("sandbox screenshot job", function () {
       expect(outputs[0].subarray(0, 8).equals(PNG)).toBe(true);
     }, SLOW);
 
+    it("returns a PNG the size of the viewport, in screen pixels", async function () {
+      const sharp = require("sharp");
+      const { outputs } = await sandbox.run(
+        "screenshot",
+        { url, width: 300, height: 200 },
+        empty
+      );
+      const info = await sharp(outputs[0]).metadata();
+      expect([info.width, info.height]).toEqual([600, 400]);
+      expect(info.exif).toBeUndefined();
+      expect(info.icc).toBeUndefined();
+    }, SLOW);
+
+    describe("re-encoding", function () {
+      const sharp = require("sharp");
+      const { reencode } = require("../jobs/screenshot");
+
+      const chunks = (png) => {
+        const names = [];
+        for (let i = 8; i < png.length; i += 12 + png.readUInt32BE(i)) {
+          names.push(png.toString("latin1", i + 4, i + 8));
+        }
+        return names;
+      };
+
+      it("drops metadata and ancillary chunks", async function () {
+        const dirty = await sharp({
+          create: { width: 20, height: 10, channels: 4, background: "#f00" },
+        })
+          .withMetadata({ exif: { IFD0: { Copyright: "hostile" } } })
+          .png()
+          .toBuffer();
+        // a text chunk, which sharp can't write itself
+        const text = Buffer.concat([
+          Buffer.from([0, 0, 0, 3]),
+          Buffer.from("tEXtk\0v", "latin1"),
+          Buffer.alloc(4),
+        ]);
+        const end = dirty.length - 12;
+        const withText = Buffer.concat([dirty.subarray(0, end), text, dirty.subarray(end)]);
+        expect(chunks(withText)).toContain("tEXt");
+
+        const clean = await reencode(withText, 20, 10);
+        expect(chunks(clean).filter((c) => !["IHDR", "pHYs", "IDAT", "IEND"].includes(c))).toEqual([]);
+        expect(clean.subarray(0, 8).equals(PNG)).toBe(true);
+      });
+
+      it("shrinks what is bigger than asked for and keeps its shape", async function () {
+        const big = await sharp({
+          create: { width: 400, height: 200, channels: 4, background: "#00f" },
+        }).png().toBuffer();
+        const info = await sharp(await reencode(big, 100, 100)).metadata();
+        expect([info.width, info.height]).toEqual([100, 50]);
+      });
+
+      it("keeps transparency and doesn't enlarge", async function () {
+        const small = await sharp({
+          create: { width: 10, height: 10, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+        }).png().toBuffer();
+        const out = sharp(await reencode(small, 100, 100));
+        const info = await out.metadata();
+        expect([info.width, info.height, info.hasAlpha]).toEqual([10, 10, true]);
+      });
+
+      it("rejects bytes that aren't an image", async function () {
+        await rejection(reencode(Buffer.concat([PNG, Buffer.from("junk")]), 10, 10));
+      });
+    });
+
     it("returns a PNG of a blank page, which is the deploy's check", async function () {
       const { outputs } = await sandbox.run("screenshot", { url: "about:blank" }, empty);
       expect(outputs[0].subarray(0, 8).equals(PNG)).toBe(true);

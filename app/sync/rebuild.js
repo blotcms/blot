@@ -167,7 +167,7 @@ module.exports = function main(blogID, options, callback) {
           // Rebuild can change every entry's parsed fields (e.g. dateStamp,
           // after a dateFormat/timeZone change) without going through
           // sync/index.js's normal "done" flow, which is what usually bumps
-          // cacheID. render/retrieve/posts.js keys its process-wide cache on
+          // cacheID. The render caches in the models (e.g. Entries.getCachedPage) key on
           // blogID + cacheID, so without this an unchanged cacheID means a
           // rebuild's fresh entries never invalidate that cache - see
           // https://github.com/blotcms/blot/issues/1844

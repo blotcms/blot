@@ -175,7 +175,7 @@ jobs:
           # no airlock any more (#2257), and without BLOT_SANDBOX no proxy or browser
           if docker inspect blot-blue-airlock >/dev/null 2>&1 \
             || docker exec blot-blue printenv BLOT_AIRLOCK_BROWSER_URL \
-            || docker exec blot-green printenv BLOT_AIRLOCK_PROXY_URL; then
+            || docker exec blot-green printenv BLOT_EGRESS_PROXY_URL; then
             echo "an airlock, or a browser or proxy URL without the sandbox" >&2; exit 1
           fi
           code=$(curl -sS -o /dev/null -w '%{http_code}' --connect-to "$BLOT_HOST:443:127.0.0.1:443" "https://$BLOT_HOST/")

@@ -299,32 +299,20 @@ describe("posts", function () {
 
 describe("posts cache", function () {
   const Entry = require("models/entry");
+  const Tags = require("models/tags");
   const entriesModel = require("models/entries");
-  const helperPath = require.resolve("../helpers/fetchTaggedEntries");
-  const postsPath = require.resolve("../posts");
+  const posts = require("../posts");
+  const cachedPage = require("models/entries/cachedPage");
+  const cachedTagged = require("models/tags/cachedTagged");
+  const { keepFields } = require("models/entries/heavyFields");
+  const projectEntryFields = require("../helpers/projectEntryFields");
 
-  function loadPostsWithTaggedStub(taggedStub) {
-    delete require.cache[postsPath];
-    delete require.cache[helperPath];
-    require.cache[helperPath] = {
-      id: helperPath,
-      filename: helperPath,
-      loaded: true,
-      exports: taggedStub,
-    };
-
-    return require("../posts");
-  }
-
-  afterEach(function () {
-    delete require.cache[postsPath];
-    delete require.cache[helperPath];
+  beforeEach(function () {
+    cachedPage._clear();
+    cachedTagged._clear();
   });
 
   it("forwards raw, unnormalized pageNumber/pageSize to models/entries.getPage", function (done) {
-    const posts = loadPostsWithTaggedStub(function () {});
-    posts._clear();
-
     spyOn(entriesModel, "getPage").and.callFake(function (blogID, options, callback) {
       // models/entries.getPage does its own validation (default page size 5,
       // max 100, and a 400 for a non-digit page). If posts.js pre-normalizes
@@ -353,9 +341,6 @@ describe("posts cache", function () {
   });
 
   it("passes nested sort locals into getPage", function (done) {
-    const posts = loadPostsWithTaggedStub(function () {});
-    posts._clear();
-
     spyOn(entriesModel, "getPage").and.callFake(function (blogID, options, callback) {
       expect(options.sortBy).toBe("id");
       expect(options.order).toBe("desc");
@@ -379,13 +364,12 @@ describe("posts cache", function () {
     );
   });
 
-  it("forwards the resolved sort selection to fetchTaggedEntries and orders the page", function (done) {
+  it("forwards the resolved sort selection to Tags.tagged and orders the page", function (done) {
     let received;
-    const posts = loadPostsWithTaggedStub(async function (blogID, tags, options) {
+    spyOn(Tags, "tagged").and.callFake(async function (blogID, tags, options) {
       received = { blogID, tags, options };
       return { entryIDs: ["a.txt", "m.txt", "z.txt"], pagination: {} };
     });
-    posts._clear();
 
     spyOn(Entry, "get").and.callFake(function (blogID, ids, cb) {
       // Entry.get preserves input order; return the hydrated entries shuffled
@@ -421,9 +405,6 @@ describe("posts cache", function () {
   });
 
   it("reuses cached untagged responses for identical inputs", function (done) {
-    const posts = loadPostsWithTaggedStub(function () {});
-    posts._clear();
-
     spyOn(entriesModel, "getPage").and.callFake(function (blogID, options, callback) {
       callback(null, [{ id: "1", title: "A" }], { page: 1, pages: 1 });
     });
@@ -445,14 +426,11 @@ describe("posts cache", function () {
   });
 
   it("reuses cached tagged responses for identical inputs", function (done) {
-    const taggedSpy = jasmine
-      .createSpy("fetchTaggedEntries")
-      .and.callFake(async function (blogID, tags, options) {
+    const taggedSpy = spyOn(Tags, "tagged").and.callFake(
+      async function (blogID, tags, options) {
         return { entryIDs: ["1", "2"], pagination: { page: 1, pages: 1 } };
-      });
-
-    const posts = loadPostsWithTaggedStub(taggedSpy);
-    posts._clear();
+      }
+    );
 
     spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
       callback([
@@ -479,9 +457,6 @@ describe("posts cache", function () {
   });
 
   it("returns isolated copies so caller mutations do not taint cache", function (done) {
-    const posts = loadPostsWithTaggedStub(function () {});
-    posts._clear();
-
     spyOn(entriesModel, "getPage").and.callFake(function (blogID, options, callback) {
       callback(null, [{ title: "Original" }], { page: 1, pages: 3, nested: { total: 10 } });
     });
@@ -513,220 +488,117 @@ describe("posts cache", function () {
   });
 
   it("varies cache keys across invalidation and query dimensions", function () {
-    const posts = loadPostsWithTaggedStub(function () {});
-
     const makeKey = function ({ cacheID, tag, pageNumber, sortBy, order, pathPrefix }) {
-      return posts._createCacheKey(
-        { blog: { id: "blog-1", cacheID }, query: { tag }, params: {}, template: { locals: {} } },
-        { locals: {} },
-        {
-          branch: tag ? "tagged" : "untagged",
-          tags: tag,
-          sortBy,
-          order,
-          pathPrefix,
-          pageNumber,
-          pageSize: 10,
-          limit: 10,
-          offset: (pageNumber - 1) * 10,
-        }
-      );
+      const query = { pageSize: 10, pageNumber, sortBy, order, pathPrefix };
+      return tag
+        ? cachedTagged._createCacheKey(
+            "blog-1",
+            cacheID,
+            tag,
+            {
+              limit: 10,
+              offset: (pageNumber - 1) * 10,
+              sortBy,
+              order,
+              pathPrefix,
+            },
+            []
+          )
+        : cachedPage._createCacheKey("blog-1", cacheID, query, []);
     };
 
-    const base = makeKey({
-      cacheID: "v1",
-      tag: "foo",
-      pageNumber: 1,
-      sortBy: "date",
-      order: "desc",
-      pathPrefix: "/blog/",
-    });
+    for (const tag of ["foo", undefined]) {
+      const other = tag ? [{ tag: "bar" }] : [];
+      const base = {
+        cacheID: "v1",
+        tag,
+        pageNumber: 1,
+        sortBy: "date",
+        order: "desc",
+        pathPrefix: "/blog/",
+      };
 
-    expect(base).not.toBe(
-      makeKey({
-        cacheID: "v2",
-        tag: "foo",
-        pageNumber: 1,
-        sortBy: "date",
-        order: "desc",
-        pathPrefix: "/blog/",
-      })
-    );
-    expect(base).not.toBe(
-      makeKey({
-        cacheID: "v1",
-        tag: "bar",
-        pageNumber: 1,
-        sortBy: "date",
-        order: "desc",
-        pathPrefix: "/blog/",
-      })
-    );
-    expect(base).not.toBe(
-      makeKey({
-        cacheID: "v1",
-        tag: "foo",
-        pageNumber: 2,
-        sortBy: "date",
-        order: "desc",
-        pathPrefix: "/blog/",
-      })
-    );
-    expect(base).not.toBe(
-      makeKey({
-        cacheID: "v1",
-        tag: "foo",
-        pageNumber: 1,
-        sortBy: "slug",
-        order: "desc",
-        pathPrefix: "/blog/",
-      })
-    );
-    expect(base).not.toBe(
-      makeKey({
-        cacheID: "v1",
-        tag: "foo",
-        pageNumber: 1,
-        sortBy: "date",
-        order: "asc",
-        pathPrefix: "/blog/",
-      })
-    );
-    expect(base).not.toBe(
-      makeKey({
-        cacheID: "v1",
-        tag: "foo",
-        pageNumber: 1,
-        sortBy: "date",
-        order: "desc",
-        pathPrefix: "/notes/",
-      })
-    );
-  });
-
-  it("does not collide tagged and untagged key spaces", function () {
-    const posts = loadPostsWithTaggedStub(function () {});
-
-    const tagged = posts._createCacheKey(
-      { blog: { id: "blog-1", cacheID: "v1" }, query: { tag: "foo" }, params: {}, template: { locals: {} } },
-      { locals: {} },
-      {
-        branch: "tagged",
-        tags: "foo",
-        sortBy: "date",
-        order: "desc",
-        pathPrefix: "/blog/",
-        pageNumber: 1,
-        pageSize: 10,
-        limit: 10,
-        offset: 0,
+      for (const change of [
+        { cacheID: "v2" },
+        { pageNumber: 2 },
+        { sortBy: "slug" },
+        { order: "asc" },
+        { pathPrefix: "/notes/" },
+        ...other,
+      ]) {
+        expect(makeKey(base)).not.toBe(makeKey({ ...base, ...change }));
       }
-    );
-
-    const untagged = posts._createCacheKey(
-      { blog: { id: "blog-1", cacheID: "v1" }, query: {}, params: {}, template: { locals: {} } },
-      { locals: {} },
-      {
-        branch: "untagged",
-        tags: "foo",
-        sortBy: "date",
-        order: "desc",
-        pathPrefix: "/blog/",
-        pageNumber: 1,
-        pageSize: 10,
-        limit: 10,
-        offset: 0,
-      }
-    );
-
-    expect(tagged).not.toBe(untagged);
+    }
   });
 
   it("does not collide an unset page_size with an explicit default-sized one", function () {
-    const posts = loadPostsWithTaggedStub(function () {});
-
+    // The untagged branch keys on the RAW page size - an unset value must
+    // not collide with an explicit page_size equal to normalizePageSize's own
+    // default (100), or two different requests would share a cache entry
+    // fetched with models/entries' unrelated default of 5. See
+    // https://github.com/blotcms/blot/issues/1844
     const makeKey = (pageSize) =>
-      posts._createCacheKey(
-        { blog: { id: "blog-1", cacheID: "v1" }, query: {}, params: {}, template: { locals: {} } },
-        { locals: {} },
-        {
-          branch: "untagged",
-          tags: undefined,
-          sortBy: "date",
-          order: "desc",
-          pathPrefix: undefined,
-          pageNumber: 1,
-          // The untagged branch keys on the RAW page size (posts() passes
-          // `tags ? pageSize : options.pageSize` here) - an unset value
-          // must not collide with an explicit page_size equal to
-          // normalizePageSize's own default (100), or two different
-          // requests (e.g. a template with no page_size configured and a
-          // second one explicitly set to 100) would share a cache entry
-          // fetched with models/entries' unrelated default of 5. See
-          // https://github.com/blotcms/blot/issues/1844
-          pageSize,
-          limit: 100,
-          offset: 0,
-        }
+      cachedPage._createCacheKey(
+        "blog-1",
+        "v1",
+        { pageNumber: 1, pageSize, sortBy: "date", order: "desc" },
+        []
       );
 
     expect(makeKey(undefined)).not.toBe(makeKey(100));
   });
 
   it("does not collide an unset path_prefix with the literal string \"undefined\"", function () {
-    const posts = loadPostsWithTaggedStub(function () {});
-
     const makeKey = (pathPrefix) =>
-      posts._createCacheKey(
-        { blog: { id: "blog-1", cacheID: "v1" }, query: {}, params: {}, template: { locals: {} } },
-        { locals: {} },
-        {
-          branch: "untagged",
-          tags: undefined,
-          sortBy: "date",
-          order: "desc",
-          pathPrefix,
-          pageNumber: 1,
-          pageSize: 100,
-          limit: 100,
-          offset: 0,
-        }
+      cachedPage._createCacheKey(
+        "blog-1",
+        "v1",
+        { pageNumber: 1, pageSize: 100, sortBy: "date", order: "desc", pathPrefix },
+        []
       );
 
     expect(makeKey(undefined)).not.toBe(makeKey("undefined"));
   });
-  it("separates stable projected field sets from the full cache variant", function () {
-    const posts = loadPostsWithTaggedStub(function () {});
-    const normalized = {
-      branch: "untagged", sortBy: "date", order: "desc", pageNumber: 1,
-      pageSize: 5, limit: 5, offset: 0,
-    };
-    const request = (retrieve) => ({
-      blog: { id: "blog-1", cacheID: "v1" }, retrieve,
-    });
-    const first = posts._createCacheKey(
-      request({ posts: { fields: { title: true, html: true } } }),
-      { locals: {} }, normalized
-    );
-    const reordered = posts._createCacheKey(
-      request({ posts: { fields: { html: true, title: true } } }),
-      { locals: {} }, normalized
-    );
-    const full = posts._createCacheKey(
-      request({ posts: {} }), { locals: {} }, normalized
-    );
-    const withEntries = posts._createCacheKey(
-      request({
-        posts: { fields: { title: true } },
-        entries: true,
-      }),
-      { locals: {} },
-      normalized
-    );
 
-    expect(first).toBe(reordered);
-    expect(first).not.toBe(full);
-    expect(withEntries).toBe(full);
+  it("keys on the heavy fields kept, not on how they were listed", function () {
+    const query = { pageNumber: 1, pageSize: 5, sortBy: "date", order: "desc" };
+    const key = (keep) =>
+      cachedPage._createCacheKey("blog-1", "v1", query, keepFields(keep));
+
+    expect(key(["html", "body"])).toBe(key(["body", "html"]));
+    expect(key(["html"])).not.toBe(key(undefined));
+    expect(key(["html"])).not.toBe(key([]));
   });
 
+  it("keeps every heavy field for an {{#entries}} binding without a fields map", function () {
+    expect(
+      projectEntryFields.heavyFieldsToKeep(
+        { posts: { fields: { title: true } }, entries: true },
+        ["posts", "entries"]
+      )
+    ).toBeUndefined();
+  });
+
+  it("drops heavy fields the view does not reference before caching", async function () {
+    spyOn(entriesModel, "getPage").and.callFake(function (blogID, options, callback) {
+      callback(null, [{ id: "1", title: "A", html: "<p>A</p>", body: "A" }], {});
+    });
+
+    const result = await new Promise((resolve, reject) =>
+      posts(
+        {
+          blog: { id: "blog-1", cacheID: 100 },
+          query: {},
+          params: {},
+          template: { locals: {} },
+          retrieve: { posts: { fields: { title: true, html: true } } },
+          log: function () {},
+        },
+        { locals: {} },
+        (err, entries) => (err ? reject(err) : resolve(entries))
+      )
+    );
+
+    expect(result).toEqual([{ id: "1", title: "A", html: "<p>A</p>" }]);
+  });
 });

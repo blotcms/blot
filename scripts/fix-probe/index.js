@@ -51,7 +51,7 @@ async function main() {
     script: path.join(__dirname, "probe.js"),
     probeArgs: rest,
     // On blotnet like green, so its Redis traffic takes the same path.
-    airlock: true,
+    egressProxy: true,
     ...fromWrapperOptions(options, DEFAULTS),
   });
   if (exitCode) process.exitCode = exitCode;

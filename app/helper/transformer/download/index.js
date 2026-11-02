@@ -11,13 +11,13 @@ const invalid = require("./invalid");
 
 // Remote assets referenced in posts are user-controlled URLs, so they are
 // fetched through the forward proxy in the sandbox's proxy jail (see
-// helper/airlock and app/sandbox/README.md). The jail's nftables egress filter
+// helper/egress and app/sandbox/README.md). The jail's nftables egress filter
 // is what blocks a URL - or a redirect from one - that resolves to an
 // internal address, on the real connection IP, so DNS-rebinding does not
 // help an attacker. In production assertProxyReady() throws if the proxy
 // isn't configured rather than letting this fall back to a direct fetch;
 // outside production the fetch goes direct.
-const { proxyAgent, assertProxyReady } = require("helper/airlock");
+const { proxyAgent, assertProxyReady } = require("helper/egress");
 
 const IF_NONE_MATCH = "If-None-Match";
 const IF_MODIFIED_SINCE = "If-Modified-Since";
