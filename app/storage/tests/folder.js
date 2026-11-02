@@ -436,6 +436,17 @@ describe("storage/folder", function () {
         expect(await folder.listNames(this.blog.id, "/")).toEqual([{ name: "photo.jpg", isDirectory: false }]);
       });
 
+      it("refuses to move onto its own ancestor, losing nothing", async function () {
+        await folder.write(this.blog.id, "/a/b/c.txt", "c");
+        await folder.write(this.blog.id, "/a/d.txt", "d");
+
+        expect((await rejection(folder.move(this.blog.id, "/a/b", "/a"))).code).toEqual("EINVAL");
+        expect((await rejection(folder.move(this.blog.id, "/a/b/c.txt", "/a"))).code).toEqual("EINVAL");
+
+        expect((await folder.read(this.blog.id, "/a/b/c.txt")).toString()).toEqual("c");
+        expect((await folder.read(this.blog.id, "/a/d.txt")).toString()).toEqual("d");
+      });
+
       it("rejects moving a missing path with ENOENT", async function () {
         var err = await rejection(folder.move(this.blog.id, "/nope", "/b"));
 
@@ -1183,6 +1194,19 @@ describe("storage/folder", function () {
         expect(await File.totals(this.blog.id)).toEqual({ bytes: 3, files: 1 });
       });
 
+      it("gives a moved file the Content-Type of its new name", async function () {
+        await folder.write(this.blog.id, "/theme.txt", "body {}");
+        await folder.write(this.blog.id, "/d/style.txt", "p {}");
+        await folder.mkdir(this.blog.id, "/d/empty");
+
+        await folder.move(this.blog.id, "/theme.txt", "/theme.css");
+        await folder.move(this.blog.id, "/d", "/e");
+
+        expect((await s3.head(this.blog.id + "/folder/theme.css")).contentType).toMatch(/^text\/css/);
+        expect((await s3.head(this.blog.id + "/folder/e/style.txt")).contentType).toMatch(/^text\/plain/);
+        expect(await s3.head(this.blog.id + "/folder/e/empty/")).not.toBeNull();
+      });
+
       it("uploads nothing below a file", async function () {
         await folder.write(this.blog.id, "/f", "file");
 
@@ -1269,6 +1293,19 @@ describe("storage/folder", function () {
         expect(counts).toEqual({ files: 2, dirs: 2, bytes: 7, skipped: [] });
         expect(await collect(folder.walk(this.blog.id, "/", { directories: true }))).toEqual(before);
         expect((await File.get(this.blog.id, "/a/b.txt")).sha1).toEqual(record.sha1);
+      });
+
+      it("keeps apart downloads of same-named files when there are no hashes", async function () {
+        await folder.write(this.blog.id, "/one/a.txt", "1");
+        await folder.write(this.blog.id, "/two/a.txt", "2");
+
+        // As a rebuild without hashing leaves them: same name, size and time
+        for (var path of ["/one/a.txt", "/two/a.txt"]) {
+          await File.set(this.blog.id, path, { type: "file", size: 1, modified: 5, sha1: "" });
+        }
+
+        expect(await fs.readFile(await folder.ensureLocal(this.blog.id, "/one/a.txt"), "utf8")).toEqual("1");
+        expect(await fs.readFile(await folder.ensureLocal(this.blog.id, "/two/a.txt"), "utf8")).toEqual("2");
       });
 
       it("leaves hashes out unless asked", async function () {

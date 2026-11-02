@@ -11,7 +11,8 @@ var { PassThrough, Readable } = require("stream");
 var { join, dirname, basename, posix } = require("path");
 var s3 = require("../s3");
 var sendObject = require("../sendObject");
-var { walkLocal, createPool } = require("../util");
+var contentTypeFor = require("../contentType");
+var { walkLocal, createPool, FOLDER_STAGING_DIRECTORY, FOLDER_DOWNLOAD_DIRECTORY } = require("../util");
 var File = require("models/file");
 var { NotFoundError } = require("./errors");
 
@@ -50,8 +51,8 @@ var DEFAULT_LIMIT = 1000;
 // writing for path() and commit(), and a stream being written to disk before
 // its upload. All are short-lived and left to the tmp pruner if a process
 // dies. A proper content cache, bounded and keyed by hash, is a later PR.
-var DOWNLOAD_DIRECTORY = "storage-folder";
-var STAGING_DIRECTORY = "storage-folder-staging";
+var DOWNLOAD_DIRECTORY = FOLDER_DOWNLOAD_DIRECTORY;
+var STAGING_DIRECTORY = FOLDER_STAGING_DIRECTORY;
 var SPOOL_DIRECTORY = "storage-folder-spool";
 
 // Objects copied at once when a directory moves
@@ -403,7 +404,14 @@ async function ensureLocal(blogID, relPath) {
   if (!found) throw new NotFoundError("No such file: " + relPath);
   if (found.type === "dir") throw failure("EISDIR", "Is a directory: " + relPath);
 
-  var version = found.sha1 || found.size + "-" + found.modified;
+  // Without a SHA-1 (a rebuild without hashing), the path is part of the
+  // name, so two files with the same name, size and time can't share it
+  var version =
+    found.sha1 ||
+    crypto
+      .createHash("sha1")
+      .update(path + "\n" + found.size + "\n" + found.modified)
+      .digest("hex") + "-unhashed";
   var destination = join(config.tmp_directory, DOWNLOAD_DIRECTORY, blogID, version, basename(path));
 
   try {
@@ -540,6 +548,11 @@ async function move(blogID, from, to) {
     throw failure("EINVAL", "Cannot move " + from + " into itself");
   }
 
+  // Replacing the destination would delete the source along with it
+  if (source.indexOf(destination + "/") === 0) {
+    throw failure("EINVAL", "Cannot move " + from + " over its own ancestor " + to);
+  }
+
   // Whatever is at the destination is replaced, but not anything above it
   var replaced = await File.get(blogID, destination);
 
@@ -548,7 +561,9 @@ async function move(blogID, from, to) {
   if (replaced) await removePath(blogID, destination, replaced);
 
   if (found.type === "file") {
-    await s3.copy(objectKey(blogID, source), objectKey(blogID, destination));
+    await s3.copy(objectKey(blogID, source), objectKey(blogID, destination), {
+      contentType: contentTypeFor(objectKey(blogID, destination)),
+    });
     await File.set(blogID, destination, found);
     await s3.deleteKeys([objectKey(blogID, source)]);
     await File.remove(blogID, source);
@@ -565,7 +580,10 @@ async function move(blogID, from, to) {
     for await (var entry of s3.listEntries(from_)) {
       var target = to_ + entry.key.slice(from_.length);
       copied++;
-      await pool.add(s3.copy.bind(null, entry.key, target));
+      // A file's type follows its new name; a marker stays a marker
+      await pool.add(
+        s3.copy.bind(null, entry.key, target, target.slice(-1) === "/" ? {} : { contentType: contentTypeFor(target) })
+      );
     }
 
     await pool.drain();

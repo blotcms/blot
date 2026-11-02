@@ -247,17 +247,38 @@ async function putBuffer(objectKey, data, options) {
   };
 }
 
-// Copies one object to another key within the bucket, headers and all
-async function copy(fromKey, toKey) {
+// Copies one object to another key within the bucket, headers and all. With
+// options.contentType the copy gets that Content-Type instead (a renamed
+// file is served by its new name's type), keeping the rest of the source's
+// metadata, which S3 only allows by restating it.
+async function copy(fromKey, toKey, options) {
+  options = options || {};
+
+  const input = {
+    Bucket: bucket(),
+    // URL-encoded, but its slashes are separators
+    CopySource: bucket() + "/" + fromKey.split("/").map(encodeURIComponent).join("/"),
+    Key: toKey,
+  };
+
+  if (options.contentType) {
+    const source = await head(fromKey);
+
+    if (!source) {
+      const err = new Error("storage/s3: no such object to copy: " + fromKey);
+      err.name = "NoSuchKey";
+      err.$metadata = { httpStatusCode: 404 };
+      throw err;
+    }
+
+    input.MetadataDirective = "REPLACE";
+    input.ContentType = options.contentType;
+    if (source.cacheControl) input.CacheControl = source.cacheControl;
+    if (source.metadata) input.Metadata = source.metadata;
+  }
+
   await withRetries(function () {
-    return client().send(
-      new (SDK().CopyObjectCommand)({
-        Bucket: bucket(),
-        // URL-encoded, but its slashes are separators
-        CopySource: bucket() + "/" + fromKey.split("/").map(encodeURIComponent).join("/"),
-        Key: toKey,
-      })
-    );
+    return client().send(new (SDK().CopyObjectCommand)(input));
   });
 }
 
@@ -274,7 +295,7 @@ async function upload(blogID, relPath, localFile) {
 }
 
 // Metadata for an object ({ size, etag, modified, contentType,
-// cacheControl }), or null if there's no such object.
+// cacheControl, metadata }), or null if there's no such object.
 async function head(objectKey) {
   try {
     const data = await client().send(
@@ -287,6 +308,7 @@ async function head(objectKey) {
       modified: data.LastModified,
       contentType: data.ContentType,
       cacheControl: data.CacheControl,
+      metadata: data.Metadata,
     };
   } catch (err) {
     if (isNotFound(err)) return null;

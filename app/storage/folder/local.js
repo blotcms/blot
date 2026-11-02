@@ -349,6 +349,13 @@ async function move(blogID, from, to) {
     throw new Error("storage/folder: move needs paths inside the folder");
   }
 
+  // Replacing the destination would delete the source along with it
+  if (source.local.indexOf(destination.local + sep) === 0) {
+    var err = new Error("Cannot move " + from + " over its own ancestor " + to);
+    err.code = "EINVAL";
+    throw err;
+  }
+
   await guard(source.root, dirname(source.local));
   await guard(destination.root, dirname(destination.local));
   await attempt(fs.move(source.local, destination.local, { overwrite: true }));
