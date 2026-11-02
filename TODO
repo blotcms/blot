@@ -1,3 +1,13 @@
+Unit memory: cut each unit's total ceiling (the unit container plus its sandbox cgroups, about 4.8 GiB today now the airlock is gone: 3300m unit, 512M image jobs and proxy jail, 1G browser) to about 3 GiB, then aim for about 2 GiB of real use by shrinking Node itself.
+- Done: the airlock is gone (#2257), the sampler splits node-a, node-b, other node and git (#2413), and git commands are bounded per process (#2415).
+- After #2415 is deployed, collect a few days of unit-mem.log including a deploy and a busy period, then read unit-mem-summary.sh: node-a, node-b, other node and git maxima, the sandbox cgroups' peaks and oom_kill, and the host's lowest mem_available.
+- Then lower UNIT memory and the node-a/node-b heaps in scripts/deploy/constants.js to about 2000 MiB, with the node-a and node-b heaps around 1100-1200 MiB (keep V8's heap limit below the cgroup's, so a runaway heap dies with a report, not to the OOM killer), and the sandbox cgroups in config/host/host/setup.sh to about 384 MiB (image jobs and proxy jail) and 700 MiB (browser; real pages peaked at 417 MiB, the heaviest measured needed up to 880 MiB). Accept a few heavy pages failing in the browser jail; sandbox failures email the admin.
+- One-off scripts run with docker exec count against the unit: run anything heavy through scripts/probe (its own container and limit) instead.
+- Is 512 MiB enough for the image jobs, given four share it? cgroup peak against limit and oom_kill above 0 in blot-sandbox-blue/green say; `grep "broker: job="` in the unit logs for what failed.
+- Later: shrink Node's own memory (the render LRU caches, the heap) toward about 2 GiB per unit in real use; on 2 Nov the unit's own unreclaimable peak was about 1.4-1.6 GiB, with the biggest Node process about 1.15 GiB.
+
+---
+
 clean up launch templates on ec2 console (should be 1 or none?)
 clean up security groups on ec2 console (should be 1?)
 
@@ -110,7 +120,12 @@ Implement folder storage limits (include generated files in this amount?). #2258
 
 Bump katex to >= 0.18.2 (low, prototype pollution Dependabot alert).
 
-A few days after turning the sandbox on (BLOT_SANDBOX=1, #2257): is 512 MiB per unit enough, given four jobs share it? There is no data before then: Amazon Linux 2 can't run it. Run unit-mem-summary.sh on the host and read blot-sandbox-blue/green: cgroup peak against the limit, and oom_kill above 0 means jobs were killed. Then `grep "broker: job="` in the unit logs for what failed. If it's tight, raise memory.max in blot-sandbox-cgroup.sh (config/host/host/setup.sh), within #2261's budget, or lower MAX_RUNNING in proxy/unit/sandbox/broker.js.
+Sandbox follow-ups (#2257):
+- Hardening: a seccomp filter for OpenResty, like Node's (proxy/unit/supervisor.sh, proxy/unit/sandbox/node-filter.js): its workers parse hostile requests and it is the one unit process left unfiltered.
+- Hardening: a CI job that runs the real jail (nsjail, pasta, the seccomp profile and a cgroup) against the unit image. Today the jail is only exercised by the deploy's verify-container checks on the host.
+- Count successful sandbox jobs, not only failures: the broker logs only failed jobs, so how much each job is used shows only in the sampler's cgroup peaks.
+- Before dashboard screenshots of customer sites and template previews: size the browser cgroup and queue for that load (one Chromium per unit at a time today; heavy pages need up to about twice the median), from the sampler's blot-sandbox-<unit>-browser lines.
+- CJK fonts for the browser jail, so sites in those languages don't render as boxes. They are large, so weigh them against the unit image's size.
 ---
 
 Investigate slow creep of green's baseline heap (~40-80MB/day lowest heapUsed in [STATS], never resets until a V8 OOM crash; crashed 13+14 Oct 2026). Leak or unbounded cache? Compare heap snapshots taken hours apart
