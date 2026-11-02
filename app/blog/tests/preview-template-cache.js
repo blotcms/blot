@@ -31,5 +31,6 @@ describe("preview of a template the blog hasn't installed", function () {
     expect((await getBlog({ id: this.blog.id })).cacheID).toBe(before);
     const updated = await this.fetch(preview);
     expect(await updated.text()).toBe("Second");
+    expect(updated.headers.get("last-modified")).toBeNull();
   });
 });
