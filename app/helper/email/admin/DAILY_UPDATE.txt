@@ -6,7 +6,9 @@ Revenue: {{annual_recurring_revenue}}, {{paypal_percentage}} through PayPal, {{a
 
 Response time: {{render_time}}
 
-{{{redis_server}}}
+{{{redis}}}
+
+{{{server}}}
 
 {{{data_disk}}}
 

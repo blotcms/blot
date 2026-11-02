@@ -1,6 +1,6 @@
 ---
 name: redis-host
-description: Look after Blot's production Redis (redis6 on the combined production host, set up with config/redis/ and moved with the host cycle, config/host/cycle.sh): triage a "Redis host:" alert email from app/scheduler/check-redis-host.js (failed background save, Redis refused writes - OOM/MISCONF/NOREPLICAS, other Redis errors, rejected connections, Redis restarted or switched host, slow Redis commands, TCP memory, memory over 80% of maxmemory, stale sample, stale backup or offsite backup, maxmemory unset) or a problem in the Redis line of the daily email (resize now, last save failed, backup overdue, no sample, backup disk full); resize the host (a host cycle); rehearse or run disaster recovery; or check Redis health. Holds the procedure and the guardrails (ask before every production command, drill hosts, teardown, no rollback to a recent host) and points into config/redis/README.md for the steps. Appends a short entry to this skill's incident log. Use when the user pastes or forwards one of these alerts, or asks to resize, drill, restore or check the Redis host.
+description: Look after Blot's production Redis (redis6 on the combined production host, set up with config/redis/ and moved with the host cycle, config/host/cycle.sh): triage a "Redis host:" alert email from app/scheduler/check-redis-host.js (failed background save, Redis refused writes - OOM/MISCONF/NOREPLICAS, other Redis errors, rejected connections, Redis restarted or switched host, slow Redis commands, TCP memory, memory over 90% of maxmemory, stale sample, stale backup or offsite backup, maxmemory unset) or a problem in the Redis or Server line of the daily email (resize now, last save failed, backup overdue, no sample, backup disk full); resize the host (a host cycle); rehearse or run disaster recovery; or check Redis health. Holds the procedure and the guardrails (ask before every production command, drill hosts, teardown, no rollback to a recent host) and points into config/redis/README.md for the steps. Appends a short entry to this skill's incident log. Use when the user pastes or forwards one of these alerts, or asks to resize, drill, restore or check the Redis host.
 ---
 
 # Redis host
@@ -75,7 +75,7 @@ starts a new baseline, so a long outage does not produce a flood).
 | TCP memory sample stale | no new sample for 20 minutes (judged only if the previous check also read Redis within 11 minutes) |
 | Redis backup stale | the time in `blot:redis-host:backup` is over 3 hours old (two missed hourly runs), or the value can't be read; a missing key is quiet |
 | Offsite Redis backup stale | the same for `blot:redis-host:offsite` at 50 hours (two missed daily runs); S3 backups may be fine. Look at `~/backup.log`, the `blot-b2` profile, B2 and `/etc/blot-redis/offsite-bucket` |
-| Redis memory nearing maxmemory | `used_memory` at 80% of `maxmemory` (clears at 75%); `noeviction`, so writes fail at the limit |
+| Redis memory nearing maxmemory | `used_memory` at 90% of `maxmemory` (clears at 85%); `noeviction`, so writes fail at the limit |
 | maxmemory not set | `maxmemory` is 0 on a host marked active by `/etc/blot-redis/active` |
 | Redis background save failing | `rdb_last_bgsave_status` is not `ok` (`stop-writes-on-bgsave-error yes`) |
 | Redis refused writes (OOM, MISCONF) | any new `OOM`, `MISCONF` or `NOREPLICAS` error (emailed at most hourly) |
@@ -85,18 +85,19 @@ starts a new baseline, so a long outage does not produce a flood).
 | Slow Redis commands | slowlog entries of 50ms or more (Redis records from 10ms) |
 
 The **daily email** has one line, from `app/scheduler/daily/redis-server.js`:
-`**Redis:** memory 27% (resize in ~47 days), disk 21% (19 GB free), saved 3m ago, backed up 30m ago.`
+`Redis: memory 27% (resize in ~58 days, 8 GB free), saved 3m ago, backed up 30m ago, offsite 9h ago`
+`Server: disk 21% (19 GB free), RAM 75% available (12 GB)`
 These need action:
 
 | In the line | Meaning |
 | --- | --- |
-| **resize now** | memory is at 70% of `maxmemory` or more |
+| **resize now** | memory is at 80% of `maxmemory` or more |
 | `no maxmemory set` | as the alert above |
 | **last save failed** / `save not reported` / `never saved` | background save problem |
 | **last backup Xh ago, overdue** / **no backup recorded** | no upload for over 2 hours (backups are hourly) |
-| `no sample from the Redis host` / `sample Nm old` / `disk not reported` | the host's 5-minute sample is missing or old |
+| `no sample from the host` / `sample Nm old` / `disk not reported` (Server line) | the host's 5-minute sample is missing or old |
 | **/backups not mounted** / **backup disk N% full** | the instance store holding local backup copies |
-| `Redis: unavailable (...)` | Redis itself is down; `/redis-health` covers that, treat it as an outage |
+| `Redis: unavailable (...)` (and `Server: unavailable`) | Redis itself is down; `/redis-health` covers that, treat it as an outage |
 
 To print the current report without sending an email, the README has
 `NODE_PATH=app node app/scheduler/check-redis-host.js`; on production that
@@ -239,7 +240,7 @@ leak, `sudo sysctl -w net.ipv4.tcp_mem=...` above the count, is lost on
 reboot and is a host change to propose. Background and the burst test are in
 `investigate-production-container-restarts`.
 
-### Memory over 80% of maxmemory / `resize now`
+### Memory over 90% of maxmemory / `resize now`
 
 ```
 ssh blot 'tail -n 20 ~/redis-mem.log'
@@ -252,8 +253,8 @@ path to a resize, a sudden jump is something writing a lot (a sync, a
 runaway job) and is worth finding first. `maxmemory` is about 70% of RAM, so
 it is the headroom for the save's copy-on-write that is being used up.
 Fix: **README, "Increasing the Redis server size"**, then the guardrails
-below. The daily email warns at 70% so there are days to plan; the 80% alert
-means do it now. Avoid `--bigkeys`, `--scan` or `DEBUG` commands on the live
+below. The daily email flags 80% and the alert 90%: raising `maxmemory`
+needs no planning while the host has RAM to spare (the Server line). Avoid `--bigkeys`, `--scan` or `DEBUG` commands on the live
 master (one CPU); never `KEYS`. `MEMORY USAGE <key>` is cheap for a suspect key.
 
 ### Stale sample / `no sample from the Redis host`
