@@ -2,7 +2,7 @@ const path = require("path");
 const fs = require("fs-extra");
 const seedrandom = require("seedrandom");
 const { performance } = require("perf_hooks");
-const localPath = require("helper/localPath");
+const { join } = require("path");
 const config = require("config");
 const { ensureMediaPool } = require("../lib/generate-media");
 const { PhaseMonitor, summarizeDurations } = require("./util/metrics");
@@ -145,7 +145,7 @@ describe("blog benchmarks", function () {
           // paths are recorded as link references), so data/blogs/ stays
           // small exactly like the symlink approach would have, without
           // tripping the no-symlinks guard.
-          let blogDir = localPath(task.blog.id, "/");
+          let blogDir = join(config.blog_folder_dir, task.blog.id, "/");
           if (blogDir.endsWith("/")) blogDir = blogDir.slice(0, -1);
           const destPath = blogDir + task.path;
           await fs.ensureDir(path.dirname(destPath));
@@ -163,7 +163,7 @@ describe("blog benchmarks", function () {
             }
           }
         } else if (task.sourcePath != null) {
-          let blogDir = localPath(task.blog.id, "/");
+          let blogDir = join(config.blog_folder_dir, task.blog.id, "/");
           if (blogDir.endsWith("/")) blogDir = blogDir.slice(0, -1);
           const destPath = blogDir + task.path;
           await fs.ensureDir(path.dirname(destPath));

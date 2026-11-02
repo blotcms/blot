@@ -71,7 +71,6 @@ The setup process can be interrupted if the user changes their email or cancels 
 - `models/client` — Redis client for data persistence.
 - `sync/establishSyncLock` — Mutual exclusion lock for sync operations.
 - `sync/fix` — Post-sync validation and fixing of blog state.
-- `helper/localPath` — Constructs filesystem paths for blog content.
 - `helper/tempDir` — Temporary directory for staging downloads.
 - `helper/clfdate` — Logging timestamp formatter.
 - `clients/util/shouldIgnoreFile` — Determines if a file should be ignored (dotfiles, etc.).

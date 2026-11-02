@@ -330,7 +330,6 @@
   "app/helper/tests/formJSON.js": 0.002,
   "app/helper/tests/hash.js": 0.006,
   "app/helper/tests/listen.js": 0.011,
-  "app/helper/tests/localPath.js": 0.01,
   "app/helper/tests/makeSlug.js": 0.004,
   "app/helper/tests/metadataCaseInsensitive.js": 0.003,
   "app/helper/tests/move.js": 2.059,

@@ -126,7 +126,7 @@ Writes through `storage/folder`. Validates the path against `shouldIgnoreFile()`
 ### remove.js
 Removes files or directories through `storage/folder`; a missing path is a no-op.
 
-`setup.js` is the exception: chokidar needs a real directory, so it watches the blog folder through `localPath`, and a blog on the Local client must stay on the local-disk backend of `storage/folder`.
+`setup.js` is the exception: chokidar needs a real directory, so it watches the blog folder through `folder.ensureLocal`, and a blog on the Local client must stay on the local-disk backend of `storage/folder`.
 
 ### disconnect.js
 Sets the blog's `client` field to an empty string in the Blog model, causing the master process to stop watching the folder on next server start.
@@ -178,7 +178,6 @@ The sync flow coordinates changes between the file system and Blot's internal st
 - **Template Builder**: Builds and rebuilds Handlebars templates from the blog folder.
 
 ### Helper Utilities
-- **localPath**: Converts a blog ID and relative path to an absolute server file path.
 - **shouldIgnoreFile**: Checks whether a path matches ignored patterns (system files, temp files, etc.).
 - **clfdate**: Formats timestamped log prefixes.
 - **ensure**: Runtime type validation for function arguments.
@@ -205,7 +204,7 @@ The sync flow coordinates changes between the file system and Blot's internal st
 - `sync/establishSyncLock`: Promise wrapper around sync locks for `folder.update` / `done`.
 - `sync/fix`: Blog state validation and repair.
 - `sync/renames`: File rename detection.
-- `helper/localPath`: Path resolution from blog ID and relative path.
+- `storage/folder`: `ensureLocal` gives the absolute path chokidar watches.
 - `helper/ensure`: Runtime type validation.
 - `helper/clfdate`: Timestamped logging.
 - `helper/pathNormalizer`: Path normalization.

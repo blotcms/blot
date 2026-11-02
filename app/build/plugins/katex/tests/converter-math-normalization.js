@@ -1,5 +1,5 @@
 const fs = require("fs-extra");
-const LocalPath = require("helper/localPath");
+const LocalPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
 
 const markdownConvert = require("../../../converters/markdown/convert");
 const orgConvert = require("../../../converters/org/convert");

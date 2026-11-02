@@ -245,7 +245,6 @@ The client uses the official Dropbox JavaScript SDK (`dropbox` npm package) to i
 - **Client model** (`require("models/client")`): Redis-backed pubsub for publishing sync status updates.
 - **Helper modules**:
   - `storage/folder`: Reads and writes the blog folder (listing, `stat` with `{ hash: true }` for the content hash, `write`, `remove`, `resolveCaseInsensitive`).
-  - `helper/localPath`: Still used by `sync/reset-to-blot.js` for the shared `localDescendants` and `countLocalFiles` helpers.
   - `helper/email`: Sends error notifications to users and admins.
   - `helper/ensure`: Runtime type validation.
 - **Configuration** (`config`): Reads Dropbox OAuth credentials and webhook configuration.

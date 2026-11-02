@@ -2,7 +2,7 @@ const Blog = require("models/blog");
 const config = require("config");
 const chokidar = require("chokidar");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
-const localPath = require("helper/localPath");
+const folder = require("storage/folder");
 const Fix = require("sync/fix");
 const syncReport = require("clients/util/syncReport");
 const establishSyncLock = require("sync/establishSyncLock");
@@ -14,13 +14,13 @@ let watchers = {};
 function setup(blogID, callback) {
   Blog.get({ id: blogID }, function (err, blog) {
     if (err || !blog) return callback();
-    Fix(blog, function (err, report) {
+    Fix(blog, async function (err, report) {
       // Fix() can fail after repairing some checks, so log first.
       const repaired = syncReport.summarize(report);
       if (repaired) console.log(prefix(), "Fix repaired", blogID, repaired);
       if (err) return callback();
       if (config.environment === "development") {
-        watch(blogID);
+        await watch(blogID);
       }
       console.log(prefix(), "Setup complete", blogID);
       callback();
@@ -28,7 +28,7 @@ function setup(blogID, callback) {
   });
 }
 
-function watch(blogID) {
+async function watch(blogID) {
   const debounceInterval = 50;
   const maximumBatchSize = 100;
   const pending = new Set();
@@ -93,13 +93,15 @@ function watch(blogID) {
   }
 
   try {
+    // chokidar needs a real directory, so this asks for the local path and a
+    // blog on the Local client stays on the local-disk backend of
+    // storage/folder. To stop this watcher, call watcher.close();
+    const root = await folder.ensureLocal(blogID, "/");
+
     if (watchers[blogID]) return;
 
-    // chokidar needs a real directory, so this stays on localPath and a blog
-    // on the Local client stays on the local-disk backend of storage/folder.
-    // To stop this watcher, call watcher.close();
-    const watcher = chokidar.watch(localPath(blogID, "/"), {
-      cwd: localPath(blogID, "/"),
+    const watcher = chokidar.watch(root, {
+      cwd: root,
       ignored: shouldIgnoreFile,
       ignoreInitial: true,
     });

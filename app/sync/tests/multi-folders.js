@@ -5,7 +5,7 @@ describe("sync multi-folder support", function () {
   var Entry = require("models/entry");
   var Entries = require("models/entries");
   var syncFolder = require("sync");
-  var localPath = require("helper/localPath");
+  var localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
   var drafts = require("../update/drafts");
   var previewPath = drafts.previewPath;
 

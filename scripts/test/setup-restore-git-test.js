@@ -1,6 +1,6 @@
 const Blog = require("models/blog");
 const Template = require("models/template");
-const localPath = require("helper/localPath");
+const storage = require("storage/folder");
 const writeToFolder = require("models/template").writeToFolder;
 const Git = require("clients/git/git");
 const fs = require("fs-extra");
@@ -51,10 +51,10 @@ async function setup(blogHandle) {
     console.log("Local editing enabled, template written to folder");
 
     // Determine template folder path
-    const templateBase = fs.existsSync(localPath(blog.id, "/Templates"))
+    const templateBase = fs.existsSync(await storage.path(blog.id, "/Templates"))
       ? "Templates"
       : "templates";
-    const templateDir = localPath(
+    const templateDir = await storage.path(
       blog.id,
       path.join("/", templateBase, template.slug)
     );

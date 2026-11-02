@@ -282,7 +282,6 @@ sync(blogID, cb)
 | `models/client` (Redis) | Publishes `sync:status:{blogID}` messages; reads dependency sets. |
 | `build` | Converts a file at a path into an entry object. |
 | `storage/folder` | Reads and writes the blog's folder (`stat`, `exists`, `listNames`, `read`, `write`). Sync no longer touches the filesystem itself, except for `folder.path`, which is handed to the sync clients. |
-| `helper/localPath` | Resolves the blog's folder for `folder.path`. |
 | `storage/folder` `stat` (size and mtime in ms) | Detects mid-update file changes. Directories and missing paths have no fingerprint, so they never trigger a re-sync. |
 | `helper/pathNormalizer` | Normalises path separators and casing before dispatch. |
 | `models/client` (Redis) | Backs the mutual exclusion lock in `lock.js`. |
