@@ -67,7 +67,6 @@
 //   stats     { bytes, objects, basesFetched, packs }, for logs
 const fs = require("fs");
 const fsp = require("fs/promises");
-const { once } = require("events");
 const path = require("path");
 const zlib = require("zlib");
 const { pipeline } = require("stream/promises");
@@ -263,29 +262,26 @@ function createScratch(reservation, children) {
   return { dir: reservation.dir, git };
 }
 
-// Streams the pack into `file`, within the reservation and the limit
+// Streams the pack into `file`, within the reservation and the limit. It is
+// a pipeline, so a failure of the file (the disk full, say) rejects at once
+// whatever the generator is waiting for, and nothing is left without a listener.
 async function writeIncoming(incoming, reservation, cache, file, limit) {
-  const out = fs.createWriteStream(file);
   const step = Math.max(1, Math.min(RESERVE_STEP, Math.floor(cache.maxBytes / 8)));
   let bytes = 0;
 
-  try {
+  async function* chunks() {
     for (;;) {
       const next = await incoming.next();
-      if (next.done) break;
+      if (next.done) return;
 
       bytes += next.value.length;
       if (bytes > limit) throw new Refused("the push is larger than the " + formatSize(limit) + " Blot accepts");
       if (bytes > reservation.bytes) await reservation.extend(Math.max(bytes - reservation.bytes, Math.min(step, limit - reservation.bytes)));
-      if (!out.write(next.value)) await once(out, "drain");
+      yield next.value;
     }
-    out.end();
-    await once(out, "close");
-  } catch (err) {
-    out.destroy();
-    throw err;
   }
 
+  await pipeline(chunks(), fs.createWriteStream(file));
   return bytes;
 }
 
@@ -405,9 +401,9 @@ async function loadObjects(scratch, gitDir, oids) {
 // trees and tags, and `listed` every object in the new pack (the fetched bases
 // too, as Map(oid -> { type })). Only what the pack adds is checked: see the
 // top of this file. Resolves with { missing, wrong }: the IDs that are
-// nowhere, and those which are in the pack but are not the kind of object
-// they are linked as (index-pack does not check links). What lies outside the
-// pack is not read for its type: it was checked when it was stored.
+// nowhere, and those which are not the kind of object they are linked as
+// (index-pack does not check links). Outside the pack that is a read of the
+// object's header, not of its contents.
 async function findMissing({ repo, fresh, local, listed }) {
   const toCheck = new Set();
   const expected = new Map();
@@ -491,9 +487,12 @@ async function findMissing({ repo, fresh, local, listed }) {
 
   const wrong = [...expected].filter(([oid, types]) => listed.has(oid) && (types.size > 1 || !types.has(listed.get(oid).type))).map(([oid]) => oid);
 
+  // Outside the pack: there, and the kind of object it is linked as
   const missing = [];
   await mapLimit([...toCheck].filter((oid) => !listed.has(oid)), CONCURRENCY, async (oid) => {
-    if (!(await repo.has(oid))) missing.push(oid);
+    const type = await repo.typeOf(oid);
+    if (!type) missing.push(oid);
+    else if (expected.get(oid).size > 1 || !expected.get(oid).has(type)) wrong.push(oid);
   });
   return { missing, wrong };
 }
@@ -506,17 +505,7 @@ async function checkTips({ repo, commands, listed }) {
   for (const command of commands) {
     if (command.new === ZERO) continue;
 
-    let type = listed.has(command.new) ? listed.get(command.new).type : null;
-    if (!type) {
-      try {
-        // A commit is small; anything bigger isn't one
-        const found = await repo.read(command.new, { maxSize: MiB });
-        type = found && found.type;
-      } catch (err) {
-        if (!(err instanceof TooLargeError)) throw err;
-        type = "other";
-      }
-    }
+    const type = listed.has(command.new) ? listed.get(command.new).type : await repo.typeOf(command.new);
 
     if (!type) problems[command.ref] = "missing necessary objects";
     else if (command.ref.indexOf("refs/heads/") === 0 && type !== "commit") problems[command.ref] = "branches must point to a commit";
@@ -528,6 +517,7 @@ async function checkTips({ repo, commands, listed }) {
 // Uploads a pack with its index and reverse index
 async function uploadPack(store, piece) {
   const stream = fs.createReadStream(piece.packFile);
+  stream.on("error", () => {}); // the upload sees it too, by reading the stream
   try {
     await store.put(packKey(piece.name), stream);
   } finally {
@@ -583,7 +573,7 @@ async function receive({ store, cache, lock, commands, pack = null, limit = DEFA
 
     // Work out of date before it is done: the pack is still read, below
     const base = await manifest.read(store);
-    const behind = staleRefs(base, commands);
+    const behind = staleRefs(base, commands) || nameConflicts(applied(base, commands), commands);
     if (behind) throw behind;
 
     const added = await prepare({ store, cache, commands, incoming, limit, sizeHint, base, children, stats, baseLimit, hold: (r) => (reservation = r), say });
@@ -624,6 +614,42 @@ function failure(commands, err, stats) {
       ? "Blot has no room to receive this push right now; please try again in a moment"
       : "Blot hit an error receiving the push; please try again in a moment";
   return answer(commands, { outcome: "failed", status, extra: { stats, error: err } });
+}
+
+// Git's refusal when one ref's name is a directory in another's: with
+// refs/tags/foo there can be no refs/tags/foo/bar. `refs` are the names that
+// will exist after the push; the problems are for the refs it creates.
+function nameConflicts(refs, commands) {
+  const names = new Set(Object.keys(refs));
+  const problems = {};
+
+  for (const { ref, new: oid } of commands) {
+    if (oid === ZERO) continue;
+
+    const parts = ref.split("/");
+    for (let i = 2; i < parts.length; i++) {
+      const parent = parts.slice(0, i).join("/");
+      if (names.has(parent)) {
+        problems[ref] = "cannot lock ref '" + ref + "': '" + parent + "' exists; cannot create '" + ref + "'";
+        break;
+      }
+    }
+
+    const child = [...names].find((name) => name.startsWith(ref + "/"));
+    if (child && !problems[ref]) problems[ref] = "cannot lock ref '" + ref + "': '" + child + "' exists; cannot create '" + ref + "'";
+  }
+
+  return Object.keys(problems).length ? new Refused("ok", problems) : null;
+}
+
+// The refs as they will be once `commands` are applied to `current`'s
+function applied(current, commands) {
+  const refs = { ...current.refs };
+  for (const command of commands) {
+    if (command.new === ZERO) delete refs[command.ref];
+    else refs[command.ref] = command.new;
+  }
+  return refs;
 }
 
 const MOVED = "the ref moved while you were pushing; pull and try again";
@@ -754,14 +780,9 @@ async function historyPiece(scratch, reservation, gitDir, commits) {
 // fine as long as the refs the commands name have not.
 async function swap({ store, lock, commands, added }) {
   const current = await manifest.read(store);
-  const behind = staleRefs(current, commands);
+  const refs = applied(current, commands);
+  const behind = staleRefs(current, commands) || nameConflicts(refs, commands);
   if (behind) throw behind;
-
-  const refs = { ...current.refs };
-  for (const command of commands) {
-    if (command.new === ZERO) delete refs[command.ref];
-    else refs[command.ref] = command.new;
-  }
 
   const has = new Set(current.packs.map((pack) => pack.name));
   const next = manifest.advance(current, {

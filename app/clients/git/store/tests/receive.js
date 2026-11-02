@@ -338,6 +338,107 @@ describe("git store receive", function () {
       }
     });
 
+    it("refuses a commit whose tree, or parent, is a blob the repository already has", async function () {
+      const stored = fx.text(src, ["rev-parse", fixture.head + ":docs/big.txt"]);
+      const tree = fx.text(src, ["rev-parse", fixture.head + "^{tree}"]);
+
+      const withTree = forgeCommit(stored, fixture.head);
+      await expectWrongType(withTree, packOf(withTree));
+      const withParent = forgeCommit(tree, stored);
+      await expectWrongType(withParent, packOf(withParent));
+    });
+
+    it("refuses a tree entry whose stored target is the wrong type", async function () {
+      const stored = fx.text(src, ["rev-parse", fixture.head + ":docs/big.txt"]);
+      const dir = fx.text(src, ["rev-parse", fixture.head + ":docs"]);
+
+      for (const [mode, target] of [["40000", stored], ["100644", dir]]) {
+        const tree = forge("tree", Buffer.concat([Buffer.from(mode + " x\0"), Buffer.from(target, "hex")]));
+        const tip = forgeCommit(tree, fixture.head);
+        await expectWrongType(tip, packOf(tip, tree));
+      }
+    });
+
+    it("moves master to a stored commit of any size with no pack", async function () {
+      const tree = fx.text(src, ["rev-parse", fixture.head + "^{tree}"]);
+      const big = fx.text(src, ["commit-tree", tree, "-p", fixture.head], "x".repeat(1200 * 1024) + "\n");
+      expect((await direct([update(big, "refs/tags/big", ZERO)], fx.packRevs(src, [big], [fixture.head], { thin: true }))).outcome).toBe("ok");
+
+      const result = await direct([update(big)], null);
+      expect(result.outcome).toBe("ok");
+      expect((await manifest.read(store)).refs[MASTER]).toBe(big);
+    });
+
+    it("fails, and does not crash, when the scratch file cannot be written while the next chunk is awaited", async function () {
+      // incoming.pack is a directory, so opening it for writing fails at once
+      const broken = {
+        ...cache,
+        reserve: async (bytes) => {
+          const reservation = await cache.reserve(bytes);
+          fs.mkdirSync(path.join(reservation.dir, "incoming.pack"));
+          return reservation;
+        },
+      };
+      const tip = commit("work");
+      const slow = (async function* () {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        yield thin(tip);
+      })();
+
+      const result = await receive({ store, cache: broken, lock, commands: [update(tip)], pack: slow });
+      expect(result.outcome).toBe("failed");
+      expect(result.messages).toContain("Nothing was pushed.");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expectNoScratch();
+    });
+
+    describe("ref names which are a file and a directory", function () {
+      const create = (ref, oid = fixture.commits[1]) => ({ old: ZERO, new: oid, ref });
+      const conflict = (ref, other) => new RegExp("cannot lock ref '" + ref + "': '" + other + "' exists");
+
+      it("refuses a ref inside an existing one", async function () {
+        const result = await direct([create("refs/tags/v1/x")], null);
+        expect(result.outcome).toBe("refused");
+        expect(result.results[0].error).toMatch(conflict("refs/tags/v1/x", "refs/tags/v1"));
+      });
+
+      it("refuses a ref which an existing one is inside", async function () {
+        expect((await direct([create("refs/tags/a/b")], null)).outcome).toBe("ok");
+        const result = await direct([create("refs/tags/a")], null);
+        expect(result.outcome).toBe("refused");
+        expect(result.results[0].error).toMatch(conflict("refs/tags/a", "refs/tags/a/b"));
+      });
+
+      it("refuses both in one push", async function () {
+        const result = await direct([create("refs/tags/p"), create("refs/tags/p/q")], null);
+        expect(result.outcome).toBe("refused");
+        expect(result.results.some((r) => /cannot lock ref/.test(r.error || ""))).toBe(true);
+        expect((await manifest.read(store)).refs["refs/tags/p"]).toBeUndefined();
+      });
+
+      it("allows deleting one and creating inside it in the same push", async function () {
+        const result = await direct([{ old: fixture.tag, new: ZERO, ref: "refs/tags/v1" }, create("refs/tags/v1/x")], null);
+        expect(result.outcome).toBe("ok");
+        const refs = (await manifest.read(store)).refs;
+        expect(refs["refs/tags/v1"]).toBeUndefined();
+        expect(refs["refs/tags/v1/x"]).toBe(fixture.commits[1]);
+      });
+
+      it("catches a conflict made by a push which lands while this one is arriving", async function () {
+        // The other push landed after this one read the manifest it started from
+        const tip = commit("work");
+        const body = (async function* () {
+          yield thin(tip);
+          expect((await direct([create("refs/tags/z/y")], null)).outcome).toBe("ok");
+        })();
+        const result = await receive({ store, cache, lock, commands: [update(tip), create("refs/tags/z", tip)], pack: body });
+        expect(result.outcome).toBe("refused");
+        expect(result.results.some((r) => /cannot lock ref 'refs\/tags\/z'/.test(r.error || ""))).toBe(true);
+        expect((await manifest.read(store)).refs[MASTER]).toBe(fixture.head);
+        expectNoScratch();
+      });
+    });
+
     it("refuses a stale base: the ref has moved since the client looked", async function () {
       const a = commit("a");
       const b = commit("b");
