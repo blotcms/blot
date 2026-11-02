@@ -76,8 +76,9 @@ function client() {
     responseChecksumValidation: "WHEN_REQUIRED",
     requestHandler: {
       connectionTimeout: 5000,
-      // idle time on the socket, not the length of a request
-      requestTimeout: 120000,
+      // idle time on the socket, not the length of a request. requestTimeout
+      // is the length of a request, and only logs unless told to throw.
+      socketTimeout: 120000,
     },
   };
 
