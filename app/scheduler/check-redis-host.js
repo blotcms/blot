@@ -106,9 +106,10 @@ const TCP_MEM_CLEAR = 0.45;
 
 // Leaves room to raise maxmemory or move to a bigger instance before writes
 // fail. maxmemory is set with room for the copy-on-write a background save
-// needs (and, on a combined host, for the units), so 80% of it still leaves that.
-const MAXMEMORY_ALERT = 0.8;
-const MAXMEMORY_CLEAR = 0.75;
+// needs (and, on a combined host, for the units), so 90% of it still leaves that.
+// The daily email warns from 80%.
+const MAXMEMORY_ALERT = 0.9;
+const MAXMEMORY_CLEAR = 0.85;
 
 // The host samples every 5 minutes, so this is three missed samples.
 const STALE_MS = 20 * MINUTE;
