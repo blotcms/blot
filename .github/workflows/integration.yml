@@ -440,6 +440,9 @@ jobs:
             exit 1
           fi
 
+      - name: The deploy reads the certificate auto-ssl stored
+        run: bash proxy/e2e/stored-cert-checks.sh
+
       - name: Certificate persists across a container recreate
         run: |
           set -eux
