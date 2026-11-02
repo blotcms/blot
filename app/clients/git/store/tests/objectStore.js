@@ -69,6 +69,51 @@ describe("git store local directory object store", function () {
     expect(fs.readdirSync(dir + "/a").sort()).toEqual(["b", "c"]);
   });
 
+  it("writes all of an object when the filesystem takes it in short writes", async function () {
+    const fsp = require("fs/promises");
+    const real = fsp.open;
+    spyOn(fsp, "open").and.callFake(async (...args) => {
+      const handle = await real(...args);
+      if (args[1] !== "wx") return handle;
+      return new Proxy(handle, {
+        get(target, key) {
+          if (key === "write") return (buffer, offset, length) => target.write(buffer, offset, Math.min(length, 3));
+          const value = target[key];
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+    });
+
+    const store = createFsStore({ root: dir });
+    await store.put("whole", Buffer.from("0123456789abcdef"));
+    expect((await store.get("whole")).toString()).toBe("0123456789abcdef");
+    expect(await store.putIfAbsent("created", Buffer.from("ghijklmnop"))).toBe(true);
+    expect((await store.get("created")).toString()).toBe("ghijklmnop");
+  });
+
+  it("publishes nothing when a write makes no progress", async function () {
+    const fsp = require("fs/promises");
+    const real = fsp.open;
+    spyOn(fsp, "open").and.callFake(async (...args) => {
+      const handle = await real(...args);
+      if (args[1] !== "wx") return handle;
+      return new Proxy(handle, {
+        get(target, key) {
+          if (key === "write") return async () => ({ bytesWritten: 0 });
+          const value = target[key];
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+    });
+
+    const store = createFsStore({ root: dir });
+    await expectAsync(store.put("never", Buffer.from("abc"))).toBeRejected();
+    await expectAsync(store.putIfAbsent("never-either", Buffer.from("abc"))).toBeRejected();
+    expect(await store.head("never")).toBeNull();
+    expect(await store.head("never-either")).toBeNull();
+    expect(fs.readdirSync(dir + "/.tmp")).toEqual([]);
+  });
+
   it("refuses a key outside its directory", async function () {
     const store = createFsStore({ root: dir });
     await expectAsync(store.put("../escape", Buffer.from("x"))).toBeRejected();

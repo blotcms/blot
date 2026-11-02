@@ -486,6 +486,159 @@ describe("git store import", function () {
     });
   });
 
+  describe("sources which are not what they seem", function () {
+    const copyOfRich = (name) => {
+      const dir = path.join(root, name + "-" + ++counter);
+      fx.git(root, ["clone", "-q", "--no-hardlinks", "--bare", path.join(rich, ".git"), dir]);
+      return dir;
+    };
+
+    it("refuses a shallow repository, before it uploads anything", async function () {
+      const dir = path.join(root, "shallow-" + ++counter);
+      fx.git(root, ["clone", "-q", "--depth", "1", "file://" + path.join(rich, ".git"), dir]);
+      expect(fs.existsSync(path.join(dir, ".git", "shallow"))).toBe(true);
+
+      const env = setup();
+      const error = await run(env, path.join(dir, ".git")).catch((err) => err);
+      expect(error.code).toBe("ESHALLOW");
+      expect(env.inner.stats.puts).toBe(0);
+      expect((await manifest.read(env.inner)).seq).toBe(0);
+      scratchIsEmpty(env);
+    });
+
+    it("does not publish a pack with missing parents even if the shallow file is gone", async function () {
+      const dir = path.join(root, "shallow-gone-" + ++counter);
+      fx.git(root, ["clone", "-q", "--depth", "1", "file://" + path.join(rich, ".git"), dir]);
+      fs.rmSync(path.join(dir, ".git", "shallow"));
+
+      const env = setup();
+      const error = await run(env, path.join(dir, ".git")).catch((err) => err);
+      expect(error instanceof Error).toBe(true);
+      expect(env.inner.stats.puts).toBe(0);
+      expect((await manifest.read(env.inner)).seq).toBe(0);
+      scratchIsEmpty(env);
+    });
+
+    it("imports the real history of a repository with grafts, not the grafted one", async function () {
+      const dir = copyOfRich("grafts");
+      const tip = fx.text(dir, ["rev-parse", "master"]);
+      fs.mkdirSync(path.join(dir, "info"), { recursive: true });
+      fs.writeFileSync(path.join(dir, "info", "grafts"), tip + "\n");
+      expect(fx.text(dir, ["rev-list", "--count", "master"])).toBe("1");
+
+      const env = setup();
+      const result = await run(env, dir);
+      expect(result.history.commits).toBe(Number(fx.text(rich, ["rev-list", "--count", "--branches", "--tags"])));
+      expect((await verifyImport({ store: env.store, cache: env.cache, gitDir: dir })).refs).toBe(7);
+    });
+
+    it("peels a tag as stored, not as a replace ref says", async function () {
+      const dir = copyOfRich("replaced");
+      const v1 = fx.text(dir, ["rev-parse", "refs/tags/v1"]);
+      const v2 = fx.text(dir, ["rev-parse", "refs/tags/v2"]);
+      fx.git(dir, ["replace", "-f", v1, v2]);
+      expect(fx.text(dir, ["rev-parse", "refs/tags/v1^{commit}"])).toBe(fx.text(dir, ["rev-parse", "refs/tags/v2^{commit}"]));
+
+      const env = setup();
+      const result = await run(env, dir);
+      expect(result.skipped.map((skip) => skip.ref)).toContain("refs/replace/" + v1);
+      const imported = await manifest.read(env.store);
+      expect(imported.peeled[v1]).toBe(fx.text(rich, ["rev-parse", "refs/tags/v1^{commit}"]));
+      expect(imported.peeled[v1]).not.toBe(imported.peeled[v2]);
+      expect((await verifyImport({ store: env.store, cache: env.cache, gitDir: dir })).refs).toBe(7);
+    });
+
+    it("does not write to the source, even a temporary file: it works on a read-only copy", async function () {
+      const dir = copyOfRich("readonly");
+      const chmod = (mode) => {
+        (function walk(current) {
+          for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+            if (entry.isDirectory()) walk(path.join(current, entry.name));
+          }
+          fs.chmodSync(current, mode);
+        })(dir);
+      };
+      chmod(0o555);
+      try {
+        const env = setup();
+        expect((await run(env, dir)).outcome).toBe("imported");
+      } finally {
+        chmod(0o755);
+      }
+    });
+
+    it("counts what a repository borrows through alternates when it reserves scratch space", async function () {
+      const dir = path.join(root, "alternates-" + ++counter);
+      fx.git(root, ["clone", "-q", "--shared", "--bare", path.join(rich, ".git"), dir]);
+      expect(fs.existsSync(path.join(dir, "objects", "info", "alternates"))).toBe(true);
+      expect(fx.text(dir, ["count-objects", "-v"])).toContain("size-pack: 0");
+
+      // The cache is far smaller than what the alternates hold
+      const small = setup({ maxBytes: 512 * 1024 });
+      const error = await run(small, dir).catch((err) => err);
+      expect(error.code).toBe("NO_ROOM");
+      scratchIsEmpty(small);
+
+      const env = setup();
+      const result = await run(env, dir);
+      expect(result.outcome).toBe("imported");
+      expect(result.pack.objects).toBeGreaterThan(50);
+    });
+
+    it("keeps the reservation up with the pack as git writes it, or stops with no room", async function () {
+      const dir = copyOfRich("growth");
+      const size = (await run(setup(), dir)).pack.size;
+      expect(size).toBeGreaterThan(512 * 1024);
+
+      // A guess far too low is made up for while the pack is written
+      const roomy = setup();
+      const imported = await run(roomy, dir, { estimateBytes: 64 * 1024 });
+      expect(imported.outcome).toBe("imported");
+      scratchIsEmpty(roomy);
+
+      // And when the cache cannot hold what git writes, git is stopped
+      const tight = setup({ maxBytes: Math.floor(size * 0.6) });
+      const error = await run(tight, dir, { estimateBytes: 64 * 1024 }).catch((err) => err);
+      expect(error.code).toBe("NO_ROOM");
+      expect((await manifest.read(tight.inner)).seq).toBe(0);
+      expect(tight.inner.stats.puts).toBe(0);
+      scratchIsEmpty(tight);
+    });
+
+    it("waits for the other upload to stop before it fails, so nothing reads scratch after it is gone", async function () {
+      let active = 0;
+      let first = true;
+      const inner = createMemoryStore();
+      const env = setup();
+      env.store = {
+        ...inner,
+        put: async (key, body) => {
+          active++;
+          try {
+            if (key.endsWith(".pack")) {
+              if (first) {
+                first = false;
+                throw new Error("the first upload failed");
+              }
+              // The other pack's upload is still going when the first has failed
+              await new Promise((resolve) => setTimeout(resolve, 300));
+              for await (const chunk of body) void chunk;
+              return;
+            }
+            return await inner.put(key, body);
+          } finally {
+            active--;
+          }
+        },
+      };
+
+      const error = await run(env, path.join(rich, ".git")).catch((err) => err);
+      expect(error.message).toBe("the first upload failed");
+      expect(active).toBe(0);
+      scratchIsEmpty(env);
+    });
+  });
+
   describe("odd repositories", function () {
     const bare = (name) => {
       const dir = path.join(root, name + "-" + ++counter);

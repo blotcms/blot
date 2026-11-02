@@ -17,6 +17,17 @@ const { NotFoundError, TooLargeError } = require("../errors");
 const CHUNK = 1024 * 1024;
 const TMP = ".tmp";
 
+// FileHandle.write may write less than it was given; this writes it all
+async function writeAll(handle, buffer) {
+  let at = 0;
+  while (at < buffer.length) {
+    const { bytesWritten } = await handle.write(buffer, at, buffer.length - at);
+    if (!bytesWritten) throw new Error("A write made no progress");
+    at += bytesWritten;
+  }
+  return buffer.length;
+}
+
 function createFsStore({ root }) {
   if (!root) throw new Error("createFsStore needs a root directory");
   root = path.resolve(root);
@@ -97,15 +108,18 @@ function createFsStore({ root }) {
     await fsp.mkdir(path.join(root, TMP), { recursive: true });
     const tmp = path.join(root, TMP, crypto.randomBytes(8).toString("hex"));
     const handle = await fsp.open(tmp, "wx");
+    let written = 0;
     try {
-      if (Buffer.isBuffer(body)) await handle.write(body);
-      else for await (const chunk of body) await handle.write(Buffer.from(chunk));
-    } catch (err) {
+      for await (const chunk of Buffer.isBuffer(body) ? [body] : body) written += await writeAll(handle, Buffer.from(chunk));
       await handle.close();
+      // Nothing is published that is not all on disk
+      const { size } = await fsp.stat(tmp);
+      if (size !== written) throw new Error("Wrote " + size + " of " + written + " bytes to " + tmp);
+    } catch (err) {
+      await handle.close().catch(() => {});
       await fsp.rm(tmp, { force: true });
       throw err;
     }
-    await handle.close();
     return tmp;
   }
 

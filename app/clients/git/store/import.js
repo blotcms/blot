@@ -124,12 +124,13 @@ function counting(store) {
 
 // Runs git against the source. -c safe.directory lets a repository owned by
 // another user be read (it only applies when given on the command line).
+// --no-replace-objects: what is read is what is stored, not a replacement.
 function sourceGit(children, gitDir, args, input) {
-  return runGit(children, ["-c", "safe.directory=*", ...args], { gitDir, input });
+  return runGit(children, ["--no-replace-objects", "-c", "safe.directory=*", ...args], { gitDir, input });
 }
 
-// { refs: { name: oid }, kinds: { name: "commit" | "tag" | ... }, peeled,
-//   skipped, head } for the repository at gitDir
+// { refs: { name: oid }, kinds: { name: "commit" | "tag" | ... }, skipped, head }
+// for the repository at gitDir
 async function readRefs(children, gitDir) {
   const listing = await sourceGit(children, gitDir, ["for-each-ref", "--format=%(refname) %(objectname) %(objecttype)"]);
   const refs = {};
@@ -150,23 +151,6 @@ async function readRefs(children, gitDir) {
     }
   }
 
-  // An annotated tag is followed to what it finally points at, as a push does
-  // (the manifest's `peeled`), with its type, for the history pack
-  const tagRefs = Object.keys(refs).filter((ref) => kinds[ref] === "tag");
-  const peeled = {};
-  const peeledType = {};
-  if (tagRefs.length) {
-    const tags = [...new Set(tagRefs.map((ref) => refs[ref]))];
-    const out = await sourceGit(children, gitDir, ["cat-file", "--batch-check=%(objectname) %(objecttype)"], tags.map((oid) => oid + "^{}").join("\n") + "\n");
-    const lines = out.split("\n");
-    tags.forEach((tag, i) => {
-      const [target, type] = (lines[i] || "").split(" ");
-      if (!OID.test(target) || type === "missing") throw coded("The tag " + tag + " does not lead to an object the repository has", "ECORRUPT");
-      peeled[tag] = target;
-      peeledType[tag] = type;
-    });
-  }
-
   // HEAD is the branch it names if that exists. Otherwise it is what a push
   // makes it (receive.js): master if there is one, else nothing.
   let head = null;
@@ -176,12 +160,34 @@ async function readRefs(children, gitDir) {
   } catch (err) {}
   if (!head && refs["refs/heads/master"]) head = "refs/heads/master";
 
-  return { refs, kinds, peeled, peeledType, skipped, head };
+  return { refs, kinds, skipped, head };
+}
+
+// Each annotated tag is followed to what it finally points at, as a push does
+// (the manifest's `peeled`), with its type, for the history pack. Asked of
+// `repo`, the scratch repository, which sees the source's objects and none of
+// its replace refs, grafts or shallow file.
+async function peelTags(children, repo, refs, kinds) {
+  const tagRefs = Object.keys(refs).filter((ref) => kinds[ref] === "tag");
+  const peeled = {};
+  const peeledType = {};
+  if (tagRefs.length) {
+    const tags = [...new Set(tagRefs.map((ref) => refs[ref]))];
+    const out = await runGit(children, ["cat-file", "--batch-check=%(objectname) %(objecttype)"], { gitDir: repo, input: tags.map((oid) => oid + "^{}").join("\n") + "\n" });
+    const lines = out.split("\n");
+    tags.forEach((tag, i) => {
+      const [target, type] = (lines[i] || "").split(" ");
+      if (!OID.test(target) || type === "missing") throw coded("The tag " + tag + " does not lead to an object the repository has", "ECORRUPT");
+      peeled[tag] = target;
+      peeledType[tag] = type;
+    });
+  }
+  return { peeled, peeledType };
 }
 
 // A guess at the bytes of the pack and its index, high rather than low, from
 // what git counts: used to reserve scratch before the pack exists
-async function estimate(children, gitDir, tips, maxBytes) {
+async function estimate(children, gitDir, tips, maxBytes, alternates) {
   const counts = {};
   for (const line of (await sourceGit(children, gitDir, ["count-objects", "-v"])).split("\n")) {
     const [key, value] = line.split(": ");
@@ -190,7 +196,8 @@ async function estimate(children, gitDir, tips, maxBytes) {
 
   const objects = (counts.count || 0) + (counts["in-pack"] || 0);
   const guess = ((counts.size || 0) + (counts["size-pack"] || 0)) * 1024 + objects * IDX_PER_OBJECT + SLACK;
-  if (guess <= maxBytes) return guess;
+  // count-objects does not count what is borrowed through alternates
+  if (guess <= maxBytes && !alternates) return guess;
 
   // Loose objects are counted by the blocks they fill, which can be several
   // times what they hold. Before giving up, ask git what the reachable ones
@@ -199,6 +206,8 @@ async function estimate(children, gitDir, tips, maxBytes) {
     const out = await sourceGit(children, gitDir, ["rev-list", "--objects", "--disk-usage", "--stdin"], tips.join("\n") + "\n");
     return Number(out.trim()) + objects * IDX_PER_OBJECT + SLACK;
   } catch (err) {
+    // No better figure. With alternates the guess is not a bound, but the
+    // reservation is checked as the pack grows (watchGrowth), so it is safe.
     return guess;
   }
 }
@@ -254,20 +263,112 @@ async function describePack(base, hash, label) {
 }
 
 // The pack of everything reachable from `tips`
-async function packEverything({ children, gitDir, dir, tips, config }) {
+async function packEverything({ children, repo, dir, tips, config }) {
   const args = [...configArgs(config), "pack-objects", "--revs", "--delta-base-offset", "-q", path.join(dir, "all")];
-  const hash = (await sourceGit(children, gitDir, args, tips.join("\n") + "\n")).trim();
+  const hash = (await runGit(children, args, { gitDir: repo, input: tips.join("\n") + "\n" })).trim();
   if (!hash) throw new CorruptError("git wrote no pack for the repository's refs");
   return hash;
 }
 
 // The pack of every commit reachable from `tips` (commits), and how many there
 // are. A commit's pack holds only commits, which is what history.js reads.
-async function packCommits({ children, gitDir, dir, tips, config }) {
-  const commits = (await sourceGit(children, gitDir, ["rev-list", "--stdin"], tips.join("\n") + "\n")).split("\n").filter(Boolean);
+async function packCommits({ children, repo, dir, tips, config }) {
+  const commits = (await runGit(children, ["rev-list", "--stdin"], { gitDir: repo, input: tips.join("\n") + "\n" })).split("\n").filter(Boolean);
   const args = [...configArgs(config), "pack-objects", "--delta-base-offset", "-q", path.join(dir, "history")];
-  const hash = (await sourceGit(children, gitDir, args, commits.join("\n") + "\n")).trim();
+  const hash = (await runGit(children, args, { gitDir: repo, input: commits.join("\n") + "\n" })).trim();
   return { hash, commits };
+}
+
+// A bare repository in scratch which reads the source's objects through
+// objects/info/alternates. Packing runs here, not in the source, for three
+// reasons: git writes a pack it is making (a temporary file) into the object
+// directory of the repository it runs in, and the source is never written;
+// the source's replace refs, grafts, shallow file and config do not apply; and
+// the output lands in scratch whatever else the source holds.
+async function scratchRepo(children, dir, gitDir) {
+  const repo = path.join(dir, "repo.git");
+  await runGit(children, ["init", "-q", "--bare", repo], { gitDir: repo });
+  await fsp.mkdir(path.join(repo, "objects", "info"), { recursive: true });
+  await fsp.writeFile(path.join(repo, "objects", "info", "alternates"), path.resolve(gitDir, "objects") + "\n");
+  return repo;
+}
+
+function fileExists(file) {
+  return fsp.stat(file).then(() => true, () => false);
+}
+
+// The bytes of everything under `dir` (git's temporary pack, the packs, the
+// scratch repository)
+async function sizeOf(dir) {
+  let total = 0;
+  for (const entry of await fsp.readdir(dir, { withFileTypes: true }).catch(() => [])) {
+    const file = path.join(dir, entry.name);
+    if (entry.isDirectory()) total += await sizeOf(file);
+    else total += await fsp.stat(file).then((stat) => stat.size, () => 0);
+  }
+  return total;
+}
+
+// Keeps a reservation at least as big as what git has written into its
+// directory, extending it as the output grows. The estimate is only a guess,
+// and git writes the pack without asking. If the cache has no room for the
+// growth (NoRoomError), git is killed and the error is thrown. check() also
+// settles the final size, and stops the watching.
+function watchGrowth(reservation, children) {
+  let failure = null;
+  let busy = false;
+
+  async function look() {
+    if (busy || failure) return;
+    busy = true;
+    try {
+      const used = await sizeOf(reservation.dir);
+      if (used > reservation.bytes) await reservation.extend(used - reservation.bytes + SLACK);
+    } catch (err) {
+      failure = err;
+      for (const child of children) child.kill("SIGKILL");
+    } finally {
+      busy = false;
+    }
+  }
+
+  const timer = setInterval(look, 50);
+  return {
+    async check() {
+      clearInterval(timer);
+      while (busy) await new Promise((resolve) => setTimeout(resolve, 5));
+      await look();
+      if (failure) throw failure;
+    },
+    stop() {
+      clearInterval(timer);
+    },
+    fail: () => failure,
+  };
+}
+
+// Proves the pack is closed: in a repository which holds only the pack (no
+// alternates, no shallow file, no grafts, no replace refs), every object
+// reachable from the tips is there, commits' parents and trees, trees' entries
+// and tags' targets. A shallow or grafted source, or objects a source lacks,
+// fail here, before anything is uploaded. It reads the .idx and the trees and
+// commits, not the blobs' contents.
+async function proveClosed({ children, dir, main, tips }) {
+  const repo = path.join(dir, "closed.git");
+  await runGit(children, ["init", "-q", "--bare", repo], { gitDir: repo });
+  const packDir = path.join(repo, "objects", "pack");
+  await fsp.mkdir(packDir, { recursive: true });
+  const base = path.basename(main.packFile, ".pack");
+  for (const ext of [".pack", ".idx"]) {
+    const from = path.join(path.dirname(main.packFile), base + ext);
+    await fsp.link(from, path.join(packDir, base + ext)).catch(() => fsp.copyFile(from, path.join(packDir, base + ext)));
+  }
+  try {
+    await runGit(children, ["rev-list", "--objects", "--missing=error", "--count", "--stdin"], { gitDir: repo, input: tips.join("\n") + "\n" });
+  } catch (err) {
+    throw coded("The pack is not closed: objects the refs lead to are missing from it (" + err.message.slice(-300) + "). A shallow or grafted source, or one with missing objects, cannot be imported.", "ENOTCLOSED");
+  }
+  await fsp.rm(repo, { recursive: true, force: true });
 }
 
 // Uploads a pack, its index and (for the main pack) its reverse index at once.
@@ -286,7 +387,7 @@ const entryOf = ({ name, size, idxSize, objects }) => ({ name, size, idxSize, ob
 
 // ---- Import ---------------------------------------------------------------
 
-async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = null, pack = {} }) {
+async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = null, pack = {}, estimateBytes = null }) {
   if (typeof lock !== "function") throw new Error("importRepo needs the host's lock function");
   if (!gitDir) throw new Error("importRepo needs gitDir");
   if (!scratchDir && !(cache && typeof cache.reserve === "function")) throw new Error("importRepo needs a cache to reserve scratch space from, or a scratchDir");
@@ -299,6 +400,11 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
     stats.ms = Date.now() - started;
     return stats;
   };
+
+  // A shallow source has commits whose parents it does not have
+  if (await fileExists(path.join(gitDir, "shallow"))) {
+    throw coded("The repository is shallow (" + path.join(gitDir, "shallow") + "), so its history is incomplete. Only a complete repository can be imported.", "ESHALLOW");
+  }
 
   const base = await manifest.read(store);
   if (base.seq !== 0) {
@@ -313,14 +419,13 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
   try {
     let mark = Date.now();
     const found = await readRefs(children, gitDir);
-    const { refs, kinds, peeled, peeledType, skipped, head } = found;
+    const { refs, kinds, skipped, head } = found;
     if (!Object.keys(refs).length) {
       stats.gitMs = Date.now() - mark;
       return { outcome: "empty", skipped, stats: finish() };
     }
 
     const tips = [...new Set(Object.values(refs))];
-    const commitTips = [...new Set(Object.keys(refs).flatMap((ref) => (kinds[ref] === "commit" ? [refs[ref]] : peeledType[refs[ref]] === "commit" ? [peeled[refs[ref]]] : [])))];
 
     // Scratch: a reservation from the cache (which fails with NoRoomError if
     // the repository could not fit in it), or a directory of the host's own
@@ -328,7 +433,8 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
       await fsp.mkdir(scratchDir, { recursive: true });
       dir = await fsp.mkdtemp(path.join(scratchDir, "import-"));
     } else {
-      const need = await estimate(children, gitDir, tips, cache.maxBytes);
+      const alternates = await fileExists(path.join(gitDir, "objects", "info", "alternates"));
+      const need = estimateBytes !== null ? estimateBytes : await estimate(children, gitDir, tips, cache.maxBytes, alternates);
       try {
         reservation = await cache.reserve(need);
       } catch (err) {
@@ -338,11 +444,26 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
       dir = reservation.dir;
     }
 
-    // The main pack and the history pack are independent; one git each
-    const [hash, history] = await Promise.all([
-      packEverything({ children, gitDir, dir, tips, config }),
-      commitTips.length ? packCommits({ children, gitDir, dir, tips: commitTips, config }) : null,
-    ]);
+    const repo = await scratchRepo(children, dir, gitDir);
+    const { peeled, peeledType } = await peelTags(children, repo, refs, kinds);
+    const commitTips = [...new Set(Object.keys(refs).flatMap((ref) => (kinds[ref] === "commit" ? [refs[ref]] : peeledType[refs[ref]] === "commit" ? [peeled[refs[ref]]] : [])))];
+
+    // The main pack and the history pack are independent; one git each. If
+    // the output outgrows the reservation it is extended, or git is stopped.
+    const watching = reservation ? watchGrowth(reservation, children) : null;
+    let hash;
+    let history;
+    try {
+      [hash, history] = await Promise.all([
+        packEverything({ children, repo, dir, tips, config }),
+        commitTips.length ? packCommits({ children, repo, dir, tips: commitTips, config }) : null,
+      ]);
+    } catch (err) {
+      throw (watching && watching.fail()) || err;
+    } finally {
+      if (watching) watching.stop();
+    }
+    if (watching) await watching.check();
     stats.gitMs = Date.now() - mark;
 
     // Proofs. Nothing is uploaded until all hold.
@@ -354,6 +475,7 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
     for (const target of Object.values(peeled)) {
       if (!has(main.ids, target)) throw new CorruptError("The imported pack lacks " + target + ", the target of a tag");
     }
+    await proveClosed({ children, dir, main, tips });
 
     let commits = null;
     if (history) {
@@ -367,7 +489,11 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
     stats.proveMs = Date.now() - mark;
 
     mark = Date.now();
-    await Promise.all([upload(store, main, { rev: true }), commits ? upload(store, commits, { rev: false }) : null]);
+    // Both groups settle before either failure is thrown, so no upload is
+    // still reading scratch when scratch is deleted
+    const uploads = await Promise.allSettled([upload(store, main, { rev: true }), commits ? upload(store, commits, { rev: false }) : null]);
+    const failedUpload = uploads.find((settled) => settled.status === "rejected");
+    if (failedUpload) throw failedUpload.reason;
     stats.uploadMs = Date.now() - mark;
 
     const next = manifest.advance(base, {
