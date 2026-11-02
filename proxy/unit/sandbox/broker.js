@@ -6,12 +6,13 @@
 // This file and its siblings are owned by root and read-only to the app (the
 // Dockerfile copies them to /usr/local/lib/blot-sandbox): root must never load
 // code from /usr/src/app, which the app can rewrite. So it requires only Node
-// built-ins and ./jail. It takes no paths, never parses job output and never
+// built-ins and its siblings. It takes no paths, never parses job output and never
 // touches the data mount.
 
 const fs = require("fs");
 const net = require("net");
 const { spawn } = require("child_process");
+const cgroup = require("./cgroup");
 const jail = require("./jail");
 
 const DIRECTORY = "/run/blot-sandbox";
@@ -29,8 +30,9 @@ const DRAIN_MS = 10 * 1000;
 // now, so a request that has waited this long gets no jail
 const MAX_QUEUED_MS = 60 * 1000;
 
-// options: { socket, group, spawnJail(name) -> child process, jobs, maxRunning,
-// maxQueued, log }. The defaults are the real ones; tests replace spawnJail.
+// options: { socket, group, spawnJail(name, cgroup) -> child process, jobs, maxRunning,
+// maxQueued, log, prepareCgroup }. The defaults are the real ones; tests
+// replace spawnJail.
 function createBroker(options = {}) {
   const socketPath = options.socket || SOCKET;
   const jobs = options.jobs || jail.JOBS;
@@ -40,15 +42,18 @@ function createBroker(options = {}) {
   const log = options.log || console.error;
   const spawnJail =
     options.spawnJail ||
-    ((name) => {
-      const { file, args } = jail.command(name);
+    ((name, directory) => {
+      const { file, args } = jail.command(name, directory);
       return spawn(file, args, { stdio: ["pipe", "pipe", "ignore"], env: {} });
     });
-  // What is left of a job in its own cgroup goes with it: a job's cgroup holds
-  // that one job, which is why such a job has a maxRunning of 1
+  // What is left of a job in its own cgroup goes with it: each of a job's
+  // cgroups holds one of its jails at a time
   const clearCgroup =
     options.clearCgroup ||
     ((directory) => fs.writeFileSync(directory + "/cgroup.kill", "1"));
+  // A job whose cgroup is in the unit's subtree, which nsjail can't make for
+  // a jail with a network, has its cgroup made here (./cgroup.js)
+  const prepareCgroup = options.prepareCgroup || cgroup.prepare;
 
   const running = new Set();
   const queue = [];
@@ -103,18 +108,33 @@ function createBroker(options = {}) {
     });
   }
 
-  // A job may have its own limit, below the broker's
+  // One of the job's cgroups that no jail is in, if it has its own
+  function freeCgroup(job) {
+    const used = new Set([...running].map((entry) => entry.cgroup));
+    return job.cgroups.find((directory) => !used.has(directory));
+  }
+
+  // A job may have its own limit, below the broker's, and a jail in its own
+  // cgroup needs one of them free
   function hasRoom({ name, job }) {
     if (running.size >= maxRunning) return false;
+    if (job.cgroups && !freeCgroup(job)) return false;
     if (!job.maxRunning) return true;
     let same = 0;
     for (const entry of running) if (entry.name === name) same++;
     return same < job.maxRunning;
   }
 
+  // The broker's queue, and a job's own, shorter one if it has one
+  function queueIsFull({ name, job }) {
+    if (queue.length >= maxQueued) return true;
+    if (job.maxQueued === undefined) return false;
+    return queue.filter((entry) => entry.name === name).length >= job.maxQueued;
+  }
+
   function admit(request) {
     if (hasRoom(request)) return start(request);
-    if (queue.length >= maxQueued) return fail(request.socket, "busy");
+    if (queueIsFull(request)) return fail(request.socket, "busy");
     request.queued = Date.now();
     queue.push(request);
     // a client that gives up while queued never gets a jail
@@ -147,13 +167,14 @@ function createBroker(options = {}) {
     let outputBytes = 0;
     const output = [];
 
+    const directory = job.cgroups ? freeCgroup(job) : null;
     let child;
     try {
-      child = spawnJail(name);
+      child = spawnJail(name, directory);
     } catch (e) {
       return fail(socket, "failed");
     }
-    const entry = { child, name };
+    const entry = { child, name, cgroup: directory };
     running.add(entry);
 
     const kill = (error) => {
@@ -171,9 +192,9 @@ function createBroker(options = {}) {
       finished = true;
       clearTimeout(limit);
       running.delete(entry);
-      if (job.cgroup) {
+      if (directory) {
         try {
-          clearCgroup(job.cgroup);
+          clearCgroup(directory);
         } catch (e) {
           log(`broker: job=${name} cannot clear its cgroup: ${e.code}`);
         }
@@ -250,7 +271,22 @@ function createBroker(options = {}) {
     if (!failure) socket.resume();
   }
 
+  // A cgroup that can't be made fails that job's jails, not the broker
+  function prepareCgroups() {
+    for (const [name, job] of Object.entries(jobs)) {
+      if (!job.cgroups || !job.cgroupLimits) continue;
+      for (const directory of job.cgroups) {
+        try {
+          prepareCgroup(directory, job.cgroupLimits);
+        } catch (e) {
+          log(`broker: job=${name} cannot make its cgroup ${directory}: ${e.code || e.message}`);
+        }
+      }
+    }
+  }
+
   function listen() {
+    prepareCgroups();
     return new Promise((resolve, reject) => {
       const directory = require("path").dirname(socketPath);
       fs.mkdirSync(directory, { recursive: true, mode: 0o710 });

@@ -34,6 +34,30 @@ describe("sandbox alerts", function () {
     expect(lines.split("\n").sort()).toEqual(["1 × job screenshot: timeout", "2 × job thumbnail: killed"]);
   });
 
+  it("logs a busy fetch-image job, which is backpressure, but emails busy from the others", async function () {
+    spyOn(console, "log");
+    alerts.jobFailed("fetch-image", error("SANDBOX_BUSY"));
+    alerts.jobFailed("fetch-image", error("SANDBOX_BUSY"));
+    await tick();
+
+    expect(email.SANDBOX_ALERT).not.toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalledTimes(2);
+    expect(console.log.calls.argsFor(1)[1]).toBe("sandbox: job fetch-image busy (2 since start)");
+
+    alerts.jobFailed("thumbnail", error("SANDBOX_BUSY"));
+    await tick();
+    expect(email.SANDBOX_ALERT).toHaveBeenCalledTimes(1);
+    expect(email.SANDBOX_ALERT.calls.argsFor(0)[1].lines).toBe("1 × job thumbnail: busy");
+  });
+
+  it("emails a failed fetch-image job, which answers bad input with meta.error", async function () {
+    alerts.jobFailed("fetch-image", error("SANDBOX_FAILED"));
+    await tick();
+
+    expect(email.SANDBOX_ALERT).toHaveBeenCalledTimes(1);
+    expect(email.SANDBOX_ALERT.calls.argsFor(0)[1].lines).toBe("1 × job fetch-image: failed");
+  });
+
   describe("checkProxy", function () {
     let server;
 

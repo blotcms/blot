@@ -353,6 +353,7 @@ COPY proxy/unit/sandbox/broker.js proxy/unit/sandbox/jail.js proxy/unit/sandbox/
      proxy/unit/sandbox/network-proxy-green.cfg proxy/unit/sandbox/tinyproxy.conf \
      proxy/unit/sandbox/egress.nft proxy/unit/sandbox/egress-proxy.nft \
      proxy/unit/sandbox/enter-network.sh proxy/unit/sandbox/node-filter.js \
+     proxy/unit/sandbox/cgroup.js \
      /usr/local/lib/blot-sandbox/
 RUN node /usr/local/lib/blot-sandbox/node-filter.js > /usr/local/lib/blot-sandbox/node.seccomp \
  && chmod -R go-w /usr/local/lib/blot-sandbox \
