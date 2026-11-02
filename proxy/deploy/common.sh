@@ -570,7 +570,7 @@ stored_cert_fps() {
   [ -n "$domains" ] || return 0
   while IFS= read -r d <&3 && IFS= read -r pem <&4; do
     [ "$pem" != - ] || continue
-    fp=$(printf '%s\n' "$pem" | sed -e 's/\\\//\//g' -e 's/\\r//g' -e 's/\\n/\n/g' -e 's/\\\\/\\/g' | openssl x509 -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)
+    fp=$(printf '%s\n' "$pem" | sed 's/\\n/\n/g' | openssl x509 -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)
     [ -z "$fp" ] || echo "$d $fp"
   done 3< <(printf '%s\n' "$domains") 4< <(printf '%s\n' "$domains" | sed 's/^/get ssl:/; s/$/:latest/' | redis_cli --raw 2>/dev/null \
     | awk '{ if (match($0, /"fullchain_pem":"[^"]*"/)) print substr($0, RSTART + 17, RLENGTH - 18); else print "-" }')
