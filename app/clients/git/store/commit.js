@@ -550,15 +550,11 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
         built = await build({ objects, parent, parts, blob, message, identity, when });
         uploaded = null;
       }
-<<<<<<< HEAD
-      if (!built) return { outcome: "ok", commit: null, parent, changed: false, seq: base.seq, manifest: base };
-=======
       // A rewrite landed since the upload: its purge may delete the pack, so
       // it is uploaded again. What was built still holds: it links only to
       // what master reaches, which a rewrite keeps.
       if (uploaded && uploaded.epoch !== manifest.epochOf(base)) uploaded = null;
-      if (!built) return { outcome: "ok", commit: null, parent, changed: false, seq: base.seq };
->>>>>>> origin/master
+      if (!built) return { outcome: "ok", commit: null, parent, changed: false, seq: base.seq, manifest: base };
 
       if (!uploaded) {
         const smalls = built.objects;
