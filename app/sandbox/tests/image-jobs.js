@@ -165,6 +165,80 @@ describe("sandbox image jobs", function () {
     });
   });
 
+  describe("template-image", function () {
+    const sizes = [{ size: 160, crop: false }, { size: 40, crop: true }];
+
+    it("checks an image and reports its oriented size", async function () {
+      const { meta, outputs } = await sandbox.run("template-image", { op: "check" }, await image(30, 20, "jpeg"));
+      expect(meta).toEqual(jasmine.objectContaining({ format: "jpeg", width: 30, height: 20 }));
+      expect(outputs).toEqual([]);
+    });
+
+    it("rejects bytes that are not an image", async function () {
+      expect(await rejection(sandbox.run("template-image", { op: "check" }, Buffer.from("nope")))).not.toBeNull();
+    });
+
+    it("makes the original and one webp thumbnail per size, cut to the shape", async function () {
+      const crop = { x: "0", y: "0", width: "0.5", height: "1" };
+      const args = { op: "generate", crop, shape: "circle", editable: false, sizes };
+      const { meta, outputs } = await sandbox.run("template-image", args, await image(200, 100));
+      expect(meta).toEqual([{ width: 100, height: 100 }, { width: 100, height: 100 }, { width: 40, height: 40 }]);
+      for (const output of outputs) expect((await sharp(output).metadata()).format).toEqual("webp");
+      expect((await sharp(outputs[2]).metadata()).hasAlpha).toBe(true);
+    });
+
+    it("regenerates thumbnails from a stored original", async function () {
+      const args = { op: "regenerate", crop: null, shape: "square", sizes };
+      const { meta, outputs } = await sandbox.run("template-image", args, await image(200, 100, "webp"));
+      expect(meta).toEqual([{ width: 160, height: 80 }, { width: 40, height: 40 }]);
+      expect(outputs.length).toEqual(2);
+    });
+
+    it("rejects arguments it does not expect", async function () {
+      const input = await image(20, 20);
+      const bad = [
+        undefined,
+        { op: "nope" },
+        { op: "generate", shape: "square", editable: false, sizes: [] },
+        { op: "generate", shape: "square", editable: "yes", sizes },
+        { op: "generate", shape: "hexagon-ish", editable: false, sizes },
+        { op: "generate", shape: "square", editable: false, sizes: [{ size: 1e6, crop: false }] },
+        { op: "regenerate", crop: { x: {} }, shape: "square", sizes },
+      ];
+      for (const args of bad) {
+        expect(await rejection(sandbox.run("template-image", args, input))).not.toBeNull();
+      }
+    });
+  });
+
+  describe("favicon", function () {
+    const valid = { extract: { left: 0, top: 0, width: 20, height: 20 }, shape: "circle", ico: [16, 32], png: [16, 180] };
+
+    it("makes an ico and one png per size", async function () {
+      const { outputs } = await sandbox.run("favicon", valid, await image(30, 20, "jpeg"));
+      expect(outputs.length).toEqual(3);
+      expect(outputs[0].subarray(0, 4)).toEqual(Buffer.from([0, 0, 1, 0]));
+      expect((await sharp(outputs[1]).metadata()).width).toEqual(16);
+      expect((await sharp(outputs[2]).metadata()).width).toEqual(180);
+    });
+
+    it("rejects arguments it does not expect", async function () {
+      const input = await image(30, 20);
+      const bad = [
+        undefined,
+        { ...valid, extract: null },
+        { ...valid, extract: { left: -1, top: 0, width: 20, height: 20 } },
+        { ...valid, extract: { left: 0, top: 0, width: 0, height: 20 } },
+        { ...valid, ico: [] },
+        { ...valid, png: [4096] },
+        { ...valid, shape: "nope" },
+      ];
+      for (const args of bad) {
+        expect(await rejection(sandbox.run("favicon", args, input))).not.toBeNull();
+      }
+    });
+  });
+
   describe("exif", function () {
     it("rejects fields it does not expect", async function () {
       const input = await image(10, 10);

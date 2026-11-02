@@ -1,4 +1,4 @@
-const { SHAPES, ORGANIC_SHAPES, normalizeShape, shapeIcon } = require("../../../../build/thumbnail/image-mask");
+const { SHAPES, ORGANIC_SHAPES, normalizeShape, shapeIcon } = require("sandbox/jobs/image-mask");
 
 module.exports = function photoMaskOptions(mask) {
   let selectedMask = "circle";

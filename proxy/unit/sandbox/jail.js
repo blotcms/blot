@@ -67,6 +67,23 @@ const JOBS = {
     maxInputBytes: 256 * MiB,
     maxOutputBytes: 64 * MiB,
   },
+  // A template image setting: the decode check, the original and its
+  // thumbnails (app/build/thumbnail/template-image.js)
+  "template-image": {
+    command: node("template-image"),
+    memoryBytes: 512 * MiB,
+    timeSeconds: 60,
+    maxInputBytes: 256 * MiB,
+    maxOutputBytes: 64 * MiB,
+  },
+  // A template's favicon set: one ICO and a few PNGs
+  favicon: {
+    command: node("favicon"),
+    memoryBytes: 512 * MiB,
+    timeSeconds: 60,
+    maxInputBytes: 256 * MiB,
+    maxOutputBytes: 8 * MiB,
+  },
   // Spawns perl, which runs exiftool, reading the image from stdin
   exif: {
     command: node("exif"),

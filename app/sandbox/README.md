@@ -32,6 +32,9 @@ starts `SANDBOX_`, and it never falls back to in-process.
 - `to-png` converts an image (HEIC, AVIF, TIFF...) to PNG.
 - `exif` exiftool on stdin, reduced to the fields asked for. It spawns
   `/usr/bin/perl /usr/bin/exiftool` directly; in-process it honours `EXIFTOOL_PATH`.
+- `template-image` a template image setting: a decode check, then the original
+  and its thumbnails, cropped and cut to a shape (`image-mask.js`, `crop.js`).
+- `favicon` a template's favicon set, one ICO and a few PNGs.
 
 Callers write any output files themselves: the jail can't reach the data mount.
 Args are JSON and every job checks them, since they come from the less trusted side.
