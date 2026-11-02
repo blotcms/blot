@@ -740,7 +740,7 @@ describe("git store commit", function () {
       // commit and the three trees. None of it grows with the history.
       expect(cold.reads).toBeGreaterThan(0);
       expect(cold.lists).toBe(0);
-      expect(cold.reading).toBeLessThanOrEqual(warm ? 20 : 26); // without a cache, index parts are fetched again
+      expect(cold.reading).toBeLessThanOrEqual(warm ? 14 : 20); // without a cache, index parts are fetched again
       expect(cold.writing).toBe(7);
 
       if (!warm) return;
