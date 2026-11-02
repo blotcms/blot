@@ -11,6 +11,7 @@
 const fs = require("fs");
 const net = require("net");
 const config = require("config");
+const alerts = require("./alerts");
 
 const JOB = /^[a-z-]+$/;
 
@@ -173,7 +174,12 @@ function viaBroker(socketPath, job, args, input) {
 async function run(job, args, input) {
   const socketPath = config.sandbox.socket;
   if (!socketPath) return inProcess(job, args, input);
-  return viaBroker(socketPath, job, args, input);
+  try {
+    return await viaBroker(socketPath, job, args, input);
+  } catch (err) {
+    alerts.jobFailed(job, err);
+    throw err;
+  }
 }
 
 module.exports = { run };
