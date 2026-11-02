@@ -6,6 +6,13 @@ const { join, sep } = require("path");
 // looks after it too.
 const STAGING_DIRECTORY = "storage-assets-staging";
 
+// Where storage/folder's S3 backend keeps files inside config.tmp_directory:
+// what a tool writes for path() and commit(), and ensureLocal's downloads.
+// app/scheduler/prune-tmp.js judges both file by file, not by the age of the
+// directory, since a directory's mtime says nothing about the files below it.
+const FOLDER_STAGING_DIRECTORY = "storage-folder-staging";
+const FOLDER_DOWNLOAD_DIRECTORY = "storage-folder";
+
 function isMissing(err) {
   return (
     err &&
@@ -97,4 +104,7 @@ function createPool(limit) {
   return { add, drain };
 }
 
-module.exports = { STAGING_DIRECTORY, isMissing, isScopeName, walkLocal, createPool };
+module.exports = {
+  STAGING_DIRECTORY,
+  FOLDER_STAGING_DIRECTORY,
+  FOLDER_DOWNLOAD_DIRECTORY, isMissing, isScopeName, walkLocal, createPool };

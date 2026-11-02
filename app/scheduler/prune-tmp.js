@@ -7,7 +7,11 @@ const fs = require("fs-extra");
 const config = require("config");
 const path = require("path");
 const lifecycle = require("../dashboard/site/import/lifecycle");
-const { STAGING_DIRECTORY } = require("../storage/util");
+const {
+  STAGING_DIRECTORY,
+  FOLDER_STAGING_DIRECTORY,
+  FOLDER_DOWNLOAD_DIRECTORY,
+} = require("../storage/util");
 
 // Nothing the app puts in tmp is meant to last this long: uploads are
 // consumed by the request that made them, and conversions by the build.
@@ -28,7 +32,11 @@ const IMPORT_DIRECTORY = "import";
 // abandoned by a crash or a deploy. They may also be in use for as long as
 // a build takes, and a directory's mtime says nothing about the files below
 // it, so unlike the rest of tmp these are judged file by file, and kept far
-// longer than any build runs.
+// longer than any build runs. storage/folder's S3 backend stages files the
+// same way (tmp/storage-folder-staging/{blogID}/...), so they are kept as
+// long. Its ensureLocal downloads (tmp/storage-folder/...) are judged file
+// by file too, but only kept a day, like the rest of tmp: one may be in use
+// while its directory looks old, and an old one is just downloaded again.
 const STAGING_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Total size of the files under a path, without following symlinks
@@ -132,16 +140,15 @@ module.exports = async function pruneTmp(options) {
   // about its contents, so it is never judged on its age.
   const importRoot = path.join(tmpDirectory, IMPORT_DIRECTORY);
   const stagingRoot = path.join(tmpDirectory, STAGING_DIRECTORY);
+  const folderStagingRoot = path.join(tmpDirectory, FOLDER_STAGING_DIRECTORY);
+  const folderDownloadRoot = path.join(tmpDirectory, FOLDER_DOWNLOAD_DIRECTORY);
+  const byFile = [importRoot, stagingRoot, folderStagingRoot, folderDownloadRoot];
 
-  await prune(
-    tmpDirectory,
-    maxAgeMs,
-    now,
-    report,
-    (entryPath) => entryPath === importRoot || entryPath === stagingRoot
-  );
+  await prune(tmpDirectory, maxAgeMs, now, report, (entryPath) => byFile.includes(entryPath));
 
   await pruneFiles(stagingRoot, stagingMaxAgeMs, now, report);
+  await pruneFiles(folderStagingRoot, stagingMaxAgeMs, now, report);
+  await pruneFiles(folderDownloadRoot, maxAgeMs, now, report);
 
   for (const blogID of await readdir(importRoot)) {
     // An import with a live lease (running.txt) has a worker on it. Imports
