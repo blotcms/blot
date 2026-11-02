@@ -212,6 +212,8 @@ A pack is deleted only after it has been unnamed and unwritten for at least two 
 
 ### Measurements: what many packs cost
 
+These numbers were taken before #2400, which reads small indexes whole and caches them as recommended below. A one-file push into 128 packs went from about 3.6 s to 1.2 s cold and 0.5 s warm with that change; its PR has the full before and after.
+
 `scripts/git/measure-packs.js` (not a spec; see its header for how to run it) pushes a synthetic repository through the real `receive` with a real `git push`, with the same 128 commits, 33,154 objects (52.8 MiB of packs, 0.9 MiB of `.idx`) and refs every time, grouped into 1, 8, 32, 64 or 128 pushes and so that many packs. Each is loaded into MinIO and every operation is run against it through toxiproxy with the real modules, counting the SDK's requests. Assumed: 25 ms (+/-5) added to every S3 response, which is a same-region first byte for a small GET, HEAD or PUT, and 60 MB/s a connection each way; the client (git, or the clone's reader) is on the same host, so only the store's latency is in the numbers. Cache 512 MiB, median of two repetitions; cold is an empty cache, warm is the same cache after an earlier operation of the same kind. A one-file change is a delta against a blob in the newest pack.
 
 | cold / warm | 1 pack | 8 | 32 | 64 | 128 |
