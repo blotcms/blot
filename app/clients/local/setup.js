@@ -95,6 +95,8 @@ function watch(blogID) {
   try {
     if (watchers[blogID]) return;
 
+    // chokidar needs a real directory, so this stays on localPath and a blog
+    // on the Local client stays on the local-disk backend of storage/folder.
     // To stop this watcher, call watcher.close();
     const watcher = chokidar.watch(localPath(blogID, "/"), {
       cwd: localPath(blogID, "/"),

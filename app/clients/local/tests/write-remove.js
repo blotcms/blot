@@ -1,0 +1,38 @@
+describe("local client write and remove", function () {
+  global.test.blog();
+
+  const folder = require("storage/folder");
+  const write = require("clients/local/write");
+  const remove = require("clients/local/remove");
+  const { promisify } = require("util");
+
+  it("writes a file into the blog folder, creating parents", async function () {
+    await promisify(write)(this.blog.id, "/posts/hello.txt", "Hello");
+    const contents = await folder.read(this.blog.id, "/posts/hello.txt");
+    expect(contents.toString()).toBe("Hello");
+  });
+
+  it("does not write an ignored name", async function () {
+    let error;
+    try {
+      await promisify(write)(this.blog.id, "/.DS_Store", "x");
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeDefined();
+    expect(await folder.exists(this.blog.id, "/.DS_Store")).toBe(false);
+  });
+
+  it("removes a file and a directory", async function () {
+    await promisify(write)(this.blog.id, "/a/b.txt", "b");
+    await promisify(remove)(this.blog.id, "/a/b.txt");
+    expect(await folder.exists(this.blog.id, "/a/b.txt")).toBe(false);
+    await promisify(write)(this.blog.id, "/dir/c.txt", "c");
+    await promisify(remove)(this.blog.id, "/dir");
+    expect(await folder.exists(this.blog.id, "/dir")).toBe(false);
+  });
+
+  it("treats removing a missing path as a no-op", async function () {
+    await promisify(remove)(this.blog.id, "/missing.txt");
+  });
+});

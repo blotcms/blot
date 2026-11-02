@@ -1,6 +1,5 @@
-const fs = require("fs-extra");
 const debug = require("debug")("blot:clients:local:write");
-const localPath = require("helper/localPath");
+const folder = require("storage/folder");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 
 // Writes a file or folder from at a given path inside
@@ -13,5 +12,7 @@ module.exports = function write(blogID, path, contents, callback) {
     return callback(new Error(`Cannot write ignored file: ${path}`));
   }
 
-  fs.outputFile(localPath(blogID, path), contents, callback);
+  folder.write(blogID, path, contents).then(function () {
+    callback(null);
+  }, callback);
 };
