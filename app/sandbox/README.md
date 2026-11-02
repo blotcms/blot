@@ -130,6 +130,15 @@ no-new-privs comes with it, so no setuid program works under Node. The broker an
 the proxy jail start separately, as they must. OpenResty isn't filtered, and
 neither is anything run by `docker exec`.
 
+## Alerts
+
+`alerts.js` emails the admin (`SANDBOX_ALERT`) when a job is killed, times out,
+is cut short or answers nonsense, when the broker can't be reached or its queue
+is full, and, checked every five minutes from each web process, when the unit's
+fetch proxy (the airlock's or the jail's) stops answering or lets the metadata
+address through. A job that fails on bad input isn't reported. At most one
+email per process every ten minutes, with counts for what happened in between.
+
 ## Why
 
 - **The broker is root-owned.** A jail with its own uid and cgroups has to be

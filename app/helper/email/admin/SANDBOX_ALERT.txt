@@ -1,0 +1,15 @@
+Sandbox problems on {{{container}}}
+
+In the last ten minutes or so:
+
+{{{lines}}}
+
+Log in to the server and look at the broker and the proxy jail:
+
+$ docker logs --since 30m blot-blue 2>&1 | grep -E "broker:|proxy jail:"
+
+Memory peaks and kills of the sandbox's cgroups:
+
+$ unit-mem-summary.sh
+
+To turn a part of the sandbox off, remove its flag (BLOT_SANDBOX_BROWSER or BLOT_SANDBOX_PROXY, or BLOT_SANDBOX for all of it) from /etc/blot/proxy.env and deploy a new commit. See app/sandbox/README.md.
