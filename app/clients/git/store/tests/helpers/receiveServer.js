@@ -6,12 +6,14 @@
 //   const server = await createReceiveServer({ store, cache, lock });
 //   await push(dir, [server.url, "master"]);     // a real git, resolves { code, stderr }
 //   server.results                               // what receive() answered, in order
+//   server.responses                             // the streamed responses (their stats)
 //   await server.close();
 const http = require("http");
 const zlib = require("zlib");
 const { spawn } = require("child_process");
 const manifest = require("../../manifest");
 const receive = require("../../receive");
+const createResponse = require("../../sideband");
 
 const ZERO = "0".repeat(40);
 const CAPABILITIES = "report-status delete-refs side-band-64k quiet ofs-delta agent=blot";
@@ -65,21 +67,6 @@ async function* remainder(rest, iterator) {
   }
 }
 
-// What the client reads: messages on band 2, the report on band 1
-function report(capabilities, result) {
-  const band = (number, content) => pkt(Buffer.concat([Buffer.from([number]), content]));
-  const lines = [pkt("unpack " + result.status + "\n")];
-  for (const { ref, error } of result.results) lines.push(pkt((error ? "ng " + ref + " " + error : "ok " + ref) + "\n"));
-  lines.push(Buffer.from("0000"));
-
-  if (!/side-band-64k/.test(capabilities)) return Buffer.concat(lines);
-  return Buffer.concat([
-    ...result.messages.map((message) => band(2, Buffer.from(message + "\n"))),
-    band(1, Buffer.concat(lines)),
-    Buffer.from("0000"),
-  ]);
-}
-
 async function advertise(store, res) {
   const current = await manifest.read(store);
   const refs = Object.entries(current.refs).sort(([a], [b]) => (a < b ? -1 : 1));
@@ -93,8 +80,9 @@ async function advertise(store, res) {
   res.end(Buffer.concat(parts));
 }
 
-async function createReceiveServer({ store, cache, lock, limit }) {
+async function createReceiveServer({ store, cache, lock, limit, keepaliveMs }) {
   const results = [];
+  const responses = [];
 
   const server = http.createServer(async (req, res) => {
     try {
@@ -105,7 +93,10 @@ async function createReceiveServer({ store, cache, lock, limit }) {
       const { lines, rest } = await readCommands(iterator);
       const { commands, capabilities } = parse(lines);
 
-      const result = await receive({
+      const response = createResponse(res, { capabilities, commands, keepaliveMs });
+      responses.push(response);
+
+      await receive({
         store,
         cache,
         lock,
@@ -113,13 +104,13 @@ async function createReceiveServer({ store, cache, lock, limit }) {
         pack: remainder(rest, iterator),
         limit,
         sizeHint: Number(req.headers["content-length"] || 0),
-      });
-      results.push(result);
-
-      res.writeHead(200, { "content-type": "application/x-git-receive-pack-result" });
-      res.end(report(capabilities, result));
+        progress: response.progress,
+      }).then((result) => {
+        results.push(result);
+        response.finish(result);
+      }, response.fail);
     } catch (err) {
-      res.writeHead(500);
+      if (!res.headersSent) res.writeHead(500);
       res.end(String(err.stack));
     }
   });
@@ -129,6 +120,7 @@ async function createReceiveServer({ store, cache, lock, limit }) {
   return {
     url: "http://127.0.0.1:" + server.address().port + "/repo.git",
     results,
+    responses,
     close: () => new Promise((resolve) => server.close(resolve)),
   };
 }
@@ -137,15 +129,20 @@ async function createReceiveServer({ store, cache, lock, limit }) {
 // is where the server runs)
 function push(cwd, args) {
   return new Promise((resolve, reject) => {
-    const child = spawn("git", ["push", ...args], {
+    const child = spawn("git", ["push", ...(args[0] === "-q" ? [] : ["--progress"]), ...args], {
       cwd,
       env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null", GIT_TERMINAL_PROMPT: "0" },
     });
     const stderr = [];
-    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    const started = Date.now();
+    const events = [];
+    child.stderr.on("data", (chunk) => {
+      stderr.push(chunk);
+      events.push({ at: Date.now() - started, text: chunk.toString() });
+    });
     child.stdout.resume();
     child.on("error", reject);
-    child.on("close", (code) => resolve({ code, stderr: Buffer.concat(stderr).toString() }));
+    child.on("close", (code) => resolve({ code, stderr: Buffer.concat(stderr).toString(), events, endedAt: Date.now() - started }));
   });
 }
 

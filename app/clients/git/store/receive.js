@@ -14,6 +14,8 @@
 //   pack       an async iterable of Buffers: the rest of the request after the
 //              commands. It may be empty or a pack with no objects.
 //   limit      the most bytes of pack accepted (default 2 GiB)
+//   progress   progress(message), called as each stage starts, with a line
+//              for the blog's owner; see sideband.js for streaming it. Optional.
 //   sizeHint   how big the pack is expected to be (the Content-Length), so
 //              the reservation starts near the right size; optional
 //
@@ -487,7 +489,13 @@ function answer(commands, { outcome, status = "ok", problems = {}, messages = []
   return { outcome, status, results, messages, ...extra };
 }
 
-async function receive({ store, cache, lock, commands, pack = null, limit = DEFAULT_LIMIT, sizeHint = 0 }) {
+async function receive({ store, cache, lock, commands, pack = null, limit = DEFAULT_LIMIT, sizeHint = 0, progress = null }) {
+  // A host's callback must never be able to fail a push
+  const say = (message) => {
+    try {
+      if (progress) progress(message);
+    } catch (err) {}
+  };
   const incoming = createIncoming(pack);
   const children = new Set();
   const stats = { bytes: 0, objects: 0, basesFetched: 0, packs: [] };
@@ -503,10 +511,11 @@ async function receive({ store, cache, lock, commands, pack = null, limit = DEFA
     const behind = staleRefs(base, commands);
     if (behind) throw behind;
 
-    const added = await prepare({ store, cache, commands, incoming, limit, sizeHint, base, children, stats, hold: (r) => (reservation = r) });
+    const added = await prepare({ store, cache, commands, incoming, limit, sizeHint, base, children, stats, hold: (r) => (reservation = r), say });
     const next = await swap({ store, lock, commands, added });
 
     stats.packs = added.packs.map((piece) => piece.name);
+    say("Push saved.");
     return answer(commands, { outcome: "ok", extra: { seq: next.seq, stats } });
   } catch (err) {
     await incoming.drain();
@@ -555,7 +564,7 @@ function staleRefs(current, commands) {
 // Everything up to the upload: the pack in scratch, completed and checked, its
 // history piece, and both uploaded. Resolves with { packs, pieces } to name in
 // the manifest (none, for a push of refs only).
-async function prepare({ store, cache, commands, incoming, limit, sizeHint, base, children, stats, hold }) {
+async function prepare({ store, cache, commands, incoming, limit, sizeHint, base, children, stats, hold, say }) {
   const added = { packs: [], pieces: [] };
   const needsPack = commands.some((command) => command.new !== ZERO);
   const reservation = await cache.reserve(Math.min(limit, Math.max(sizeHint, FIRST_RESERVE), Math.floor(cache.maxBytes / 2)));
@@ -577,6 +586,7 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, base
   // A request which carried no pack, or a pack with no objects, is a push of
   // refs to objects the repository has
   if (stats.bytes > 0) {
+    say("Checking the pack...");
     let scanned;
     try {
       scanned = await scanPack(incomingFile);
@@ -589,6 +599,7 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, base
       const wanted = [...scanned.bases].filter((oid) => !scanned.whole.has(oid));
       const basesDir = path.join(reservation.dir, "bases");
       await fsp.mkdir(basesDir, { recursive: true });
+      if (wanted.length) say(wanted.length >= 100 ? "Fetching " + wanted.length + " files the push builds on..." : "Fetching files the push builds on...");
       const bases = await fetchBases(repo, wanted, basesDir, reservation);
       stats.basesFetched = bases.fetched.size;
 
@@ -622,6 +633,7 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, base
       }
       local = await loadObjects(scratch, gitDir, checked.map(([oid]) => oid));
 
+      say("Checking the new commits...");
       const missing = await findMissing({ repo, fresh, local, present });
       if (missing.length) {
         throw new Refused("ok", Object.fromEntries(commands.filter((c) => c.new !== ZERO).map((c) => [c.ref, "missing necessary objects"])));
@@ -639,6 +651,8 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, base
 
   // Nothing is acknowledged before this, and the manifest names no pack which
   // is not uploaded: a failure here leaves the repository as it was
+  say("Saving to Blot...");
+
   // Every upload ends before this returns, so none is still reading a file
   // from scratch when scratch is deleted
   const uploads = await Promise.allSettled([...added.packs, ...added.pieces].map((piece) => uploadPack(store, piece)));
