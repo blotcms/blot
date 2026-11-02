@@ -89,6 +89,16 @@ Retrieves all entries including deleted ones (reads from the `all` list). Return
 
 - `callback(entries)` — array of `Entry` instances.
 
+### `getCatalog(blogID, [options])`
+
+Every entry of the blog, like `getAll`, but cached in this process per blog `cacheID` (`catalog.js`), for rendering. Resolves to a copy the caller may change.
+
+- `options.keep` — the heavy fields (`html`, `body`, `teaser`, `teaserBody`, `summary`) to keep; the rest are stripped before the catalog is stored. Every heavy field when left out. A call is served from any stored copy that kept at least those fields.
+- `options.cacheID` — the blog's `cacheID`, when the caller already has it; read from Redis otherwise.
+- `options.log` — `req.log`, told whether the lookup was a hit, a miss or waited on another call's read.
+
+Don't use it in code that writes back what it read (sync, `Fix()`, scripts): a write is only visible here once the blog's `cacheID` has been bumped. Use `getAll`.
+
 ### `getAllIDs(blogID, callback)`
 
 Returns all entry IDs (including deleted) in reverse-creation-date order.
@@ -231,9 +241,9 @@ The lex index is only updated incrementally by `_assign.js` when the ready flag 
 | `app/blog/entries.js` | `getPage` — serves the paginated entries list view |
 | `app/blog/render/retrieve/posts.js` | `getPage` — provides posts to template rendering |
 | `app/blog/render/retrieve/recent_entries.js` | `getRecent` |
-| `app/blog/render/retrieve/all_entries.js` | `getAll` |
+| `app/blog/render/retrieve/all_entries.js` | `getCatalog` (via `helpers/getAllCached.js`) |
 | `app/blog/render/retrieve/total_posts.js` | `getTotal` |
-| `app/blog/render/retrieve/archives.js` | `getAll` |
+| `app/blog/render/retrieve/archives.js` | `getCatalog` (via `helpers/getAllCached.js`) |
 | `app/blog/render/retrieve/latest_entry.js` | `getPage` |
 | `app/blog/entry.js` | `adjacentTo` — next/previous navigation |
 | `app/blog/random.js` | `random` — random entry redirect |

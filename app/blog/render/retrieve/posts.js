@@ -1,11 +1,11 @@
 const { getEntry, getPage } = require("../../lib/models");
-const { createRenderCache, timeClone } = require("../../lib/cacheMetrics");
+const { createRenderCache, timeClone } = require("models/cache/metrics");
 const fetchTaggedEntries = require("./helpers/fetchTaggedEntries");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const getTemplateSortOptions = require("blog/sortOptions");
-const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
-const cacheStats = require("../../lib/cacheStats");
-const fetchCached = require("../../lib/fetchCached");
+const { cloneDeep, prepareCacheValue } = require("models/cache/clone");
+const cacheStats = require("models/cache/stats");
+const fetchCached = require("models/cache/fetchCached");
 const asRetriever = require("../../lib/asRetriever");
 const {
   normalizePageNumber,

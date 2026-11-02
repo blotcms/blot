@@ -10,11 +10,13 @@ describe("getAllCached", function () {
 
   beforeEach(function () {
     delete require.cache[getAllCachedPath];
+    require("models/entries/catalog")._clear();
     getAllCached = require("../getAllCached");
   });
 
   afterEach(function () {
     delete require.cache[getAllCachedPath];
+    require("models/entries/catalog")._clear();
   });
 
   // A fresh catalog on every call, since getAllCached strips it in place.
@@ -243,17 +245,17 @@ describe("getAllCached", function () {
     stubCatalog();
 
     await getAllCached(blog, { retrieve: NARROW });
-    expect(getAllCached._stats().size).toEqual(1);
+    expect(require("models/entries/catalog")._stats().size).toEqual(1);
 
     await getAllCached(blog, { retrieve: WIDE });
     expect(Entries.getAll).toHaveBeenCalledTimes(2);
-    expect(getAllCached._stats().size).toEqual(1);
+    expect(require("models/entries/catalog")._stats().size).toEqual(1);
 
     // The wide copy now serves the narrow request, so no third fetch.
     const narrow = await getAllCached(blog, { retrieve: NARROW });
     expect(narrow[0].html).toBeUndefined();
     expect(Entries.getAll).toHaveBeenCalledTimes(2);
-    expect(getAllCached._stats().size).toEqual(1);
+    expect(require("models/entries/catalog")._stats().size).toEqual(1);
   });
 
   it("does not evict a copy that kept fields the new one did not", async function () {
@@ -263,7 +265,7 @@ describe("getAllCached", function () {
     await getAllCached(blog, { retrieve: retrieveWith({ summary: true }) });
 
     expect(Entries.getAll).toHaveBeenCalledTimes(2);
-    expect(getAllCached._stats().size).toEqual(2);
+    expect(require("models/entries/catalog")._stats().size).toEqual(2);
   });
 
   describe("concurrent requests", function () {
@@ -311,12 +313,12 @@ describe("getAllCached", function () {
       const narrowEntries = await narrow;
 
       expect(narrowEntries[0].html).toBeUndefined();
-      expect(getAllCached._stats().size).toEqual(1);
+      expect(require("models/entries/catalog")._stats().size).toEqual(1);
 
       // The wide copy serves the narrow request.
       await getAllCached(blog, { retrieve: NARROW });
       expect(Entries.getAll).toHaveBeenCalledTimes(2);
-      expect(getAllCached._stats().size).toEqual(1);
+      expect(require("models/entries/catalog")._stats().size).toEqual(1);
     });
 
     it("shares one in-flight fill between requests with the same needs", async function () {
@@ -384,48 +386,23 @@ describe("getAllCached", function () {
     expect(Entries.getAll.calls.argsFor(1)[0]).toEqual("blog-2");
   });
 
-  describe("bypassCache", function () {
-    it("neither reads nor writes the cache", async function () {
-      stubCatalog();
+  it("reads the cacheID from Redis when the caller doesn't pass one", async function () {
+    const client = require("models/client");
+    const getCatalog = require("models/entries/catalog");
+    stubCatalog();
+    spyOn(client, "hGet").and.returnValues(
+      Promise.resolve("100"),
+      Promise.resolve("100"),
+      Promise.resolve("101")
+    );
 
-      await getAllCached(blog, { bypassCache: true, retrieve: WIDE });
-      expect(getAllCached._stats().size).toEqual(0);
+    await getCatalog("blog-1", { keep: [] });
+    await getCatalog("blog-1", { keep: [] });
+    expect(Entries.getAll).toHaveBeenCalledTimes(1);
 
-      await getAllCached(blog, { retrieve: WIDE });
-      expect(Entries.getAll).toHaveBeenCalledTimes(2);
-      expect(getAllCached._stats().size).toEqual(1);
-
-      // A populated cache is not read either.
-      await getAllCached(blog, { bypassCache: true, retrieve: WIDE });
-      expect(Entries.getAll).toHaveBeenCalledTimes(3);
-    });
-
-    it("still strips heavy fields per retrieve", async function () {
-      stubCatalog();
-
-      const entries = await getAllCached(blog, {
-        bypassCache: true,
-        retrieve: NARROW,
-      });
-
-      expect(entries[0].title).toEqual("A");
-      ALL_HEAVY.forEach(function (field) {
-        expect(entries[0][field]).toBeUndefined();
-      });
-    });
-
-    it("still shares one in-flight fetch between concurrent requests", async function () {
-      const pending = deferGetAll();
-
-      const first = getAllCached(blog, { bypassCache: true, retrieve: WIDE });
-      const second = getAllCached(blog, { bypassCache: true, retrieve: WIDE });
-
-      expect(Entries.getAll).toHaveBeenCalledTimes(1);
-      pending[0]();
-      await Promise.all([first, second]);
-
-      expect(Entries.getAll).toHaveBeenCalledTimes(1);
-    });
+    await getCatalog("blog-1", { keep: [] });
+    expect(Entries.getAll).toHaveBeenCalledTimes(2);
+    expect(client.hGet).toHaveBeenCalledWith("blog:blog-1:info", "cacheID");
   });
 
   it("does not cache an empty catalog", async function () {
@@ -437,7 +414,7 @@ describe("getAllCached", function () {
     await getAllCached(blog, { retrieve: NARROW });
 
     expect(Entries.getAll).toHaveBeenCalledTimes(2);
-    expect(getAllCached._stats().size).toEqual(0);
+    expect(require("models/entries/catalog")._stats().size).toEqual(0);
   });
 
   it("returns Entry instances when getAll returns them, whether or not heavy fields are stripped", async function () {

@@ -11,6 +11,7 @@ var mime = require("mime-types");
 
 // This method is used to retrieve the locals,
 // partials and missing locals for a given view, and whether it uses backlinks.
+// Uncached: Template.getFullView is ./fullViewCache, which calls this.
 module.exports = function getFullView(blogID, templateID, viewName, callback) {
   ensure(blogID, "string")
     .and(templateID, "string")
@@ -102,8 +103,8 @@ module.exports = function getFullView(blogID, templateID, viewName, callback) {
 // are never wrapped. Calls back with the wrapping options (the blog's
 // current hosts, see blog/lib/blogHosts), or null not to wrap.
 //
-// getFullView runs once per view per blog cacheID in each process
-// (blog/render/full-view-cache), so this lookup and the wrapping don't run
+// This runs once per view per blog and template cacheID in each process
+// (./fullViewCache), so this lookup and the wrapping don't run
 // on every request. A new handle or domain bumps the cacheID (models/blog/set).
 function folderLinkOptions(blogID, templateID, callback) {
   if (templateID.indexOf(blogID + ":") !== 0) return callback(null, null);

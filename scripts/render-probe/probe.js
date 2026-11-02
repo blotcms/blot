@@ -56,7 +56,7 @@ const als = new AsyncLocalStorage();
 
 // ---------------------------------------------------------------------------
 // Instrumentation. Must be installed before require("blog"), and in order:
-// most render modules destructure helpers from blog/lib/clone and
+// most render modules destructure helpers from models/cache/clone and
 // blog/render/load/augmentedEntries when they load (getAllCached included),
 // so those are wrapped first, then the modules that require them.
 
@@ -143,11 +143,17 @@ function wrapExport(moduleName, key, label) {
 function instrumentRender() {
   // A blog module loaded before this point may already hold an unwrapped
   // helper, so its calls would go untimed.
-  const early = Object.keys(require.cache).filter((file) => file.includes("/app/blog/"));
+  const early = Object.keys(require.cache).filter(
+    (file) =>
+      file.includes("/app/blog/") ||
+      file.endsWith("/app/models/entries/catalog.js") ||
+      file.endsWith("/app/models/template/fullViewCache.js")
+  );
   if (early.length) console.warn("probe: blog modules loaded before instrumenting:", early);
 
-  wrapExport("blog/lib/clone", "prepareCacheValue", "prepareCacheValue");
-  wrapExport("blog/lib/clone", "cloneDeep", "cloneDeep");
+  const clone = tryResolve("models/cache/clone") ? "models/cache/clone" : "blog/lib/clone";
+  wrapExport(clone, "prepareCacheValue", "prepareCacheValue");
+  wrapExport(clone, "cloneDeep", "cloneDeep");
   wrapExport("blog/render/load/augmentedEntries", "augmentEntries", "augmentEntries");
   wrapExport("blog/render/load/augmentedEntries", "shareEntries", "shareEntries");
   wrapExport("blog/render/retrieve/helpers/getAllCached", null, "getAllCached");
@@ -390,7 +396,9 @@ async function catalogTimings(blog, entries) {
   const redisClient = require("models/client");
   const Entries = require("models/entries");
   const { entry: entryKey } = require("models/entry/key");
-  const { cloneDeep, prepareCacheValue } = require("blog/lib/clone");
+  const { cloneDeep, prepareCacheValue } = require(
+    tryResolve("models/cache/clone") ? "models/cache/clone" : "blog/lib/clone"
+  );
   const { getAll } = require("blog/lib/models");
 
   const elapsed = (start) => Math.round((performance.now() - start) * 10) / 10;
@@ -735,6 +743,9 @@ async function main() {
       "blog/render/retrieve/archives",
       "blog/render/retrieve/posts",
       "blog/render/retrieve/tagged",
+      // The two above that moved into the models (--release can be older)
+      "models/template/fullViewCache",
+      "models/entries/catalog",
     ]
       .filter((name) => tryResolve(name) && require(name)._stats)
       .map((name) => require(name)._stats()),

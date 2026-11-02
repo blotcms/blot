@@ -6,7 +6,7 @@ module.exports = {
   getMetadata: require("./getMetadata"),
   setMetadata: require("./setMetadata"),
 
-  getFullView: require("./getFullView"),
+  getFullView: require("./fullViewCache"),
   getView: require("./getView"),
   getViewByURL: require("./getViewByURL"),
   getViewsByURLs: require("./getViewsByURLs"),

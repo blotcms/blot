@@ -45,6 +45,9 @@ const CACHE_STATS = [
   "blog/render/retrieve/tagged",
   "blog/render/retrieve/all_entries",
   "blog/render/retrieve/helpers/getAllCached",
+  // Where those two caches live once they moved into the models
+  "models/template/fullViewCache",
+  "models/entries/catalog",
 ];
 
 const loop = monitorEventLoopDelay({ resolution: 10 });

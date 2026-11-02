@@ -45,7 +45,7 @@ at sync/build time instead.
   conflicts; Google Drive's local fingerprint reads `dev`, `ino`, `ctimeNs`
   and `mtimeNs`; the local client watches the folder with chokidar.
 - Rendered template views are cached in-process
-  (`app/blog/render/full-view-cache.js`, an LRU bounded by count and bytes,
+  (`app/models/template/fullViewCache.js`, an LRU bounded by count and bytes,
   not Redis), and rendered template CSS/JS in Redis (`app/cdn/index.js`
   `/template`), so neither is read from disk per request.
 - Generated assets (thumbnails, doc conversions, image optimization) are
