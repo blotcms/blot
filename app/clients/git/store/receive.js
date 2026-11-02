@@ -16,8 +16,8 @@
 //   limit      the most bytes of pack accepted (default 2 GiB)
 //   progress   progress(message), called as each stage starts, with a line
 //              for the blog's owner; see sideband.js for streaming it. Optional.
-//   baseLimit  the largest delta base stored as a delta that is resolved
-//              (default 256 MiB); a base stored whole has no limit
+//   smallBase  the largest base stored as a delta that is resolved in memory
+//              rather than in scratch (default 16 MiB); for specs to lower
 //   sizeHint   how big the pack is expected to be (the Content-Length), so
 //              the reservation starts near the right size; optional
 //
@@ -101,12 +101,12 @@ const RESERVE_STEP = 8 * MiB;
 // How many objects are fetched or checked at once
 const CONCURRENCY = 8;
 
-// A base which is stored whole is streamed to scratch whatever its size. One
-// stored as a delta has to be resolved in memory, so those are read up to
-// SMALL_BASE with several at once; any larger is read on its own, up to
-// `baseLimit` (default DEFAULT_BASE_LIMIT), and past that the push is refused.
+// A base is streamed to scratch whatever its size. One stored as a delta is
+// resolved in memory if it is up to SMALL_BASE (several at once, so this is the
+// most memory a push's bases take, times CONCURRENCY), and otherwise is built
+// in files in the push's reservation, one at a time. There is no limit on a
+// base's size: the reservation, and so the cache's budget, is what bounds it.
 const SMALL_BASE = 16 * MiB;
-const DEFAULT_BASE_LIMIT = 256 * MiB;
 
 // The commits, trees and tags of a push are held in memory to be checked.
 // This is far more than any real push has.
@@ -290,58 +290,116 @@ async function writeIncoming(incoming, reservation, cache, file, limit) {
   return bytes;
 }
 
+// Lets the reader build delta-stored bases in files out of the push's own
+// reservation, so the push's scratch space stays one number. Each request takes
+// room from the reservation (extending it) and a directory inside it, and gives
+// the room back when released. The reader builds one at a time, so several big
+// bases do not reserve together.
+function scratchFrom(reservation, cache) {
+  let count = 0;
+
+  // The push needs room it could never have, as opposed to room which is taken
+  // just now: all it holds already (the pack, the other bases) and `bytes` more
+  function mustFit(bytes) {
+    if (reservation.bytes + bytes > cache.maxBytes) {
+      const err = new TooLargeError("The push needs " + (reservation.bytes + bytes) + " bytes of scratch space and the cache holds " + cache.maxBytes);
+      err.size = bytes;
+      throw err;
+    }
+  }
+
+  return {
+    async reserve(bytes) {
+      let held = 0;
+      let released = false;
+      const dir = path.join(reservation.dir, "expand-" + ++count);
+
+      try {
+        mustFit(bytes);
+        await reservation.extend(bytes);
+        held = bytes;
+        await fsp.mkdir(dir);
+      } catch (err) {
+        reservation.shrink(held);
+        throw err;
+      }
+
+      return {
+        dir,
+        async extend(more) {
+          mustFit(more);
+          await reservation.extend(more);
+          held += more;
+        },
+        async release() {
+          if (released) return;
+          released = true;
+          try {
+            await fsp.rm(dir, { recursive: true, force: true });
+          } finally {
+            reservation.shrink(held);
+          }
+        },
+      };
+    },
+  };
+}
+
+// A base which this push could never have the room for is a refusal: trying
+// again will not help, unlike a cache which is full just now
+function tooBig(size) {
+  return new Refused(
+    "the push builds on a file" + (size ? " of " + formatSize(size) : "") + " which is larger than Blot can currently handle. Please contact support."
+  );
+}
+
 // Writes the objects `oids` that the store has as loose objects under `dir`,
 // which index-pack reads as an alternate to complete the thin pack. Each is
-// deflated as it streams, so a large base costs no more memory than a small
-// one (apart from one stored as a delta: see SMALL_BASE). Resolves with
+// deflated as it streams, so a base costs no more memory than the chunk it is
+// on, whatever its size and however it is stored. One stored as a delta
+// (OFS_DELTA or REF_DELTA, possibly a chain) is resolved in memory if it is
+// up to SMALL_BASE, and otherwise is built in files in the reservation (see the
+// reader's `scratch`), whose size the reservation then counts. Resolves with
 // { fetched: Set of IDs, bytes }.
-async function fetchBases(repo, oids, dir, reservation, baseLimit) {
+async function fetchBases(repo, oids, dir, reservation, cache, smallBase) {
   const fetched = new Set();
-  const large = [];
   let bytes = 0;
 
-  async function fetchOne(oid, cap) {
-    const found = await repo.stream(oid, { maxSize: cap });
+  await mapLimit(oids, CONCURRENCY, async (oid) => {
+    let found;
+    try {
+      found = await repo.stream(oid, { maxSize: smallBase });
+    } catch (err) {
+      if (err instanceof TooLargeError) throw tooBig(err.size);
+      throw err;
+    }
     if (!found) return;
 
-    // Room for the loose copy here, and for the copy index-pack appends to the pack
-    await reservation.extend(2 * found.size + 1024);
-    const file = path.join(dir, oid.slice(0, 2), oid.slice(2));
-    await fsp.mkdir(path.dirname(file), { recursive: true });
-    await pipeline(
-      Readable.from(
-        (async function* () {
-          yield Buffer.from(found.type + " " + found.size + "\0");
-          yield* found.data;
-        })()
-      ),
-      zlib.createDeflate({ level: 1 }),
-      fs.createWriteStream(file)
-    );
+    try {
+      // Room for the loose copy here, and for the copy index-pack appends to the pack
+      const need = 2 * found.size + 1024;
+      if (reservation.bytes + need > cache.maxBytes) throw tooBig(found.size);
+      await reservation.extend(need);
+      const file = path.join(dir, oid.slice(0, 2), oid.slice(2));
+      await fsp.mkdir(path.dirname(file), { recursive: true });
+      await pipeline(
+        Readable.from(
+          (async function* () {
+            yield Buffer.from(found.type + " " + found.size + "\0");
+            yield* found.data;
+          })()
+        ),
+        zlib.createDeflate({ level: 1 }),
+        fs.createWriteStream(file)
+      );
+    } finally {
+      // A stream never started still holds the files it was built in
+      if (found.data.return) await found.data.return().catch(() => {});
+    }
 
     fetched.add(oid);
     bytes += found.size;
-  }
-
-  await mapLimit(oids, CONCURRENCY, async (oid) => {
-    try {
-      await fetchOne(oid, Math.min(SMALL_BASE, baseLimit));
-    } catch (err) {
-      if (!(err instanceof TooLargeError)) throw err;
-      large.push(oid);
-    }
   });
-
-  for (const oid of large) {
-    try {
-      await fetchOne(oid, baseLimit);
-    } catch (err) {
-      if (!(err instanceof TooLargeError)) throw err;
-      throw new Refused(
-        "the push builds on a file which Blot stores in a form it can only use up to " + formatSize(baseLimit) + ", and this one is larger."
-      );
-    }
-  }
 
   return { fetched, bytes };
 }
@@ -596,7 +654,7 @@ function answer(commands, { outcome, status = "ok", problems = {}, messages = []
   return { outcome, status, results, messages, ...extra };
 }
 
-async function receive({ store, cache, lock, commands, pack = null, limit = DEFAULT_LIMIT, sizeHint = 0, baseLimit = DEFAULT_BASE_LIMIT, progress = null }) {
+async function receive({ store, cache, lock, commands, pack = null, limit = DEFAULT_LIMIT, sizeHint = 0, smallBase = SMALL_BASE, progress = null }) {
   // A host's callback must never be able to fail a push
   const say = (message) => {
     try {
@@ -625,7 +683,7 @@ async function receive({ store, cache, lock, commands, pack = null, limit = DEFA
     const behind = staleRefs(base, commands) || nameConflicts(applied(base, commands), commands);
     if (behind) throw behind;
 
-    const added = await prepare({ store, cache, commands, incoming, limit, sizeHint, base, children, stats, baseLimit, hold: (r) => (reservation = r), say });
+    const added = await prepare({ store, cache, commands, incoming, limit, sizeHint, base, children, stats, smallBase, hold: (r) => (reservation = r), say });
     const next = await swap({ store, cache, lock, commands, added });
 
     stats.packs = added.packs.map((piece) => piece.name);
@@ -714,14 +772,14 @@ function staleRefs(current, commands) {
 // Everything up to the upload: the pack in scratch, completed and checked, its
 // history piece, and both uploaded. Resolves with { packs, pieces } to name in
 // the manifest (none, for a push of refs only).
-async function prepare({ store, cache, commands, incoming, limit, sizeHint, base, children, stats, baseLimit, hold, say }) {
+async function prepare({ store, cache, commands, incoming, limit, sizeHint, base, children, stats, smallBase, hold, say }) {
   const added = { packs: [], pieces: [] };
   const needsPack = commands.some((command) => command.new !== ZERO);
   const reservation = await cache.reserve(Math.min(limit, Math.max(sizeHint, FIRST_RESERVE), Math.floor(cache.maxBytes / 2)));
   hold(reservation);
 
   const scratch = createScratch(reservation, children);
-  const repo = createReader({ store, cache, packs: base.packs });
+  const repo = createReader({ store, cache, packs: base.packs, scratch: scratchFrom(reservation, cache) });
   const incomingFile = path.join(reservation.dir, "incoming.pack");
   const gitDir = path.join(reservation.dir, "repo.git");
 
@@ -749,7 +807,7 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, base
       const basesDir = path.join(reservation.dir, "bases");
       await fsp.mkdir(basesDir, { recursive: true });
       if (wanted.length) say(wanted.length >= 100 ? "Fetching " + wanted.length + " files the push builds on..." : "Fetching files the push builds on...");
-      const bases = await fetchBases(repo, wanted, basesDir, reservation, baseLimit);
+      const bases = await fetchBases(repo, wanted, basesDir, reservation, cache, smallBase);
       stats.basesFetched = bases.fetched.size;
 
       // The pack index-pack writes holds the pack, its bases and an index
