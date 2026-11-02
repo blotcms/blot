@@ -107,12 +107,15 @@ case "$cmd" in
   *"sudo bash -c"*) script=${cmd#sudo bash -c }; eval "bash -c ${script//\/etc\/blot/$W/etc.$m}" ;;
   *"sed -n 's/^BLOT_HOST"*) echo blot.test ;;
   *"mountpoint -q"*) [ ! -e "$W/nomount.$m" ] ;;
+  *'grep -qs "^\[blot-b2\]"'*) true ;;
+  *"grep -qsxF"*) [ -n "${STUB_NEW_HAS_B2:-}" ] || { [ -n "${STUB_NEW_HAS_B2_CREDS:-}" ] && [[ "$cmd" == *credentials* ]]; } ;;
   *".aws/credentials"*) cat > /dev/null; touch "$W/creds.$m" ;;
   *"mkdir /tmp/blot-data-volume"*) cat > /dev/null ;;
   *blockdev*) echo "268435456 bytes (268 MB, 256 MiB) copied, 1.0 s, 268 MB/s" ;;
   *"host.sh prewarm"*) printf 'prewarm=%s\nprewarm_percent=10\nprewarm_duration_s=5\n' "$(cat "$W/prewarm" 2> /dev/null || echo running)" ;;
   *".blot-data-volume"*) cat "$W/marker" 2> /dev/null || echo vol-0e ;;
-  *"aws sts"*) [ -z "${STUB_NO_BACKUP_KEY:-}" ] ;;
+  *"aws sts"*) [ -z "${STUB_NO_BACKUP_KEY:-}" ] && { [ -z "${STUB_AWS_AFTER_COPY:-}" ] || [ -e "$W/aws-copied" ]; } ;;
+  *'tar -C "$HOME" -xf -'*) cat > /dev/null; touch "$W/aws-copied" ;;
   *"curl -sS"*"cdn.blot.test"*"/layout.css"*) echo "${STUB_STATIC:-200}" ;;
   *"curl -sS"*) echo "${STUB_PROBE:-200}" ;;
   *"tar -C"*) cat > /dev/null ;;
@@ -502,9 +505,25 @@ run --drill app old new
 has "after that nothing is forced" "$CALLS" "force= skip_write=1"
 ready_for_switch
 echo None > "$W/tag"; rm "$W/units.new"
-run --production app old new
+STUB_AWS_AFTER_COPY=1 run --production app old new
 status_is "a production app works" 0
 has "it copies the backup key from the old Redis" "$CALLS" 'tar -C "$HOME" -cf - .aws'
+ready_for_switch
+echo None > "$W/tag"; rm "$W/units.new"
+run --production app old new
+status_is "a production app with working credentials works" 0
+lacks "it leaves them alone, as an old host on an instance profile has no key to copy" "$CALLS" 'tar -C "$HOME" -cf - .aws'
+has "and adds the offsite profile, which backup.sh needs" "$CALLS" '[blot-b2]'
+ready_for_switch
+echo None > "$W/tag"; rm "$W/units.new"
+STUB_NEW_HAS_B2=1 run --production app old new
+lacks "it doesn't add the offsite profile twice" "$CALLS" "awk -v s="
+ready_for_switch
+echo None > "$W/tag"; rm "$W/units.new"
+STUB_NEW_HAS_B2_CREDS=1 run --production app old new
+has "a half-finished copy of the profile is completed" "$CALLS" "awk -v s='[profile blot-b2]'"
+lacks "without repeating the half that is there" "$CALLS" "awk -v s='[blot-b2]'"
+has "each on a line of its own" "$CALLS" "{ echo; cat; }"
 ready_for_switch
 echo None > "$W/tag"; rm "$W/units.new"
 STUB_NO_BACKUP_KEY=1 run --production app old new

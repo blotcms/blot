@@ -257,6 +257,28 @@ async function sandboxProxyWorks({ config }) {
   return `the metadata address was refused through ${config.airlock.proxy}`;
 }
 
+// With the sandbox on, Node runs under one seccomp filter more than this process,
+// which docker exec started outside the supervisor (proxy/unit/supervisor.sh).
+async function nodeFilter() {
+  if (!process.env.BLOT_SANDBOX_SOCKET) return "skipped, BLOT_SANDBOX_SOCKET is not set";
+
+  const filters = (status) => Number(/^Seccomp_filters:\s*(\d+)/m.exec(status)[1]);
+  const own = filters(await fs.readFile("/proc/self/status", "utf8"));
+
+  let checked = 0;
+  for (const pid of (await fs.readdir("/proc")).filter((name) => /^\d+$/.test(name))) {
+    const command = await fs.readFile(`/proc/${pid}/cmdline`, "utf8").catch(() => "");
+    if (command !== "node\0app/index.js\0") continue;
+    const status = await fs.readFile(`/proc/${pid}/status`, "utf8");
+    if (filters(status) <= own || !/^NoNewPrivs:\s*1/m.test(status)) {
+      throw new Error(`node pid ${pid} is not under the filter`);
+    }
+    checked++;
+  }
+  if (!checked) throw new Error("did not find node-a");
+  return `node-a has more seccomp filters than a docker exec (${own})`;
+}
+
 async function requiredEnv() {
   const missing = REQUIRED_ENV.filter((name) => !process.env[name]);
   if (missing.length) throw new Error(`unset: ${missing.join(", ")}`);
@@ -340,6 +362,7 @@ module.exports = [
   { name: "sharp", run: sharpWorks },
   { name: "sandbox", run: sandboxWorks },
   { name: "sandbox browser", run: sandboxBrowserWorks },
+  { name: "node filter", run: nodeFilter },
   { name: "required environment", run: requiredEnv },
   { name: "airlock", run: airlock },
   { name: "sandbox proxy", run: sandboxProxyWorks },

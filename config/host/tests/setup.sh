@@ -80,7 +80,7 @@ check "fail2ban-client and iptables exist" in_ct 'command -v fail2ban-client && 
 check "firewalld is not installed" in_ct '! rpm -q firewalld'
 check "sqlite3 is installed, for bans.sh export" in_ct 'command -v sqlite3'
 check "docker is installed and not running" in_ct 'rpm -q docker && ! grep -lx dockerd /proc/[0-9]*/comm 2> /dev/null'
-check "cron entry" in_ct '[ "$(grep -v "^#" /etc/cron.d/blot-docker-health)" = "* * * * * root /usr/local/bin/check_docker_health.sh >/dev/null 2>&1" ] &&
+check "cron entry" in_ct '[ "$(grep -v "^#" /etc/cron.d/blot-docker-health)" = "* * * * * root /usr/local/bin/check_docker_health.sh >> /home/ec2-user/docker-health-check.log 2>&1" ] &&
   [ "$(stat -c "%a %U:%G" /etc/cron.d/blot-docker-health)" = "644 root:root" ]'
 check "docker drop-in" in_ct 'grep -qx "After=redis6.service" /etc/systemd/system/docker.service.d/30-redis.conf &&
   ! grep -qE "^(Wants|Requires)=" /etc/systemd/system/docker.service.d/30-redis.conf'

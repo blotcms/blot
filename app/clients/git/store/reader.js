@@ -105,6 +105,24 @@ function createReader({ store, cache = null, packs, maxSize = DEFAULT_MAX_SIZE }
     return (await locate(oid)) !== null;
   }
 
+  // The type of object `oid` ("commit", "tree", "blob" or "tag"), or null if
+  // no pack has it. Only entry headers are read: the one at the object, and for
+  // a delta the headers of its bases until one is not a delta. That is a
+  // single small read when the object is stored whole. The data is not
+  // inflated, so unlike read() this does not check the object against its ID.
+  async function typeOf(oid) {
+    let at = await locate(oid);
+    if (!at) return null;
+
+    for (let steps = 0; steps < MAX_CHAIN; steps++) {
+      const entry = await at.pack.pack.open(at.offset);
+      entry.output.return();
+      if (!isDelta(entry)) return entry.type;
+      at = await baseOf(at, entry);
+    }
+    throw new CorruptError("Delta chain does not end");
+  }
+
   // The object `oid` as { type, size, data }, or null if no pack has it.
   // Throws CorruptError if what the packs hold for it is not it.
   async function read(oid, { maxSize: limit = maxSize } = {}) {
@@ -145,7 +163,7 @@ function createReader({ store, cache = null, packs, maxSize = DEFAULT_MAX_SIZE }
     return { type: entry.type, size: entry.size, data: verified() };
   }
 
-  return { packs: opened.map((p) => p.name), has, locate, read, stream, pack: (name) => byName.get(name) };
+  return { packs: opened.map((p) => p.name), has, locate, typeOf, read, stream, pack: (name) => byName.get(name) };
 }
 
 module.exports = createReader;

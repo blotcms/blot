@@ -355,9 +355,12 @@ COPY proxy/unit/sandbox/broker.js proxy/unit/sandbox/jail.js proxy/unit/sandbox/
      proxy/unit/sandbox/network.cfg proxy/unit/sandbox/network-proxy-blue.cfg \
      proxy/unit/sandbox/network-proxy-green.cfg proxy/unit/sandbox/tinyproxy.conf \
      proxy/unit/sandbox/egress.nft proxy/unit/sandbox/egress-proxy.nft \
-     proxy/unit/sandbox/enter-network.sh /usr/local/lib/blot-sandbox/
-RUN chmod -R go-w /usr/local/lib/blot-sandbox \
- && nsjail --help >/dev/null
+     proxy/unit/sandbox/enter-network.sh proxy/unit/sandbox/node-filter.js \
+     /usr/local/lib/blot-sandbox/
+RUN node /usr/local/lib/blot-sandbox/node-filter.js > /usr/local/lib/blot-sandbox/node.seccomp \
+ && chmod -R go-w /usr/local/lib/blot-sandbox \
+ && nsjail --help >/dev/null \
+ && setpriv --no-new-privs --seccomp-filter /usr/local/lib/blot-sandbox/node.seccomp true
 
 COPY proxy/unit/supervisor.sh /usr/local/bin/unit-supervisor
 COPY proxy/unit/healthcheck.sh /usr/local/bin/unit-healthcheck

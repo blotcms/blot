@@ -37,11 +37,10 @@
 // With -p or -c the blogs finish out of order, so no position is printed to
 // resume from, and the progress line doesn't show the entry being rebuilt.
 
-const fs = require("fs-extra");
 const Blog = require("models/blog");
 const Entries = require("models/entries");
 const Entry = require("models/entry");
-const localPath = require("helper/localPath");
+const folder = require("storage/folder");
 const clfdate = require("helper/clfdate");
 const establishSyncLock = require("sync/establishSyncLock");
 const rebuildEntry = require("sync/update/rebuildEntry");
@@ -171,7 +170,7 @@ async function rebuildEntries(blog, paths) {
 
         const source = folderPostSourceFolder(entry) || entry.path;
 
-        if (!(await fs.pathExists(localPath(blog.id, source)))) {
+        if (!(await folder.exists(blog.id, source))) {
           stats.entriesMissing++;
           log(blog, "Skipping, source file no longer exists:", path);
           continue;
