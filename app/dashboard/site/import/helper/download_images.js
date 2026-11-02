@@ -4,7 +4,7 @@ var extname = require("path").extname;
 var parse = require("url").parse;
 var each_el = require("./each_el");
 var fs = require("fs-extra");
-var sharp = require("sharp");
+var sandbox = require("sandbox");
 var mime = require("mime-types");
 var assetDirectory = require("./asset_directory");
 var boundedDownload = require("./download");
@@ -14,9 +14,9 @@ function download(url, callback) {
   boundedDownload(url, { airlockLabel: "import/download_images" })
     .then(async ({ data, headers }) => {
       lifecycle.check();
-      const metadata = await sharp(data).metadata();
+      const { meta } = await sandbox.run("metadata", {}, data);
       lifecycle.check();
-      return { data, format: metadata.format, headers: {
+      return { data, format: meta.format, headers: {
         contentType: headers.get("content-type"),
         contentDisposition: headers.get("content-disposition"),
       }};

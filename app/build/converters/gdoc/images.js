@@ -2,7 +2,7 @@ const Transformer = require("helper/transformer");
 const { extname } = require("path");
 const hash = require("helper/hash");
 const assets = require("storage/assets");
-const sharp = require("sharp");
+const sandbox = require("sandbox");
 const mime = require("mime-types");
 
 async function processImages(blogID, docPath, $) {
@@ -71,8 +71,8 @@ async function processImages(blogID, docPath, $) {
       }
 
       if (!ext) {
-        const metadata = await sharp(buffer).metadata();
-        ext = metadata.format;
+        const { meta } = await sandbox.run("metadata", {}, buffer);
+        ext = meta.format;
       }
 
       filename = hash(src) + "." + ext;
@@ -161,8 +161,8 @@ async function determineExtension(path) {
 
   if (!ext) {
     try {
-      const metadata = await sharp(path).metadata();
-      ext = metadata.format;
+      const { meta } = await sandbox.run("metadata", {}, { path });
+      ext = meta.format;
     } catch (err) {}
   }
 
