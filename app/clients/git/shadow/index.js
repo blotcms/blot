@@ -102,7 +102,13 @@ function log(fields) {
   );
 
   console.log(clfdate(), "[git-store-shadow] " + keys.map((key) => key + "=" + value(fields[key])).join(" "));
+
+  // What a mirror came to, for mirror()'s caller (the backfill): a blog's
+  // operations never overlap, so its last push or import line is the mirror's
+  if (fields.op === "push" || fields.op === "import") outcomes.set(fields.blog, fields);
 }
+
+const outcomes = new Map();
 
 // An error's message, with the blog's repository path and handle taken out
 function scrub(err, ctx) {
@@ -390,7 +396,7 @@ async function runMirror(ctx, task) {
     const outcome = measured.result;
 
     if (outcome && outcome.imported) {
-      const imported = await runImport(ctx, ebs, extra, measured);
+      const imported = await runImport(ctx, ebs, extra, measured, task.scratchDir);
 
       // Another process imported it first: push onto what it imported
       if (imported === null && attempt < 2) continue;
@@ -463,8 +469,9 @@ async function runMirror(ctx, task) {
 }
 
 // `before` is the measurement of the mirror's read which found the store
-// empty, counted in with the import's
-async function runImport(ctx, ebs, extra, before) {
+// empty, counted in with the import's. With scratchDir (the backfill's, on a
+// large disk) the packs are built there, not in the cache's budget.
+async function runImport(ctx, ebs, extra, before, scratchDir) {
   const { blogID, gitDir, store, cache, lock } = ctx;
 
   if (!Object.keys(ebs).length) {
@@ -475,7 +482,7 @@ async function runImport(ctx, ebs, extra, before) {
   let measured;
 
   try {
-    measured = await measure(() => importRepo({ store, cache, lock, gitDir }));
+    measured = await measure(() => importRepo({ store, cache, lock, gitDir, scratchDir: scratchDir || null }));
   } catch (err) {
     // Another process imported it first: the next mirror pushes onto that
     if (err.code === "ENOTEMPTY" || err.code === "EMOVED") {
@@ -664,6 +671,8 @@ async function drain(blogID, state) {
 
     let ctx = null;
 
+    outcomes.delete(blogID);
+
     try {
       ctx = await contextFor(blogID);
 
@@ -686,7 +695,8 @@ async function drain(blogID, state) {
     if (next === "mirror") requestMirror(blogID, { op: "push", reason: "write" });
     if (next && next.compact && ctx) requestCompact(blogID, state, ctx, next.compact);
 
-    task.resolve();
+    task.resolve(task.type === "mirror" ? outcomes.get(blogID) : undefined);
+    outcomes.delete(blogID);
   }
 
   state.draining = null;
@@ -695,7 +705,7 @@ async function drain(blogID, state) {
 
 // Queues a mirror, unless the last thing queued is one already, which then
 // covers this request too: it reads both sides when it starts.
-function requestMirror(blogID, { op = "push", ebsMs, reason } = {}) {
+function requestMirror(blogID, { op = "push", ebsMs, reason, scratchDir } = {}) {
   if (removed.has(blogID)) return Promise.resolve();
 
   const state = stateOf(blogID);
@@ -705,10 +715,11 @@ function requestMirror(blogID, { op = "push", ebsMs, reason } = {}) {
     last.requests++;
     if (ebsMs !== undefined) last.ebsMs = ebsMs;
     if (last.reason !== reason) last.reason = undefined;
+    if (scratchDir) last.scratchDir = scratchDir;
     return last.done;
   }
 
-  const task = { type: "mirror", op, ebsMs, reason, requests: 1 };
+  const task = { type: "mirror", op, ebsMs, reason, scratchDir, requests: 1 };
   task.done = new Promise((resolve) => (task.resolve = resolve));
   state.queue.push(task);
   start(blogID, state);
@@ -804,6 +815,10 @@ const removed = new Map();
 // nothing (contextFor).
 let removeAgainMs = 5 * 60 * 1000;
 
+// The second passes waiting to run, so _reset() can cancel them: a spec's
+// disconnect would otherwise reach into a spec running minutes later
+const removeAgainTimers = new Set();
+
 // Deletes every object under the blog's prefix, a few at a time
 async function deleteCopy(blogID) {
   if (makeObjectStore === s3ObjectStore && !(config.storage && config.storage.bucket)) return null;
@@ -858,6 +873,7 @@ async function removeBlog(blogID) {
   await deleteAndLog(blogID, 1);
 
   const again = setTimeout(() => {
+    removeAgainTimers.delete(again);
     require("models/blog").get({ id: blogID }, async (err, blog) => {
       // Back on git: its new copy is not ours to delete
       if (err || !blog || blog.client !== "git") await deleteAndLog(blogID, 2);
@@ -865,13 +881,27 @@ async function removeBlog(blogID) {
     });
   }, removeAgainMs);
 
+  removeAgainTimers.add(again);
   if (again.unref) again.unref();
 }
 
-// Makes the store's refs equal to EBS's, in the queue. Resolves once done;
-// never rejects.
-function mirror(blogID) {
-  return requestMirror(blogID, { op: "push", reason: "asked" });
+// Makes the store's refs equal to EBS's, in the queue. Resolves once done,
+// with the fields of the mirror's last log line (op=push or op=import, with
+// its outcome), or undefined if it was dropped; never rejects. options:
+// reason, for the log line, and scratchDir, where an import builds its packs.
+function mirror(blogID, { reason = "asked", scratchDir } = {}) {
+  return requestMirror(blogID, { op: "push", reason, scratchDir });
+}
+
+// Whether there is a bucket to shadow into (or a spec's stores)
+function hasStore() {
+  return makeObjectStore !== s3ObjectStore || !!(config.storage && config.storage.bucket);
+}
+
+// A blog's object store, uncounted and not kept, for the daily maintenance
+// (./maintenance.js), which lists and deletes what is left of blogs off git
+function objectStoreFor(blogID) {
+  return makeObjectStore(blogID);
 }
 
 // Resolves once nothing is queued or running for the blog, compaction included
@@ -896,6 +926,9 @@ function _reset() {
   stores = new LRUCache({ max: STORES });
   cache = null;
   removed.clear();
+  outcomes.clear();
+  removeAgainTimers.forEach((timer) => clearTimeout(timer));
+  removeAgainTimers.clear();
   Object.keys(stats).forEach((key) => (stats[key] = 0));
 }
 
@@ -905,6 +938,13 @@ module.exports = {
   mirror,
   idle,
   removeBlog,
+  contextFor,
+  ebsRefs,
+  git,
+  log,
+  scrub,
+  hasStore,
+  objectStoreFor,
   readContext,
   stats,
   _setObjectStore,

@@ -16,6 +16,7 @@ describe("scheduler", function () {
     "check-redis-host",
     "sweep-git",
     "prune-tmp",
+    "git-store-maintenance",
     "check-featured-sites",
     "daily-update",
     "subscription-emails",
