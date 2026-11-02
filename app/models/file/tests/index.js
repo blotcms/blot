@@ -288,10 +288,33 @@ describe("models/file", function () {
         yield { path: "/c.txt", type: "file", size: 4, modified: MODIFIED, sha1: "" };
       }
 
-      expect(await File.rebuild(this.blog.id, listing())).toEqual({ files: 2, dirs: 2, bytes: 7 });
+      expect(await File.rebuild(this.blog.id, listing())).toEqual({ files: 2, dirs: 2, bytes: 7, skipped: [] });
       expect(await File.get(this.blog.id, "/stale.txt")).toBeNull();
       expect(await collect(File.subtree(this.blog.id, "/"))).toEqual(["/a", "/a/b.txt", "/c.txt", "/empty"]);
       expect(await File.get(this.blog.id, "/c.txt")).toEqual(Object.assign(file(4), { sha1: "" }));
+    });
+
+    it("skips records which conflict with one before them, and reports them", async function () {
+      var records = [
+        { path: "/a", type: "file", size: 1, modified: MODIFIED },
+        { path: "/a/b.txt", type: "file", size: 2, modified: MODIFIED },
+        { path: "/a", type: "dir", size: 0, modified: MODIFIED },
+        { path: "/c.txt", type: "file", size: 4, modified: MODIFIED },
+        { path: "/d", type: "dir", size: 0, modified: MODIFIED },
+        { path: "/d", type: "file", size: 8, modified: MODIFIED },
+      ];
+
+      var counts = await File.rebuild(this.blog.id, records);
+
+      expect(counts.skipped).toEqual([
+        { path: "/a/b.txt", type: "file", code: "ENOTDIR" },
+        { path: "/a", type: "dir", code: "EEXIST" },
+        { path: "/d", type: "file", code: "EISDIR" },
+      ]);
+      expect(counts.files).toEqual(2);
+      expect(counts.bytes).toEqual(5);
+      expect((await File.get(this.blog.id, "/a")).type).toEqual("file");
+      expect((await File.get(this.blog.id, "/d")).type).toEqual("dir");
     });
 
     it("takes more records than one batch", async function () {
@@ -299,7 +322,7 @@ describe("models/file", function () {
 
       for (var i = 0; i < 1201; i++) records.push({ path: "/d/" + i, type: "file", size: 1, modified: MODIFIED });
 
-      expect(await File.rebuild(this.blog.id, records)).toEqual({ files: 1201, dirs: 1, bytes: 1201 });
+      expect(await File.rebuild(this.blog.id, records)).toEqual({ files: 1201, dirs: 1, bytes: 1201, skipped: [] });
       expect((await File.listAll(this.blog.id, "/d")).length).toEqual(1201);
     });
   });

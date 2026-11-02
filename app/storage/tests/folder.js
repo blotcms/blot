@@ -486,6 +486,24 @@ describe("storage/folder", function () {
         expect(big.hash).toMatch(/^[0-9a-f]{64}$/);
       });
 
+      it("includes the SHA-1 of the file's bytes only when asked", async function () {
+        var crypto = require("crypto");
+
+        await folder.write(this.blog.id, "/a.txt", "hello");
+        await folder.write(this.blog.id, "/empty.txt", "");
+        await folder.mkdir(this.blog.id, "/d");
+
+        // Whichever backend holds the file, the same bytes give the same hash
+        expect((await folder.stat(this.blog.id, "/a.txt", { sha1: true })).sha1).toEqual(
+          crypto.createHash("sha1").update("hello").digest("hex")
+        );
+        expect((await folder.stat(this.blog.id, "/empty.txt", { sha1: true })).sha1).toEqual(
+          crypto.createHash("sha1").update("").digest("hex")
+        );
+        expect((await folder.stat(this.blog.id, "/a.txt")).sha1).toBeUndefined();
+        expect((await folder.stat(this.blog.id, "/d", { sha1: true })).sha1).toBeUndefined();
+      });
+
       it("rejects a missing file with ENOENT and exists is false", async function () {
         var err = await rejection(folder.stat(this.blog.id, "/nope.txt", { hash: true }));
 
@@ -1248,7 +1266,7 @@ describe("storage/folder", function () {
 
         var counts = await backend.rebuildIndex(this.blog.id, { hash: true });
 
-        expect(counts).toEqual({ files: 2, dirs: 2, bytes: 7 });
+        expect(counts).toEqual({ files: 2, dirs: 2, bytes: 7, skipped: [] });
         expect(await collect(folder.walk(this.blog.id, "/", { directories: true }))).toEqual(before);
         expect((await File.get(this.blog.id, "/a/b.txt")).sha1).toEqual(record.sha1);
       });
@@ -1259,6 +1277,7 @@ describe("storage/folder", function () {
         await backend.rebuildIndex(this.blog.id);
 
         expect((await File.get(this.blog.id, "/a.txt")).sha1).toEqual("");
+        expect((await folder.stat(this.blog.id, "/a.txt", { sha1: true })).sha1).toEqual(sha1("x"));
         expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("x");
         expect(await fs.readFile(await folder.ensureLocal(this.blog.id, "/a.txt"), "utf8")).toEqual("x");
       });

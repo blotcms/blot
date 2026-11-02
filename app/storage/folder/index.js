@@ -102,7 +102,10 @@ module.exports = {
   // epoch and size 0 for a directory. A file also gets hash when called with
   // { hash: true }: Dropbox's content_hash (helper/hashFile). It is opt-in
   // because on the local backend computing it reads the whole file, so only
-  // callers which need it ask. On S3 it comes from the index at no cost.
+  // callers which need it ask. On S3 it costs a download. With
+  // { sha1: true } a file also gets sha1, the SHA-1 of its bytes in hex (as
+  // entries' contentHash uses): read from the file on the local backend, and
+  // from the index at no cost on S3.
   stat: delegate("stat"),
 
   // Resolves to a boolean. A symlink counts as missing.

@@ -217,6 +217,12 @@ async function setMany(blogID, items) {
 
     // Packed now so a bad record fails before anything is read
     pack(item);
+
+    // A file and a directory at one path, as a listing could hold
+    if (wanted.has(path) && wanted.get(path).type !== item.type) {
+      throw failure(item.type === "dir" ? "EEXIST" : "EISDIR", "A file and a directory at: " + path);
+    }
+
     wanted.set(path, item);
   }
 
@@ -435,27 +441,57 @@ async function removeAll(blogID) {
   await client.del([key.dir(blogID, "/"), key.lower(blogID, "/"), key.paths(blogID), key.totals(blogID)]);
 }
 
+// The errors setMany raises for a path which cannot exist beside what is
+// already recorded: below a file, a file over a directory, a directory over
+// a file
+var CONFLICTS = ["ENOTDIR", "EISDIR", "EEXIST"];
+
 // Replaces a blog's index with records from a full listing of its folder:
 // records is an iterable or async iterable of { path, type, size, modified,
-// sha1 }. Resolves to { files, dirs, bytes } as recorded.
+// sha1 }. Resolves to { files, dirs, bytes, skipped } as recorded.
+//
+// S3 can hold what a disk cannot: a file "a" and objects below "a/". Blot's
+// own writes refuse to make that, but a listing may still contain it, so a
+// record which conflicts with one recorded before it is skipped rather than
+// failing the rebuild. skipped lists them as { path, type, code }: listing
+// order puts "a" before "a/...", so the file is kept and what is below it
+// skipped.
 async function rebuild(blogID, records) {
   check(blogID);
 
-  var counts = { files: 0, dirs: 0, bytes: 0 };
+  var counts = { files: 0, dirs: 0, bytes: 0, skipped: [] };
   var batch = [];
+
+  async function flush() {
+    try {
+      await setMany(blogID, batch);
+    } catch (err) {
+      if (CONFLICTS.indexOf(err.code) === -1) throw err;
+
+      // Nothing of the batch was written: setMany checks before its exec. One
+      // at a time finds which records conflict.
+      for (var record of batch) {
+        try {
+          await setMany(blogID, [record]);
+        } catch (err) {
+          if (CONFLICTS.indexOf(err.code) === -1) throw err;
+          counts.skipped.push({ path: normalize(record.path), type: record.type, code: err.code });
+        }
+      }
+    }
+
+    batch = [];
+  }
 
   await removeAll(blogID);
 
   for await (var record of records) {
     batch.push(record);
 
-    if (batch.length >= 500) {
-      await setMany(blogID, batch);
-      batch = [];
-    }
+    if (batch.length >= 500) await flush();
   }
 
-  if (batch.length) await setMany(blogID, batch);
+  if (batch.length) await flush();
 
   var sum = await totals(blogID);
 

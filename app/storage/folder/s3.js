@@ -2,6 +2,7 @@ var config = require("config");
 var ensure = require("helper/ensure");
 var pathNormalizer = require("helper/pathNormalizer");
 var hashFile = require("helper/hashFile");
+var sha1File = require("util").promisify(require("helper/transformer/hash"));
 var fs = require("fs-extra");
 var crypto = require("crypto");
 var { randomUUID: uuid } = require("crypto");
@@ -614,6 +615,11 @@ async function stat(blogID, relPath, options) {
   // pairs (#2258, "Content hash")
   if (options && options.hash && !isDirectory) {
     result.hash = await hashFile(await ensureLocal(blogID, path));
+  }
+
+  // Free from the index, unless a rebuild without hashing left it out
+  if (options && options.sha1 && !isDirectory) {
+    result.sha1 = found.sha1 || (await sha1File(await ensureLocal(blogID, path)));
   }
 
   return result;

@@ -66,7 +66,7 @@ All return promises.
 | `set(blogID, path, record)`, `setMany(blogID, [{ path, ...record }])` | Record paths, giving every ancestor without a record a directory record (S3 has implicit directories). Refuses a path below a file (ENOTDIR), a file over a directory (EISDIR) and a directory over a file (EEXIST) |
 | `remove(blogID, path)` | Forget a file, or a directory and its whole subtree. Resolves to the removed record, or null |
 | `removeAll(blogID)` | Forget the whole folder |
-| `rebuild(blogID, records)` | Replace the index with records from a full listing (an iterable or async iterable). Resolves to `{ files, dirs, bytes }` |
+| `rebuild(blogID, records)` | Replace the index with records from a full listing (an iterable or async iterable). Resolves to `{ files, dirs, bytes, skipped }`. A record which conflicts with one before it (below a file, or a file and a directory at one path, which S3 can hold and a disk cannot) is skipped and listed in `skipped` as `{ path, type, code }` |
 
 Removing a directory goes through its subtree deepest first, a page at a time, so each file's size is still in its parent's hash when the totals are corrected. If it stops part way, what is left is consistent apart from a lowercased lookup which may still name a child already gone, until its directory goes too.
 
