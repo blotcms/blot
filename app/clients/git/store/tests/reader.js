@@ -71,6 +71,12 @@ describe("git store reader", function () {
       await expectAllObjects(reader);
     });
 
+    it("tells the type of every object, through delta chains, from entry headers only", async function () {
+      const { reader } = await readerFor(packs);
+      for (const [oid, want] of oracle) expect(await reader.typeOf(oid)).toBe(want.type);
+      expect(await reader.typeOf("1".repeat(40))).toBeNull();
+    });
+
     it("reads every object with a cache, cold then warm", async function () {
       const cache = createCache({ dir: workDir + "/cache-a", maxBytes: 50 * 1024 * 1024 });
       const { reader } = await readerFor(packs, { cache });
