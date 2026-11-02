@@ -65,7 +65,10 @@ function parseCommit(buffer) {
 
 // [{ mode, name, oid }] in the order stored. `mode` is as git writes it in
 // the tree ("100644", "100755", "120000", "40000" for a directory, "160000"
-// for a submodule), not zero-padded.
+// for a submodule), not zero-padded. `name` is decoded as UTF-8; `nameBytes` is
+// the name as stored, and `validName` is false if those bytes are not UTF-8,
+// in which case `name` holds replacement characters and cannot be used to
+// tell two such names apart.
 function parseTree(buffer) {
   const entries = [];
   let at = 0;
@@ -78,9 +81,14 @@ function parseTree(buffer) {
     const mode = buffer.toString("latin1", at, space);
     if (!/^[0-7]{5,6}$/.test(mode)) fail("tree", "an entry has the mode " + JSON.stringify(mode));
 
+    const nameBytes = buffer.subarray(space + 1, nul);
+    const name = nameBytes.toString("utf8");
+
     entries.push({
       mode,
-      name: buffer.toString("utf8", space + 1, nul),
+      name,
+      nameBytes,
+      validName: Buffer.from(name, "utf8").equals(nameBytes),
       oid: buffer.toString("hex", nul + 1, nul + 21),
     });
     at = nul + 21;
