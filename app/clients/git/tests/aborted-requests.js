@@ -253,8 +253,9 @@ describe("git client aborted requests", function () {
   // arguments) and the helpers that service starts. index-pack and
   // pack-objects have no repository path in their arguments but, like the
   // service, run with the bare repository as their working directory, so that
-  // is how we recognise them.
-  var GIT_SERVICE_PROCESS = /(^|[\s/])git[ -](receive-pack|upload-pack|index-pack|unpack-objects|pack-objects)(\s|$)/;
+  // is how we recognise them. The ones Blot starts have the limiter's
+  // settings in front of the command (git -c a=b ... upload-pack).
+  var GIT_SERVICE_PROCESS = /(^|[\s/])git(-|(\s+-c\s+\S+)*\s+)(receive-pack|upload-pack|index-pack|unpack-objects|pack-objects)(\s|$)/;
 
   function run(command, args) {
     return new Promise(function (resolve) {

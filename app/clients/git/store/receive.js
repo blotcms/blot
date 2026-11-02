@@ -86,7 +86,7 @@ const { Readable } = require("stream");
 const { spawn } = require("child_process");
 const { NoRoomError, StaleManifestError, OutcomeUnknownError, CorruptError, TooLargeError } = require("./errors");
 const { packKey, idxKey, revKey } = require("./layout");
-const { mapLimit, createSemaphore } = require("./limit");
+const { mapLimit, createSemaphore, createChildren } = require("./limit");
 const manifest = require("./manifest");
 const createReader = require("./reader");
 const { parseCommit, parseTree, parseTag, isDirectory, isGitlink } = require("./objects");
@@ -234,8 +234,9 @@ function createScratch(reservation, children) {
   // Runs git; resolves with its stdout, or rejects with an Error carrying
   // `stderr`. `input` is a Buffer or string, `inputFile` a file to feed to
   // its stdin, and `outputFile` a file for its stdout (which then resolves "").
+  // It starts once the host's gate lets it (limit.js, createChildren).
   function git(args, { gitDir, env = {}, input, inputFile, outputFile } = {}) {
-    return new Promise((resolve, reject) => {
+    return children.start(() => new Promise((resolve, reject) => {
       const output = outputFile ? fs.openSync(outputFile, "w") : null;
       const child = spawn("git", args, {
         env: gitEnvironment({ ...(gitDir ? { GIT_DIR: gitDir } : {}), ...env }),
@@ -272,7 +273,7 @@ function createScratch(reservation, children) {
 
       if (inputFile) fs.createReadStream(inputFile).on("error", () => child.kill("SIGKILL")).pipe(child.stdin);
       else child.stdin.end(input || "");
-    });
+    }));
   }
 
   return { dir: reservation.dir, git };
@@ -676,7 +677,7 @@ function answer(commands, { outcome, status = "ok", problems = {}, messages = []
   return { outcome, status, results, messages, ...extra };
 }
 
-async function receive({ store, cache, lock, commands, pack = null, limit = DEFAULT_LIMIT, sizeHint = 0, smallBase = SMALL_BASE, progress = null }) {
+async function receive({ store, cache, lock, commands, pack = null, limit = DEFAULT_LIMIT, sizeHint = 0, smallBase = SMALL_BASE, progress = null, gate = null }) {
   // A host's callback must never be able to fail a push
   const say = (message) => {
     try {
@@ -684,7 +685,7 @@ async function receive({ store, cache, lock, commands, pack = null, limit = DEFA
     } catch (err) {}
   };
   const incoming = createIncoming(pack);
-  const children = new Set();
+  const children = createChildren(gate);
   const stats = { bytes: 0, objects: 0, basesFetched: 0, packs: [] };
   let reservation = null;
 

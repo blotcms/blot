@@ -742,7 +742,8 @@ describe("git client receive-pack", function () {
               String(stdout)
                 .split("\n")
                 .filter(function (line) {
-                  return /git[ -]index-pack/.test(line) && line.indexOf("--stdin") > -1;
+                  // With or without the limiter's settings in front (git -c a=b ...)
+                  return /git(-|(\s+-c\s+\S+)*\s+)index-pack/.test(line) && line.indexOf("--stdin") > -1;
                 })
             );
           });

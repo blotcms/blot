@@ -442,7 +442,10 @@ of blog info, domain, handle and template metadata keys, using RESP3
 `CLIENT TRACKING` in OPTIN mode (`app/models/redis-cache.js`). The render path
 reads these on every blog request (the blog record, the template metadata,
 and the cacheIDs the render caches are keyed on), and most of those reads are
-served locally. Measured on production in November 2026, which is why it was
+served locally. A write through the same client drops the keys it names from
+that client's cache as it is sent, because Redis pushes the invalidation
+after the write's reply; every other process's cache learns of the write from
+that push. Measured on production in November 2026, which is why it was
 kept:
 
 - Hit rates were roughly 70-85% per process, saving a few sequential round
@@ -461,7 +464,8 @@ kept:
 `tracking-table-max-keys` is left at its default. Each unit logs
 `redis_tracking_total_keys` and the per-class hit counters in its `[STATS]`
 lines. If the key count ever climbs toward the cap, or a node-redis upgrade
-breaks `AllowlistClientSideCache` (it overrides `handleCache`), dropping
+breaks `AllowlistClientSideCache` (it overrides `handleCache` and wraps the
+client's `sendCommand`, `_executeMulti` and `_executePipeline`), dropping
 client-side caching is a reasonable answer: the reads it saves are cheap.
 
 ## Notes

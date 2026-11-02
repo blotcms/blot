@@ -45,4 +45,16 @@ function createSemaphore(limit) {
   };
 }
 
-module.exports = { mapLimit, createSemaphore };
+// The git processes one operation has running (so it can end them), and the
+// host's gate for starting them: `gate(start)` calls `start()`, which spawns
+// git and settles once it has closed, when the host has room for it, and
+// returns what it returns. Without a gate git starts at once. See "Limiting
+// git" in the README.
+function createChildren(gate) {
+  if (gate !== undefined && gate !== null && typeof gate !== "function") throw new Error("gate must be a function");
+  const children = new Set();
+  children.start = gate || ((start) => start());
+  return children;
+}
+
+module.exports = { mapLimit, createSemaphore, createChildren };

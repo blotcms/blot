@@ -77,7 +77,7 @@ const fsp = require("fs/promises");
 const path = require("path");
 const { StaleManifestError, OutcomeUnknownError, CorruptError, NoRoomError } = require("./errors");
 const { SWEEP_KEY, PACK_PREFIX, manifestKey, packKey, idxKey, packFile } = require("./layout");
-const { mapLimit } = require("./limit");
+const { mapLimit, createChildren } = require("./limit");
 const manifest = require("./manifest");
 const { PACK_CONFIG, git: shared } = require("./compact");
 const { internals } = require("./import");
@@ -116,8 +116,8 @@ const bytesOf = (entries) => entries.reduce((sum, entry) => sum + entry.size + e
 // Fetches `base`'s packs into scratch, writes and proves the pack of what its
 // refs reach and the history pack, and (unless `dryRun`) uploads them.
 // Resolves with { from, main, history, peeled, before, after, uploaded }.
-async function make({ store, cache, scratchDir, base, packConfig, dryRun, stats }) {
-  const children = new Set();
+async function make({ store, cache, scratchDir, base, packConfig, dryRun, stats, gate }) {
+  const children = createChildren(gate);
   let reservation = null;
   let dir = null;
 
@@ -375,7 +375,7 @@ async function planPurge(store, kept) {
 
 // ---- The rewrite ----------------------------------------------------------
 
-async function rewriteRepo({ store: objects, cache, lock, scratchDir = null, purge: purging = false, dryRun = false, pack = {}, clock = Date.now, attempts = ATTEMPTS }) {
+async function rewriteRepo({ store: objects, cache, lock, scratchDir = null, purge: purging = false, dryRun = false, pack = {}, clock = Date.now, attempts = ATTEMPTS, gate = null }) {
   if (!dryRun && typeof lock !== "function") throw new Error("rewriteRepo needs the host's lock function");
   if (!scratchDir && !(cache && typeof cache.reserve === "function")) throw new Error("rewriteRepo needs a cache to reserve scratch space from, or a scratchDir");
 
@@ -397,7 +397,7 @@ async function rewriteRepo({ store: objects, cache, lock, scratchDir = null, pur
   for (let attempt = 1; ; attempt++) {
     stats.attempts = attempt;
     if (!made || !sameState(made.from, current)) {
-      made = await make({ store, cache, scratchDir, base: current, packConfig: pack, dryRun, stats });
+      made = await make({ store, cache, scratchDir, base: current, packConfig: pack, dryRun, stats, gate });
     }
 
     if (dryRun) {

@@ -84,7 +84,7 @@ Each run is a fresh process (cold caches) on an empty Redis:
 | warm | the same pages five more times |
 | after a bump | the same pages after a cacheID bump, as after any sync, three times |
 | previews | `preview-of-my-<template>-on-<handle>` for each of the site's templates, three rounds; previews skip some render caches |
-| other blogs | two visitors browse the small sites, first alone, then while the mega sites resync (cacheID bumps) and get browsed and previewed |
+| other blogs | two visitors browse the small sites, first alone for 4 s, then for 10 s while the mega sites resync (cacheID bumps) and get browsed and previewed, round after round; the window is fixed so a faster head samples the same span (each run's JSON has `megaRounds`, how many rounds it held) |
 | memory | peak heap above the post-seed baseline, and what a GC leaves |
 
 Timings are wall time of real HTTP requests; "block" is the longest event
