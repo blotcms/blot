@@ -177,6 +177,38 @@ describe("scheduler prune-tmp", function () {
     });
   });
 
+  describe("storage/folder's staging and downloads", function () {
+    it("keeps staged folder files for a week, judging each file and not its directory", async function () {
+      await write(this.tmp, "storage-folder-staging/blog_1/a/new.txt", 3 * DAY);
+      await write(this.tmp, "storage-folder-staging/blog_1/a/old.txt", 8 * DAY);
+
+      const then = new Date(Date.now() - 30 * DAY);
+      await fs.utimes(this.tmp + "/storage-folder-staging", then, then);
+      await fs.utimes(this.tmp + "/storage-folder-staging/blog_1", then, then);
+
+      await this.run();
+
+      expect(await exists(this.tmp + "/storage-folder-staging/blog_1/a/new.txt")).toBe(true);
+      expect(await exists(this.tmp + "/storage-folder-staging/blog_1/a/old.txt")).toBe(false);
+      expect(await exists(this.tmp + "/storage-folder-staging")).toBe(true);
+    });
+
+    it("keeps a recent download however old its directory is", async function () {
+      await write(this.tmp, "storage-folder/blog_1/abc/new.jpg", HOUR);
+      await write(this.tmp, "storage-folder/blog_1/def/old.jpg", 2 * DAY);
+
+      const then = new Date(Date.now() - 30 * DAY);
+      await fs.utimes(this.tmp + "/storage-folder", then, then);
+      await fs.utimes(this.tmp + "/storage-folder/blog_1", then, then);
+      await fs.utimes(this.tmp + "/storage-folder/blog_1/abc", then, then);
+
+      await this.run();
+
+      expect(await exists(this.tmp + "/storage-folder/blog_1/abc/new.jpg")).toBe(true);
+      expect(await exists(this.tmp + "/storage-folder/blog_1/def/old.jpg")).toBe(false);
+    });
+  });
+
   it("copes with a tmp directory that does not exist yet", async function () {
     await fs.remove(this.tmp);
 

@@ -453,6 +453,9 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, clo
     // and commits only add packs and pieces, so a manifest that has moved on is
     // usually built on again. If an input is gone, someone compacted first.
     const stillListed = (current) => {
+      // A rewrite replaced every pack, and its purge may delete what this run
+      // uploaded
+      if (manifest.epochOf(current) !== manifest.epochOf(base)) return false;
       const packs = new Set(current.packs.map((pack) => pack.name));
       const pieces = new Set((current.historyPieces || []).map((piece) => piece.name));
       const sameHistory = (current.history && current.history.name) === (base.history && base.history.name);
@@ -562,5 +565,5 @@ module.exports.planOptions = planOptions;
 module.exports.DEFAULTS = DEFAULTS;
 module.exports.snapshotLimits = snapshotLimits;
 module.exports.PACK_CONFIG = PACK_CONFIG;
-// For import.js, which runs git and proves its packs in the same way
-module.exports.git = { runGit, idsOf, assertContains };
+// For import.js and rewrite.js, which run git and prove their packs in the same way
+module.exports.git = { runGit, idsOf, assertContains, fetchInput, CONCURRENCY };

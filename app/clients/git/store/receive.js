@@ -814,7 +814,7 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, read
   const behind = staleRefs(base, commands) || nameConflicts(applied(base, commands), commands);
   if (behind) throw behind;
 
-  const repo = createReader({ store, cache, packs: base.packs, scratch: scratchFrom(reservation, cache) });
+  const repo = createReader({ store, cache, manifest: base, scratch: scratchFrom(reservation, cache) });
 
   // The commits the push replaces, and their root trees, are what the check
   // of the new commits compares with first, and each is usually the parent of
@@ -1006,6 +1006,11 @@ async function swap({ store, cache, lock, commands, added, base }) {
 
   for (let attempt = 1; ; attempt++) {
     const current = attempt === 1 ? base : await manifest.read(store);
+    // A rewrite (rewrite.js) landed: it may have dropped objects this push's
+    // check found in the repository, and its purge may delete the packs just
+    // uploaded. The push is refused, as if its ref had moved, and the client
+    // pushes again against the rewritten repository.
+    if (manifest.epochOf(current) !== manifest.epochOf(base)) throw staleRefs(null, commands);
     const refs = applied(current, commands);
     const behind = staleRefs(current, commands) || nameConflicts(refs, commands);
     if (behind) throw behind;

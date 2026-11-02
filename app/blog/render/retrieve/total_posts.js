@@ -1,9 +1,9 @@
 const { getTotal } = require("../../lib/models");
 const asRetriever = require("../../lib/asRetriever");
-const { createRenderCache } = require("../../lib/cacheMetrics");
-const { prepareCacheValue } = require("../../lib/clone");
-const cacheStats = require("../../lib/cacheStats");
-const fetchCached = require("../../lib/fetchCached");
+const { createRenderCache } = require("models/cache/metrics");
+const { prepareCacheValue } = require("models/cache/clone");
+const cacheStats = require("models/cache/stats");
+const fetchCached = require("models/cache/fetchCached");
 
 const totalPostsCache = createRenderCache("totalPosts", {
   max: 10000,

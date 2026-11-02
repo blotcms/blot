@@ -122,10 +122,9 @@ Investigate slow creep of green's baseline heap (~40-80MB/day lowest heapUsed in
 - Spikes from heavy post builds (e.g. blog_825ed2a 'All paths', ~250MB) only crash it once the baseline has crept up
 
 Now we have many LRU caches in app/blog we need to gather data in production to rigorously determine the most effective relative sizes for the caches (include the mustache template cache in this)
-- Maybe move all LRU caching into app/models and simplify app/blog?
+- Move the rest of the render caches into app/models the way #2401 moved the entry catalog (Entries.getCatalog) and full views (Template.getFullView), and delete the idle ones (totalPosts, latestEntry, popularTags hardly hit on 27 Oct). Check each with the mega benchmark (scripts/benchmarks/mega)
 - Maybe remove redis client side caching and instead implement LRU caching more aggressively in the models?
 - Check in on the redis client side caching change and then audit the in memory LRU caches for tuning the sizes of them
-  - clicking down the list of templates in the template editor is now slower, can we analyze the LRU caching to optimize this part too?
 - Is the status page just measuring the lru caches? how do we make it verify a cold request to get a real sense for system performance?
 
 Add a new template which just looks like finder on the index page

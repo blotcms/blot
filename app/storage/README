@@ -45,7 +45,7 @@ at sync/build time instead.
   conflicts; Google Drive's local fingerprint reads `dev`, `ino`, `ctimeNs`
   and `mtimeNs`; the local client watches the folder with chokidar.
 - Rendered template views are cached in-process
-  (`app/blog/render/full-view-cache.js`, an LRU bounded by count and bytes,
+  (`app/models/template/fullViewCache.js`, an LRU bounded by count and bytes,
   not Redis), and rendered template CSS/JS in Redis (`app/cdn/index.js`
   `/template`), so neither is read from disk per request.
 - Generated assets (thumbnails, doc conversions, image optimization) are
@@ -487,14 +487,28 @@ or uses `.listAll()` for small directories.
     conversion across every entry that must complete before anything compares
     the new values, and the CDN version tokens would still need a decision.
 
-## 8. `app/storage/folder` (local backend only)
+## 8. `app/storage/folder`
 
 `app/storage/folder` exists, with plain functions taking `blogID` first like
 `storage/assets`: `read`, `createReadStream`, `serve`, `write`, `writeFrom`,
 `path` + `commit`, `ensureLocal`, `mkdir`, `rmdir`, `remove`, `move`, `stat`,
 `exists`, `list`, `listNames`, `listAll`, `walk`, `resolveCaseInsensitive` and `removeAll`.
 `index.js` is the public surface and documents each function; `local.js` is
-the only backend, and keeps the folder on disk exactly as the app has always resolved it.
+the backend every blog uses, and keeps the folder on disk exactly as the app has always resolved it.
+
+`s3.js` is the S3 backend (Phase C, built but unused): objects at
+`{blogID}/folder/{path}`, a zero-byte marker `{blogID}/folder/{dir}/` for a
+directory with nothing in it, and every metadata read (`stat`, `list`,
+`walk`, `resolveCaseInsensitive`, ...) from the Redis index `models/file`
+(see its README). Writes go to S3 first and the index after, with the SHA-1
+computed as the bytes upload; removes delete from S3 first. `move` is copy
+plus delete. `path` returns a staging path under the tmp directory which
+`commit` uploads, and `ensureLocal` downloads to the tmp directory, named by
+the file's SHA-1, until the content cache exists. Nothing in the app or its
+config selects it: `useBackend` in `index.js` switches every blog at once
+and is only for specs, which run `app/storage/tests/folder.js` against both
+backends (on MinIO for S3). `scripts/storage/rebuild-file-index.js` rebuilds
+a blog's index from a listing of the bucket. Per-blog selection is Phase D.
 
 What it keeps from today:
 
@@ -517,12 +531,11 @@ What it does not do yet:
   folder-link version tokens), and so has everything else: nothing outside
   `app/storage` reaches a blog's folder directly, which
   `scripts/tests/ci/check-folder-access.js` enforces.
-- There is no S3 backend, no Redis index and no content cache. `stat` with
-  `{ hash: true }` reads the whole file here; on S3 the hash comes from the
-  index.
-- `commit` does nothing but check for symlinks, because the path `path()`
-  returns is the file's real place. An S3 backend will return a staging path
-  and upload in `commit`.
+- There is no content cache, no dual writing and no backfill. `stat` with
+  `{ hash: true }` (Dropbox's content hash) reads the whole file on disk, and
+  downloads it on S3, whose index holds only the SHA-1.
+- On disk, `commit` does nothing but check for symlinks, because the path
+  `path()` returns is the file's real place.
 - `list` reads a directory's names whole in order to sort them (stats are
   limited to the page), and `listAll` buffers everything.
 - Missing files reject with `NotFoundError` (`code: "ENOENT"`), including

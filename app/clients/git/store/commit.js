@@ -436,8 +436,8 @@ async function deflateToScratch(chunks, size, { scratch, limit }) {
 //
 // The reader keeps them in the cache by ID (see reader.js), checked against
 // their ID when they come back.
-function createObjects({ store, cache, packs }) {
-  const repo = createReader({ store, cache, packs });
+function createObjects({ store, cache, base }) {
+  const repo = createReader({ store, cache, manifest: base });
 
   return {
     put: (oid, type, body) => repo.remember(oid, type, body),
@@ -544,13 +544,21 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
     for (let attempt = 1; ; attempt++) {
       const base = await manifest.read(store);
       const parent = base.refs[MASTER] || null;
-      const objects = createObjects({ store, cache, packs: base.packs });
+      const objects = createObjects({ store, cache, base });
 
       if (!built || built.parent !== parent) {
         built = await build({ objects, parent, parts, blob, message, identity, when });
         uploaded = null;
       }
+<<<<<<< HEAD
       if (!built) return { outcome: "ok", commit: null, parent, changed: false, seq: base.seq, manifest: base };
+=======
+      // A rewrite landed since the upload: its purge may delete the pack, so
+      // it is uploaded again. What was built still holds: it links only to
+      // what master reaches, which a rewrite keeps.
+      if (uploaded && uploaded.epoch !== manifest.epochOf(base)) uploaded = null;
+      if (!built) return { outcome: "ok", commit: null, parent, changed: false, seq: base.seq };
+>>>>>>> origin/master
 
       if (!uploaded) {
         const smalls = built.objects;
@@ -562,7 +570,7 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
         const results = await Promise.allSettled([uploadPack(store, pack), uploadPack(store, piece, { rev: false })]);
         const failed = results.find((result) => result.status === "rejected");
         if (failed) throw failed.reason;
-        uploaded = { pack, piece };
+        uploaded = { pack, piece, epoch: manifest.epochOf(base) };
 
         // This process uploaded them, so it knows their size, and the next
         // reader of the pack needs no request for its index

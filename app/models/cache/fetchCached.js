@@ -14,8 +14,8 @@
 // log is req.log, or anything else that takes the same arguments; callers
 // without one (tests, non-HTTP renders) can leave it out.
 const filling = new WeakMap();
-const cacheMetrics = require("./cacheMetrics");
-const { Uncacheable } = require("./uncacheableFetch");
+const cacheMetrics = require("./metrics");
+const { Uncacheable } = require("./uncacheable");
 
 function fetchCached(cache, name, log, key, options) {
   let keys = filling.get(cache);

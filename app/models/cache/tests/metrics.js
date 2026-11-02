@@ -1,4 +1,4 @@
-const cacheMetrics = require("../cacheMetrics");
+const cacheMetrics = require("../metrics");
 const fetchCached = require("../fetchCached");
 
 describe("render cache metrics", function () {
@@ -65,7 +65,7 @@ describe("render cache metrics", function () {
   });
 
   it("counts an Uncacheable result as an uncached fill, not a failure", async function () {
-    const { Uncacheable } = require("../uncacheableFetch");
+    const { Uncacheable } = require("../uncacheable");
     const cache = cacheMetrics.createRenderCache("test", {
       max: 2,
       fetchMethod: async () => {
@@ -139,7 +139,7 @@ describe("render cache metrics", function () {
   });
 
   it("says why a fill was not kept", async function () {
-    const { Uncacheable } = require("../uncacheableFetch");
+    const { Uncacheable } = require("../uncacheable");
     const cache = cacheMetrics.createRenderCache("test", {
       max: 2,
       fetchMethod: async (key) => {

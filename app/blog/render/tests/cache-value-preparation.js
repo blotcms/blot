@@ -1,6 +1,6 @@
 const { LRUCache } = require("lru-cache");
 const EntryInstance = require("models/entry/instance");
-const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
+const { cloneDeep, prepareCacheValue } = require("models/cache/clone");
 
 describe("cache value preparation", function () {
   it("freezes an isolated copy while retaining EntryInstance prototypes", function () {

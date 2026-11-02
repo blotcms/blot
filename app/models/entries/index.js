@@ -936,6 +936,7 @@ module.exports = (function () {
     getPage: getPage,
     getListIDs: getListIDs,
     getAll: getAll,
+    getCatalog: require("./catalog"),
     getAllIDs: getAllIDs,
     getTotal: getTotal,
     getAllTotal: getAllTotal,

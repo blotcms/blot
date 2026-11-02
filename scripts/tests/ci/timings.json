@@ -32,7 +32,7 @@
   "app/blog/render/tests/backlinks.js": 0.347,
   "app/blog/render/tests/cache-value-preparation.js": 0.009000000000000001,
   "app/blog/render/tests/error.js": 0.002,
-  "app/blog/render/tests/full-view-cache.js": 0.006,
+  "app/models/template/tests/fullViewCache.js": 0.006,
   "app/blog/render/tests/main.js": 0.024,
   "app/blog/render/tests/middleware.js": 1.257,
   "app/blog/tests/archives.js": 0.472,

@@ -2,11 +2,11 @@ const getAllCached = require("./helpers/getAllCached");
 const yieldToEventLoop = require("./helpers/yieldToEventLoop");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const asRetriever = require("../../lib/asRetriever");
-const { createRenderCache } = require("../../lib/cacheMetrics");
-const { prepareCacheValue } = require("../../lib/clone");
-const cacheStats = require("../../lib/cacheStats");
-const fetchCached = require("../../lib/fetchCached");
-const { Uncacheable } = require("../../lib/uncacheableFetch");
+const { createRenderCache } = require("models/cache/metrics");
+const { prepareCacheValue } = require("models/cache/clone");
+const cacheStats = require("models/cache/stats");
+const fetchCached = require("models/cache/fetchCached");
+const { Uncacheable } = require("models/cache/uncacheable");
 const {
   augmentContext,
   augmentEntries,
@@ -84,12 +84,13 @@ function blogURL(req) {
 }
 
 async function allEntries(req, res) {
-  // Preview renders change on every save and are rarely repeated, so caching
-  // them would only thrash the LRU with entries no other request will read.
-  // render/load augments these the usual way.
+  // A preview's augmented list is keyed on its template's fields and
+  // settings, and the template editor previews many templates, so storing
+  // each would crowd out the live site's. Previews still share the catalog
+  // itself (one copy per blog cacheID); render/load augments these the
+  // usual way.
   if (req.preview) {
     const allEntriesList = await getAllCached(req.blog, {
-      bypassCache: true,
       retrieve: req.retrieve,
       log: req.log,
     });

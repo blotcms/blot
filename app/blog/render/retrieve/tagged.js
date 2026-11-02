@@ -2,11 +2,11 @@ const { getEntry } = require("../../lib/models");
 const fetchTaggedEntries = require("./helpers/fetchTaggedEntries");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const asRetriever = require("../../lib/asRetriever");
-const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
-const cacheStats = require("../../lib/cacheStats");
-const fetchCached = require("../../lib/fetchCached");
-const { Uncacheable } = require("../../lib/uncacheableFetch");
-const { createRenderCache, timeClone } = require("../../lib/cacheMetrics");
+const { cloneDeep, prepareCacheValue } = require("models/cache/clone");
+const cacheStats = require("models/cache/stats");
+const fetchCached = require("models/cache/fetchCached");
+const { Uncacheable } = require("models/cache/uncacheable");
+const { createRenderCache, timeClone } = require("models/cache/metrics");
 const { normalizePathPrefix } = require("helper/pathPrefix");
 const {
   normalizePageNumber,

@@ -168,12 +168,14 @@ describe("all_entries cache", function () {
   function loadAllEntries() {
     delete require.cache[allEntriesPath];
     delete require.cache[getAllCachedPath];
+    require("models/entries/catalog")._clear();
     return require("../all_entries");
   }
 
   afterEach(function () {
     delete require.cache[allEntriesPath];
     delete require.cache[getAllCachedPath];
+    require("models/entries/catalog")._clear();
   });
 
   function makeReq(blog, retrieve) {
@@ -326,7 +328,7 @@ describe("all_entries cache", function () {
     });
   });
 
-  it("bypasses the cache for preview requests", function (done) {
+  it("shares the catalog, but not its own cache, with preview requests", function (done) {
     const allEntries = loadAllEntries();
 
     spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
@@ -338,7 +340,7 @@ describe("all_entries cache", function () {
 
     allEntries(req, { locals: {} }, function () {
       allEntries(req, { locals: {} }, function () {
-        expect(Entries.getAll).toHaveBeenCalledTimes(2);
+        expect(Entries.getAll).toHaveBeenCalledTimes(1);
         done();
       });
     });
@@ -377,12 +379,14 @@ describe("all_entries shared augmentation", function () {
   function loadAllEntries() {
     delete require.cache[allEntriesPath];
     delete require.cache[getAllCachedPath];
+    require("models/entries/catalog")._clear();
     return require("../all_entries");
   }
 
   afterEach(function () {
     delete require.cache[allEntriesPath];
     delete require.cache[getAllCachedPath];
+    require("models/entries/catalog")._clear();
   });
 
   function makeReq(blogURL, cacheID) {
