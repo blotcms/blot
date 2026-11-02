@@ -42,7 +42,7 @@ const REQUIRED_ENV = [
   "BLOT_STRIPE_WEBHOOK_SECRET",
   // the sandbox: production has no other browser or egress proxy
   "BLOT_SANDBOX_SOCKET",
-  "BLOT_AIRLOCK_PROXY_URL",
+  "BLOT_EGRESS_PROXY_URL",
 ];
 
 // Where this process serves: 127.0.0.1:<port>, or its socket when it has no
@@ -265,7 +265,7 @@ async function sandboxFetchWorks() {
 async function sandboxProxyWorks({ config }) {
   if (!process.env.BLOT_SANDBOX_SOCKET) return "skipped, BLOT_SANDBOX_SOCKET is not set";
 
-  const { hostname, port } = new URL(config.airlock.proxy);
+  const { hostname, port } = new URL(config.egress.proxy);
   const metadata = "http://169.254.169.254/latest/meta-data/";
   const res = await request({
     url: metadata,
@@ -273,7 +273,7 @@ async function sandboxProxyWorks({ config }) {
     options: { hostname, port, path: metadata },
   });
   if (res.status !== 500) throw new Error(`the metadata address answered ${res.status} through the proxy`);
-  return `the metadata address was refused through ${config.airlock.proxy}`;
+  return `the metadata address was refused through ${config.egress.proxy}`;
 }
 
 // With the sandbox on, Node runs under one seccomp filter more than this process,

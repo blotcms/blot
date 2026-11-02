@@ -30,7 +30,7 @@ module.exports = function download_audio(post, callback) {
 
       if (name.charAt(0) !== "_") name = "_" + name;
 
-      download(href, { airlockLabel: "import/download_audio" })
+      download(href, { egressLabel: "import/download_audio" })
         .then(function ({ data }) {
           assetDirectory(post, function (err, directory) {
             if (err) return next();

@@ -16,7 +16,7 @@ const invalid = require("./invalid");
 // egress filter is what blocks a URL - or a redirect from one - that resolves
 // to an internal address, on the real connection IP, so DNS-rebinding does
 // not help an attacker. Without a sandbox the job runs in-process and fetches
-// directly, which production refuses (config.airlock.required).
+// directly, which production refuses (config.egress.required).
 //
 // Calls back with the path of a temporary file holding the image, which the
 // caller removes, and the response's caching headers; or with no path when the
@@ -36,7 +36,7 @@ module.exports = function (url, headers, callback) {
 
   // Fail closed: in production the fetch must happen in the sandbox's jail,
   // never in this process.
-  if (!config.sandbox.socket && config.airlock.required) {
+  if (!config.sandbox.socket && config.egress.required) {
     return callback(
       new Error(
         "transformer/download: refusing to fetch a user-controlled URL - this unit has no sandbox (BLOT_SANDBOX). See app/sandbox/README.md."

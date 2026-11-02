@@ -1,19 +1,24 @@
-const { listTags } = require("../../lib/models");
-const { normalizePathPrefix } = require("helper/pathPrefix");
-const { cloneDeep, prepareCacheValue } = require("models/cache/clone");
-const cacheStats = require("models/cache/stats");
-const fetchCached = require("models/cache/fetchCached");
-const { compactTags, expandTags } = require("./helpers/compactTags");
-const { createRenderCache } = require("models/cache/metrics");
+const Tags = require("models/tags");
 const asRetriever = require("../../lib/asRetriever");
 
-async function loadAllTags(blogID, pathPrefix, log) {
-  log("Listing all tags");
-  let tags = await listTags(blogID, { path_prefix: pathPrefix });
+// Every tag, from Tags.getCachedList, which caches the list per blog cacheID
+// and path prefix (previews share it: nothing in it depends on the
+// template). The sorting and counting here are cheap next to the list read.
+async function allTags(req, res) {
+  const path_prefix =
+    res.locals.path_prefix ??
+    (req.template && req.template.locals && req.template.locals.path_prefix);
+
+  req.log("Listing all tags");
+  let tags = await Tags.getCachedList(req.blog.id, {
+    pathPrefix: path_prefix,
+    cacheID: req.blog.cacheID,
+    log: req.log,
+  });
 
   // In future, we might want to expose
   // other options for this sorting...
-  log("Sorting all tags");
+  req.log("Sorting all tags");
   tags = tags.sort(function (a, b) {
     const nameA = a.name.toLowerCase();
     const nameB = b.name.toLowerCase();
@@ -25,7 +30,7 @@ async function loadAllTags(blogID, pathPrefix, log) {
 
   const set = {};
 
-  log("Counting all tags");
+  req.log("Counting all tags");
   tags = tags.map((tag) => {
     tag.tag = tag.name;
     tag.total = tag.entries.length;
@@ -36,66 +41,11 @@ async function loadAllTags(blogID, pathPrefix, log) {
     return tag;
   });
 
-  const totalPosts = Object.keys(set).length;
-  log("Listed all tags");
-  return { tags, totalPosts };
-}
-
-// Tag entries are IDs (or nulls for the no-path-prefix count-only branch),
-// never full entry bodies, so there's no heavy-field concern here - the
-// whole payload is safe to cache as-is.
-const allTagsCache = createRenderCache("allTags", {
-  max: 1000,
-  maxSize: 50 * 1024 * 1024,
-  sizeCalculation: (value) => value.size,
-  // Without this, an in-flight fetch evicted by LRU/size pressure aborts and
-  // every request coalesced onto it rejects with "Error: evicted" instead
-  // of getting its tags - let the already-running loadAllTags call finish
-  // and hand its result back even if it can't be cached.
-  ignoreFetchAbort: true,
-  // Coalesce concurrent misses on the same key into one in-flight
-  // loadAllTags call.
-  fetchMethod: async (key, staleValue, { context }) => {
-    const { blogID, pathPrefix, log } = context;
-    const { tags, totalPosts } = await loadAllTags(blogID, pathPrefix, log);
-    return prepareCacheValue({ tags: compactTags(tags), totalPosts });
-  },
-});
-
-function createCacheKey(blog, pathPrefix) {
-  return JSON.stringify({
-    blogID: String(blog && blog.id),
-    cacheID: String(blog && blog.cacheID),
-    // Key on the same normalized value models/tags/list.js actually filters
-    // by, not the raw pathPrefix - Tags.list treats a non-string as "no
-    // filter" and normalizePathPrefix("1") into "/1", so a naive String()
-    // key would collide "1" (a real prefix) with 1 (ignored) and serve one
-    // view's tag set to the other.
-    pathPrefix: normalizePathPrefix(pathPrefix),
-  });
-}
-
-async function allTags(req, res) {
-  const path_prefix =
-    res.locals.path_prefix ??
-    (req.template && req.template.locals && req.template.locals.path_prefix);
-
-  // Previews share this cache: nothing in it depends on the template, only
-  // on the blog's cacheID and the path prefix.
-  const key = createCacheKey(req.blog, path_prefix);
-  const prepared = await fetchCached(allTagsCache, "allTags", req.log, key, {
-    context: { blogID: req.blog.id, pathPrefix: path_prefix, log: req.log },
-  });
-
   // toDO maybe rename this? it's ugly
-  res.locals.all_tags_total_posts = prepared.payload.totalPosts;
+  res.locals.all_tags_total_posts = Object.keys(set).length;
+  req.log("Listed all tags");
 
-  return expandTags(cloneDeep(prepared.payload.tags));
+  return tags;
 }
 
 module.exports = asRetriever(allTags);
-module.exports._createCacheKey = createCacheKey;
-module.exports._clear = function () {
-  allTagsCache.clear();
-};
-module.exports._stats = cacheStats("allTags", allTagsCache);

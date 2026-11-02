@@ -307,12 +307,12 @@ describe("domain verifier", function () {
   });
 
   it("should timeout if the verification endpoint hangs", async () => {
-    // verify.js now reaches the endpoint through helper/airlock.getViaIP
-    // (a raw http.request through the airlock proxy), not node-fetch, so the
+    // verify.js now reaches the endpoint through helper/egress.getViaIP
+    // (a raw http.request through the egress proxy), not node-fetch, so the
     // hang is simulated at that boundary: a promise that only settles when
     // the AbortController fires.
-    const airlock = require("helper/airlock");
-    spyOn(airlock, "getViaIP").and.callFake((ip, path, options = {}) => {
+    const egress = require("helper/egress");
+    spyOn(egress, "getViaIP").and.callFake((ip, path, options = {}) => {
       const { signal } = options;
       return new Promise((resolve, reject) => {
         if (!signal) {

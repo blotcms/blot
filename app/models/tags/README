@@ -10,7 +10,7 @@ The module is invoked automatically during every entry write (via `models/entry/
 
 | File | Purpose |
 |------|---------|
-| `index.js` | Public module surface. Re-exports `get`, `key`, `list`, `normalize`, `popular`, and `set`. |
+| `index.js` | Public module surface. Re-exports `get`, `getCachedList`, `getCachedTagged`, `key`, `list`, `normalize`, `popular`, `set` and `tagged`. |
 | `key.js` | Generates all Redis key strings used by the module. |
 | `normalize.js` | Converts a raw tag string into a normalised, URL-safe slug. Delegates to `helper/makeSlug`. |
 | `get.js` | Public retrieval function. Resolves tag variants (normalised, raw, URI-decoded) before querying Redis. |
@@ -18,6 +18,10 @@ The module is invoked automatically during every entry write (via `models/entry/
 | `set.js` | Writes tag associations for a single entry. Computes added and removed tags relative to the previous state and updates all affected Redis keys atomically. |
 | `list.js` | Returns all tags defined on a blog, with entry counts, as an array of tag objects. |
 | `popular.js` | Returns the most-used tags on a blog, ranked by use count, with support for pagination. |
+| `tagged.js` | The entry IDs tagged with one or more slugs (intersected), filtered by path prefix, sorted and paginated, with the tags' display names. |
+| `cachedList.js` | `getCachedList`: `list`, cached per blog `cacheID` for rendering (the `allTags` cache). |
+| `cachedTagged.js` | `getCachedTagged`: a hydrated page of `tagged`, cached per blog `cacheID` for rendering (the `tagged` cache). |
+| `compact.js` | Stores the count-only `entries` placeholders `list` returns as a count in the cache, and expands them back. |
 
 ### `tests/`
 
@@ -26,6 +30,8 @@ The module is invoked automatically during every entry write (via `models/entry/
 | `tests/get.js` | Tests for `get`: basic retrieval, date-based ordering, and pagination via `limit` and `offset`. |
 | `tests/list.js` | Tests for `list`: verifies returned shape including `name`, `slug`, and `entries` array length. |
 | `tests/set.js` | Tests for `set`: verifies that writing an entry's tags completes without error. |
+| `tests/tagged.js` | Tests for `tagged`: sort ordering and pagination. |
+| `tests/compact.js` | Tests for `compact.js`. |
 
 ---
 
@@ -114,6 +120,29 @@ Returns the most-used tags on a blog, ranked by use count descending.
   }
   ```
 
+### `tagged(blogID, slugs, [options])`
+
+The entry IDs tagged with `slugs` (one slug, or a list intersected), resolving to `{ entryIDs, tag, tagged, prettyTags, slugs, total, pagination }`: `tag` joins the display names with ` + `, `tagged` maps it (and its lowercase) to `true`.
+
+- `options.limit` / `options.offset` — a page; `pagination` and `total` are set only with a limit.
+- `options.pathPrefix` — keep only entry IDs under this folder.
+- `options.sortBy` / `options.order` — as in `blog/sortOptions`. A single tag sorted by date is paginated in Redis; any other query reads the whole tag and sorts it here.
+
+### `getCachedTagged(blogID, slugs, [options])`
+
+A page of `tagged` with its entries hydrated (`Entry.get`) and in the selected order, cached in this process per blog `cacheID` (`cachedTagged.js`), for rendering. Resolves to `tagged`'s result plus `entries`, a copy the caller may change. A page whose IDs hydrated to nothing is not stored.
+
+- `options.limit`, `offset`, `pathPrefix`, `sortBy`, `order` — as for `tagged`.
+- `options.keep` — the heavy entry fields (`html`, `body`, ...) to keep, as for `Entries.getCatalog`; a stored page only serves calls that keep the same fields.
+- `options.cacheID` — the blog's `cacheID`, when the caller already has it; read from Redis otherwise.
+- `options.log` — `req.log`, told whether the lookup was a hit, a miss or waited on another call's read.
+
+### `getCachedList(blogID, [options])`
+
+`list`, cached in this process per blog `cacheID` and path prefix (`cachedList.js`), for rendering. Resolves to a copy the caller may change. `options.pathPrefix`, `options.cacheID` and `options.log` as above.
+
+Don't use `getCachedTagged` or `getCachedList` in code that writes back what it read (sync, `Fix()`, scripts): a write is only visible here once the blog's `cacheID` has been bumped. Use `get` and `list`, as `sync/fix/tag-ghosts.js` does.
+
 ### `normalize(tag)`
 
 Converts a raw tag string to a normalised, URL-safe slug. Delegates to `helper/makeSlug`.
@@ -147,11 +176,11 @@ key.name(blogID, normalizedTag)        // → "blog:{blogID}:tags:name:{slug}"
 
 **`models/entry/set.js`** — the primary caller of `tags.set`. After writing an entry to Redis, `entry/set.js` invokes `tags.set` in parallel with list assignment and dependency graph rebuilding. This ensures the tag index is updated atomically with every entry write.
 
-**`app/blog/render/retrieve/tagged.js`** — calls `tags.get` to resolve entry IDs for tag-filtered views. Supports single-tag and multi-tag intersection queries. Handles pagination via `limit` and `offset`.
+**`app/blog/render/retrieve/tagged.js`** and **`posts.js`** — call `tags.getCachedTagged` for tag-filtered views (`/tagged/:tag`, and `{{#posts}}` with a tag).
 
-**`app/blog/render/retrieve/all_tags.js`** — calls `tags.list` to populate the full tag listing view. Sorts results alphabetically by display name and URI-encodes slugs before passing them to templates.
+**`app/blog/render/retrieve/all_tags.js`** — calls `tags.getCachedList` to populate the full tag listing view. Sorts results alphabetically by display name and URI-encodes slugs before passing them to templates.
 
-**`app/blog/render/retrieve/popular_tags.js`** — calls `tags.popular` with a fixed limit of `100`. Results are cached in an LRU cache keyed by `blogID`, `cacheID`, and pagination parameters. The cache is invalidated when `blog.cacheID` changes.
+**`app/blog/render/retrieve/popular_tags.js`** — calls `tags.popular` with a fixed limit of `100`, uncached: a sorted-set range and a name lookup per tag.
 
 **`app/sync/fix/tag-ghosts.js`** — a data repair utility that uses `tags.list`, `tags.get`, and `tags.key` directly to remove tag index entries that reference missing or misidentified entries.
 
