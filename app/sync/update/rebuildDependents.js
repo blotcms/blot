@@ -72,7 +72,14 @@ module.exports = function (blogID, path, callback) {
               // rebuildEntry.
               rebuildEntry(blog, entry, function (err) {
                 if (err) {
-                  log("Error rebuilding dependent_path:", dependent_path, err);
+                  // The dependent's own source file is gone, usually deleted
+                  // in the same batch as this file. Dropping it below is the
+                  // whole fix, so don't report it as an error.
+                  if (isMissingFile(err)) {
+                    log("Dependent no longer exists:", dependent_path);
+                  } else {
+                    log("Error rebuilding dependent_path:", dependent_path, err);
+                  }
 
                   if (shouldDropDependent(err)) {
                     dropDependent(blogID, dependent_path, function (dropErr) {
@@ -130,6 +137,10 @@ async function markTemplateDependents(blogID, path, log) {
   } catch (err) {
     log("Error marking template dependents", err);
   }
+}
+
+function isMissingFile(err) {
+  return !!err && (err.code === "ENOENT" || err.name === "NotFoundError");
 }
 
 function shouldDropDependent(err) {

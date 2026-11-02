@@ -50,6 +50,27 @@ describe("rebuild dependents cleanup", function () {
     });
   });
 
+  it("does not log an error when the dependent was deleted too", async function () {
+    const imagePath = "/assets/image.png";
+    const postPath = "/post.txt";
+
+    await this.blog.write({
+      path: imagePath,
+      content: await global.test.fake.pngBuffer(),
+    });
+    await this.blog.write({ path: postPath, content: `![Alt](${imagePath})` });
+    await this.blog.rebuild();
+    await this.blog.remove(postPath);
+
+    const logged = [];
+    spyOn(console, "log").and.callFake((...args) => logged.push(args.join(" ")));
+
+    await rebuildDependentsOf(this.blog.id, imagePath);
+
+    expect(logged.some((line) => line.includes("Error rebuilding"))).toBe(false);
+    expect(logged.some((line) => line.includes("Dependent no longer exists"))).toBe(true);
+  });
+
   it("rebuilds a folder post via its source folder instead of dropping it", async function () {
     const assetPath = "/album+/cover.png";
     const sourcePath = "/album+/post.md";
