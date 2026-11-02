@@ -2,12 +2,13 @@
 // that tolerated the old ones could go:
 //
 // - users without created, welcomeEmailSent or paymentMethods are saved
-//   through User.set, which fills the defaults the readers used to apply
+//   through User.set with the defaults the readers used to apply
 // - template metadata loses the retired isPublic field
 // - views lose the type field viewModel dropped in 2019; the Content-Type
 //   now always comes from the view's name
 // - customer views using the camelCase pagination aliases pageSize and
-//   totalEntries are rewritten to page_size and total_entries
+//   totalEntries, in their content or stored partials, are rewritten to
+//   page_size and total_entries
 // - the unread blog:*:entries:lex:ready keys are deleted
 //
 // Each step is idempotent. Dry run by default; pass --apply to write.
@@ -28,6 +29,10 @@ const writeToFolderAsync = promisify(writeToFolder);
 const PAGINATION_ALIAS = /(\{\{\{?[#^/&\s]*(?:[\w.]*\.)?)(pageSize|totalEntries)\b/g;
 const SNAKE = { pageSize: "page_size", totalEntries: "total_entries" };
 
+function snakeCase(text) {
+  return text.replace(PAGINATION_ALIAS, (match, prefix, alias) => prefix + SNAKE[alias]);
+}
+
 const counts = {};
 function count(name) {
   counts[name] = (counts[name] || 0) + 1;
@@ -46,8 +51,12 @@ async function users() {
       return;
     count("users missing defaults");
     if (!APPLY) return;
+    const defaults = {};
+    if (user.created === undefined) defaults.created = 0;
+    if (user.welcomeEmailSent === undefined) defaults.welcomeEmailSent = true;
+    if (user.paymentMethods === undefined) defaults.paymentMethods = [];
     try {
-      await setUser(key.split(":")[1], {});
+      await setUser(key.split(":")[1], defaults);
     } catch (err) {
       count("users failed");
       console.log("Failed to save user", key, err.message);
@@ -81,7 +90,11 @@ async function templates() {
     const template = owners.get(id);
     if (!template) return;
 
-    const [type, content] = await client.hmGet(key, ["type", "content"]);
+    const [type, content, partialsJSON] = await client.hmGet(key, [
+      "type",
+      "content",
+      "partials",
+    ]);
 
     if (type !== null && type !== undefined) {
       count("views with type");
@@ -90,16 +103,30 @@ async function templates() {
 
     if (template.owner === "SITE" || typeof content !== "string") return;
 
-    const updated = content.replace(
-      PAGINATION_ALIAS,
-      (match, prefix, alias) => prefix + SNAKE[alias]
-    );
-    if (updated === content) return;
+    const updates = { name };
+    const updated = snakeCase(content);
+    if (updated !== content) updates.content = updated;
+
+    let partials = {};
+    try {
+      partials = JSON.parse(partialsJSON || "{}") || {};
+    } catch (err) {}
+    let partialsChanged = false;
+    for (const partial in partials) {
+      if (typeof partials[partial] !== "string") continue;
+      const value = snakeCase(partials[partial]);
+      if (value === partials[partial]) continue;
+      partials[partial] = value;
+      partialsChanged = true;
+    }
+    if (partialsChanged) updates.partials = partials;
+
+    if (Object.keys(updates).length === 1) return;
 
     count("views using pagination aliases");
     console.log("pagination aliases:", id, name);
     if (!APPLY) return;
-    await setView(id, { name, content: updated });
+    await setView(id, updates);
     rewritten.set(id, template);
   });
 
