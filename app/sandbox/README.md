@@ -35,6 +35,9 @@ starts `SANDBOX_`, and it never falls back to in-process.
 - `template-image` a template image setting: a decode check, then the original
   and its thumbnails, cropped and cut to a shape (`image-mask.js`, `crop.js`).
 - `favicon` a template's favicon set, one ICO and a few PNGs.
+- `unzip` a zip archive into its files, one output each. It refuses absolute and
+  upward paths, symlinks, too many records, too many bytes and too high a ratio
+  (a bad archive is a `meta.error`, not a thrown error). Output stops at 60 MiB.
 
 Callers write any output files themselves: the jail can't reach the data mount.
 Args are JSON and every job checks them, since they come from the less trusted side.
