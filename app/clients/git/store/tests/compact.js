@@ -142,12 +142,68 @@ describe("git store compaction plan", function () {
 
   it("rebuilds the history once there are enough pieces", function () {
     expect(compact.plan(manifestWith([pack(1, 1000, 1)], 15))).toBe(null);
-    expect(compact.plan(manifestWith([pack(1, 1000, 1)], 16))).toEqual({ packs: [], history: true });
-    expect(compact.plan(manifestWith([pack(1, 1000, 1)], 3), { minPieces: 3 })).toEqual({ packs: [], history: true });
+    expect(compact.plan(manifestWith([pack(1, 1000, 1)], 16))).toEqual({ packs: [], history: true, trim: false });
+    expect(compact.plan(manifestWith([pack(1, 1000, 1)], 3), { minPieces: 3 })).toEqual({ packs: [], history: true, trim: false });
   });
 
   it("has nothing to do for an empty repository", function () {
     expect(compact.plan(manifest.empty())).toBe(null);
+  });
+
+  it("trims snapshots on their own once they are past the limit by the slack", function () {
+    const withSnapshots = (n, refs = 1) => {
+      const m = manifestWith([pack(1, 1000, n)]);
+      m.snapshots = Array.from({ length: n }, (_, i) => {
+        const named = {};
+        for (let r = 0; r < refs; r++) named["refs/heads/b" + r] = "a".repeat(40);
+        return { seq: i + 1, refs: named };
+      });
+      return m;
+    };
+    expect(compact.plan(withSnapshots(11), { maxSnapshots: 10 })).toBe(null);
+    expect(compact.plan(withSnapshots(12), { maxSnapshots: 10 })).toEqual({ packs: [], history: false, trim: true });
+    expect(compact.plan(withSnapshots(1100))).toBe(null);
+    expect(compact.plan(withSnapshots(1101)).trim).toBe(true);
+
+    // By bytes: 20 snapshots of about 1.4 KB each
+    const big = withSnapshots(20, 20);
+    const each = manifest.snapshotBytes(big.snapshots[0]);
+    expect(compact.plan(big, { maxSnapshotBytes: 20 * each })).toBe(null);
+    expect(compact.plan(big, { maxSnapshotBytes: 19 * each })).toBe(null);
+    expect(compact.plan(big, { maxSnapshotBytes: 15 * each }).trim).toBe(true);
+    // but never below minSnapshots
+    expect(compact.plan(big, { maxSnapshotBytes: 1, minSnapshots: 20 })).toBe(null);
+  });
+});
+
+describe("git store compaction of snapshots alone", function () {
+  it("swaps in a trimmed manifest without reading a pack, and then has nothing to do", async function () {
+    const store = createMemoryStore();
+    const lock = createLock();
+    const dir = fx.tempDir();
+    try {
+      const cache = createCache({ dir, maxBytes: 1024 });
+      for (let i = 1; i <= 12; i++) {
+        const base = await manifest.read(store);
+        const next = manifest.advance(base, { refs: { [MASTER]: String(i % 10).repeat(40) }, head: MASTER });
+        await manifest.swap({ store, lock, base, next });
+      }
+
+      const before = { ...store.stats };
+      const result = await compact({ store, cache, lock, maxSnapshots: 10, minSnapshots: 2 });
+      expect(result.outcome).toBe("compacted");
+      expect(result.merged).toEqual([]);
+      expect(result.into).toBe(null);
+      expect(result.stats.snapshotsTrimmed).toBe(2);
+      expect(store.stats.reads - before.reads).toBe(0);
+
+      const latest = await manifest.read(store);
+      expect(latest.seq).toBe(13);
+      expect(latest.snapshots.map((snapshot) => snapshot.seq)).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+      expect((await compact({ store, cache, lock, maxSnapshots: 10 })).outcome).toBe("nothing");
+    } finally {
+      fx.remove(dir);
+    }
   });
 });
 
@@ -398,6 +454,33 @@ describe("git store compaction", function () {
       expect(lastResult().packs).toBeLessThan(latest.packs.length);
     });
 
+    it("trims old snapshots, after which a client behind them all is sent everything and one within them only what it lacks", async function () {
+      const old = await clone("old");
+      await pushes(6);
+      const recent = await clone("recent");
+      await pushes(2);
+      const snapshotsBefore = latest.snapshots.length;
+
+      const result = await compact({ store, cache, lock, maxSnapshots: 4, minSnapshots: 2 });
+      expect(result.outcome).toBe("compacted");
+      expect(result.stats.snapshotsTrimmed).toBe(snapshotsBefore - 4);
+      await refresh();
+      expect(latest.snapshots.length).toBe(4);
+      expect(latest.snapshots[latest.snapshots.length - 1].refs).toEqual(latest.refs);
+
+      // Two pushes behind, at a snapshot that is kept: only those pushes' packs.
+      // No auto gc, which a fetch can start in the background, under fsck
+      ok(await runGit(["-c", "gc.auto=0", "-c", "maintenance.auto=false", "-c", "transfer.fsckObjects=true", "fetch", "-q", "origin"], { cwd: recent }));
+      expect(lastResult().packs).toBe(2);
+      expect(lastResult().objects).toBeLessThan(15);
+      expectMirror(recent);
+
+      // Eight behind, older than every snapshot kept: everything, as a clone
+      ok(await runGit(["-c", "gc.auto=0", "-c", "maintenance.auto=false", "-c", "transfer.fsckObjects=true", "fetch", "-q", "origin"], { cwd: old }));
+      expect(lastResult().packs).toBe(latest.packs.length);
+      expectMirror(old);
+    });
+
     it("keeps fetch's ancestor walk working once the pieces are merged into the history pack", async function () {
       // A push of two commits, so the first is no snapshot's tip
       fs.writeFileSync(path.join(work, "posts", "middle.md"), "Middle\n");
@@ -457,6 +540,25 @@ describe("git store compaction", function () {
       // The push's own pack is the newest, unmerged
       expect(latest.packs[latest.packs.length - 1].seq).toBe(latest.seq - 1);
 
+      await expectObjects();
+      expectMirror(await clone("after"));
+    });
+
+    it("reads again and retries when its merge took longer than a swap allows a base to be held", async function () {
+      let now = Date.now();
+      const clock = () => now;
+      const slow = async (fn) => {
+        if (!slow.done) {
+          slow.done = true;
+          now += manifest.MAX_BASE_AGE + 1;
+        }
+        return lock(fn);
+      };
+      const result = await compact({ store, cache, lock: slow, clock });
+      expect(result.outcome).toBe("compacted");
+      expect(result.stats.attempts).toBe(2);
+      await refresh();
+      expect(latest.seq).toBe(result.seq);
       await expectObjects();
       expectMirror(await clone("after"));
     });
