@@ -26,11 +26,19 @@ const setUser = promisify(User.set);
 const setView = promisify(Template.setView);
 const writeToFolderAsync = promisify(writeToFolder);
 
-const PAGINATION_ALIAS = /(\{\{\{?[#^/&\s]*(?:[\w.]*\.)?)(pageSize|totalEntries)\b/g;
+// Only pagination's own fields: {{pagination.pageSize}}, or a bare
+// {{pageSize}} inside a {{#pagination}} section. A custom local with the
+// same name, like {{custom.pageSize}}, is left alone.
+const QUALIFIED = /(\{\{\{?[#^/&\s]*pagination\.)(pageSize|totalEntries)\b/g;
+const SECTION = /(\{\{#\s*pagination\s*\}\})([\s\S]*?)(\{\{\/\s*pagination\s*\}\})/g;
+const BARE = /(\{\{\{?[#^/&\s]*)(pageSize|totalEntries)\b/g;
 const SNAKE = { pageSize: "page_size", totalEntries: "total_entries" };
 
 function snakeCase(text) {
-  return text.replace(PAGINATION_ALIAS, (match, prefix, alias) => prefix + SNAKE[alias]);
+  const rename = (match, prefix, alias) => prefix + SNAKE[alias];
+  return text
+    .replace(QUALIFIED, rename)
+    .replace(SECTION, (match, open, body, close) => open + body.replace(BARE, rename) + close);
 }
 
 const counts = {};
@@ -119,9 +127,10 @@ async function templates() {
       partials[partial] = value;
       partialsChanged = true;
     }
-    if (partialsChanged) updates.partials = partials;
-
-    if (Object.keys(updates).length === 1) return;
+    if (!updates.content && !partialsChanged) return;
+    // setView drops file-backed partial markers that aren't in the content
+    // or in updates.partials, so always pass the whole map back
+    updates.partials = partials;
 
     count("views using pagination aliases");
     console.log("pagination aliases:", id, name);
@@ -136,7 +145,10 @@ async function templates() {
     try {
       await writeToFolderAsync(template.owner, id);
     } catch (err) {
-      console.log("Failed to write template to folder", id, err.message);
+      // Redis is already migrated, so a re-run won't find this template:
+      // retry it by hand with writeToFolder(owner, id)
+      process.exitCode = 1;
+      console.log("Failed to write template to folder", template.owner, id, err.message);
     }
   }
 }
@@ -159,7 +171,7 @@ async function main() {
 }
 
 main()
-  .then(() => process.exit(0))
+  .then(() => process.exit())
   .catch((err) => {
     console.error(err);
     process.exit(1);
