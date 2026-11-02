@@ -140,7 +140,7 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   as long as 20s. That is background build work. A fetch waits in a queue of
   its own, at most 8, inside the broker's, so a backlog of them never fills
   the queue the dashboard's jobs wait in: past it, or after a minute queued,
-  the answer is `busy` (alerted) and the post keeps its remote link.
+  the answer is `busy` (logged, not emailed: see Alerts) and the post keeps its remote link.
 - **The fetch shares the unit's sandbox subtree** (`blot-sandbox/<unit>`,
   512 MiB) with the proxy jail (128 MiB at most) and the image jobs (each up
   to 512 MiB, four at once). The fetch and the proxy together take at most
@@ -197,7 +197,9 @@ is full, and, checked every five minutes from each web process, when the unit's
 fetch proxy jail stops answering or lets the metadata
 address through. A job that fails on bad input isn't reported, except
 `fetch-image`, which answers bad input with `meta.error`, so its failing means
-the jail is broken. At most one
+the jail is broken. A busy `fetch-image` is the other way round: its short
+queue fills by design when builds have many remote images, so that is logged
+with a count (`sandbox: job fetch-image busy`) rather than emailed. At most one
 email per process every ten minutes, with counts for what happened in between.
 
 ## Why
