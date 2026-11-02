@@ -203,7 +203,7 @@ describe("all_tags cache", function () {
     });
   });
 
-  it("bypasses the cache for preview requests", function (done) {
+  it("shares the cache with preview requests", function (done) {
     const allTags = loadAllTags();
 
     spyOn(Tags, "list").and.callFake(function (blogID, options, callback) {
@@ -215,7 +215,7 @@ describe("all_tags cache", function () {
 
     allTags(req, { locals: {} }, function () {
       allTags(req, { locals: {} }, function () {
-        expect(Tags.list).toHaveBeenCalledTimes(2);
+        expect(Tags.list).toHaveBeenCalledTimes(1);
         done();
       });
     });

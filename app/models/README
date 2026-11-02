@@ -91,6 +91,7 @@ Entities
 - **question** – Q&A / form submissions: create, get, list, search, tags, import/export.
 - **404** – Track 404s per blog; ignore/unignore paths, list.
 - **ignoredFiles** – Hash of paths Blot won’t process (e.g. too large, wrong type), with reason codes. See `REASONS` in the file.
+- **cache** – Not a model: the in-process LRU helpers the read caches are built from (`metrics.js` for `createRenderCache` and its counters, `fetchCached.js`, `clone.js`, `stats.js`, `uncacheable.js`). `Entries.getCatalog` and `Template.getFullView` cache inside the model, so callers get the cache without knowing about it; the other render caches still live in `blog/render/retrieve`. Every cache is keyed on the blog's `cacheID` (and a template's own `cacheID` for views), so a write is seen by every instance once it bumps that.
 
 
 Using models from the app

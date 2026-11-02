@@ -1,7 +1,7 @@
 var Mustache = require("mustache");
-var { createRenderCache } = require("../lib/cacheMetrics");
+var { createRenderCache } = require("models/cache/metrics");
 var ensure = require("helper/ensure");
-var cacheStats = require("../lib/cacheStats");
+var cacheStats = require("models/cache/stats");
 
 var ERROR = require("./error");
 var OVERFLOW = "Maximum call stack size exceeded";

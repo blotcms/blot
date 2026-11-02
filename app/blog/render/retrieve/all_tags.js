@@ -1,10 +1,10 @@
 const { listTags } = require("../../lib/models");
 const { normalizePathPrefix } = require("helper/pathPrefix");
-const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
-const cacheStats = require("../../lib/cacheStats");
-const fetchCached = require("../../lib/fetchCached");
+const { cloneDeep, prepareCacheValue } = require("models/cache/clone");
+const cacheStats = require("models/cache/stats");
+const fetchCached = require("models/cache/fetchCached");
 const { compactTags, expandTags } = require("./helpers/compactTags");
-const { createRenderCache } = require("../../lib/cacheMetrics");
+const { createRenderCache } = require("models/cache/metrics");
 const asRetriever = require("../../lib/asRetriever");
 
 async function loadAllTags(blogID, pathPrefix, log) {
@@ -54,8 +54,7 @@ const allTagsCache = createRenderCache("allTags", {
   // and hand its result back even if it can't be cached.
   ignoreFetchAbort: true,
   // Coalesce concurrent misses on the same key into one in-flight
-  // loadAllTags call. Preview requests never reach this - see the
-  // bypassCache branch below.
+  // loadAllTags call.
   fetchMethod: async (key, staleValue, { context }) => {
     const { blogID, pathPrefix, log } = context;
     const { tags, totalPosts } = await loadAllTags(blogID, pathPrefix, log);
@@ -81,22 +80,8 @@ async function allTags(req, res) {
     res.locals.path_prefix ??
     (req.template && req.template.locals && req.template.locals.path_prefix);
 
-  // Preview renders change on every save and are rarely repeated, so caching
-  // them would only thrash the LRU with entries no other request will read.
-  // Go around the cache entirely rather than through fetchMethod, since a
-  // preview render must never be persisted or served to another request.
-  const bypassCache = !!req.preview;
-
-  if (bypassCache) {
-    const { tags, totalPosts } = await loadAllTags(
-      req.blog.id,
-      path_prefix,
-      req.log,
-    );
-    res.locals.all_tags_total_posts = totalPosts;
-    return tags;
-  }
-
+  // Previews share this cache: nothing in it depends on the template, only
+  // on the blog's cacheID and the path prefix.
   const key = createCacheKey(req.blog, path_prefix);
   const prepared = await fetchCached(allTagsCache, "allTags", req.log, key, {
     context: { blogID: req.blog.id, pathPrefix: path_prefix, log: req.log },
