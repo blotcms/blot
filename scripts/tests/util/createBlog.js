@@ -1,8 +1,7 @@
 var Blog = require("models/blog");
 var randomString = require("./randomString");
 var localPath = require("helper/localPath");
-const fs = require("fs-extra");
-const { join } = require("path");
+const folder = require("storage/folder");
 const { promisify } = require("util");
 const rebuild = promisify(require("sync/rebuild"));
 const checkEntry = require("./checkEntry");
@@ -58,13 +57,13 @@ function attempt(context, attemptIndex, done) {
     };
 
     context.blog.write = async ({ path, content }) => {
-      await fs.outputFile(join(context.blogDirectory, path), content);
+      await folder.write(context.blog.id, path, content);
     };
 
     context.blog.remove = async (path) => {
-      await fs.remove(join(context.blogDirectory, path));
+      await folder.remove(context.blog.id, path);
     };
-    
+
     context.blog.rebuild = async (options = {}) =>
       await rebuild(context.blog.id, options);
 

@@ -1,7 +1,6 @@
-const fs = require("fs").promises;
 const path = require("path");
 const eachBlogOrOneBlog = require("../each/eachBlogOrOneBlog");
-const localPath = require("helper/localPath");
+const folder = require("storage/folder");
 const getConfirmation = require("../util/getConfirmation");
 const createDriveClient = require("clients/google-drive/serviceAccount/createDriveClient");
 const database = require("clients/google-drive/database");
@@ -9,36 +8,23 @@ const database = require("clients/google-drive/database");
 const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
 
 const walkLocalGitFolder = async (blogID, templateBase, templateName) => {
-  const gitPath = localPath(blogID, path.join(templateBase, templateName, ".git"));
+  const gitPath = path.join(templateBase, templateName, ".git");
 
   try {
-    const stats = await fs.stat(gitPath);
-    if (!stats.isDirectory()) return null;
+    const stats = await folder.stat(blogID, gitPath);
+    if (!stats.isDirectory) return null;
   } catch (err) {
     if (err.code === "ENOENT") return null;
     throw err;
   }
 
+  // walk yields paths from the blog's folder; report them from the .git folder
+  const depth = gitPath.split("/").filter(Boolean).length;
   const files = [];
 
-  const walk = async (currentPath, relativePath = "") => {
-    const entries = await fs.readdir(currentPath, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const absoluteChild = path.join(currentPath, entry.name);
-      const relativeChild = relativePath
-        ? path.posix.join(relativePath, entry.name)
-        : entry.name;
-
-      if (entry.isDirectory()) {
-        await walk(absoluteChild, relativeChild);
-      } else {
-        files.push(relativeChild);
-      }
-    }
-  };
-
-  await walk(gitPath);
+  for await (const file of folder.walk(blogID, gitPath)) {
+    files.push(file.split("/").filter(Boolean).slice(depth).join("/"));
+  }
 
   return files;
 };
@@ -55,13 +41,11 @@ const listTemplateFolders = async (blogID) => {
   const candidateDirs = ["/Templates", "/templates"];
 
   for (const dir of candidateDirs) {
-    const absolutePath = localPath(blogID, dir);
-
     try {
-      const entries = await fs.readdir(absolutePath, { withFileTypes: true });
+      const entries = await folder.listNames(blogID, dir);
 
       for (const entry of entries) {
-        if (entry.isDirectory() && !entry.name.startsWith(".")) {
+        if (entry.isDirectory && !entry.name.startsWith(".")) {
           templates.push({ name: entry.name, base: dir });
         }
       }
