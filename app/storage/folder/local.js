@@ -4,6 +4,7 @@ var pathNormalizer = require("helper/pathNormalizer");
 var assertNoSymlinks = require("helper/assertNoSymlinks");
 var caseSensitivePath = require("helper/caseSensitivePath");
 var hashFile = require("helper/hashFile");
+var sha1File = require("util").promisify(require("helper/transformer/hash"));
 var fs = require("fs-extra");
 var { randomUUID: uuid } = require("crypto");
 var { pipeline } = require("stream/promises");
@@ -348,6 +349,13 @@ async function move(blogID, from, to) {
     throw new Error("storage/folder: move needs paths inside the folder");
   }
 
+  // Replacing the destination would delete the source along with it
+  if (source.local.indexOf(destination.local + sep) === 0) {
+    var err = new Error("Cannot move " + from + " over its own ancestor " + to);
+    err.code = "EINVAL";
+    throw err;
+  }
+
   await guard(source.root, dirname(source.local));
   await guard(destination.root, dirname(destination.local));
   await attempt(fs.move(source.local, destination.local, { overwrite: true }));
@@ -368,6 +376,12 @@ async function stat(blogID, relPath, options) {
 
   if (options && options.hash && !isDirectory) {
     result.hash = await attempt(hashFile(local));
+  }
+
+  // The SHA-1 of the bytes, as entries' contentHash and the S3 backend's
+  // index use (helper/transformer/hash)
+  if (options && options.sha1 && !isDirectory) {
+    result.sha1 = await attempt(sha1File(local));
   }
 
   return result;

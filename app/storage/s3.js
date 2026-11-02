@@ -1,5 +1,7 @@
 const config = require("config");
 const fs = require("fs-extra");
+const crypto = require("crypto");
+const { pipeline, Transform } = require("stream");
 const contentTypeFor = require("./contentType");
 const { isScopeName } = require("./util");
 
@@ -128,50 +130,14 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Uploads a local file to the key for (blogID, relPath), with the
-// Content-Type its name implies and a year of caching. This is the one place
-// objects are written, shared by assets.commit and the backfill script, so
-// the headers can't drift.
-async function upload(blogID, relPath, localFile) {
-  const objectKey = key(blogID, relPath);
+// Runs fn up to UPLOAD_ATTEMPTS times, waiting longer after each failure,
+// unless the error is one a retry can't fix. fn must start afresh each time.
+async function withRetries(fn) {
   let lastError;
 
   for (let attempt = 1; attempt <= UPLOAD_ATTEMPTS; attempt++) {
     try {
-      // Open the file before anything else, so a file which isn't there
-      // fails here as a plain ENOENT (not inside the SDK, which may wrap it),
-      // and a concurrent unlink once it's open can't break the read
-      const handle = await fs.promises.open(localFile, "r");
-      let stat;
-      let body;
-
-      try {
-        stat = await handle.stat();
-
-        // Stream the file; it's never read into memory whole. The stream
-        // owns the handle and closes it when destroyed.
-        body = handle.createReadStream();
-      } catch (err) {
-        await handle.close().catch(function () {});
-        throw err;
-      }
-
-      try {
-        await client().send(
-          new (SDK().PutObjectCommand)({
-            Bucket: bucket(),
-            Key: objectKey,
-            Body: body,
-            ContentLength: stat.size,
-            ContentType: contentTypeFor(objectKey),
-            CacheControl: CACHE_CONTROL,
-          })
-        );
-      } finally {
-        body.destroy();
-      }
-
-      return { key: objectKey, size: stat.size };
+      return await fn();
     } catch (err) {
       lastError = err;
 
@@ -183,12 +149,153 @@ async function upload(blogID, relPath, localFile) {
     }
   }
 
-  lastError.key = objectKey;
   throw lastError;
 }
 
+// Uploads a local file to objectKey, streaming it (it's never read into
+// memory whole) and computing its SHA-1 on the way, so the hash costs no
+// extra read. Resolves to { key, size, sha1 }. options are contentType
+// (default: by the key's extension) and cacheControl (default: none).
+async function uploadFile(objectKey, localFile, options) {
+  options = options || {};
+
+  try {
+    return await withRetries(async function () {
+      // Open the file before anything else, so a file which isn't there
+      // fails here as a plain ENOENT (not inside the SDK, which may wrap it),
+      // and a concurrent unlink once it's open can't break the read
+      const handle = await fs.promises.open(localFile, "r");
+      const hash = crypto.createHash("sha1");
+      let stat;
+      let source;
+
+      try {
+        stat = await handle.stat();
+
+        // The stream owns the handle and closes it when destroyed
+        source = handle.createReadStream();
+      } catch (err) {
+        await handle.close().catch(function () {});
+        throw err;
+      }
+
+      const body = pipeline(
+        source,
+        new Transform({
+          transform(chunk, encoding, callback) {
+            hash.update(chunk);
+            callback(null, chunk);
+          },
+        }),
+        function () {}
+      );
+
+      try {
+        await client().send(
+          new (SDK().PutObjectCommand)({
+            Bucket: bucket(),
+            Key: objectKey,
+            Body: body,
+            ContentLength: stat.size,
+            ContentType: options.contentType || contentTypeFor(objectKey),
+            CacheControl: options.cacheControl,
+          })
+        );
+      } finally {
+        source.destroy();
+        body.destroy();
+      }
+
+      // S3 took ContentLength bytes, so every one of them went through the hash
+      return { key: objectKey, size: stat.size, sha1: hash.digest("hex") };
+    });
+  } catch (err) {
+    err.key = objectKey;
+    throw err;
+  }
+}
+
+// Uploads a Buffer (or string) to objectKey. Resolves to { key, size, sha1 }.
+// Same options as uploadFile.
+async function putBuffer(objectKey, data, options) {
+  options = options || {};
+
+  const body = Buffer.isBuffer(data) ? data : Buffer.from(String(data));
+
+  try {
+    await withRetries(function () {
+      return client().send(
+        new (SDK().PutObjectCommand)({
+          Bucket: bucket(),
+          Key: objectKey,
+          Body: body,
+          ContentLength: body.length,
+          ContentType: options.contentType || contentTypeFor(objectKey),
+          CacheControl: options.cacheControl,
+        })
+      );
+    });
+  } catch (err) {
+    err.key = objectKey;
+    throw err;
+  }
+
+  return {
+    key: objectKey,
+    size: body.length,
+    sha1: crypto.createHash("sha1").update(body).digest("hex"),
+  };
+}
+
+// Copies one object to another key within the bucket, headers and all. With
+// options.contentType the copy gets that Content-Type instead (a renamed
+// file is served by its new name's type), keeping the rest of the source's
+// metadata, which S3 only allows by restating it.
+async function copy(fromKey, toKey, options) {
+  options = options || {};
+
+  const input = {
+    Bucket: bucket(),
+    // URL-encoded, but its slashes are separators
+    CopySource: bucket() + "/" + fromKey.split("/").map(encodeURIComponent).join("/"),
+    Key: toKey,
+  };
+
+  if (options.contentType) {
+    const source = await head(fromKey);
+
+    if (!source) {
+      const err = new Error("storage/s3: no such object to copy: " + fromKey);
+      err.name = "NoSuchKey";
+      err.$metadata = { httpStatusCode: 404 };
+      throw err;
+    }
+
+    input.MetadataDirective = "REPLACE";
+    input.ContentType = options.contentType;
+    if (source.cacheControl) input.CacheControl = source.cacheControl;
+    if (source.metadata) input.Metadata = source.metadata;
+  }
+
+  await withRetries(function () {
+    return client().send(new (SDK().CopyObjectCommand)(input));
+  });
+}
+
+// Uploads a local file to the key for (blogID, relPath), with the
+// Content-Type its name implies and a year of caching. This is the one place
+// asset objects are written, shared by assets.commit and the backfill script,
+// so the headers can't drift.
+async function upload(blogID, relPath, localFile) {
+  const result = await uploadFile(key(blogID, relPath), localFile, {
+    cacheControl: CACHE_CONTROL,
+  });
+
+  return { key: result.key, size: result.size };
+}
+
 // Metadata for an object ({ size, etag, modified, contentType,
-// cacheControl }), or null if there's no such object.
+// cacheControl, metadata }), or null if there's no such object.
 async function head(objectKey) {
   try {
     const data = await client().send(
@@ -201,6 +308,7 @@ async function head(objectKey) {
       modified: data.LastModified,
       contentType: data.ContentType,
       cacheControl: data.CacheControl,
+      metadata: data.Metadata,
     };
   } catch (err) {
     if (isNotFound(err)) return null;
@@ -419,6 +527,10 @@ module.exports = {
   reset,
   isNotFound,
   upload,
+  uploadFile,
+  putBuffer,
+  copy,
+  deleteKeys,
   head,
   get,
   open,
