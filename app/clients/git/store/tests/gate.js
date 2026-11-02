@@ -159,7 +159,12 @@ describe("git store gate", function () {
     const children = createChildren((start) => Promise.reject(new Error("no room")));
     const { git } = require("../compact");
 
-    await expectAsync(git.runGit(children, ["init", "-q", "--bare", path.join(dir, "never.git")], { gitDir: path.join(dir, "never.git") })).toBeRejectedWithError("no room");
+    const failed = await git.runGit(children, ["init", "-q", "--bare", path.join(dir, "never.git")], { gitDir: path.join(dir, "never.git") }).then(
+      () => null,
+      (err) => err.message
+    );
+
+    expect(failed).toBe("no room");
 
     expect(lines()).toEqual([]);
     expect(fs.existsSync(path.join(dir, "never.git"))).toBe(false);

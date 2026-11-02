@@ -119,12 +119,21 @@ describe("git client limiter", function () {
     it("holds a place until the work has settled, however it ends", async function () {
       var lanes = createLimiter({ interactive: 1, background: 1, gc: 1 });
 
-      await expectAsync(lanes.run("background", () => Promise.reject(new Error("git failed")))).toBeRejectedWithError("git failed");
-      await expectAsync(
-        lanes.run("background", function () {
-          throw new Error("could not spawn");
-        })
-      ).toBeRejectedWithError("could not spawn");
+      function failure(promise) {
+        return promise.then(
+          () => null,
+          (err) => err.message
+        );
+      }
+
+      expect(await failure(lanes.run("background", () => Promise.reject(new Error("git failed"))))).toBe("git failed");
+      expect(
+        await failure(
+          lanes.run("background", function () {
+            throw new Error("could not spawn");
+          })
+        )
+      ).toBe("could not spawn");
 
       expect(await lanes.run("background", () => "still room")).toBe("still room");
       expect(lanes.stats().background.running).toBe(0);
