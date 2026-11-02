@@ -1,14 +1,14 @@
 const clfdate = require("helper/clfdate");
 
 // Each of these render-path LRU caches exports a _stats() accessor
-// (see blog/lib/cacheStats.js) returning current size/calculatedSize
+// (see models/cache/stats.js) returning current size/calculatedSize
 // against the cache's configured max/maxSize, plus the lookup, fill and
-// eviction counters from blog/lib/cacheMetrics (cumulative for the process).
+// eviction counters from models/cache/metrics (cumulative for the process).
 // Not every cache has every counter: Mustache's template cache is read by
 // Mustache, not through fetchCached, so only its evictions are counted.
 const caches = [
   require("blog/render/main")._stats,
-  require("blog/render/full-view-cache")._stats,
+  require("models/template/fullViewCache")._stats,
   require("blog/render/retrieve/popular_tags")._stats,
   require("blog/render/retrieve/posts")._stats,
   require("blog/render/retrieve/archives")._stats,
@@ -17,7 +17,7 @@ const caches = [
   require("blog/render/retrieve/recent_entries")._stats,
   require("blog/render/retrieve/latest_entry")._stats,
   require("blog/render/retrieve/all_entries")._stats,
-  require("blog/render/retrieve/helpers/getAllCached")._stats,
+  require("models/entries/catalog")._stats,
   require("blog/render/retrieve/total_posts")._stats,
 ];
 

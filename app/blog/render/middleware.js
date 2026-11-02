@@ -3,7 +3,7 @@ const loadView = require("./load");
 const finalRender = require("./main");
 const retrieve = require("./retrieve");
 const listingViews = require("./listingViews");
-const getCachedFullView = require("./full-view-cache");
+const { getFullView } = require("../lib/models");
 
 const ensure = require("helper/ensure");
 const extend = require("helper/extend");
@@ -80,10 +80,9 @@ module.exports = function attachRenderView(req, res, _next) {
     if (callback) callback = callOnce(callback);
 
     try {
-      const response = await getCachedFullView({
-        blog,
-        template: req.template,
-        viewName: name,
+      const response = await getFullView(blog.id, req.template.id, name, {
+        blogCacheID: blog.cacheID,
+        templateCacheID: req.template.cacheID,
         log: req.log,
       });
 

@@ -11,7 +11,7 @@ const {
   cloneDeep,
   deepFreeze,
   prepareCacheValue,
-} = require("../../app/blog/lib/clone");
+} = require("../../app/models/cache/clone");
 
 const entries = Array.from({ length: 2000 }, (_, index) => {
   const entry = new EntryInstance();
