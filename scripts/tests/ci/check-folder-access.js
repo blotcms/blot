@@ -9,6 +9,14 @@
 // working on the local disk and silently break once the folder is in S3.
 // Code which needs a real path calls folder.ensureLocal (or folder.path).
 //
+// Second rule: Blot's own changes to a blog's folder go through the blog's sync
+// client, so the provider (Dropbox, Google Drive, iCloud, Git) and the client's
+// own records see them. Code outside the places below may read the folder with
+// storage/folder, but must not call its mutating methods (write, writeFrom,
+// remove, removeAll, rmdir, move, mkdir). Use app/clients/folder.js instead:
+// it uses the blog's client, and writes the folder directly only for a blog
+// with no client.
+//
 // Run from anywhere: node scripts/tests/ci/check-folder-access.js
 
 const { execFileSync } = require("child_process");
@@ -51,6 +59,97 @@ function allowed(file) {
   );
 }
 
+// Mutating methods of storage/folder. Only these places may call them.
+const MUTATORS = ["write", "writeFrom", "remove", "removeAll", "rmdir", "move", "mkdir"];
+
+const MUTATION_ALLOWED_PREFIXES = [
+  "app/storage/", // the backend itself
+  // A sync client's own directory: it is the code that applies changes to the
+  // folder on behalf of its provider.
+  "app/clients/dropbox/",
+  "app/clients/google-drive/",
+  "app/clients/icloud/",
+  "app/clients/git/",
+  "app/clients/local/",
+  "app/clients/folder.js", // the router
+  // Syncs Blot's own demo blogs, which have no client.
+  "app/templates/folders/",
+  // Deletes a whole blog folder along with the blog.
+  "app/models/blog/remove.js",
+  // Creates the empty folder of a brand new blog, which has no client yet.
+  "app/models/blog/create.js",
+  // Recreates a missing folder on a new volume during a host cycle.
+  "scripts/host-cycle/reconcile.js",
+  // KNOWN GAP: writes a template's package.json straight to the folder,
+  // bypassing the blog's client (see TODO). Move it onto clients/folder and
+  // delete this entry.
+  "app/models/template/removeEnabledFromAllTemplates.js",
+  // proxy/e2e seed scripts build fixture blogs before any client exists.
+  "proxy/e2e/",
+];
+
+function mutationAllowed(file) {
+  return (
+    isTest(file) ||
+    MUTATION_ALLOWED_PREFIXES.some(
+      (prefix) => file === prefix || file.startsWith(prefix)
+    )
+  );
+}
+
+const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const REQUIRE = String.raw`require\(\s*["'](?:storage\/folder|storage|(?:\.\.?\/)+(?:app\/)?storage\/folder|(?:\.\.?\/)+folder)["']\s*\)`;
+
+// Finds calls to the mutating methods of storage/folder in one file's source:
+// through any name the module is bound to (const x = require(...)), through a
+// destructured name, or straight off the require call.
+function findMutations(source) {
+  const found = [];
+  const names = new Set();
+  const direct = new Set();
+  const lines = source.split("\n");
+
+  const bindRe = new RegExp(String.raw`(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*` + REQUIRE);
+  const destructureRe = new RegExp(String.raw`(?:const|let|var)\s*\{([^}]*)\}\s*=\s*` + REQUIRE, "g");
+  const assignRe = new RegExp(String.raw`^\s*([A-Za-z_$][\w$]*)\s*=\s*` + REQUIRE);
+
+  for (const line of lines) {
+    let m = bindRe.exec(line) || assignRe.exec(line);
+    if (m) names.add(m[1]);
+  }
+
+  const destructureSource = source.replace(/\n/g, " ");
+  let m;
+  while ((m = destructureRe.exec(destructureSource))) {
+    for (const part of m[1].split(",")) {
+      const [original, alias] = part.split(":").map((x) => x.trim());
+      if (MUTATORS.includes(original)) direct.add(alias || original);
+    }
+  }
+
+  const methodList = MUTATORS.join("|");
+  const viaName = names.size
+    ? new RegExp(String.raw`(?<![\w$.])(?:${[...names].map(escapeRe).join("|")})\s*\.\s*(?:${methodList})\b`)
+    : null;
+  const viaRequire = new RegExp(REQUIRE + String.raw`\s*\.\s*(?:${methodList})\b`);
+  const viaDirect = direct.size
+    ? new RegExp(String.raw`(?<![\w$.])(?:${[...direct].map(escapeRe).join("|")})\s*\(`)
+    : null;
+
+  lines.forEach((line, i) => {
+    if (/^\s*(\/\/|\*)/.test(line)) return;
+    if (
+      (viaName && viaName.test(line)) ||
+      viaRequire.test(line) ||
+      (viaDirect && viaDirect.test(line) && !bindRe.test(line) && !/\bfunction\b/.test(line))
+    ) {
+      found.push(i);
+    }
+  });
+
+  return found;
+}
+
 const files = execFileSync("git", ["ls-files", "app", "scripts", "config", "proxy/e2e"], {
   cwd: root,
   encoding: "utf8",
@@ -60,8 +159,21 @@ const files = execFileSync("git", ["ls-files", "app", "scripts", "config", "prox
   .filter((file) => file.endsWith(".js"));
 
 const violations = [];
+const mutations = [];
 
 for (const file of files) {
+  if (!mutationAllowed(file)) {
+    try {
+      const source = readFileSync(join(root, file), "utf8");
+      const lines = source.split("\n");
+      for (const i of findMutations(source)) {
+        mutations.push(`${file}:${i + 1}: ${lines[i].trim()}`);
+      }
+    } catch (err) {
+      if (err.code !== "ENOENT") throw err;
+    }
+  }
+
   if (allowed(file)) continue;
 
   let lines;
@@ -77,6 +189,21 @@ for (const file of files) {
       violations.push(`${file}:${i + 1}: ${line.trim()}`);
     }
   });
+}
+
+if (mutations.length) {
+  console.error(
+    "Blot's own changes to a blog's folder must go through the blog's sync " +
+      "client (see the top of scripts/tests/ci/check-folder-access.js):\n"
+  );
+  for (const mutation of mutations) console.error("  " + mutation);
+  console.error(
+    "\nUse write, writeFrom or remove from app/clients/folder.js " +
+      "(require(\"clients/folder\")), which uses the blog's client. Only extend " +
+      "MUTATION_ALLOWED_PREFIXES for code which is itself a sync client or " +
+      "works on whole folders."
+  );
+  process.exit(1);
 }
 
 if (violations.length) {

@@ -1,6 +1,6 @@
 var joinpath = require("path").join;
 var isOwner = require("./isOwner");
-var folder = require("storage/folder");
+var blogFolder = require("clients/folder");
 var callbackify = require("util").callbackify;
 var getAllViews = require("./getAllViews");
 var determineTemplateFolder = require("./determineTemplateFolder");
@@ -17,44 +17,17 @@ function removeFromFolderUnlocked (blogID, templateID, callback) {
   
         if (!views || !metadata || !metadata.localEditing) return callback(null);
   
-      makeClient(blogID, function (err, client) {
-        if (err) {
-          return callback(err);
+      determineTemplateFolder(blogID, function (folderErr, folderName) {
+        if (folderErr) {
+          return callback(folderErr);
         }
 
-        determineTemplateFolder(blogID, function (folderErr, folderName) {
-          if (folderErr) {
-            return callback(folderErr);
-          }
+        var dir = joinpath(folderName, metadata.slug);
 
-          var dir = joinpath(folderName, metadata.slug);
-          
-          client.remove(blogID, dir, callback);
-        });
+        callbackify(blogFolder.remove)(blogID, dir, callback);
       });
     });
 });
-}
-
-function makeClient (blogID, callback) {
-  require("models/blog").get({ id: blogID }, function (err, blog) {
-    var client = require("clients")[blog.client];
-
-    // we create a fake client to write the template files directly
-    // to the blog's folder if the user has not configured a client
-    if (!blog.client || !client) {
-      return callback(null, {
-        remove: function (blogID, path, callback) {
-          callbackify(folder.remove)(blogID, path, callback);
-        },
-        write: function (blogID, path, content, callback) {
-          callbackify(folder.write)(blogID, path, content, callback);
-        }
-      });
-    }
-
-    return callback(null, client, blog.template);
-  });
 }
 
 module.exports = withFolderLock(removeFromFolderUnlocked);
