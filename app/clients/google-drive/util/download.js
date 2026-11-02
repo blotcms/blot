@@ -3,7 +3,7 @@ const pipeline = require("util").promisify(require("stream").pipeline);
 const folder = require("storage/folder");
 const localFile = require("./localFile");
 const colors = require("colors/safe");
-const { join, dirname } = require("path");
+const { join, dirname, sep } = require("path");
 const debug = require("debug")("blot:clients:google-drive:download");
 const tempDir = require("helper/tempDir")();
 const guid = require("helper/guid");
@@ -11,7 +11,7 @@ const verifyContent = require("./verifyContent");
 const assets = require("storage/assets");
 const hash = require("helper/hash");
 const cheerio = require("cheerio");
-const yauzl = require("yauzl");
+const sandbox = require("sandbox");
 const hotDocPoller = require("../serviceAccount/hotDocPoller");
 const database = require("../database");
 
@@ -61,37 +61,24 @@ const verifyOnBlot = async (blogID, path, md5Checksum) => {
 const streamToFile = (readStream, filePath) =>
   pipeline(readStream, fs.createWriteStream(filePath));
 
-const extractZip = (zipPath, extractDir) => {
-  return new Promise((resolve, reject) => {
-    yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
-      if (err) return reject(err);
-      zipfile.readEntry();
-      zipfile.on("entry", (entry) => {
-        if (/\/$/.test(entry.fileName)) {
-          fs.ensureDir(join(extractDir, entry.fileName)).then(() => {
-            zipfile.readEntry();
-          }, reject);
-        } else {
-          const destPath = join(extractDir, entry.fileName);
-          zipfile.openReadStream(entry, (openErr, readStream) => {
-            if (openErr) return reject(openErr);
-            fs.ensureDir(dirname(destPath)).then(() => {
-              const writer = fs.createWriteStream(destPath);
-              readStream.pipe(writer);
-              writer.on("error", reject);
-              writer.on("finish", () => zipfile.readEntry());
-              readStream.on("error", (e) => {
-                writer.destroy();
-                reject(e);
-              });
-            }, reject);
-          });
-        }
-      });
-      zipfile.on("end", () => resolve());
-      zipfile.on("error", reject);
-    });
-  });
+// A Google Doc exported as a zip: its HTML and images. Docs over 10mb can't be
+// exported at all, so these are generous, and only there for a hostile zip.
+const ZIP_LIMITS = { maxEntries: 2000, maxBytes: 50 * 1024 * 1024, maxRatio: 200 };
+
+// The zip is read in the sandbox (app/sandbox/jobs/unzip.js), which can't reach
+// the disk: the files are written here, each inside extractDir
+const extractZip = async (zipPath, extractDir) => {
+  const { meta, outputs } = await sandbox.run("unzip", ZIP_LIMITS, { path: zipPath });
+  if (meta.error) throw new Error("Could not unzip export: " + meta.error.reason);
+
+  await fs.ensureDir(extractDir);
+
+  for (let i = 0; i < meta.files.length; i++) {
+    const destPath = join(extractDir, meta.files[i]);
+    if (!destPath.startsWith(extractDir + sep)) throw new Error("Zip entry outside the export");
+    await fs.ensureDir(dirname(destPath));
+    await fs.writeFile(destPath, outputs[i]);
+  }
 };
 
 const resolveHtmlAndImagesDir = async (extractDir) => {
