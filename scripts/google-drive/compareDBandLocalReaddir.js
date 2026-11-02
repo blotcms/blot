@@ -1,6 +1,5 @@
 const fs = require("fs-extra");
 const { join } = require("path");
-const localPath = require("helper/localPath");
 
 const database = require("clients/google-drive/database");
 const localReaddir = require("clients/google-drive/sync/util/localReaddir");
@@ -27,7 +26,7 @@ const check = async (blogID) => {
     console.log("checking", dir);
 
     const [localContents, databaseContents] = await Promise.all([
-      localReaddir(localPath(blogID, dir)),
+      localReaddir(blogID, dir),
       databaseReaddir(readdir, dir),
     ]);
 

@@ -1,6 +1,6 @@
 const migrationBudget = require("./util/migrationBudget");
 const comparePaths = require("./util/comparePaths");
-const fs = require("fs-extra");
+const folder = require("storage/folder");
 const { join } = require("path");
 const localPath = require("helper/localPath");
 const database = require("../database");
@@ -137,7 +137,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
 
     const [driveItems, localContents] = await Promise.all([
       driveReaddir(drive, dirId),
-      localReaddir(localPath(blogID, dir)),
+      localReaddir(blogID, dir),
     ]);
 
     // We handle file name deduplication and the mapping of
@@ -156,7 +156,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
 
     for (const { name, isDirectory: isLocalDirectory } of localContents) {
       const path = join(dir, name);
-      // A directory removed in one fs.remove call still accounts for every
+      // A directory removed in one remove call still accounts for every
       // file total counted inside it, so current must advance by that many.
       const removedCount = isLocalDirectory
         ? await countLocalFiles(localPath(blogID, path))
@@ -165,7 +165,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       if (shouldIgnoreFile(path)) {
         await checkWeCanContinue();
         progress.publish("Removing ignored", path, false, removedCount);
-        await fs.remove(localPath(blogID, path));
+        await folder.remove(blogID, path);
         summary.removed += 1;
         await update(path);
         const id = await getByPath(path);
@@ -184,7 +184,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
         const descendants = isLocalDirectory
           ? await localDescendants(localPath(blogID, path), path)
           : [];
-        await fs.remove(localPath(blogID, path));
+        await folder.remove(blogID, path);
         summary.removed += 1;
         await update(path);
         for (const descendant of descendants) await update(descendant);
@@ -222,7 +222,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
           await checkWeCanContinue();
           console.log("Removing directory", path, "which is a file remotely");
           const descendants = await localDescendants(localPath(blogID, path), path);
-          await fs.remove(localPath(blogID, path));
+          await folder.remove(blogID, path);
           summary.removed += 1;
           await update(path);
           for (const descendant of descendants) await update(descendant);
@@ -340,12 +340,12 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
             }
 
             // Only trust the remote modifiedTime once download() has
-            // returned without throwing: pathOnBlot now reflects that remote
+            // returned without throwing: the blog folder now reflects that remote
             // state. A failed download must not be treated as up to date, so
             // this must not run in the catch below.
             await setApplied(id, {
               modifiedTime,
-              fingerprint: await localFingerprint(localPath(blogID, path)),
+              fingerprint: await localFingerprint(blogID, path),
             });
           } catch (err) {
             publish("Download failed", path);
@@ -367,17 +367,17 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
           await checkWeCanContinue();
           progress.publish("Removing file", path);
           console.log("Removing file", path, "which is a directory remotely");
-          await fs.remove(localPath(blogID, path));
+          await folder.remove(blogID, path);
           summary.removed += 1;
           publish("Creating directory", path);
-          await fs.ensureDir(localPath(blogID, path));
+          await folder.mkdir(blogID, path);
           summary.createdDirs += 1;
           await update(path);
         } else if (!existsLocally) {
           await checkWeCanContinue();
           publish("Creating directory", path);
           console.log("Creating directory locally", path);
-          await fs.ensureDir(localPath(blogID, path));
+          await folder.mkdir(blogID, path);
           summary.createdDirs += 1;
           await update(path);
         }

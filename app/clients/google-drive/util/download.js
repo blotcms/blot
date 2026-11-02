@@ -1,6 +1,7 @@
 const fs = require("fs-extra");
 const pipeline = require("util").promisify(require("stream").pipeline);
-const localPath = require("helper/localPath");
+const folder = require("storage/folder");
+const localFile = require("./localFile");
 const colors = require("colors/safe");
 const { join, dirname } = require("path");
 const debug = require("debug")("blot:clients:google-drive:download");
@@ -32,12 +33,29 @@ const isExportSizeLimitError = (err) => {
   return errorData?.error?.code === 403 && errorData?.error?.message?.includes("too large to be exported");
 };
 
-const ensurePlaceholder = async (pathOnBlot) => {
+const ensurePlaceholder = async (blogID, path) => {
   // The caller (sync.js) records the remote modifiedTime in the client's
   // own database once this resolves, so Blot knows not to re-fetch this
   // placeholder every sync. We no longer need the local file's mtime to
   // carry that information.
-  await fs.ensureFile(pathOnBlot);
+  let stat;
+  try {
+    stat = await folder.stat(blogID, path);
+  } catch (err) {
+    if (err.code !== "ENOENT") throw err;
+  }
+  if (stat && stat.isDirectory) {
+    throw new Error("Cannot make a placeholder over a directory: " + path);
+  }
+  if (!stat) await folder.write(blogID, path, "");
+};
+
+// The checksum-verified fingerprint of the file at path in the blog's folder,
+// or null if there is none
+const verifyOnBlot = async (blogID, path, md5Checksum) => {
+  if (!md5Checksum) return null;
+  const file = await localFile(blogID, path);
+  return file ? verifyContent(file, md5Checksum) : null;
 };
 
 const streamToFile = (readStream, filePath) =>
@@ -127,7 +145,6 @@ const downloadGoogleDocAsZip = async ({
   id,
   path,
   blogID,
-  pathOnBlot,
   zipStream,
 }) => {
   const zipPath = join(tempDir, guid());
@@ -176,7 +193,7 @@ const downloadGoogleDocAsZip = async ({
       }
     });
 
-    await fs.writeFile(pathOnBlot, $.html().trim(), "utf-8");
+    await folder.write(blogID, path, $.html().trim());
   } finally {
     await fs.remove(zipPath).catch(() => {});
     await fs.remove(extractDir).catch(() => {});
@@ -191,7 +208,6 @@ module.exports = async (
   { serviceAccountId, folderId, skipHotEnqueue } = {}
 ) => {
   return new Promise(async function (resolve, reject) {
-    let pathOnBlot = localPath(blogID, path);
     const tempPath = join(tempDir, guid());
     let settled = false;
     const settle = (action) => {
@@ -206,7 +222,7 @@ module.exports = async (
         return false;
       }
 
-      debug("EXPORT size limit exceeded for file", pathOnBlot);
+      debug("EXPORT size limit exceeded for file", path);
 
       if (mimeType === "application/vnd.google-apps.document") {
         try {
@@ -235,7 +251,6 @@ module.exports = async (
                 id,
                 path,
                 blogID,
-                pathOnBlot,
                 zipStream,
               });
 
@@ -256,8 +271,8 @@ module.exports = async (
         }
       }
       
-      await ensurePlaceholder(pathOnBlot);
-      debug("   created empty file at:", colors.green(pathOnBlot));
+      await ensurePlaceholder(blogID, path);
+      debug("   created empty file at:", colors.green(path));
       return "placeholder";
     };
     try {
@@ -290,9 +305,9 @@ module.exports = async (
       }
 
       if (mimeType === "application/vnd.google-apps.folder") {
-        await fs.ensureDir(pathOnBlot);
+        await folder.mkdir(blogID, path);
         debug("MKDIR folder");
-        debug("   to:", colors.green(pathOnBlot));
+        debug("   to:", colors.green(path));
         return resolve({ updated: false });
       }
 
@@ -304,16 +319,16 @@ module.exports = async (
         mimeType.startsWith("application/vnd.google-apps.") &&
         mimeType !== "application/vnd.google-apps.document"
       ) {
-        await ensurePlaceholder(pathOnBlot);
+        await ensurePlaceholder(blogID, path);
         debug(
           "SKIP download of file because it is a Google App file type",
           mimeType
         );
-        debug("   created empty file at:", colors.green(pathOnBlot));
+        debug("   created empty file at:", colors.green(path));
         return resolve({ updated: false });
       }
 
-      const verifiedContent = await verifyContent(pathOnBlot, md5Checksum);
+      const verifiedContent = await verifyOnBlot(blogID, path, md5Checksum);
 
       if (verifiedContent) {
         debug("DOWNLOAD file skipped because md5Checksum matches");
@@ -324,7 +339,7 @@ module.exports = async (
       }
 
       debug("DOWNLOAD file");
-      debug("   to:", colors.green(pathOnBlot));
+      debug("   to:", colors.green(path));
 
       if (mimeType === "application/vnd.google-apps.document") {
         try {
@@ -334,7 +349,6 @@ module.exports = async (
             id,
             path,
             blogID,
-            pathOnBlot,
           });
           debug("DOWNLOAD file SUCCEEDED");
           return resolve({ updated: true });
@@ -388,10 +402,10 @@ module.exports = async (
       if (md5Checksum && !(await verifyContent(tempPath, md5Checksum))) {
         throw new Error("Downloaded content does not match the listed Drive checksum");
       }
-      await fs.move(tempPath, pathOnBlot, { overwrite: true });
+      await folder.writeFrom(blogID, path, tempPath, { move: true });
       // Publication has succeeded. A concurrent local write (or stat failure)
       // must not suppress the caller's rebuild; simply decline to cache it.
-      const verified = await verifyContent(pathOnBlot, md5Checksum).catch(() => null);
+      const verified = await verifyOnBlot(blogID, path, md5Checksum).catch(() => null);
       settle(() => resolve({ updated: true, verifiedContent: verified }));
     } catch (e) {
       debug("download error", e);

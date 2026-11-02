@@ -2,7 +2,8 @@ const createDriveClient = require("./serviceAccount/createDriveClient");
 const dirname = require("path").dirname;
 const basename = require("path").basename;
 const computeMd5Checksum = require("./util/md5Checksum");
-const localPath = require("helper/localPath");
+const localFile = require("./util/localFile");
+const folder = require("storage/folder");
 const clfdate = require("helper/clfdate");
 const fs = require("fs-extra");
 const TMP = require("helper/tempDir")();
@@ -30,21 +31,16 @@ module.exports = async function write(blogID, path, input, callback) {
     console.log(prefix(), "writing input to tmp");
     const tempPath = await writeToTmp(input);
 
-    const pathOnBlot = localPath(blogID, path);
-
     console.log(prefix(), "calculating md5Checksum for", tempPath);
     const md5Checksum = await computeMd5Checksum(tempPath);
     console.log(prefix(), " md5Checksum for", tempPath, "is", md5Checksum);
 
-    console.log(prefix(), "calculating md5Checksum for", pathOnBlot);
-    const md5ChecksumOnBlot = await computeMd5Checksum(pathOnBlot);
-    console.log(
-      prefix(),
-      " md5Checksum for",
-      pathOnBlot,
-      "is",
-      md5ChecksumOnBlot
-    );
+    console.log(prefix(), "calculating md5Checksum for", path);
+    const fileOnBlot = await localFile(blogID, path);
+    const md5ChecksumOnBlot = fileOnBlot
+      ? await computeMd5Checksum(fileOnBlot)
+      : null;
+    console.log(prefix(), " md5Checksum for", path, "is", md5ChecksumOnBlot);
 
     if (md5ChecksumOnBlot === md5Checksum) {
       console.log(
@@ -102,8 +98,8 @@ module.exports = async function write(blogID, path, input, callback) {
       }
     }
 
-    console.log(prefix(), "moving", tempPath, "to", pathOnBlot);
-    await fs.move(tempPath, pathOnBlot, { overwrite: true });
+    console.log(prefix(), "moving", tempPath, "to", path);
+    await folder.writeFrom(blogID, path, tempPath, { move: true });
   } catch (e) {
     return callback(e);
   }
