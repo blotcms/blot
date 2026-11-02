@@ -1,20 +1,23 @@
 ---
 name: redis-host
-description: Look after Blot's production Redis host (its own EC2 instance, built and operated with config/redis/): triage a "Redis host:" alert email from app/scheduler/check-redis-host.js (failed background save, Redis refused writes - OOM/MISCONF/NOREPLICAS, other Redis errors, rejected connections, Redis restarted or switched host, slow Redis commands, TCP memory, memory over 80% of maxmemory, stale sample, stale backup or offsite backup, maxmemory unset) or a problem in the Redis line of the daily email (resize now, last save failed, backup overdue, no sample, backup disk full); resize the host; rehearse or run disaster recovery; or check Redis health. Holds the procedure and the guardrails (ask before every production command, drill hosts, teardown, no rollback to a recent host) and points into config/redis/README.md for the steps. Appends a short entry to this skill's incident log. Use when the user pastes or forwards one of these alerts, or asks to resize, drill, restore or check the Redis host.
+description: Look after Blot's production Redis (redis6 on the combined production host, set up with config/redis/ and moved with the host cycle, config/host/cycle.sh): triage a "Redis host:" alert email from app/scheduler/check-redis-host.js (failed background save, Redis refused writes - OOM/MISCONF/NOREPLICAS, other Redis errors, rejected connections, Redis restarted or switched host, slow Redis commands, TCP memory, memory over 80% of maxmemory, stale sample, stale backup or offsite backup, maxmemory unset) or a problem in the Redis line of the daily email (resize now, last save failed, backup overdue, no sample, backup disk full); resize the host (a host cycle); rehearse or run disaster recovery; or check Redis health. Holds the procedure and the guardrails (ask before every production command, drill hosts, teardown, no rollback to a recent host) and points into config/redis/README.md for the steps. Appends a short entry to this skill's incident log. Use when the user pastes or forwards one of these alerts, or asks to resize, drill, restore or check the Redis host.
 ---
 
 # Redis host
 
-Production Redis is one host, built by `config/redis/` and reached by the
-app containers, the proxy and the cert scripts at a floating private IP
-(`BLOT_REDIS_HOST`). `config/redis/README.md` describes the setup and holds
-the steps for building a host, promoting a replica, resizing and disaster recovery.
-This skill does not repeat them: it says which README section to use, which
+Production Redis (`redis6` 6.2) runs on the one production host, an
+m6gd.xlarge on Amazon Linux 2023, together with both units. The units reach it
+over a Unix socket (`/run/blot/redis/redis.sock`); there is no separate Redis
+host and no floating IP. `config/redis/README.md` describes the Redis setup,
+backups and alerts and holds the steps for promoting a replica and disaster
+recovery; replacing or resizing the host is the host cycle
+(`config/host/cycle.sh`, `config/host/README.md`). This skill does not repeat
+them: it says which README section to use, which
 read-only checks to propose for each alert, how to read them, and what must
 never be done without asking.
 
-SSH aliases: `redis` is the Redis host (`ec2-user`, port 22, key-only),
-`blot` is the app host.
+SSH alias: `blot` is the production host (`ec2-user`, key-only). The old
+`redis` alias no longer exists.
 
 Related: `investigate-production-container-restarts` (a Redis stall shows up
 there as `[LOCK COMPROMISED]` restarts; its section on the Redis host has the
@@ -22,8 +25,7 @@ TCP memory background) and `investigate-slow-upstream-responses`.
 
 ## Rules
 
-1. **Ask the operator before EVERY production command**: `ssh redis`,
-   `ssh blot`, `docker exec`, `docker logs`, and any AWS call that changes
+1. **Ask the operator before EVERY production command**: `ssh blot`, `docker exec`, `docker logs`, and any AWS call that changes
    something (launch, terminate, assign an address, modify an attribute, write
    to S3). Read-only commands too. State the exact command. An approval
    covers that command only, not the next one, not "the same kind of thing",
@@ -35,8 +37,8 @@ TCP memory background) and `investigate-slow-upstream-responses`.
    production ones.
 3. **Tear down by explicit instance ID only**, never with a filter-based
    terminate. Immediately before, re-check that instance's `BlotDrill` tag and
-   that it is not a production instance (not the one holding the floating IP
-   or serving `BLOT_REDIS_HOST`). Production instances have termination
+   that it is not a production instance (not the one holding the production
+   Elastic IP). Production instances have termination
    protection; if a terminate is refused for that reason, stop and ask rather
    than lifting it.
 4. **Roll back only while the old host still replicates from the new one.**
@@ -117,15 +119,15 @@ runs inside an app container, so it is a production command (ask first).
 
 ## Triage per alert
 
-Host checks run as `ssh redis '<command>'` (use `ssh -n` when the command
+Host checks run as `ssh blot '<command>'` (use `ssh -n` when the command
 does not read stdin). `redis6-cli` needs no auth.
 
 ### Background save failing / `last save failed`
 
 ```
-ssh redis 'redis6-cli INFO persistence'
-ssh redis 'sudo tail -n 100 /var/log/redis6/redis6.log'
-ssh redis 'df -h / /backups; free -m; sysctl vm.overcommit_memory'
+ssh blot 'redis6-cli INFO persistence'
+ssh blot 'sudo tail -n 100 /var/log/redis6/redis6.log'
+ssh blot 'df -h / /backups; free -m; sysctl vm.overcommit_memory'
 ```
 
 - `rdb_last_bgsave_status:err`, with `rdb_last_bgsave_time_sec` and
@@ -146,9 +148,9 @@ ssh redis 'df -h / /backups; free -m; sysctl vm.overcommit_memory'
 ### Redis refused writes (OOM, MISCONF, NOREPLICAS)
 
 ```
-ssh redis 'redis6-cli INFO errorstats'
-ssh redis 'redis6-cli INFO memory | grep -E "^(used_memory_human|maxmemory_human|mem_fragmentation_ratio):"'
-ssh redis 'redis6-cli CONFIG GET min-replicas-to-write'
+ssh blot 'redis6-cli INFO errorstats'
+ssh blot 'redis6-cli INFO memory | grep -E "^(used_memory_human|maxmemory_human|mem_fragmentation_ratio):"'
+ssh blot 'redis6-cli CONFIG GET min-replicas-to-write'
 ```
 
 - `OOM`: memory reached `maxmemory`. Treat as the memory alert below, but
@@ -164,7 +166,7 @@ ssh redis 'redis6-cli CONFIG GET min-replicas-to-write'
 
 `INFO errorstats` for the type and count. `READONLY` is expected for a moment
 during a promotion; outside one, clients are talking to a replica: check
-`redis6-cli ROLE` on the host `BLOT_REDIS_HOST` points at, and which host has
+`redis6-cli ROLE` on the host, and which host has
 `/etc/blot-redis/active`. `WRONGTYPE` or `ERR` in bulk is an app bug:
 find the error text and the calling code in the containers' logs and fix it
 in the app.
@@ -172,24 +174,26 @@ in the app.
 ### Rejected connections
 
 ```
-ssh redis 'redis6-cli INFO clients'
-ssh redis 'redis6-cli CLIENT LIST | grep -o " addr=[0-9.]*" | sort | uniq -c | sort -rn | head'
+ssh blot 'redis6-cli INFO clients'
+ssh blot 'redis6-cli CLIENT LIST | grep -o " addr=[0-9.]*" | sort | uniq -c | sort -rn | head'
 ```
 
-`connected_clients` against `maxclients`. The per-address counts show which
-host (app container host, proxy, a script) is leaking connections. Fixing
+`connected_clients` against `maxclients`. Units connect over the Unix socket,
+so their addresses show as the socket path or empty; the per-address counts
+show which client (a unit, the proxy, a script, a replica) is leaking
+connections. Fixing
 that means restarting or fixing the client, which is a production change to
 propose, not to do.
 
 ### Restarted or switched host
 
-Expected after a promotion, a resize or a planned reboot. If none, check:
+Expected after a promotion, a host cycle or a Redis restart (the host itself is not rebooted until there are several hosts). If none, check:
 
 ```
-ssh redis 'uptime; redis6-cli INFO server | grep -E "^(run_id|uptime_in_seconds|redis_version):"'
-ssh redis 'sudo journalctl -u redis6 --since "2 hours ago" | tail -n 50'
-ssh redis 'sudo dmesg | grep -i -E "oom|killed process" | tail'
-ssh redis 'sudo tail -n 100 /var/log/redis6/redis6.log'
+ssh blot 'uptime; redis6-cli INFO server | grep -E "^(run_id|uptime_in_seconds|redis_version):"'
+ssh blot 'sudo journalctl -u redis6 --since "2 hours ago" | tail -n 50'
+ssh blot 'sudo dmesg | grep -i -E "oom|killed process" | tail'
+ssh blot 'sudo tail -n 100 /var/log/redis6/redis6.log'
 ```
 
 An OOM kill (dmesg, journald) means memory: the resize section. A reboot
@@ -202,9 +206,9 @@ the outage itself.
 ### Slow Redis commands
 
 ```
-ssh redis 'redis6-cli SLOWLOG GET 20'
-ssh redis 'redis6-cli INFO stats | grep latest_fork_usec'
-ssh redis 'ls ~/perf/*.log 2>/dev/null && tail -n 20 ~/perf/redis-sample.log'
+ssh blot 'redis6-cli SLOWLOG GET 20'
+ssh blot 'redis6-cli INFO stats | grep latest_fork_usec'
+ssh blot 'ls ~/perf/*.log 2>/dev/null && tail -n 20 ~/perf/redis-sample.log'
 ```
 
 Each entry has the command, its first arguments, the duration in
@@ -220,9 +224,9 @@ app. Do not `SLOWLOG RESET` before the entries are recorded in the report.
 ### TCP memory (nearing tcp_mem[1], pressure, sample)
 
 ```
-ssh redis 'tail -n 30 ~/tcpmem.log'
-ssh redis 'grep TCP: /proc/net/sockstat; cat /proc/sys/net/ipv4/tcp_mem'
-ssh redis 'nstat -az TcpExtTCPMemoryPressures TcpExtTCPMemoryPressuresChrono TcpExtPruneCalled TcpExtTCPRcvQDrop'
+ssh blot 'tail -n 30 ~/tcpmem.log'
+ssh blot 'grep TCP: /proc/net/sockstat; cat /proc/sys/net/ipv4/tcp_mem'
+ssh blot 'nstat -az TcpExtTCPMemoryPressures TcpExtTCPMemoryPressuresChrono TcpExtPruneCalled TcpExtTCPRcvQDrop'
 ```
 
 `mem` and `tcp_mem` are pages. Healthy use is dozens of sockets with empty
@@ -238,9 +242,9 @@ reboot and is a host change to propose. Background and the burst test are in
 ### Memory over 80% of maxmemory / `resize now`
 
 ```
-ssh redis 'tail -n 20 ~/redis-mem.log'
-ssh redis 'redis6-cli INFO memory | grep -E "^(used_memory_human|used_memory_peak_human|maxmemory_human|mem_fragmentation_ratio):"'
-ssh redis 'redis6-cli INFO keyspace'
+ssh blot 'tail -n 20 ~/redis-mem.log'
+ssh blot 'redis6-cli INFO memory | grep -E "^(used_memory_human|used_memory_peak_human|maxmemory_human|mem_fragmentation_ratio):"'
+ssh blot 'redis6-cli INFO keyspace'
 ```
 
 Compare with the daily email's projection: steady growth is the normal
@@ -258,27 +262,30 @@ The sample is written to Redis by `bin/tcpmem-log.sh` on the host, only if
 the host is the master and accepts writes.
 
 ```
-ssh redis 'tail -n 5 ~/tcpmem.log; cat /etc/cron.d/blot-redis; systemctl is-active crond'
-ssh redis 'redis6-cli ROLE | head -n 1; ls /etc/blot-redis/active'
+ssh blot 'tail -n 5 ~/tcpmem.log; cat /etc/cron.d/blot-redis; systemctl is-active crond'
+ssh blot 'redis6-cli ROLE | head -n 1; ls /etc/blot-redis/active'
 ```
 
 Right after a promotion the new host needs one or two 5-minute runs. If
 `ROLE` is not `master` or Redis refuses the write (`OOM`, `MISCONF`,
 frozen), it is that problem, not cron. If cron is dead or the file is gone,
-`config/redis/bootstrap.sh redis` re-applies it (propose, do not run).
+`REDIS_MAXMEMORY=6gb config/redis/bootstrap.sh blot` re-applies it (propose,
+do not run). Always pass `REDIS_MAXMEMORY` on the production host: without it
+setup takes 70% of RAM and raises Redis into the units' share.
 
 ### maxmemory not set
 
-`ssh redis 'redis6-cli CONFIG GET maxmemory; cat /etc/redis6/blot-memory.conf'`.
-Fix: `config/redis/bootstrap.sh redis`, which writes the file and applies it
+`ssh blot 'redis6-cli CONFIG GET maxmemory; cat /etc/redis6/blot-memory.conf'`.
+Fix: `REDIS_MAXMEMORY=6gb config/redis/bootstrap.sh blot` (the shared host's
+limit; never leave it out, or setup takes 70% of RAM), which writes the file and applies it
 with `CONFIG SET` without a restart (propose it; the README, "Running
 bootstrap on a live host").
 
 ### Backup overdue / no backup recorded / backup disk
 
 ```
-ssh redis 'tail -n 20 ~/backup.log; ls -l /etc/blot-redis; cat /etc/cron.d/blot-redis'
-ssh redis 'df -h /backups; findmnt /backups; systemctl status blot-instance-store --no-pager | head'
+ssh blot 'tail -n 20 ~/backup.log; ls -l /etc/blot-redis; cat /etc/cron.d/blot-redis'
+ssh blot 'df -h /backups; findmnt /backups; systemctl status blot-instance-store --no-pager | head'
 aws s3 ls s3://blot-redis-backups/hourly/ | tail -n 3  # hourly/ keeps 1 day, daily/ 7, weekly/ 30 (lifecycle rules)
 ```
 
@@ -311,31 +318,30 @@ there.
 
 ## Resize
 
-**README, "Increasing the Redis server size"** (launch a replica of the live
-master on a bigger type in the same family with `--from replica:<primary
-private IP>`, check it, `promote.sh`). Guardrails on top
+**README, "Increasing the Redis server size"**: first try raising `maxmemory`
+(Redis shares the host's RAM with the units); if the host is too small, that is
+a host cycle onto a bigger type in the same family (`config/host/README.md`,
+"Host cycle"; `cycle.sh` runs `promote.sh` at `switch`). Guardrails on top
 of the rules:
 
-- `launch.sh --dry-run` and `promote.sh --dry-run` first, and show the
-  operator the plan each prints.
-- The replica must follow the old host's **primary** private IP, not the
-  floating IP, which the units still use until the combined host (#2261):
-  a Redis-only replacement moves it by hand (README, Disaster recovery step 4).
+- Every `cycle.sh` phase with `--dry-run` first, and show the operator the
+  plan each prints.
 - Keep instance IDs and public IPs out of chat that will be pasted into an
   issue; put them in `data/`.
 - After the promotion, check `/redis-health`, the app containers' restart
   counts, and that the next hourly backup arrives from the new host.
-- The old host stays up a few days, replicating from the new one, then is
-  terminated by instance ID (rule 3). It is not a rollback target after the
-  first minutes (rule 4).
+- The old host stays up about a day after `settle`, replicating from the new
+  one, then `cycle.sh finish --any-age` terminates it by instance ID (rule 3).
+  It is not a rollback target after the first minutes (rule 4).
 
 ## Disaster recovery and drills
 
 **README, "Disaster recovery"**: pick the newest backup with
-`launch.sh --list`, restore onto a new host, check it, move the floating IP,
-turn on backups, check the app. To rehearse it, run steps 1-3 with
+`launch.sh --list`, restore onto a new host, check it, turn on backups, check the app. In
+production the whole recovery is `cycle.sh restore` (`config/host/README.md`,
+"Recovery"). To rehearse the Redis part, run steps 1-3 with
 `launch.sh --drill` (tagged, never uploads), write down the commands for
-steps 4-5 against the drill host without running them, time each step, and tear
+steps 5-6 against the drill host without running them, time each step, and tear
 the host down by instance ID (rule 3). A drill is still a production-account
 action: launch and terminate each need an explicit yes. Add the timings to
 the incident log.

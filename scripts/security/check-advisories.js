@@ -195,7 +195,7 @@ async function checkAlpine() {
 async function checkAmazonLinux() {
   await source("endoflife.date amazon-linux", async () => {
     const rows = await eolApi("amazon-linux");
-    for (const [cycle, use] of [["2", "app/proxy host"], ["2023", "Redis host"]]) {
+    for (const [cycle, use] of [["2023", "production host: Redis and units"]]) {
       const r = rows.find((x) => String(x.cycle) === cycle);
       if (r) eolStatus("Amazon Linux " + cycle + " (" + use + ")", r.eol);
     }
@@ -203,7 +203,7 @@ async function checkAmazonLinux() {
 }
 
 async function checkRedis() {
-  // The Redis host runs the AL2023 redis6 package, not a pinned version, so
+  // The production host runs the AL2023 redis6 package, not a pinned version, so
   // the upstream EOL date is context only and ALAS is the real signal.
   await source("endoflife.date redis", async () => {
     const rows = await eolApi("redis");
@@ -297,8 +297,7 @@ function parseRss(xml) {
 
 async function checkAlas() {
   for (const [name, url, where] of [
-    ["AL2", "https://alas.aws.amazon.com/AL2/alas.rss", "app/proxy host"],
-    ["AL2023", "https://alas.aws.amazon.com/AL2023/alas.rss", "Redis host"],
+    ["AL2023", "https://alas.aws.amazon.com/AL2023/alas.rss", "production host"],
   ]) {
     await source("Amazon Linux " + name + " bulletins", async () => {
       const items = parseRss(await (await get(url)).text());
