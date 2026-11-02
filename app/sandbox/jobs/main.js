@@ -18,6 +18,7 @@ const JOBS = [
   "screenshot",
   "template-image",
   "favicon",
+  "unzip",
 ];
 
 function readStdin() {
