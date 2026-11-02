@@ -1,11 +1,11 @@
 const { getPage } = require("../../lib/models");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const asRetriever = require("../../lib/asRetriever");
-const { createRenderCache } = require("../../lib/cacheMetrics");
-const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
-const cacheStats = require("../../lib/cacheStats");
-const fetchCached = require("../../lib/fetchCached");
-const { Uncacheable } = require("../../lib/uncacheableFetch");
+const { createRenderCache } = require("models/cache/metrics");
+const { cloneDeep, prepareCacheValue } = require("models/cache/clone");
+const cacheStats = require("models/cache/stats");
+const fetchCached = require("models/cache/fetchCached");
+const { Uncacheable } = require("models/cache/uncacheable");
 
 const ALIASES = ["latestEntry", "latest_entry"];
 

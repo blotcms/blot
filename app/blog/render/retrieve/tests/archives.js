@@ -118,6 +118,7 @@ describe("archives cache", function () {
     delete require.cache[archivesPath];
     delete require.cache[allEntriesPath];
     delete require.cache[getAllCachedPath];
+    require("models/entries/catalog")._clear();
     const archives = require("../archives");
     const getAllCached = require("../helpers/getAllCached");
     return { archives, getAllCached };
@@ -127,6 +128,7 @@ describe("archives cache", function () {
     delete require.cache[archivesPath];
     delete require.cache[allEntriesPath];
     delete require.cache[getAllCachedPath];
+    require("models/entries/catalog")._clear();
   });
 
   function makeReq(blog, retrieve) {
@@ -344,7 +346,7 @@ describe("archives cache", function () {
     expect(list[0].summary).toBeUndefined();
   });
 
-  it("bypasses the cache for preview requests", function (done) {
+  it("shares the catalog, but not its own cache, with preview requests", function (done) {
     const { archives } = loadArchives();
 
     spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
@@ -356,7 +358,7 @@ describe("archives cache", function () {
 
     archives(req, { locals: {} }, function () {
       archives(req, { locals: {} }, function () {
-        expect(Entries.getAll).toHaveBeenCalledTimes(2);
+        expect(Entries.getAll).toHaveBeenCalledTimes(1);
         done();
       });
     });
@@ -394,6 +396,7 @@ describe("archives shared augmentation", function () {
   afterEach(function () {
     delete require.cache[archivesPath];
     delete require.cache[getAllCachedPath];
+    require("models/entries/catalog")._clear();
   });
 
   function makeReq(blogURL) {
@@ -412,6 +415,7 @@ describe("archives shared augmentation", function () {
   it("shares augmented entries across hits with a per-request absoluteURL", async function () {
     delete require.cache[archivesPath];
     delete require.cache[getAllCachedPath];
+    require("models/entries/catalog")._clear();
     const archives = require("../archives");
 
     spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {

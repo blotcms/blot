@@ -5,11 +5,11 @@ const projectEntryFields = require("./helpers/projectEntryFields");
 const moment = require("moment");
 require("moment-timezone");
 const asRetriever = require("../../lib/asRetriever");
-const { createRenderCache } = require("../../lib/cacheMetrics");
-const { prepareCacheValue } = require("../../lib/clone");
-const cacheStats = require("../../lib/cacheStats");
-const fetchCached = require("../../lib/fetchCached");
-const { Uncacheable } = require("../../lib/uncacheableFetch");
+const { createRenderCache } = require("models/cache/metrics");
+const { prepareCacheValue } = require("models/cache/clone");
+const cacheStats = require("models/cache/stats");
+const fetchCached = require("models/cache/fetchCached");
+const { Uncacheable } = require("models/cache/uncacheable");
 const {
   augmentContext,
   augmentEntries,
@@ -126,9 +126,8 @@ function flattenEntries(years) {
   return entries;
 }
 
-async function buildArchives(req, blog, options) {
+async function buildArchives(req, blog) {
   const allEntries = await getAllCached(blog, {
-    ...options,
     retrieve: req.retrieve,
     log: req.log,
   });
@@ -147,11 +146,10 @@ function blogURL(req) {
 }
 
 async function archives(req, res) {
-  // Preview renders change on every save and are rarely repeated, so caching
-  // them would only thrash the LRU with entries no other request will read.
-  // render/load augments these the usual way.
+  // As in all_entries.js: a preview shares the catalog but doesn't store its
+  // own augmented archives. render/load augments these the usual way.
   if (req.preview) {
-    return buildArchives(req, req.blog, { bypassCache: true });
+    return buildArchives(req, req.blog);
   }
 
   const key = createCacheKey(req.blog, req.retrieve, augmentContext(req, res));

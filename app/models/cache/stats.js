@@ -1,8 +1,8 @@
-const { read } = require("./cacheMetrics");
+const { read } = require("./metrics");
 
 // Returns a stats() function for a scheduler job to log an LRU cache's
 // current footprint: item count against `max`, and estimated retained
-// bytes (from lib/clone's prepareCacheValue) against `maxSize`.
+// bytes (from ./clone's prepareCacheValue) against `maxSize`.
 function cacheStats(name, cache) {
   return function () {
     return {

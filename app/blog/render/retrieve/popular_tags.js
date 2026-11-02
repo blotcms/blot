@@ -1,9 +1,9 @@
 const { popularTags: getPopularTags } = require("../../lib/models");
-const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
-const cacheStats = require("../../lib/cacheStats");
-const fetchCached = require("../../lib/fetchCached");
+const { cloneDeep, prepareCacheValue } = require("models/cache/clone");
+const cacheStats = require("models/cache/stats");
+const fetchCached = require("models/cache/fetchCached");
 const { compactTags, expandTags } = require("./helpers/compactTags");
-const { createRenderCache } = require("../../lib/cacheMetrics");
+const { createRenderCache } = require("models/cache/metrics");
 const asRetriever = require("../../lib/asRetriever");
 
 // Safe cache key includes blog/cache identity and query pagination options.
