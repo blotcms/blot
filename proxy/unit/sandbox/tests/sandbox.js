@@ -113,6 +113,29 @@ test("jail: the proxy jail binds no app, data, keys or /proc", () => {
   assert(!args.some((a) => /^(-B|--bindmount)/.test(a)), "no writable binds");
 });
 
+test("jail: every job raises its OOM score before nsjail starts, the proxy jail doesn't", () => {
+  const raise = `echo ${jail.OOM_SCORE_ADJ} > /proc/self/oom_score_adj && `;
+  assert.strictEqual(jail.OOM_SCORE_ADJ, 1000);
+  for (const name of Object.keys(jail.JOBS)) {
+    const { file, args } = jail.command(name);
+    assert.strictEqual(file, "/bin/sh", name);
+    assert(args[1].startsWith(raise), name);
+  }
+  const { args } = jail.command("metadata");
+  assert.deepStrictEqual(args.slice(2, 4), ["sh", jail.NSJAIL]);
+  assert.deepStrictEqual(args.slice(4), jail.args("metadata"));
+  assert(!jail.proxyCommand("blue").args[1].includes("oom_score_adj"));
+});
+
+test("jail: the OOM score a job's shell sets reaches the program it execs", function () {
+  if (!fs.existsSync("/proc/self/oom_score_adj")) return pending("needs Linux");
+  const { args } = jail.command("metadata");
+  const script = args[1];
+  const { execFileSync } = require("child_process");
+  const out = execFileSync("/bin/sh", ["-c", script, "sh", "/bin/cat", "/proc/self/oom_score_adj"]);
+  assert.strictEqual(out.toString().trim(), String(jail.OOM_SCORE_ADJ));
+});
+
 test("jail: the proxy jail only starts for a unit", () => {
   for (const unit of ["red", "", undefined, "../blue"]) {
     assert.throws(() => jail.proxyCommand(unit), /unknown unit/);

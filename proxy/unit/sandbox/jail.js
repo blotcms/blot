@@ -214,16 +214,26 @@ function networkArgs({ config, binds, timeSeconds, nofile, env, command }) {
   return flags.concat("--", "/bin/sh", ENTER_NETWORK, command);
 }
 
+// Under host-wide memory pressure the kernel kills the process with the highest
+// score. A job fails closed and is cheap to lose, so it goes before the units'
+// Node (0), level with Redis's BGSAVE child (1000, config/redis/redis.conf),
+// which is larger and so still goes first. Raising it needs no privilege, the
+// jail inherits it, and the job's uid can't lower it again. The proxy jail
+// keeps the unit's: it is small and serves every fetch.
+const OOM_SCORE_ADJ = 1000;
+const RAISE_OOM_SCORE = `echo ${OOM_SCORE_ADJ} > /proc/self/oom_score_adj`;
+
 // Puts this shell in the job's cgroup, which only root can do, and becomes the
 // jail's own uid. Everything in it comes from this file, none from the client.
 const ENTER_CGROUP = 'echo $$ > "$1/cgroup.procs" && shift && exec "$@"';
 
 // Starts a jail in a cgroup, as NETWORK_UID
-function inCgroup(cgroup, args) {
+function inCgroup(cgroup, args, { raiseOomScore }) {
+  const script = raiseOomScore ? `${RAISE_OOM_SCORE} && ${ENTER_CGROUP}` : ENTER_CGROUP;
   return {
     file: "/bin/sh",
     args: [
-      "-c", ENTER_CGROUP, "sh", cgroup,
+      "-c", script, "sh", cgroup,
       SU_EXEC, `${NETWORK_UID}:${NETWORK_UID}`, NSJAIL,
     ].concat(args),
   };
@@ -232,7 +242,12 @@ function inCgroup(cgroup, args) {
 // The program and arguments that start a job's jail
 function command(name) {
   const j = job(name);
-  if (!j.network) return { file: NSJAIL, args: args(name) };
+  if (!j.network) {
+    return {
+      file: "/bin/sh",
+      args: ["-c", `${RAISE_OOM_SCORE} && exec "$@"`, "sh", NSJAIL].concat(args(name)),
+    };
+  }
   return inCgroup(
     j.cgroup,
     networkArgs({
@@ -247,7 +262,8 @@ function command(name) {
         "PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser",
       ],
       command: j.command,
-    })
+    }),
+    { raiseOomScore: true }
   );
 }
 
@@ -265,8 +281,9 @@ function proxyCommand(unit) {
       nofile: 256,
       env: ["BLOT_PROXY_JAIL=1"],
       command: ["/usr/bin/tinyproxy", "-d", "-c", path.join(__dirname, "tinyproxy.conf")],
-    })
+    }),
+    { raiseOomScore: false }
   );
 }
 
-module.exports = { JOBS, NSJAIL, BROWSER_CGROUP, PROXY_CGROUP, job, args, command, proxyCommand };
+module.exports = { JOBS, NSJAIL, BROWSER_CGROUP, PROXY_CGROUP, OOM_SCORE_ADJ, job, args, command, proxyCommand };
