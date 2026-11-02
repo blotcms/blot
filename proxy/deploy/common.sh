@@ -595,7 +595,9 @@ certs_unchanged() { # certs_unchanged <baseline> <now>
       stored="$(printf '%s\n' "$bad" | awk '{ print $1 }' | stored_cert_fps)"
       bad=$(printf '%s\n' "$bad" | while read -r domain fp; do
         now=$(printf '%s\n' "$2" | awk -v d="$domain" '$1 == d { print $2 }')
-        if [ -n "$now" ] && [ "$now" != none ] && printf '%s\n' "$stored" | grep -qxF "$domain $now"; then
+        # From a here-string, not a pipe: grep -q stops at the first match,
+        # and with pipefail a writer cut off by that would fail the check
+        if [ -n "$now" ] && [ "$now" != none ] && grep -qxF "$domain $now" <<< "$stored"; then
           log "  $domain was renewed and serves the certificate Redis holds" >&2
         else
           echo "$domain $fp"
