@@ -5,7 +5,10 @@
 // can't be screenshotted is an answer, not a failure of the job: it comes back
 // as meta.error, and meta.retryable says if trying again could help.
 
+const sharp = require("sharp");
 const ARGS = require("./screenshot-args");
+
+sharp.cache(false);
 
 // How long the page's HTML has to arrive and parse, then how long images, fonts
 // and late requests get before we screenshot whatever has rendered. Some pages
@@ -60,10 +63,13 @@ async function capture(browser, puppeteer, { url, width, height, mobile }) {
   const page = await browser.newPage();
   await page.setUserAgent(DEFAULT_USER_AGENT);
 
-  const viewport = mobile ? VIEWPORT.mobile : VIEWPORT.desktop;
+  const defaults = mobile ? VIEWPORT.mobile : VIEWPORT.desktop;
+  const viewport = {
+    width: dimension(width, defaults.width),
+    height: dimension(height, defaults.height),
+  };
   await page.setViewport({
-    width: dimension(width, viewport.width),
-    height: dimension(height, viewport.height),
+    ...viewport,
     deviceScaleFactor: DEVICE_SCALE_FACTOR,
   });
 
@@ -96,13 +102,29 @@ async function capture(browser, puppeteer, { url, width, height, mobile }) {
     if (!(error instanceof puppeteer.TimeoutError)) throw error;
   }
 
-  return Buffer.from(
-    await page.screenshot({
-      type: "png",
-      omitBackground: true,
-      timeout: SCREENSHOT_TIMEOUT,
-    })
-  );
+  return {
+    png: Buffer.from(
+      await page.screenshot({
+        type: "png",
+        omitBackground: true,
+        timeout: SCREENSHOT_TIMEOUT,
+      })
+    ),
+    // What the viewport was, in the pixels of the screenshot
+    maxWidth: viewport.width * DEVICE_SCALE_FACTOR,
+    maxHeight: viewport.height * DEVICE_SCALE_FACTOR,
+  };
+}
+
+// Chromium's bytes come from a process that ran a hostile page, so decode them
+// here, where a bad one can only hurt this job, and send back a PNG that sharp
+// wrote: no ancillary chunks, no metadata, and no bigger than the viewport that
+// was asked for. A screenshot that doesn't decode is a failed job.
+async function reencode(png, maxWidth, maxHeight) {
+  return sharp(png, { failOn: "error" })
+    .resize({ width: maxWidth, height: maxHeight, fit: "inside", withoutEnlargement: true })
+    .png()
+    .toBuffer();
 }
 
 function pageFailure(error, puppeteer) {
@@ -130,14 +152,18 @@ async function run(args) {
     handleSIGHUP: false,
   });
 
+  let shot;
   try {
-    const png = await capture(browser, puppeteer, args);
-    return { meta: {}, outputs: [png] };
+    shot = await capture(browser, puppeteer, args);
   } catch (error) {
     return pageFailure(error, puppeteer);
   } finally {
     await browser.close().catch(() => {});
   }
+
+  // After Chromium has gone, so its memory and sharp's are never held together
+  const png = await reencode(shot.png, shot.maxWidth, shot.maxHeight);
+  return { meta: {}, outputs: [png] };
 }
 
-module.exports = { run };
+module.exports = { run, reencode };

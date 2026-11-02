@@ -118,6 +118,15 @@ Its jail differs from the others (`networkArgs` in `proxy/unit/sandbox/jail.js`)
 - **The seccomp policy** is `policy-browser.kafel`: the other jobs' policy with
   `socket` allowed for Unix, IPv4, IPv6 and the two netlink protocols nft uses.
 
+- **The PNG is re-encoded in the jail.** Chromium's bytes come from a process that
+  ran a hostile page, so once Chromium has exited the job decodes them with sharp
+  and returns the PNG sharp writes: no ancillary chunks or metadata, and no bigger
+  than the viewport in screen pixels (width and height times the device scale
+  factor of 2). Sharp runs after the browser has closed, so Chromium's memory and
+  sharp's are never held together; for a 1260×778 @2x shot it takes about 10 ms
+  and adds about 10 MiB, nothing next to the browser's. Bytes that don't decode
+  fail the job. Node still checks the PNG signature before writing them.
+
 A page that can't be screenshotted comes back as `meta.error`; only a broken job
 is a job failure.
 
