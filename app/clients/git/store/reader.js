@@ -74,7 +74,17 @@ function objectHasher(type, size) {
 // object is the same whichever pack holds it. A reader over only some of a
 // repository's packs, which must not see objects the others hold, passes
 // `objectCache: false`.
-function createReader({ store, cache = null, packs, maxSize = DEFAULT_MAX_SIZE, scratch = null, scratchConcurrency = 1, objectCache = true }) {
+//
+// Those entries are keyed by the manifest's `epoch` too, which a rewrite
+// (rewrite.js) changes. A repository only loses objects in a rewrite, so
+// within one epoch an object cached by ID is one the repository still has,
+// and after a rewrite nothing cached before it is found. Give the reader the
+// manifest its packs came from (`manifest`, in place of `packs` and `epoch`),
+// or its `epoch` with the packs; without either the epoch is "", which is right
+// only for a manifest without one.
+function createReader({ store, cache = null, manifest = null, packs = manifest && manifest.packs, epoch = (manifest && manifest.epoch) || "", maxSize = DEFAULT_MAX_SIZE, scratch = null, scratchConcurrency = 1, objectCache = true }) {
+  if (!Array.isArray(packs)) throw new Error("createReader needs the packs, or the manifest they are in");
+  if (typeof epoch !== "string") throw new Error("A reader's epoch is a string");
   const scratchTurn = createSemaphore(scratchConcurrency);
 
   // Throws TooLargeError if `bytes` of scratch could never be had
@@ -244,7 +254,8 @@ function createReader({ store, cache = null, packs, maxSize = DEFAULT_MAX_SIZE, 
   }
 
   const reading = new Map();
-  const objectKey = (oid) => store.id + "/obj/" + oid;
+  // Without an epoch the key is what it always was
+  const objectKey = (oid) => store.id + "/obj/" + (epoch ? epoch + "/" : "") + oid;
 
   // A commit, tree or tag from the cache, checked against its ID, or null
   async function cachedObject(oid) {
@@ -488,7 +499,7 @@ function createReader({ store, cache = null, packs, maxSize = DEFAULT_MAX_SIZE, 
     return { type: entry.type, size: entry.size, data: verified() };
   }
 
-  return { packs: opened.map((p) => p.name), has, locate, typeOf, read, stream, remember, pack: (name) => byName.get(name) };
+  return { packs: opened.map((p) => p.name), epoch, has, locate, typeOf, read, stream, remember, pack: (name) => byName.get(name) };
 }
 
 module.exports = createReader;
