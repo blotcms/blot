@@ -1312,3 +1312,9 @@ Self-hosting:
   - Tell [Frank](https://mail.google.com/mail/u/0/#inbox/FMfcgzGkZkZWrprNcThxMPQKzSTLbkDs)
   - Tell [Zip](https://mail.google.com/mail/u/0/#inbox/FMfcgzGmthffLmfRBswqGmsDKQWdJZFB)
 - Tell Nick when it's possible to deploy a self-hosted [Blot on Vercel](https://mail.google.com/mail/u/0/#inbox/FMfcgxwKjxHWSvgjKtCWrbhccKFPlkdD) and [Zia](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLsSXWPRNNxDNcdhGHQXBkTtsx)
+
+---
+
+Flaky specs (newest first; see "Flaky specs" in CLAUDE.md). Remove an entry when its fix merges.
+- 2 Nov 2026, `app/models/template/tests/create.js` "template creates multiple templates in parallel": `Failed: No template: blog_…:<uuid>` on an unrelated PR (rename-egress, 13cf5b5ca). Run: https://github.com/blotcms/blot/actions/runs/41517695943/job/125525345596. Investigate: a template created in parallel isn't readable yet when the spec reads it back, so look for a create that resolves before its Redis writes (or the template index update) finish, or the spec reading through a cache.
+- 2 Nov 2026, `app/clients/icloud/tests/macserverDisconnect.js` "removeLimiterForBlogID drops waiting jobs, lets the running job finish and rejects the dropped ones": `TypeError: release is not a function` and `Error: This limiter has been stopped.` on an unrelated PR (node-b-oom-score, 9b930a320); passed on re-run. Run: https://github.com/blotcms/blot/actions/runs/41446374389/job/125280368697. Investigate: the running job's release callback is missing when the limiter is stopped mid-job, so check the order of stop() against the job's completion in the limiter (Bottleneck) and whether the spec relies on timing.
