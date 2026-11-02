@@ -60,15 +60,35 @@ describe("template", function () {
     });
   });
 
-  it("updates the cache ID of the blog which owns a template after dropping", function (done) {
+  it("updates the cache ID of the blog which has the template installed after dropping", function (done) {
     var test = this;
-    var initialCacheID = test.blog.cacheID;
-    drop(test.blog.id, test.template.name, function (err) {
+    Blog.set(test.blog.id, { template: test.template.id }, function (err) {
       if (err) return done.fail(err);
-      Blog.get({ id: test.template.owner }, function (err, blog) {
+      Blog.get({ id: test.blog.id }, function (err, installed) {
         if (err) return done.fail(err);
-        expect(blog.cacheID).not.toEqual(initialCacheID);
-        done();
+        drop(test.blog.id, test.template.name, function (err) {
+          if (err) return done.fail(err);
+          Blog.get({ id: test.template.owner }, function (err, blog) {
+            if (err) return done.fail(err);
+            expect(blog.cacheID).not.toEqual(installed.cacheID);
+            done();
+          });
+        });
+      });
+    });
+  });
+
+  it("leaves the owner blog's cache ID alone when dropping a template it doesn't use", function (done) {
+    var test = this;
+    Blog.get({ id: test.blog.id }, function (err, before) {
+      if (err) return done.fail(err);
+      drop(test.blog.id, test.template.name, function (err) {
+        if (err) return done.fail(err);
+        Blog.get({ id: test.blog.id }, function (err, blog) {
+          if (err) return done.fail(err);
+          expect(blog.cacheID).toEqual(before.cacheID);
+          done();
+        });
       });
     });
   });

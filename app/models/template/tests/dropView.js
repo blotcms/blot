@@ -3,10 +3,27 @@ describe("template", function () {
 
   var dropView = require("../index").dropView;
   var getAllViews = require("../index").getAllViews;
+  var getMetadata = require("../index").getMetadata;
   var client = require("models/client");
 
   it("dropView removes a view", function (done) {
     dropView(this.template.id, this.view.name, done);
+  });
+
+  it("dropView gives the template a new cache ID", function (done) {
+    var test = this;
+    getMetadata(test.template.id, function (err, before) {
+      if (err) return done.fail(err);
+      dropView(test.template.id, test.view.name, function (err) {
+        if (err) return done.fail(err);
+        getMetadata(test.template.id, function (err, after) {
+          if (err) return done.fail(err);
+          expect(after.cacheID).toEqual(jasmine.any(String));
+          expect(after.cacheID).not.toEqual(before.cacheID);
+          done();
+        });
+      });
+    });
   });
 
   it("dropView removes a view from the list of views", function (done) {

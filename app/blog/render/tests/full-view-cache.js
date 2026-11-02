@@ -103,6 +103,32 @@ describe("full view cache", function () {
     expect(Template.getFullView).toHaveBeenCalledTimes(2);
   });
 
+  it("misses when the template's cacheID changes", async function () {
+    spyOn(Template, "getFullView").and.callFake(function (
+      blogID,
+      templateID,
+      viewName,
+      callback
+    ) {
+      callback(null, [{}, {}, [], "text/html", "{{title}}"]);
+    });
+
+    const blog = { id: "blog-1", cacheID: 111 };
+
+    await getCachedFullView({
+      blog,
+      template: { id: "template-1", cacheID: "a" },
+      viewName: "entry.html",
+    });
+    await getCachedFullView({
+      blog,
+      template: { id: "template-1", cacheID: "b" },
+      viewName: "entry.html",
+    });
+
+    expect(Template.getFullView).toHaveBeenCalledTimes(2);
+  });
+
   it("does not collide cache keys when input segments contain colons", function () {
     const firstKey = getCachedFullView._createCacheKey(
       { id: "foo:bar", cacheID: "baz" },
@@ -131,6 +157,7 @@ describe("full view cache", function () {
         blogID: "null",
         cacheID: "undefined",
         templateID: "undefined",
+        templateCacheID: "undefined",
         viewName: "null",
       })
     );

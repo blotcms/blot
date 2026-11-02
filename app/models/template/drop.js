@@ -3,7 +3,7 @@ var ensure = require("helper/ensure");
 var client = require("models/client");
 var key = require("./key");
 var makeID = require("./util/makeID");
-var Blog = require("models/blog");
+var cacheID = require("./util/cacheID");
 var generateCdnUrl = require("./util/generateCdnUrl");
 var purgeCdnUrls = require("helper/purgeCdnUrls");
 
@@ -85,7 +85,7 @@ module.exports = function drop(owner, templateName, callback) {
           });
         }
 
-        Blog.set(ownerID, { cacheID: Date.now() }, function (blogErr) {
+        cacheID.bumpBlogIfInstalled(ownerID, templateID, function (blogErr) {
           callback(blogErr, "Deleted " + templateID);
         });
       })

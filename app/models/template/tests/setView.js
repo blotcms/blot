@@ -89,14 +89,17 @@ describe("template", () => {
 		});
 
 		const before = await promisify(Blog.get)({ id: this.template.owner });
+		const templateBefore = await getMetadata(this.template.id);
 		await setView(this.template.id, {
 			name: "sc-partial.html",
 			content: "{{> /pages/home.txt}}",
 			partials: {},
 		});
 		const after = await promisify(Blog.get)({ id: this.template.owner });
+		const templateAfter = await getMetadata(this.template.id);
 
 		expect(after.cacheID).toEqual(before.cacheID);
+		expect(templateAfter.cacheID).toEqual(templateBefore.cacheID);
 	});
 
 	it("sets changes to an existing view", async function () {
@@ -369,15 +372,38 @@ describe("template", () => {
 		);
 	});
 
-	it("updates the cache ID of the blog which owns a template after setting a view", async function () {
+	it("updates the cache ID of the blog which has the template installed after setting a view", async function () {
 		const test = this;
-		const initialCacheID = test.blog.cacheID;
+		await promisify(Blog.set)(test.blog.id, { template: test.template.id });
+		const initialCacheID = (await promisify(Blog.get)({ id: test.blog.id })).cacheID;
 		const view = { name: "cache-test.html" };
 
 		await setView(test.template.id, view);
 		const blog = await promisify(Blog.get)({ id: test.template.owner });
 
 		expect(blog.cacheID).not.toEqual(initialCacheID);
+	});
+
+	it("leaves the owner blog's cache ID alone when the template is not installed", async function () {
+		const test = this;
+		const initialCacheID = (await promisify(Blog.get)({ id: test.blog.id })).cacheID;
+
+		await setView(test.template.id, { name: "cache-test.html", content: "a" });
+		const blog = await promisify(Blog.get)({ id: test.template.owner });
+
+		expect(blog.cacheID).toEqual(initialCacheID);
+	});
+
+	it("gives the template a new cache ID when a view changes", async function () {
+		const test = this;
+		await setView(test.template.id, { name: "cache-test.html", content: "a" });
+		const before = (await getMetadata(test.template.id)).cacheID;
+
+		await setView(test.template.id, { name: "cache-test.html", content: "b" });
+		const after = (await getMetadata(test.template.id)).cacheID;
+
+		expect(after).toEqual(jasmine.any(String));
+		expect(after).not.toEqual(before);
 	});
 
 	it("will save a view with a url array", async function () {

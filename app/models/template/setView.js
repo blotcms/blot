@@ -10,10 +10,10 @@ var getView = require("./getView");
 var serialize = require("./util/serialize");
 var getMetadata = require("./getMetadata");
 var setMetadata = require("./setMetadata");
-var Blog = require("models/blog");
 var parseTemplate = require("./parseTemplate");
 var ERROR = require("../../blog/render/error");
 var updateCdnManifest = require("./util/updateCdnManifest");
+var cacheID = require("./util/cacheID");
 var serializeRedisHashValues = require("models/redisHashSerializer");
 var clfdate = require("helper/clfdate");
 var applyUserRetrieveOptions = require("./util/applyUserRetrieveOptions");
@@ -328,6 +328,9 @@ module.exports = function setView(templateID, updates, callback) {
 						if (shouldRemoveUrlPatterns) {
 							multi.hDel(viewKey, "urlPatterns");
 						}
+						if (changes) {
+							multi.hSet(key.metadata(templateID), "cacheID", cacheID.create());
+						}
 
 						// node-redis v5 multi.exec() returns a thenable; normalize to Promise so .then/.catch chain reliably
 						Promise.resolve(multi.exec())
@@ -352,7 +355,7 @@ module.exports = function setView(templateID, updates, callback) {
 									return clearErrorsIfNeeded();
 								}
 
-								Blog.set(metadata.owner, { cacheID: Date.now() }, (cacheErr) => {
+								cacheID.bumpBlogIfInstalled(metadata.owner, templateID, (cacheErr) => {
 									if (cacheErr) return callback(cacheErr);
 
 									updateCdnManifest(templateID, (manifestErr) => {
