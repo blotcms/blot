@@ -7,8 +7,8 @@ The macserver requested a resync after a push to Blot failed, and the resync fou
 {{#blogs}}
 **{{id}} {{handle}}**
 
-`logs <blue|green|yellow> | grep "{{truncatedId}} sync_"` (the request can land on any container)
-`access {{handle}}`
+`logs <blue|green|yellow> | grep "{{{truncatedId}}} sync_"` (the request can land on any container)
+`access {{{handle}}}`
 
 {{#hasChanges}}
 - {{changeCount}} unsynced change{{#changeCountPlural}}s{{/changeCountPlural}} (downloaded: {{downloaded}}, removed: {{removed}}, created dirs: {{createdDirs}}, excluded as edited during the walk: {{excluded}})

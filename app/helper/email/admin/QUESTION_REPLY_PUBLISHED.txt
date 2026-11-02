@@ -1,4 +1,4 @@
-Question reply published: {{title}}
+Question reply published: {{{title}}}
 
 {{body}}
 

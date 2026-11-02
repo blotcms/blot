@@ -1,9 +1,9 @@
-Resync found changes on {{client}}
+Resync found changes on {{{client}}}
 
 A manual resync from the dashboard (Reset your folder) found issues on {{client}} for {{id}} {{handle}}.
 
-`logs green | grep "{{truncatedId}} sync_"`
-`access {{handle}}`
+`logs green | grep "{{{truncatedId}}} sync_"`
+`access {{{handle}}}`
 
 {{#hasChanges}}
 **{{changeCount}} change{{#changeCountPlural}}s{{/changeCountPlural}} that hadn't already been synced** — evidence of a missed sync.

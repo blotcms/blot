@@ -1,4 +1,4 @@
-SSL certificate issues: {{summary}}
+SSL certificate issues: {{{summary}}}
 
 {{#hasSystemic}}
 **{{flaggedCount}} custom-domain certificates are under 25 days from expiry and not renewing.** That points at auto-ssl's renewal job being broken rather than at individual domains. On the proxy host, check `/var/instance-ssd/logs/error.log` for `auto-ssl: failed to fetch all certificate domains` and `failed to run do_renew cycle` (for example after a proxy config change), and the Redis slowlog.
@@ -10,7 +10,7 @@ SSL certificate issues: {{summary}}
 **Customer certificates under 25 days from expiry**
 
 {{#certs}}
-- `{{domain}}` ({{handle}}): {{daysLeft}} days left, expires {{date}}{{#urgent}} (urgent){{/urgent}}
+- `{{{domain}}}` ({{handle}}): {{daysLeft}} days left, expires {{date}}{{#urgent}} (urgent){{/urgent}}
 {{/certs}}
 
 {{/hasCerts}}
