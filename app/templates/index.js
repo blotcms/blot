@@ -720,7 +720,10 @@ function templateDirectories(directory) {
 }
 
 // Only blogs whose template is this one render it. A fork is a copy with its
-// own ID, so it doesn't change when the template it came from does.
+// own ID, so it doesn't change when the template it came from does. In
+// development the watcher rebuilds inside a running process, so every blog is
+// bumped there: a preview of this template on another blog caches its views
+// by that blog's cacheID too.
 function bumpCacheIDForTemplateUsers(templateID, callback) {
   Blog.getAllIDs(function (err, ids) {
     if (err) return callback(err);
@@ -730,7 +733,11 @@ function bumpCacheIDForTemplateUsers(templateID, callback) {
         client
           .hGet(blogKey.info(blogID), "template")
           .then(function (blogTemplateID) {
-            if (blogTemplateID !== templateID) return next();
+            if (
+              blogTemplateID !== templateID &&
+              config.environment !== "development"
+            )
+              return next();
 
             Blog.set(blogID, { cacheID: Date.now() }, function (err) {
               if (err) return next(err);
