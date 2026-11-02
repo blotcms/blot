@@ -76,7 +76,7 @@ jobs:
           BASE="$EVENT_BASE"
           if [ -z "$PR" ]; then
             read -r PR PR_BASE < <(gh pr list --repo "$GITHUB_REPOSITORY" --head "$GITHUB_REF_NAME" \
-              --state open --json number,baseRefName --jq '.[0] | "\(.number) \(.baseRefName)"' || true)
+              --state open --json number,baseRefName --jq '.[] | "\(.number) \(.baseRefName)"' | head -1) || true
             BASE="${INPUT_BASE:-${PR_BASE:-master}}"
           fi
           git fetch --no-tags origin "$BASE"

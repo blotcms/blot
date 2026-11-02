@@ -236,8 +236,8 @@ async function seed() {
   }
 
   // The catalog site, on its own template, and the copies it previews
-  const catalog = await site(scaled(profile.catalog), "catalog");
   const catalogShape = scaled(profile.catalog);
+  const catalog = await site(catalogShape, "catalog");
   const views = catalogViews(catalogShape);
   const catalogID = await ownTemplate(catalog.blog, "catalog", {
     locals: { page_size: catalogShape.pageSize },
