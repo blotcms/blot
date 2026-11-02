@@ -12,6 +12,7 @@ var lock = require("helper/lock");
 var clfdate = require("helper/clfdate");
 var Git = require("./git");
 var plumbing = require("./plumbing");
+var limiter = require("./limiter");
 var dataDir = require("./dataDir");
 var checkGitRepoExists = require("./checkGitRepoExists");
 var smartHttp = require("./smartHttp");
@@ -254,19 +255,23 @@ async function commitChange(blogID, change) {
     await folder.write(blogID, path, contents);
   }
 
-  var release = await holdRefLock(blogID);
-  var result;
+  // One place in the background lane for the whole commit, taken before the
+  // ref lock: its commands run one after another in it, and none waits for
+  // room with the lock held, which would hold up a push to the blog
+  var result = await limiter.run("background", async function () {
+    var release = await holdRefLock(blogID);
 
-  try {
-    result = await plumbing.commitFile(bareRepoDirectory, change);
-  } finally {
     try {
-      await release();
-    } catch (err) {
-      // The lock expires by itself; a commit that worked still worked
-      console.error(clfdate(), "Git: could not release the ref lock of", blogID, err.message);
+      return await plumbing.commitFile(bareRepoDirectory, change);
+    } finally {
+      try {
+        await release();
+      } catch (err) {
+        // The lock expires by itself; a commit that worked still worked
+        console.error(clfdate(), "Git: could not release the ref lock of", blogID, err.message);
+      }
     }
-  }
+  });
 
   if (!result.commit) return;
 

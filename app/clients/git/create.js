@@ -5,6 +5,7 @@ const database = require("./database");
 const storage = require("storage/folder");
 const repos = require("./repo");
 const plumbing = require("./plumbing");
+const limiter = require("./limiter");
 const clfdate = require("helper/clfdate");
 const sync = require("sync");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
@@ -319,21 +320,26 @@ async function handleEmptyFolder(blog, folder, index, progress) {
 // it used to make would have been refused, and the repository is removed.
 async function saveCommit(blog, index, progress, label, message) {
   const commit = await writeCommitWithRetries(index, progress.head, label, message);
-  const release = await repos.holdRefLock(blog.id);
 
-  console.log(clfdate() + " Git: create: Moving master to " + label);
+  // A place in the background lane before the ref lock, so the move never
+  // waits for room with the lock held (see repo.commit)
+  await limiter.run("background", async function () {
+    const release = await repos.holdRefLock(blog.id);
 
-  try {
-    await plumbing.moveMaster(repos.directory(blog.handle), commit, progress.head);
-  } catch (err) {
-    console.log("Failed to commit " + label + " to repository: " + err.message);
-    throw err;
-  } finally {
-    await release().catch(function (err) {
-      // The lock expires by itself
-      console.log(clfdate() + " Git: create: could not release the ref lock: " + err.message);
-    });
-  }
+    console.log(clfdate() + " Git: create: Moving master to " + label);
+
+    try {
+      await plumbing.moveMaster(repos.directory(blog.handle), commit, progress.head);
+    } catch (err) {
+      console.log("Failed to commit " + label + " to repository: " + err.message);
+      throw err;
+    } finally {
+      await release().catch(function (err) {
+        // The lock expires by itself
+        console.log(clfdate() + " Git: create: could not release the ref lock: " + err.message);
+      });
+    }
+  });
 
   progress.head = commit;
 }
