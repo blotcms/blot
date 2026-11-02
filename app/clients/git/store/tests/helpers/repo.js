@@ -117,14 +117,14 @@ function makeRepo() {
 
   // Packs everything into one pack (or with `refDeltas`, with deltas which name
   // their base by ID), uploads it, and returns a reader over it
-  async function readerOf({ refDeltas = false, cache = null, maxSize, store = createMemoryStore() } = {}) {
+  async function readerOf({ refDeltas = false, cache = null, maxSize, scratch = null, store = createMemoryStore() } = {}) {
     text(["update-ref", "refs/heads/master", head]);
     fx.repackAll(dir, { refDeltas });
 
     const entries = [];
     for (const pack of readPacks()) entries.push(await fx.upload(store, pack, 0));
 
-    return { store, reader: createReader({ store, cache, packs: entries, maxSize }), entries, packs: readPacks() };
+    return { store, reader: createReader({ store, cache, packs: entries, maxSize, scratch }), entries, packs: readPacks() };
   }
 
   function readPacks() {

@@ -622,29 +622,92 @@ describe("git store receive", function () {
   });
 
   describe("a base stored as a delta", function () {
-    beforeEach(() => setup());
-    afterEach(teardown);
+    // `smallBase` is lowered so that a base of a few MiB is built in scratch
+    // as one of any size is; nothing depends on how big it is
+    const SIZE = 3 * MiB;
+    const SMALL = 256 * 1024;
 
-    it("is refused, saying which limit was hit, when it is over the limit", async function () {
-      // An older version of the file is a delta in the stored pack
+    function hugeFile(edit) {
+      const line = Buffer.from("this line of the huge file is the same on every row of it......\n");
+      const data = Buffer.alloc(SIZE);
+      for (let at = 0; at < data.length; at += line.length) line.copy(data, at, 0, Math.min(line.length, data.length - at));
+      if (edit) data.write("EDITED " + edit, MiB);
+      return data;
+    }
+
+    // A push on the first version of a file the store holds two versions of,
+    // so that its base is stored as a delta of the second
+    function pushOnOldVersion() {
       const [stored] = fx.readPacks(src);
-      const deltas = new Set(fx.listEntries(stored).filter((entry) => entry.depth > 0).map((entry) => entry.oid));
-      const old = fixture.commits.slice(0, -1).find((c) => deltas.has(fx.text(src, ["rev-parse", c + ":docs/big.txt"])));
-      expect(old).toBeDefined();
+      const entries = fx.listEntries(stored);
+      const old = fx.text(src, ["rev-parse", "HEAD~1"]);
+      const oid = fx.text(src, ["rev-parse", old + ":huge.txt"]);
+      expect(entries.find((entry) => entry.oid === oid).depth).toBeGreaterThan(0);
 
       fx.git(src, ["checkout", "-q", "-B", "x", old]);
-      fs.writeFileSync(path.join(src, "docs", "big.txt"), fs.readFileSync(path.join(src, "docs", "big.txt"), "utf8").replace("line 5 ", "line 5 changed "));
+      fs.writeFileSync(path.join(src, "huge.txt"), hugeFile(0).fill("E", 2 * MiB, 2 * MiB + 100));
       fx.git(src, ["commit", "-q", "-am", "On an old version"]);
       const tip = fx.text(src, ["rev-parse", "HEAD"]);
-      const pack = fx.packRevs(src, [tip], [old], { thin: true });
+      return { tip, pack: fx.packRevs(src, [tip], [old], { thin: true }) };
+    }
 
-      const refused = await direct([update(tip)], pack, { baseLimit: 10 });
-      expect(refused.outcome).toBe("refused");
-      expect(refused.status).toMatch(/can only use up to 1 MB, and this one is larger/);
+    function prepare(target) {
+      for (const edit of [0, 1]) {
+        fs.writeFileSync(path.join(target, "huge.txt"), hugeFile(edit));
+        fx.git(target, ["add", "-A"]);
+        fx.git(target, ["commit", "-q", "-m", "Huge " + edit]);
+      }
+    }
+
+    afterEach(teardown);
+
+    it("is read through scratch, and counted against the push's reservation", async function () {
+      await setup({ maxBytes: 64 * MiB, prepare });
+      const { tip, pack } = pushOnOldVersion();
+      expect(pack.length).toBeLessThan(MiB);
+
+      const reserved = [];
+      const timer = setInterval(() => reserved.push(cache.stats().reservedBytes), 1);
+      const result = await direct([update(tip)], pack, { smallBase: SMALL });
+      clearInterval(timer);
+
+      expect(result.outcome).toBe("ok");
+      expect(result.stats.basesFetched).toBeGreaterThan(0);
+      expect((await manifest.read(store)).refs[MASTER]).toBe(tip);
+
+      // The files built to resolve it (two at once) and the copies of it
+      // index-pack makes are in the reservation together
+      expect(Math.max(...reserved)).toBeGreaterThan(3 * SIZE);
       expectNoScratch();
+    });
 
-      // With room for it, the same push is fine
-      expect((await direct([update(tip)], pack)).outcome).toBe("ok");
+    it("fails the push, to be tried again, when the room is taken just now", async function () {
+      await setup({ maxBytes: 64 * MiB, prepare });
+      const { tip, pack } = pushOnOldVersion();
+      const hold = await cache.reserve(58 * MiB);
+
+      const failed = await direct([update(tip)], pack, { smallBase: SMALL });
+
+      expect(failed.outcome).toBe("failed");
+      expect(failed.error.code).toBe("NO_ROOM");
+      expect(failed.messages).toContain("Nothing was pushed.");
+      expect((await manifest.read(store)).refs[MASTER]).toBe(fixture.head);
+
+      await hold.release();
+      expectNoScratch();
+      expect((await direct([update(tip)], pack, { smallBase: SMALL })).outcome).toBe("ok");
+    });
+
+    it("refuses the push, for good, when the whole budget could never hold it", async function () {
+      await setup({ maxBytes: 5 * MiB, prepare });
+      const { tip, pack } = pushOnOldVersion();
+
+      const refused = await direct([update(tip)], pack, { smallBase: SMALL });
+
+      expect(refused.outcome).toBe("refused");
+      expect(refused.status).toMatch(/builds on a file of 3 MB which is larger than Blot can currently handle. Please contact support/);
+      expect((await manifest.read(store)).refs[MASTER]).toBe(fixture.head);
+      expectNoScratch();
     });
   });
 
