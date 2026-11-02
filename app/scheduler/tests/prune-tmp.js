@@ -78,6 +78,25 @@ describe("scheduler prune-tmp", function () {
     }
   });
 
+  it("leaves alone a directory which holds the git store's cache", async function () {
+    const config = require("config");
+    const saved = config.git_store.cache_directory;
+
+    config.git_store.cache_directory = this.tmp + "/cache/git-store";
+
+    try {
+      await write(this.tmp, "cache/git-store/main/entries/ab/entry", 3 * DAY, "cache");
+      await write(this.tmp, "cache-other/old", 2 * DAY, "cache-other");
+
+      await this.run();
+
+      expect(await exists(this.tmp + "/cache/git-store/main/entries/ab/entry")).toBe(true);
+      expect(await exists(this.tmp + "/cache-other")).toBe(false);
+    } finally {
+      config.git_store.cache_directory = saved;
+    }
+  });
+
   describe("imports", function () {
     const importPath = (root, importID) => root + "/import/blog_1/" + importID;
 

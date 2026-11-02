@@ -195,11 +195,17 @@ function storeFor(blogID) {
 // Everything an operation needs: the blog's EBS repository, its store, the
 // cache and the lock. Null if the blog or its repository is gone.
 async function contextFor(blogID) {
-  const handle = await new Promise((resolve, reject) => {
-    require("models/blog").get({ id: blogID }, (err, blog) => (err ? reject(err) : resolve(blog ? blog.handle : null)));
+  if (removed.has(blogID)) return null;
+
+  const blog = await new Promise((resolve, reject) => {
+    require("models/blog").get({ id: blogID }, (err, blog) => (err ? reject(err) : resolve(blog)));
   });
 
-  if (!handle) return null;
+  // A blog disconnected from git (or deleted) has its store copy removed
+  // (removeBlog below): nothing may write to it again, in any process
+  if (!blog || blog.client !== "git" || !blog.handle) return null;
+
+  const handle = blog.handle;
 
   const gitDir = require("../repo").directory(handle);
   const exists = await require("fs-extra").pathExists(gitDir);
@@ -656,7 +662,7 @@ async function drain(blogID, state) {
       ctx = await contextFor(blogID);
 
       if (!ctx) {
-        log({ blog: blogID, op: task.type === "write" ? "write" : "push", outcome: "skipped", detail: "no repository" });
+        log({ blog: blogID, op: task.type === "write" ? "write" : "push", outcome: "skipped", detail: "the blog is gone, off git or has no repository" });
       } else if (task.type === "write") {
         stats.writes++;
         next = await runWrite(ctx, task);
@@ -684,6 +690,8 @@ async function drain(blogID, state) {
 // Queues a mirror, unless the last thing queued is one already, which then
 // covers this request too: it reads both sides when it starts.
 function requestMirror(blogID, { op = "push", ebsMs, reason } = {}) {
+  if (removed.has(blogID)) return Promise.resolve();
+
   const state = stateOf(blogID);
   const last = state.queue[state.queue.length - 1];
 
@@ -707,6 +715,8 @@ function requestMirror(blogID, { op = "push", ebsMs, reason } = {}) {
 // locally, with the options compact() itself would use, so a push or a write
 // in the steady state costs no compaction request at all.
 function requestCompact(blogID, state, ctx, current) {
+  if (removed.has(blogID)) return;
+
   const options = compact.planOptions(ctx.cache);
 
   if (!current || !compact.plan(current, options)) {
@@ -728,7 +738,7 @@ function requestCompact(blogID, state, ctx, current) {
       } catch (err) {
         log({ blog: blogID, op: "compact", outcome: "error", detail: scrub(err, ctx) });
       }
-    } while (state.compactAgain);
+    } while (state.compactAgain && !removed.has(blogID));
 
     state.compacting = null;
     settleIfIdle(blogID, state);
@@ -748,6 +758,8 @@ function pushed(blogID, ebsMs) {
 // Blot's commit has landed on EBS: result is { parent, commit } from
 // plumbing.commitFile, and ebsMs how long it took
 function committed(blogID, change, result, ebsMs) {
+  if (removed.has(blogID)) return;
+
   try {
     const state = stateOf(blogID);
     const queued = state.queue.filter((task) => task.type === "write");
@@ -774,6 +786,82 @@ function committed(blogID, change, result, ebsMs) {
   }
 }
 
+// ---- Removing a blog's store copy -----------------------------------------
+
+// Blogs whose store copy is being or has been removed in this process, with
+// when: their hooks are ignored until the second pass below
+const removed = new Map();
+
+// How long after removing a store copy it is removed again, for work another
+// process (the other unit) had already started when the blog was
+// disconnected. Work which starts later finds the blog off git and does
+// nothing (contextFor).
+let removeAgainMs = 5 * 60 * 1000;
+
+// Deletes every object under the blog's prefix, a few at a time
+async function deleteCopy(blogID) {
+  if (makeObjectStore === s3ObjectStore && !(config.storage && config.storage.bucket)) return null;
+
+  const store = makeObjectStore(blogID);
+  const keys = [];
+
+  for await (const entry of store.list("")) keys.push(entry.key);
+
+  let next = 0;
+  const worker = async () => {
+    while (next < keys.length) await store.delete(keys[next++]);
+  };
+
+  await Promise.all(Array.from({ length: Math.min(16, keys.length) }, worker));
+
+  return keys.length;
+}
+
+async function deleteAndLog(blogID, pass) {
+  try {
+    const deleted = await deleteCopy(blogID);
+    if (deleted) log({ blog: blogID, op: "remove", outcome: "ok", deleted, pass });
+  } catch (err) {
+    log({ blog: blogID, op: "remove", outcome: "error", pass, detail: scrub(err) });
+  }
+}
+
+// The blog's git client is disconnected, or the blog deleted: stops this
+// process's shadow work for it (queued work is dropped, running work is
+// waited for, later hooks are ignored), forgets its store, and deletes its
+// copy in the store, git/<blogID>/. Runs whether or not shadow mode is on
+// now, since it may have been before. Deletes the copy again a while later,
+// unless the blog is back on git by then. Never rejects: a failure is logged.
+async function removeBlog(blogID) {
+  removed.set(blogID, Date.now());
+
+  try {
+    const state = blogs.get(blogID);
+
+    if (state) {
+      state.queue.splice(0).forEach((task) => task.resolve());
+      state.compactAgain = false;
+      await Promise.all([state.draining, state.compacting].map((running) => running && running.catch(() => {})));
+    }
+
+    stores.delete(blogID);
+  } catch (err) {
+    log({ blog: blogID, op: "remove", outcome: "error", detail: scrub(err) });
+  }
+
+  await deleteAndLog(blogID, 1);
+
+  const again = setTimeout(() => {
+    require("models/blog").get({ id: blogID }, async (err, blog) => {
+      // Back on git: its new copy is not ours to delete
+      if (err || !blog || blog.client !== "git") await deleteAndLog(blogID, 2);
+      removed.delete(blogID);
+    });
+  }, removeAgainMs);
+
+  if (again.unref) again.unref();
+}
+
 // Makes the store's refs equal to EBS's, in the queue. Resolves once done;
 // never rejects.
 function mirror(blogID) {
@@ -794,9 +882,14 @@ function _setObjectStore(factory) {
   _reset();
 }
 
+function _setRemoveAgainMs(ms) {
+  removeAgainMs = ms;
+}
+
 function _reset() {
   stores = new LRUCache({ max: STORES });
   cache = null;
+  removed.clear();
   Object.keys(stats).forEach((key) => (stats[key] = 0));
 }
 
@@ -805,8 +898,10 @@ module.exports = {
   committed,
   mirror,
   idle,
+  removeBlog,
   stats,
   _setObjectStore,
+  _setRemoveAgainMs,
   _reset,
   _log: log,
 };

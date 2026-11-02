@@ -24,6 +24,16 @@ function setup(options) {
 
   var saved;
 
+  // Shadow mode only works for a blog on the git client, as the dashboard
+  // sets it when the repository is made (the test set-up makes the repository
+  // without it)
+  beforeEach(function (done) {
+    require("models/blog").set(this.blog.id, { client: "git" }, function (err) {
+      if (err) return done.fail(err);
+      done();
+    });
+  });
+
   beforeEach(function () {
     var ctx = this;
 
