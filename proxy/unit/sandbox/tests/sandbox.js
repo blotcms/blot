@@ -370,6 +370,10 @@ test("broker: a jail that exits non-zero is failed, one killed by a signal is ki
   await withBroker({ script: "kill -9 $$" }, async (socket) => {
     assert.deepStrictEqual((await request(socket, job, "x")).header, { ok: false, error: "killed" });
   });
+  // nsjail's own exit when the job inside it was killed (SIGKILL)
+  await withBroker({ script: "cat > /dev/null; exit 137" }, async (socket) => {
+    assert.deepStrictEqual((await request(socket, job, "x")).header, { ok: false, error: "killed" });
+  });
 });
 
 test("broker: a jail that outlives its time limit is timeout", async () => {
