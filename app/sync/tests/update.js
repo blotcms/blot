@@ -14,6 +14,13 @@ describe("update", function () {
   // Set up a test blog before each test
   global.test.blog();
 
+  // The blog's folder on disk, which these specs change directly
+  let blogDirectory;
+
+  beforeEach(function () {
+    blogDirectory = this.blogDirectory;
+  });
+
   // Expose methods for creating fake files, paths, etc.
   beforeEach(function () {
     this.fake = global.test.fake;
@@ -31,12 +38,12 @@ describe("update", function () {
     sync(this.blog.id, function (err, folder, done) {
       if (err) testDone.fail(err);
 
-      fs.outputFileSync(folder.path + path, content.toString(), "utf-8");
+      fs.outputFileSync(blogDirectory + path, content.toString(), "utf-8");
 
       const poll = setInterval(function () {
         content = content + 1;
         console.log("setting content to", content.toString());
-        fs.outputFileSync(folder.path + path, content.toString(), "utf-8");
+        fs.outputFileSync(blogDirectory + path, content.toString(), "utf-8");
         if (content > 300) {
           console.log("cleaning interval at:", content.toString());
           clearInterval(poll);
@@ -74,7 +81,7 @@ describe("update", function () {
     sync(this.blog.id, function (err, folder, done) {
       if (err) testDone.fail(err);
 
-      fs.outputFileSync(folder.path + path, content, "utf-8");
+      fs.outputFileSync(blogDirectory + path, content, "utf-8");
       folder.update(path, function (err) {
         if (err) testDone.fail(err);
 
@@ -95,14 +102,14 @@ describe("update", function () {
     sync(this.blog.id, function (err, folder, done) {
       if (err) testDone.fail(err);
 
-      fs.outputFileSync(folder.path + path, content, "utf-8");
+      fs.outputFileSync(blogDirectory + path, content, "utf-8");
       folder.update(path, function (err) {
         if (err) testDone.fail(err);
 
         checkEntry({ path: path, deleted: false }, function (err) {
           if (err) testDone.fail(err);
 
-          fs.removeSync(folder.path + path);
+          fs.removeSync(blogDirectory + path);
           folder.update(path, function (err) {
             if (err) testDone.fail(err);
             checkEntry({ path: path, deleted: true }, function (err) {
@@ -129,11 +136,11 @@ describe("update", function () {
       spyOn(Entry, "set").and.callFake(function (blogID, entryPath, entry, cb) {
         // Change the source (and its size) after the first build read it
         if (++calls === 1)
-          fs.outputFileSync(folder.path + path, "second version");
+          fs.outputFileSync(blogDirectory + path, "second version");
         original.call(Entry, blogID, entryPath, entry, cb);
       });
 
-      fs.outputFileSync(folder.path + path, "first");
+      fs.outputFileSync(blogDirectory + path, "first");
 
       folder.update(path, function (err, result) {
         if (err) return testDone.fail(err);
@@ -154,13 +161,13 @@ describe("update", function () {
 
     sync(blogID, function (err, folder, done) {
       if (err) return testDone.fail(err);
-      fs.ensureDirSync(folder.path + dir);
+      fs.ensureDirSync(blogDirectory + dir);
 
       // A build writing .preview.html files moves a directory's mtime. A
       // directory has no fingerprint, so this must not re-run the update.
       const touch = spyOn(build, "findMultiFolder").and.callFake(function () {
         const later = new Date(Date.now() + 5000 * touch.calls.count());
-        fs.utimesSync(folder.path + dir, later, later);
+        fs.utimesSync(blogDirectory + dir, later, later);
         return null;
       });
 

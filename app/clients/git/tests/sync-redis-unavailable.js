@@ -72,7 +72,6 @@ describe("Git sync when Redis is unavailable", function () {
           cb(
             null,
             {
-              path: "/not-used",
               log(message) {
                 logs.push(message);
               },
@@ -87,7 +86,7 @@ describe("Git sync when Redis is unavailable", function () {
               cb(err);
             }
           ),
-        "./checkGitRepoExists": (path, cb) => cb(null),
+        "./checkGitRepoExists": (blogID, cb) => cb(null, "/not-used"),
         "./repo": {
           directory: (handle) => "/not-used/" + handle + ".git",
           followLiveClone: (git, handle, commit, cb) =>

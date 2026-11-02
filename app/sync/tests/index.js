@@ -22,7 +22,6 @@ describe("sync", function () {
     sync(this.blog.id, function (err, folder, done) {
       if (err) return testDone.fail(err);
 
-      expect(folder.path).toEqual(jasmine.any(String));
       expect(folder.update).toEqual(jasmine.any(Function));
       expect(done).toEqual(jasmine.any(Function));
 
@@ -273,11 +272,18 @@ describe("sync cacheID", function () {
 
   global.test.blog();
 
+  // The blog's folder on disk, which these specs change directly
+  let blogDirectory;
+
+  beforeEach(function () {
+    blogDirectory = this.blogDirectory;
+  });
+
   // Changes one file in the blog's folder, then finishes the sync
   function syncChange(blogID, callback) {
     sync(blogID, function (err, folder, done) {
       if (err) return callback(err);
-      fs.outputFileSync(folder.path + "/a.txt", "Hello");
+      fs.outputFileSync(blogDirectory + "/a.txt", "Hello");
       folder.update("/a.txt", function (err) {
         if (err) return callback(err);
         done(null, callback);

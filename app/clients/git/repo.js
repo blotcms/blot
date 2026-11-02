@@ -7,7 +7,7 @@
 // are not about one blog take the handle.
 var fs = require("fs-extra");
 var debug = require("debug")("blot:clients:git:repo");
-var localPath = require("helper/localPath");
+var folder = require("storage/folder");
 var lock = require("helper/lock");
 var clfdate = require("helper/clfdate");
 var Git = require("./git");
@@ -173,13 +173,7 @@ function followLiveClone(git, handle, commit, callback) {
 // Moves the blog's live clone, if it has one, to the commit. Nothing depends
 // on it, so a failure is logged and not passed on.
 function followLiveCloneIfAny(blogID, handle, commit, callback) {
-  var blogDirectory = localPath(blogID, "/");
-
-  // Right now local path returns a path with a trailing slash
-  if (blogDirectory.slice(-1) === "/")
-    blogDirectory = blogDirectory.slice(0, -1);
-
-  checkGitRepoExists(blogDirectory, function (err) {
+  checkGitRepoExists(blogID, function (err, blogDirectory) {
     if (err) return callback();
 
     var git;
@@ -249,9 +243,9 @@ async function commitChange(blogID, change) {
     throw new Error("The Git repository of " + blogID + " does not exist at " + bareRepoDirectory);
 
   if (contents === null) {
-    await fs.remove(localPath(blogID, path));
+    await folder.remove(blogID, path);
   } else {
-    await fs.outputFile(localPath(blogID, path), contents);
+    await folder.write(blogID, path, contents);
   }
 
   var release = await holdRefLock(blogID);

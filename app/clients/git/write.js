@@ -3,8 +3,7 @@ var repo = require("./repo");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 
 // Used to write a file to the user's blog folder
-// contents can be anything supported by fs-extra.outputFile
-// which I believe includes buffers and utf8 strings.
+// contents is a Buffer or a string, as storage/folder's write takes
 module.exports = function write(blogID, path, contents, callback) {
   debug("Blog:", blogID, "Writing", path);
 
