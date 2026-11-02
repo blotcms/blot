@@ -1,6 +1,5 @@
-const fs = require("fs-extra");
 const path = require("path");
-const localPath = require("helper/localPath");
+const folder = require("storage/folder");
 const clfdate = require("helper/clfdate");
 
 const prefix = () => `${clfdate()} iCloud case-conflict:`;
@@ -13,17 +12,7 @@ const sortByName = (entries) =>
   );
 
 const listEntries = async (blogID, relDir) => {
-  const absDir = localPath(blogID, relDir);
-  const names = await fs.readdir(absDir);
-
-  const entries = await Promise.all(
-    names.map(async (name) => {
-      const stat = await fs.stat(path.join(absDir, name));
-      return { name, isDirectory: stat.isDirectory() };
-    })
-  );
-
-  return sortByName(entries);
+  return sortByName(await folder.listNames(blogID, relDir));
 };
 
 const getParentPaths = (relPath) => {
@@ -106,12 +95,11 @@ module.exports = async function resolveCaseConflicts(blogID, publish, update) {
   const renameEntry = async (relDir, originalName, newName) => {
     const fromRel = path.posix.join(relDir, originalName);
     const toRel = path.posix.join(relDir, newName);
-    const fromAbs = localPath(blogID, fromRel);
-    const fromStat = await fs.stat(fromAbs);
-    const fromTreePaths = fromStat.isDirectory()
+    const fromStat = await folder.stat(blogID, fromRel);
+    const fromTreePaths = fromStat.isDirectory
       ? await collectTreePaths(blogID, fromRel)
       : null;
-    await fs.move(localPath(blogID, fromRel), localPath(blogID, toRel));
+    await folder.move(blogID, fromRel, toRel);
     console.log(prefix(), "Renamed conflict", fromRel, "->", toRel);
     publish("Renamed conflict", fromRel, "->", toRel);
     await updatePathAndParents(update, fromRel);
@@ -125,12 +113,11 @@ module.exports = async function resolveCaseConflicts(blogID, publish, update) {
   };
 
   const moveEntry = async (fromRel, toRel) => {
-    const fromAbs = localPath(blogID, fromRel);
-    const fromStat = await fs.stat(fromAbs);
-    const fromTreePaths = fromStat.isDirectory()
+    const fromStat = await folder.stat(blogID, fromRel);
+    const fromTreePaths = fromStat.isDirectory
       ? await collectTreePaths(blogID, fromRel)
       : null;
-    await fs.move(fromAbs, localPath(blogID, toRel));
+    await folder.move(blogID, fromRel, toRel);
     await updatePathAndParents(update, fromRel);
     await updatePathAndParents(update, toRel);
     if (fromTreePaths) {
@@ -147,21 +134,20 @@ module.exports = async function resolveCaseConflicts(blogID, publish, update) {
     for (const entry of entries) {
       const sourceChildRel = path.posix.join(sourceRel, entry.name);
       const targetChildRel = path.posix.join(targetRel, entry.name);
-      const targetChildAbs = localPath(blogID, targetChildRel);
 
-      if (await fs.pathExists(targetChildAbs)) {
-        const targetStat = await fs.stat(targetChildAbs);
+      if (await folder.exists(blogID, targetChildRel)) {
+        const targetStat = await folder.stat(blogID, targetChildRel);
 
-        if (targetStat.isDirectory() && entry.isDirectory) {
+        if (targetStat.isDirectory && entry.isDirectory) {
           await mergeDirectory(targetChildRel, sourceChildRel);
-        } else if (targetStat.isDirectory() && !entry.isDirectory) {
+        } else if (targetStat.isDirectory && !entry.isDirectory) {
           const targetEntries = await listEntries(blogID, targetRel);
           const existingLowerSet = new Set(
             targetEntries.map((item) => canonicalName(item.name))
           );
           const conflictName = generateConflictName(existingLowerSet, entry.name);
           await moveEntry(sourceChildRel, path.posix.join(targetRel, conflictName));
-        } else if (!targetStat.isDirectory() && entry.isDirectory) {
+        } else if (!targetStat.isDirectory && entry.isDirectory) {
           const targetEntries = await listEntries(blogID, targetRel);
           const existingLowerSet = new Set(
             targetEntries.map((item) => canonicalName(item.name))
@@ -182,7 +168,7 @@ module.exports = async function resolveCaseConflicts(blogID, publish, update) {
       }
     }
 
-    await fs.remove(localPath(blogID, sourceRel));
+    await folder.remove(blogID, sourceRel);
     await updatePathAndParents(update, sourceRel);
     await updateTree(blogID, update, targetRel);
   };

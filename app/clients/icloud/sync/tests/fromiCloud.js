@@ -1,6 +1,7 @@
 const fs = require("fs-extra");
 const { join } = require("path");
 const localPath = require("helper/localPath");
+const folder = require("storage/folder");
 
 const fromiCloudPath = require.resolve("../fromiCloud");
 const remoteRecursiveListPath = require.resolve("../util/remoteRecursiveList");
@@ -187,11 +188,11 @@ describe("icloud fromiCloud sync", function () {
     it("leaves an existing empty placeholder alone", async () => {
       const localFile = localPath(blogID, join("/", remoteFile.name));
       await fs.outputFile(localFile, "");
-      const outputFile = spyOn(fs, "outputFile").and.callThrough();
+      const write = spyOn(folder, "write").and.callThrough();
 
       const { summary, updated } = await run();
 
-      expect(outputFile).not.toHaveBeenCalled();
+      expect(write).not.toHaveBeenCalled();
       expect(updated).toEqual([]);
       expect(summary.skipped).toBe(0);
       expect(summary.placeholdersCreated).toBe(0);
@@ -459,7 +460,7 @@ describe("icloud fromiCloud sync", function () {
       mockWalk([
         { name: "huge.mov", size: 1000 * 1000 * 1000, isDirectory: false },
       ]);
-      spyOn(fs, "outputFile").and.callFake(async () => {
+      spyOn(folder, "write").and.callFake(async () => {
         throw new Error("disk full");
       });
 
