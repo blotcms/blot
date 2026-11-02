@@ -80,10 +80,6 @@ const MUTATION_ALLOWED_PREFIXES = [
   "app/models/blog/create.js",
   // Recreates a missing folder on a new volume during a host cycle.
   "scripts/host-cycle/reconcile.js",
-  // KNOWN GAP: writes a template's package.json straight to the folder,
-  // bypassing the blog's client (see TODO). Move it onto clients/folder and
-  // delete this entry.
-  "app/models/template/removeEnabledFromAllTemplates.js",
   // proxy/e2e seed scripts build fixture blogs before any client exists.
   "proxy/e2e/",
 ];
