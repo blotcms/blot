@@ -23,10 +23,6 @@ function folder(folderId, blogID) {
   // content, so change detection never depends on the local file's mtime.
   this.appliedKey = `${PREFIX}${folderId}:applied-modified-time${blogID ? ":" + blogID : ""}`;
 
-  this.migrationCursorKey = `${this.contentKey}:cursor`;
-  this.getMigrationCursor = async () => (await client.get(this.migrationCursorKey)) || "";
-  this.setMigrationCursor = async (path) => client.set(this.migrationCursorKey, path);
-
   // Content verification is independent of mutable metadata written by set().
   // Fetch a directory in one Redis request, rather than one request per file.
   this.getVerifiedContents = async (ids) => {
@@ -264,7 +260,6 @@ function folder(folderId, blogID) {
     if (!preserveVerifiedContent) {
       multi.del(this.contentKey);
       multi.del(this.appliedKey);
-      multi.del(this.migrationCursorKey);
     }
     await multi.exec();
   };
