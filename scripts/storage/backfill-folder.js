@@ -29,6 +29,11 @@
 // - writes a marker for every empty directory on disk which has none;
 // - deletes objects and index records for paths which are not on disk.
 //
+// A blog named by --blog or --dirty which no longer exists (its deletion
+// could not delete its copy) has its whole copy in S3 and any index removed,
+// without the disk, and leaves the dirty set. An existing blog with no folder
+// on disk is skipped, never emptied in S3.
+//
 // --apply and --verify run each blog holding its sync lock (sync/hold.js,
 // which takes the lock as sync() does but does nothing else), so nothing
 // writes the folder meanwhile. Disabled blogs are included. A blog which is
@@ -130,7 +135,7 @@ function newStats() {
 
 // The changes a blog needs, or made
 function differences(stats) {
-  return stats.uploads + stats.markers + stats.deletes + stats.retimed;
+  return stats.uploads + stats.markers + stats.deletes + stats.retimed + (stats.removedObjects || 0);
 }
 
 function ancestorsOf(path) {
@@ -302,6 +307,23 @@ async function backfillBlog(blogID, options) {
   return stats;
 }
 
+// A blog which no longer exists (deleted while a mirror failure left its copy
+// in S3) has no disk or index to compare with, so its whole copy goes:
+// every object under {blogID}/folder/, markers included, and any index left.
+// Resolves to the number of objects there were.
+async function removeDeletedBlog(blogID, apply) {
+  let objects = 0;
+
+  for await (const entry of s3.listEntries(blogID + "/folder/")) if (entry.key) objects++;
+
+  if (apply) {
+    await backend.removeAll(blogID);
+    await client.sRem(DIRTY_KEY, blogID);
+  }
+
+  return objects;
+}
+
 async function blogIDs(options) {
   let ids;
 
@@ -325,7 +347,14 @@ async function run(options) {
   const apply = options.mode === "apply";
   const locked = options.mode !== "dry-run";
   const ids = await blogIDs(options);
-  const totals = Object.assign(newStats(), { blogs: 0, changed: 0, skipped: [], failed: [] });
+  const totals = Object.assign(newStats(), {
+    blogs: 0,
+    changed: 0,
+    skipped: [],
+    failed: [],
+    removedBlogs: 0,
+    removedObjects: 0,
+  });
   const started = Date.now();
 
   log(
@@ -338,7 +367,26 @@ async function run(options) {
     let stats;
 
     try {
-      const work = () => backfillBlog(blogID, { apply: apply, log: log });
+      // Only --blog and --dirty can name a blog which no longer exists
+      if (!(await promisify(Blog.get)({ id: blogID }))) {
+        const objects = await removeDeletedBlog(blogID, apply);
+
+        totals.removedBlogs++;
+        totals.removedObjects += objects;
+        log("[backfill-folder] " + blogID + " deleted blog: " + (apply ? "removed " : "would remove ") + objects + " objects");
+        return;
+      }
+
+      const work = async function () {
+        const result = await backfillBlog(blogID, { apply: apply, log: log });
+
+        // The copy now matches the disk, so the blog no longer needs repair.
+        // Cleared before the lock is released, so a mirror failure in a
+        // sync which runs after this backfill is never erased.
+        if (apply && !result.errors) await client.sRem(DIRTY_KEY, blogID);
+
+        return result;
+      };
 
       stats = locked ? await hold(blogID, work) : await work();
     } catch (err) {
@@ -377,9 +425,6 @@ async function run(options) {
         "errors=" + stats.errors
       );
     }
-
-    // The copy now matches the disk, so the blog no longer needs repair
-    if (apply && !stats.errors) await client.sRem(DIRTY_KEY, blogID);
   }
 
   const pool = createPool(options.concurrency);
@@ -408,6 +453,12 @@ function summarise(totals, options) {
       verb + "delete " + totals.deletes + " paths, " +
       verb + "correct " + totals.retimed + " modified times"
   );
+
+  if (totals.removedBlogs) {
+    lines.push(
+      totals.removedBlogs + " deleted blogs: " + verb + "remove " + totals.removedObjects + " objects left in S3"
+    );
+  }
 
   if (totals.skipped.length) {
     lines.push("");

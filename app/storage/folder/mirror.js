@@ -21,7 +21,9 @@ var { NotFoundError } = require("./errors");
 // - mkdir writes the directory's marker; remove and rmdir delete the path.
 // - move is copy plus delete in S3. If S3 does not have the source (a blog
 //   mirrored before its backfill), the destination is uploaded from disk.
-// - removeAll deletes the blog's folder in S3 and its index.
+// - removeAll deletes the blog's folder in S3 and its index. If that fails,
+//   the blog is flagged like any other failure, and the backfill's --dirty
+//   run removes the copy of a blog which no longer exists.
 //
 // A mirror failure never fails the caller: the change is on disk, which is
 // what counts. It is logged with the prefix below and the blog is added to
@@ -194,7 +196,7 @@ var OPERATIONS = {
   },
 };
 
-function describe(value) {
+function quote(value) {
   return typeof value === "string" ? JSON.stringify(value) : String(value);
 }
 
@@ -224,7 +226,7 @@ async function mirror(op, args) {
 
     await OPERATIONS[op].apply(null, args);
   } catch (err) {
-    var paths = Array.prototype.slice.call(args, 1, op === "move" ? 3 : 2).map(describe);
+    var paths = Array.prototype.slice.call(args, 1, op === "move" ? 3 : 2).map(quote);
 
     console.error(
       clfdate(),

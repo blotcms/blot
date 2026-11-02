@@ -585,6 +585,8 @@ records for paths no longer on disk. `--dry-run` (the default) reports,
 (blogs at once) choose what to run over. `--apply` and `--verify` run each
 blog holding its sync lock (`app/sync/hold.js`: the lock as `sync()` takes
 it, and nothing else, so disabled blogs are included) and skip a locked
-blog, to retry with `--blog`; a blog applied without errors leaves the dirty set. It is safe to
+blog, to retry with `--blog`; a blog applied without errors leaves the dirty set, before its
+lock is released. A blog in the dirty set (or named by `--blog`) which no
+longer exists has its whole copy removed: its deletion could not remove it. It is safe to
 rerun. Turn mirroring on for a blog before its backfill, so nothing written
 in between is missed.

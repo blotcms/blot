@@ -8,6 +8,10 @@ describe("scripts/storage/backfill-folder", function () {
   var File = require("models/file");
   var client = require("models/client");
   var folderLock = require("sync/lock");
+  var config = require("config");
+  var { promisify } = require("util");
+  var Blog = require("models/blog");
+  var folder = require("storage/folder");
   var { run, exitCode } = require("../backfill-folder");
 
   global.test.blog();
@@ -148,6 +152,77 @@ describe("scripts/storage/backfill-folder", function () {
     expect(totals.skipped).toEqual([]);
     expect(totals.errors).toEqual(0);
     expect(await keys(this.blog.id)).toEqual(["/a.txt", "/empty/", "/posts/2024/b.md"]);
+  });
+
+  it("clears the dirty flag before releasing the lock", async function () {
+    var blogID = this.blog.id;
+    var lock = folderLock.lock;
+    var clearedBeforeRelease;
+
+    await client.sAdd(mirror.DIRTY_KEY, blogID);
+
+    // As the lock goes, check the flag is already clear, then flag the blog
+    // again as a sync's failed mirror would once it takes the lock
+    spyOn(folderLock, "lock").and.callFake(async function () {
+      var held = await lock.apply(folderLock, arguments);
+
+      return Object.assign({}, held, {
+        release: async function () {
+          clearedBeforeRelease = !(await client.sIsMember(mirror.DIRTY_KEY, blogID));
+          await held.release();
+          await client.sAdd(mirror.DIRTY_KEY, blogID);
+        },
+      });
+    });
+
+    await backfill(blogID, "apply");
+
+    expect(clearedBeforeRelease).toBe(true);
+    expect(await client.sIsMember(mirror.DIRTY_KEY, blogID)).toBeTruthy();
+  });
+
+  it("removes the copy of a blog deleted while S3 failed", async function () {
+    var blogID = this.blog.id;
+    var saved = config.folder_mirror;
+    var removePrefix = s3.removePrefix;
+
+    config.folder_mirror = blogID;
+
+    try {
+      await folder.write(blogID, "/mirrored/a.txt", "a");
+      await folder.mkdir(blogID, "/mirrored/empty");
+
+      // Only the folder's copy fails to go, so the rest of the deletion runs
+      spyOn(s3, "removePrefix").and.callFake(function (prefix) {
+        if (prefix === blogID + "/folder/") return Promise.reject(new Error("S3 is down"));
+        return removePrefix.apply(s3, arguments);
+      });
+      spyOn(console, "error");
+
+      await promisify(Blog.remove)(blogID);
+    } finally {
+      config.folder_mirror = saved;
+    }
+
+    s3.removePrefix.and.callFake(removePrefix);
+
+    expect(await promisify(Blog.get)({ id: blogID })).toBeFalsy();
+    expect(await client.sIsMember(mirror.DIRTY_KEY, blogID)).toBeTruthy();
+    expect((await keys(blogID)).length).toBeGreaterThan(0);
+
+    var dry = await backfill(blogID, "dry-run");
+
+    expect(dry.removedBlogs).toEqual(1);
+    expect(dry.removedObjects).toEqual((await keys(blogID)).length);
+    expect(exitCode(dry, { mode: "verify" })).toEqual(1);
+
+    var totals = await backfill(blogID, "apply");
+
+    expect(totals.errors).toEqual(0);
+    expect(totals.removedBlogs).toEqual(1);
+    expect(await keys(blogID)).toEqual([]);
+    expect(await File.totals(blogID)).toEqual({ bytes: 0, files: 0 });
+    expect(await client.sIsMember(mirror.DIRTY_KEY, blogID)).toBeFalsy();
   });
 
   it("skips a blog whose sync lock is held", async function () {
