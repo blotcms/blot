@@ -153,7 +153,7 @@ Every push and every one of Blot's commits adds a pack and a history piece. A cl
 
 **Rerunning, and readers in flight.** Packs are named by their checksum, and `pack-objects` with one thread writes the same pack from the same inputs, so a run after a crash between the uploads and the swap uploads the same bytes to the same keys, which is harmless. Nothing here deletes anything: a clone or fetch that read the old manifest keeps reading the old packs, which are still there until the sweep, days later, finds no kept manifest names them.
 
-**A push racing a compaction.** `receive` reads the newest manifest just before its swap. A compaction that lands between that read and the push's conditional create makes the push's swap stale, and `receive` refuses the push today, as it does for any manifest that moves under it; the window is the swap itself, short, and the user is told to try again. Blot's commits retry. Making `receive` rebuild on the newer manifest when only packs moved is separate work.
+**A push racing a compaction.** `receive` reads the newest manifest just before its swap. A compaction that lands between that read and the push's conditional create makes the push's swap stale, and `receive` builds its manifest again on the newer one and retries, since compaction never moves refs (see *Receiving a push*). Blot's commits retry too.
 
 **Cost.** A run with nothing to do is a manifest read. Otherwise it is a GET of each input's `.pack` and `.idx` (and the history pack and pieces when they are merged), three PUTs for the merged pack, two for the history pack, and the swap (the conditional create and the hint). In bytes it reads and writes the packs it merges, which the geometric split keeps to the small ones: on the synthetic repository above, compacting after every push rewrote about 12 MB over 300 pushes (about 40 KB a push, for a repository of 3.5 MB), and took 28 ms a run on average (at most 260 ms). The merged inputs stay in the store until the sweep deletes them.
 
@@ -237,4 +237,4 @@ Reads are bounded. Ranged reads are at most the caller's range (merged reads are
 
 ## Not here yet
 
-Calling `compact` from the host after pushes and `sweep` on a schedule, the verifier (which checks, in shadow mode, that every pack a manifest names is there), `receive` retrying a swap lost to a compaction, a multi-pack index for repositories left with dozens of large packs (see *Compaction*), and the rewrite script. They build on the pieces above. Cache keys include the object store's `id`, so one cache can serve many repositories.
+Calling `compact` from the host after pushes and `sweep` on a schedule, the verifier (which checks, in shadow mode, that every pack a manifest names is there), a multi-pack index for repositories left with dozens of large packs (see *Compaction*), and the rewrite script. They build on the pieces above. Cache keys include the object store's `id`, so one cache can serve many repositories.
