@@ -123,6 +123,11 @@ const JOBS = {
   // the unit's browser cgroup: that cgroup's limits replace memoryBytes, and
   // one job at a time keeps a heavy page's memory to itself. A job with a
   // network runs in one of its cgroups, which holds one jail at a time.
+  // A job is a batch of up to 8 pages taken one after the other in that one
+  // Chromium (app/sandbox/jobs/screenshot.js). A page takes 25s at worst, so
+  // 8 of them could not fit anywhere: the job stops starting pages 90s in and
+  // hands the rest back to be sent again, so this is the backstop, not the
+  // plan. Its replies are at most 56 MiB of PNGs.
   screenshot: {
     command: [
       "/usr/local/bin/node",
@@ -131,9 +136,9 @@ const JOBS = {
     ],
     network: true,
     cgroups: [BROWSER_CGROUP],
-    timeSeconds: 30,
+    timeSeconds: 100,
     maxInputBytes: 64 * 1024,
-    maxOutputBytes: 32 * MiB,
+    maxOutputBytes: 60 * MiB,
   },
   // Fetches one image from a URL and re-encodes it (remote images in posts,
   // helper/transformer/download), behind the egress filter like the browser

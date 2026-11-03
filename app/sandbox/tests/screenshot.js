@@ -70,6 +70,122 @@ describe("sandbox screenshot job", function () {
       expect(info.icc).toBeUndefined();
     }, SLOW);
 
+    describe("a batch", function () {
+      const sharp = require("sharp");
+      const job = require("../jobs/screenshot");
+      const { execSync } = require("child_process");
+
+      const pngSize = async (png) => {
+        const info = await sharp(png).metadata();
+        return [info.width, info.height];
+      };
+
+      // Chromium is this process's child
+      const killChromium = () => {
+        try {
+          const pids = execSync(`pgrep -P ${process.pid}`).toString().split("\n").filter(Boolean);
+          for (const pid of pids) {
+            try { process.kill(Number(pid), "SIGKILL"); } catch (e) {}
+          }
+        } catch (e) {}
+      };
+
+      let killer;
+      beforeAll(function () {
+        killer = http.createServer((req, res) => {
+          if (req.url === "/kill") return killChromium();
+          res.setHeader("Content-Type", "text/html");
+          res.end("<h1>Hello</h1>");
+        });
+        return new Promise((resolve) => killer.listen(0, "127.0.0.1", resolve));
+      });
+      afterAll(function (done) {
+        killer.close(done);
+      });
+
+      const closedPort = async () => {
+        const closed = http.createServer();
+        await new Promise((resolve) => closed.listen(0, "127.0.0.1", resolve));
+        const { port } = closed.address();
+        await new Promise((resolve) => closed.close(resolve));
+        return `http://127.0.0.1:${port}/`;
+      };
+
+      it("returns one PNG per page, in order", async function () {
+        const { meta, outputs } = await sandbox.run(
+          "screenshot",
+          { pages: [{ url, width: 300, height: 200 }, { url, width: 100, height: 50 }, { url: "about:blank", width: 200, height: 100 }] },
+          empty
+        );
+        expect(meta.results).toEqual([{}, {}, {}]);
+        expect(await Promise.all(outputs.map(pngSize))).toEqual([[600, 400], [200, 100], [400, 200]]);
+      }, SLOW);
+
+      it("keeps one page's failure to itself", async function () {
+        const { meta, outputs } = await sandbox.run(
+          "screenshot",
+          { pages: [{ url }, { url: await closedPort() }, { url: "file:///etc/passwd" }, { url, width: 100000 }, { url }] },
+          empty
+        );
+        expect(meta.results[0]).toEqual({});
+        expect(meta.results[1].error).toMatch(/ERR_CONNECTION_REFUSED/);
+        expect(meta.results[1].retryable).toBe(true);
+        expect(meta.results[2]).toEqual({ error: "URL is not allowed", retryable: false });
+        expect(meta.results[3].error).toBe("invalid dimension");
+        expect(meta.results[3].retryable).toBe(false);
+        expect(meta.results[4]).toEqual({});
+        expect(outputs.map((o) => o.length > 0)).toEqual([true, false, false, false, true]);
+      }, SLOW);
+
+      it("takes no more than 8 pages, and at least one", async function () {
+        const nine = Array.from({ length: 9 }, () => ({ url: "about:blank" }));
+        for (const pages of [[], nine, "x"]) {
+          const { meta, outputs } = await sandbox.run("screenshot", { pages }, empty);
+          expect(meta.error).toBeDefined();
+          expect(meta.retryable).toBe(false);
+          expect(outputs).toEqual([]);
+        }
+      });
+
+      it("gives what finished and defers the rest when Chromium dies", async function () {
+        const base = `http://127.0.0.1:${killer.address().port}`;
+        const { meta, outputs } = await sandbox.run(
+          "screenshot",
+          { pages: [{ url: base + "/" }, { url: base + "/kill" }, { url: base + "/" }] },
+          empty
+        );
+        expect(meta.results[0]).toEqual({});
+        expect(outputs[0].subarray(0, 8).equals(PNG)).toBe(true);
+        expect(meta.results[1].retryable).toBe(true);
+        expect(meta.results[1].deferred).toBeUndefined();
+        expect(meta.results[2].deferred).toBe(true);
+        expect(meta.results[2].retryable).toBe(true);
+        expect(outputs[2].length).toBe(0);
+      }, SLOW);
+
+      describe("out of room", function () {
+        let before;
+        beforeEach(function () { before = { ...job.limits }; });
+        afterEach(function () { Object.assign(job.limits, before); });
+
+        it("defers the pages it hasn't time for, never the first", async function () {
+          job.limits.batchBudget = 1;
+          const { meta } = await sandbox.run("screenshot", { pages: [{ url }, { url }, { url }] }, empty);
+          expect(meta.results[0]).toEqual({});
+          expect(meta.results[1].deferred).toBe(true);
+          expect(meta.results[2].deferred).toBe(true);
+        }, SLOW);
+
+        it("defers the pages that wouldn't fit in the reply, never the first", async function () {
+          job.limits.maxOutputBytes = 1;
+          const { meta, outputs } = await sandbox.run("screenshot", { pages: [{ url }, { url }] }, empty);
+          expect(meta.results[0]).toEqual({});
+          expect(outputs[0].length).toBeGreaterThan(1);
+          expect(meta.results[1].deferred).toBe(true);
+        }, SLOW);
+      });
+    });
+
     describe("re-encoding", function () {
       const sharp = require("sharp");
       const { reencode } = require("../jobs/screenshot");
@@ -184,21 +300,161 @@ describe("sandbox screenshot job", function () {
 
     it("asks for the job, and writes what comes back", async function () {
       const png = Buffer.concat([PNG, Buffer.from("rest")]);
-      const run = spyOn(sandbox, "run").and.returnValue(Promise.resolve({ meta: {}, outputs: [png] }));
+      const run = spyOn(sandbox, "run").and.returnValue(Promise.resolve({ meta: { results: [{}] }, outputs: [png] }));
 
       await screenshot("https://example.com", target, { width: 10, height: 20, untrusted: true });
 
       expect(run.calls.first().args.slice(0, 2)).toEqual([
         "screenshot",
-        { url: "https://example.com", width: 10, height: 20, mobile: false },
+        { pages: [{ url: "https://example.com", width: 10, height: 20, mobile: false }] },
       ]);
       expect((await fs.readFile(target)).equals(png)).toBe(true);
     });
 
+    describe("batching", function () {
+      const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const png = (label) => Buffer.concat([PNG, Buffer.from(label)]);
+      const ok = (labels) => ({
+        meta: { results: labels.map(() => ({})) },
+        outputs: labels.map(png),
+      });
+      const file = (name) => path.join(directory, name + ".png");
+      const urls = (call) => (call.args || call)[1].pages.map((p) => p.url);
+
+      it("sends requests that arrive together as one job and writes each its own", async function () {
+        const run = spyOn(sandbox, "run").and.callFake(async (name, args) =>
+          ok(args.pages.map((p) => p.url))
+        );
+
+        await Promise.all(["a", "b", "c"].map((n) => screenshot("https://" + n, file(n))));
+
+        expect(run).toHaveBeenCalledTimes(1);
+        expect(urls(run.calls.first())).toEqual(["https://a", "https://b", "https://c"]);
+        for (const n of ["a", "b", "c"]) {
+          expect((await fs.readFile(file(n))).equals(png("https://" + n))).toBe(true);
+        }
+      });
+
+      it("sends a lone request after the window, not much later", async function () {
+        const run = spyOn(sandbox, "run").and.callFake(async (name, args) =>
+          ok(args.pages.map((p) => p.url))
+        );
+        const started = Date.now();
+        await screenshot("https://a", file("a"));
+        expect(Date.now() - started).toBeLessThan(screenshot.COALESCE_MS + 500);
+        expect(run).toHaveBeenCalledTimes(1);
+      });
+
+      it("sends a full batch at once and the rest in the next", async function () {
+        const run = spyOn(sandbox, "run").and.callFake(async (name, args) =>
+          ok(args.pages.map((p) => p.url))
+        );
+        const names = Array.from({ length: screenshot.BATCH_MAX + 2 }, (_, i) => "p" + i);
+        await Promise.all(names.map((n) => screenshot("https://" + n, file(n))));
+
+        expect(run).toHaveBeenCalledTimes(2);
+        expect(run.calls.argsFor(0)[1].pages.length).toBe(screenshot.BATCH_MAX);
+        expect(urls(run.calls.argsFor(1))).toEqual(["https://p8", "https://p9"]);
+      });
+
+      it("collects what arrives while a batch runs, and sends it when that is done", async function () {
+        let release;
+        const first = new Promise((resolve) => (release = resolve));
+        const run = spyOn(sandbox, "run").and.callFake(async (name, args) => {
+          if (run.calls.count() === 1) await first;
+          return ok(args.pages.map((p) => p.url));
+        });
+
+        const a = screenshot("https://a", file("a"));
+        await wait(screenshot.COALESCE_MS + 100);
+        expect(run).toHaveBeenCalledTimes(1);
+
+        const later = [screenshot("https://b", file("b")), screenshot("https://c", file("c"))];
+        await wait(screenshot.COALESCE_MS + 100);
+        expect(run).toHaveBeenCalledTimes(1);
+
+        release();
+        await Promise.all([a, ...later]);
+        expect(run).toHaveBeenCalledTimes(2);
+        expect(urls(run.calls.argsFor(1))).toEqual(["https://b", "https://c"]);
+      });
+
+      it("keeps a page's failure to itself, and retries only what can change", async function () {
+        const run = spyOn(sandbox, "run").and.callFake(async (name, args) => {
+          const results = args.pages.map((p) => {
+            if (p.url === "https://gone") return { error: "net::ERR_NAME_NOT_RESOLVED", retryable: false };
+            if (p.url === "https://flaky" && run.calls.count() === 1) return { error: "reset", retryable: true };
+            return {};
+          });
+          return { meta: { results }, outputs: args.pages.map((p, i) => (results[i].error ? empty : png(p.url))) };
+        });
+
+        const outcomes = await Promise.all([
+          screenshot("https://good", file("good")).then(() => "ok", (e) => e.message),
+          screenshot("https://gone", file("gone")).then(() => "ok", (e) => e.message),
+          screenshot("https://flaky", file("flaky")).then(() => "ok", (e) => e.message),
+        ]);
+
+        expect(outcomes[0]).toBe("ok");
+        expect(outcomes[1]).toMatch(/ERR_NAME_NOT_RESOLVED/);
+        expect(outcomes[2]).toBe("ok");
+        expect(await fs.pathExists(file("gone"))).toBe(false);
+        // The batch, then flaky again alone
+        expect(run).toHaveBeenCalledTimes(2);
+        expect(urls(run.calls.argsFor(1))).toEqual(["https://flaky"]);
+      }, 10000);
+
+      it("sends pages the job didn't reach in the next batch, without a failed attempt", async function () {
+        const run = spyOn(sandbox, "run").and.callFake(async (name, args) => {
+          if (run.calls.count() <= 3) {
+            // only the first of the pages each time
+            return {
+              meta: { results: args.pages.map((p, i) => (i ? { error: "late", retryable: true, deferred: true } : {})) },
+              outputs: args.pages.map((p, i) => (i ? empty : png(p.url))),
+            };
+          }
+          return ok(args.pages.map((p) => p.url));
+        });
+
+        await Promise.all(["a", "b", "c", "d", "e"].map((n) => screenshot("https://" + n, file(n))));
+        // 3 passes where one page was done each, then the last two together
+        expect(run).toHaveBeenCalledTimes(4);
+        for (const n of ["a", "b", "c", "d", "e"]) expect(await fs.pathExists(file(n))).toBe(true);
+      }, 10000);
+
+      ["SANDBOX_KILLED", "SANDBOX_TIMEOUT"].forEach(function (code) {
+        it("sends each page alone when a batch ends in " + code, async function () {
+          const heavy = "https://heavy";
+          const run = spyOn(sandbox, "run").and.callFake(async (name, args) => {
+            if (args.pages.length > 1 || args.pages[0].url === heavy) {
+              throw Object.assign(new Error("sandbox: page"), { code });
+            }
+            return ok(args.pages.map((p) => p.url));
+          });
+
+          const outcomes = await Promise.all([
+            screenshot("https://a", file("a")).then(() => "ok", () => "failed"),
+            screenshot(heavy, file("heavy")).then(() => "ok", () => "failed"),
+            screenshot("https://b", file("b")).then(() => "ok", () => "failed"),
+          ]);
+
+          // Only the heavy page pays, and it isn't tried again
+          expect(outcomes).toEqual(["ok", "failed", "ok"]);
+          expect(run).toHaveBeenCalledTimes(4);
+          expect(run.calls.argsFor(0)[1].pages.length).toBe(3);
+          expect(run.calls.allArgs().slice(1).map((a) => urls({ args: a }))).toEqual([
+            ["https://a"],
+            [heavy],
+            ["https://b"],
+          ]);
+        });
+      });
+    });
+
     it("doesn't retry a page the job says won't change", async function () {
       const run = spyOn(sandbox, "run").and.returnValue(Promise.resolve({
-        meta: { error: "net::ERR_NAME_NOT_RESOLVED", retryable: false },
-        outputs: [],
+        meta: { results: [{ error: "net::ERR_NAME_NOT_RESOLVED", retryable: false }] },
+        outputs: [empty],
       }));
 
       expect((await rejection(screenshot("https://nope.example", target))).message).toMatch(
@@ -220,7 +476,7 @@ describe("sandbox screenshot job", function () {
 
     it("writes nothing that isn't a PNG", async function () {
       spyOn(sandbox, "run").and.returnValue(Promise.resolve({
-        meta: {},
+        meta: { results: [{}] },
         outputs: [Buffer.from("<script>alert(1)</script>")],
       }));
 

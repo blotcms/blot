@@ -228,8 +228,16 @@ async function sandboxBrowserWorks() {
   const sandbox = require("../../../app/sandbox");
   const empty = Buffer.alloc(0);
 
-  const blank = await sandbox.run("screenshot", { url: "about:blank" }, empty);
-  if (!blank.outputs.length) throw new Error(`no screenshot: ${blank.meta.error}`);
+  // Two pages, as a batch: both must come back
+  const blank = await sandbox.run(
+    "screenshot",
+    { pages: [{ url: "about:blank" }, { url: "about:blank", mobile: true }] },
+    empty
+  );
+  const results = (blank.meta && blank.meta.results) || [];
+  if (results.length !== 2 || results.some((r) => r.error) || blank.outputs.some((o) => !o.length)) {
+    throw new Error(`no screenshots: ${JSON.stringify(blank.meta)}`);
+  }
 
   const metadata = await sandbox.run(
     "screenshot",

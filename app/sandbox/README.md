@@ -177,6 +177,15 @@ container went (#2257) production has no other browser. Every URL is treated as 
 customer sites run their own template code. The job starts its own Chromium, driven
 over a pipe so there is no DevTools port, and all of it goes when the job ends.
 
+**A job is a batch of up to 8 pages**, taken one after the other in one Chromium, each in a fresh incognito context.
+A job costs about 2.1 s before it touches a page (jail, Chromium, re-encode; measured on production, 3 Nov 2026), and
+a batch pays it once. Pages from different sites and customers share a batch on purpose. This accepts that a hostile
+page that compromises Chromium (`--no-sandbox` inside the jail) can tamper with or break the other screenshots of its
+batch, and that one heavy page can kill its batch (`helper/screenshot` then retries each page alone). The host is
+protected by the jail boundary itself: no secrets or env vars, no data mount, the egress filter, no capabilities,
+seccomp. That is the same for one page or eight. The rule: keep the boundary intact above all; isolation between
+jobs inside one jail is not a goal, so don't split batches by site or customer.
+
 `fetch-image` and `fetch` fetch with Node's `http` and `https`, not through the
 proxy jail: their own jail is behind the same filter.
 
@@ -235,16 +244,37 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   `socket` allowed for Unix, IPv4, IPv6 and the two netlink protocols nft uses.
 
 - **The PNG is re-encoded in the jail.** Chromium's bytes come from a process that
-  ran a hostile page, so once Chromium has exited the job decodes them with sharp
-  and returns the PNG sharp writes: no ancillary chunks or metadata, and no bigger
-  than the viewport in screen pixels (width and height times the device scale
-  factor of 2). Sharp runs after the browser has closed, so Chromium's memory and
-  sharp's are never held together; for a 1260×778 @2x shot it takes about 10 ms
-  and adds about 10 MiB, nothing next to the browser's. Bytes that don't decode
-  fail the job. Node still checks the PNG signature before writing them.
+  ran a hostile page, so the job decodes them with sharp and returns the PNG sharp
+  writes: no ancillary chunks or metadata, and no bigger than the viewport in
+  screen pixels (width and height times the device scale factor of 2). In a batch
+  this happens right after each page, with its context closed and Chromium idle,
+  so only one raw PNG is held at a time; for a 1260×778 @2x shot it takes about
+  10 ms and adds about 10 MiB, nothing next to the browser's. Bytes that don't
+  decode fail that page. Node still checks the PNG signature before writing them.
+- **A batch has limits of its own.** Args are `{ pages: [{ url, width, height, mobile }] }`,
+  1 to 8 pages (the single-page form still works). A page keeps its limits
+  (HTML 10 s, render grace 8 s, screenshot 5 s, closing 3 s: 26 s at worst), so 8 hostile
+  pages could not fit in any limit the client would wait for. The job therefore
+  stops starting pages 90 s in, and a page it didn't reach, or whose PNG would
+  take the replies past 56 MiB, comes back `deferred` for the client to send
+  again in a later batch (without counting as a failed attempt). The jail's limit
+  is 100 s, the backstop, and the client waits 170 s (a minute queued, then a
+  job). If Chromium dies mid-batch the pages done are returned and the rest are
+  deferred. If the job as a whole is killed (the 1 GiB browser cgroup's OOM kill
+  takes the group) or times out, `helper/screenshot` sends each page of that
+  batch on its own, so a heavy page costs only itself.
+- **`helper/screenshot` coalesces requests** from every caller (bookmark links,
+  the template gallery): a request waits at most 150 ms for company, a batch
+  goes at 8, only one batch is out at a time per process, and what arrives
+  while it runs goes out as soon as it is done. A lone request is delayed
+  150 ms. The retry (3 attempts, 1 s apart) is per page and re-batched.
+- **What a batch costs.** Starting the jail, Chromium and the re-encode takes
+  about 2.1 s per job on production (`about:blank`, measured 3 Nov 2026), and
+  a real page 2.7-7 s per job. A batch pays the 2.1 s once, so each page after
+  the first in a batch saves about that much.
 
-A page that can't be screenshotted comes back as `meta.error`; only a broken job
-is a job failure.
+A page that can't be screenshotted comes back as its entry in `meta.results` (`error`
+and `retryable`); only a broken job is a job failure.
 
 ## The proxy jail
 
