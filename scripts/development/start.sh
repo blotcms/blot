@@ -18,7 +18,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && cd ../../ && pwd)"
 set -a; . "$DIR/config/versions.env"; set +a
 
 # Files
-SETUP="$DIR/scripts/development/proxy/setup.sh"
+SETUP="$DIR/scripts/development/setup-certs.sh"
 COMPOSE_FILE="$DIR/scripts/development/docker-compose.yml"
 AGENTATION="$DIR/scripts/development/agentation/run.sh"
 FOLDER_SERVER="$DIR/scripts/development/open-folder-server.js"
@@ -121,6 +121,17 @@ fi
 echo "[start] Pruning dangling Docker images and week-old build cache"
 docker image prune -f >/dev/null 2>&1 || true
 docker builder prune -f --filter until=168h >/dev/null 2>&1 || true
+
+# node-app (Dockerfile target dev-unit) takes OpenResty from this image: the
+# proxy image without its generated config. Compiling OpenResty takes a few
+# minutes the first time; after that the build is cached. image.sh passes the
+# versions in config/versions.env as build args.
+echo "[start] Building the OpenResty runtime image"
+(cd "$DIR" && bash proxy/build/image.sh blot-proxy-runtime -q --target runtime) >/dev/null
+
+# Agentation's hooks for the proxy; empty until it fills them
+mkdir -p "$DIR/scripts/development/agentation/generated/openresty" \
+  "$DIR/scripts/development/agentation/generated/dist"
 
 STACK_STARTED=1
 compose up --build -d

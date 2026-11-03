@@ -119,6 +119,7 @@ describe("proxy config locals", function () {
     ["every optional env set", ALL_OPTIONAL],
     ["logging to files", { LOG_TO_STDOUT: "false" }],
     ["without reuseport", { ENABLE_REUSEPORT: "false" }],
+    ["for local development", { LOCAL_DEVELOPMENT: "true" }],
   ].forEach(([description, env]) => {
     it(`every variable the templates read has a value (${description})`, function () {
       const partials = readPartials(directory);

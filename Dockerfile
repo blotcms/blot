@@ -376,3 +376,41 @@ EXPOSE 80 443
 
 # tini (the base image's entrypoint) is PID 1; it runs the supervisor
 CMD ["/usr/local/bin/unit-supervisor"]
+
+## Stage 8 (dev-unit; local development only)
+# What scripts/development/docker-compose.yml runs as node-app: the `dev` image
+# plus the unit's OpenResty, so local.blot is served by the production proxy
+# config. Source, proxy/ included, is bind mounted as for `dev`;
+# scripts/development/unit/start.sh renders the config from proxy/config and
+# runs the supervisor from proxy/unit, so editing either needs only a restart.
+# OpenResty comes from proxy/Dockerfile's `runtime` stage, the proxy image
+# without its generated config, which scripts/development/start.sh builds and
+# tags blot-proxy-runtime. The sandbox is left out: it is off in development.
+FROM blot-proxy-runtime AS proxy-runtime
+
+FROM dev AS dev-unit
+
+# The unit stage's runtime packages and user (see there). The dev image has no
+# USER, so git is configured again for ec2-user, who runs node-a; bind mounts
+# can be owned by anyone, hence the wildcard safe.directory.
+RUN apk add --no-cache bash openssl gettext brotli findutils libgcc zlib su-exec \
+ && deluser node \
+ && addgroup -g 1000 ec2-user \
+ && adduser -S -u 1000 -G ec2-user -h /home/node -H ec2-user \
+ && su-exec ec2-user git config --global --add safe.directory '*' \
+ && su-exec ec2-user git config --global user.email "you@example.com" \
+ && su-exec ec2-user git config --global user.name "Your Name"
+
+COPY --from=proxy-runtime /usr/local/openresty /usr/local/openresty
+COPY --from=proxy-runtime /usr/bin/resty-auto-ssl /usr/bin/resty-auto-ssl
+COPY --from=proxy-runtime /usr/local/bin/render-config /usr/local/bin/diskcache-evict /usr/local/bin/proxy-start /usr/local/bin/
+ENV PATH=$PATH:/usr/local/openresty/luajit/bin:/usr/local/openresty/nginx/sbin:/usr/local/openresty/bin
+
+RUN mkdir -p /etc/openresty /etc/ssl/private /etc/resty-auto-ssl/storage /etc/resty-auto-ssl/letsencrypt/conf \
+    /var/log/openresty /var/cache/openresty /run/openresty /run/blot \
+ && chmod 755 /etc/resty-auto-ssl \
+ && chown -R ec2-user:ec2-user /etc/resty-auto-ssl /var/log/openresty /var/cache/openresty /run/blot
+
+EXPOSE 80 443
+
+CMD ["/usr/src/app/scripts/development/unit/start.sh"]
