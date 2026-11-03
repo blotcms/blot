@@ -63,7 +63,7 @@ Paging through the path set instead needs no new key, but a directory's children
 
 Names sets came after the rest of the index, so a directory may lack one. `list` then reads its hash whole and sorts it, as every listing did before. Only a writer, under the sync lock, makes a names set: when `setMany` adds a name to a directory without one, it builds the whole set from the hash in the same exec, so a names set that exists is always complete. A remove never creates one (`ZREM` of a missing key does nothing). `addMissingNames(blogID, { apply })` builds the rest, from `scripts/storage/add-file-index-names.js`, which holds each blog's sync lock while it does.
 
-Memory: a names set holds each name once more, beside its field in the hash and its full path in the path set. A small directory's set is a listpack, a few bytes over the names; above `zset-max-listpack-entries` (128 by default) it is a skiplist, roughly 80 bytes per name on top of the name itself.
+Memory: a names set holds each name once more, beside its field in the hash and its full path in the path set. A small directory's set is a ziplist, a few bytes per name over the names themselves, plus the key; above `zset-max-ziplist-entries` (128 by default, Redis 6.2) or with a name over 64 bytes it is a skiplist, roughly 90 to 100 bytes per name on top of the name. Against an index of about 250 bytes per path, that is roughly a tenth to a fifth more for most folders.
 
 ---
 
