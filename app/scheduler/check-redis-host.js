@@ -1,11 +1,13 @@
-// Warns the operator before the Redis host hits a limit (blotcms/blot#2041):
+// Warns the operator before Redis or the host it runs on hits a limit
+// (blotcms/blot#2041, #2261):
 //
 // - The kernel's TCP memory count nearing tcp_mem[1], where TCP memory
 //   pressure starts. A kernel bug once leaked this count upwards until bursts
-//   to Redis were dropped. Only the Redis host can read the count, so its
-//   5-minute cron (config/redis/bin/tcpmem-log.sh) stores each sample in Redis
-//   at SAMPLE_KEY, and this check reads it. The count and the RAM and disk
-//   fields describe the whole host, which on a combined host the units share.
+//   to Redis were dropped; on the combined host it is mostly the proxy's
+//   sockets. The host's 5-minute cron (config/redis/bin/tcpmem-log.sh) stores
+//   each sample in Redis at SAMPLE_KEY, and this check reads it, since the
+//   units run in containers. The count and the RAM and disk fields describe
+//   the whole host.
 //   A sample that stops arriving means that monitoring stopped, which is
 //   alerted too.
 // - A stale backup: backup.sh (config/redis/bin) records each upload at
@@ -20,7 +22,7 @@
 // - The memory available on the machine this check runs on staying under
 //   HOST_MEMORY_ALERT of its total (blotcms/blot#2261). It is read from
 //   /proc/meminfo by whichever process wins the scheduled run (host-memory.js),
-//   so it describes the app host, which also runs Redis once they share one.
+//   so it describes the host, which also runs Redis.
 //   A reading under the limit must hold for HOST_MEMORY_CHECKS runs in a row
 //   before it is emailed.
 // - A failed background save. Redis keeps taking writes
@@ -479,7 +481,7 @@ async function check(deps = {}) {
 function eventMessage(type, data, report) {
   switch (type) {
     case "tcp-pressure":
-      return `TCPMemoryPressures rose from ${data.from} to ${data.to} on ${data.host || "an unknown host"}: the kernel was rationing TCP buffers, so bursts to Redis may have been dropped`;
+      return `TCPMemoryPressures rose from ${data.from} to ${data.to} on ${data.host || "an unknown host"}: the kernel was rationing TCP buffers, so bursts of traffic to the host may have been dropped`;
     case "errors-critical":
       return `new errors that mean Redis refused writes: ${counts(data.counts)}. OOM is the maxmemory limit (\`noeviction\`), MISCONF a failed background save (\`stop-writes-on-bgsave-error yes\`), NOREPLICAS fewer replicas than \`min-replicas-to-write\``;
     case "errors":
@@ -525,7 +527,7 @@ function message(name, report) {
         (backupAge === null
           ? `the last backup recorded in \`${BACKUP_KEY}\` can't be read`
           : `the last backup was ${duration(backupAge)} ago`) +
-        " (they run hourly). Look at `~/backup.log` on the Redis host: the upload to S3, or `backup.sh` skipping " +
+        " (they run hourly). Look at `~/backup.log` on the host: the upload to S3, or `backup.sh` skipping " +
         `(drill host, not the active host); see [config/redis/README.md](${README_URL})`
       );
     }
@@ -535,7 +537,7 @@ function message(name, report) {
         (backupAge === null
           ? `the last offsite backup recorded in \`${OFFSITE_KEY}\` can't be read`
           : `the last offsite backup (to Backblaze B2) was ${duration(backupAge)} ago`) +
-        " (it runs daily at 03:05). Look at `~/backup.log` on the Redis host, the `blot-b2` profile in `~ec2-user/.aws`, " +
+        " (it runs daily at 03:05). Look at `~/backup.log` on the host, the `blot-b2` profile in `~ec2-user/.aws`, " +
         "B2 itself and `/etc/blot-redis/offsite-bucket`. This does not mean the S3 backups stopped; " +
         `see [config/redis/README.md](${README_URL})`
       );
@@ -554,7 +556,7 @@ function message(name, report) {
       return (
         `the last background save failed (\`rdb_last_bgsave_status:${redis.saveStatus}\`). ` +
         "**Urgent:** Redis keeps taking writes (`stop-writes-on-bgsave-error no`), but nothing new reaches disk " +
-        "until a save succeeds, so a restart would lose what was written since the last good save. On the Redis host check " +
+        "until a save succeeds, so a restart would lose what was written since the last good save. On the host check " +
         "disk space on `/var/lib/redis6` (`df -h`), the reason in `/var/log/redis6/redis6.log`, and memory " +
         "(a save that cannot fork means RAM is short or `vm.overcommit_memory` is not 1); see " +
         `[config/redis/README.md](${README_URL})`

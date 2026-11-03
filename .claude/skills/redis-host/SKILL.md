@@ -31,7 +31,7 @@ TCP memory background) and `investigate-slow-upstream-responses`.
    covers that command only, not the next one, not "the same kind of thing",
    and not what other skills auto-approve. Read-only AWS `describe-*` / `ls`
    calls are fine without asking, but say what you ran.
-2. **Use `launch.sh --drill` for any throwaway host** (a rehearsal, a
+2. **Use `cycle.sh --drill` for any throwaway host** (a rehearsal, a
    restore test, a promotion practice). A drill host is tagged `BlotDrill=true`
    and can never upload backups, so it cannot add to the
    production ones.
@@ -212,7 +212,6 @@ the outage itself.
 ```
 ssh blot 'redis6-cli SLOWLOG GET 20'
 ssh blot 'redis6-cli INFO stats | grep latest_fork_usec'
-ssh blot 'ls ~/perf/*.log 2>/dev/null && tail -n 20 ~/perf/redis-sample.log'
 ```
 
 Each entry has the command, its first arguments, the duration in
@@ -220,8 +219,7 @@ microseconds and the client address. One slow command blocks everything
 behind it on Redis's single thread, so the usual suspects are a big reply
 (`SMEMBERS`/`LRANGE`/`MGET` over huge values), a Lua script, `KEYS` or an
 unbounded `SCAN`, or a fork stall at the :00 backup (compare the time with
-`latest_fork_usec` and the `~/perf/redis-sample.log` BGSAVE columns, if the
-collectors from `config/redis/perf/` are installed). Find the calling code by
+`latest_fork_usec`). Find the calling code by
 grepping the repo for the command and the key pattern, then fix it in the
 app. Do not `SLOWLOG RESET` before the entries are recorded in the report.
 
@@ -341,10 +339,10 @@ of the rules:
 ## Disaster recovery and drills
 
 **README, "Disaster recovery"**: pick the newest backup with
-`launch.sh --list`, restore onto a new host, check it, turn on backups, check the app. In
+`restore.sh <host> list`, restore onto a new host, check it, turn on backups, check the app. In
 production the whole recovery is `cycle.sh restore` (`config/host/README.md`,
-"Recovery"). To rehearse the Redis part, run steps 1-3 with
-`launch.sh --drill` (tagged, never uploads), write down the commands for
+"Recovery"). To rehearse the Redis part, run steps 1-3 on a
+`cycle.sh --drill` host (tagged, never uploads), write down the commands for
 steps 5-6 against the drill host without running them, time each step, and tear
 the host down by instance ID (rule 3). A drill is still a production-account
 action: launch and terminate each need an explicit yes. Add the timings to
