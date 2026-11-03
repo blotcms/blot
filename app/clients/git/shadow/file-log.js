@@ -3,9 +3,11 @@
 // when a deploy replaces them, and the lines are wanted for a week or more.
 //
 // The units, both processes in each, and one-off scripts can all append to the
-// same file at once. Each line is one appendFile call (O_APPEND), so whole
-// lines land one after another. Nothing here waits or throws: a failed write
-// is dropped, with one warning per process.
+// same file at once. Each line is one append (O_APPEND), so whole lines land
+// one after another. The append is synchronous: a line is short and the file
+// is on local disk, and a script which calls process.exit() straight after
+// its last line still has that line in the file. Nothing here throws: a failed
+// write is dropped, with one warning per process.
 //
 // The file is bounded: when it is over MAX_BYTES it is renamed to <file>.1,
 // replacing the previous .1, and a new one is started. A process checks the
@@ -29,13 +31,12 @@ function warn(err) {
   } catch (e) {}
 }
 
-function rotateIfNeeded(file, maxBytes, done) {
-  fs.stat(file, function (err, stat) {
-    if (err || stat.size <= maxBytes) return done();
-    fs.rename(file, file + ".1", function () {
-      done();
-    });
-  });
+function rotateIfNeeded(file, maxBytes) {
+  try {
+    if (fs.statSync(file).size > maxBytes) fs.renameSync(file, file + ".1");
+  } catch (err) {
+    // Not there yet, or another process moved it first
+  }
 }
 
 // file: the path ("" is off); line: one line, without its newline
@@ -46,19 +47,21 @@ module.exports = function append(file, line, options) {
     const maxBytes = (options && options.maxBytes) || MAX_BYTES;
     const data = line + "\n";
 
-    const write = function () {
-      fs.appendFile(file, data, function (err) {
-        if (err) warn(err);
-      });
-    };
-
-    fs.mkdir(path.dirname(file), { recursive: true }, function (err) {
-      if (err) return warn(err);
-      sinceCheck += Buffer.byteLength(data);
-      if (sinceCheck < CHECK_BYTES) return write();
+    sinceCheck += Buffer.byteLength(data);
+    if (sinceCheck >= CHECK_BYTES) {
       sinceCheck = 0;
-      rotateIfNeeded(file, maxBytes, write);
-    });
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      rotateIfNeeded(file, maxBytes);
+    }
+
+    try {
+      fs.appendFileSync(file, data);
+    } catch (err) {
+      // Its directory was removed since the last check: make it once more
+      if (err.code !== "ENOENT") throw err;
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.appendFileSync(file, data);
+    }
   } catch (err) {
     warn(err);
   }

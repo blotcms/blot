@@ -85,6 +85,7 @@ const compact = require("../store/compact");
 const importRepo = require("../store/import");
 const limiter = require("../limiter");
 const counting = require("./counting");
+const appendToFile = require("./file-log");
 const { measure } = counting;
 
 const ZERO = "0".repeat(40);
