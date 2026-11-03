@@ -13,7 +13,7 @@
 //               space is reserved from, as for a push or a compaction. Not
 //               needed if scratchDir is given.
 //   lock(fn)    the host's per-repository lock, passed to manifest.swap
-//   gitDir      the git directory to read (`data/git/<handle>.git`). It is never
+//   gitDir      the git directory to read (a scratch repository, a clone). It is never
 //               written: git is only asked to read it (for-each-ref, rev-list,
 //               cat-file, pack-objects), and a spec checks that every file in
 //               it is the same afterwards.

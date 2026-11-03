@@ -5,10 +5,12 @@ description: Grow or shrink the EBS volume that holds the production host's data
 
 # Data volume
 
-The production host's data directory (`/var/www/blot/data`: blog folders and git repos;
-generated assets live only in S3) is one XFS-formatted EBS volume. Blog folders
-are planned to move to S3 (#2258) and git repos too (#2259), after which the
-volume is removed. It is mounted by
+The production host's data directory (`/var/www/blot/data`: blog folders; git
+repositories and generated assets live only in S3) is one XFS-formatted EBS
+volume. Blog folders are planned to move to S3 (#2258), after which the
+volume is removed. Until `data/git` is deleted from the host (the cleanup PR
+of #2259 has it as a deployment step) the old bare repositories are still on
+it, unused. It is mounted by
 `mount-data-volume.service` by its volume ID (`/etc/blot/data-volume`, checked
 against the `.blot-data-volume` marker at the volume's root), shared, and the
 app containers bind it with `bind-propagation=rslave` (config/host/README.md).

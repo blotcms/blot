@@ -527,7 +527,7 @@ undo_freeze() {
 }
 
 # refuse_near_cron: host cron and the app scheduler delete files at 01:00 and
-# 05:00 UTC (stats pruning, the git quarantine sweep); a freeze then would
+# 05:00 UTC (stats pruning, the scheduler's daily jobs); a freeze then would
 # either stall on them or copy a tree that is changing under it.
 refuse_near_cron() {
   local hour minute now t diff

@@ -67,7 +67,7 @@ LOCK=/run/blot-data-volume.lock
 MOUNT_SCRIPT=/home/ec2-user/scripts/mount-data-volume.sh
 # The top-level directories whose children are copied by separate rsyncs in the
 # frozen pass (final-copy). Everything else at the top level is one rsync.
-SHARD_PARENTS=${SHARD_PARENTS:-"static blogs git"}
+SHARD_PARENTS=${SHARD_PARENTS:-"static blogs"}
 # For a move all the frozen rsyncs share one ssh connection, and sshd allows 10
 # sessions per connection by default, so this has to stay below 10.
 FINAL_COPY_JOBS=${FINAL_COPY_JOBS:-8}
@@ -594,7 +594,7 @@ cmd_copy_status() { [[ "${1:-}" =~ ^[a-z0-9]+$ ]] || die "pass label must be low
 # be right at every level:
 #
 #   A. one rsync of the top level, with the contents of each shard parent
-#      (static/, blogs/, git/) excluded. It copies everything else in full,
+#      (static/, blogs/) excluded. It copies everything else in full,
 #      the shard parents themselves as empty directories, and (excluded paths
 #      being protected from deletion) leaves what the other steps handle alone.
 #   B. per shard parent, a non-recursive pass (-d, no -r): it copies that

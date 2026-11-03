@@ -6,14 +6,12 @@ The Git client enables Blot users to manage their blog using a Git repository as
 
 The Git client's repositories are:
 
-1. **Bare repository** (storage layer): Located in `data/git/<blogHandle>.git`. This is a bare Git repository (no working tree) that serves as the central authority for blog content. Pushes arrive here, and so do Blot's own writes, as commits made with git's plumbing (`plumbing.js`).
-2. **User repository** (on user's computer): A clone of the bare repository where the user makes edits via Git pushes.
+1. **The repository in the git store** (storage layer): under `<blogID>/git/` in the storage bucket, keyed by blog ID (`store/`, see its README, and `served/`). It is the only copy of a blog's repository on Blot's side and the central authority for its content. Pushes arrive here, and so do Blot's own writes. A change of handle moves nothing.
+2. **User repository** (on user's computer): A clone where the user makes edits and pushes them.
 
-The blog folder (`data/blogs/<blogID>/`, `config.blog_folder_dir`) is written from the bare repository by `materialize.js`; it has no repository of its own. Blogs made before #2259 PR 8 still have a **live repository** in it (`.git`, a clone of the bare repository). Nothing depends on it now: a sync and a write keep it at master only so that this code can be rolled back, and PR 9 removes the clones.
+The blog folder (`storage/folder`, by blog ID) is written from the store by `served/materialize.js`; it has no repository of its own. Blogs made before #2259 PR 8 may still have a **live repository** in it (`.git`), which nothing reads or moves; disconnecting removes it, and PR 9 removes the rest.
 
-The bare repositories are planned to move to S3 (https://github.com/blotcms/blot/issues/2259).
-
-When a user pushes changes from their local repository to the bare repository, Blot automatically detects the change, syncs the blog folder, and processes modified files.
+When a user pushes changes from their local repository, Blot automatically detects the change, syncs the blog folder, and processes modified files.
 
 ## File Inventory
 
@@ -27,42 +25,41 @@ When a user pushes changes from their local repository to the bare repository, B
   - Authentication middleware application
   - Sync triggering on post-push
 
-- **`repo.js`**: The one internal interface to a blog's bare repository. Everything else asks it rather than building paths or talking to git's protocol: `directory(handle)` (where the repository is), `exists(handle, callback)`, `handleSmartHttp(req, res, blogID)` (serves an authenticated fetch or push), `onPush(callback, { prepare, abandon })` (registers the `(blogID, old, new, prepared)` function called as soon as a push has moved master, which routes.js uses to start a sync, and the hooks that write the follow-up sync before the refs move, see below), `commit(blogID, { path, contents }, callback)` (writes or, with `contents: null`, removes a file in the blog folder, then commits it to master of the bare repository under the ref lock; backs `write.js` and `remove.js`), `remove(handle, callback)` (removes the repository, used by `disconnect.js`), `holdRefLock(blogID)`, and `followLiveClone` and `pointOriginAtBareRepo` (keep a live clone at master, where a blog has one). Repositories are keyed by handle on disk. Later steps of #2259 change what is behind this interface.
+- **`repo.js`**: The one internal interface to a blog's repository. Everything else asks it rather than talking to git's protocol or the store: `exists(blogID, callback)` (whether the store has a repository for the blog), `handleSmartHttp(req, res, blogID, blog)` (serves an authenticated fetch or push, through `served/reads.js` and `served/receive.js`), `onPush(callback, { prepare, abandon })` (registers the `(blogID, old, new, prepared)` function called as soon as a push has moved master, which routes.js uses to start a sync, and the hooks that write the follow-up sync before the refs move, see below), `commit(blogID, { path, contents }, callback)` (writes or, with `contents: null`, removes a file in the blog folder, then commits it to master in the store under the ref lock, `served/commit.js`; backs `write.js` and `remove.js`), `remove(blogID, callback)` (removes the repository from the store, `served/remove.js`, used by `disconnect.js`), `holdRefLock(blogID)` and `receiveHooks(blogID)`.
 
-- **`smartHttp.js`**: Routes a request for `repo.handleSmartHttp`. Serves ref advertisement and upload-pack (clones and fetches) by running `git upload-pack` and streaming it to the response. Stays on protocol v0, answers git's `0000` probe, accepts gzipped bodies and stops git if the client goes away. Pushes go to `receivePack.js`. The leftovers (dumb HTTP `HEAD`, wrong methods, unknown paths) keep the statuses and bodies pushover gave.
+- **`receivePack.js`**: The parts of git's receive-pack protocol that are about the request: reading a push's commands up to the flush packet, the capabilities Blot advertises (`report-status`, `delete-refs`, `side-band-64k`, `quiet`, `ofs-delta`, `agent`), and small helpers for smart HTTP responses. The pack, the checks and the report are the store's (`store/receive.js`).
 
-- **`receivePack.js`**: Receives a push in Node (no `git-receive-pack`, no pushover). It parses the commands, streams the pack into `git index-pack --stdin --fix-thin` in a quarantine directory (`objects/tmp_objdir-incoming-XXXXXX`, with the repository as an alternate; `sweepQuarantine.js` clears leftovers), then checks the push before anyone is told "ok": ref names, only `master` and tags, no deleting master, every object present and connected (`git rev-list --objects --not --all`), and master's tree has only regular files (`validateTree.js`). A push is applied whole or not at all. Under a short lock on the refs it checks that no ref has moved, moves the pack out of quarantine (`.idx` last), writes the follow-up sync, and updates the refs in one `git update-ref --stdin` transaction (each with its old value). Then the sync is started and the client gets `unpack ok` / `ok <ref>` / `ng <ref> <reason>` (inside side-band-64k when asked), with the reasons as `remote:` lines. Refusals are HTTP 200 with a report; only a request that isn't git gets a 400. Capabilities: `report-status`, `delete-refs`, `side-band-64k`, `quiet`, `ofs-delta`, `agent` (logged as `Git: push-client`). The lock, the follow-up and the sync are hooks, so a store which keeps repositories elsewhere can reuse the parsing, checks and report. Each push logs one `Git: receive-pack <handle> exit=... duration=... rx=... tx=...` line; `exit` is index-pack's status if it failed, 1 for any other failure, else 0.
+- **`served/`**: The host side of the git store, everything that needs the rest of Blot (the store itself, `store/`, requires nothing outside itself):
+  - `context.js`: one object store per blog (S3, under `<blogID>/git/`, each request counted by `counting.js`) and one cache per process; the store's writes take the blog's ref lock.
+  - `reads.js`: the ref advertisements, clones, fetches and the dumb HTTP `HEAD` probe, from the manifest and packs. Protocol v0 only, with no shallow clones or filters (git shows the store's `ERR` as "remote error"). A clone or fetch takes a place in the interactive lane of `limiter.js`. A store with no copy answers 503, never an empty repository; a blog off git gets a 404. Wrong methods and unknown paths keep the statuses Blot's git server has always given.
+  - `receive.js`: a push. The commands are read by `receivePack.js`, the store's receive takes the pack with side-band progress (`Saving to Blot...`), Blot's tree rule (regular files only on master: no symbolic links or submodules) and a size limit (the smaller of `receive.maxInputSize` and half the cache's budget, 512 MiB by default). Only `master` and tags may be pushed, master may not be deleted, and a push is applied whole or not at all. The follow-up sync is armed under the ref lock before the swap (see below). Each push logs a `Git: push-client` line with the client's agent.
+  - `commit.js`: Blot's own writes (`repo.commit`), with the store's `commit()`, holding the ref lock for the whole call. The author and committer are `Your Name <you@example.com>`, and the message is `Updated <path>` or `Removed <path>`. A change that leaves the tree as it was makes no commit.
+  - `sync.js` and `materialize.js`: the sync, see *Sync Flow*.
+  - `create.js`: new-folder setup, see `create.js` below.
+  - `upkeep.js`: compaction after a write to the store, when the manifest it swapped in has anything worth compacting, one at a time per blog, in the background lane.
+  - `remove.js`: removal of a blog's copy on disconnect or deletion: every pack deleted, then a tombstone manifest (so the numbering never restarts), and again a few minutes later unless the blog is back on git.
+  - `maintenance.js`: the daily upkeep (`app/scheduler/git-store-maintenance.js`): for every blog on git, the store's sweep and a cheap check of its copy (the newest manifest has the repository, and every file it names is in the bucket at its size); a deep check (a whole clone through the store's own clone code, `index-pack --strict`, `fsck --strict`, every ref made in it) of a few blogs a day in turn and the git test blog; on the first of the month, deleting `<blogID>/git/` prefixes left by blogs no longer on git; and clearing scratch directories a killed process left. It emails the admin only if it found something. `scripts/git/verify-store.js` runs the same checks by hand.
+  - `log.js` and `file-log.js`: one `[git-store-served] blog=<id> op=... outcome=...` line per request or operation, also appended to `config.git_store.log` (`BLOT_GIT_STORE_LOG`, by default `git-store-log/git-store.log` in tmp), since the containers' stdout is lost at every deploy.
 
-- **`guardServices.js`**: What is left of the code that wrapped pushover: the exit line (`formatExitLine`, `logExit`, used for upload-pack), a stderr tail, and `stop` for ending a git child whose client has gone.
+- **`git.js`**: A thin wrapper around `execFile("git", args)` for running git in one directory. `Git(directory).raw(args, [callback])`. Commands on one instance run one at a time; a command fails only if git exits non-zero and writes to stderr; the error message is git's output. Commands wait for room in the background lane of `limiter.js` unless `Git(directory, { lane: "interactive" })`.
 
-- **`git.js`**: A thin wrapper around `execFile("git", args)` for running git in one directory.`Git(directory).raw(args, [callback])`. Commands on one instance run one at a time; a command fails only if git exits non-zero and writes to stderr (so `git commit` with nothing to commit is a success); the error message is git's output. Commands wait for room in the background lane of `limiter.js` unless `Git(directory, { lane: "interactive" })` (a push's checks).
+- **`limiter.js`**: How much git each Node process runs at once, and the memory each git command may take; every git process the client and the store start goes through it. Two lanes with their own caps, so neither waits behind the other: interactive (a push's `index-pack` and checks, clones and fetches) and background (Blot's commits, compaction, the import of a new repository). A command holds its place from just before it is spawned until it has closed, and work beyond the cap queues in order (a closure and a promise each; nothing is dropped). Blot's commit takes one place before the ref lock and runs its commands in it, so it never waits for room with the lock held. Every command runs with `-c pack.threads=1 pack.windowMemory=16m pack.deltaCacheSize=16m core.deltaBaseCacheLimit=16m core.bigFileThreshold=16m core.packedGitLimit=64m core.packedGitWindowSize=16m`, about 100 MB at most for one command, and with `gc.auto=0 maintenance.auto=false`, so no command starts a gc of its own; `git config` is left alone. Caps are in `config.git` (`BLOT_GIT_INTERACTIVE_PROCESSES`, default 4, so slow clones don't hold up a push; `BLOT_GIT_BACKGROUND_PROCESSES`, 2).
 
-- **`limiter.js`**: How much git each Node process runs at once, and the memory each git command may take; every git process the client starts goes through it. Two lanes with their own caps, so neither waits behind the other: interactive (a push's `index-pack` and checks, `upload-pack` for clones and fetches) and background (Blot's commits, syncs, the import of a new repository, live-clone fetches, gc; at most `gc_processes` of these are gc). A command holds its place from just before it is spawned until it has closed, and work beyond the cap queues in order (a closure and a promise each; nothing is dropped). Blot's commit and a push's ref-locked section take one place before the ref lock and run their commands in it, so neither waits for room with the lock held. Every command runs with `-c pack.threads=1 pack.windowMemory=16m pack.deltaCacheSize=16m core.deltaBaseCacheLimit=16m core.bigFileThreshold=16m core.packedGitLimit=64m core.packedGitWindowSize=16m`, about 100 MB at most for one command, and with `gc.auto=0 maintenance.auto=false` (gc itself with `gc.autoDetach=false`), so no command starts a gc of its own that would run uncounted; `git config` is left alone. Caps are in `config.git` (`BLOT_GIT_INTERACTIVE_PROCESSES`, default 4, so slow clones don't hold up a push; `BLOT_GIT_BACKGROUND_PROCESSES`, 2; `BLOT_GIT_GC_PROCESSES`, 1).
-
-- **`gc.js`**: `git gc --auto` for a bare repository after Blot's commits and users' pushes. A commit or push asks for one; it runs `config.git.gc_delay` later (`BLOT_GIT_GC_DELAY_MS`, a minute), so a burst of writes to a repository makes one gc, at most one runs per repository at a time in a process, and one asked for while it runs follows once it has finished.
+- **`stuckProcesses.js`**: Lists git processes in the container that have run for more than two hours (`app/scheduler/sweep-git.js`, daily, emails if it finds any).
 
 - **`authenticate.js`**: HTTP Basic Auth middleware using http-auth. Validates user credentials (email and token) against the blog and user models before allowing access to the push endpoint.
 
-- **`sync.js`**: Core synchronization logic. Acquires a lock on the blog folder, validates master in the bare repository, brings the blog folder to it with `materialize.js`, keeps the live repository's HEAD and index at the same commit if the blog has one (a fetch and a mixed reset, so that a rollback to the code that committed there still works; a failure is logged, not fatal), and triggers folder updates for all modified files. A blog made since #2259 PR 8 has no live repository and a sync does not look for one beyond that. The last applied commit (`blog:<id>:git:applied`) is what a sync compares from; with none recorded it starts from the live repository's HEAD, or from nothing if there is none.
+- **`sync.js`**: Takes the sync's folder lock and hands the sync to `served/sync.js`, which brings the blog folder from the last applied commit (`blog:<id>:git:applied`) to master in the store and passes each changed path to Blot. With none recorded, or one the store does not have, it compares from the empty tree, which writes every file but removes none.
 
-- **`materialize.js`**: Writes the blog folder from the bare repository: `git diff-tree -r -z` between the commit last applied and the new one gives the changed paths, and one `git cat-file --batch` streams the new blobs to their files a chunk at a time. Files are the raw committed bytes (mode 0644 or 0755), so `.gitattributes` rules do not apply. Removals come first, then the directories they empty are removed; only changed paths are touched, so drift elsewhere in the folder stays until a resync. A path with an empty, `.` or `..` component, a `.git` component (any case) or a name that is not UTF-8 is skipped, and a symbolic link in the way is replaced, never followed. With nothing applied yet (or the commit lost to a force push and a gc) it compares from the empty tree, which writes every file but removes none.
+- **`create.js`**: Repository initialization. Refuses a blog which already has a repository (`EEXIST`) or a `.git` directory in its folder, generates the authentication token, and sets the repository up in the store from the blog folder (`served/create.js`): the folder is listed and read through `storage/folder` alone (it is never git's work tree, and may have no copy on local disk), a `.gitignore` in it applies as `git add` would apply it, and one `git fast-import` makes one commit (`Add files`, or `Initial commit` for an empty folder) which is imported into the store. The commit is recorded as applied. If it fails it removes only the store copy it made.
 
-- **`plumbing.js`**: Blot's own commits to the bare repository, made with git's plumbing and no checkout: `hash-object -w --no-filters`, a temporary index (`GIT_INDEX_FILE` in a directory of its own in the tmp directory, removed afterwards, never shared between commits), `write-tree`, `commit-tree` and `update-ref` with the old value, so master moves only from the commit the change was made on (a mismatch is `EMOVED`, and a change is made again on the new master up to three times). Paths are NUL-terminated wherever git offers it, are normalised as the blog folder's are (`pathNormalizer`) and refuse empty, `.` and `..` components and `.git` in any case. The author and committer are `Your Name <you@example.com>`, what the Docker image configures. A change that leaves the tree as it was makes no commit.
+- **`write.js`**: Writes a file to the blog folder and commits it (through `repo.commit`). Used by Blot to persist preview files and other content changes. One commit per file.
 
-- **`create.js`**: Repository initialization. Creates the bare repository, copies existing blog files into it in commits of 25 files (each added with `git add` into a temporary index whose work tree is the blog folder, so a `.gitignore` in the folder applies), moving master under the ref lock, and generates authentication tokens. It makes no live repository. If it fails it removes only the bare repository it made.
+- **`remove.js`**: Removes a file from the blog folder and commits the deletion (through `repo.commit`).
 
-- **`write.js`**: Writes a file to the blog folder and commits it to the bare repository (through `repo.commit`). Used by Blot to persist preview files and other content changes. One commit per file.
+- **`disconnect.js`**: Cleans up when a user disconnects the Git client. Removes the repository from the store (`repo.remove`), the status record, the live repository (the `.git` directory in the blog folder) if there is one, the applied commit and, with the owner's last git site, the token. It needs nothing from the blog folder. It also runs when a blog on git is deleted.
 
-- **`remove.js`**: Removes a file from the blog folder and commits the deletion to the bare repository (through `repo.commit`).
-
-- **`disconnect.js`**: Cleans up when a user disconnects the Git client. Removes tokens, status records, the bare repository at the blog's current handle (`repo.remove`), and the live repository (the `.git` directory in the blog folder) if there is one. It needs nothing from the blog folder. It also runs when a blog on git is deleted; a repository at a former handle is left.
-
-- **`database.js`**: Redis-based token and status storage. Handles token creation, validation, refresh, and deletion. Also manages creation status tracking (e.g., `createInProgress`, `createFailed`, `createComplete`).
-
-- **`dataDir.js`**: The bare repository data directory (`<data_directory>/git`). Ensures the directory exists on require. Only `repo.js` (and the quarantine sweep, which lists every repository) use it.
-
-- **`checkGitRepoExists.js`**: Tells whether a blog folder has a live repository, by validating that a Git repository exists in the directory by using `git rev-parse --show-toplevel` and comparing the repository root with the expected blog folder path. Accounts for nested Git repositories (the entire Blot codebase is itself a Git repo).
-
+- **`database.js`**: Redis-based token and status storage. Handles token creation, validation, refresh, and deletion. Also manages creation status tracking (e.g., `createInProgress`, `createFailed`, `createComplete`) and the applied commit.
 
 ### Views
 
@@ -76,29 +73,7 @@ When a user pushes changes from their local repository to the bare repository, B
 
 ### Tests
 
-- **`tests/setup/index.js`**: Test framework setup. Creates Express server, manages temporary folders, sets test blog configuration, cleans up bare repositories and disconnects after each test.
-
-- **`tests/setup/setClientToGit.js`**: Helper to configure a test blog to use the Git client and create initial repositories.
-
-- **`tests/authenticate.js`**: Tests for authentication middleware validation.
-
-- **`tests/create.js`**: Tests for repository creation, including empty folders, existing files, and error cleanup.
-
-- **`tests/write.js`**: Tests for file write and commit operations.
-
-- **`tests/remove.js`**: Tests for file removal operations.
-
-- **`tests/sync.js`**: Tests for synchronization, including push handling and file change detection.
-
-- **`tests/plumbing.js`**: Tests for `plumbing.js` on a repository of its own: identical writes, removals, names, the compare and swap on master, concurrent commits and temporary indexes.
-
-- **`tests/blot-writes.js`**: Blot's writes as a user with a real git client sees them, including against a push.
-
-- **`tests/create-without-clone.js`**, **`tests/live-clone-writes.js`**, **`tests/sync-live-clone.js`**: Blogs with and without a live repository (the live clone specs go with the clones).
-
-- **`tests/branches.js`**: Tests for branch handling (only master branch is accepted).
-
-- **`tests/handle-change.js`**: A request for a blog's former handle is redirected to its current one, publicly. A handle change moves no repository.
+The specs in `tests/` are the client's regression suite: what a user sees with a stock git client. `tests/setup/index.js` makes a test blog on the git client with its repository in the store (a memory object store per blog), a test server for the git routes and a clone (`tests/setup/client.js` for a real git client), and cleans up after each spec. The specs of the host side of the store are in `served/tests/`, and of the store itself in `store/tests/`.
 
 ## Public API
 
@@ -122,48 +97,48 @@ module.exports = {
 
 #### `write(blogID, path, contents, callback)`
 
-Writes a file to the blog folder and commits/pushes the change to the bare repository.
+Writes a file to the blog folder and commits the change.
 
 - **Parameters**:
   - `blogID` (string): The blog's unique identifier
   - `path` (string): Relative path within the blog folder (e.g., `/drafts/my-post.md`)
   - `contents` (string or buffer): File contents
   - `callback` (function): `(err) => void`
-- **Behavior**: Returns error if the file is in the ignore list (via `shouldIgnoreFile`). Writes to disk, then commits the file to master of the bare repository with message "Updated <path>" (see `plumbing.js`), unless the file already has those contents.
+- **Behavior**: Returns error if the file is in the ignore list (via `shouldIgnoreFile`), or for a path with an empty, `.` or `..` component or `.git` in any case. Writes the file to the blog folder, then commits it to master with message "Updated <path>", unless the file already has those contents. Fails, before the folder is touched, if the store has no copy of the repository.
 
 #### `remove(blogID, path, callback)`
 
-Removes a file from the blog folder and commits/pushes the deletion.
+Removes a file from the blog folder and commits the deletion.
 
 - **Parameters**:
   - `blogID` (string): The blog's unique identifier
   - `path` (string): Relative path within the blog folder
   - `callback` (function): `(err) => void`
-- **Behavior**: Removes the file from disk, then commits the deletion to master of the bare repository with message "Removed <path>". Makes no commit, and is no error, if the repository does not have the file.
+- **Behavior**: Removes the file from the blog folder, then commits the deletion to master with message "Removed <path>". Makes no commit, and is no error, if the repository does not have the file.
 
 #### `disconnect(blogID, callback)`
 
-Disconnects the Git client from a blog by removing the Git infrastructure.
+Disconnects the Git client from a blog.
 
 - **Parameters**:
   - `blogID` (string): The blog's unique identifier
   - `callback` (function): `(err) => void`
-- **Behavior**: Updates blog model to remove the client, deletes Redis token/status keys, removes the bare repository directory, and removes the `.git` directory from the blog folder if there is one.
+- **Behavior**: Updates blog model to remove the client, removes the repository from the store, deletes Redis status and applied keys (and the token with the owner's last git site), and removes the `.git` directory from the blog folder if there is one.
 
 #### Express Route Handlers
 
 The `dashboard_routes` and `site_routes` routers are mounted at `/git` under the dashboard and site namespaces respectively.
 
 **Dashboard routes**:
-- `GET /`: Shows Git status if repository exists, redirects to create otherwise
+- `GET /`: Shows Git status if the blog has a repository (or one is being made), redirects to create otherwise
 - `GET /create`: Shows repository creation form
-- `POST /create`: Initiates repository creation (sets blog client to "git" and calls `create()` asynchronously)
+- `POST /create`: Initiates repository creation (sets blog client to "git" and calls `create()` asynchronously), unless the blog already has a repository
 - `POST /reset-password`: Refreshes the authentication token
 - `GET /disconnect`: Shows disconnection confirmation
 - `POST /disconnect`: Disconnects the Git client
 
 **Site routes**:
-- `POST /end/<blogHandle>.git`: Git push endpoint. Requires HTTP Basic Auth. Triggers synchronization on successful push.
+- `/end/<blogHandle>.git/...`: Git's smart HTTP endpoint (`info/refs`, `git-upload-pack`, `git-receive-pack`, `HEAD`). Requires HTTP Basic Auth; a former handle is redirected to the current one first. Triggers synchronization on a successful push.
 - `GET /syncs-finished/<blogID>`: Test-only endpoint to check if all active syncs have completed.
 
 ## Internal Structure
@@ -171,38 +146,37 @@ The `dashboard_routes` and `site_routes` routers are mounted at `/git` under the
 ### Repository Architecture
 
 ```
-Bare Repository (Reference)
-  ├─ Contains commits and branches
-  └─ No working tree
+Git store (<blogID>/git/ in the storage bucket)
+  ├─ Manifests: refs, HEAD, the live packs
+  └─ Packs, their indexes, history packs
 
-Blog folder (Blot Server)
-  └─ Written from the Bare Repository by materialize.js
-     (older blogs also have a Live Repository in .git: origin -> Bare Repository)
+Blog folder (storage/folder)
+  └─ Written from the store by served/materialize.js
+     (older blogs may also have a Live Repository in .git, which nothing uses)
 
 User Repository (User's Computer)
-  ├─ Remote: origin -> Bare Repository
+  ├─ Remote: origin -> https://<host>/clients/git/end/<handle>.git
   └─ User edits files here
 ```
 
 ### Sync Flow
 
-1. User makes local edits and pushes to the bare repository via `git push origin master`
-2. `receivePack.js` receives the push at `/end/<blogHandle>.git` (see above)
-3. Authentication middleware validates user credentials against the User and Blog models
+1. User makes local edits and pushes via `git push origin master`
+2. Authentication middleware validates user credentials against the User and Blog models
+3. `served/receive.js` receives the push at `/end/<blogHandle>.git` (see above)
 4. Once the push passes its checks, and just before master moves, a follow-up sync is written to Redis (`followUpSync`'s alarm, due in 15 seconds). If that fails the push fails and nothing moves. Then master moves, the sync starts at once, and the client is told. A crash after that is picked up by the follow-up; a sync that finishes takes its follow-up back.
 5. `sync()` is called with the blog ID and handle
 6. Sync acquires a file lock to prevent concurrent syncs
-7. Sync resolves `refs/heads/master` in the bare repository to an immutable commit and rejects trees containing symbolic links or submodules
-8. If the blog has a live repository, sync fetches into it and resets its HEAD and index (not the folder) to that commit
-9. `materialize.js` writes the paths that differ between the last applied commit and that commit into the blog folder
-10. For each modified file, `folder.update(path)` is called to process the change
-11. The commit is recorded as applied, the lock is released and callback is invoked
+7. Sync reads master from the store's newest manifest
+8. `served/materialize.js` brings the blog folder from the last applied commit to it: the changed paths come from `store/treediff.js`; an exact rename is a `move()`; removals come next, then the directories they empty; then the writes, streamed from the store's packs (a small file whose bytes are already there is not written again). Files are the raw committed bytes, so `.gitattributes` rules do not apply. Only changed paths are touched, so drift elsewhere in the folder stays until a resync. A path with an empty, `.` or `..` component, a `.git` component (any case) or a name that is not UTF-8 is skipped, and a symbolic link in the way is replaced, never followed. Every change goes through `storage/folder`, so the folder may be on disk or in the bucket.
+9. For each modified file, `folder.update(path)` is called to process the change, in series. If Redis refuses one, the sync stops there.
+10. The commit is recorded as applied, the lock is released and callback is invoked
 
-Symbolic links (including links within the blog) and submodules are not supported. Replace them with regular files before pushing. A push whose master has any is refused with a message before the client is told "ok", and `sync()` checks again.
+Symbolic links (including links within the blog) and submodules are not supported. Replace them with regular files before pushing. A push whose master adds any is refused with a message before the client is told "ok", and the materializer never writes one.
 
 ### The ref lock
 
-`blog:<blogID>:git:ref-lock` (`helper/lock`, 10 second TTL extended every 3 seconds while held, so a holder which dies releases it within 10 seconds) is held only to move refs: by a push that has been received and checked, and by `repo.commit` around its commit to the bare repository (which also names master's old value, see `plumbing.js`), and by `create.js` around each of its commits. It is never held while a push is arriving, which can take up to an hour, and it is not the sync's folder lock, which Blot's own commits happen inside of. Anyone who cannot get it within about 16 seconds fails: a push is told to try again, and a write is an error.
+`blog:<blogID>:git:ref-lock` (`helper/lock`, 10 second TTL extended every 3 seconds while held, so a holder which dies releases it within 10 seconds) is held only around writes to the store's manifest: by a push that has been received and checked (which arms the follow-up sync under it), by Blot's own commit for the whole of its commit, by a compaction and by the import of a new repository. It is never held while a push is arriving, which can take up to an hour, and it is not the sync's folder lock, which Blot's own commits happen inside of. Anyone who cannot get it within about 16 seconds fails: a push is told to try again, and a write is an error.
 
 ### Authentication Flow
 
@@ -221,17 +195,20 @@ Symbolic links (including links within the blog) and submodules are not supporte
 
 - `models/blog`: Blog model for querying and updating blog records
 - `models/user`: User model for email-based user lookup
-- `helper/ensure`: Runtime type validation utility
 - `helper/clfdate`: CLF date formatting for logs
+- `helper/lock`: The ref lock
 - `sync`: Distributed lock manager for coordinating blog folder updates
+- `storage/folder`: The blog folder, on disk or in the bucket
+- `storage/s3`: The storage bucket the store lives in
 - `clients/util/shouldIgnoreFile`: Utility to determine if a file should be excluded from syncing
+- `clients/util/followUpSync`: The follow-up sync after a push
 
 ### External (NPM)
 
 - **`http-auth`** (v3.2.3+): HTTP Basic Authentication middleware
 - **`uuid`** (v3.2.1+): Token generation
 - **`fs-extra`**: File system utilities with Promise support
-- **`async`**: Utilities for asynchronous operations
+- **`lru-cache`**: The stores kept per process
 - **`debug`**: Logging utility (namespace: `blot:clients:git:*`)
 - **`express`**: Web framework for routing
 
@@ -239,12 +216,16 @@ Symbolic links (including links within the blog) and submodules are not supporte
 
 - Stores authentication tokens (key: `user:<uid>:git:token`)
 - Stores creation status (key: `user:<uid>:git:status`)
+- Stores the commit last applied to the blog folder (key: `blog:<blogID>:git:applied`)
+- The ref lock (key: `blog:<blogID>:git:ref-lock`)
 
 ## Configuration
 
 ### Environment
 
-The Git client uses Redis as the sole persistence layer for credentials and status. No additional environment variables are required; the client integrates with Blot's existing Redis configuration via the shared `models/client` module.
+- `config.git` (`BLOT_GIT_INTERACTIVE_PROCESSES`, `BLOT_GIT_BACKGROUND_PROCESSES`): the limiter's caps.
+- `config.git_store`: the store's cache directory and budget (`BLOT_GIT_STORE_CACHE_DIRECTORY`, `BLOT_GIT_STORE_CACHE_BYTES`, 1 GiB) and its log file (`BLOT_GIT_STORE_LOG`).
+- `config.storage.bucket` (`BLOT_STORAGE_BUCKET`): the bucket the store is in.
 
 ### File Filtering
 
@@ -256,43 +237,25 @@ Only `master` and tags are accepted. A push with any other branch (or deleting m
 
 ## Known Limitations and Constraints
 
-1. **Nested Git Repositories**: Blot's entire codebase is a Git repository. The `checkGitRepoExists` function, which looks for a live repository, accounts for this by verifying that the repository root directory name matches the blog folder name (prefixed with `blog_`), but this could cause unexpected behavior if a user names their blog folder identically to a higher-level Git directory.
+1. **Race Conditions**: The sync mechanism uses a locking mechanism to prevent concurrent syncs, but the test framework includes a tracking mechanism (`activeSyncs`) because determining sync completion without the lock is unreliable. In production, the same lock ensures consistency.
 
-2. **Race Conditions**: The sync mechanism uses a locking mechanism to prevent concurrent syncs, but the test framework includes a tracking mechanism (`activeSyncs`) because determining sync completion without the lock is unreliable. In production, the same lock ensures consistency.
+2. **No Rollback**: If `write()` or `remove()` fails after the file operation but before the commit lands, the file in the blog folder and in the repository are out of sync. The next sync from the store reconciles the paths it changes.
 
-3. **No Rollback**: If `write()` or `remove()` fails after the file operation but before the push completes, the file on disk and in the repository become out of sync. The next sync from the bare repository will reconcile the state.
+3. **Token Invalidation**: Tokens are stored in Redis. If Redis is flushed without coordination, authentication will fail until a new token is generated via the dashboard.
 
-4. **Token Invalidation**: Tokens are stored in Redis. If Redis is flushed without coordination, authentication will fail until a new token is generated via the dashboard.
+4. **Push Atomicity**: The sync runs after the client has been told. If Blot crashes before or during it, the follow-up written before the refs moved runs it again from the last applied commit.
 
-5. **Bare Repository Size**: As blog content accumulates, the bare repository grows. There is no automatic garbage collection or pruning implemented.
+5. **No shallow clones or filters**: the store serves protocol v0 without them; a shallow clone is refused with a remote error.
 
-6. **Push Atomicity**: The sync runs after the client has been told. If Blot crashes before or during it, the follow-up written before the refs moved runs it again from the last applied commit.
-
-7. **A pack per push**: `index-pack` keeps every push's objects as a pack, where git's own receive-pack unpacked small pushes into loose objects. `git gc --auto` runs a minute after a push or Blot's commit (one for a burst of them, `gc.js`) and packs the repository when there are too many.
+6. **The store is the only copy**: the bucket has no versioning, so a repository the store has lost can only be restored from a full clone (`scripts/git/import-repo.js`) or set up again from the blog folder (a new history). The daily verifier is what notices.
 
 ## Testing
-
-Tests are located in the `tests/` directory and use a shared setup utility that:
-- Creates a temporary blog for each test
-- Initializes a Git infrastructure
-- Starts an Express server with the Git client routes
-- Provides utilities for creating and verifying test files
-- Cleans up all temporary data after each test
-
-To run tests:
 
 ```bash
 npm test -- app/clients/git/tests
 ```
 
-The test suite covers:
-- Authentication validation
-- Repository creation with existing and empty folders
-- File write and remove operations
-- Sync on push with multi-file change detection
-- Branch restriction enforcement
-- Redirects from a blog's former handles
-- Error handling and cleanup
+The specs need Redis and run in CI.
 
 ## Integration Points
 

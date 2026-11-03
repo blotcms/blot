@@ -172,23 +172,22 @@ systemctl enable --now mount-data-volume.service
 mountpoint -q "$DATA"
 findmnt -n -o PROPAGATION --target "$DATA" | grep -qx shared
 
-# Something to copy: about 50,000 small files in the production layout, a
+# Something to copy: about 40,000 small files in the production layout, a
 # hard link, a symlink and a sparse file so that -H and -S have work to do.
 if [ ! -d "$DATA/static" ]; then
-  mkdir -p "$DATA"/{static,blogs,git,logs,tmp,views,cdn} "$DATA/blogs/drill"
+  mkdir -p "$DATA"/{static,blogs,logs,tmp,views,cdn} "$DATA/blogs/drill"
   for i in $(seq 1 20); do
-    mkdir -p "$DATA/static/$i/img" "$DATA/blogs/$i/entries" "$DATA/git/$i/objects"
+    mkdir -p "$DATA/static/$i/img" "$DATA/blogs/$i/entries"
     for j in $(seq 1 1000); do
       echo "static $i $j" > "$DATA/static/$i/img/f$j.txt"
       echo "entry $i $j" > "$DATA/blogs/$i/entries/e$j.txt"
     done
-    for j in $(seq 1 250); do echo "object $i $j" > "$DATA/git/$i/objects/o$j"; done
   done
   for j in $(seq 1 1000); do echo "scratch $j" > "$DATA/tmp/t$j"; done
   echo "cert log" > "$DATA/logs/expiring-certs.log"
   ln "$DATA/static/1/img/f1.txt" "$DATA/static/1/img/hardlink.txt"
   ln -s img/f2.txt "$DATA/static/1/link.txt"
-  truncate -s 64M "$DATA/git/sparse.pack"
+  truncate -s 64M "$DATA/blogs/drill/sparse.bin"
 fi
 
 # Two "app" containers bind the whole data directory with rslave, like the

@@ -7,12 +7,13 @@ off EBS onto S3, for cost/scalability/deployment reasons, and enforce
 per-blog storage quotas — with no added read-path latency, paying any cost
 at sync/build time instead.
 
-- **Done:** `.assets` is in S3 and nowhere else (Phase 1), and the EBS
-  volume has shrunk to blog folders plus git repos.
+- **Done:** `.assets` is in S3 and nowhere else (Phase 1), and so are the
+  git client's repositories (Phase 3,
+  [#2259](https://github.com/blotcms/blot/issues/2259)), so the EBS volume
+  is down to blog folders.
 - **Next:** blog folders, with S3 as the source of truth, a Redis metadata
   index and a per-file content cache on the instance SSD (Phase 2,
-  [#2258](https://github.com/blotcms/blot/issues/2258)). Git client repos
-  follow (Phase 3, [#2259](https://github.com/blotcms/blot/issues/2259)).
+  [#2258](https://github.com/blotcms/blot/issues/2258)).
 - **Long term:** node containers scale horizontally with no EBS mount
   (one EBS volume can't be attached to several containers). Each host's
   ephemeral SSD is a cache, never the source of truth.
@@ -39,9 +40,8 @@ at sync/build time instead.
   `{blogID}/{path}`, no scope prefix — relevant to the object-key plan in §3.
 - Mostly plain `fs-extra` (`readFile`, `outputFile`, `remove`, `ensureDir`,
   `copy`) plus `express.static()` for serving, with a few exceptions that
-  assume a real filesystem: pandoc, sharp and exiftool take file paths; the
-  git client keeps a live `.git` clone inside the blog folder and runs
-  `reset --hard` there; iCloud renames whole directory trees to resolve case
+  assume a real filesystem: pandoc, sharp and exiftool take file paths;
+  iCloud renames whole directory trees to resolve case
   conflicts; Google Drive's local fingerprint reads `dev`, `ino`, `ctimeNs`
   and `mtimeNs`; the local client watches the folder with chokidar.
 - Rendered template views are cached in-process
@@ -421,19 +421,19 @@ should consolidate into one storage-layer method, exposed explicitly
     the reverse reconcile are built (§ "S3 as a blog's primary store" below);
     no production blog is on S3 yet.
   - **E, remove the disk.** Stop writing blog folders to EBS, delete
-    `data/blogs`, and shrink the data volume to git client data until
-    Phase 3.
-- **Phase 3 — git client repos.** Planned in
-  [#2259](https://github.com/blotcms/blot/issues/2259). Bare repos live in
-  `{data_directory}/git/{handle}.git` (`app/clients/git/dataDir.js`)
-  today. They move to a walgit-style store: immutable packs plus a small
-  manifest under `{blogID}/git/`, kept private by the bucket policy, with
-  the SSD caching refs, pack indexes and commits/trees, and blobs fetched on
-  demand, so a
-  repo can be larger than the SSD. No whole-repo archive and no S3
-  filesystem mount. A push is acknowledged once its pack is in S3, under the
-  per-blog lock, and the blog folder is materialized from the repo with no
-  live `.git` in it.
+    `data/blogs`, and remove the data volume.
+- **Phase 3 — git client repos.** Done in
+  [#2259](https://github.com/blotcms/blot/issues/2259). Every git blog's
+  repository is in a walgit-style store (`app/clients/git/store`):
+  immutable packs plus a small manifest under `{blogID}/git/`, kept private
+  by the bucket policy, with the SSD caching refs, pack indexes and
+  commits/trees, and blobs fetched on demand, so a repo can be larger than
+  the SSD. No whole-repo archive and no S3 filesystem mount. A push is
+  acknowledged once its pack is in S3, under the per-blog lock, and the blog
+  folder is materialized from the repo through `storage/folder`, with no
+  live `.git` in it. The bare repositories that were in
+  `{data_directory}/git/` are deleted from the host once the daily verifier
+  has run clean.
 - **Quotas** — the Phase 2 index keeps per-blog byte and file totals, which
   enforcement can read. Until then, `scripts/user/identify-overdue-users.js`
   is the manual audit.
@@ -686,9 +686,8 @@ backend instead of the disk, and the disk keeps a copy to roll back to.
   it leaves the Local client (whose watcher changes the disk directly), so
   either needs a clean backfill first. Blogs on the Local client stay on disk because the client
   watches the folder there with chokidar (until the Phase E rework of the
-  Local client). Blogs on the Git client stay on disk because live clones
-  run git in the folder and the setup import uses the folder as git's work
-  tree (until #2259). Blogs on Google Drive stay on disk because its sync
+  Local client). Blogs on the Git client can move: it reads and writes the
+  folder through `storage/folder` alone (#2259). Blogs on Google Drive stay on disk because its sync
   reads directory entries from the disk and fingerprints files by their
   nanosecond mtime there, which the content cache's copies don't keep (until
   it keeps `{ sha1, md5Checksum }` pairs against the index).
