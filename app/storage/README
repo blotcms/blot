@@ -42,8 +42,9 @@ at sync/build time instead.
   assume a real filesystem: pandoc, sharp and exiftool take file paths; the
   git client keeps a live `.git` clone inside the blog folder and runs
   `reset --hard` there; iCloud renames whole directory trees to resolve case
-  conflicts; Google Drive's local fingerprint reads `dev`, `ino`, `ctimeNs`
-  and `mtimeNs`; the local client watches the folder with chokidar.
+  conflicts; the local client watches the folder with chokidar. (Google
+  Drive's fingerprint read `dev`, `ino`, `ctimeNs` and `mtimeNs` until its
+  records moved to storage/folder's size, modified time and SHA-1.)
 - Rendered template views are cached in-process
   (`app/models/template/fullViewCache.js`, an LRU bounded by count and bytes,
   not Redis), and rendered template CSS/JS in Redis (`app/cdn/index.js`
@@ -252,10 +253,13 @@ with `Last-Modified`.
   still changes whenever the file is rewritten.
 - Google Drive compares Drive's `modifiedTime` with an "applied" record in
   its client DB. iCloud and Dropbox compare content or provider hashes.
-- Exception: Google Drive's local fingerprint (`util/contentFingerprint.js`,
-  `localFingerprint.js`, `verifyContent.js`, `sync/util/localReaddir.js`)
-  reads `dev`, `ino`, `ctimeNs` and `mtimeNs`, which have no S3 equivalent.
-  It has to move to the content hash and size before `.folder` moves.
+- Google Drive's records of the file Blot holds (`util/localState.js`) are
+  storage/folder's `size` and `modified` (rounded to the millisecond, as
+  `models/file` keeps it, so the mirror and the disk copy preserve them),
+  plus the SHA-1 when it's known, checked only when those two moved. The
+  older fingerprint (`util/contentFingerprint.js`, `localFingerprint.js`:
+  size and nanosecond mtime on disk) is still honoured in records written
+  before, and replaced the first time it matches.
 - The other mtime reads are display (`retrieve/folder.js`,
   `dashboard/site/folder/stat.js`, `build/multiple.js`) and iCloud
   forwarding the time to the macserver.
@@ -681,7 +685,7 @@ backend instead of the disk, and the disk keeps a copy to roll back to.
   if the mirror covers it (so S3 is kept in step whenever it is on disk), its
   copy in S3 is known to be complete (it is in
   `storage:folder:mirror:complete`), its mirror is not dirty (S3 is not
-  behind its disk), and its client is not Local, Git or Google Drive.
+  behind its disk), and its client is not Local or Git.
   Otherwise it stays on disk, logged once per process as `[storage/folder
   primary] blog=... stays on disk: ...`. That is one Redis round trip per
   call for named blogs only. An index alone proves nothing: the mirror
@@ -699,10 +703,14 @@ backend instead of the disk, and the disk keeps a copy to roll back to.
   watches the folder there with chokidar (until the Phase E rework of the
   Local client). Blogs on the Git client stay on disk because live clones
   run git in the folder and the setup import uses the folder as git's work
-  tree (until #2259). Blogs on Google Drive stay on disk because its sync
-  reads directory entries from the disk and fingerprints files by their
-  nanosecond mtime there, which the content cache's copies don't keep (until
-  it keeps `{ sha1, md5Checksum }` pairs against the index).
+  tree (until #2259). Google Drive works on either backend: its sync lists
+  the folder through storage/folder and pairs each Drive `md5Checksum` with
+  the file's size, modified time and SHA-1 in its own database
+  (`clients/google-drive/util/localState.js`), so an unchanged file costs no
+  read on S3 either. A Drive blog whose records predate that should sync
+  once on disk before it is named: on disk its old fingerprints are replaced
+  for the cost of a stat each, while on S3 they can't match, so each file is
+  read once from S3 (no Drive download) to record a fresh pair.
 - **The disk copy**: each change is made in S3 first, which is what the
   caller waits for and what counts, then copied to disk by the mirror's
   copier run the other way round (`mirror.copier`, S3 to disk), with the
@@ -723,7 +731,7 @@ backend instead of the disk, and the disk keeps a copy to roll back to.
   while it is still on S3, so its disk copy is complete and it leaves
   `storage:folder:primary:dirty`, then take it out of the flag. The mirror
   takes over again from there.
-- **What does not work on S3 yet**: the Local, Git and Google Drive clients
+- **What does not work on S3 yet**: the Local and Git clients
   (kept on disk above); switching a blog on S3 to one of them moves it to
   disk, so its disk copy must be clean; `stat` with `{ hash: true }`
   downloads the file (Dropbox, until it keeps its own `{ sha1, content_hash }`

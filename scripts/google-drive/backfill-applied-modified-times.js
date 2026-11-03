@@ -5,10 +5,18 @@
 // otherwise every Drive file still lacking a record would be re-downloaded
 // once after the move.
 //
+// It also replaces records which describe the file Blot holds by its old
+// fingerprint on disk (size and nanosecond mtime) with storage/folder's size
+// and modified time (clients/google-drive/util/localState.js). A sync does
+// that for every unchanged file it checks, at the cost of a stat, but only on
+// disk: on S3 an old fingerprint can't match, so the file would be read from
+// S3 (one with an md5) or exported from Drive again (a Google Doc). Run this
+// before a Drive blog is named in BLOT_FOLDER_PRIMARY.
+//
 // Default is a dry run: reports, per blog, how many non-directory files in the
-// ID <-> path mapping have no valid applied record. With --apply, blogs with a
-// non-zero count are synced sequentially under the blog's sync lock, then
-// re-counted. This is the same full walk a webhook sync does (clients/
+// ID <-> path mapping have no valid applied record, and how many have an old
+// fingerprint record. With --apply, blogs with either are synced sequentially
+// under the blog's sync lock, then re-counted. This is the same full walk a webhook sync does (clients/
 // google-drive/sync/sync, without the dashboard resync's reset), which
 // writes an applied record whenever a file is downloaded or already
 // identical. Nothing is cleared first, so a walk that fails part way leaves
@@ -45,6 +53,8 @@ let totalMissing = 0;
 let successfulResyncs = 0;
 let failedResyncs = 0;
 let totalRemaining = 0;
+let totalOld = 0;
+let totalOldRemaining = 0;
 const needsResync = [];
 const errors = [];
 
@@ -52,14 +62,24 @@ const label = (blog) => `${blog.handle || "no handle"} ${blog.id}`;
 
 const formatError = (err) => (err && err.message ? err.message : String(err));
 
-// Scans the ID <-> path mapping a page at a time, reading metadata for each
-// page with a single HMGET, and compares against the applied hash (read once).
+// Whether a record describes the file Blot holds the old way, by its
+// fingerprint on disk, rather than by size and modified time
+// (clients/google-drive/util/localState.js)
+const isOld = (record) =>
+  Boolean(record && record.fingerprint && !Number.isFinite(record.size));
+
+// Scans the ID <-> path mapping a page at a time, reading metadata and
+// verified records for each page with a single HMGET each, and compares
+// against the applied hash (read once). old counts files whose record is in
+// the old fingerprint form: the verified record of a file with an md5, or
+// otherwise the applied one (an md5 file's applied record isn't used).
 const countMissing = async (folderId, blogID) => {
   const folder = database.folder(folderId, blogID);
   const applied = await folder.getAllApplied();
 
   let files = 0;
   let missing = 0;
+  let old = 0;
   let cursor = "0";
 
   do {
@@ -70,6 +90,7 @@ const countMissing = async (folderId, blogID) => {
     if (!ids.length) continue;
 
     const metadata = await client.hmGet(folder.metadataKey, ids);
+    const verified = await folder.getVerifiedContents(ids);
 
     ids.forEach((id, i) => {
       let isDirectory = false;
@@ -81,10 +102,11 @@ const countMissing = async (folderId, blogID) => {
 
       files++;
       if (!applied.get(id)) missing++;
+      if (verified[i] ? isOld(verified[i]) : isOld(applied.get(id))) old++;
     });
   } while (String(cursor) !== "0");
 
-  return { files, missing };
+  return { files, missing, old };
 };
 
 const resync = async (blog) => {
@@ -139,16 +161,17 @@ const processBlog = async (blog) => {
       return;
     }
 
-    const { files, missing } = await countMissing(folderId, blog.id);
+    const { files, missing, old } = await countMissing(folderId, blog.id);
 
     totalFiles += files;
     totalMissing += missing;
+    totalOld += old;
 
     console.log(
-      `${label(blog)}: ${missing} of ${files} files missing applied modifiedTime`
+      `${label(blog)}: ${missing} of ${files} files missing applied modifiedTime, ${old} with an old fingerprint record`
     );
 
-    if (!missing) return;
+    if (!missing && !old) return;
 
     needsResync.push(blog);
 
@@ -172,9 +195,10 @@ const processBlog = async (blog) => {
 
     const after = await countMissing(folderId, blog.id);
     totalRemaining += after.missing;
+    totalOldRemaining += after.old;
 
     console.log(
-      `${label(blog)}: ${after.missing} of ${after.files} files still missing applied modifiedTime` +
+      `${label(blog)}: ${after.missing} of ${after.files} files still missing applied modifiedTime, ${after.old} with an old fingerprint record` +
         (after.missing
           ? " (expected to be ~0; old md5 files whose verification was deferred by sync's migration budget may remain, re-run to reduce)"
           : "")
@@ -193,6 +217,7 @@ const summarize = () => {
   );
   console.log(`  Google Drive blogs checked: ${totalGoogleDriveBlogs}`);
   console.log(`  Files missing applied modifiedTime: ${totalMissing} of ${totalFiles}`);
+  console.log(`  Files with an old fingerprint record: ${totalOld}`);
   console.log(`  Blogs needing a resync: ${needsResync.length}`);
 
   needsResync.forEach((blog) => console.log(`    ${label(blog)}`));
@@ -201,6 +226,7 @@ const summarize = () => {
     console.log(`  Successful resyncs: ${successfulResyncs}`);
     console.log(`  Failed: ${failedResyncs}`);
     console.log(`  Files still missing after resync: ${totalRemaining}`);
+    console.log(`  Old fingerprint records left after resync: ${totalOldRemaining}`);
     if (totalRemaining) {
       console.log(
         "  (A residue is expected for old md5 files deferred by sync's verification budget; their change detection doesn't use the applied record. Re-run to reduce it.)"

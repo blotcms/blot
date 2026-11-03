@@ -28,7 +28,7 @@ const createDriveClient = require("./createDriveClient");
 const createDocsClient = require("./createDocsClient");
 const establishSyncLock = require("sync/establishSyncLock");
 const database = require("../database");
-const localFingerprint = require("../util/localFingerprint");
+const localState = require("../util/localState");
 const sync = require("../sync");
 
 const prefix = () => `${clfdate()} Google Drive hotDocPoller:`;
@@ -657,7 +657,7 @@ class HotDocPoller {
         // and rebuild the same document again.
         await folderDb.setApplied(file.data.id, {
           modifiedTime: file.data.modifiedTime,
-          fingerprint: await localFingerprint(item.blogID, path),
+          ...(await localState.stateOf(item.blogID, path)),
         });
 
         if (result?.updated !== true) {
