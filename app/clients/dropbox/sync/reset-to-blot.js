@@ -208,9 +208,8 @@ async function resetToBlotWithClient(
     removedFiles: {},
     modifiedPaths: [],
     startedAt,
-    // The pre-walk cursor, to confirm that a subfolder Dropbox can no longer
-    // list changed during the walk (see walk)
-    cursor,
+    // Subfolders Dropbox could no longer list, as { dir, tag } (see walk)
+    vanished: [],
   };
 
   const progress = createProgress(await countLocalFiles(blogID, "/"), publish);
@@ -226,8 +225,29 @@ async function resetToBlotWithClient(
     progress
   );
 
+  const changed =
+    summary.changedPaths.length || summary.vanished.length
+      ? await changedSinceCursor(client, cursor, dropboxRoot)
+      : null;
+
+  // A subfolder Dropbox listed in its parent but then said isn't one was
+  // deleted, moved or replaced by a file since. If Dropbox reports it as
+  // changed since the pre-walk cursor, that's a live edit: leave Blot's copy
+  // alone, since the catch-up sync applies it from that cursor (as a move,
+  // where the walk could only remove and download). Otherwise the 409 is
+  // unexplained, so report it as a failed path rather than hide it.
+  for (const { dir, tag } of summary.vanished) {
+    if (changed && overlapsAny(dir, changed)) {
+      publish("Skipping", dir, "which changed in Dropbox during the walk");
+      summary.skipped += 1;
+    } else {
+      publish("Failed to list", dir, tag);
+      recordFailure(summary, dir, new Error("409 " + tag));
+    }
+  }
+
   if (summary.changedPaths.length) {
-    await excuseRecentChanges(client, cursor, dropboxRoot, summary);
+    await excuseRecentChanges(client, changed, dropboxRoot, summary);
     if (summary.changedDuringWalk)
       publish(
         `${summary.changedDuringWalk} change(s) were made in Dropbox during or just before the walk`
@@ -263,38 +283,18 @@ const walk = async (
   progress
 ) => {
   publish("Checking", dir);
-  let vanishedError;
   const [remoteContents, localContents] = await Promise.all([
     remoteReaddir(client, join(dropboxRoot, dir)).catch((err) => {
       if (dir === "/" || !vanishedFolder(err)) throw err;
-      vanishedError = dropboxTag(err);
+      summary.vanished.push({ dir, tag: dropboxTag(err) });
       return null;
     }),
     localReaddir(blogID, dir),
   ]);
 
-  // Dropbox listed this folder in its parent but now says it isn't one: it
-  // was deleted, moved or replaced by a file since. If Dropbox reports it as
-  // changed since the pre-walk cursor, that's a live edit: skip it and leave
-  // Blot's copy alone, since the catch-up sync applies it from that cursor (as
-  // a move, where the walk could only remove and download). Otherwise the
-  // 409 is unexplained, so report it as a failed path rather than hide it,
-  // and still don't remove anything. Neither retries, so neither can loop.
-  if (!remoteContents) {
-    const changed = await changedSinceCursor(
-      client,
-      summary.cursor,
-      dropboxRoot
-    );
-    if (changed && overlapsAny(dir, changed)) {
-      publish("Skipping", dir, "which changed in Dropbox during the walk");
-      summary.skipped += 1;
-    } else {
-      publish("Failed to list", dir, vanishedError);
-      recordFailure(summary, dir, new Error("409 " + vanishedError));
-    }
-    return;
-  }
+  // Dropbox no longer has this folder: remove nothing, and check once the
+  // walk is done whether the cursor explains it (see resetToBlotWithClient)
+  if (!remoteContents) return;
 
   for (const { name, path_display, is_directory } of localContents) {
     const pathOnBlot = join(dir, name);
@@ -600,8 +600,7 @@ const deletedRecently = async (client, dropboxRoot, files, startedAt) => {
 //   removed folder via the files that were in it;
 // - a created folder with a recently modified file downloaded into it.
 // A change that none of these excuses is counted by countChanges.
-const excuseRecentChanges = async (client, cursor, dropboxRoot, summary) => {
-  const changed = await changedSinceCursor(client, cursor, dropboxRoot);
+const excuseRecentChanges = async (client, changed, dropboxRoot, summary) => {
   let lookups = 0;
 
   for (const path of summary.changedPaths) {
