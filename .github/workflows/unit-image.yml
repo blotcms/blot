@@ -136,7 +136,21 @@ jobs:
               test -x /usr/bin/resty-auto-ssl/sockproc
               /usr/bin/resty-auto-ssl/dehydrated --version
               test -z "${CURL_CA_BUNDLE:-}${SSL_CERT_FILE:-}"
-              curl -fsS -o /dev/null https://acme-staging-v02.api.letsencrypt.org/directory
+              # Staging goes down for maintenance (a 5xx, no connection or a
+              # reset one), which must not block deploys: that alone is a
+              # warning. A certificate that does not verify (exit 60) still
+              # fails, and production, through the same curl and TLS, must
+              # answer.
+              status=0
+              code=$(curl -sS -o /dev/null -w "%{http_code}" https://acme-staging-v02.api.letsencrypt.org/directory) || status=$?
+              if [ "$status" = 0 ] && [ "$code" = 200 ]; then
+                :
+              elif { [ "$status" = 0 ] && [ "${code#5}" != "$code" ]; } || case "$status" in 6|7|28|35|52|56) true ;; *) false ;; esac; then
+                echo "::warning::Let'"'"'s Encrypt staging is unavailable (HTTP $code, curl exit $status)"
+              else
+                echo "Let'"'"'s Encrypt staging: HTTP $code, curl exit $status" >&2
+                exit 1
+              fi
               curl -fsS -o /dev/null https://acme-v02.api.letsencrypt.org/directory
             '
 
