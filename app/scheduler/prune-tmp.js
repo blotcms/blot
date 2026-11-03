@@ -149,6 +149,13 @@ module.exports = async function pruneTmp(options) {
   // the entry which is it, or holds it, is left alone
   const gitStoreCache = path.resolve(config.git_store.cache_directory);
 
+  // So are the shadow log and its rotated .1 (shadow mode's log lines, which
+  // are wanted for much longer than a day), and any directory holding them,
+  // wherever in tmp the log is configured
+  const shadowLogs = config.git_store.shadow_log
+    ? [path.resolve(config.git_store.shadow_log), path.resolve(config.git_store.shadow_log) + ".1"]
+    : [];
+
   await prune(
     tmpDirectory,
     maxAgeMs,
@@ -157,7 +164,8 @@ module.exports = async function pruneTmp(options) {
     (entryPath) =>
       byFile.includes(entryPath) ||
       holds(path.resolve(entryPath), folderCache) ||
-      holds(path.resolve(entryPath), gitStoreCache)
+      holds(path.resolve(entryPath), gitStoreCache) ||
+      shadowLogs.some((file) => holds(path.resolve(entryPath), file))
   );
 
   await pruneFiles(stagingRoot, stagingMaxAgeMs, now, report);
