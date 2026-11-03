@@ -95,6 +95,9 @@ test("jail: a job with a network starts as its own uid, in its cgroup, behind th
     assert.throws(() => jail.command(name, jail.PROXY_CGROUP), /unknown cgroup/);
   }
   assert.deepStrictEqual(jail.JOBS.screenshot.cgroups, [jail.BROWSER_CGROUP]);
+  // a batch of 8 pages (app/sandbox/jobs/screenshot.js)
+  assert.strictEqual(jail.JOBS.screenshot.timeSeconds, 70);
+  assert.strictEqual(jail.JOBS.screenshot.maxOutputBytes, 60 * 1024 * 1024);
 });
 
 test("jail: the fetch-image job has one cgroup of its own, in the unit's subtree, and a short queue", () => {
