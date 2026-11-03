@@ -83,6 +83,48 @@ describe("git store served: the blog folder from the store", function () {
     expect(await fs.pathExists(this.blogDirectory + "/old")).toBe(false);
   });
 
+  it("renames a file to the folder it was in, and a file into a folder of its own name", async function () {
+    await this.local.writeAndPush("/a/b.txt", "Same bytes");
+    await this.local.writeAndPush("/c", "Other bytes");
+    await mirrorAndSwitch(this);
+
+    spyOn(storage, "move").and.callThrough();
+
+    // a/b.txt to a, and c to c/d.txt, in one push
+    await this.local.git(["mv", "a/b.txt", "tmp-a"]);
+    await this.local.git(["mv", "tmp-a", "a"]);
+    await this.local.git(["mv", "c", "tmp-c"]);
+    await fs.mkdirp(this.local.path("/c"));
+    await this.local.git(["mv", "tmp-c", "c/d.txt"]);
+    await this.local.commit("Renames into and out of folders");
+    await this.local.push();
+
+    await this.local.expectSynced();
+    expect(storage.move).not.toHaveBeenCalled();
+    expect(await fs.readFile(this.blogDirectory + "/a", "utf8")).toBe("Same bytes");
+    expect(await fs.readFile(this.blogDirectory + "/c/d.txt", "utf8")).toBe("Other bytes");
+  });
+
+  it("writes a renamed file from the store when the folder's copy is not the old blob", async function () {
+    await this.local.writeAndPush("/old.txt", "The committed bytes");
+    await mirrorAndSwitch(this);
+
+    // A sync which wrote other bytes there and failed before moving the
+    // applied commit on
+    await fs.outputFile(this.blogDirectory + "/old.txt", "Bytes from a sync that failed");
+
+    spyOn(storage, "move").and.callThrough();
+
+    await this.local.git(["mv", "old.txt", "new.txt"]);
+    await this.local.commit("Rename");
+    await this.local.push();
+
+    await this.local.expectSynced();
+    expect(storage.move).not.toHaveBeenCalled();
+    expect(await fs.readFile(this.blogDirectory + "/new.txt", "utf8")).toBe("The committed bytes");
+    expect(await fs.pathExists(this.blogDirectory + "/old.txt")).toBe(false);
+  });
+
   it("does not write a file whose bytes are already there", async function () {
     await this.local.commitFiles({ "/a.txt": "A", "/b.txt": "B" });
     await this.local.push();
