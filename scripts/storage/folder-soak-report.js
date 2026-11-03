@@ -467,16 +467,24 @@ function costEstimate(summary, hours, options, storedBytes) {
 
   let readsPerMonth = 0;
   let getsPerMonth = 0;
+  // Byte reads whose GETs can't be estimated: their ops had no cache
+  // outcomes in the window (hours from before the split), so not counted as 0
+  let unclassifiedPerMonth = 0;
 
   CACHE_AWARE.forEach(function (op) {
     const row = summary.ops[op];
 
     if (!row || !(rate > 0)) return;
 
-    const calls = (row.sampled / rate / hours) * HOURS_PER_MONTH;
+    // A dropped shadow was selected by the rate too, then skipped for
+    // concurrency, so it counts towards the volume of calls
+    const calls = ((row.sampled + (row.dropped || 0)) / rate / hours) * HOURS_PER_MONTH;
+    const per = requestsPerOp(row);
 
     readsPerMonth += calls;
-    getsPerMonth += calls * (requestsPerOp(row) || 0);
+
+    if (per === null) unclassifiedPerMonth += calls;
+    else getsPerMonth += calls * per;
   });
 
   const writesPerDay = options.writesPerDay !== undefined ? options.writesPerDay : (summary.cache.filled / hours) * 24;
@@ -493,6 +501,7 @@ function costEstimate(summary, hours, options, storedBytes) {
     storedBytes: storedBytes || null,
     readsPerMonth: readsPerMonth,
     getsPerMonth: getsPerMonth,
+    unclassifiedPerMonth: unclassifiedPerMonth,
     writesPerDay: writesPerDay,
     writesFrom: options.writesPerDay !== undefined ? "from --writes-per-day" : "cache filled counter, a lower bound",
     putsPerMonth: putsPerMonth,
@@ -525,7 +534,11 @@ function costMarkdown(cost) {
   lines.push(
     "| Request rates (estimated) | " + compact(cost.writesPerDay) + " writes/day (" + cost.writesFrom + "); " + compact(cost.getsPerMonth) +
       " GETs/month of " + compact(cost.readsPerMonth) + " byte reads/month, from the shadow sample" +
-      (cost.rate ? " at rate " + cost.rate : "") + " |"
+      (cost.rate ? " at rate " + cost.rate : "") +
+      (cost.unclassifiedPerMonth
+        ? "; GETs unknown for " + compact(cost.unclassifiedPerMonth) + " reads/month with no cache outcomes, left out of the request cost"
+        : "") +
+      " |"
   );
   lines.push("| Egress | unchanged (the CDN pulls a folder file from S3 at the same price per GB as from EC2 today) |");
 
@@ -562,7 +575,8 @@ async function build(options, now) {
   now = now || new Date();
 
   const maxHours = shadow.TTL_SECONDS / 3600;
-  const hours = options.hours !== null ? Math.floor(options.hours) : Math.floor((now - options.since) / 3600000) + 1;
+  // Every UTC hour bucket the window touches, the one --since falls in included
+  const hours = options.hours !== null ? Math.floor(options.hours) : Math.floor(now / 3600000) - Math.floor(options.since / 3600000) + 1;
 
   if (hours < 1 || hours > maxHours) throw new Error("The window must be 1 to " + maxHours + " hours (the counters are kept that long)");
 

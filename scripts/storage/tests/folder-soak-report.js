@@ -74,6 +74,48 @@ describe("scripts/storage/folder-soak-report", function () {
     expect(text).toContain("| Egress | unchanged");
   });
 
+  it("counts dropped shadows towards the volume of reads", function () {
+    var c = counters();
+    c["read:dropped"] = 100;
+
+    var cost = report.costEstimate(summarise(c), 10, { rate: 0.1, writesPerDay: 0 }, null);
+
+    // read: (200 + 100 dropped) / 0.1 / 10 h * 730, serve as before
+    expect(cost.readsPerMonth).toBeCloseTo(((300 + 10) / 0.1 / 10) * 730, 3);
+  });
+
+  it("leaves out, and says so, reads with no cache outcomes rather than costing them at zero", function () {
+    var c = {
+      "read:sampled": 100,
+      "read:matched": 100,
+      "read:local:le:1": 100,
+      "read:s3:le:100": 100,
+    };
+
+    var cost = report.costEstimate(summarise(c), 10, { rate: 0.1, writesPerDay: 0 }, null);
+
+    expect(cost.getsPerMonth).toEqual(0);
+    expect(cost.unclassifiedPerMonth).toBeCloseTo((100 / 0.1 / 10) * 730, 3);
+    expect(report.costMarkdown(cost).join("\n")).toContain("GETs unknown for");
+  });
+
+  it("includes the hour bucket --since falls in", async function () {
+    var shadowReport = require("../shadow-report");
+    var loaded;
+
+    spyOn(shadowReport, "load").and.callFake(function (hours, now) {
+      loaded = hours;
+      return Promise.resolve(Object.assign(summarise({}), { from: "2026-11-03 12:00", to: "2026-11-03 13:00" }));
+    });
+
+    var options = report.parseArgs(["--since", "2026-11-03T12:50:00Z", "--no-index"]);
+
+    await report.build(options, new Date("2026-11-03T13:10:00Z"));
+
+    // 12:00 and 13:00
+    expect(loaded).toEqual(2);
+  });
+
   it("says what is missing when the volume is not given", function () {
     var cost = report.costEstimate(summarise(counters()), 10, { rate: 0.1, writesPerDay: 100 }, 1024 * 1024 * 1024);
 
