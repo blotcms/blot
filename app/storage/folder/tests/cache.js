@@ -332,6 +332,97 @@ describe("storage/folder cache", function () {
     expect(await fs.pathExists(a)).toBe(false);
   });
 
+  describe("pinning across processes", function () {
+    // Two caches on one directory stand in for two processes. A short grace
+    // period keeps the specs quick; the holder touches three times in it.
+    var GRACE = 300;
+
+    function sleep(ms) {
+      return new Promise(function (resolve) {
+        setTimeout(resolve, ms);
+      });
+    }
+
+    // Pins /a.txt in holder, and resolves to { local, release } once fn runs
+    async function hold(holder, never) {
+      var release;
+      var held = new Promise(function (resolve) {
+        release = resolve;
+      });
+      var started = new Promise(function (resolve) {
+        holder
+          .use(spec("/a.txt", "aaaa"), source("aaaa"), function (local) {
+            resolve(local);
+            return never ? new Promise(function () {}) : held;
+          })
+          .catch(function () {});
+      });
+      var local = await started;
+
+      return { local: local, release: release };
+    }
+
+    it("keeps an entry another cache would evict, past the grace period", async function () {
+      var holder = open({ maxBytes: 100, graceMs: GRACE });
+      var held = await hold(holder);
+      var other = open({ maxBytes: 4, graceMs: GRACE });
+
+      await other.ready();
+      await sleep(GRACE * 2.5);
+
+      // The other cache last saw it before the wait, and is over budget
+      await other.get(spec("/b.txt", "bbbb"), source("bbbb"));
+      await other.check();
+
+      expect(await fs.pathExists(held.local)).toBe(true);
+
+      held.release();
+    });
+
+    it("lets go of the entry when it is released", async function () {
+      var holder = open({ maxBytes: 100, graceMs: GRACE });
+      var held = await hold(holder);
+      var other = open({ maxBytes: 4, graceMs: GRACE });
+
+      await other.ready();
+      await sleep(GRACE * 2.5);
+      await other.get(spec("/b.txt", "bbbb"), source("bbbb"));
+      expect(await fs.pathExists(held.local)).toBe(true);
+
+      held.release();
+      await sleep(GRACE * 1.5);
+      await other.get(spec("/c.txt", "cccc"), source("cccc"));
+
+      expect(await fs.pathExists(held.local)).toBe(false);
+    });
+
+    it("does not protect an entry whose holder died", async function () {
+      var holder = open({ maxBytes: 100, graceMs: GRACE });
+      var held = await hold(holder, true);
+      var other = open({ maxBytes: 4, graceMs: GRACE });
+
+      await other.ready();
+
+      // The holder goes, with its pin still held and no one to release it
+      holder.stop();
+      await sleep(GRACE * 1.5);
+      await other.get(spec("/b.txt", "bbbb"), source("bbbb"));
+
+      expect(await fs.pathExists(held.local)).toBe(false);
+    });
+
+    it("lets the cache run over its budget rather than refuse a fill", async function () {
+      var cache = open({ maxBytes: 4, graceMs: GRACE });
+
+      await cache.use(spec("/a.txt", "aaaa"), source("aaaa"), async function () {
+        var b = await cache.get(spec("/b.txt", "bbbb"), source("bbbb"));
+
+        expect(await fs.readFile(b, "utf8")).toEqual("bbbb");
+        expect(cache.stats().bytes).toBeGreaterThan(4);
+      });
+    });
+  });
+
   it("gives room back when the disk runs low", async function () {
     var cache = open({ maxBytes: 1000, minFreePercent: 10 });
 

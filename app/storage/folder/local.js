@@ -296,6 +296,11 @@ async function ensureLocal(blogID, relPath) {
   return local;
 }
 
+// The file is on disk, so there is nothing to pin
+async function withLocal(blogID, relPath, fn) {
+  return fn(await ensureLocal(blogID, relPath));
+}
+
 async function mkdir(blogID, relPath) {
   var { root, local } = locate(blogID, relPath);
 
@@ -573,6 +578,7 @@ module.exports = {
   path,
   commit,
   ensureLocal,
+  withLocal,
   mkdir,
   rmdir,
   remove,
