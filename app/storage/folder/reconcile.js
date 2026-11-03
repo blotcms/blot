@@ -17,7 +17,7 @@ const hold = require("sync/hold");
 const { DIRTY_KEY } = mirror;
 
 // Keeps a blog's copy of its folder in the storage bucket (objects under
-// folder/{blogID}/ and the models/file index) in line with the folder on
+// {blogID}/folder/ and the models/file index) in line with the folder on
 // disk, which stays authoritative (#2258 Phase C). The mirror (mirror.js)
 // copies every change as it is made; this finds and repairs the ones it
 // missed: a write which failed (the blog is then in the dirty set), a crash
@@ -220,7 +220,7 @@ async function backfillBlog(blogID, options) {
 
 // A blog which no longer exists (deleted while a mirror failure left its copy
 // in S3) has no disk or index to compare with, so its whole copy goes:
-// every object under folder/{blogID}/, markers included, and any index left.
+// every object under {blogID}/folder/, markers included, and any index left.
 // Resolves to the number of objects there were.
 async function removeDeletedBlog(blogID, apply) {
   let objects = 0;

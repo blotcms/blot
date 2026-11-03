@@ -7,14 +7,15 @@ const fs = require("fs");
 
 let rolling_total = 0;
 
-// Bytes of everything stored for a blog in the storage bucket, summed over all
-// of its objects under {blogID}/, which is its generated assets (the
-// {blogID}/_*/ prefixes). The mirrored folder is under folder/{blogID}/, which
-// this does not count; folderBytes below counts the folder on disk.
+// Bytes of a blog's generated assets in the storage bucket: its objects under
+// the {blogID}/_*/ prefixes. The mirrored folder ({blogID}/folder/) and the git
+// store ({blogID}/git/) are under {blogID}/ too and are not counted here;
+// folderBytes below counts the folder on disk.
 async function bucketBytes(blogID) {
   let total = 0;
 
   for await (const object of s3.listEntries(blogID + "/")) {
+    if (!object.key.startsWith(blogID + "/_")) continue;
     total += object.size;
   }
 
