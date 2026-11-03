@@ -654,6 +654,17 @@ compared. Counters go to an hourly Redis hash, `storage:folder:shadow:YYYYMMDDHH
 as `[storage/folder shadow] mismatch blog=... op=... kind=... path=...`.
 `node scripts/storage/shadow-report.js --hours 24` prints the mismatch rate,
 local and S3 latency percentiles per call, and the content cache's hit rate.
+A cache hit takes about a millisecond and a miss an S3 GET, so for `read`,
+`createReadStream`, `serve` and `ensureLocal` the S3 latency is also recorded
+by outcome: `hit`, `miss`, or `direct` (over `max_file_bytes`, or the cache
+fell back on ECHANGED or a disk error). The S3 backend reports the outcome of
+each call through an optional trailing `trace` object (`trace.cache`), which
+the cache fills in via an optional `outcome` callback on `get`/`use`; it is
+per call, unlike the cache's shared counters, so concurrent shadows can't mix
+outcomes up. For `createReadStream` and `serve` (which re-read the file from
+both sides) the time to first byte of each side is recorded as well as the
+whole transfer, since the first byte is what a visitor waits for. Hours
+recorded before this have only the blended S3 latency.
 Reads which go to S3 in the first place (a blog on S3, below) are not
 shadowed.
 

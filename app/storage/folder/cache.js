@@ -295,15 +295,20 @@ function createCache(options) {
   // (which resolves to a readable stream of its bytes) on a miss. Concurrent
   // calls for one entry share one download.
   //   spec  { blogID, path, version, size, sha1 }: sha1 may be empty
-  async function get(spec, open, pin) {
+  //   outcome  optional, called with "hit" or "miss" as this call is counted,
+  //            so a caller learns what happened to its own read (the
+  //            counters are shared by every concurrent one)
+  async function get(spec, open, pin, outcome) {
     var entry = await lookup(spec, pin);
 
     if (entry) {
       counters.hits++;
+      if (outcome) outcome("hit");
       return entry.file;
     }
 
     counters.misses++;
+    if (outcome) outcome("miss");
 
     entry = await fill(spec, open, true);
 
@@ -361,8 +366,8 @@ function createCache(options) {
 
   // Calls fn with the local path of the file spec describes, which is not
   // evicted until the promise fn returns has settled
-  async function use(spec, open, fn) {
-    var file = await get(spec, open, true);
+  async function use(spec, open, fn, outcome) {
+    var file = await get(spec, open, true, outcome);
     var { name } = locate(spec);
 
     try {
@@ -510,8 +515,8 @@ function createCache(options) {
     ready: function () {
       return ready;
     },
-    get: function (spec, open) {
-      return get(spec, open, false);
+    get: function (spec, open, outcome) {
+      return get(spec, open, false, outcome);
     },
     use: use,
     put: put,

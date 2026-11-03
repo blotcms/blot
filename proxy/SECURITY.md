@@ -25,7 +25,8 @@ in 1.31.2) and CVE-2026-95101 (request-body injection, fixed in 1.31.7).
 ## HTTP/3
 
 HTTP/3 is enabled on all six public servers, which listen for QUIC on UDP 443
-and advertise it with `Alt-Svc: h3=":443"; ma=86400`. The fail2ban jails ban
+and advertise it with `Alt-Svc: h3=":443"; ma=86400` (not on `cdn.`, which
+only Bunny reaches). The fail2ban jails ban
 over UDP as well as TCP.
 
 It was disabled in PR #2225, on OpenResty 1.31.1.1 (nginx 1.31.1), because
