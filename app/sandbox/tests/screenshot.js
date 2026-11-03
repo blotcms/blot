@@ -437,7 +437,7 @@ describe("sandbox screenshot job", function () {
         expect(await fs.pathExists(file("b"))).toBe(true);
       }, screenshot.BUSY_DELAY_MS + 10000);
 
-      ["SANDBOX_KILLED", "SANDBOX_TIMEOUT"].forEach(function (code) {
+      ["SANDBOX_KILLED", "SANDBOX_TIMEOUT", "SANDBOX_INPUT_TOO_LARGE"].forEach(function (code) {
         it("sends each page alone when a batch ends in " + code, async function () {
           const heavy = "https://heavy";
           const run = spyOn(sandbox, "run").and.callFake(async (name, args) => {

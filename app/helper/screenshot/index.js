@@ -397,7 +397,7 @@ const BATCH_ARGS_BYTES = 48 * 1024;
 // The job as a whole failed rather than a page: it ran out of time or memory,
 // or its reply was too big. In a batch the cause is one of its pages, or all
 // of them together, so each page is tried again on its own.
-const JOB_LIMIT_CODES = ["SANDBOX_TIMEOUT", "SANDBOX_KILLED", "SANDBOX_OUTPUT_TOO_LARGE"];
+const JOB_LIMIT_CODES = ["SANDBOX_TIMEOUT", "SANDBOX_KILLED", "SANDBOX_OUTPUT_TOO_LARGE", "SANDBOX_INPUT_TOO_LARGE"];
 
 // A batch the broker answered busy is sent again this often, this far apart
 const BUSY_TRIES = 6;
