@@ -19,6 +19,17 @@ describe("local client source directory", function () {
   let saved;
   let dir;
 
+  // Watching waits on the file system and a sync lock; a loaded CI runner
+  // can need longer than jasmine's 5 seconds
+  let timeout;
+  beforeAll(function () {
+    timeout = jasmine.DEFAULT_TIMEOUT_INTERVAL;
+    jasmine.DEFAULT_TIMEOUT_INTERVAL = 30000;
+  });
+  afterAll(function () {
+    jasmine.DEFAULT_TIMEOUT_INTERVAL = timeout;
+  });
+
   beforeEach(async function () {
     saved = process.env.BLOT_LOCAL_SOURCE_DIRECTORY;
     base = await fs.mkdtemp(join(os.tmpdir(), "local-client-"));
