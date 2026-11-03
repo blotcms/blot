@@ -72,7 +72,10 @@ describe("git store progress", function () {
       const res = fakeResponse();
       const response = createResponse(res, { capabilities: "report-status side-band-64k", commands, keepaliveMs: 20 });
       response.progress("Saving to Blot...");
-      await new Promise((resolve) => setTimeout(resolve, 90));
+      // At least two keepalives, however late a loaded machine runs the timers
+      for (let waited = 0; response.stats.keepalives < 2 && waited < 2000; waited += 10) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
       expect(res.text()).toContain("0005\x01");
       expect(response.stats.keepalives).toBeGreaterThan(1);
 

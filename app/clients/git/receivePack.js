@@ -32,6 +32,8 @@
 //                           the push without moving anything.
 //     accepted(master, p),  after the refs have moved
 //     abandoned(master, p), after prepare, if the refs did not move
+//     applied(ms),          after the refs have moved, whichever refs they
+//                           were, with how long the push took to get there
 //   })
 var fs = require("fs-extra");
 var path = require("path");
@@ -718,6 +720,14 @@ async function apply(context, commands, options) {
       }
     }
 
+    if (options.applied) {
+      try {
+        options.applied(Date.now() - context.started);
+      } catch (err) {
+        console.error(clfdate(), "Git: error after push", context.handle, err);
+      }
+    }
+
     return null;
   } finally {
     await Promise.resolve(release()).catch(function (err) {
@@ -749,6 +759,7 @@ async function receive(req, res, options) {
   var context = {
     directory: directory,
     handle: options.handle,
+    started: started,
     env: env,
     children: new Set(),
     quarantine: null,

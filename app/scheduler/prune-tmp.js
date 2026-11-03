@@ -144,12 +144,20 @@ module.exports = async function pruneTmp(options) {
   const folderCache = path.resolve(config.folder_cache.directory);
   const holds = (dir, inside) => inside === dir || inside.startsWith(dir + path.sep);
 
+  // The git store's cache (config.git_store) is in tmp too, but it is in use
+  // for as long as the process which owns it runs, and keeps to its budget:
+  // the entry which is it, or holds it, is left alone
+  const gitStoreCache = path.resolve(config.git_store.cache_directory);
+
   await prune(
     tmpDirectory,
     maxAgeMs,
     now,
     report,
-    (entryPath) => byFile.includes(entryPath) || holds(path.resolve(entryPath), folderCache)
+    (entryPath) =>
+      byFile.includes(entryPath) ||
+      holds(path.resolve(entryPath), folderCache) ||
+      holds(path.resolve(entryPath), gitStoreCache)
   );
 
   await pruneFiles(stagingRoot, stagingMaxAgeMs, now, report);

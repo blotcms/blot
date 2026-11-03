@@ -1,0 +1,21 @@
+Git store: {{{summary}}}
+
+Today's check of the git store (shadow mode, #2259) against the repositories on disk found these, each still there when checked again a minute later. The repositories on disk are the source of truth, so no blog has lost anything: this is about the store's copy. {{checked}} blogs checked, {{deepChecked}} cloned in full.
+
+{{#findings}}
+- `{{{blog}}}` **{{kind}}** ({{check}}): {{detail}}
+{{/findings}}
+
+**What to do**
+
+{{#hasMissing}}
+- **missing**: a file the newest manifest names is not in the bucket, so the store has lost data for that blog. Look for what deleted it: `logs green | grep "git-store-shadow" | grep "<blogID>" | grep -E "op=(sweep|remove|compact)"`. Then repair the copy, just before a deploy (the app keeps the last manifest it read): `docker exec -u 1000 blot-blue node scripts/git/backfill-store.js --blog <blogID> --reset`, and check it with `scripts/git/verify-store.js --blog <blogID> --deep` after.
+{{/hasMissing}}
+{{#hasMismatch}}
+- **mismatch**: the store's refs or files differ from the repository on disk, or a full clone failed index-pack or fsck. Look at the blog's last `op=push` and `op=write` lines. `docker exec -u 1000 blot-blue node scripts/git/backfill-store.js --blog <blogID>` brings refs up to date; for a failed clone or a wrong size, add `--reset`, as for a missing file.
+{{/hasMismatch}}
+{{#hasErrors}}
+- **error**: a check, sweep or the orphan cleanup could not run (often a failed request to the bucket). It runs again tomorrow; check by hand with `docker exec -u 1000 blot-blue node scripts/git/verify-store.js --blog <blogID> --deep`.
+{{/hasErrors}}
+
+Every finding is also in the log as `op=verify` (or `op=sweep`, `op=remove`): `logs green | grep "git-store-shadow" | grep -E "op=(verify|sweep|remove)"` (or `logs blue`, whichever unit ran the job).

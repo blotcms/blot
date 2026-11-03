@@ -22,6 +22,7 @@ const checkRedisHost = require("./check-redis-host");
 const readHostMemory = require("./host-memory");
 const sweepGit = require("./sweep-git");
 const pruneTmp = require("./prune-tmp");
+const gitStoreMaintenance = require("./git-store-maintenance");
 const folderMirror = require("storage/folder/reconcile");
 
 // If any other disk has less than 2GB of space, we should notify the admin.
@@ -394,6 +395,20 @@ module.exports = function () {
       );
     } catch (err) {
       console.log(clfdate(), "Error: Pruning the tmp directory", err);
+    }
+  });
+
+  // The git store's sweep, the check of each shadowed blog's copy against its
+  // repository on disk, and prefixes left by blogs off git. Once a day across
+  // all containers (lock.cron); it only touches the bucket and reads the
+  // repositories, so any container can run it. Nothing unless shadow mode
+  // (BLOT_GIT_STORE_SHADOW) is on.
+  console.log(clfdate(), "Scheduled daily git store maintenance");
+  lock.cron(gitStoreMaintenance.NAME, { hour: 6, minute: 0 }, async function () {
+    try {
+      await gitStoreMaintenance.job();
+    } catch (err) {
+      console.log(clfdate(), "Error: Git store maintenance", err);
     }
   });
 

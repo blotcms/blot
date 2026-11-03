@@ -60,6 +60,8 @@
 //   parent    master's commit before it, or null
 //   changed   whether a commit was made (null for "unknown")
 //   seq       the manifest the commit made
+//   manifest  that manifest itself (or the one read, if nothing changed), so
+//             a host can plan a compaction without reading it again
 //
 // It throws for everything else, and then the manifest is as it was: an Error
 // with code EPATH for a path refused, EMOVED for three lost swaps in a row, a
@@ -552,7 +554,7 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
       // it is uploaded again. What was built still holds: it links only to
       // what master reaches, which a rewrite keeps.
       if (uploaded && uploaded.epoch !== manifest.epochOf(base)) uploaded = null;
-      if (!built) return { outcome: "ok", commit: null, parent, changed: false, seq: base.seq };
+      if (!built) return { outcome: "ok", commit: null, parent, changed: false, seq: base.seq, manifest: base };
 
       if (!uploaded) {
         const smalls = built.objects;
@@ -591,7 +593,7 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
       }
 
       await Promise.all(built.objects.map((o) => objects.put(o.oid, o.type, o.body)));
-      return { outcome: "ok", commit: built.commit, parent, changed: true, seq: next.seq };
+      return { outcome: "ok", commit: built.commit, parent, changed: true, seq: next.seq, manifest: next };
     }
   } finally {
     await scratch.release();

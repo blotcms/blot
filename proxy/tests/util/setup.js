@@ -85,13 +85,25 @@ module.exports = (configFile, { upstream = server } = {}) => {
     const configPath = DATA_DIRECTORY + "/" + basename(configFile);
 
     const identity = openrestyIdentity();
-    const result = mustache.render(await fs.readFile(configInput, "utf8"), {
-      ...config,
-      user: identity.username,
-      group: identity.group,
-      lua_directory: PROXY_DIRECTORY + "/config",
-      data_directory: DATA_DIRECTORY
-    });
+    // The production config's own partials, for a test config to include
+    // ({{> reverse-proxy-huge-base.conf}}) rather than copy
+    const partials = {};
+    for (const file of await fs.readdir(PROXY_DIRECTORY + "/config")) {
+      if (file.endsWith(".conf"))
+        partials[file] = await fs.readFile(PROXY_DIRECTORY + "/config/" + file, "utf8");
+    }
+
+    const result = mustache.render(
+      await fs.readFile(configInput, "utf8"),
+      {
+        ...config,
+        user: identity.username,
+        group: identity.group,
+        lua_directory: PROXY_DIRECTORY + "/config",
+        data_directory: DATA_DIRECTORY
+      },
+      partials
+    );
 
     await fs.outputFile(configPath, result, "utf8");
 
