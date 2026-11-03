@@ -147,6 +147,13 @@ run aws s3api put-public-access-block \
 step "Bucket policy: public s3:GetObject on blog_* only"
 run aws s3api put-bucket-policy --bucket "$BUCKET" --policy "$BUCKET_POLICY"
 
+# Puts the whole lifecycle configuration, so any rule added in the console is
+# replaced: add rules here. Why git/ is a top-level prefix: README.md.
+step "Lifecycle: abort incomplete multipart uploads under git/ after 3 days"
+run aws s3api put-bucket-lifecycle-configuration \
+  --bucket "$BUCKET" \
+  --lifecycle-configuration '{"Rules":[{"ID":"git-abort-incomplete-multipart","Status":"Enabled","Filter":{"Prefix":"git/"},"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":3}}]}'
+
 step "IAM user $IAM_USER"
 
 if ! $DRY_RUN && aws iam get-user --user-name "$IAM_USER" >/dev/null 2>&1; then

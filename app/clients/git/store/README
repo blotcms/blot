@@ -6,7 +6,7 @@ Nothing in this directory may require anything outside it except Node built-ins 
 
 ## What is here
 
-A repository is a set of immutable packs, each with its `.idx`, and a small manifest for each push. The packs and the manifests sit in an object store, keyed under a prefix the host chooses (`{blogID}/git/`):
+A repository is a set of immutable packs, each with its `.idx`, and a small manifest for each push. The packs and the manifests sit in an object store, keyed under a prefix the host chooses (`{blogID}/git/` in the storage bucket, which the bucket policy keeps private; `config/storage-bucket/README.md` says why):
 
 ```
 manifests/<seq>.json     (seq zero-padded to 10 digits, so keys sort in order)
