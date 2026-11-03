@@ -18,6 +18,7 @@ var checkGitRepoExists = require("./checkGitRepoExists");
 var smartHttp = require("./smartHttp");
 var database = require("./database");
 var shadow = require("./shadow/hook");
+var servedSwitch = require("./served/switch");
 
 // Set with onPush
 var pushed = function () {};
@@ -87,8 +88,16 @@ function exists(handle, callback) {
 // Serves a smart HTTP request (ref advertisement, fetch, push) for the blog's
 // repository. The request has been authenticated as having access to the
 // blog, and its URL names the blog's current handle (req.gitHandle).
-function handleSmartHttp(req, res, blogID) {
+function handleSmartHttp(req, res, blogID, blog) {
   req.blogID = blogID;
+
+  // A blog served from the git store (served/switch.js) is answered from it
+  // entirely: EBS is not read (#2259)
+  if (servedSwitch.enabled(blogID)) {
+    return require("./served/reads").handle(req, res, blog || { id: blogID }, {
+      receive: require("./served/receive").handle,
+    });
+  }
 
   // Times clones and fetches for comparison with the store's (shadow/reads.js)
   shadow(blogID, function () {

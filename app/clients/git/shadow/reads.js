@@ -23,13 +23,11 @@
 // Blog IDs only: never handles.
 const zlib = require("zlib");
 const receivePack = require("../receivePack");
-const { measure } = require("./counting");
-const { advertise, CONTENT_TYPE: ADVERTISEMENT } = require("../store/advertise");
-const { serve, parseRequest, createLimiter, CONTENT_TYPE: RESULT } = require("../store/clone");
-const manifest = require("../store/manifest");
+const served = require("../served/reads");
+const { createLimiter } = require("../store/clone");
 
-// The request is a few lines of wants and haves. Past this it is not one.
-const MAX_BODY = 1024 * 1024;
+const { meter, outcomeOf, whenDone, reply } = served;
+
 const MAX_INSPECT = 64 * 1024;
 
 // Reads from the store for the test route, at most this many at once and this
@@ -38,82 +36,6 @@ const limiter = createLimiter({ max: 2, maxWaiting: 4 });
 
 function log(fields) {
   require("./index")._log(fields);
-}
-
-// ---- What went to the client ------------------------------------------------
-
-// Counts what a response sends and when the first byte went, by wrapping the
-// response's write and end. `skip` is how many writes to leave out of the first
-// byte's time (the smart HTTP advertisement is preceded by a service line which
-// is written before git has been asked anything).
-function meter(res, started, skip) {
-  const sent = { bytes: 0, firstByteMs: null, writes: 0 };
-  const write = res.write;
-  const end = res.end;
-
-  function note(chunk) {
-    if (chunk === undefined || chunk === null || typeof chunk === "function") return;
-    sent.bytes += Buffer.byteLength(chunk);
-    if (sent.firstByteMs === null && sent.writes++ >= skip) sent.firstByteMs = Date.now() - started;
-  }
-
-  res.write = function (chunk) {
-    note(chunk);
-    return write.apply(this, arguments);
-  };
-
-  res.end = function (chunk) {
-    note(chunk);
-    return end.apply(this, arguments);
-  };
-
-  return sent;
-}
-
-// How a response ended: ok, aborted (the client left) or the status it sent
-function outcomeOf(res) {
-  if (res.statusCode >= 400) return "http" + res.statusCode;
-  return res.writableFinished ? "ok" : "aborted";
-}
-
-function whenDone(res, callback) {
-  let done = false;
-
-  function finish() {
-    if (done) return;
-    done = true;
-    callback();
-  }
-
-  res.once("close", finish);
-  res.once("finish", function () {
-    setImmediate(finish);
-  });
-}
-
-// ---- The store ------------------------------------------------------------
-
-function reply(res, status, body) {
-  res.statusCode = status;
-  res.setHeader("content-type", "text/plain");
-  res.end(body);
-}
-
-async function collect(req) {
-  const chunks = [];
-  let size = 0;
-
-  for await (const chunk of req) {
-    size += chunk.length;
-    if (size > MAX_BODY) return null;
-    chunks.push(chunk);
-  }
-
-  return Buffer.concat(chunks);
-}
-
-function statusOf(err) {
-  return err && err.code === "BUSY" ? 503 : err && err.code === "PROTOCOL" ? 400 : 500;
 }
 
 // The refusal of a push, which git shows as "fatal: remote error: ..."
@@ -162,92 +84,31 @@ async function handle(req, res, blog) {
   reply(res, 404, "not found");
 }
 
+// The store's side, through the served path's read (../served/reads.js) with
+// this route's own limiter, logged in shadow mode's format
 async function read(req, res, blog, kind) {
-  const started = Date.now();
-  const sent = meter(res, started, 0);
-  let op = kind === "advertise" ? "advertise" : "clone";
-  let outcome;
-  let detail;
-  let measured = { ms: 0, counts: { requests: 0, bytesDown: 0 } };
-
-  res.on("error", function () {});
+  let ctx;
 
   try {
-    const { store, cache } = require("./index").readContext(blog.id);
-
-    measured = await measure(async function () {
-      const current = await manifest.read(store);
-
-      // Nothing mirrored yet: a clone of nothing would look like an empty repository
-      if (manifest.isEmpty(current)) {
-        reply(res, 503, "the store has no copy of this repository yet");
-        return "empty";
-      }
-
-      if (kind === "advertise") {
-        res.setHeader("content-type", ADVERTISEMENT);
-        receivePack.noCache(res);
-        res.end(advertise(current));
-        return "ok";
-      }
-
-      let body = await collect(req);
-      if (body === null) {
-        reply(res, 413, "request too large");
-        return "http413";
-      }
-
-      if (req.headers["content-encoding"] === "gzip") {
-        try {
-          body = zlib.gunzipSync(body, { maxOutputLength: MAX_BODY * 4 });
-        } catch (err) {
-          reply(res, 400, "bad request body");
-          return "http400";
-        }
-      }
-
-      try {
-        op = parseRequest(body).haves.length ? "fetch" : "clone";
-      } catch (err) {
-        // serve() reports what is wrong with it
-      }
-
-      res.setHeader("content-type", RESULT);
-      receivePack.noCache(res);
-
-      const result = await serve({ store, cache, manifest: current, body, out: res, limiter });
-
-      return result.refused ? "refused" : result.negotiated ? "negotiated" : result.empty ? "empty" : "ok";
-    });
-
-    outcome = measured.result;
+    ctx = require("./index").readContext(blog.id);
   } catch (err) {
-    outcome = err && err.code === "BUSY" ? "busy" : "error";
-    detail = (err && (err.code || err.name)) || "error";
-
-    if (!res.headersSent) {
-      reply(res, statusOf(err), err && err.code === "BUSY" ? "busy, try again" : "the store could not serve this");
-    } else if (!res.writableEnded) {
-      res.destroy();
-    }
+    log({ blog: blog.id, op: kind === "post" ? "clone" : kind, source: "store", outcome: "error", detail: (err && (err.code || err.name)) || "error" });
+    return reply(res, 500, "the store could not serve this");
   }
 
-  await new Promise(function (resolve) {
-    if (res.writableFinished || res.destroyed) return resolve();
-    whenDone(res, resolve);
-  });
+  const fields = await served.read(req, res, { kind, store: ctx.store, cache: ctx.cache, limiter });
 
   log({
     blog: blog.id,
-    op,
+    op: fields.op,
     source: "store",
-    outcome: outcome === "ok" ? outcomeOf(res) : outcome,
-    storeMs: Date.now() - started,
-    firstByteMs: sent.firstByteMs === null ? undefined : sent.firstByteMs,
-    requests: measured.counts ? measured.counts.requests : undefined,
-    bytesDown: measured.counts ? measured.counts.bytesDown : undefined,
-    bytesSent: sent.bytes,
-    detail,
+    outcome: fields.outcome,
+    storeMs: fields.ms,
+    firstByteMs: fields.firstByteMs,
+    requests: fields.requests,
+    bytesDown: fields.bytesDown,
+    bytesSent: fields.bytesSent,
+    detail: fields.detail,
   });
 }
 
