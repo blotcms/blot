@@ -101,32 +101,27 @@ async function eolApi(product) {
 
 const pins = {};
 
+// The pins all live in config/versions.env (the macserver's Node is not there).
 function readPins() {
-  const dockerfile = read("Dockerfile") || "";
-  const m = dockerfile.match(/^ARG\s+NODE_BASE=node:([\w.]+?)-alpine/m);
-  if (m) pins.node = m[1];
-  const p = dockerfile.match(/^ARG\s+PANDOC_VERSION=(\S+)/m);
-  if (p) pins.pandoc = p[1];
+  const v = require("./check-versions").readVersions();
+  if (v.NODE_VERSION) pins.node = v.NODE_VERSION;
+  if (v.PANDOC_VERSION) pins.pandoc = v.PANDOC_VERSION;
+  if (v.OPENRESTY_VERSION) pins.openresty = v.OPENRESTY_VERSION;
+  if (v.NGINX_VERSION) pins.nginx = v.NGINX_VERSION;
 
-  const proxy = read("proxy/Dockerfile") || "";
-  const ver = proxy.match(/^ARG\s+OPENRESTY_VERSION=(\S+)/m);
-  const ngx = proxy.match(/^ARG\s+NGINX_VERSION=(\S+)/m);
-  if (ver) pins.openresty = ver[1];
-  if (ngx) pins.nginx = ngx[1];
-
-  // The app and proxy images must share one node:alpine base (the proxy
-  // builds OpenResty on it); a drift means one of them is behind.
-  for (const problem of require("./check-base-image").problems()) add("action", "Base image: " + problem);
+  // A NODE_BASE that doesn't match NODE_VERSION, a default back in a
+  // Dockerfile or a repeated version means one of them is behind.
+  for (const problem of require("./check-versions").problems()) add("action", "Versions: " + problem);
 }
 
 // ---- checks ---------------------------------------------------------------
 
 async function checkNode() {
-  if (!pins.node) return add("watch", "Node: could not find ARG NODE_BASE=node:<ver>-alpine in Dockerfile");
+  if (!pins.node) return add("watch", "Node: could not find NODE_VERSION in config/versions.env");
   const floating = !/^\d+\.\d+\.\d+$/.test(pins.node);
   const major = pins.node.split(".")[0];
   if (floating) {
-    add("watch", "Node: Dockerfile uses floating tag node:" + pins.node + "-alpine (not pinned; rebuild picks up latest)");
+    add("watch", "Node: config/versions.env uses floating tag node:" + pins.node + "-alpine (not pinned; rebuild picks up latest)");
   }
 
   await source("Node releases (nodejs.org/dist/index.json)", async () => {

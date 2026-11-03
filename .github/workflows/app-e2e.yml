@@ -49,9 +49,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - id: versions
+        uses: ./.github/actions/versions
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 24.22.1
+          node-version: ${{ steps.versions.outputs.NODE_VERSION }}
 
       - name: Install config generator dependencies
         if: ${{ env.E2E_UNIT != 'true' }}

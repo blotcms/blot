@@ -5,7 +5,9 @@
 
 BLOT_DIRECTORY=/var/www/blot
 NVM_URL=https://raw.githubusercontent.com/creationix/nvm/v0.32.1/install.sh
-NODE_VERSION=24.22.1
+# config/versions.env is the one place the Node version is set
+NODE_VERSION=$(sed -n 's/^NODE_VERSION=//p' "$BLOT_DIRECTORY/config/versions.env")
+[ -n "$NODE_VERSION" ] || { echo "No NODE_VERSION in $BLOT_DIRECTORY/config/versions.env"; exit 1; }
 SCRIPTS_DIRECTORY=/home/ec2-user/node/scripts
 
 if [ ! -d "$SCRIPTS_DIRECTORY" ]; then

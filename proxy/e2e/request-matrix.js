@@ -44,6 +44,7 @@ const crypto = require("crypto");
 const zlib = require("zlib");
 const path = require("path");
 const { execFileSync } = require("child_process");
+const versions = require("../../scripts/versions");
 
 const IMAGE = process.env.PROXY_IMAGE || "blot-proxy:e2e";
 const BASE = parseInt(process.env.RM_PORT_BASE || "18120", 10);
@@ -143,7 +144,7 @@ async function startProxy(c) {
 }
 
 function startStub(c) {
-  docker("run", "-d", "--name", c.name + "-stub", "--network", "container:" + c.name, "-v", `${STUB}:/s.js:ro`, "node:24.22.1-alpine", "node", "/s.js");
+  docker("run", "-d", "--name", c.name + "-stub", "--network", "container:" + c.name, "-v", `${STUB}:/s.js:ro`, versions.nodeImage(), "node", "/s.js");
 }
 
 // The stub restarts for the "node down" section: wait until it answers

@@ -90,9 +90,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - id: versions
+        uses: ./.github/actions/versions
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 24.22.1
+          node-version: ${{ steps.versions.outputs.NODE_VERSION }}
 
       # Which host scripts/deploy/units.sh and util/sshCommand.js ssh to
       # (BLOT_DEPLOY_TARGET), against a stub ssh.
@@ -113,8 +116,8 @@ jobs:
       - name: Check OpenResty release and record build options
         run: |
           docker run --rm --entrypoint openresty blot-proxy:ci -V 2>&1 | tee openresty-version.txt
-          grep -Fq 'nginx version: openresty/1.31.8.1' openresty-version.txt
-          grep -Fq 'built with OpenSSL 3.5.9 ' openresty-version.txt
+          grep -Fq "nginx version: openresty/$OPENRESTY_VERSION" openresty-version.txt
+          grep -Fq "built with OpenSSL $RESTY_OPENSSL_VERSION " openresty-version.txt
 
       - name: Validate generated OpenResty config
         # The image holds a template; render it (as the entrypoint does) first
@@ -193,7 +196,7 @@ jobs:
             blot-proxy:e2e
           docker run -d --name stub --network container:proxy \
             -v "$PWD/proxy/e2e/stub-upstream.js:/s.js" \
-            node:24.22.1-alpine node /s.js
+            node:${NODE_VERSION}-alpine node /s.js
           for i in $(seq 1 30); do
             docker exec proxy sh -c 'wget -qO- -T1 http://127.0.0.1:8090/ >/dev/null 2>&1' && break
             sleep 1
@@ -240,9 +243,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - id: versions
+        uses: ./.github/actions/versions
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 24.22.1
+          node-version: ${{ steps.versions.outputs.NODE_VERSION }}
 
       - uses: ./.github/actions/build-proxy-image
         with:
@@ -267,9 +273,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - id: versions
+        uses: ./.github/actions/versions
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 24.22.1
+          node-version: ${{ steps.versions.outputs.NODE_VERSION }}
 
       - uses: ./.github/actions/build-proxy-image
         with:
@@ -301,9 +310,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - id: versions
+        uses: ./.github/actions/versions
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 24.22.1
+          node-version: ${{ steps.versions.outputs.NODE_VERSION }}
 
       - uses: ./.github/actions/build-proxy-image
         with:
@@ -324,7 +336,7 @@ jobs:
           HOSTIP=$(hostname -I | awk '{print $1}')
           echo "HOSTIP=$HOSTIP" >> "$GITHUB_ENV"
 
-          docker run -d --name redis --network host redis:6.2.12-alpine
+          docker run -d --name redis --network host redis:${REDIS_VERSION}-alpine
 
           # challtestsrv only needs its DNS server; disable the HTTP/HTTPS/
           # TLS-ALPN/DoH listeners and AAAA so nothing competes with the proxy.
@@ -371,7 +383,7 @@ jobs:
           set -eux
           docker exec redis redis-cli set "domain:$TEST_DOMAIN" 1
           docker run -d --name stub --network host \
-            -v "$PWD/proxy/e2e/stub-upstream.js:/s.js" node:24.22.1-alpine node /s.js
+            -v "$PWD/proxy/e2e/stub-upstream.js:/s.js" node:${NODE_VERSION}-alpine node /s.js
           for i in $(seq 1 30); do
             curl -sf -o /dev/null http://127.0.0.1:8088/ && break
             sleep 1
@@ -573,9 +585,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - id: versions
+        uses: ./.github/actions/versions
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 24.22.1
+          node-version: ${{ steps.versions.outputs.NODE_VERSION }}
 
       - uses: ./.github/actions/build-proxy-image
         with:
@@ -590,7 +605,7 @@ jobs:
           echo "HOSTIP=$HOSTIP" >> "$GITHUB_ENV"
 
           docker run -d --name stub --network host \
-            -v "$PWD/proxy/e2e/stub-upstream.js:/s.js" node:24.22.1-alpine node /s.js
+            -v "$PWD/proxy/e2e/stub-upstream.js:/s.js" node:${NODE_VERSION}-alpine node /s.js
           for i in $(seq 1 30); do
             curl -sf -o /dev/null http://127.0.0.1:8088/ && break; sleep 1
           done
@@ -683,7 +698,7 @@ jobs:
             blot-proxy:f2b
           docker run -d --name f2b-stub --network host \
             -v "$PWD/proxy/e2e/stub-upstream.js:/s.js" \
-            node:24.22.1-alpine node /s.js
+            node:${NODE_VERSION}-alpine node /s.js
           for i in $(seq 1 30); do
             docker exec f2b-proxy sh -c 'wget -qO- -T1 http://127.0.0.1:8090/ >/dev/null 2>&1' && break
             sleep 1

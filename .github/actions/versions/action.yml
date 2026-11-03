@@ -1,0 +1,95 @@
+name: Versions
+description: >
+  Loads config/versions.env, the one place the project's versions and pins
+  live. Every pair goes to the job's env ($GITHUB_ENV, for later steps and for
+  docker/bake-action and docker compose, which read the environment) and to the
+  step's outputs: one per key (steps.<id>.outputs.NODE_VERSION) and build-args,
+  all the pairs one per line, for docker/build-push-action's build-args input.
+  Call it once per job, after checkout. A composite action must declare its
+  outputs, so a new key in the file needs a line below;
+  scripts/security/check-versions.js fails if one is missing.
+outputs:
+  build-args:
+    description: Every KEY=VALUE pair, one per line
+    value: ${{ steps.load.outputs.build-args }}
+  NODE_VERSION:
+    description: NODE_VERSION from config/versions.env
+    value: ${{ steps.load.outputs.NODE_VERSION }}
+  NODE_BASE:
+    description: NODE_BASE from config/versions.env
+    value: ${{ steps.load.outputs.NODE_BASE }}
+  PANDOC_VERSION:
+    description: PANDOC_VERSION from config/versions.env
+    value: ${{ steps.load.outputs.PANDOC_VERSION }}
+  NSJAIL_VERSION:
+    description: NSJAIL_VERSION from config/versions.env
+    value: ${{ steps.load.outputs.NSJAIL_VERSION }}
+  NSJAIL_COMMIT:
+    description: NSJAIL_COMMIT from config/versions.env
+    value: ${{ steps.load.outputs.NSJAIL_COMMIT }}
+  OPENRESTY_VERSION:
+    description: OPENRESTY_VERSION from config/versions.env
+    value: ${{ steps.load.outputs.OPENRESTY_VERSION }}
+  OPENRESTY_SHA256:
+    description: OPENRESTY_SHA256 from config/versions.env
+    value: ${{ steps.load.outputs.OPENRESTY_SHA256 }}
+  NGINX_VERSION:
+    description: NGINX_VERSION from config/versions.env
+    value: ${{ steps.load.outputs.NGINX_VERSION }}
+  RESTY_OPENSSL_VERSION:
+    description: RESTY_OPENSSL_VERSION from config/versions.env
+    value: ${{ steps.load.outputs.RESTY_OPENSSL_VERSION }}
+  RESTY_OPENSSL_SHA256:
+    description: RESTY_OPENSSL_SHA256 from config/versions.env
+    value: ${{ steps.load.outputs.RESTY_OPENSSL_SHA256 }}
+  RESTY_OPENSSL_PATCH_VERSION:
+    description: RESTY_OPENSSL_PATCH_VERSION from config/versions.env
+    value: ${{ steps.load.outputs.RESTY_OPENSSL_PATCH_VERSION }}
+  RESTY_OPENSSL_PATCH_SHA256:
+    description: RESTY_OPENSSL_PATCH_SHA256 from config/versions.env
+    value: ${{ steps.load.outputs.RESTY_OPENSSL_PATCH_SHA256 }}
+  RESTY_PCRE_VERSION:
+    description: RESTY_PCRE_VERSION from config/versions.env
+    value: ${{ steps.load.outputs.RESTY_PCRE_VERSION }}
+  RESTY_PCRE_SHA256:
+    description: RESTY_PCRE_SHA256 from config/versions.env
+    value: ${{ steps.load.outputs.RESTY_PCRE_SHA256 }}
+  DEHYDRATED_TAG:
+    description: DEHYDRATED_TAG from config/versions.env
+    value: ${{ steps.load.outputs.DEHYDRATED_TAG }}
+  SOCKPROC_COMMIT:
+    description: SOCKPROC_COMMIT from config/versions.env
+    value: ${{ steps.load.outputs.SOCKPROC_COMMIT }}
+  NGX_BROTLI_COMMIT:
+    description: NGX_BROTLI_COMMIT from config/versions.env
+    value: ${{ steps.load.outputs.NGX_BROTLI_COMMIT }}
+  REDIS_VERSION:
+    description: REDIS_VERSION from config/versions.env
+    value: ${{ steps.load.outputs.REDIS_VERSION }}
+  REDIS_E2E_IMAGE:
+    description: REDIS_E2E_IMAGE from config/versions.env
+    value: ${{ steps.load.outputs.REDIS_E2E_IMAGE }}
+  MINIO_IMAGE:
+    description: MINIO_IMAGE from config/versions.env
+    value: ${{ steps.load.outputs.MINIO_IMAGE }}
+  TOXIPROXY_VERSION:
+    description: TOXIPROXY_VERSION from config/versions.env
+    value: ${{ steps.load.outputs.TOXIPROXY_VERSION }}
+  UBUNTU_IMAGE:
+    description: UBUNTU_IMAGE from config/versions.env
+    value: ${{ steps.load.outputs.UBUNTU_IMAGE }}
+runs:
+  using: composite
+  steps:
+    - id: load
+      shell: bash
+      run: |
+        delimiter="EOF_$(openssl rand -hex 8)"
+        pairs=$(grep -E '^[A-Z][A-Z0-9_]*=' "${{ github.action_path }}/../../../config/versions.env")
+        echo "$pairs" >> "$GITHUB_ENV"
+        echo "$pairs" >> "$GITHUB_OUTPUT"
+        {
+          echo "build-args<<$delimiter"
+          echo "$pairs"
+          echo "$delimiter"
+        } >> "$GITHUB_OUTPUT"

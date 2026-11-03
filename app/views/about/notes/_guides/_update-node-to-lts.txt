@@ -1,12 +1,10 @@
 # Update the version of Node
 
-Blot uses [Node.js 24.22.1 (LTS)](https://nodejs.org/blog/release/v24.22.1). Run the test suite on GitHub against a new Node version before merging an upgrade.
+Blot uses the [Node.js LTS](https://nodejs.org/en/about/previous-releases) release named by `NODE_VERSION` in `config/versions.env`. Run the test suite on GitHub against a new Node version before merging an upgrade.
 
 ## In the repository
 
-Keep the version in `.nvmrc`, the `Dockerfile` base image, GitHub Actions `node-version` settings (including the screenshot matrix), `config/environment.sh` and `config/node/scripts/setup-ec2-user.sh` aligned. Update the Node images used by development tooling, proxy benchmarks and proxy test helpers too, including the deploy e2e runner.
-
-Update the `engines.node` requirement in the root `package.json` and the Agentation package. Keep Agentation's root package metadata in `package-lock.json` in sync; dependency engine requirements belong to those dependencies and do not need changing.
+Edit `NODE_VERSION` and `NODE_BASE` (the same version with the image's multi-architecture index digest) in `config/versions.env`. Everything else reads that file: the Dockerfiles take it as build arguments, the GitHub Actions workflows load it with `.github/actions/versions`, and the development and test scripts source it. `scripts/security/check-versions.js` fails if `NODE_BASE` doesn't match `NODE_VERSION` or if a version is repeated elsewhere. The one exception is `BLOT_NODE_VERSION` in `config/environment.sh`, a template copied to hosts, which the checker requires to match.
 
 Commit and push to a branch, open a pull request, and wait for GitHub's builds and tests to pass.
 
@@ -15,11 +13,11 @@ Commit and push to a branch, open a pull request, and wait for GitHub's builds a
 From the repository root with nvm loaded:
 
 ```sh
-nvm install
-nvm use
+nvm install "$(sed -n 's/^NODE_VERSION=//p' config/versions.env)"
+nvm use "$(sed -n 's/^NODE_VERSION=//p' config/versions.env)"
 ```
 
-These commands read `.nvmrc`. If you use another version manager, select the version pinned there. Use the npm bundled with Node.js.
+These commands read the version from `config/versions.env`. If you use another version manager, select that version. Use the npm bundled with Node.js.
 
 Restart development with `npm start` so Docker Compose rebuilds the app and Agentation images. For dependencies installed directly on the host, run `npm install` under the new Node version to rebuild native modules. The root package does not track a lockfile.
 

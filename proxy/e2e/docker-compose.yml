@@ -10,7 +10,7 @@ name: blot-proxy-e2e
 
 services:
   redis:
-    image: redis:6.2.12-alpine
+    image: redis:${REDIS_VERSION:?config/versions.env is loaded by .github/actions/versions}-alpine
     network_mode: host
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]

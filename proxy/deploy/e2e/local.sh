@@ -20,6 +20,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
+set -a; . "$REPO/config/versions.env"; set +a
 P="${NAME_PREFIX:-sl-}"
 export IMAGE_A="${P}a.test/blot-unit:e2e" IMAGE_B="${P}b.test/blot-unit:e2e"
 
@@ -36,6 +37,7 @@ mkdir -p "$SCRATCH/src/app" "$SCRATCH/src/config"
 rsync -a --exclude build/data "$REPO/proxy/" "$SCRATCH/src/proxy/"
 cp "$REPO/app/config.js" "$SCRATCH/src/app/"
 cp "$REPO/config/index.js" "$SCRATCH/src/config/" 2>/dev/null || true
+cp "$REPO/config/versions.env" "$SCRATCH/src/config/"
 cp "$REPO/package.json" "$SCRATCH/src/"
 
 echo "== config generator dependencies"
@@ -51,13 +53,15 @@ echo "== images"
 bash "$HERE/build-unit-image.sh" "$SCRATCH/src" "$IMAGE_A"
 bash "$HERE/build-unit-image.sh" "$SCRATCH/src" "$IMAGE_B" --label e2e.variant=b
 IMAGES="$IMAGE_A $IMAGE_B"
-docker pull -q node:24.22.1-alpine >/dev/null; docker pull -q redis:7-alpine >/dev/null
+NODE_IMAGE="node:$NODE_VERSION-alpine"
+docker pull -q "$NODE_IMAGE" >/dev/null; docker pull -q "$REDIS_E2E_IMAGE" >/dev/null
 mkdir -p "$SCRATCH/images"
 # shellcheck disable=SC2086
-docker save -o "$SCRATCH/images/images.tar" $IMAGES node:24.22.1-alpine redis:7-alpine
+docker save -o "$SCRATCH/images/images.tar" $IMAGES "$NODE_IMAGE" "$REDIS_E2E_IMAGE"
 
 echo "== runner"
-docker build -q -t "blot-${P}deploy-e2e-runner" "$HERE/local" >/dev/null
+docker build -q --build-arg NODE_VERSION="$NODE_VERSION" --build-arg UBUNTU_IMAGE="$UBUNTU_IMAGE" \
+  -t "blot-${P}deploy-e2e-runner" "$HERE/local" >/dev/null
 docker run --rm --privileged \
   -e IMAGE_A -e IMAGE_B -e TCP_MIGRATE_REQ -e ALLOW_FAILED_SWAP_STALE \
   -v "${P}deploy-e2e-docker":/var/lib/docker \
