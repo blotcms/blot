@@ -57,6 +57,14 @@
 // with outcome=mismatch and a detail= for anything mirroring cannot explain.
 // Blog handles and emails are kept out of the logs: IDs only.
 //
+// The same lines, with the same timestamp and unit prefix, are also appended
+// to config.git_store.shadow_log (BLOT_GIT_STORE_SHADOW_LOG), because the
+// containers' stdout is lost at every deploy. By default that is
+// shadow-log/shadow.log in tmp: /var/instance-ssd/tmp/shadow-log/shadow.log on
+// the host, which every unit mounts, so it outlives the containers. Empty
+// turns it off. See ./file-log.js. It is on the instance store, which a stop
+// and start of the host wipes.
+//
 // All of it is background work for the git limiter (../limiter.js), the
 // mirror of a push too: every git process it starts, its own in the EBS
 // repository (with the limiter's memory settings) and the store's (through
@@ -77,6 +85,7 @@ const compact = require("../store/compact");
 const importRepo = require("../store/import");
 const limiter = require("../limiter");
 const counting = require("./counting");
+const appendToFile = require("./file-log");
 const { measure } = counting;
 
 const ZERO = "0".repeat(40);
@@ -114,7 +123,11 @@ function log(fields) {
     Object.keys(fields).filter((key) => ORDER.indexOf(key) === -1 && fields[key] !== undefined)
   );
 
-  console.log(clfdate(), "[git-store-shadow] " + keys.map((key) => key + "=" + value(fields[key])).join(" "));
+  const text = "[git-store-shadow] " + keys.map((key) => key + "=" + value(fields[key])).join(" ");
+  const stamp = clfdate();
+
+  console.log(stamp, text);
+  appendToFile(config.git_store.shadow_log, stamp + " " + text);
 
   // What a mirror came to, for mirror()'s caller (the backfill): a blog's
   // operations never overlap, so its last push or import line is the mirror's

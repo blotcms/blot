@@ -41,6 +41,7 @@ function setup(options) {
     config.git_store.shadow = options.shadow === undefined ? "all" : options.shadow;
     config.git_store.cache_directory = ctx.tmp + "/git-store-cache";
     config.git_store.cache_bytes = 256 * 1024 * 1024;
+    config.git_store.shadow_log = "";
 
     ctx.stores = {};
     shadow._setObjectStore(
