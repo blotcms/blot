@@ -341,6 +341,10 @@ module.exports = {
   git_store: {
     // Off unless set: "all", or a comma-separated list of blog IDs
     shadow: process.env.BLOT_GIT_STORE_SHADOW || "",
+    // Which blogs' repositories are served from the store, which is then their
+    // source of truth (app/clients/git/served): off unless set, "all", or a
+    // comma-separated list of blog IDs. A blog listed here is never shadowed.
+    serve: process.env.BLOT_GIT_STORE_SERVE || "",
     // Where shadow mode also appends its log lines, so they outlive the
     // containers (app/clients/git/shadow/file-log.js). Empty is off (the
     // shadow specs turn it off, or point it at their own file). app/scheduler/prune-tmp.js leaves its directory alone.

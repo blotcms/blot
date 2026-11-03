@@ -1,0 +1,250 @@
+// A push to a blog served from the git store (#2259): the store's receive
+// (../store/receive.js) on the normal route, with what receivePack.js does
+// around a push on EBS.
+//
+//   handle(req, res, blog, hooks)   hooks are repo.js's receiveHooks: lock,
+//                                   prepare, abandoned, accepted
+//
+// 1. The commands are read and parsed by receivePack.js's own functions, so
+//    the capabilities, the 0000 probe and the push-client log line are the
+//    same.
+// 2. The store's receive takes the push, with the interactive lane as its
+//    gate, progress on side-band (store/sideband.js: "Saving to Blot..." and
+//    the keepalives), the Content-Length as its size hint, Blot's tree rule
+//    (regular files only on master) and the limit below.
+// 3. The follow-up sync is armed before the swap. The lock(fn) the store
+//    takes around its manifest swap holds the blog's ref lock and, the first
+//    time, arms the follow-up (hooks.prepare) when master changes; a swap
+//    tried again after another writer won uses the same alarm. If the push
+//    then does not land the alarm is cancelled (hooks.abandoned). So a push
+//    the client is told succeeded is never lost to a crash.
+// 4. ok: the sync starts (hooks.accepted), a compaction is asked for
+//    (./upkeep.js) and the EBS fallback queued (./fallback.js). refused or
+//    failed: reported as on EBS. unknown: reported as neither (the store
+//    tells the user to fetch before pushing again), the alarm is kept, so a
+//    sync then applies whatever master is, and the fallback is queued, which
+//    reads the store as it is.
+//
+// One line per push:
+//
+//   [git-store-served] blog=<id> op=push outcome=ok|refused|failed|unknown|...
+//     ms=... bytesUp=... objects=... basesFetched=...
+const zlib = require("zlib");
+const { execFile } = require("child_process");
+const clfdate = require("helper/clfdate");
+const receivePack = require("../receivePack");
+const limiter = require("../limiter");
+const receive = require("../store/receive");
+const createResponse = require("../store/sideband");
+const context = require("./context");
+const upkeep = require("./upkeep");
+const fallback = require("./fallback");
+const log = require("./log");
+
+const MASTER = "refs/heads/master";
+
+// The share of the cache's budget a push to the store may be. A push is
+// streamed into scratch space reserved from the cache, and is completed and
+// indexed there, so a push needs about its own size again on top; half the
+// budget leaves room for the clones and fetches the cache serves meanwhile.
+// With the default 1 GiB cache that is 512 MiB. The limit is the smaller of
+// this and receive.maxInputSize, EBS's limit (agreed with the operator, 3 Nov
+// 2026: no larger cache for this).
+const PUSH_CACHE_SHARE = 0.5;
+
+// receive.maxInputSize, from git's config (the Docker image sets it for every
+// git process), read once per process. 0 when it is not set.
+let maxInputSize = null;
+
+function readMaxInputSize() {
+  if (!maxInputSize) {
+    maxInputSize = limiter.run("interactive", function () {
+      return new Promise(function (resolve) {
+        execFile("git", ["config", "--get", "receive.maxInputSize"], { timeout: 30 * 1000 }, function (err, stdout) {
+          resolve(err ? 0 : receivePack.parseSize(String(stdout).trim()));
+        });
+      });
+    });
+  }
+
+  return maxInputSize;
+}
+
+// The most bytes of pack a push to the store may carry
+async function pushLimit(cache) {
+  const share = Math.floor(cache.maxBytes * PUSH_CACHE_SHARE);
+  const ebs = await readMaxInputSize();
+
+  return ebs > 0 ? Math.min(ebs, share) : share;
+}
+
+// The request's body, decompressed if it was sent gzipped
+function bodyOf(req) {
+  if (req.headers["content-encoding"] !== "gzip") return req;
+
+  const gunzip = zlib.createGunzip();
+  req.pipe(gunzip);
+  return gunzip;
+}
+
+function isBadRequest(err) {
+  return !!(err && (err.badRequest || (typeof err.code === "string" && /^Z_/.test(err.code))));
+}
+
+async function handle(req, res, blog, hooks) {
+  const started = Date.now();
+  const fields = { blog: blog.id, op: "push" };
+
+  res.setHeader("connection", "close");
+  res.on("error", function () {});
+  req.on("error", function () {});
+
+  try {
+    await push(req, res, blog, hooks, fields);
+  } catch (err) {
+    fields.outcome = isBadRequest(err) ? "http400" : "error";
+    fields.detail = (err && (err.code || err.name)) || "error";
+
+    if (!res.headersSent) {
+      res.statusCode = isBadRequest(err) ? 400 : 500;
+      res.setHeader("content-type", "text/plain");
+      res.end(isBadRequest(err) ? "bad request body" : "");
+    } else if (!res.writableEnded) {
+      res.destroy();
+    }
+
+    if (!isBadRequest(err)) console.error(clfdate(), "[git-store-served] blog=" + blog.id, "push failed:", err && err.message);
+  } finally {
+    fields.ms = Date.now() - started;
+    log(fields);
+  }
+}
+
+async function push(req, res, blog, hooks, fields) {
+  const blogID = blog.id;
+  const body = bodyOf(req);
+  const iterator = body[Symbol.asyncIterator]();
+  const packets = await receivePack.readPackets(iterator);
+  const parsed = receivePack.parseCommands(packets.lines);
+  const commands = parsed.commands;
+  const capabilities = parsed.capabilities;
+
+  // Git's 0000 probe, sent before a request larger than http.postBuffer
+  if (!commands.length) {
+    for (;;) if ((await iterator.next()).done) break;
+    res.setHeader("content-type", "application/x-git-receive-pack-result");
+    receivePack.noCache(res);
+    fields.outcome = "probe";
+    return res.end();
+  }
+
+  const agent = receivePack.capability(capabilities, "agent");
+
+  console.log(
+    clfdate(),
+    req.headers["x-request-id"] || "no-request-id",
+    "Git: push-client",
+    req.gitHandle,
+    "agent=" + JSON.stringify(typeof agent === "string" ? agent.slice(0, 100) : "")
+  );
+
+  const store = context.storeFor(blogID);
+  const cache = context.cache();
+  const limit = await pushLimit(cache);
+  const master = commands.find((command) => command.ref === MASTER && command.old !== command.new) || null;
+  const length = Number(req.headers["content-length"]);
+  const sizeHint = req.headers["content-encoding"] !== "gzip" && length > 0 ? length : 0;
+
+  let armed;
+  let readied = false;
+
+  // Held around the store's manifest swap: the ref lock, and the alarm armed
+  // once, before master can move
+  async function lock(fn) {
+    const release = await hooks.lock();
+
+    try {
+      if (master && !readied) {
+        armed = await limiter.outside(() => hooks.prepare(master));
+        readied = true;
+      }
+
+      return await fn();
+    } finally {
+      await Promise.resolve()
+        .then(release)
+        .catch(function (err) {
+          console.error(clfdate(), "Git: could not release the ref lock of", blogID, err && err.message);
+        });
+    }
+  }
+
+  async function* pack() {
+    if (packets.rest.length) yield packets.rest;
+    for (;;) {
+      const next = await iterator.next();
+      if (next.done) return;
+      yield next.value;
+    }
+  }
+
+  const response = createResponse(res, { capabilities, commands });
+  let result;
+
+  try {
+    result = await receive({
+      store,
+      cache,
+      lock,
+      commands,
+      pack: pack(),
+      limit,
+      sizeHint,
+      progress: response.progress,
+      gate: limiter.gate("interactive"),
+      regularFilesOnly: true,
+    });
+  } catch (err) {
+    // receive() does not throw; whatever did, every ref is reported failed
+    result = null;
+    response.fail(err);
+    fields.outcome = "error";
+  }
+
+  if (result) response.finish(result);
+
+  const stats = (result && result.stats) || {};
+  fields.outcome = fields.outcome || result.outcome;
+  fields.bytesUp = stats.bytes;
+  fields.objects = stats.objects;
+  fields.basesFetched = stats.basesFetched;
+  fields.seq = result && result.seq;
+  if (result && result.error) fields.detail = result.error.code || result.error.name || "error";
+
+  if (result && result.outcome === "ok") {
+    if (master) {
+      try {
+        // The sync this starts waits for room of its own
+        limiter.outside(() => hooks.accepted(master, armed));
+      } catch (err) {
+        console.error(clfdate(), "Git: error after push", blogID, err);
+      }
+    }
+
+    upkeep.compactAfter(blogID, result.manifest);
+  }
+
+  // EBS follows the store in the background; after an unknown outcome it
+  // takes whatever the store turned out to hold
+  const outcome = result ? result.outcome : "error";
+
+  if (outcome === "ok" || outcome === "unknown") fallback.request(blogID, { reason: "push" });
+
+  if (outcome !== "ok" && outcome !== "unknown" && readied) {
+    // Did not land: the alarm goes. An unknown outcome keeps it, so a sync
+    // applies whatever master turned out to be.
+    await Promise.resolve(limiter.outside(() => hooks.abandoned(master, armed))).catch(function () {});
+  }
+}
+
+module.exports = { handle, pushLimit, PUSH_CACHE_SHARE };
