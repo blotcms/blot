@@ -11,21 +11,31 @@ const { normalize } = require("models/file/key");
 const local = require("./local");
 const backend = require("./s3");
 const mirror = require("./mirror");
+const primary = require("./primary");
 const { NotFoundError } = require("./errors");
 const hold = require("sync/hold");
+const fs = require("fs-extra");
 
-const { DIRTY_KEY } = mirror;
+const { DIRTY_KEY, COMPLETE_KEY } = mirror;
 
-// Keeps a blog's copy of its folder in the storage bucket (objects under
-// {blogID}/folder/ and the models/file index) in line with the folder on
-// disk, which stays authoritative (#2258 Phase C). The mirror (mirror.js)
-// copies every change as it is made; this finds and repairs the ones it
-// missed: a write which failed (the blog is then in the dirty set), a crash
-// between the disk write and the mirror, or a change made outside Blot.
+// Keeps a blog's two copies of its folder in line: the one in the storage
+// bucket (objects under {blogID}/folder/ and the models/file index) and the
+// one on disk.
 //
-// backfillBlog compares one blog and, with apply, repairs it. It is what
-// scripts/storage/backfill-folder.js runs for a person; reconcile() at the
-// end is what the scheduler runs (app/scheduler/index.js), unattended.
+// For a blog on disk, disk is authoritative (#2258 Phase C). The mirror
+// (mirror.js) copies every change as it is made; this finds and repairs the
+// ones it missed: a write which failed (the blog is then in the dirty set),
+// a crash between the disk write and the mirror, or a change made outside
+// Blot. backfillBlog compares one blog and, with apply, repairs it.
+//
+// For a blog on S3 (primary.js, #2258 Phase D), it is the other way round:
+// S3 is authoritative and the disk is the copy, kept for rolling back.
+// restoreBlog compares the disk with S3 and, with apply, repairs the disk.
+// compareBlog picks which of the two a blog needs.
+//
+// scripts/storage/backfill-folder.js runs compareBlog for a person;
+// reconcile() at the end is what the scheduler runs (app/scheduler/index.js),
+// unattended.
 
 const MAX_LISTED_ERRORS = 100;
 
@@ -60,13 +70,25 @@ function ancestorsOf(path) {
 
 // Compares one blog's folder on disk with its copy in S3 and the index, and
 // with apply, brings the copy in line. Resolves to its stats. Must run under
-// the blog's sync lock when apply is set.
+// the blog's sync lock when apply is set, and the caller says so with
+// { locked: true } for a check too.
+//
+// It also keeps the set of complete copies (mirror.COMPLETE_KEY), which is
+// what lets a blog named for S3 move there (primary.js): an apply takes the
+// blog out when it starts and puts it back once it has finished with no
+// errors, and so does a check under the lock which finds nothing to do. Only
+// while the mirror covers the blog: a copy it doesn't keep in step can't
+// stay complete.
 async function backfillBlog(blogID, options) {
   options = options || {};
 
   const apply = !!options.apply;
   const stats = newStats();
   const prefix = backend.root(blogID);
+
+  // While its copy is being made it is not complete, so a blog named for S3
+  // stays on disk
+  if (apply) await client.sRem(COMPLETE_KEY, blogID);
 
   // What S3 holds: files by path with their sizes, and directory markers
   const objects = new Map();
@@ -215,6 +237,10 @@ async function backfillBlog(blogID, options) {
   for (const path of markers) await stale(path);
   for await (const path of File.subtree(blogID, "/")) await stale(path);
 
+  const complete = !stats.errors && (apply || (options.locked && !differences(stats)));
+
+  if (complete && mirror.enabledFor(blogID)) await client.sAdd(COMPLETE_KEY, blogID);
+
   return stats;
 }
 
@@ -229,10 +255,214 @@ async function removeDeletedBlog(blogID, apply) {
 
   if (apply) {
     await backend.removeAll(blogID);
-    await client.sRem(DIRTY_KEY, blogID);
+    await client.multi().sRem(DIRTY_KEY, blogID).sRem(COMPLETE_KEY, blogID).exec();
+
+    // A blog on S3 whose deletion could not delete its disk copy
+    if (await client.sIsMember(primary.DIRTY_KEY, blogID)) {
+      await local.removeAll(blogID);
+      await client.sRem(primary.DIRTY_KEY, blogID);
+    }
   }
 
   return objects;
+}
+
+// Compares the disk copy of a blog on S3 with S3 (its index, which reads of
+// a blog on S3 go by) and with apply, brings the disk in line: copies down
+// every file which is missing or differs (by size, then modified time, then
+// SHA-1, as backfillBlog does), makes missing directories, and deletes what
+// S3 doesn't have. Resolves to its stats, with uploads counting the files
+// copied to disk and markers the directories made there. Must run under the
+// blog's sync lock when apply is set.
+async function restoreBlog(blogID, options) {
+  options = options || {};
+
+  const apply = !!options.apply;
+  const stats = newStats();
+
+  // Only a copy known to be complete is the truth. Then an empty index is an
+  // empty folder, and the disk is emptied too.
+  if (!(await client.sIsMember(COMPLETE_KEY, blogID))) {
+    const skip = new Error("no complete copy in S3");
+    skip.code = "ESKIPPED";
+    throw skip;
+  }
+
+  // While the disk is being repaired it is behind S3. The caller takes the
+  // blog out of the set once this has finished cleanly.
+  if (apply) await client.sAdd(primary.DIRTY_KEY, blogID);
+
+  const seen = new Set();
+  const deleted = new Set();
+
+  function fail(path, err) {
+    stats.errors++;
+
+    if (stats.errorMessages.length < MAX_LISTED_ERRORS) {
+      stats.errorMessages.push(blogID + " " + JSON.stringify(path) + ": " + ((err && err.code) || "") + " " + ((err && err.message) || err));
+    }
+  }
+
+  async function onDisk(path) {
+    try {
+      return await local.stat(blogID, path);
+    } catch (err) {
+      if (err instanceof NotFoundError) return null;
+      throw err;
+    }
+  }
+
+  // Whatever the disk has at path is in the way: a file where S3 has a
+  // directory, or the other way round
+  async function clear(path, isDirectory) {
+    stats.deletes++;
+    if (isDirectory) deleted.add(path);
+    if (apply) await local.remove(blogID, path);
+  }
+
+  async function directory(path) {
+    stats.dirs++;
+
+    const found = await onDisk(path);
+
+    if (found && found.isDirectory) return;
+    if (found) await clear(path, false);
+
+    stats.markers++;
+    if (apply) await local.mkdir(blogID, path);
+  }
+
+  async function file(path, record) {
+    stats.files++;
+
+    const found = await onDisk(path);
+    let copy = false;
+
+    if (!found || found.isDirectory || found.size !== record.size) copy = true;
+    else if (Math.round(found.modified) === record.modified) copy = false;
+    else if (!record.sha1) copy = true;
+    else {
+      stats.hashed++;
+
+      if ((await local.stat(blogID, path, { sha1: true })).sha1 !== record.sha1) {
+        copy = true;
+      } else {
+        // Same bytes, different time: only the disk needs S3's time
+        stats.retimed++;
+
+        if (apply) {
+          const modified = new Date(record.modified);
+          await fs.utimes(await local.ensureLocal(blogID, path), modified, modified);
+        }
+        return;
+      }
+    }
+
+    if (!copy) return;
+
+    stats.uploads++;
+    stats.bytes += record.size;
+
+    if (found && found.isDirectory) await clear(path, true);
+
+    if (!apply) return;
+
+    const source = await backend.ensureLocal(blogID, path);
+
+    await local.writeFrom(blogID, path, source, { modified: record.modified });
+  }
+
+  for await (const path of backend.walk(blogID, "/", { directories: true })) {
+    seen.add(path);
+
+    try {
+      const record = await File.get(blogID, path);
+
+      // Removed from the index since the walk listed it
+      if (!record) continue;
+
+      if (record.type === "dir") await directory(path);
+      else await file(path, record);
+    } catch (err) {
+      fail(path, err);
+    }
+  }
+
+  // What is on disk and not in S3 goes, the highest such path with
+  // everything below it
+  let paths = [];
+
+  try {
+    for await (const raw of local.walk(blogID, "/", { directories: true })) paths.push(normalize(raw));
+  } catch (err) {
+    // No folder on disk: everything in S3 was copied (or would be) above
+    if (!(err instanceof NotFoundError)) throw err;
+    paths = [];
+  }
+
+  for (const path of paths) {
+    if (seen.has(path)) continue;
+
+    const lineage = ancestorsOf(path).concat(path);
+
+    if (lineage.some((p) => deleted.has(p))) continue;
+
+    const top = lineage.find((p) => !seen.has(p));
+
+    deleted.add(top);
+    stats.deletes++;
+
+    if (!apply) continue;
+
+    try {
+      await local.remove(blogID, top);
+    } catch (err) {
+      fail(top, err);
+    }
+  }
+
+  return stats;
+}
+
+// Which way a blog's copies are brought in line: "s3" (disk to S3, for a
+// blog on disk) or "disk" (S3 to disk, for a blog on S3). Rejects with
+// ECONFLICT for a blog on disk whose disk copy is marked as behind S3: it was
+// on S3 when a change failed to reach its disk, and has left S3 since (its
+// flag was unset, or it was marked dirty), so each copy may have changes the
+// other lacks and neither may overwrite the other. Restore its disk (put it
+// back on S3 and run this) before rolling it back.
+async function directionOf(blogID) {
+  if (await primary.usesS3(blogID)) return "disk";
+
+  if (await client.sIsMember(primary.DIRTY_KEY, blogID)) {
+    const err = new Error("its disk copy is behind S3 but it is no longer on S3; restore the disk copy before taking it off S3");
+    err.code = "ECONFLICT";
+    throw err;
+  }
+
+  return "s3";
+}
+
+// Marks the copy a dirty set is for as behind. A copy in S3 behind its disk
+// is no longer complete either.
+function markDirty(dirtyKey, blogID) {
+  if (dirtyKey === DIRTY_KEY) return mirror.markBehind(blogID);
+  return client.sAdd(dirtyKey, blogID);
+}
+
+// The set a blog is in while the copy direction names may be behind
+function dirtyKeyOf(direction) {
+  return direction === "disk" ? primary.DIRTY_KEY : DIRTY_KEY;
+}
+
+// Compares one blog's two copies, in its direction, and with apply repairs
+// the copy which follows. Resolves to { direction, stats }. Must run under
+// the blog's sync lock when apply is set.
+async function compareBlog(blogID, options) {
+  const direction = await directionOf(blogID);
+  const stats = await (direction === "disk" ? restoreBlog : backfillBlog)(blogID, options);
+
+  return { direction, stats };
 }
 
 
@@ -270,9 +500,10 @@ function sleep(ms) {
 
 // Whether the scheduled job has anything to do at all
 function enabled() {
-  const setting = String(config.folder_mirror || "").trim();
-
-  return !!setting && setting !== "off" && !!(config.storage && config.storage.bucket);
+  return (
+    (mirror.isOn(config.folder_mirror) || mirror.isOn(config.folder_primary)) &&
+    !!(config.storage && config.storage.bucket)
+  );
 }
 
 // Every blog ID, a page at a time, so thousands of blogs are never held
@@ -289,13 +520,17 @@ async function* eachBlogID() {
   } while (cursor !== "0");
 }
 
-// The blogs to check in a full run: those the mirror is on for
+// The blogs to check in a full run: those the mirror is on for, and those
+// named for S3
 async function* mirroredBlogIDs() {
-  for await (const id of eachBlogID()) if (mirror.enabledFor(id)) yield id;
+  for await (const id of eachBlogID()) if (mirror.enabledFor(id) || primary.enabledFor(id)) yield id;
 }
 
+// The blogs either copy may be behind for
 async function* dirtyBlogIDs() {
-  const ids = (await client.sMembers(DIRTY_KEY)).sort();
+  const ids = Array.from(
+    new Set((await client.sMembers(DIRTY_KEY)).concat(await client.sMembers(primary.DIRTY_KEY)))
+  ).sort();
 
   for (const id of ids) yield id;
 }
@@ -309,8 +544,12 @@ async function hasObjects(blogID) {
 // Checks one blog and repairs it if need be, recording what happened in
 // report. With check set (a full run) a blog is only changed if it differs;
 // without it (a dirty blog) it is repaired at once, since it is known to be
-// behind. Never rejects.
+// behind. A blog on disk has its copy in S3 repaired, and a blog on S3 its
+// copy on disk (compareBlog). Never rejects.
 async function reconcileBlog(blogID, check, report) {
+  // The dirty set of the copy being repaired, once known
+  let dirtyKey = null;
+
   try {
     // A blog deleted while a mirror failure left its copy in S3
     if (!(await promisify(Blog.get)({ id: blogID }))) {
@@ -324,8 +563,14 @@ async function reconcileBlog(blogID, check, report) {
     }
 
     await hold(blogID, async function () {
+      // Decided under the lock, since the repair below can change it
+      const direction = await directionOf(blogID);
+      const repair = direction === "disk" ? restoreBlog : backfillBlog;
+
+      dirtyKey = dirtyKeyOf(direction);
+
       if (check) {
-        const found = await backfillBlog(blogID, { apply: false });
+        const found = await repair(blogID, { apply: false, locked: true });
 
         report.checked++;
 
@@ -334,17 +579,17 @@ async function reconcileBlog(blogID, check, report) {
         report.drifted.push(blogID);
       }
 
-      const stats = await backfillBlog(blogID, { apply: true });
+      const stats = await repair(blogID, { apply: true });
 
       if (stats.errors) {
         // Left in the dirty set (put there if the check found it), so the
         // hourly run tries again
-        await client.sAdd(DIRTY_KEY, blogID);
+        await markDirty(dirtyKey, blogID);
         report.errored.push(blogID);
 
         for (const message of stats.errorMessages.slice(0, 3)) console.error(clfdate(), LOG_PREFIX, message);
       } else {
-        await client.sRem(DIRTY_KEY, blogID);
+        await client.sRem(dirtyKey, blogID);
         report.repaired.push(blogID);
       }
     });
@@ -353,16 +598,27 @@ async function reconcileBlog(blogID, check, report) {
       // A sync is running. The blog stays dirty and is tried next time.
       report.locked.push(blogID);
     } else if (err.code === "ESKIPPED") {
-      // No folder on disk: never emptied in S3, but not repairable either
+      // No folder on disk (or for a blog on S3, no complete copy): the other copy is
+      // never emptied, but it is not repairable either
       report.skipped.push(blogID);
     } else {
       // Thrown before or during the check (S3 or Redis briefly failing, say):
       // put in the dirty set, so the hourly run tries again rather than the
-      // next daily one
-      await client.sAdd(DIRTY_KEY, blogID).catch(function () {});
+      // next daily one. Not if the direction is unknown (or in conflict):
+      // marking the wrong copy dirty would move the blog to the other one.
+      if (dirtyKey) await markDirty(dirtyKey, blogID).catch(function () {});
       report.errored.push(blogID);
       console.error(clfdate(), LOG_PREFIX, "failed blog=" + blogID, ((err && err.code) || "") + " " + ((err && err.message) || err));
     }
+  }
+
+  // Named apart in the email, since for these it is the disk which differed
+  // or was repaired
+  if (
+    dirtyKey === primary.DIRTY_KEY &&
+    [report.drifted, report.repaired, report.errored, report.skipped].some((list) => list.includes(blogID))
+  ) {
+    report.onS3.push(blogID);
   }
 }
 
@@ -391,6 +647,8 @@ function emailView(report) {
     errored: report.errored.join(", "),
     hasSkipped: report.skipped.length > 0,
     skipped: report.skipped.join(", "),
+    hasOnS3: report.onS3.length > 0,
+    onS3: report.onS3.join(", "),
     hasLocked: report.locked.length > 0,
     locked: report.locked.length,
     seconds: report.seconds,
@@ -427,7 +685,7 @@ async function reconcile(options) {
   const pauseMs = options.pauseMs === undefined ? PAUSE_MS : options.pauseMs;
   const quietMs = options.quietMs === undefined ? EMAIL_QUIET_MS : options.quietMs;
   const started = Date.now();
-  const report = { mode, checked: 0, drifted: [], repaired: [], errored: [], locked: [], skipped: [] };
+  const report = { mode, checked: 0, drifted: [], repaired: [], errored: [], locked: [], skipped: [], onS3: [] };
 
   for await (const blogID of mode === "full" ? mirroredBlogIDs() : dirtyBlogIDs()) {
     await reconcileBlog(blogID, mode === "full", report);
@@ -445,6 +703,7 @@ async function reconcile(options) {
     "repaired=" + report.repaired.length,
     "failed=" + report.errored.length,
     "no-folder=" + report.skipped.length,
+    "on-s3=" + report.onS3.length,
     "locked=" + report.locked.length,
     "seconds=" + report.seconds
   );
@@ -465,6 +724,10 @@ module.exports = {
   reconcile,
   enabled,
   backfillBlog,
+  restoreBlog,
+  compareBlog,
+  directionOf,
+  dirtyKeyOf,
   removeDeletedBlog,
   newStats,
   differences,
