@@ -32,6 +32,19 @@ for page in site blog; do
   cp scripts/development/unit/restarting.html "/etc/openresty/html/error-upstream-offline-$page.html"
 done
 
+# node-a runs as ec2-user (uid 1000), as in production; the old development
+# container ran Node as root. On Linux that left what it wrote in data/ and
+# app/views-built owned by root, which ec2-user cannot write to. Hand any
+# such directory over (once: afterwards it is writable). Docker Desktop lets
+# any uid write to a bind mount, so on a Mac this does nothing. Redis and
+# MinIO keep their own.
+for dir in data/* app/views-built; do
+  case "$dir" in data/redis|data/minio|data/ssl) continue ;; esac
+  [ -d "$dir" ] || continue
+  su-exec ec2-user test -w "$dir" || chown -R ec2-user:ec2-user "$dir"
+done
+su-exec ec2-user test -w data || chown ec2-user:ec2-user data
+
 # node-a and node-b each make up a session secret when there is none in .env,
 # and a session started on one would not be valid on the other
 export BLOT_SESSION_SECRET="${BLOT_SESSION_SECRET:-development-session-secret}"
