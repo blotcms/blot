@@ -257,6 +257,12 @@ async function commitChange(blogID, change) {
   // Before anything is touched
   plumbing.treePath(path);
 
+  // A blog served from the git store has its commits made there (#2259)
+  if (servedSwitch.enabled(blogID)) {
+    await require("./served/commit")(blogID, change);
+    return;
+  }
+
   // Required here because models/blog requires renameRepo, which requires
   // this module.
   var blog = await new Promise(function (resolve, reject) {
