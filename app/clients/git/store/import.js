@@ -25,7 +25,7 @@
 //   pack        git pack-objects' settings, over PACK_CONFIG (compact.js)
 //   clock       the clock manifest.read and swap time the base by (an import
 //               that outlasts manifest.MAX_BASE_AGE reads again and, if the
-//               repository is still empty, swaps on that); for specs
+//               newest is still the same empty manifest, swaps on that); for specs
 //
 // The steps, in the order they run:
 //
@@ -549,10 +549,13 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
         await manifest.swap({ store, lock, base, next, uploaded, clock });
       } catch (err) {
         // An import that took longer than a swap lets a base be held (a day)
-        // reads the manifest again: still empty, it swaps on that, once
+        // reads the manifest again: still the same empty one, it swaps on
+        // that, once. A newer empty one is a removal's tombstone, whose
+        // removal may have deleted this import's uploads (which `uploaded`
+        // would skip checking), so that is refused like any other change.
         if (!(err instanceof StaleManifestError) || manifest.isFresh(base, clock)) throw err;
         const fresh = await manifest.read(store, { clock });
-        if (!manifest.isEmpty(fresh)) throw err;
+        if (!manifest.isEmpty(fresh) || fresh.seq !== base.seq || manifest.epochOf(fresh) !== manifest.epochOf(base)) throw err;
         next = build(fresh);
         result.seq = next.seq;
         await manifest.swap({ store, lock, base: fresh, next, uploaded, clock });

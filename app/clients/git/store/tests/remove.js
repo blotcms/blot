@@ -10,6 +10,7 @@ const fx = require("./helpers/fixture");
 const timeout = require("./helpers/timeout");
 const manifest = require("../manifest");
 const removeRepo = require("../remove");
+const sweep = require("../sweep");
 const importRepo = require("../import");
 const { verifyImport } = importRepo;
 const createCache = require("../cache");
@@ -150,11 +151,16 @@ describe("git store removal", function () {
       expect(await namedAreThere()).toBe(true);
     });
 
-    it("deletes everything from a repository with no manifest, and writes no tombstone", async function () {
-      await upload(inner);
-      expect(await removeRepo({ store: processOf() })).toEqual({ outcome: "removed", seq: 0, deleted: 3 });
-      expect(keys()).toEqual([]);
+    it("writes nothing to an empty repository, and a tombstone after deleting the uploads of one with no manifest yet", async function () {
       expect(await removeRepo({ store: processOf() })).toEqual({ outcome: "removed", seq: 0, deleted: 0 });
+      expect(keys()).toEqual([]);
+
+      // An import's uploads, its swap still to come
+      await upload(inner);
+      expect(await removeRepo({ store: processOf() })).toEqual({ outcome: "removed", seq: 1, deleted: 3 });
+      expect(keys()).toEqual([manifestKey(1), LATEST_KEY]);
+      expect(manifest.isEmpty(await manifest.read(processOf()))).toBe(true);
+      expect(await removeRepo({ store: processOf() })).toEqual({ outcome: "removed", seq: 1, deleted: 0 });
     });
 
     it("starts again from a manifest swapped in while it deleted, and deletes that one's packs too", async function () {
@@ -291,6 +297,35 @@ describe("git store removal", function () {
         });
       }
 
+      it("leaves the sweep able to read past the damaged manifest it kept, and to delete it once it is old", async function () {
+        const DAY = 24 * 60 * 60 * 1000;
+        await pushOf(inner, 1);
+        await inner.put(manifestKey(2), Buffer.from("{ not json"));
+        await removeRepo({ store: processOf() });
+        await importOf(processOf(), 7);
+        await upload(inner); // an orphan, so the sweep reads the older manifests
+
+        await sweep({ store: processOf() });
+        expect(inner.objects.has(manifestKey(2))).toBe(true);
+
+        for (let i = 0; i < 20; i++) await pushOf(processOf(), 8 + i);
+        const stats = await sweep({ store: processOf(), now: Date.now() + 9 * DAY });
+        expect(stats.manifestsDeleted).toBe(4);
+        expect(inner.objects.has(manifestKey(2))).toBe(false);
+        expect((await manifest.read(processOf())).seq).toBe(24);
+      });
+
+      it("leaves the sweep stopping on a damaged manifest no tombstone follows", async function () {
+        await pushOf(inner, 1);
+        await inner.put(manifestKey(2), Buffer.from("{ not json"));
+        const m = manifest.advance(manifest.empty(), { refs: { [MASTER]: oid(3) }, head: MASTER });
+        await inner.put(manifestKey(3), manifest.serialize({ ...m, seq: 3, snapshots: [{ seq: 3, refs: m.refs }] }));
+        await upload(inner);
+
+        const error = await fails(sweep({ store: processOf() }));
+        expect(error && error.name).toBe("CorruptError");
+      });
+
       it("starts again when another writer takes the number after the damaged one first", async function () {
         await pushOf(inner, 1);
         await inner.put(manifestKey(2), Buffer.from("{ not json"));
@@ -378,6 +413,37 @@ describe("git store removal", function () {
 
     afterEach(function () {
       fx.remove(root);
+    });
+
+    function makeRepo() {
+      const work = path.join(root, "work");
+      fs.mkdirSync(work);
+      fx.git(work, ["init", "-q", "-b", "master"]);
+      fs.writeFileSync(path.join(work, "post.md"), "# Post\n");
+      fx.git(work, ["add", "-A"]);
+      fx.git(work, ["commit", "-q", "-m", "Post"]);
+      return path.join(work, ".git");
+    }
+
+    it("refuses an import which outlasted its base while a removal deleted its uploads", async function () {
+      const gitDir = makeRepo();
+      let now = Date.now();
+      let removed = null;
+      const late = async (fn) => {
+        if (!removed) {
+          now += manifest.MAX_BASE_AGE + 1;
+          removed = await removeRepo({ store: processOf() });
+        }
+        return lock(fn);
+      };
+
+      const error = await fails(importRepo({ store: processOf(), cache: createCache({ dir: path.join(root, "cache"), maxBytes: 64 * 1024 * 1024 }), lock: late, gitDir, clock: () => now }));
+      expect(removed).toEqual({ outcome: "removed", seq: 1, deleted: 5 });
+      expect(error && error.code).toBe("EMOVED");
+
+      const newest = await manifest.read(processOf());
+      expect(newest.seq).toBe(1);
+      expect(manifest.isEmpty(newest)).toBe(true);
     });
 
     it("imports into a removed repository above the tombstone, with its history through that seq, and verifies", async function () {

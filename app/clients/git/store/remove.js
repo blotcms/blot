@@ -39,9 +39,8 @@
 //   removeRepo({ store, lock?, clock? })
 //
 // resolves { outcome: "removed", seq, deleted }, where seq is the newest
-// manifest after the removal, an empty one (0 if the repository has no
-// manifest, when everything listed is deleted and no tombstone is needed), and
-// deleted the number of keys deleted. Running it again is safe. A removal that
+// manifest after the removal, an empty one (0 only if there was nothing to
+// delete and no manifest), and deleted the number of keys deleted. Running it again is safe. A removal that
 // loses its swap to other writers three times throws with code EMOVED, and an
 // ambiguous swap throws OutcomeUnknownError: the packs may then be gone under
 // a manifest which still names them, and running it again finishes the job.
@@ -97,13 +96,9 @@ async function removeRepo({ store, lock = (fn) => fn(), clock = Date.now }) {
     const seqs = keys.map(manifestSeq).filter((seq) => seq !== null);
     const doomed = keys.filter((key) => key !== LATEST_KEY && manifestSeq(key) === null);
 
-    // No manifest at all: no numbering to keep
-    if (base && base.seq === 0 && !seqs.length) {
-      await deleteAll(store, keys);
-      return { outcome: "removed", seq: 0, deleted: deleted + keys.length };
-    }
-
-    // Already removed, and nothing since
+    // Already removed (or never written to), and nothing since. Otherwise,
+    // even with no manifest yet, the deletes may take an import's uploads,
+    // so a tombstone goes on top and that import's swap fails.
     if (base && manifest.isEmpty(base) && !doomed.length) return { outcome: "removed", seq: base.seq, deleted };
 
     await deleteAll(store, doomed);
