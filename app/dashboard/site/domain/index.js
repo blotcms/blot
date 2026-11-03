@@ -6,9 +6,9 @@ const Blog = require('models/blog');
 const moment = require('moment');
 const verify = require('./verify');
 const identifyNameServers = require('./identifyNameServers');
-// triggerAutoSSL() below pokes a user-set hostname; route it through the
-// egress proxy like the other user-controlled fetches. See helper/egress.
-const fetch = require('helper/egress').fetch;
+// triggerAutoSSL() below pokes a user-set hostname; fetch it in the sandbox like
+// the other user-controlled URLs. See app/sandbox/README.md.
+const sandboxFetch = require('sandbox/fetch');
 const Domain = express.Router();
 
 const ip = config.ip;
@@ -180,18 +180,28 @@ const updateHandle = (blogID, handle) => {
     });
 };
 
+// The first request for a domain can wait on its certificate being issued, so
+// the job's 20s, not the shorter wait of the checks
 function triggerAutoSSL(hostname) {
   if (!hostname) return;
 
-  fetch(`https://${hostname}`, { method: "HEAD", redirect: "manual" }).catch(
-    (error) => {
+  sandboxFetch
+    .one(
+      {
+        url: `https://${hostname}`,
+        method: "HEAD",
+        redirect: "manual",
+        anyStatus: true,
+      },
+      { label: "domain/autossl" }
+    )
+    .catch((error) => {
       console.error(
         "Failed to trigger AutoSSL for %s: %s",
         hostname,
         error && error.message ? error.message : error
       );
-    }
-  );
+    });
 }
 
 module.exports = Domain;

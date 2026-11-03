@@ -50,7 +50,7 @@ Importer.route("/arena")
     const { importDirectory, outputDirectory, status } = job;
     res.message(req.baseUrl, "Began import");
     await job.run(async () => {
-      const { data } = await download(`https://api.are.na/v2/channels/${slug}`);
+      const { data } = await download(`https://api.are.na/v2/channels/${slug}`, { kind: "text", maxBytes: 8 * 1024 * 1024 });
       const { title } = JSON.parse(data.toString("utf8"));
       await fs.outputFile(
         join(importDirectory, "identifier.txt"),

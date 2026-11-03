@@ -21,6 +21,7 @@ const JOBS = [
   "pandoc",
   "unzip",
   "fetch-image",
+  "fetch",
 ];
 
 // The jobs that don't use sharp
@@ -52,13 +53,14 @@ async function main() {
   const input = stdin.subarray(end + 1);
   const { meta, outputs } = await require("./" + name).run(args, input);
 
+  // Written one by one, not joined: the outputs of a batch of fetches can be
+  // tens of MiB, and a copy of them would double what the jail holds
   const header = JSON.stringify({ meta, lengths: outputs.map((o) => o.length) });
-  await new Promise((resolve, reject) =>
-    process.stdout.write(
-      Buffer.concat([Buffer.from(header + "\n")].concat(outputs)),
-      (err) => (err ? reject(err) : resolve())
-    )
-  );
+  for (const chunk of [Buffer.from(header + "\n")].concat(outputs)) {
+    await new Promise((resolve, reject) =>
+      process.stdout.write(chunk, (err) => (err ? reject(err) : resolve()))
+    );
+  }
 }
 
 main().then(

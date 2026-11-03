@@ -5,8 +5,8 @@ var _ = require("lodash");
 var prettyPrice = require("helper/prettyPrice");
 var config = require("config");
 // The SSL-cert warmup below fetches the new blog's URL, which is a user-set
-// custom domain when one is configured; route it through the egress proxy.
-var fetch = require("helper/egress").fetch;
+// custom domain when one is configured; fetch it in the sandbox.
+var sandboxFetch = require("sandbox/fetch");
 var stripe = require("stripe")(config.stripe.secret);
 var User = require("models/user");
 var Email = require("helper/email");
@@ -287,7 +287,14 @@ function saveBlog (req, res, next) {
 
     // Begin SSL cert fetching process
     // in the background
-    fetch(Blog.extend(blog).url)
+    sandboxFetch
+      .one({
+        url: Blog.extend(blog).url,
+        kind: "text",
+        maxBytes: 1024,
+        truncate: true,
+        anyStatus: true,
+      }, { label: "create-site" })
       .then(function () {})
       .catch(function () {});
 

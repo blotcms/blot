@@ -15,10 +15,11 @@ const alerts = require("./alerts");
 
 const JOB = /^[a-z-]+$/;
 
-// The longest job limit in proxy/unit/sandbox/jail.js (60s) plus time queued
-// behind the broker's other jobs. The client can't import the broker's table,
-// so until the table is shared, one constant.
-const TIMEOUT_MS = 120 * 1000;
+// The longest job limit in proxy/unit/sandbox/jail.js (75s, the fetch job's
+// batch) plus the time a request can be queued behind the broker's other jobs
+// (a minute at most, MAX_QUEUED_MS in the broker). The client can't import the
+// broker's table, so until the table is shared, one constant.
+const TIMEOUT_MS = 150 * 1000;
 
 // Upper bound on what any job may send back (the broker caps each job lower)
 const MAX_REPLY_BYTES = 64 * 1024 * 1024;
