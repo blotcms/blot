@@ -86,6 +86,7 @@ Each run is a fresh process (cold caches) on an empty Redis:
 | previews | `preview-of-my-<template>-on-<handle>` for each of the site's templates, three rounds; previews skip some render caches |
 | other blogs | two visitors browse the small sites, first alone for 4 s, then for 10 s while the mega sites resync (cacheID bumps) and get browsed and previewed, round after round; the window is fixed so a faster head samples the same span (each run's JSON has `megaRounds`, how many rounds it held) |
 | memory | peak heap above the post-seed baseline, and what a GC leaves |
+| full build | after a cacheID bump, every page of each mega site once in a row (the index and its pages, each entry, each tag page, `/archives`, `/sitemap.xml`), as a static build into the proxy cache would: the first page against each one after it, the total, the event loop and the heap. Runs last, so it leaves the phases above as they were. The page count, the output size, medians per kind of page and how the render caches' counters moved are under `build` in each run's JSON |
 
 Timings are wall time of real HTTP requests; "block" is the longest event
 loop delay while they ran (`monitorEventLoopDelay`). The render cache

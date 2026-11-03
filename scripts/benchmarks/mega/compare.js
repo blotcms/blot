@@ -44,6 +44,20 @@ const METRICS = [
   ["Render caches", "cache_uncached_fills", "fills not stored"],
   ["Render caches", "cache_clone_ms", "time copying cached values (ms)"],
   ["Render caches", "cache_fill_max_ms", "slowest fill (ms)"],
+  ["Full build after a bump", "build_catalog_first_ms", "catalog: first page"],
+  ["Full build after a bump", "build_catalog_rest_p50_ms", "catalog: each page after it, p50"],
+  ["Full build after a bump", "build_catalog_rest_p95_ms", "catalog: each page after it, p95"],
+  ["Full build after a bump", "build_catalog_rest_max_ms", "catalog: each page after it, max"],
+  ["Full build after a bump", "build_catalog_ms", "catalog: every page"],
+  ["Full build after a bump", "build_catalog_block_ms", "catalog: longest event loop block"],
+  ["Full build after a bump", "build_catalog_heap_peak_mb", "catalog: peak heap above the start (MB)"],
+  ["Full build after a bump", "build_heavy_first_ms", "heavy: first page"],
+  ["Full build after a bump", "build_heavy_rest_p50_ms", "heavy: each page after it, p50"],
+  ["Full build after a bump", "build_heavy_rest_p95_ms", "heavy: each page after it, p95"],
+  ["Full build after a bump", "build_heavy_rest_max_ms", "heavy: each page after it, max"],
+  ["Full build after a bump", "build_heavy_ms", "heavy: every page"],
+  ["Full build after a bump", "build_heavy_block_ms", "heavy: longest event loop block"],
+  ["Full build after a bump", "build_heavy_heap_peak_mb", "heavy: peak heap above the start (MB)"],
 ];
 
 // Flag a change this much worse whose ranges don't overlap
@@ -128,10 +142,12 @@ function short(sha) {
 
 function doneBody({ baseRuns, headRuns, baseSha, headSha, runUrl }) {
   const shape = (headRuns[0] || baseRuns[0] || {}).shape || {};
+  const build = (headRuns[0] || baseRuns[0] || {}).build || {};
   const summary = (name) =>
-    shape[name]
+    (shape[name]
       ? `${shape[name].entries} entries, ${shape[name].htmlMB} MB of HTML, ${shape[name].previews} templates`
-      : "?";
+      : "?") +
+    (build[name] ? `, a full build of ${build[name].pages} pages and ${build[name].outputMB} MB` : "");
 
   return [
     MARKER,

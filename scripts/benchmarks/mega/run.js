@@ -185,6 +185,37 @@ async function main() {
     metrics.cache_fill_max_ms = caches.fillMaxMs;
   }
 
+  // 7. Full build: after a cacheID bump, every page of each mega site once,
+  // in a row, as a static build into the proxy cache would. Last, so the
+  // phases above measure what they always have. The first page pays for
+  // the catalog; the rest show what one more page costs once it's loaded.
+  const build = {};
+  for (const name of ["catalog", "heavy"]) {
+    await bump(sites[name].blog);
+    gc();
+    const before = cacheCounters();
+    const heapBefore = process.memoryUsage().heapUsed;
+    heapPeak = heapBefore;
+    const built = await fullBuild(request, sites[name]);
+    const after = cacheCounters();
+    const rest = built.each.slice(1).map((r) => r.ms);
+
+    metrics[`build_${name}_first_ms`] = built.each[0].ms;
+    metrics[`build_${name}_rest_p50_ms`] = percentile(rest, 0.5);
+    metrics[`build_${name}_rest_p95_ms`] = percentile(rest, 0.95);
+    metrics[`build_${name}_rest_max_ms`] = Math.max(...rest);
+    metrics[`build_${name}_ms`] = built.ms;
+    metrics[`build_${name}_block_ms`] = built.blockMs;
+    metrics[`build_${name}_heap_peak_mb`] = (heapPeak - heapBefore) / 1048576;
+
+    build[name] = {
+      pages: built.each.length,
+      outputMB: round(built.each.reduce((sum, r) => sum + r.bytes, 0) / 1048576),
+      byKind: byKind(built.each),
+      caches: before && after ? counterDelta(before.byCache, after.byCache) : null,
+    };
+  }
+
   const result = {
     sha: process.env.BENCHMARK_SHA || null,
     label: args.label || null,
@@ -194,6 +225,8 @@ async function main() {
     metrics: round(metrics),
     // Higher is better, so not a metric: how many mega rounds the window held
     megaRounds,
+    // The full build's page count, output and per-kind medians
+    build,
     timings,
     caches: caches && caches.byCache,
   };
@@ -252,7 +285,7 @@ async function seed() {
     const stored = await mapLimit(entries, 8, (entry) =>
       promisify((cb) => Entry.get(created.id, entry.path, (e) => cb(null, e)))()
     );
-    return { blog: created, entries: stored.filter((e) => e && !e.page) };
+    return { blog: created, shape, entries: stored.filter((e) => e && !e.page) };
   }
 
   // The catalog site, on its own template, and the copies it previews
@@ -380,6 +413,60 @@ async function megaLoad(request, sites, urls, deadline) {
     await Promise.all(work);
   }
   return round;
+}
+
+// Every page a static build of the site would write: the index and its
+// pages, each entry, each tag page, the archives and the sitemap. The index
+// comes first, as a build would start with the page most visitors see.
+async function fullBuild(request, site) {
+  const pages = Math.ceil(site.entries.length / site.shape.pageSize);
+  const tags = new Set(site.entries.flatMap((entry) => entry.tags || []));
+  const urls = [
+    "/",
+    ...Array.from({ length: pages - 1 }, (_, i) => `/page/${i + 2}`),
+    ...site.entries.map((entry) => entry.url),
+    ...[...tags].map((tag) => `/tagged/${tag.toLowerCase().replace(/\s+/g, "-")}`),
+    "/archives",
+    "/sitemap.xml",
+  ];
+  return sequence(request, site.blog.handle, urls);
+}
+
+function kindOf(url) {
+  if (url === "/" || url.startsWith("/page/")) return "index";
+  if (url.startsWith("/tagged/")) return "tag";
+  if (url === "/archives" || url === "/sitemap.xml") return url.slice(1);
+  return "entry";
+}
+
+// Median time and size of each kind of page, the first page left out
+function byKind(each) {
+  const groups = {};
+  for (const r of each.slice(1)) {
+    const kind = kindOf(r.url);
+    groups[kind] = groups[kind] || { ms: [], bytes: [] };
+    groups[kind].ms.push(r.ms);
+    groups[kind].bytes.push(r.bytes);
+  }
+  return Object.fromEntries(
+    Object.entries(groups).map(([kind, g]) => [
+      kind,
+      { pages: g.ms.length, p50Ms: round(median(g.ms)), p50KB: round(median(g.bytes) / 1024) },
+    ])
+  );
+}
+
+// How each cache's counters moved between two cacheCounters() snapshots
+function counterDelta(before, after) {
+  const fields = ["hit", "miss", "fills", "uncachedFills", "evictions"];
+  return Object.fromEntries(
+    Object.keys(after).map((name) => [
+      name,
+      Object.fromEntries(
+        fields.map((f) => [f, (after[name][f] || 0) - ((before[name] || {})[f] || 0)])
+      ),
+    ])
+  );
 }
 
 // --- reporting --------------------------------------------------------------
