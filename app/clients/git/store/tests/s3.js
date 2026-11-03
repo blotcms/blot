@@ -71,7 +71,7 @@ const MIB = 1024 * 1024;
     return require("../objectStore/s3")({
       client,
       bucket,
-      prefix: "git/blog_" + crypto.randomBytes(6).toString("hex") + "/",
+      prefix: "blog_" + crypto.randomBytes(6).toString("hex") + "/git/",
       partSize: 5 * MIB,
       partConcurrency: 2,
       ...options,

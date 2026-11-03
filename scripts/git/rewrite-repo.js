@@ -18,7 +18,7 @@
 //
 // Usage:
 //   node scripts/git/rewrite-repo.js --dir <folder> [options]
-//   node scripts/git/rewrite-repo.js --bucket <name> --prefix <git/blog_x/> [options]
+//   node scripts/git/rewrite-repo.js --bucket <name> --prefix <blog_x/git/> [options]
 //
 // Target (one of):
 //   --dir <folder>     a local directory used as the object store

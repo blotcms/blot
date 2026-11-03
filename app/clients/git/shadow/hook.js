@@ -37,7 +37,7 @@ function shadow(blogID, fn) {
 
 // The blog's git client is being disconnected, or the blog deleted: stops
 // any shadow work for it in this process and deletes its copy in the store
-// (git/<blogID>/ in the storage bucket), whether or not shadow mode is on now,
+// (<blogID>/git/ in the storage bucket), whether or not shadow mode is on now,
 // since it may have been before. With no bucket configured, and no shadow
 // work ever started in this process, there is nothing to do. Always calls
 // back without an error: a failure is logged, and the disconnect goes on.

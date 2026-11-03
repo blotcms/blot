@@ -1,7 +1,7 @@
 // Shadow mode for the git store (../store, see its README and #2259). The bare
 // repositories on disk (data/git/<handle>.git, "EBS" below) stay the source of
 // truth; every push and every one of Blot's commits is also mirrored into the
-// store, under git/<blogID>/ in the storage bucket, so its correctness, timing
+// store, under <blogID>/git/ in the storage bucket, so its correctness, timing
 // and cost can be compared on real traffic before anything depends on it.
 //
 // repo.js calls two functions here, through ./hook.js, which loads this module
@@ -145,7 +145,7 @@ function countsOf(measured) {
 
 // ---- The store and its cache --------------------------------------------
 
-// The object store for a blog: the storage bucket, under git/<blogID>/. The
+// The object store for a blog: the storage bucket, under <blogID>/git/. The
 // S3 client is asked for on each request, because storage/s3 replaces it if
 // its configuration changes. Each request it sends is counted (counting.js):
 // a large pack's put is several, and a long list several pages. Specs replace
@@ -163,7 +163,7 @@ function s3ObjectStore(blogID) {
       },
     },
     bucket: config.storage.bucket,
-    prefix: "git/" + blogID + "/",
+    prefix: blogID + "/git/",
   });
 
   return Object.assign(store, { countsOwnRequests: true });
@@ -919,7 +919,7 @@ async function deleteAndLog(blogID, pass) {
 // The blog's git client is disconnected, or the blog deleted: stops this
 // process's shadow work for it (queued work is dropped, running work is
 // waited for, later hooks are ignored), forgets its store, and deletes its
-// copy in the store, git/<blogID>/. Runs whether or not shadow mode is on
+// copy in the store, <blogID>/git/. Runs whether or not shadow mode is on
 // now, since it may have been before. Deletes the copy again a while later,
 // unless the blog is back on git by then. Never rejects: a failure is logged.
 async function removeBlog(blogID) {

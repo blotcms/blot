@@ -1,4 +1,4 @@
-// Checks one git blog's copy in the git store (git/<blogID>/ in the storage
+// Checks one git blog's copy in the git store (<blogID>/git/ in the storage
 // bucket) against its repository on disk, with the checks the daily
 // maintenance runs (app/clients/git/shadow/maintenance.js), and prints the
 // result as JSON. It reads, and writes nothing to the store or the repository.

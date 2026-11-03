@@ -217,6 +217,7 @@ describe("git store shadow mode: daily maintenance", function () {
       expect(counts.removed).toBe(1);
       expect(counts.spared).toBe(1);
       expect(counts.live).toBe(1);
+      expect(counts.findings).toEqual([{ blog: "blog_gone", check: "orphan", kind: "orphan", detail: "deleted 2 objects left behind" }]);
 
       counts = await maintenance.orphans({ now: Date.now() + 7 * DAY });
       expect(await keys(recent)).toEqual([]);
@@ -249,13 +250,17 @@ describe("git store shadow mode: daily maintenance", function () {
       expect(counts.errors).toBe(1);
       expect(counts.removed).toBe(1);
       expect(await keys(gone)).toEqual([]);
-      expect(counts.findings).toEqual([{ blog: "blog_broken", check: "orphan", kind: "error", detail: "listing failed" }]);
+      expect(counts.findings).toEqual([
+        { blog: "blog_broken", check: "orphan", kind: "error", detail: "listing failed" },
+        { blog: "blog_gone", check: "orphan", kind: "orphan", detail: "deleted 2 objects left behind" },
+      ]);
 
       // The daily run emails it
       var sent = [];
       var result = await gitStoreMaintenance.run({
         recheckDelayMs: 10,
         deepCount: 0,
+        orphanSweep: true,
         sendEmail: async function (view) {
           sent.push(view);
         },
@@ -266,12 +271,41 @@ describe("git store shadow mode: daily maintenance", function () {
       expect(sent[0].findings).toEqual([{ blog: "blog_broken", kind: "error", check: "orphan", detail: "listing failed" }]);
       expect(result.report.orphans.errors).toBe(1);
     });
+
+    it("looks for prefixes left behind only on the first of the month", async function () {
+      await this.local.writeAndPush("/a.txt", "A");
+      await setup.expectMirrored(this);
+
+      var gone = await old(this, "blog_gone", 2 * DAY);
+      var options = { deepCount: 0, recheckDelayMs: 10, scratchDir: this.tmp + "/daily-scratch" };
+
+      var second = await maintenance.daily(Object.assign({ now: Date.UTC(2099, 0, 2) }, options));
+      expect(second.orphans).toBe(null);
+      expect((await keys(gone)).length).toBe(2);
+
+      var first = await maintenance.daily(Object.assign({ now: Date.UTC(2099, 0, 1) }, options));
+      expect(first.orphans.removed).toBe(1);
+      expect(await keys(gone)).toEqual([]);
+      expect(first.findings.map((f) => f.kind)).toEqual(["orphan"]);
+
+      // And the alert email says so
+      var sent = [];
+      await gitStoreMaintenance.run(Object.assign({ orphanSweep: true, sendEmail: async (view) => sent.push(view) }, options));
+      expect(sent).toEqual([]);
+
+      await old(this, "blog_gone", 2 * DAY);
+      await gitStoreMaintenance.run(Object.assign({ orphanSweep: true, sendEmail: async (view) => sent.push(view) }, options));
+      expect(sent.length).toBe(1);
+      expect(sent[0].summary).toBe("1 leftover in 1 blog");
+      expect(sent[0].hasOrphans).toBe(true);
+    });
   });
 
   describe("the daily job", function () {
     function run(ctx, sent) {
       return gitStoreMaintenance.run({
         recheckDelayMs: 10,
+        orphanSweep: false,
         scratchDir: ctx.tmp + "/daily-scratch",
         sendEmail: async function (view) {
           sent.push(view);
