@@ -70,9 +70,11 @@ function only(refs) {
 
 // Runs git in the repository once there is a place in the background lane
 // (or in the place this context already holds). Resolves with
-// { code, stdout, stderr } whatever the exit code. options: input, env,
-// timeout, stdin (a function given the child's stdin to write to instead of
-// input).
+// { code, stdout, stderr, fedError } whatever the exit code. options: input,
+// env, timeout, stdin (a function given the child's stdin to write to instead
+// of input, returning a promise of the writing; its failure is fedError, and
+// is handled at once, so one that comes before git has closed is never an
+// unhandled rejection).
 function git(gitDir, args, options = {}) {
   return limiter.run("background", () => new Promise((resolve, reject) => {
     const child = spawn("git", limiter.args(args), {
@@ -84,7 +86,7 @@ function git(gitDir, args, options = {}) {
     });
     const stdout = [];
     let stderr = "";
-    let feeding = null;
+    let fed = Promise.resolve(null);
 
     child.stdout.on("data", (chunk) => stdout.push(chunk));
     child.stderr.on("data", (chunk) => {
@@ -93,13 +95,18 @@ function git(gitDir, args, options = {}) {
     child.stdin.on("error", () => {});
     child.on("error", reject);
     child.on("close", (code, signal) => {
-      Promise.resolve(feeding)
-        .catch(() => {})
-        .then(() => resolve({ code: signal ? 1 : code, stdout: Buffer.concat(stdout).toString(), stderr }));
+      fed.then((fedError) => resolve({ code: signal ? 1 : code, stdout: Buffer.concat(stdout).toString(), stderr, fedError }));
     });
 
-    if (options.stdin) feeding = options.stdin(child.stdin);
-    else child.stdin.end(options.input);
+    if (options.stdin) {
+      // Settled into its error (or null) as soon as it is made
+      fed = new Promise((settle) => settle(options.stdin(child.stdin))).then(
+        () => null,
+        (err) => err || new Error("feeding git failed")
+      );
+    } else {
+      child.stdin.end(options.input);
+    }
   }));
 }
 
@@ -223,6 +230,8 @@ async function fetchInto(gitDir, { store, cache, current, wants, haves }) {
       if (outcome.err && !(result.code && outcome.err.code === "CLIENT_GONE")) throw outcome.err;
       if (outcome.value && outcome.value.refused) throw new Error("the store refused: " + outcome.value.refused);
       if (result.code) throw new Error("git index-pack failed: " + result.stderr.trim());
+      // index-pack took a pack, but not all of what the store sent reached it
+      if (result.fedError) throw result.fedError;
     });
 
     return quarantine;
@@ -287,25 +296,31 @@ async function fallback(blogID) {
   const quarantine = lacking.length ? await fetchInto(gitDir, { store, cache, current, wants: lacking, haves }) : null;
 
   try {
-    const release = await repo.holdRefLock(blogID);
+    // One place in the background lane before the ref lock, for the commands
+    // run under it, so none waits for room with the lock held (as repo.commit
+    // does): a commit holding a place and waiting for the lock never waits on
+    // a fallback holding the lock and waiting for a place
+    return await limiter.run("background", async () => {
+      const release = await repo.holdRefLock(blogID);
 
-    try {
-      // Anything that moved EBS's refs meanwhile is left alone; the next
-      // fallback starts again from both sides
-      if (!sameRefs(await ebsRefs(gitDir), before)) return { outcome: "moved" };
+      try {
+        // Anything that moved EBS's refs meanwhile is left alone; the next
+        // fallback starts again from both sides
+        if (!sameRefs(await ebsRefs(gitDir), before)) return { outcome: "moved" };
 
-      if (quarantine) await receivePack.migrate({ quarantine, directory: gitDir });
+        if (quarantine) await receivePack.migrate({ quarantine, directory: gitDir });
 
-      const updates = updatesFor(ebs, target);
-      await gitOk(gitDir, ["update-ref", "--stdin"], { input: updates.join("") });
+        const updates = updatesFor(ebs, target);
+        await gitOk(gitDir, ["update-ref", "--stdin"], { input: updates.join("") });
 
-      gc.schedule(gitDir);
-      return { outcome: "ok", refs: updates.length };
-    } finally {
-      await Promise.resolve()
-        .then(release)
-        .catch(() => {});
-    }
+        gc.schedule(gitDir);
+        return { outcome: "ok", refs: updates.length };
+      } finally {
+        await Promise.resolve()
+          .then(release)
+          .catch(() => {});
+      }
+    });
   } finally {
     if (quarantine) await fs.remove(quarantine).catch(() => {});
   }
@@ -376,4 +391,4 @@ function idle(blogID) {
   return state ? state.chain.then(() => idle(blogID)) : Promise.resolve();
 }
 
-module.exports = { request, run, idle, _requestFor: requestFor, _unwrap: unwrap, _fetchInto: fetchInto };
+module.exports = { request, run, idle, _requestFor: requestFor, _unwrap: unwrap, _fetchInto: fetchInto, _git: git };
