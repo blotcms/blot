@@ -254,7 +254,7 @@ describe("git store shadow mode: the test-only read route", function () {
       headers: { "Content-Type": "application/x-git-upload-pack-request", "Content-Encoding": "gzip" },
     });
 
-    await lineMatching(this, / deepen=deepen-since,deepen-not filter=blob:none$/);
+    await lineMatching(this, / deepen=deepen-since\+deepen-not filter=blob:none$/);
     await lineMatching(this, / filter=tree:0$/);
   });
 

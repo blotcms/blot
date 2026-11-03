@@ -21,7 +21,7 @@
 // The last three are on source=ebs lines only, and only when the client's
 // upload-pack request asked for them: what the store does not serve, so how
 // often real clients need it (#2259). deepen is the kind of the depth request,
-// deepen|deepen-since|deepen-not (comma-separated if more than one; the
+// deepen|deepen-since|deepen-not ("+"-separated if more than one, so the logger leaves it unquoted; the
 // value is never logged), shallow=1 is set if the client sent shallow lines
 // (it has a shallow clone), and filter is the partial-clone spec, e.g.
 // blob:none or tree:0 (other characters make it "other").
@@ -299,7 +299,7 @@ function shape(buffer) {
   }
 
   return {
-    deepen: kinds.length ? kinds.join(",") : undefined,
+    deepen: kinds.length ? kinds.join("+") : undefined,
     shallow: shallow ? 1 : undefined,
     filter,
   };
