@@ -208,6 +208,9 @@ async function resetToBlotWithClient(
     removedFiles: {},
     modifiedPaths: [],
     startedAt,
+    // The pre-walk cursor, to confirm that a subfolder Dropbox can no longer
+    // list changed during the walk (see walk)
+    cursor,
   };
 
   const progress = createProgress(await countLocalFiles(blogID, "/"), publish);
@@ -260,21 +263,36 @@ const walk = async (
   progress
 ) => {
   publish("Checking", dir);
+  let vanishedError;
   const [remoteContents, localContents] = await Promise.all([
     remoteReaddir(client, join(dropboxRoot, dir)).catch((err) => {
-      if (dir !== "/" && vanishedFolder(err)) return null;
-      throw err;
+      if (dir === "/" || !vanishedFolder(err)) throw err;
+      vanishedError = dropboxTag(err);
+      return null;
     }),
     localReaddir(blogID, dir),
   ]);
 
-  // The folder was deleted, moved or replaced by a file in Dropbox after its
-  // parent was listed: a live edit, not a missed change. Leave Blot's copy
-  // alone rather than abort the whole walk; the edit's own sync (or the
-  // catch-up sync, from the pre-walk cursor) applies it.
+  // Dropbox listed this folder in its parent but now says it isn't one: it
+  // was deleted, moved or replaced by a file since. If Dropbox reports it as
+  // changed since the pre-walk cursor, that's a live edit: skip it and leave
+  // Blot's copy alone, since the catch-up sync applies it from that cursor (as
+  // a move, where the walk could only remove and download). Otherwise the
+  // 409 is unexplained, so report it as a failed path rather than hide it,
+  // and still don't remove anything. Neither retries, so neither can loop.
   if (!remoteContents) {
-    publish("Skipping", dir, "which changed in Dropbox during the walk");
-    summary.skipped += 1;
+    const changed = await changedSinceCursor(
+      client,
+      summary.cursor,
+      dropboxRoot
+    );
+    if (changed && overlapsAny(dir, changed)) {
+      publish("Skipping", dir, "which changed in Dropbox during the walk");
+      summary.skipped += 1;
+    } else {
+      publish("Failed to list", dir, vanishedError);
+      recordFailure(summary, dir, new Error("409 " + vanishedError));
+    }
     return;
   }
 

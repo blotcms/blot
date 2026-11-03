@@ -343,8 +343,11 @@ Entry template:
   the blog next hour, which didn't happen) or `remoteReaddir` on a subfolder that
   was deleted/renamed in Dropbox mid-walk, which is the likely one. The user was
   actively editing, with follow-up syncs queued at 17:00:30.
-- Follow-up: fixed in the PR for this entry. The walk now skips a subfolder
-  whose listing 409s with `path/not_found`/`path/not_folder` (it logs
-  `Skipping <dir> which changed in Dropbox during the walk`), and the report
-  appends the Dropbox `error_summary` to the error message. Tip: a deploy between the run and the
+- Follow-up: fixed in the PR for this entry. When a subfolder's listing 409s
+  with `path/not_found`/`path/not_folder` and Dropbox lists it as changed since
+  the pre-walk cursor, the walk skips it (`Skipping <dir> which changed in
+  Dropbox during the walk`). If the cursor doesn't explain it, the walk logs
+  `Failed to list <dir>` and the email shows "1 file(s) failed to sync, eg.
+  <dir>: 409 path/…": that's not a race, so investigate. The report also
+  appends a Dropbox error's `error_summary` to its message. Tip: a deploy between the run and the
   investigation wipes the logs; check `docker inspect -f '{{.State.StartedAt}}'` first.
