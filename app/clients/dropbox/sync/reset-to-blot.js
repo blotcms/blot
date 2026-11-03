@@ -23,6 +23,7 @@ const persistError = promisify(require("../util/persistError"));
 const {
   SOURCES,
   classify,
+  dropboxTag,
   keepsErrorAfterDownload,
 } = require("../util/classifyError");
 const tagSource = require("../util/tagSource");
@@ -260,9 +261,22 @@ const walk = async (
 ) => {
   publish("Checking", dir);
   const [remoteContents, localContents] = await Promise.all([
-    remoteReaddir(client, join(dropboxRoot, dir)),
+    remoteReaddir(client, join(dropboxRoot, dir)).catch((err) => {
+      if (dir !== "/" && vanishedFolder(err)) return null;
+      throw err;
+    }),
     localReaddir(blogID, dir),
   ]);
+
+  // The folder was deleted, moved or replaced by a file in Dropbox after its
+  // parent was listed: a live edit, not a missed change. Leave Blot's copy
+  // alone rather than abort the whole walk; the edit's own sync (or the
+  // catch-up sync, from the pre-walk cursor) applies it.
+  if (!remoteContents) {
+    publish("Skipping", dir, "which changed in Dropbox during the walk");
+    summary.skipped += 1;
+    return;
+  }
 
   for (const { name, path_display, is_directory } of localContents) {
     const pathOnBlot = join(dir, name);
@@ -622,6 +636,12 @@ const localReaddir = async (blogID, dir) => {
     };
   });
 };
+
+// list_folder's 409 for a path that is no longer a folder in Dropbox
+const vanishedFolder = (err) =>
+  err &&
+  err.status === 409 &&
+  /^path\/(not_found|not_folder)\b/.test(dropboxTag(err));
 
 const remoteReaddir = async (client, dir) => {
   let items = [];

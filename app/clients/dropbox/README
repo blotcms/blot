@@ -469,6 +469,7 @@ Sync records only failures the user must act on, tagged with `error_source` so `
 - **HTTP 400 `invalid_grant` / HTTP 401**: Persisted as `REAUTH_REQUIRED` from any step; not retried. Other 400s are treated as transient. Resyncs (reset to/from Blot) persist errors the same way: only the folder lookup counts as the delta step, so a per-file 409 during a resync is not reported as a missing folder.
 - **HTTP 409 from delta** (`filesListFolder` / `filesGetMetadata` on the blog folder): Persisted as `SOURCE_MISSING`. A `reset` tag is recovered by clearing the cursor and listing from scratch — that is a rename/move, not a missing folder, and does not set `error_code`.
 - **HTTP 409 from apply / write / remove**: Per-file conflict or restricted content. Not persisted, not retried, not reported as a missing folder.
+- **HTTP 409 `path/not_found` / `path/not_folder` listing a subfolder during a resync**: The folder was deleted, moved or replaced by a file in Dropbox after its parent was listed. The walk skips it (`summary.skipped`) and carries on; the live edit's own sync applies the change.
 - **Unsupported files** (`.paper`): Placeholder files created; download skipped.
 - **Oversized files** (>100 MB): Placeholder files created; download skipped.
 - **Case-only renames** (e.g., `foo` → `FOO`): Detected and injected as delete + create to maintain consistency on case-sensitive file systems.

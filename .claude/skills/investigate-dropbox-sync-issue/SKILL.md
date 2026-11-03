@@ -330,3 +330,21 @@ Entry template:
 - Follow-up: retry network errors in `retryRequest`, and report `err.code`
   (and the `AggregateError`'s inner codes) so the reason isn't blank.
   Tip: `grep -A12 'Error validating'` shows the error's code fields.
+
+### 2026-11-03 16:00:00 UTC validation run (probably) — 409 during walk, logs lost
+
+- Alert: "error during walk: Response failed with a 409 code" for 1 blog, no
+  changes. Both containers were recreated at 16:49 (deploy), so the run's logs
+  were gone. The 17:00:00 run (green/node-b) walked the same blog cleanly
+  17:01:23–17:02:04 with `issues=0`, and the account's `error_code` was 0 afterwards.
+- Cause (from the code, not confirmed in logs): the message has no "N file(s)
+  failed" prefix, so the walk threw instead of skipping a file. That leaves the
+  folder metadata/cursor calls (a 409 there would persist SOURCE_MISSING and skip
+  the blog next hour, which didn't happen) or `remoteReaddir` on a subfolder that
+  was deleted/renamed in Dropbox mid-walk, which is the likely one. The user was
+  actively editing, with follow-up syncs queued at 17:00:30.
+- Follow-up: fixed in the PR for this entry. The walk now skips a subfolder
+  whose listing 409s with `path/not_found`/`path/not_folder` (it logs
+  `Skipping <dir> which changed in Dropbox during the walk`), and the report
+  appends the Dropbox `error_summary` to the error message. Tip: a deploy between the run and the
+  investigation wipes the logs; check `docker inspect -f '{{.State.StartedAt}}'` first.
