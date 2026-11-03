@@ -1297,8 +1297,15 @@ describe("storage/folder", function () {
         };
       }
 
+      // Drops the copies a blog's writes put in the cache, so the next read
+      // has to download
+      function forget(blogID) {
+        return contentCache().removeBlog(blogID);
+      }
+
       it("downloads a file once for ensureLocal, into the cache", async function () {
         await folder.write(this.blog.id, "/a.txt", "cached");
+        await forget(this.blog.id);
 
         var gets = countGets(this.blog.id, "/a.txt");
         var first = await folder.ensureLocal(this.blog.id, "/a.txt");
@@ -1322,6 +1329,7 @@ describe("storage/folder", function () {
 
       it("reads and streams a small file from the cache after the first time", async function () {
         await folder.write(this.blog.id, "/a.txt", "0123456789");
+        await forget(this.blog.id);
 
         var gets = countGets(this.blog.id, "/a.txt");
 
@@ -1346,12 +1354,14 @@ describe("storage/folder", function () {
 
       it("downloads the new version once a file changes", async function () {
         await folder.write(this.blog.id, "/a.txt", "one");
+        await forget(this.blog.id);
 
         var gets = countGets(this.blog.id, "/a.txt");
 
         expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("one");
 
         await folder.write(this.blog.id, "/a.txt", "two");
+        await forget(this.blog.id);
 
         expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("two");
         expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("two");
@@ -1360,6 +1370,7 @@ describe("storage/folder", function () {
 
       it("reads S3 directly when it holds bytes the index does not describe", async function () {
         await folder.write(this.blog.id, "/a.txt", "old");
+        await forget(this.blog.id);
 
         // As if a write had reached S3 but not yet the index
         await s3.putBuffer(this.blog.id + "/folder/a.txt", Buffer.from("new"));
@@ -1380,6 +1391,7 @@ describe("storage/folder", function () {
 
       it("counts hits and misses", async function () {
         await folder.write(this.blog.id, "/a.txt", "x");
+        await forget(this.blog.id);
 
         var before = contentCache().stats();
 
@@ -1392,6 +1404,164 @@ describe("storage/folder", function () {
         expect(after.hits - before.hits).toEqual(1);
       });
 
+      describe("filled by writes", function () {
+        var tmp;
+
+        beforeEach(async function () {
+          await fs.ensureDir(config.tmp_directory);
+          tmp = await fs.mkdtemp(join(config.tmp_directory, "storage-folder-write-through-"));
+        });
+
+        afterEach(async function () {
+          await fs.remove(tmp);
+        });
+
+        function filled() {
+          return contentCache().stats().filled;
+        }
+
+        it("makes a read straight after a write of a Buffer, a string or a stream a hit", async function () {
+          var blogID = this.blog.id;
+          var before = contentCache().stats();
+          var get = spyOn(s3, "get").and.callThrough();
+
+          await folder.write(blogID, "/buffer.txt", Buffer.from("buffer"));
+          await folder.write(blogID, "/string.txt", "string");
+          await folder.write(blogID, "/stream.txt", Readable.from([Buffer.from("str"), Buffer.from("eam")]));
+
+          expect((await folder.read(blogID, "/buffer.txt")).toString()).toEqual("buffer");
+          expect((await folder.read(blogID, "/string.txt")).toString()).toEqual("string");
+          expect(await slurp(folder.createReadStream(blogID, "/stream.txt"))).toEqual("stream");
+          expect(await fs.readFile(await folder.ensureLocal(blogID, "/stream.txt"), "utf8")).toEqual("stream");
+
+          var after = contentCache().stats();
+
+          expect(get).not.toHaveBeenCalled();
+          expect(after.filled - before.filled).toEqual(3);
+          expect(after.misses - before.misses).toEqual(0);
+          expect(after.fetchedBytes - before.fetchedBytes).toEqual(0);
+        });
+
+        it("makes a read straight after writeFrom a hit, for a copy and a move", async function () {
+          var copied = join(tmp, "copied.txt");
+          var moved = join(tmp, "moved.txt");
+
+          await fs.writeFile(copied, "copied");
+          await fs.writeFile(moved, "moved");
+
+          var get = spyOn(s3, "get").and.callThrough();
+
+          await folder.writeFrom(this.blog.id, "/copied.txt", copied);
+          await folder.writeFrom(this.blog.id, "/moved.txt", moved, { move: true });
+
+          expect(await fs.pathExists(copied)).toBe(true);
+          expect(await fs.pathExists(moved)).toBe(false);
+          expect((await folder.read(this.blog.id, "/copied.txt")).toString()).toEqual("copied");
+          expect((await folder.read(this.blog.id, "/moved.txt")).toString()).toEqual("moved");
+          expect(get).not.toHaveBeenCalled();
+        });
+
+        it("makes a read straight after a commit a hit", async function () {
+          var staged = await folder.path(this.blog.id, "/tool.txt");
+
+          await fs.outputFile(staged, "from a tool");
+
+          var get = spyOn(s3, "get").and.callThrough();
+
+          await folder.commit(this.blog.id, "/tool.txt");
+
+          expect((await folder.read(this.blog.id, "/tool.txt")).toString()).toEqual("from a tool");
+          expect(get).not.toHaveBeenCalled();
+        });
+
+        it("serves the new bytes after an overwrite", async function () {
+          var source = join(tmp, "three.txt");
+          var gets = countGets(this.blog.id, "/a.txt");
+
+          await folder.write(this.blog.id, "/a.txt", "one");
+          expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("one");
+
+          await folder.write(this.blog.id, "/a.txt", "two");
+          expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("two");
+
+          await fs.writeFile(source, "three");
+          await folder.writeFrom(this.blog.id, "/a.txt", source);
+          expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("three");
+
+          expect(gets()).toEqual(0);
+        });
+
+        it("does not fill the cache with a file over the size limit", async function () {
+          config.folder_cache.max_file_bytes = 2;
+
+          var before = filled();
+          var source = join(tmp, "big.txt");
+
+          await fs.writeFile(source, "too big");
+          await folder.write(this.blog.id, "/big.txt", "too big");
+          await folder.write(this.blog.id, "/big-stream.txt", Readable.from([Buffer.from("too big")]));
+          await folder.writeFrom(this.blog.id, "/big-copy.txt", source);
+
+          expect(filled()).toEqual(before);
+
+          // ensureLocal, which caches any size, downloads it
+          var gets = countGets(this.blog.id, "/big.txt");
+
+          expect(await fs.readFile(await folder.ensureLocal(this.blog.id, "/big.txt"), "utf8")).toEqual("too big");
+          expect(gets()).toEqual(1);
+        });
+
+        it("still writes when the cache fails, and the read downloads", async function () {
+          var full = Object.assign(new Error("no space left on device"), { code: "ENOSPC" });
+          var source = join(tmp, "moved.txt");
+          var put = spyOn(contentCache(), "put").and.callFake(() => Promise.reject(full));
+
+          spyOn(console, "error");
+
+          await fs.writeFile(source, "moved");
+
+          await folder.write(this.blog.id, "/a.txt", "buffer");
+          await folder.write(this.blog.id, "/b.txt", Readable.from([Buffer.from("stream")]));
+          await folder.writeFrom(this.blog.id, "/c.txt", source, { move: true });
+
+          expect(put.calls.count()).toEqual(3);
+          expect(await fs.pathExists(source)).toBe(false);
+          expect((await File.get(this.blog.id, "/c.txt")).sha1).toEqual(sha1("moved"));
+
+          var gets = countGets(this.blog.id, "/a.txt");
+
+          expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("buffer");
+          expect((await folder.read(this.blog.id, "/b.txt")).toString()).toEqual("stream");
+          expect((await folder.read(this.blog.id, "/c.txt")).toString()).toEqual("moved");
+          expect(gets()).toEqual(1);
+        });
+
+        it("caches nothing when the source changes after its upload", async function () {
+          var source = join(tmp, "source.txt");
+          var upload = s3.uploadFile;
+
+          await fs.writeFile(source, "uploaded");
+
+          // As if the file on disk was rewritten while the mirror uploaded it
+          spyOn(s3, "uploadFile").and.callFake(async function () {
+            var uploaded = await upload.apply(s3, arguments);
+            await fs.writeFile(source, "rewritten");
+            return uploaded;
+          });
+
+          var before = filled();
+
+          await folder.writeFrom(this.blog.id, "/a.txt", source);
+
+          expect(filled()).toEqual(before);
+
+          var gets = countGets(this.blog.id, "/a.txt");
+
+          expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("uploaded");
+          expect(gets()).toEqual(1);
+        });
+      });
+
       describe("when serving", function () {
         var state = {};
 
@@ -1399,6 +1569,7 @@ describe("storage/folder", function () {
 
         it("serves a small file from the cache, with validators from the index", async function () {
           await folder.write(state.blogID, "/a.txt", "hello");
+          await forget(state.blogID);
 
           var gets = countGets(state.blogID, "/a.txt");
           var open = spyOn(s3, "open").and.callThrough();

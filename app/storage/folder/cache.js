@@ -29,6 +29,15 @@ var { join, dirname, basename } = require("path");
 // Two processes fetching the same entry each rename a complete copy over the
 // other's, which is harmless.
 //
+// put() fills an entry the same way from bytes the caller already holds: the
+// S3 backend's write-through, which hands over the bytes it has just uploaded
+// (a Buffer, its spool file or the source of a writeFrom) under the version
+// it has just recorded, so the read which usually follows a write is a hit.
+// They go through the same tmp file, check and rename as a download, so a
+// source which changed after its upload (a mirrored file rewritten on disk,
+// say) is refused rather than cached under the wrong version. A put is not a
+// hit or a miss, and its bytes are not fetchedBytes; it counts in filled.
+//
 // The LRU is bounded by bytes. Recency is the entry's modification time,
 // which a hit sets, so the order survives a restart: the directory is
 // scanned when the cache opens, and again every few minutes, which is also
@@ -97,7 +106,7 @@ function createCache(options) {
   var downloads = new Map();
   // name -> the promise of an eviction deleting it
   var removing = new Map();
-  var counters = { hits: 0, misses: 0, evictions: 0, fetchedBytes: 0, changed: 0 };
+  var counters = { hits: 0, misses: 0, evictions: 0, fetchedBytes: 0, changed: 0, filled: 0 };
   var timer = null;
   var checking = null;
 
@@ -229,7 +238,9 @@ function createCache(options) {
     }
   }
 
-  async function download(spec, open, file) {
+  // fetched: open() reads S3, so its bytes count as fetched and a mismatch as
+  // S3 holding a version the index does not have
+  async function download(spec, open, file, fetched) {
     var temporary = join(tmpDir, crypto.randomBytes(12).toString("hex"));
     var hash = crypto.createHash("sha1");
     var bytes = 0;
@@ -254,11 +265,11 @@ function createCache(options) {
         fs.createWriteStream(temporary)
       );
 
-      counters.fetchedBytes += bytes;
+      if (fetched) counters.fetchedBytes += bytes;
 
       if (bytes !== spec.size || (spec.sha1 && hash.digest("hex") !== spec.sha1)) {
-        counters.changed++;
-        throw changed("storage/folder cache: " + spec.path + " in S3 is not the version the index has");
+        if (fetched) counters.changed++;
+        throw changed("storage/folder cache: " + spec.path + (fetched ? " in S3" : "") + " is not the version the index has");
       }
 
       // An empty entry directory may be removed by another process's scan
@@ -294,10 +305,20 @@ function createCache(options) {
 
     counters.misses++;
 
+    entry = await fill(spec, open, true);
+
+    if (pin) entry.pins++;
+
+    return entry.file;
+  }
+
+  // Downloads the entry spec describes and adds it. Concurrent fills of one
+  // entry share one download.
+  async function fill(spec, open, fetched) {
     var { name, file } = locate(spec);
 
     if (!downloads.has(name)) {
-      var fetching = download(spec, open, file).finally(function () {
+      var fetching = download(spec, open, file, fetched).finally(function () {
         downloads.delete(name);
       });
 
@@ -307,15 +328,24 @@ function createCache(options) {
     await downloads.get(name);
 
     var now = Date.now();
-
-    entry = entries.get(name);
+    var entry = entries.get(name);
 
     if (entry) entry.used = now;
     else add(name, (entry = { file: file, size: spec.size, used: now, pins: 0 }));
 
-    if (pin) entry.pins++;
+    return entry;
+  }
 
-    return file;
+  // Stores the bytes open() resolves to (a readable stream) as the entry spec
+  // describes, unless it is there already, which it then marks used. Returns
+  // nothing and pins nothing: the caller has the bytes, and wants the next
+  // reader to find them. Rejects with ECHANGED if they are not the version
+  // spec describes.
+  async function put(spec, open) {
+    if (await lookup(spec, false)) return;
+
+    await fill(spec, open, false);
+    counters.filled++;
   }
 
   // Calls fn with the local path of the file spec describes, which is not
@@ -473,6 +503,7 @@ function createCache(options) {
       return get(spec, open, false);
     },
     use: use,
+    put: put,
     removeBlog: removeBlog,
     check: check,
     stats: stats,
