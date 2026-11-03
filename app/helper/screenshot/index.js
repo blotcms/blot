@@ -438,7 +438,7 @@ function sendBatch() {
   const items = [];
   let bytes = 0;
   while (waiting.length && items.length < BATCH_MAX) {
-    bytes += JSON.stringify(waiting[0].args).length;
+    bytes += Buffer.byteLength(JSON.stringify(waiting[0].args));
     if (items.length && bytes > BATCH_ARGS_BYTES) break;
     items.push(waiting.shift());
   }
