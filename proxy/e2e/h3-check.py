@@ -4,10 +4,13 @@
     h3-check.py <host> <port> <authority> [path] [sni]
 
 Needs `pip install aioquic`. The certificate is not verified (the CI proxy
-serves a self-signed placeholder). Prints the status and Alt-Svc and exits
+serves a self-signed placeholder) unless H3_CAFILE names a CA bundle, when the
+handshake must present a certificate for the SNI that chains to it. Prints the status and Alt-Svc and exits
 non-zero unless the status is 200.
 """
 import asyncio
+import os
+import ssl
 import sys
 
 from aioquic.asyncio import connect
@@ -31,6 +34,9 @@ class Client(QuicConnectionProtocol):
 
 async def main(host, port, authority, path, sni=None):
     config = QuicConfiguration(is_client=True, alpn_protocols=H3_ALPN, verify_mode=0)
+    if os.environ.get("H3_CAFILE"):
+        config.verify_mode = ssl.CERT_REQUIRED
+        config.load_verify_locations(cafile=os.environ["H3_CAFILE"])
     # SNI is the address, as with curl to an IP: a custom domain's certificate
     # would otherwise be looked up in Redis, which this job does not run.
     config.server_name = sni or host
@@ -39,6 +45,8 @@ async def main(host, port, authority, path, sni=None):
         client.h3.send_headers(stream, [
             (b":method", b"GET"), (b":scheme", b"https"),
             (b":authority", authority.encode()), (b":path", path.encode()),
+            # An empty User-Agent is a bad bot (server.conf) and gets a 403
+            (b"user-agent", b"Mozilla/5.0 (proxy HTTP/3 check)"),
         ], end_stream=True)
         client.transmit()
         headers = await asyncio.wait_for(client.headers, 10)
