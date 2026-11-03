@@ -8,6 +8,9 @@
 //   verify(blogID, options)   compares the blog's EBS repository with its store
 //   orphans(options)          deletes <blogID>/git/ prefixes left behind by
 //                             blogs no longer on git
+//   scratch(options)          removes the import-, verify- and rewrite-
+//                             directories a killed process left in the
+//                             scratch directory (store/leftovers.js)
 //   daily(options)            all of the above, for every shadowed blog; the
 //                             orphans only on the first of the month
 //
@@ -38,6 +41,7 @@ const shadow = require("./index");
 const { manifest, layout } = require("../store");
 const sweep = require("../store/sweep");
 const { verifyImport } = require("../store/import");
+const { sweepScratch } = require("../store/leftovers");
 const { measure } = require("./counting");
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -92,6 +96,21 @@ function allBlogIDs() {
 // which has far more room than the cache's budget
 function defaultScratchDir() {
   return path.dirname(config.git_store.cache_directory);
+}
+
+// Removes what a killed import, verify or rewrite left in the scratch
+// directory (a deploy replacing a container mid-import), judged by age alone:
+// the directory is shared by processes which cannot see each other. Logs one
+// line, without paths. Never throws.
+async function scratch({ scratchDir = defaultScratchDir(), minAge, now = Date.now() } = {}) {
+  try {
+    const result = await sweepScratch({ dir: scratchDir, minAge, now });
+    shadow.log({ op: "sweep", source: "scratch", outcome: result.errors ? "error" : "ok", ...result });
+    return result;
+  } catch (err) {
+    shadow.log({ op: "sweep", source: "scratch", outcome: "error", detail: shadow.scrub(err) });
+    return { removed: 0, spared: 0, bytes: 0, errors: 1, failed: shadow.scrub(err) };
+  }
 }
 
 // Whether shadow mode is set up, so there is anything to look after
@@ -478,7 +497,10 @@ async function daily({ now = Date.now(), deepCount = DEEP_SAMPLE, recheckDelayMs
     }
   }
 
-  return { blogs: ids.length, sweeps, deepChecked, findings, orphans: orphaned, ms: Date.now() - started };
+  const leftovers = await scratch({ scratchDir, now });
+  if (leftovers.failed) findings.push({ blog: "-", check: "scratch", kind: "error", detail: leftovers.failed });
+
+  return { blogs: ids.length, sweeps, deepChecked, findings, orphans: orphaned, scratch: leftovers, ms: Date.now() - started };
 }
 
 function _setPrefixLister(fn) {
@@ -490,6 +512,7 @@ module.exports = {
   sweepBlog,
   verify,
   orphans,
+  scratch,
   daily,
   configured,
   defaultScratchDir,
