@@ -35,7 +35,7 @@ esac
 
 log() { echo "[$(date +%Y-%m-%d-%H-%M-%S)] $KIND backup: $*"; }
 
-# A drill host (launch.sh --drill) holds a copy of production data and may be
+# A drill host (cycle.sh --drill) holds a copy of production data and may be
 # put through a real promotion, which marks it active below. It must never upload
 # to (or prune) the production bucket.
 if [ -e "$ROOT/etc/blot-redis/drill" ]; then

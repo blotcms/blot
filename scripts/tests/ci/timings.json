@@ -512,8 +512,6 @@
   "app/templates/tests/index.js": 8.277,
   "app/templates/tests/rebuild-subscriber.js": 0.005,
   "config/redis": 9,
-  "config/redis/perf/tests/perf.js": 0.622,
-  "config/redis/perf/tests/synthetic-logs.js": 0,
   "config/redis/tests/backup.js": 0.127,
   "config/redis/tests/redis-conf.js": 0.035,
   "config/redis/tests/tcpmem-log.js": 0.466,
