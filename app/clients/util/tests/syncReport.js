@@ -95,6 +95,23 @@ describe("clients/util syncReport", function () {
     expect(message.length).toBeLessThan(400);
   });
 
+  it("adds an error's code when its message doesn't give it", function () {
+    const report = syncReport.create();
+    const network = Object.assign(new Error("request failed, reason: "), {
+      code: "ETIMEDOUT",
+    });
+    const named = Object.assign(new Error("connect ECONNRESET"), {
+      code: "ECONNRESET",
+    });
+
+    syncReport.recordError(report, blog, "walk", network);
+    syncReport.recordError(report, blog, "fix", named);
+
+    const [first, second] = syncReport.view(report).blogs[0].errors;
+    expect(first.message).toEqual("request failed, reason: (ETIMEDOUT)");
+    expect(second.message).toEqual("connect ECONNRESET");
+  });
+
   it("summarizes a Fix() report on one line", function () {
     expect(syncReport.summarize({ a: [1, 2, 3], b: [1] })).toEqual("a=3 b=1");
     expect(syncReport.summarize({})).toEqual("");

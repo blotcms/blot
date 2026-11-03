@@ -1,8 +1,8 @@
 const clfdate = require("helper/clfdate");
 
 // Retries a single Dropbox API call (e.g. list_folder) that failed with a
-// transient 5xx or 429, so one blip doesn't abort a whole walk. Everything
-// else (409 path errors, 401, network errors) is thrown straight away.
+// transient 5xx, 429 or network error, so one blip doesn't abort a whole
+// walk. Everything else (409 path errors, 401) is thrown straight away.
 // For 429 the server's retry_after is honoured (as in waitForErrorTimeout).
 //
 // `delays` is the wait before each retry in ms; it is exported so specs can
@@ -22,6 +22,8 @@ const retryRequest = async function (fn, label) {
         label || "",
         "status",
         err.status,
+        "code",
+        err.code,
         "retrying in",
         wait,
         "ms"
@@ -31,7 +33,11 @@ const retryRequest = async function (fn, label) {
   }
 };
 
+// A network error reaches us as node-fetch's FetchError with type "system"
+// (connection reset, DNS failure, a connect timeout). Node's connect gives up
+// after 250ms per address, so a busy event loop alone can cause one.
 function isTransient(err) {
+  if (err && err.name === "FetchError" && err.type === "system") return true;
   const status = err && err.status;
   return status === 429 || (typeof status === "number" && status >= 500);
 }
