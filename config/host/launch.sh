@@ -54,8 +54,9 @@ ssh_run() {
 AMI_PARAMETER=/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
 # A volume can only attach in its own AZ: this is the subnet (us-west-2a) the data volume and both current hosts are in.
 SUBNET=subnet-4a78973d
-APP_SECURITY_GROUP=sg-0d1c2c28e0c7084ad
-REDIS_SECURITY_GROUP=sg-0b3b200323d36ce2e
+# The one host security group: 80, 443 and ssh from anywhere, and 6379 from
+# other hosts in the group, so a new host can replicate during a host cycle.
+SECURITY_GROUP=sg-0d1c2c28e0c7084ad
 PROVISIONED_BY=config/host/launch.sh
 
 TYPE=""; KEY_NAME=${BLOT_HOST_KEY_NAME:-}; KEY=${BLOT_HOST_SSH_KEY:-}; REDIS_MAXMEMORY=${REDIS_MAXMEMORY:-}
@@ -148,7 +149,7 @@ fi
 # Termination protection is set at launch, so there is no window without it.
 # The root volume gets the same tags as the instance.
 ARGS=(ec2 run-instances --image-id "$AMI" --instance-type "$TYPE" --key-name "$KEY_NAME"
-  --subnet-id "$SUBNET" --security-group-ids "$APP_SECURITY_GROUP" "$REDIS_SECURITY_GROUP"
+  --subnet-id "$SUBNET" --security-group-ids "$SECURITY_GROUP"
   --block-device-mappings "$MAPPINGS"
   --metadata-options HttpTokens=required,HttpPutResponseHopLimit=1
   --tag-specifications "ResourceType=instance,Tags=[$TAGS]" "ResourceType=volume,Tags=[$TAGS]")
