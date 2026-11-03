@@ -29,7 +29,8 @@
 // STUB_URL (http://127.0.0.1:8090), PROXY_HOST (127.0.0.1), PURGE_URL
 // (http://127.0.0.1:8077), BLOT_HOST (blot.im), PURGE_MS (500), WORKERS (24),
 // ALLOW_RESETS (1: a new connection reset before any response byte is counted
-// and reported, not a failure; see isHandshakeReset), FILL_FILE.
+// and reported, not a failure; see isHandshakeReset), DRAIN_CUT_MS (10000; see
+// isDrainCut), FILL_FILE.
 //
 // What "wrong" means. The upstream's answer for a (host, path) is a function of
 // the host's generation, which a "change" bumps. A cached answer is allowed to
@@ -61,8 +62,18 @@ const LARGE = "/large/1";
 // byte: what the kernel does to one that had finished its handshake in the
 // listen queue of a socket that was then closed (a container stopping), unless
 // net.ipv4.tcp_migrate_req=1 hands it to the other listener (swap-load.sh).
-const isHandshakeReset = (e) => e.code === "ECONNRESET" && !e.reusedSocket && !e.gotResponse;
+// Nothing accepted it, so its TLS handshake never finished.
+const isHandshakeReset = (e) => e.code === "ECONNRESET" && !e.reusedSocket && !e.secured && !e.gotResponse;
 const ALLOW_RESETS = process.env.ALLOW_RESETS === "1";
+
+// A request a container had accepted and was still working on when its drain
+// ran out: worker_shutdown_timeout (proxy/config/initial.conf) or `docker stop
+// --time` cuts it. That is the drain timeout doing its job, not a lost request
+// (a big upload under this load can take longer than either), so it is counted
+// and reported, not a failure. One cut sooner than the shortest drain is a
+// failure.
+const DRAIN_CUT_MS = parseInt(process.env.DRAIN_CUT_MS || "10000", 10);
+const isDrainCut = (e, ms) => e.code === "ECONNRESET" && e.secured && !e.gotResponse && ms >= DRAIN_CUT_MS;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -92,8 +103,9 @@ function attempt({ method = "GET", host, path, headers = {}, body, reuse = false
   const started = Date.now();
   return new Promise((resolve, reject) => {
     let reused = false;
+    let secured = false;
     let gotResponse = false;
-    const fail = (e) => reject(Object.assign(e, { reusedSocket: reused, gotResponse }));
+    const fail = (e) => reject(Object.assign(e, { reusedSocket: reused, secured, gotResponse }));
     const r = https.request(
       {
         method,
@@ -118,6 +130,8 @@ function attempt({ method = "GET", host, path, headers = {}, body, reuse = false
     );
     r.on("socket", (socket) => {
       reused = r.reusedSocket === true;
+      if (reused) secured = true;
+      else socket.once("secureConnect", () => (secured = true));
     });
     r.setTimeout(timeout, () => r.destroy(Object.assign(new Error("timeout"), { code: "ETIMEDOUT" })));
     r.on("error", fail);
@@ -187,8 +201,8 @@ async function load() {
     maxMs: 0,
     startedAt: Date.now(),
   };
-  const problems = { error: [], status: [], wrong: [], stale: [], sse: [], purge: [], reset: [] };
-  const counts = { error: 0, status: 0, wrong: 0, stale: 0, sse: 0, purge: 0, reset: 0 };
+  const problems = { error: [], status: [], wrong: [], stale: [], sse: [], purge: [], reset: [], drainCut: [] };
+  const counts = { error: 0, status: 0, wrong: 0, stale: 0, sse: 0, purge: 0, reset: 0, drainCut: 0 };
   const problem = (type, detail) => {
     counts[type]++;
     if (problems[type].length < 15) problems[type].push({ at: Date.now(), ...detail });
@@ -404,7 +418,9 @@ async function load() {
         const res = await kinds[kind](reuse);
         stats.maxMs = Math.max(stats.maxMs, res.ms);
       } catch (e) {
-        if (isHandshakeReset(e)) problem("reset", { kind, size: e.size, ms: Date.now() - t0 });
+        const ms = Date.now() - t0;
+        if (isHandshakeReset(e)) problem("reset", { kind, size: e.size, ms });
+        else if (isDrainCut(e, ms)) problem("drainCut", { kind, size: e.size, ms });
         else problem("error", { kind, error: e.code || e.message, syscall: e.syscall, reused: e.reusedSocket, gotResponse: e.gotResponse, ms: Date.now() - t0, size: e.size });
       }
       await sleep(20 + Math.random() * 60);
@@ -423,7 +439,9 @@ async function load() {
         const ok = res.status === 200 && events.length === lib.SSE_EVENTS && events.every((e, i) => e === String(i + 1)) && text.endsWith("event: done\ndata: done\n\n");
         if (!ok) problem("sse", { status: res.status, events: events.length, ms: Date.now() - started });
       } catch (e) {
-        if (isHandshakeReset(e)) problem("reset", { kind: "sse", ms: Date.now() - started });
+        const ms = Date.now() - started;
+        if (isHandshakeReset(e)) problem("reset", { kind: "sse", ms });
+        else if (isDrainCut(e, ms)) problem("drainCut", { kind: "sse", ms });
         else problem("sse", { error: e.code || e.message, ms: Date.now() - started });
       }
     }
@@ -464,10 +482,11 @@ async function load() {
   await Promise.all(tasks);
 
   const resets = counts.reset;
+  const drainCuts = counts.drainCut;
   if (ALLOW_RESETS) counts.reset = 0;
   const failures = counts.error + counts.status + counts.wrong + counts.stale + counts.sse + counts.purge + counts.reset;
   stats.keepAliveRetries = races.keepAliveRetries;
-  const summary = { ...stats, seconds: Math.round((Date.now() - stats.startedAt) / 1000), counts, handshakeResets: resets, problems: failures || resets ? problems : undefined };
+  const summary = { ...stats, seconds: Math.round((Date.now() - stats.startedAt) / 1000), counts, handshakeResets: resets, drainCuts, problems: failures || resets || drainCuts ? problems : undefined };
   console.log(JSON.stringify(summary, null, 1));
   process.exit(failures ? 1 : 0);
 }
