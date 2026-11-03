@@ -165,9 +165,9 @@ function isHTTP(value) {
 // ---- Named extractions (for the fetch job's kind "html") ----
 
 // A video the page names in its Open Graph tags (bandcamp's player): its URL
-// and size, each only if it is there. A value that is not an http(s) URL without quotes, spaces or angle
-// brackets (which the caller puts in an attribute), or not a whole number of
-// pixels, is left out.
+// and size, each only if it is there. A value that is not an http(s) URL
+// without quotes, spaces or angle brackets (which the caller puts in an
+// attribute), or not a whole number of pixels, is left out.
 function ogVideo($) {
   const content = (property) => {
     const value = $(`meta[property="${property}"]`).first().attr("content");
