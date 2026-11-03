@@ -16,7 +16,15 @@
 //
 //   [git-store-shadow] blog=<id> op=advertise|clone|fetch source=store|ebs
 //     outcome=... storeMs|ebsMs=... firstByteMs=... [requests=... bytesDown=...]
-//     bytesSent=...
+//     bytesSent=... [deepen=... shallow=1 filter=...]
+//
+// The last three are on source=ebs lines only, and only when the client's
+// upload-pack request asked for them: what the store does not serve, so how
+// often real clients need it (#2259). deepen is the kind of the depth request,
+// deepen|deepen-since|deepen-not ("+"-separated if more than one, so the logger leaves it unquoted; the
+// value is never logged), shallow=1 is set if the client sent shallow lines
+// (it has a shallow clone), and filter is the partial-clone spec, e.g.
+// blob:none or tree:0 (other characters make it "other").
 //
 // op: advertise is GET info/refs; a POST is a fetch if the client sent have
 // lines (the way clone.js's serve() tells them apart) and a clone if not.
@@ -258,6 +266,45 @@ function hasHaves(buffer) {
   return /[0-9a-f]{4}have [0-9a-f]{40}/.test(buffer.toString("latin1"));
 }
 
+// What the start of an upload-pack request (v0, decompressed) asks for beyond
+// plain wants and haves: { deepen, shallow, filter }, each undefined if absent.
+// Reads the pkt-lines up to the first flush, where wants, shallows, deepens and
+// the filter end, and stops at anything which is not a pkt-line.
+function shape(buffer) {
+  const text = buffer.toString("latin1");
+  const kinds = [];
+  let shallow = false;
+  let filter;
+  let offset = 0;
+
+  while (offset + 4 <= text.length) {
+    const head = text.slice(offset, offset + 4);
+    if (!/^[0-9a-f]{4}$/.test(head)) break;
+
+    const length = parseInt(head, 16);
+    if (length === 0) break;
+    if (length < 4) break;
+
+    const line = text.slice(offset + 4, offset + length).replace(/\n$/, "");
+    offset += length;
+
+    if (line.startsWith("shallow ")) shallow = true;
+    else if (/^deepen(?:-since|-not)? /.test(line)) {
+      const kind = line.split(" ")[0];
+      if (kinds.indexOf(kind) === -1) kinds.push(kind);
+    } else if (line.startsWith("filter ") && filter === undefined) {
+      const spec = line.slice("filter ".length);
+      filter = /^[\w:=.+-]{1,64}$/.test(spec) ? spec : "other";
+    }
+  }
+
+  return {
+    deepen: kinds.length ? kinds.join("+") : undefined,
+    shallow: shallow ? 1 : undefined,
+    filter,
+  };
+}
+
 // Times the read side of the EBS route (smartHttp.js serving a clone or fetch
 // with `git upload-pack`) and logs it with source=ebs. It only watches: the
 // request and response are not changed, other than the response's write being
@@ -274,6 +321,7 @@ function timeEbs(req, res, blogID) {
     // byte is the first of git's own
     const sent = meter(res, started, isAdvertisement ? 1 : 0);
     let op = isAdvertisement ? "advertise" : "clone";
+    let asked = {};
 
     if (isUpload) {
       // A copy of the start of the body, to see whether the client sent haves
@@ -305,6 +353,7 @@ function timeEbs(req, res, blogID) {
           // A body cut short at MAX_INSPECT still opens as far as it goes
           if (gzipped) body = zlib.gunzipSync(body, { finishFlush: zlib.constants.Z_SYNC_FLUSH });
           if (hasHaves(body)) op = "fetch";
+          asked = shape(body);
         } catch (err) {
           // Not a body to tell by: it stays a clone
         }
@@ -320,6 +369,9 @@ function timeEbs(req, res, blogID) {
         ebsMs: Date.now() - started,
         firstByteMs: sent.firstByteMs === null ? undefined : sent.firstByteMs,
         bytesSent: sent.bytes,
+        deepen: asked.deepen,
+        shallow: asked.shallow,
+        filter: asked.filter,
       });
     });
   } catch (err) {
