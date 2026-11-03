@@ -18,9 +18,6 @@ Unit memory: cut each unit's total ceiling (the unit container plus its sandbox 
 
 ---
 
-clean up launch templates on ec2 console (should be 1 or none?)
-clean up security groups on ec2 console (should be 1?)
-
 remove emojis from deploy summary and benchmarks and ban emojis from the project
 
 when we next cycle hosts, should we cycle the ssh key pair too?
