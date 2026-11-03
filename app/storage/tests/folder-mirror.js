@@ -60,7 +60,7 @@ describe("storage/folder mirror", function () {
 
   async function keys(blogID) {
     var found = [];
-    for await (var entry of s3.listEntries(blogID + "/folder/")) found.push(entry.key.slice((blogID + "/folder").length));
+    for await (var entry of s3.listEntries(backend.root(blogID))) found.push(entry.key.slice(backend.root(blogID).length - 1));
     return found.sort();
   }
 
