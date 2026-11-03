@@ -1,0 +1,53 @@
+// The Local client's provider: a directory on the developer's machine,
+// outside the blog's folder (#2258 Phase E). Development only: this module is
+// only reached through clients/local, which clients/index.js registers only
+// when config.environment === "development".
+//
+// The directory is data/local-sources/{handle}, or under
+// BLOT_LOCAL_SOURCE_DIRECTORY when that is set. It is a path on this machine,
+// not a blog folder, so plain fs is fine for it.
+
+const { join, resolve, sep, posix } = require("path");
+const { promisify } = require("util");
+const config = require("config");
+
+const getBlog = promisify((id, cb) => require("models/blog").get({ id }, cb));
+
+function base() {
+  return process.env.BLOT_LOCAL_SOURCE_DIRECTORY
+    ? resolve(process.env.BLOT_LOCAL_SOURCE_DIRECTORY)
+    : join(config.data_directory, "local-sources");
+}
+
+function inside(parent, child) {
+  return child === parent || child.startsWith(parent + sep);
+}
+
+// The directory for a blog, from its handle (or its ID, for a blog with none)
+async function directory(blogID) {
+  const blog = await getBlog(blogID);
+  if (!blog) throw new Error("No blog with ID " + blogID);
+
+  const name = String(blog.handle || blog.id);
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(name) || name.indexOf("..") !== -1) {
+    throw new Error("Unsuitable name for a source directory: " + name);
+  }
+
+  const dir = join(base(), name);
+
+  // Blog folders live in data/blogs. Watching one would be the old design
+  // again, writing to the folder behind storage/folder's back.
+  if (inside(join(config.data_directory, "blogs"), dir)) {
+    throw new Error("The Local client's source directory must not be inside the blog folders: " + dir);
+  }
+
+  return dir;
+}
+
+// The absolute path in dir of a blog path such as "/posts/a.md", never
+// outside dir
+function absolute(dir, path) {
+  return join(dir, posix.normalize("/" + path));
+}
+
+module.exports = { directory, absolute, base };

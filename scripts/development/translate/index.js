@@ -16,7 +16,9 @@ const User = require("models/user");
 const Blog = require("models/blog");
 const Template = require("models/template");
 const client = require("models/client");
-const storage = require("storage/folder");
+// The Local client's source directory is where the operator and the scripts
+// edit files; the client copies them into the blog's folder
+const sourceDirectory = require("clients/local/source").directory;
 const nsv = require("helper/nsv");
 const determineTemplateFolder = promisify(
   require("models/template/determineTemplateFolder")
@@ -171,7 +173,7 @@ async function writeReadme(source, destination, values) {
 }
 
 async function establishReadmes(blog, template, url) {
-  const folder = await storage.path(blog.id, "/");
+  const folder = await sourceDirectory(blog.id);
   const slug = template.id.split(":").slice(1).join(":");
   const date = new Date().toISOString().slice(0, 10);
 
@@ -193,7 +195,7 @@ async function establishReadmes(blog, template, url) {
 
   const wroteTemplate = await writeReadme(
     "README.template.md",
-    await storage.path(blog.id, join(templateFolder, slug, "README")),
+    join(folder, templateFolder, slug, "README"),
     {
       templateName: template.name || slug,
       sourceURL: url,
@@ -221,7 +223,7 @@ async function git(folder, args) {
 }
 
 async function establishRepository(blog) {
-  const folder = await storage.path(blog.id, "/");
+  const folder = await sourceDirectory(blog.id);
 
   if (await fs.pathExists(join(folder, ".git"))) return false;
 
@@ -268,7 +270,7 @@ async function main(url, requestedHandle) {
 
   emit("blogID", blog.id);
   emit("handle", blog.handle);
-  emit("folder", await storage.path(blog.id, "/"));
+  emit("folder", await sourceDirectory(blog.id));
   emit("templateID", template.id);
   emit("templateSlug", slug);
   emit("siteURL", `${config.protocol}${blog.handle}.${config.host}`);

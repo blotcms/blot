@@ -1,5 +1,8 @@
 # Local Folder Client
 
+**Development only. This client is for Blot's developers on their own
+machines, never for users.**
+
 ## Production status: not a production client
 
 This client is development-only. It is not, and should not become, a way
@@ -23,7 +26,20 @@ expose or corrupt a real user's blog, only development/test fixtures.
 
 ## Purpose
 
-The local folder client provides a minimal implementation of Blot's client interface for syncing a blog folder stored directly on the Blot server. This client is intended for development and testing environments only and is not available in production. It serves as a reference implementation that demonstrates the core responsibilities and contract that all clients must fulfill.
+The local folder client syncs a blog from a directory on the developer's machine (its source directory, outside the blog's folder). This client is intended for development and testing environments only and is not available in production.
+
+## Source directory
+
+The provider of a Local blog is a directory outside the blog folder, so the blog can sit on either backend of `storage/folder`, disk or S3 (MinIO in development). It is `data/local-sources/{handle}`, or `{BLOT_LOCAL_SOURCE_DIRECTORY}/{handle}` when that variable is set. There is no dashboard field for it. It must not be inside `data/blogs`. It is a path on the developer's machine, not a blog folder, so the client uses plain `fs` there.
+
+- **Source to Blot** (`watch.js`, `sync.js`): chokidar events on the source become `storage/folder` writes (`writeFrom`, only when size or SHA-1 differ), `mkdir`s and removes, followed by `folder.update(path)`, all under the sync lock.
+- **Blot to source** (`write.js`, `remove.js`): Blot's own changes (template edits, previews) go to the source directory and then to `storage/folder`.
+- **Setup** (`setup.js`): reconciles the source against the folder before watching. The source wins: files missing or different (size, then SHA-1) are copied, extras in the folder are removed, and `folder.update` runs for each changed path.
+
+### Existing blogs
+
+Before this change the blog folder `data/blogs/{blogID}` was the watched directory. On first setup of a Local blog whose source directory does not exist, setup copies the blog's folder into `data/local-sources/{handle}` (the folder is not touched, and the blog's S3 mirror is marked behind so it is repaired from the disk). Nothing is lost; from then on edit the files in `data/local-sources/{handle}`. If the handle changes, the new name has no directory, so the folder is copied there again. `npm run fork` and `translate` now write into the source directory too.
+ It serves as a reference implementation that demonstrates the core responsibilities and contract that all clients must fulfill.
 
 ## Architecture
 
@@ -35,9 +51,12 @@ Blot supports multiple file synchronization sources (clients) such as Dropbox, G
 app/clients/local/
 ├── index.js              # Public API exports
 ├── init.js               # Master process initialization
-├── setup.js              # Blog folder setup and file watching
-├── write.js              # Write files to blog folder
-├── remove.js             # Remove files from blog folder
+├── setup.js              # Reconcile the source with the folder, then watch
+├── source.js             # Where a blog's source directory is
+├── sync.js               # Source directory -> storage/folder, one path or all
+├── watch.js              # chokidar on the source directory
+├── write.js              # Write files to the source directory and the folder
+├── remove.js             # Remove files from the source directory and the folder
 ├── disconnect.js         # Disconnect blog from local client
 ├── routes.js             # Dashboard routes for client UI
 └── views/
@@ -115,21 +134,19 @@ Establishes the local client's integration with the master process:
 The core initialization and watching logic:
 
 1. **Fix phase**: Calls `Sync/fix` to validate and repair the blog's internal state (entry ghosts, tag ghosts, etc.).
-2. **Watch phase** (development only): In development environment, starts watching the blog folder with `chokidar` for file system events.
+2. **Reconcile and watch phase** (development only): reconciles the source directory with the folder, then starts watching the source with `chokidar`.
 3. **Event queuing**: File system events are briefly collected into a `Set` (deduped, insertion-ordered) and flushed in bounded batches after a short debounce.
 4. **Sync flow**: Each batch acquires one sync lock via `establishSyncLock`, then awaits `folder.update(path)` for each path in series before releasing the lock. Events arriving during that work are collected for a later batch.
 5. **Watch lifecycle**: Watchers are stored in a per-blog registry and cleaned up when the blog is switched to a different client or deleted.
 
 ### write.js
-Writes through `storage/folder`. Validates the path against `shouldIgnoreFile()` to prevent writing to system or temporary files.
+Writes to the source directory, then through `storage/folder`. Validates the path against `shouldIgnoreFile()` to prevent writing to system or temporary files.
 
 ### remove.js
-Removes files or directories through `storage/folder`; a missing path is a no-op.
-
-`setup.js` is the exception: chokidar needs a real directory, so it watches the blog folder through `folder.ensureLocal`, and a blog on the Local client must stay on the local-disk backend of `storage/folder`.
+Removes files or directories from the source directory and through `storage/folder`; a missing path is a no-op.
 
 ### disconnect.js
-Sets the blog's `client` field to an empty string in the Blog model, causing the master process to stop watching the folder on next server start.
+Sets the blog's `client` field to an empty string in the Blog model, causing the master process to stop watching the source on next server start. The source directory is left in place. Nothing needs repairing in S3, since every change went through `storage/folder`.
 
 ### routes.js
 Express router managing dashboard user interactions:
@@ -143,7 +160,7 @@ The sync flow coordinates changes between the file system and Blot's internal st
 
 1. **Initialization** (`setup.js`): When a blog is added or the server restarts, `setup()` is called for each local blog.
    - Runs `Sync/fix` to repair internal state.
-   - In development, starts watching the blog folder with `chokidar`.
+   - In development, reconciles the source directory with the folder and starts watching it with `chokidar`.
 
 2. **File System Watch** (`setup.js` `watch()` function): When a file system event occurs on a watched path:
    - The path is normalized with a leading slash and added to a short debounce collector (`Set`).
@@ -183,7 +200,7 @@ The sync flow coordinates changes between the file system and Blot's internal st
 - **ensure**: Runtime type validation for function arguments.
 
 ### File System Libraries
-- **chokidar**: Watches the blog folder for all file system events.
+- **chokidar**: Watches the source directory for all file system events.
 - **fs-extra**: Performs file I/O operations (write, remove, check existence).
 - **sync/lock**: Redis mutex that manages exclusive locks on the blog during sync operations.
 
@@ -204,7 +221,7 @@ The sync flow coordinates changes between the file system and Blot's internal st
 - `sync/establishSyncLock`: Promise wrapper around sync locks for `folder.update` / `done`.
 - `sync/fix`: Blog state validation and repair.
 - `sync/renames`: File rename detection.
-- `storage/folder`: `ensureLocal` gives the absolute path chokidar watches.
+- `storage/folder`: every read and change of the blog folder.
 - `helper/ensure`: Runtime type validation.
 - `helper/clfdate`: Timestamped logging.
 - `helper/pathNormalizer`: Path normalization.
@@ -257,5 +274,6 @@ localClient.disconnect(blogID, (err) => {
 
 - The local client is development-only and not available in production.
 - File watching only occurs in development environment; production deployments do not monitor changes.
+- Symlinks in the source directory are not synced.
 - The sync operation is single-threaded for a given blog (sequential queue per blog).
 - The folder lock is advisory (a Redis mutex); concurrent access from external processes is not protected.

@@ -11,13 +11,13 @@ LOCAL_CONTAINER="${BLOT_LOCAL_CONTAINER:-blot-node-app-1}"
 PROD_CONTAINER="blot-blue"
 PROD_BLOGS_DIR="/var/www/blot/data/blogs"
 
-# Local blog folders live in ./data/blogs of the checkout running the Docker
-# stack. Inside a worktree that is the main checkout, not the worktree.
+# Local sites' source directories live in ./data/local-sources of the checkout
+# running the Docker stack. Inside a worktree that is the main checkout, not the
+# worktree.
 if [ -z "${BLOT_LOCAL_DATA_DIR:-}" ]; then
   COMMON_GIT_DIR="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
   BLOT_LOCAL_DATA_DIR="$(dirname "$COMMON_GIT_DIR")/data"
 fi
-LOCAL_BLOGS_DIR="$BLOT_LOCAL_DATA_DIR/blogs"
 
 if [ $# -ge 1 ]; then
   IDENTIFIER="$1"
@@ -47,7 +47,10 @@ if [ -z "$LOCAL_BLOG_ID" ]; then
   echo "Failed to create local site: $CREATED" >&2
   exit 1
 fi
-LOCAL_FOLDER="$LOCAL_BLOGS_DIR/$LOCAL_BLOG_ID"
+LOCAL_HANDLE="$(echo "$CREATED" | sed -n 's/^handle=//p')"
+# The Local client's source directory (app/clients/local/source.js): the site is
+# copied here and the client copies it into the blog's folder
+LOCAL_FOLDER="$BLOT_LOCAL_DATA_DIR/local-sources/$LOCAL_HANDLE"
 echo "Created $LOCAL_BLOG_ID"
 
 echo "Downloading folder $PROD_BLOG_ID..."

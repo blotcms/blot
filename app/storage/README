@@ -43,7 +43,8 @@ at sync/build time instead.
   git client keeps a live `.git` clone inside the blog folder and runs
   `reset --hard` there; iCloud renames whole directory trees to resolve case
   conflicts; Google Drive's local fingerprint reads `dev`, `ino`, `ctimeNs`
-  and `mtimeNs`; the local client watches the folder with chokidar.
+  and `mtimeNs`; the local client (development only, never for users) used to
+  watch the folder with chokidar and now watches a source directory of its own.
 - Rendered template views are cached in-process
   (`app/models/template/fullViewCache.js`, an LRU bounded by count and bytes,
   not Redis), and rendered template CSS/JS in Redis (`app/cdn/index.js`
@@ -670,7 +671,7 @@ backend instead of the disk, and the disk keeps a copy to roll back to.
   if the mirror covers it (so S3 is kept in step whenever it is on disk), its
   copy in S3 is known to be complete (it is in
   `storage:folder:mirror:complete`), its mirror is not dirty (S3 is not
-  behind its disk), and its client is not Local, Git or Google Drive.
+  behind its disk), and its client is not Git or Google Drive.
   Otherwise it stays on disk, logged once per process as `[storage/folder
   primary] blog=... stays on disk: ...`. That is one Redis round trip per
   call for named blogs only. An index alone proves nothing: the mirror
@@ -683,10 +684,10 @@ backend instead of the disk, and the disk keeps a copy to roll back to.
   before that moves over by itself, and a half-made copy is never read. A
   complete blog whose folder becomes empty stays on S3. A blog also leaves
   the set when its disk changes while the mirror doesn't cover it, and when
-  it leaves the Local client (whose watcher changes the disk directly), so
-  either needs a clean backfill first. Blogs on the Local client stay on disk because the client
-  watches the folder there with chokidar (until the Phase E rework of the
-  Local client). Blogs on the Git client stay on disk because live clones
+  it moves between clients while its mirror isn't covering it, so
+  either needs a clean backfill first. The Local client (development only,
+  never for users) watches a source directory of its own and writes through
+  `storage/folder`, so its blogs can be on S3 (Phase E). Blogs on the Git client stay on disk because live clones
   run git in the folder and the setup import uses the folder as git's work
   tree (until #2259). Blogs on Google Drive stay on disk because its sync
   reads directory entries from the disk and fingerprints files by their
@@ -712,7 +713,7 @@ backend instead of the disk, and the disk keeps a copy to roll back to.
   while it is still on S3, so its disk copy is complete and it leaves
   `storage:folder:primary:dirty`, then take it out of the flag. The mirror
   takes over again from there.
-- **What does not work on S3 yet**: the Local, Git and Google Drive clients
+- **What does not work on S3 yet**: the Git and Google Drive clients
   (kept on disk above); switching a blog on S3 to one of them moves it to
   disk, so its disk copy must be clean; `stat` with `{ hash: true }`
   downloads the file (Dropbox, until it keeps its own `{ sha1, content_hash }`
