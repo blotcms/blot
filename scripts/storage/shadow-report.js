@@ -17,10 +17,14 @@
 // split by how the content cache served it (hit, miss, or direct: not through
 // the cache), and for the two streamed calls the time to first byte of each
 // side is given, since that is what a visitor waits for. Hours recorded
-// before the split have only the blended S3 latency; the report says how many
-// samples that leaves unsplit.
+// before the split have only the blended S3 latency, as does a read which
+// failed before reaching the cache; the report counts those as unclassified.
 
 const shadow = require("storage/folder/shadow");
+
+// The calls whose S3 side goes through the content cache: only these get a
+// cache outcome. Other calls (stat, listings) are metadata from the index.
+const CACHE_AWARE = ["read", "createReadStream", "serve", "ensureLocal"];
 
 const MAX_HOURS = shadow.TTL_SECONDS / 3600;
 
@@ -157,9 +161,10 @@ function summarise(total) {
       },
       // S3 latency by cache outcome: only the outcomes seen
       s3ByCache: {},
-      // Samples whose S3 latency was recorded without an outcome (hours
-      // from before the split)
-      s3Unsplit: 0,
+      // Samples of a cache-aware call whose S3 latency has no outcome: from
+      // hours before the split, or a read which failed before the cache
+      // (a missing file, say)
+      s3Unclassified: 0,
       // Time to first byte, for the streamed calls: null where not recorded
       ttfb: { local: stats(histograms.ttfb.local), s3: stats(histograms.ttfb.s3) },
     };
@@ -172,7 +177,7 @@ function summarise(total) {
       split += stat.count;
     });
 
-    ops[op].s3Unsplit = Math.max(0, count(histograms.s3) - split);
+    if (CACHE_AWARE.indexOf(op) !== -1) ops[op].s3Unclassified = Math.max(0, count(histograms.s3) - split);
   });
 
   const hits = total["cache:hits"] || 0;
@@ -283,7 +288,7 @@ function format(report) {
 
   const splits = ops.filter(function (op) {
     const row = report.ops[op];
-    return Object.keys(row.s3ByCache).length || row.s3Unsplit || row.ttfb.local || row.ttfb.s3;
+    return Object.keys(row.s3ByCache).length || row.s3Unclassified || row.ttfb.local || row.ttfb.s3;
   });
 
   if (splits.length) {
@@ -296,7 +301,7 @@ function format(report) {
         (outcome) => outcome + " " + row.s3ByCache[outcome].count + " " + latencies(row.s3ByCache[outcome])
       );
 
-      if (row.s3Unsplit) outcomes.push(row.s3Unsplit + " from before the split");
+      if (row.s3Unclassified) outcomes.push(row.s3Unclassified + " unclassified");
       if (outcomes.length) lines.push("  " + pad(op, 17, true) + " s3: " + outcomes.join("; "));
 
       if (row.ttfb.local || row.ttfb.s3) {
