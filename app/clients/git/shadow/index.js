@@ -338,13 +338,26 @@ async function isAncestor(gitDir, ancestor, descendant) {
 
 // A thin pack of everything reachable from the tips the store does not
 // already reach, as a git push would send it. Returns the pack as a stream,
-// which flows once git has a place in the background lane, and done(), which
-// ends git and resolves with its exit and stderr.
+// which flows once git has a place in the background lane, done(), which
+// ends git and resolves with its exit and stderr, and exited, which resolves
+// the same once git has exited by itself (for specs: a pack bigger than the
+// PassThrough's buffer holds git until the stream is read).
 //
 // receive reads the whole pack into scratch before it starts any git of its
 // own, so git here has closed, and given its place back, before the store's
 // index-pack asks for one: a mirror never holds one place while it waits for
 // another.
+//
+// git's stdout is piped into the PassThrough as soon as git starts, and must
+// stay that way. receive only starts reading after it has reserved scratch,
+// and a small pack's git can exit before that. When a child exits, Node
+// resumes each of its output streams that has no 'data' or 'readable'
+// listener (flushStdio in its child_process), so a stdout nobody had started
+// reading is drained into nothing: the pack arrives empty, git's exit is 0,
+// and receive refuses the push with "missing necessary objects", since its
+// tip is in neither the (empty) pack nor the store. That is the refusal the
+// shadow specs saw twice on 2 Nov 2026, each followed by an accepted retry,
+// when this function handed receive child.stdout itself (tests/pack.js).
 function packFor(gitDir, tips, have) {
   const stream = new PassThrough();
   let child = null;
@@ -376,6 +389,7 @@ function packFor(gitDir, tips, have) {
 
   return {
     stream,
+    exited: closed,
     // Waits for git, which has finished once its output has been read to the
     // end; if it was not (receive gave up on the pack), git is stopped, or
     // never started
@@ -505,10 +519,14 @@ async function runMirror(ctx, task) {
       return { compact: result.manifest };
     }
 
-    // A pack git could not make explains whatever receive said about it
+    // A pack git could not make, or one which reached receive empty although
+    // git made it (a pack always has a header; see packFor), explains
+    // whatever receive said about it
     const why =
       packed && packed.code
         ? "git pack-objects failed: " + packed.stderr
+        : packed && result.stats && result.stats.bytes === 0 && (result.results || []).some((r) => r.error === "missing necessary objects")
+        ? "the pack git made reached receive empty"
         : [result.status !== "ok" ? result.status : null]
             .concat((result.results || []).filter((r) => r.error).map((r) => r.ref + ": " + r.error))
             .concat(result.error ? [result.error.message] : [])
@@ -518,7 +536,9 @@ async function runMirror(ctx, task) {
     // Refused: the store and EBS disagree on history, or another process
     // moved the store meanwhile. Once more from the store's refs as they are
     // now; if that is refused too, the store has something mirroring cannot
-    // put right.
+    // put right. A "missing necessary objects" here with packBytes=0 was a
+    // pack lost on its way to receive (see packFor), not anything the store
+    // did; the retry is not what prevents that.
     if (result.outcome === "refused" && attempt < 2) {
       log({ ...fields, detail: scrub(why, ctx) + " (retrying from the store's refs)" });
       continue;
@@ -1020,6 +1040,7 @@ module.exports = {
   objectStoreFor,
   readContext,
   stats,
+  _packFor: packFor,
   _setObjectStore,
   _setRemoveAgainMs,
   _reset,
