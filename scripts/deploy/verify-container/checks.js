@@ -7,6 +7,7 @@
 const fs = require("fs/promises");
 const path = require("path");
 const http = require("http");
+const net = require("net");
 const { execFile } = require("child_process");
 const { promisify } = require("util");
 
@@ -276,6 +277,32 @@ async function sandboxProxyWorks({ config }) {
   return `the metadata address was refused through ${config.egress.proxy}`;
 }
 
+// The host's firewall for the units (blot-app-firewall.service, from
+// config/host/host/setup.sh) refuses uid 1000 the metadata service, so a fetch
+// that misses the proxy jail can't reach it. The deploy runs this as uid 1000,
+// in the unit's cgroup, which is what the rule matches. Refused at once: a
+// connection or a timeout means the rule is not loaded.
+async function hostFirewall() {
+  if (!process.env.BLOT_UNIT) return "skipped, BLOT_UNIT is not set";
+  if (process.getuid() !== 1000) return `skipped, uid ${process.getuid()} is not the units' uid`;
+
+  const refused = ["ECONNREFUSED", "EHOSTUNREACH", "ENETUNREACH", "EACCES", "EPERM"];
+  const code = await new Promise((resolve) => {
+    const socket = net.connect({ host: "169.254.169.254", port: 80, timeout: 3000 });
+    const done = (result) => {
+      socket.destroy();
+      resolve(result);
+    };
+    socket.on("connect", () => done("connected"));
+    socket.on("timeout", () => done("timed out"));
+    socket.on("error", (err) => done(err.code || err.message));
+  });
+  if (!refused.includes(code)) {
+    throw new Error(`the metadata service was not refused (${code}): is blot-app-firewall.service loaded?`);
+  }
+  return `the metadata service was refused (${code})`;
+}
+
 // With the sandbox on, Node runs under one seccomp filter more than this process,
 // which docker exec started outside the supervisor (proxy/unit/supervisor.sh).
 async function nodeFilter() {
@@ -355,6 +382,7 @@ module.exports = [
   { name: "node filter", run: nodeFilter },
   { name: "required environment", run: requiredEnv },
   { name: "sandbox proxy", run: sandboxProxyWorks },
+  { name: "host firewall", run: hostFirewall },
   { name: "canary blog render", run: canaryBlog },
   { name: "dashboard log-in render", run: loginPage },
 ];

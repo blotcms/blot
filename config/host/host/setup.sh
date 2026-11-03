@@ -331,6 +331,84 @@ if [ -z "$SKIP_SYSTEMD" ]; then
   fi
 fi
 
+say "Firewall for the app"
+# The units run with --network host as uid 1000, so without this Node and
+# OpenResty reach the instance metadata service (and the role's credentials)
+# and anything in the VPC directly. Untrusted fetches go through the sandbox's
+# proxy jail, whose own filter refuses these; this catches a code path that
+# misses it (#2257). Refused, not dropped, so such a request fails at once.
+# Only sockets in system.slice, where docker puts the units' scopes: ec2-user is
+# uid 1000 on the host too, and its ssh sessions and cron jobs (user.slice)
+# still need the metadata service (cycle.sh, drill.sh, instance-profile
+# backups). The jails run as other uids. Loopback stays open: the purge
+# listener, the proxy jails' ports and the resolved stub are on it. The VPC's
+# resolver is the one private address the units need, for DNS (docker gives a
+# host-network container the host's upstream resolvers, not the stub).
+# Its own file and unit, so a failure here never keeps Redis from starting.
+IFS=. read -r a b c d <<< "${VPC_CIDR%/*}"
+base=$(( (a << 24 | b << 16 | c << 8 | d) & (0xffffffff << (32 - ${VPC_CIDR#*/})) & 0xffffffff ))
+VPC_RESOLVER=$(( base >> 24 & 255 )).$(( base >> 16 & 255 )).$(( base >> 8 & 255 )).$(( (base & 255) + 2 ))
+cat > "$TMP/blot-app.nft" <<EOF2
+# Installed by config/host/host/setup.sh. Loaded by blot-app-firewall.service.
+table inet blot_app
+delete table inet blot_app
+table inet blot_app {
+  chain output {
+    type filter hook output priority -10; policy accept;
+    meta skuid 1000 socket cgroupv2 level 1 "system.slice" jump unit
+  }
+  chain unit {
+    ct state established,related accept
+    oif "lo" accept
+    ip daddr { $VPC_RESOLVER, 169.254.169.253 } meta l4proto { tcp, udp } th dport 53 accept
+    ip6 daddr fd00:ec2::253 meta l4proto { tcp, udp } th dport 53 accept
+    # Link-local (the metadata service, its DNS and NTP), RFC 1918, CGNAT
+    ip daddr { 169.254.0.0/16, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10 } reject
+    # Unique local (the metadata service's fd00:ec2::254 among them), link-local
+    ip6 daddr { fc00::/7, fe80::/10 } reject
+  }
+}
+EOF2
+if ! nft -c -f "$TMP/blot-app.nft" 2> "$TMP/nft-check"; then
+  # Nor can one whose kernel lacks the socket cgroupv2 match (Docker Desktop's)
+  # or whose cgroup namespace hides system.slice.
+  if [ -n "$SKIP_SYSTEMD" ] && grep -q 'Operation not permitted\|No such file or directory' "$TMP/nft-check"; then
+    echo "    WARNING: cannot check the nft file here: $(grep -m 1 Error "$TMP/nft-check")"
+  else
+    cat "$TMP/nft-check" >&2
+    echo "nft rejected the app firewall file" >&2
+    exit 1
+  fi
+fi
+put /etc/nftables/blot-app.nft 0644 root:root < "$TMP/blot-app.nft"
+FIREWALL_CHANGED=$CHANGED
+put /etc/systemd/system/blot-app-firewall.service 0644 root:root <<'EOF2'
+[Unit]
+Description=Firewall for the units (no metadata service or private ranges for uid 1000)
+DefaultDependencies=no
+Wants=network-pre.target
+Before=network-pre.target docker.service shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/nftables/blot-app.nft
+ExecReload=/usr/sbin/nft -f /etc/nftables/blot-app.nft
+
+[Install]
+WantedBy=multi-user.target
+EOF2
+if [ -z "$SKIP_SYSTEMD" ]; then
+  systemctl daemon-reload
+  systemctl enable blot-app-firewall.service
+  if systemctl is-active --quiet blot-app-firewall.service; then
+    [ "$FIREWALL_CHANGED" = 0 ] || systemctl reload blot-app-firewall.service
+  else
+    systemctl start blot-app-firewall.service
+  fi
+fi
+
 say "Redis host setup"
 # On a live host a running Redis is not restarted (see its setup.sh).
 env BLOT_REDIS_SHARED_INSTANCE_STORE=1 REDIS_MAXMEMORY="$REDIS_MAXMEMORY" \
@@ -368,5 +446,6 @@ echo "redis-cli -> $(readlink -f "$(command -v redis-cli)")"
 echo "net.ipv4.tcp_migrate_req = $(sysctl -n net.ipv4.tcp_migrate_req 2> /dev/null || echo n/a)"
 echo "sshd port: ${BLOT_SSH_PORT:-unchanged}"
 echo "port 6379: loopback and $VPC_CIDR on $MAIN_INTERFACE only"
+echo "units (uid 1000): no link-local or private ranges, but loopback and DNS to $VPC_RESOLVER"
 echo "deploy: $(id -nG deploy)"
 [ ! -d /var/www/blot ] || ls -ld /var/www/blot /var/www/blot/data /var/www/blot/app/blog/static

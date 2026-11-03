@@ -3,7 +3,9 @@
 # BLOT_HOST_SKIP_SYSTEMD=1 (the base image has no systemd), twice, then checks
 # that the second run changed nothing and the result is what setup.sh promises.
 # Also runs it in a real Amazon Linux 2 image, where it must refuse.
-# The containers get NET_ADMIN so the test can load the real nftables file.
+# The containers get NET_ADMIN so the test can load the real nftables files,
+# and the host's cgroup namespace so the app firewall's system.slice is there
+# (on a runner whose docker uses the systemd cgroup driver, as GitHub's does).
 #
 # Needs docker. Usage: config/host/tests/setup.sh
 set -euo pipefail
@@ -28,7 +30,7 @@ in_ct() { docker exec "$NAME" bash -c "$1"; }
 put_in_ct() { docker exec -i "$NAME" bash -c "cat > '$1' && chmod +x '$1'"; } # put_in_ct <path>, content on stdin
 # A container has no instance metadata service, so the VPC range and interface are given.
 FW_ENV=(-e BLOT_VPC_CIDR=10.0.0.0/16 -e BLOT_MAIN_INTERFACE=eth0)
-start() { docker run -d --cap-add NET_ADMIN --name "$NAME" -v "$REPO:/repo:ro" "$1" sleep 3600 > /dev/null; }
+start() { docker run -d --cap-add NET_ADMIN --cgroupns host --name "$NAME" -v "$REPO:/repo:ro" "$1" sleep 3600 > /dev/null; }
 setup() { # setup <output file>
   docker exec -e BLOT_HOST_SKIP_SYSTEMD=1 -e BLOT_SSH_PORT=2222 -e "BLOT_DEPLOY_PUBLIC_KEY=$KEY" \
     -e REDIS_MAXMEMORY=1gb "${FW_ENV[@]}" "$NAME" bash /repo/config/host/host/setup.sh > "$1" 2>&1 ||
@@ -42,6 +44,7 @@ sums() {
     /home/deploy/.ssh/authorized_keys /etc/rsyslog.d/30-deploy-user.conf /etc/logrotate.d/deploy-user \
     /etc/nftables/blot-redis.nft /etc/systemd/system/blot-redis-firewall.service \
     /etc/systemd/system/redis6.service.d/zz-blot-firewall.conf /etc/blot-redis/shared-instance-store \
+    /etc/nftables/blot-app.nft /etc/systemd/system/blot-app-firewall.service \
     /etc/redis6/redis6.conf /etc/redis6/blot-memory.conf /etc/cron.d/blot-redis /usr/local/bin/mount-instance-store.sh \
     /etc/tmpfiles.d/blot-redis.conf /etc/systemd/journald.conf.d/zz-blot-host.conf \
     /etc/systemd/system/fail2ban.service.d/20-memory.conf \
@@ -164,6 +167,36 @@ iifname \"eth0\" ip saddr 10.0.0.0/16 tcp dport 6379 accept" ] &&
   [ "$(echo "$r" | grep -c "tcp dport 6379 drop")" = 1 ] &&
   [ "$(echo "$r" | grep -n "tcp dport 6379 drop" | cut -d: -f1)" -gt "$(echo "$r" | grep -n "ip saddr" | cut -d: -f1)" ]'
 check "Redis still answers over loopback with the rules loaded" in_ct 'redis6-cli PING | grep -qx PONG'
+
+echo "# Firewall for the app"
+check "the app nft file replaces only its own table and keeps DNS to the VPC resolver" in_ct '
+  f=/etc/nftables/blot-app.nft
+  [ "$(grep -v "^[[:space:]]*#" $f | sed -n 1,2p)" = "table inet blot_app
+delete table inet blot_app" ] && ! grep -q "flush ruleset" $f &&
+  grep -qF "meta skuid 1000 socket cgroupv2 level 1 \"system.slice\" jump unit" $f &&
+  grep -qF "ip daddr { 10.0.0.2, 169.254.169.253 } meta l4proto { tcp, udp } th dport 53 accept" $f'
+check "the app firewall unit runs before docker" in_ct '
+  u=/etc/systemd/system/blot-app-firewall.service
+  grep -qx "ExecStart=/usr/sbin/nft -f /etc/nftables/blot-app.nft" $u &&
+  grep -qx "Before=network-pre.target docker.service shutdown.target" $u'
+# Needs the kernel's socket cgroupv2 match and this container in system.slice,
+# as on the production host and GitHub's runners; Docker Desktop has neither.
+if ! in_ct 'grep -q "^0::/system.slice/" /proc/self/cgroup && nft -c -f /etc/nftables/blot-app.nft 2> /dev/null'; then
+  echo "skip - the app firewall's behaviour: no socket cgroupv2 match or not in system.slice here"
+else
+  in_ct 'nft -f /etc/nftables/blot-app.nft && nft -f /etc/nftables/blot-app.nft' || fail "could not load the app nft file"
+  check "the other tables survive two loads of the app file" in_ct 'nft list table inet other_owner > /dev/null && nft list table inet blot_redis > /dev/null'
+  # curl exits 7 when it could not connect: here, at once.
+  as() { echo "setpriv --reuid $1 --regid $1 --clear-groups"; }
+  check "uid 1000 is refused the metadata service at once" in_ct "$(as 1000) curl -s -m 3 http://169.254.169.254/latest/meta-data/; [ \$? = 7 ]"
+  check "uid 1000 is refused private and IPv6 unique local addresses" in_ct "
+    for u in http://10.255.255.1/ http://172.16.0.1/ http://192.168.0.1/ http://100.64.0.1/ 'http://[fd00:ec2::254]/'; do
+      $(as 1000) curl -s -g -m 3 \"\$u\"; [ \$? = 7 ] || exit 1
+    done"
+  check "uid 1000 still reaches loopback" in_ct "$(as 1000) redis6-cli -h 127.0.0.1 PING | grep -qx PONG"
+  check "other uids are not refused" in_ct "
+    curl -s -m 1 http://10.255.255.1/; [ \$? != 7 ] && { $(as 1001) curl -s -m 1 http://10.255.255.1/; [ \$? != 7 ]; }"
+fi
 
 echo "# mount-instance-store.sh on a combined host"
 # Stubs for what needs a real disk or root-owned mounts; every call is logged to /tmp/calls.
