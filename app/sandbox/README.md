@@ -206,7 +206,8 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   weighed and left. It would have to be 128 MiB or less (the proxy jail's 128 +
   `fetch-image`'s 256 + 128 is the whole 512 MiB), so the image jobs would have
   nothing when all three were busy, and 128 MiB can't hold a 50 MiB file in the
-  jail together with the copy made when it is joined, nor an image's decode.
+  jail together with the copy made when it is joined (measured, in a real jail:
+  a 50 MiB file peaks at about 170 MiB), nor an image's decode.
   The cost of one slot is that a domain check, which waits in the same queue,
   can wait for an import batch that is running (the verification's 5s covers the
   request, not the wait).
