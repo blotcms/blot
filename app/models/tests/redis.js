@@ -90,6 +90,18 @@ describe("models/redis", function () {
     await client.quit();
   });
 
+  // Redis 6.2 has no CLIENT SETINFO, so each connection's handshake would
+  // add two ERR to Redis's errorstats
+  it("doesn't send CLIENT SETINFO when connecting", function () {
+    expect(createRedisClient().options.disableClientInfo).toBe(true);
+    const library = createRedisClient.createLibraryClient("Spec");
+    expect(library.options.disableClientInfo).toBe(true);
+    // It connects as it is created; close it whether or not that finished
+    try {
+      library.destroy();
+    } catch (e) {}
+  });
+
   it("uses a socket timeout and ping interval to detect a stalled connection", function () {
     const client = createRedisClient();
     expect(client.options.pingInterval).toBe(createRedisClient.PING_INTERVAL_MS);
