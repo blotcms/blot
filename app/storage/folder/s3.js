@@ -18,9 +18,8 @@ var contentCache = require("./cache");
 var { NotFoundError } = require("./errors");
 
 // The S3 backend of storage/folder: a blog's folder is the objects under
-// {blogID}/folder/ in the storage bucket, public-read like the rest of
-// {blogID}/ (the bucket policy does that, not the objects), and its metadata
-// is models/file in Redis. Built and tested against the same specs as
+// folder/{blogID}/ in the storage bucket, a private prefix (the bucket policy
+// makes only blog_* public-read), and its metadata is models/file in Redis. Built and tested against the same specs as
 // ./local.js, but nothing selects it yet (#2258 Phase C).
 //
 // - Metadata reads (stat, exists, list, listNames, listAll, walk,
@@ -34,7 +33,7 @@ var { NotFoundError } = require("./errors");
 //   in between leaves the index behind S3, never ahead of it. The SHA-1 is
 //   computed while the bytes stream to S3.
 // - S3 has no directories. An explicitly made directory is a zero-byte
-//   marker object {blogID}/folder/{dir}/; a directory with something in it
+//   marker object folder/{blogID}/{dir}/; a directory with something in it
 //   needs none. When a remove empties a directory, it gets a marker, so the
 //   directory survives in S3 as it would on disk and a rebuild of the index
 //   from a listing keeps it.
@@ -105,8 +104,9 @@ function ancestorsOf(path) {
   return result;
 }
 
+// Private top-level prefix, outside blog_* (public-read for generated assets)
 function root(blogID) {
-  return blogID + "/folder/";
+  return "folder/" + blogID + "/";
 }
 
 // The object of a file, or of nothing for a directory
@@ -886,6 +886,7 @@ function rebuildIndex(blogID, options) {
 }
 
 module.exports = {
+  root,
   read,
   createReadStream,
   serve,

@@ -17,7 +17,7 @@ const hold = require("sync/hold");
 const { DIRTY_KEY } = mirror;
 
 // Keeps a blog's copy of its folder in the storage bucket (objects under
-// {blogID}/folder/ and the models/file index) in line with the folder on
+// folder/{blogID}/ and the models/file index) in line with the folder on
 // disk, which stays authoritative (#2258 Phase C). The mirror (mirror.js)
 // copies every change as it is made; this finds and repairs the ones it
 // missed: a write which failed (the blog is then in the dirty set), a crash
@@ -66,7 +66,7 @@ async function backfillBlog(blogID, options) {
 
   const apply = !!options.apply;
   const stats = newStats();
-  const prefix = blogID + "/folder/";
+  const prefix = backend.root(blogID);
 
   // What S3 holds: files by path with their sizes, and directory markers
   const objects = new Map();
@@ -220,12 +220,12 @@ async function backfillBlog(blogID, options) {
 
 // A blog which no longer exists (deleted while a mirror failure left its copy
 // in S3) has no disk or index to compare with, so its whole copy goes:
-// every object under {blogID}/folder/, markers included, and any index left.
+// every object under folder/{blogID}/, markers included, and any index left.
 // Resolves to the number of objects there were.
 async function removeDeletedBlog(blogID, apply) {
   let objects = 0;
 
-  for await (const entry of s3.listEntries(blogID + "/folder/")) if (entry.key) objects++;
+  for await (const entry of s3.listEntries(backend.root(blogID))) if (entry.key) objects++;
 
   if (apply) {
     await backend.removeAll(blogID);
@@ -301,7 +301,7 @@ async function* dirtyBlogIDs() {
 }
 
 async function hasObjects(blogID) {
-  for await (const entry of s3.listEntries(blogID + "/folder/")) if (entry) return true;
+  for await (const entry of s3.listEntries(backend.root(blogID))) if (entry) return true;
 
   return false;
 }
