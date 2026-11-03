@@ -90,12 +90,12 @@ describe("git store served: the blog folder from the store", function () {
 
     spyOn(storage, "move").and.callThrough();
 
-    // a/b.txt to a, and c to c/d.txt, in one push
-    await this.local.git(["mv", "a/b.txt", "tmp-a"]);
-    await this.local.git(["mv", "tmp-a", "a"]);
-    await this.local.git(["mv", "c", "tmp-c"]);
-    await fs.mkdirp(this.local.path("/c"));
-    await this.local.git(["mv", "tmp-c", "c/d.txt"]);
+    // a/b.txt to a, and c to c/d.txt, in one push (the same blobs at the new
+    // paths, which is all the diff sees)
+    await fs.remove(this.local.path("/a"));
+    await fs.outputFile(this.local.path("/a"), "Same bytes");
+    await fs.remove(this.local.path("/c"));
+    await fs.outputFile(this.local.path("/c/d.txt"), "Other bytes");
     await this.local.commit("Renames into and out of folders");
     await this.local.push();
 
