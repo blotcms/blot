@@ -11,7 +11,7 @@ module.exports = async function posts ({ slug, status }) {
     const url = base(slug, page);
     status(`Fetching page ${page + 1} of channel`);
     lifecycle.check();
-    const { data } = await download(url);
+    const { data } = await download(url, { kind: "text", maxBytes: 8 * 1024 * 1024 });
     return JSON.parse(data.toString("utf8")).contents;
   }
 

@@ -7,14 +7,15 @@ describe("Blogger importer", function () {
   const legacyFixture = path.join(__dirname, "fixtures", "export.xml");
   const atomFixture = path.join(__dirname, "fixtures", "export.atom");
 
-  // Stub the actual egress boundary used by the download helpers. These
-  // conversion specs deliberately leave assets remote and never need egress.
+  // Stub the fetch job the download helpers use. These conversion specs
+  // deliberately leave assets remote and never need the network.
   beforeEach(function () {
-    spyOn(require("helper/egress"), "fetch").and.returnValue(Promise.resolve({
-      ok: false,
-      status: 404,
-      headers: { get: () => null },
-    }));
+    spyOn(require("sandbox/fetch"), "many").and.callFake(async (requests) =>
+      requests.map(() => ({
+        ok: false,
+        error: Object.assign(new Error("404"), { status: 404 }),
+      }))
+    );
   });
 
   it("selects published posts and pages and maps Atom fields", async function () {

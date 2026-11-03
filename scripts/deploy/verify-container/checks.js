@@ -242,9 +242,10 @@ async function sandboxBrowserWorks() {
   return `Chromium started and ${metadata.meta.error}`;
 }
 
-// The fetch-image job, whenever there is a sandbox: its jail starts in its
-// cgroup, and the egress filter refuses the metadata address. A jail that
-// reaches it, or times out on it, is not one to go live with.
+// The fetch-image and fetch jobs, whenever there is a sandbox: their jail starts
+// in its cgroup, and the egress filter refuses the metadata address, by URL and
+// pinned as an address. A jail that reaches it, or times out on it, is not one
+// to go live with.
 async function sandboxFetchWorks() {
   if (!process.env.BLOT_SANDBOX_SOCKET) return "skipped, BLOT_SANDBOX_SOCKET is not set";
 
@@ -257,7 +258,26 @@ async function sandboxFetchWorks() {
   if (!/^(ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|EACCES|EPERM)$/.test(meta.code || "")) {
     throw new Error(`the metadata address was not refused: ${meta.error || "it answered"}`);
   }
-  return `the fetch jail started and ${meta.code}`;
+
+  const REFUSED = /^(ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|EACCES|EPERM)$/;
+  const batch = await sandbox.run(
+    "fetch",
+    {
+      requests: [
+        { url: "http://169.254.169.254/latest/meta-data/" },
+        { url: "http://example.com/", ip: "169.254.169.254" },
+      ],
+    },
+    Buffer.alloc(0)
+  );
+  const results = (batch.meta && batch.meta.results) || [];
+  for (const result of results) {
+    if (!REFUSED.test(result.code || "")) {
+      throw new Error(`the metadata address was not refused by the fetch job: ${result.error || "it answered"}`);
+    }
+  }
+  if (results.length !== 2) throw new Error("the fetch job did not answer both requests");
+  return `the fetch jails started and ${meta.code}`;
 }
 
 // The proxy jail, whenever there is a sandbox. A forward-proxy request for the

@@ -3,7 +3,6 @@ const download = require("../../helper/download");
 const { join, extname } = require("path");
 const moment = require("moment");
 const fs = require("fs-extra");
-const sandbox = require("sandbox");
 const async = require("async");
 const helper = require("dashboard/site/import/helper");
 const sanitize = require("./sanitize");
@@ -111,7 +110,8 @@ async function link(item, outputDirectory) {
 }
 
 async function image(item, outputDirectory) {
-  const { data } = await download(item.image.original.url, {
+  const { data, format } = await download(item.image.original.url, {
+    kind: "image",
     headers: {
       "User-Agent":
         "Mozilla/5.0 (compatible; Blot/1.0; +https://blot.im)",
@@ -131,7 +131,7 @@ async function image(item, outputDirectory) {
 
   const extension =
     extname(item.image.filename) ||
-    "." + (await sandbox.run("metadata", {}, data)).meta.format;
+    "." + format;
 
   const name = sanitize(title) + extension;
 
