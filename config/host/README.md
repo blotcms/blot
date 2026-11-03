@@ -184,6 +184,16 @@ upgrades a package. It:
   rules stay. `redis6` `Requires=` the unit, so it does not start if the rules
   fail to load. Re-running reloads the unit and never restarts Redis. Check it
   with `sudo nft list table inet blot_redis`.
+- loads a firewall for the units: they run as uid 1000 with `--network host`,
+  so `blot-app-firewall.service` loads `/etc/nftables/blot-app.nft` before
+  docker starts, refusing uid 1000 in `system.slice` (the units' docker scopes)
+  the instance metadata service and the rest of 169.254.0.0/16, RFC 1918,
+  CGNAT and IPv6 unique local and link-local addresses. Loopback stays open,
+  as does DNS to the VPC's resolver. ec2-user is uid 1000 on the host too; its
+  ssh sessions and cron jobs are in `user.slice`, so they keep the metadata
+  service. Its own table and unit, so it never holds up Redis. The deploy's
+  `verify-container` fails if a unit can reach the metadata address. Check it
+  with `sudo nft list table inet blot_app`.
 
 On the first run Redis's `/backups` cannot be mounted yet: it is a bind mount of
 `/var/instance-ssd/redis-backups`, and `deploy.sh` mounts the instance store

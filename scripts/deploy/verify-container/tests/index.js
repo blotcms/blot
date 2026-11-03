@@ -95,6 +95,18 @@ describe("deploy verify-container", function () {
     }
   });
 
+  it("skips the host firewall check outside a unit", async function () {
+    const check = checks.find((c) => c.name === "host firewall");
+    const unit = process.env.BLOT_UNIT;
+    delete process.env.BLOT_UNIT;
+
+    try {
+      expect(await check.run({})).toMatch(/^skipped/);
+    } finally {
+      if (unit !== undefined) process.env.BLOT_UNIT = unit;
+    }
+  });
+
   it("passes the storage bucket check against a reachable bucket and fails without one", async function () {
     const config = require("config");
     const check = checks.find((c) => c.name === "storage bucket reachable");

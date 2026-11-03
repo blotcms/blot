@@ -10,11 +10,13 @@ asset's public CDN path (`https://cdn.blot.im/{blogID}/{path}`), so the CDN
 fetches `blog_*` straight from the bucket. Assets are a blog's top-level `_`
 directories (`{blogID}/_thumbnails/...`); the rest of `{blogID}/` is reserved
 for later content, which the assets code never lists, backfills or deletes.
-The blog's folder content lives under the private top-level `folder/{blogID}/`
-prefix, outside `blog_*`, so it is not public. The bucket
-allows public `s3:GetObject` on `blog_*` keys, which covers the assets, and
-nothing else public: no listing, no writes. Git client repositories live under
-`{blogID}/git/`, which the policy's Deny keeps private (see below).
+The blog's folder content lives under `{blogID}/folder/{path}`, public like the
+rest of `blog_*` because the blog's own domain already serves those files. The
+bucket allows public `s3:GetObject` on `blog_*` keys, which covers the assets
+and the folder content, and nothing else public: no listing, no writes. The
+exceptions are `.git` directories inside a folder and the Git client repos
+under `{blogID}/git/` ([#2259](https://github.com/blotcms/blot/issues/2259)),
+which the bucket policy denies to everyone outside the AWS account (see below).
 
 Tools that need a local path (sharp, pandoc, puppeteer) write to a staging
 directory under the app's tmp directory, `{tmp}/storage-assets-staging/

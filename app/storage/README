@@ -88,11 +88,12 @@ at sync/build time instead.
   - `{blogID}/_thumbnails/...`, `{blogID}/_image_cache/...` etc.: the
     generated assets (`.assets`). Keys are identical to their public CDN paths
     (`cdn.blot.im/{blogID}/...`).
-  - `{blogID}/git/...`: the Git client's repos (Phase 3). Every `blog_*` key
-    is public-read, so the bucket policy denies anonymous reads of them
-    (`config/storage-bucket/README.md`).
-  - The blog's folder content (`.folder`, Phase 2) lives under the private
-    top-level `folder/{blogID}/` prefix.
+  - `{blogID}/folder/{path}`: the blog's folder content (`.folder`, Phase 2).
+    It is public like the rest of `blog_*`, since the blog's own domain
+    already serves these files; the exception is `.git` directories inside a
+    folder, which the bucket policy denies to everyone outside the AWS
+    account (`config/storage-bucket/README.md`).
+  - `{blogID}/git/...`: Git client repos (Phase 3), denied the same way.
 
   **The assets scope is exactly a blog's top-level directories whose names
   start with `_`.** `storage/assets` enforces it: a relPath whose first
@@ -101,16 +102,16 @@ at sync/build time instead.
   `list` of the blog root, `removeAll`, the backfill and its `--verify`) only
   look at the `{blogID}/_*/` prefixes, never at anything else under
   `{blogID}/`. Nothing may be written at a blog's top level without an
-  underscore. Blog IDs are always `blog_<uuid>`; the other top-level
-  prefixes are the private `folder/` (Phase 2) and `git/` (Phase 3), which
-  are never public.
+  underscore. Blog IDs are always `blog_<uuid>`; `folder/` (Phase 2) and
+  `git/` (Phase 3) are the other prefixes under `{blogID}/`.
 
   Storage class is set per object at write time rather than via
   prefix-filtered lifecycle rules. The whole bucket is public-read for
   `blog_*` keys (no listing, no public writes) because both scopes are
-  public by design: assets are served on the CDN, and a blog's folder is
-  served at the blog's domain and through the CDN's `/folder/v-:version`
-  route. Folder content goes in the same bucket: a second, versioned bucket
+  public by design (except `.git` directories in a folder and
+  `{blogID}/git/`, which the policy denies outside the AWS account): assets are
+  served on the CDN, and a blog's folder is served at the blog's domain and
+  through the CDN's `/folder/v-:version` route. Folder content goes in the same bucket: a second, versioned bucket
   for folders (for a "restore deleted file" feature) was considered and
   turned down.
 - **Versioning: off**, bucket-wide. The B2 backup is the only history.
@@ -189,9 +190,10 @@ at sync/build time instead.
   per-blog file from disk. This replaces the earlier plan of keeping the app
   as Bunny's origin and warming Perma-Cache with a GET after each write.
 - **The bucket is public for `s3:GetObject` on `blog_*` keys only** — never
-  `ListBucket`, never write. A blog's folder content is not under
-  `blog_*`: it lives under the private top-level `folder/{blogID}/` prefix,
-  so drafts and ignored files can't be fetched by key. Asset
+  `ListBucket`, never write. A blog's folder content is under
+  `{blogID}/folder/`, public like the rest of `blog_*` because the blog's own
+  domain already serves it; `.git` directories in a folder and
+  `{blogID}/git/` are denied outside the AWS account. Asset
   keys are `{blogID}/{path}`, identical to the CDN path, which is what lets
   Bunny fetch them with no rewriting. `config/storage-bucket`
   has the setup script and the operator steps.
@@ -381,7 +383,7 @@ should consolidate into one storage-layer method, exposed explicitly
     would be bounded in size.
 - **Phase 2 — `.folder`** ([#2258](https://github.com/blotcms/blot/issues/2258)
   has the plan, the checklists and the performance gates). S3 becomes the
-  source of truth for folder content, under `folder/{blogID}/{path}` in the
+  source of truth for folder content, under `{blogID}/folder/{path}` in the
   same bucket (§3), outside the assets scope; blog deletion removes it
   separately from `removeAll`. Each phase ships on its own and is reversible.
   - Design in brief: every folder read and write goes through
@@ -498,7 +500,7 @@ or uses `.listAll()` for small directories.
 the backend every blog uses, and keeps the folder on disk exactly as the app has always resolved it.
 
 `s3.js` is the S3 backend (Phase C, built but unused): objects at
-`folder/{blogID}/{path}`, a zero-byte marker `folder/{blogID}/{dir}/` for a
+`{blogID}/folder/{path}`, a zero-byte marker `{blogID}/folder/{dir}/` for a
 directory with nothing in it, and every metadata read (`stat`, `list`,
 `walk`, `resolveCaseInsensitive`, ...) from the Redis index `models/file`
 (see its README). Writes go to S3 first and the index after, with the SHA-1
@@ -569,7 +571,7 @@ What it does not do yet:
 
 For the blogs `config.folder_mirror` names, every change made through
 `storage/folder` on disk is then made in the S3 backend too: the objects under
-`folder/{blogID}/` and the `models/file` index. Disk stays authoritative and
+`{blogID}/folder/` and the `models/file` index. Disk stays authoritative and
 every read still comes from it; the copy is there for the reconcile to check
 and for shadow reads to try (the next steps of Phase C).
 
