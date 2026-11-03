@@ -13,13 +13,50 @@ for later content (`folder/` for the blog's folder), which the
 assets code never lists, backfills or deletes. The bucket allows public
 `s3:GetObject` on `blog_*` keys, which covers all of it because blog content is
 public by design, and nothing else public: no listing, no writes. Git client
-repos will live under the top-level `git/{blogID}/` prefix, outside `blog_*`,
-so they stay private ([#2259](https://github.com/blotcms/blot/issues/2259)).
+repositories live under the top-level `git/{blogID}/` prefix, outside `blog_*`,
+so they stay private (see below).
 
 Tools that need a local path (sharp, pandoc, puppeteer) write to a staging
 directory under the app's tmp directory, `{tmp}/storage-assets-staging/
 {blogID}/...`; `assets.commit()` uploads it and deletes what it uploaded. The
 daily tmp prune removes staged files a week after they were last written.
+
+## Git repositories: `git/{blogID}/`
+
+The git client's store (`app/clients/git/store`, [#2259](https://github.com/blotcms/blot/issues/2259))
+keeps each blog's repository, its packs, `.idx` files and numbered manifests,
+under `git/{blogID}/` at the bucket root. That was decided on 3 Nov 2026 over
+`{blogID}/git/`, which would keep everything of a blog under one prefix:
+
+- **A repository is not the site.** A blog's folder is roughly what it
+  publishes. Its repository is every version of every file ever pushed:
+  deleted drafts, old templates, and secrets someone committed and later
+  removed. Under `blog_*` it would be public.
+- **It could be downloaded whole.** Blog IDs are in every CDN URL, and
+  manifests are numbered from 1, each listing its packs. Under the public
+  policy anyone could fetch a blog's full history without guessing anything,
+  and through `cdn.blot.im`, which fetches `blog_*` from the bucket, at Blot's
+  egress cost.
+- **It would get around git's password.** Cloning a blog's repository needs
+  its git password. A public copy in the bucket would make that pointless.
+- **Lifecycle rules match a literal prefix, no wildcards.** One rule on `git/`
+  covers every repository: the abort of incomplete multipart uploads below,
+  and a cheaper storage class for packs later. Listing `git/` (the store's
+  daily orphan sweep, S3 Inventory) is one listing, not one per blog.
+- **What `{blogID}/git/` would have bought is already there.** Removing a blog
+  from git, or deleting the blog, deletes `git/{blogID}/` (again five minutes
+  later, for work another process had started), and the daily check deletes
+  any `git/{blogID}/` left for a blog no longer on git.
+
+Keeping `git/` private under `blog_*` would instead take a deny statement in
+the bucket policy exempting the app's IAM user, where a mistake is a leak.
+
+The bucket has one lifecycle rule, `git-abort-incomplete-multipart`: a
+multipart upload under `git/` (any pack over 8 MiB) that is still incomplete
+after 3 days is aborted, so a failed upload's parts don't stay billed.
+`setup.sh` puts it. The IAM policy above doesn't grant
+`s3:AbortMultipartUpload`, so the store's own abort after a failed upload is
+refused, and this rule is what cleans up.
 
 ## Create the bucket and the app's IAM user
 
