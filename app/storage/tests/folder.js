@@ -1136,6 +1136,16 @@ describe("storage/folder", function () {
         expect(await File.totals(this.blog.id)).toEqual({ bytes: 5, files: 1 });
       });
 
+      it("writes nothing under the public {blogID}/ prefix", async function () {
+        await folder.write(this.blog.id, "/a/b.txt", "hello");
+        await folder.mkdir(this.blog.id, "/c");
+
+        var found = [];
+        for await (var entry of s3.listEntries(this.blog.id + "/")) found.push(entry.key);
+
+        expect(found).toEqual([]);
+      });
+
       it("hashes a stream and a copied file as they upload", async function () {
         var source = join(outside, "source.txt");
         await fs.outputFile(source, "from disk");
