@@ -13,7 +13,8 @@ curl -sf -X POST "${API}/proxies/redis/toxics" \
 
 echo "[toxiproxy] Latency now active: ${LATENCY_MS}ms + jitter ${JITTER_MS}ms (enabled after server readiness)"
 
-# nginx -> node-app. Measured from a client against blot.im: ~190ms round trip
+# The proxy -> node-a, for blogs and dashboard reads that miss the proxy's
+# cache (PROXY_UNIT_MAIN in docker-compose.yml). Measured from a client against blot.im: ~190ms round trip
 # (connect time; TTFB minus TLS is one RTT for cached pages, ~+90ms when Node
 # renders). Multiplied by 1.5 = ~285ms per request, split across both
 # directions, with ~30ms jitter. Applied per direction, so a request pays 2x.
