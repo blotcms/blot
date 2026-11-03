@@ -88,10 +88,11 @@ at sync/build time instead.
   - `{blogID}/_thumbnails/...`, `{blogID}/_image_cache/...` etc.: the
     generated assets (`.assets`). Keys are identical to their public CDN paths
     (`cdn.blot.im/{blogID}/...`).
-  - The blog's folder content (`.folder`, Phase 2) and Git client repos are
-    not under `{blogID}/`: every `blog_*` key is public-read, so they live
-    under the private top-level `folder/{blogID}/` and `git/{blogID}/`
-    prefixes (Phases 2 and 3).
+  - `{blogID}/git/...`: the Git client's repos (Phase 3). Every `blog_*` key
+    is public-read, so the bucket policy denies anonymous reads of them
+    (`config/storage-bucket/README.md`).
+  - The blog's folder content (`.folder`, Phase 2) lives under the private
+    top-level `folder/{blogID}/` prefix.
 
   **The assets scope is exactly a blog's top-level directories whose names
   start with `_`.** `storage/assets` enforces it: a relPath whose first
@@ -422,8 +423,9 @@ should consolidate into one storage-layer method, exposed explicitly
   [#2259](https://github.com/blotcms/blot/issues/2259). Bare repos live in
   `{data_directory}/git/{handle}.git` (`app/clients/git/dataDir.js`)
   today. They move to a walgit-style store: immutable packs plus a small
-  manifest under the private `git/{blogID}/` prefix, with the SSD caching
-  refs, pack indexes and commits/trees, and blobs fetched on demand, so a
+  manifest under `{blogID}/git/`, kept private by the bucket policy, with
+  the SSD caching refs, pack indexes and commits/trees, and blobs fetched on
+  demand, so a
   repo can be larger than the SSD. No whole-repo archive and no S3
   filesystem mount. A push is acknowledged once its pack is in S3, under the
   per-blog lock, and the blog folder is materialized from the repo with no

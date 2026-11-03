@@ -1,5 +1,5 @@
 // Copies existing git blogs' repositories (data/git/<handle>.git) into the git
-// store in the storage bucket (git/<blogID>/), for shadow mode (#2259): blogs
+// store in the storage bucket (<blogID>/git/), for shadow mode (#2259): blogs
 // pushed to before shadow mode was on for them. See
 // app/clients/git/shadow/backfill.js.
 //

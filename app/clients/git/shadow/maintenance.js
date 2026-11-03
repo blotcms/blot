@@ -6,9 +6,10 @@
 //                             (BLOT_GIT_STORE_SHADOW), or every one with `all`
 //   sweepBlog(blogID)         the store's sweep(), with its defaults
 //   verify(blogID, options)   compares the blog's EBS repository with its store
-//   orphans(options)          deletes git/<blogID>/ prefixes left behind by
+//   orphans(options)          deletes <blogID>/git/ prefixes left behind by
 //                             blogs no longer on git
-//   daily(options)            all of the above, for every shadowed blog
+//   daily(options)            all of the above, for every shadowed blog; the
+//                             orphans only on the first of the month
 //
 // The verifier has two checks:
 //
@@ -333,25 +334,34 @@ function deepSample(ids, count, now) {
 
 // ---- Prefixes left behind -------------------------------------------------
 
-// The blog IDs with a prefix under git/ in the bucket. Specs replace it.
+// The blog IDs with anything under <blogID>/git/ in the bucket: one listing
+// of the bucket's top level, then one short listing a blog. Specs replace it.
 async function* s3Prefixes() {
   const s3 = require("storage/s3");
-  for await (const entry of s3.listEntries("git/", "/")) {
-    if (entry.prefix) yield entry.prefix.slice("git/".length).replace(/\/$/, "");
+  for await (const entry of s3.listEntries("", "/")) {
+    if (!entry.prefix) continue;
+    const blogID = entry.prefix.replace(/\/$/, "");
+    if (!BLOG_ID.test(blogID)) continue;
+    for await (const object of s3.listEntries(blogID + "/git/")) {
+      if (object.key) yield blogID;
+      break;
+    }
   }
 }
 
 let listPrefixes = s3Prefixes;
 
-// Deletes git/<blogID>/ for each blog which no longer exists, or is no longer
+// Deletes <blogID>/git/ for each blog which no longer exists, or is no longer
 // on git, once nothing has been written to it for minAge: what an operation
 // in another process left after the disconnect's two passes (see removeBlog
 // in ./index.js), or a disconnect cut off by a restart. A blog on git is never
 // touched, and is looked up again just before the delete. Only the keys listed
 // are deleted, so anything written after the listing is left. Resolves with
-// counts, and `findings`: a kind "error" finding for each prefix whose lookup,
-// listing or delete failed, for the alert email. A failed listing of the
-// prefixes themselves rejects.
+// counts, and `findings` for the alert email: a kind "orphan" finding for each
+// prefix deleted, since the disconnect should have deleted it and a leftover
+// means a removal path to fix, and a kind "error" finding for each prefix
+// whose lookup, listing or delete failed. A failed listing of the prefixes
+// themselves rejects.
 async function orphans({ now = Date.now(), minAge = ORPHAN_MIN_AGE_MS } = {}) {
   const counts = { prefixes: 0, live: 0, removed: 0, spared: 0, ignored: 0, errors: 0, deleted: 0 };
   const findings = [];
@@ -398,6 +408,7 @@ async function orphans({ now = Date.now(), minAge = ORPHAN_MIN_AGE_MS } = {}) {
 
       counts.removed++;
       counts.deleted += keys.length;
+      findings.push({ blog: blogID, check: "orphan", kind: "orphan", detail: "deleted " + keys.length + " objects left behind" });
       shadow.log({ blog: blogID, op: "remove", outcome: "ok", reason: "orphan", deleted: keys.length });
     } catch (err) {
       const detail = shadow.scrub(err);
@@ -412,10 +423,13 @@ async function orphans({ now = Date.now(), minAge = ORPHAN_MIN_AGE_MS } = {}) {
 
 // ---- The daily run --------------------------------------------------------
 
-// Sweeps and checks every shadowed blog, deep checks today's sample, and
-// deletes prefixes left behind. Resolves with a report; the findings are what
-// the alert email is about.
-async function daily({ now = Date.now(), deepCount = DEEP_SAMPLE, recheckDelayMs = RECHECK_DELAY_MS, scratchDir = defaultScratchDir(), orphanMinAge = ORPHAN_MIN_AGE_MS } = {}) {
+// Sweeps and checks every shadowed blog, deep checks today's sample, and on
+// the first of the month (UTC), or with `orphanSweep`, deletes prefixes left
+// behind: that takes a listing per blog in the bucket, and the disconnect
+// already deletes a blog's copy twice. Resolves with a report (`orphans` is
+// null when they were not looked for); the findings are what the alert email
+// is about.
+async function daily({ now = Date.now(), deepCount = DEEP_SAMPLE, recheckDelayMs = RECHECK_DELAY_MS, scratchDir = defaultScratchDir(), orphanMinAge = ORPHAN_MIN_AGE_MS, orphanSweep = new Date(now).getUTCDate() === 1 } = {}) {
   const started = Date.now();
   const ids = await gitBlogs();
   const findings = [];
@@ -452,14 +466,16 @@ async function daily({ now = Date.now(), deepCount = DEEP_SAMPLE, recheckDelayMs
     findings.push(...checked.findings);
   }
 
-  let orphaned;
-  try {
-    const { findings: failed, ...counts } = await orphans({ now, minAge: orphanMinAge });
-    orphaned = counts;
-    findings.push(...failed);
-  } catch (err) {
-    orphaned = { prefixes: 0, live: 0, removed: 0, spared: 0, ignored: 0, errors: 1, deleted: 0 };
-    findings.push({ blog: "-", check: "orphan", kind: "error", detail: shadow.scrub(err) });
+  let orphaned = null;
+  if (orphanSweep) {
+    try {
+      const { findings: failed, ...counts } = await orphans({ now, minAge: orphanMinAge });
+      orphaned = counts;
+      findings.push(...failed);
+    } catch (err) {
+      orphaned = { prefixes: 0, live: 0, removed: 0, spared: 0, ignored: 0, errors: 1, deleted: 0 };
+      findings.push({ blog: "-", check: "orphan", kind: "error", detail: shadow.scrub(err) });
+    }
   }
 
   return { blogs: ids.length, sweeps, deepChecked, findings, orphans: orphaned, ms: Date.now() - started };
