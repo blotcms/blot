@@ -3,6 +3,8 @@ set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$DIR/../../.." && pwd)"
 export BLOT_HOST="${BLOT_HOST:-local.blot}"
+# The compose files take their versions from config/versions.env
+set -a; . "$ROOT/config/versions.env"; set +a
 BASE=(-f "$ROOT/scripts/development/docker-compose.yml")
 # Optional machine-specific mounts/build secrets, kept outside tracked config.
 compose() {
@@ -11,6 +13,12 @@ compose() {
   else
     docker compose "${BASE[@]}" -f "$DIR/compose.yml" "$@"
   fi
+}
+# node-app's OpenResty reads the hooks in generated/openresty
+# (proxy/config/development.conf); a reload picks up a change without
+# restarting Node. A config that fails the check is left unloaded.
+reload_proxy() {
+  compose exec -T node-app sh -c 'openresty -t -q && openresty -s reload'
 }
 check_codex() {
   if ! command -v codex >/dev/null 2>&1; then
@@ -35,19 +43,16 @@ case "${1:-}" in
     # Copy out the asset without mounting over the image's build output.
     mkdir -p "$DIR/generated/dist"
     compose run --rm --no-deps -T --entrypoint cat agentation /opt/agentation/dist/toolbar.js > "$DIR/generated/dist/toolbar.js"
-    # Nginx workers must be able to read the asset even with a host umask of 077.
+    # The proxy's workers must be able to read the asset even with a host umask of 077.
     chmod 755 "$DIR/generated/dist"
     chmod 644 "$DIR/generated/dist/toolbar.js"
     compose up -d --no-deps --wait agentation
-    compose up -d --no-deps --force-recreate nginx
+    reload_proxy
     ;;
   down)
-    # Restore the original proxy mount, leaving the app and annotation volume.
-    if [ -n "${AGENTATION_COMPOSE_OVERRIDE:-}" ]; then
-      docker compose "${BASE[@]}" -f "$AGENTATION_COMPOSE_OVERRIDE" up -d --no-deps --force-recreate nginx
-    else
-      docker compose "${BASE[@]}" up -d --no-deps --force-recreate nginx
-    fi
+    # Empty the proxy's hooks, leaving the app and annotation volume.
+    rm -f "$DIR"/generated/openresty/*/agentation.conf
+    reload_proxy || true
     compose stop agentation
     ;;
   mcp)

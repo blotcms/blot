@@ -20,6 +20,12 @@ Folder mirror: {{{summary}}}
 `{{{skipped}}}`
 
 {{/hasSkipped}}
+{{#hasOnS3}}
+**On S3** (S3 is their source of truth, so for these it was the copy on disk which was checked and repaired from S3)
+
+`{{{onS3}}}`
+
+{{/hasOnS3}}
 {{#hasLocked}}{{locked}} blogs were locked by a sync and are tried again next time.{{/hasLocked}}
 
 **What to do**
@@ -27,3 +33,4 @@ Folder mirror: {{{summary}}}
 - **Differed** needs nothing if it is a few blogs: the run repaired them. Blogs differing on every daily check mean the mirror is missing writes, so look for `[storage/folder mirror] failed` in the logs and for changes made outside Blot.
 - **Still wrong** means the repair itself failed. The log has the reason: `logs green | grep "storage/folder reconcile"`. Run `node scripts/storage/backfill-folder.js --blog <blogID>` in a container as the user who owns the blog folders to see it.
 - **No folder on disk** is more likely a disk problem than an empty blog. Check the volume is mounted before anything else.
+- For a blog **on S3**, "differed" and "still wrong" are about its copy on disk, kept for rolling back: look for `[storage/folder disk copy] failed` in the logs. A blog on S3 whose copy is not marked complete is skipped and its disk left alone. A blog off S3 whose disk copy is still behind (`storage:folder:primary:dirty`) is "still wrong" and repaired in neither direction: put it back on S3 (`BLOT_FOLDER_PRIMARY`) until the disk is restored, then take it off.

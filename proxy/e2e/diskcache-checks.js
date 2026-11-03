@@ -32,6 +32,7 @@ const zlib = require("zlib");
 const fs = require("fs");
 const path = require("path");
 const { execFileSync, spawn } = require("child_process");
+const versions = require("../../scripts/versions");
 
 const IMAGE = process.env.PROXY_IMAGE || "blot-proxy:e2e";
 const BASE = parseInt(process.env.DC_PORT_BASE || "18080", 10);
@@ -117,7 +118,7 @@ async function startProxy(c) {
   docker(...args, IMAGE);
 
   // the stub shares the proxy's network namespace, as in the CI job
-  docker("run", "-d", "--name", c.name + "-stub", "--network", "container:" + c.name, "-v", `${STUB}:/s.js:ro`, "node:24.22.1-alpine", "node", "/s.js");
+  docker("run", "-d", "--name", c.name + "-stub", "--network", "container:" + c.name, "-v", `${STUB}:/s.js:ro`, versions.nodeImage(), "node", "/s.js");
 
   const stubUp = await waitFor(() => {
     try {

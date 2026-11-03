@@ -10,6 +10,9 @@ services:
       context: ../../
       dockerfile: Dockerfile
       target: dev
+      args:
+        NODE_BASE: ${NODE_BASE:?export config/versions.env first}
+        PANDOC_VERSION: ${PANDOC_VERSION:?}
     depends_on:
       - test-redis
     env_file:

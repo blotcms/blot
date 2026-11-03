@@ -69,7 +69,7 @@
 // written again. It throws on any failure of the store, leaving what it had
 // not yet done to the next run; every step is safe to repeat.
 const manifest = require("./manifest");
-const { NotFoundError, CorruptError } = require("./errors");
+const { NotFoundError, CorruptError, TooLargeError } = require("./errors");
 const { PACK_NAME, SWEEP_KEY, manifestKey, manifestSeq, packFile } = require("./layout");
 
 const HOUR = 60 * 60 * 1000;
@@ -231,7 +231,12 @@ async function sweep({ store, now = Date.now(), grace = DEFAULTS.grace, keepMani
 
   // The other kept manifests are read only while some pack is not yet known
   // to be named. One deleted under us by another sweep is skipped: that
-  // sweep found it old enough to go, and its packs are only marked.
+  // sweep found it old enough to go, and its packs are only marked. One that
+  // cannot be read, straight below an empty manifest, is a damaged newest
+  // manifest a removal put its tombstone after (remove.js): the removal
+  // deleted every pack there was, so it names nothing to keep, and it goes
+  // like any old manifest. Any other that cannot be read stops the sweep.
+  let above = { seq: listedNewest, m: newest };
   for (const seq of kept) {
     if (!unnamed().length) break;
     if (seq === listedNewest) continue;
@@ -240,8 +245,12 @@ async function sweep({ store, now = Date.now(), grace = DEFAULTS.grace, keepMani
       m = await loadManifest(s, seq);
     } catch (err) {
       if (err instanceof NotFoundError) continue;
-      throw err;
+      const damaged = err instanceof CorruptError || err instanceof TooLargeError;
+      if (!(damaged && above.seq === seq + 1 && above.m && manifest.isEmpty(above.m))) throw err;
+      above = { seq, m: null };
+      continue;
     }
+    above = { seq, m };
     for (const name of manifest.packsNamed(m)) named.add(name);
   }
 

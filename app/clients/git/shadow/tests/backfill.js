@@ -118,10 +118,10 @@ describe("git store shadow mode: backfill", function () {
     var summary = await backfill(options(this, { blog: this.blog.id, resetFirst: true }));
     expect(summary.outcomes).toEqual({ "import:imported": 1 });
 
-    // Read through a new object: the manifest module keeps the bytes of the
-    // manifest it last read for each store object, and seq 2 is gone
+    // The removal's tombstone takes the seq after the old newest, and the
+    // import the one after that: the numbering never starts again at 1
     var store = this.stores[this.blog.id];
     var fresh = Object.assign({}, store, { id: store.id });
-    expect((await setup.expectMirrored(this, fresh)).seq).toBe(1);
+    expect((await setup.expectMirrored(this, fresh)).seq).toBe(before.seq + 2);
   });
 });

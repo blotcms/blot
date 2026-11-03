@@ -275,6 +275,20 @@ module.exports = {
   // Read on every write, so it can be changed in place by specs.
   folder_mirror: process.env.BLOT_FOLDER_MIRROR || "off",
 
+  // Which blogs' folders live in S3 rather than on disk
+  // (app/storage/folder/primary.js, #2258 Phase D), in the same form: "off"
+  // (the default, every blog on disk), "all", or blog IDs separated by
+  // commas. A named blog moves to S3 only once its copy there is complete (a
+  // backfill or the daily reconcile finished or checked it cleanly) and not
+  // behind its disk, and only while the mirror above covers it (so S3 is kept
+  // in step whenever the blog is on disk). So mirror a blog and backfill it
+  // (scripts/storage/backfill-folder.js) before or after naming it here; in
+  // development, set BLOT_FOLDER_MIRROR too. Blogs on the Local, Git or
+  // Google Drive client stay on disk. Changes to a blog on S3
+  // are copied to disk, so unsetting this rolls it back (restore its disk
+  // copy first if it is dirty: see app/storage/README). Read on every call.
+  folder_primary: process.env.BLOT_FOLDER_PRIMARY || "off",
+
   // Shadow reads (app/storage/folder/shadow.js, #2258 Phase C): for the
   // mirrored blogs above, this fraction of folder reads is repeated against
   // the S3 backend once the disk has answered, and the two results compared
@@ -327,6 +341,13 @@ module.exports = {
   git_store: {
     // Off unless set: "all", or a comma-separated list of blog IDs
     shadow: process.env.BLOT_GIT_STORE_SHADOW || "",
+    // Where shadow mode also appends its log lines, so they outlive the
+    // containers (app/clients/git/shadow/file-log.js). Empty is off (the
+    // shadow specs turn it off, or point it at their own file). app/scheduler/prune-tmp.js leaves its directory alone.
+    shadow_log:
+      process.env.BLOT_GIT_STORE_SHADOW_LOG !== undefined
+        ? process.env.BLOT_GIT_STORE_SHADOW_LOG
+        : BLOT_TMP_DIRECTORY + "/shadow-log/shadow.log",
     // The store's local cache and scratch space. In production tmp is on the
     // host's instance store (/var/instance-ssd/tmp), which is where this
     // belongs: nothing in it needs to survive. Each process takes a

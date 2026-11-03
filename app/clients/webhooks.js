@@ -266,7 +266,13 @@ function listen({ host }) {
   }
 }
 
-if (config.environment === "development" && config.webhooks.relay_host && config.webhooks.secret) {
+// node-a only: node-b would forward every notification a second time
+if (
+  config.environment === "development" &&
+  !config.worker_child &&
+  config.webhooks.relay_host &&
+  config.webhooks.secret
+) {
   listen({ host: config.webhooks.relay_host });
 }
 

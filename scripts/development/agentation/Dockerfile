@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1
-FROM node:24.22.1-alpine
+# NODE_VERSION comes from config/versions.env (run.sh exports it for compose).
+ARG NODE_VERSION
+FROM node:${NODE_VERSION}-alpine
 WORKDIR /opt/agentation
 COPY package.json package-lock.json ./
 # SQLite may need a native build on platforms without a prebuilt binary.

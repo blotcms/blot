@@ -22,7 +22,8 @@ var { NotFoundError } = require("./errors");
 // like the rest of blog_*, except .git directories, which the bucket policy
 // denies to unsigned requests), and its metadata is models/file in Redis.
 // Built and tested against the same specs as
-// ./local.js, but nothing selects it yet (#2258 Phase C).
+// ./local.js. index.js sends a blog's calls here when config.folder_primary
+// names it (./primary.js, #2258 Phase D), and the mirror writes here.
 //
 // - Metadata reads (stat, exists, list, listNames, listAll, walk,
 //   resolveCaseInsensitive) come from models/file, never from ListObjectsV2.

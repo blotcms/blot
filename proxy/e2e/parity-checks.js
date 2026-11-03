@@ -42,6 +42,7 @@ const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
 const { execFileSync, spawnSync } = require("child_process");
+const versions = require("../../scripts/versions");
 
 const REPO = path.resolve(__dirname, "../..");
 const STUB = path.join(__dirname, "stub-upstream.js");
@@ -148,7 +149,7 @@ async function startProxy(c) {
 }
 
 function startStub(c) {
-  docker("run", "-d", "--name", c.name + "-stub", "--network", "container:" + c.name, "-e", "STUB_PARITY=1", "-v", `${STUB}:/s.js:ro`, "node:24.22.1-alpine", "node", "/s.js");
+  docker("run", "-d", "--name", c.name + "-stub", "--network", "container:" + c.name, "-e", "STUB_PARITY=1", "-v", `${STUB}:/s.js:ro`, versions.nodeImage(), "node", "/s.js");
 }
 
 async function waitStub(c) {

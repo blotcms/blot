@@ -433,7 +433,8 @@ module.exports = function () {
   });
 
   // Keeps the S3 copy of blog folders honest (#2258 Phase C), where the
-  // mirror's own writes can miss. Both do nothing unless BLOT_FOLDER_MIRROR is
+  // mirror's own writes can miss, and for blogs on S3 (Phase D) their copy on
+  // disk. Both do nothing unless BLOT_FOLDER_MIRROR or BLOT_FOLDER_PRIMARY is
   // on and the bucket is set, and each runs on the one container which wins
   // the lock.cron run, working one blog at a time (storage/folder/reconcile).
   // The data directory is shared by the containers of a host, so any of them

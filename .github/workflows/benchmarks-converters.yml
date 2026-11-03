@@ -129,10 +129,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - id: versions
+        uses: ./.github/actions/versions
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 24.22.1
+          node-version: ${{ steps.versions.outputs.NODE_VERSION }}
 
       # The repo has no committed package-lock.json/npm-shrinkwrap.json, so
       # `npm ci` fails immediately - match the rest of the repo's CI (e.g.

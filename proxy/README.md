@@ -16,7 +16,7 @@ back, deploy an older image.
 | `build/index.js` | Renders `config/server.conf` + partials into a single `openresty.conf`, with the locals from [`build/locals.js`](build/locals.js). `tests/locals.js` fails if a template reads a variable that `locals.js` leaves undefined. |
 | `build/build.sh` | Wrapper that runs `build/index.js` with the container's paths. Run this before `docker build`. |
 | `build/data/latest/` | Generated output (git-ignored). |
-| `Dockerfile` | Three-stage build: vendors the Lua deps, builds the Brotli modules, then assembles the image. |
+| `Dockerfile` | Multi-stage build: vendors the Lua deps, builds OpenResty and the Brotli modules, assembles the runtime (`runtime`, which local development uses), then adds the generated config. |
 | `SECURITY.md` | OpenResty/nginx upgrade assessment, enabled features, and remaining advisory exposure. |
 | `entrypoint.sh` | Fixes volume ownership, optionally trusts a test ACME CA, then starts OpenResty with a SIGTERM drain (`openresty -s quit`). |
 | `deploy/` | `blue-green.sh` (replaces the two always-running proxy units one at a time via SO_REUSEPORT + drain, per-container health socket, requires a real cert mount). They are run on the host; see [`deploy/README.md`](deploy/README.md) for the checks each script makes. |
@@ -29,7 +29,8 @@ back, deploy an older image.
 ```sh
 # Base domain for the generated vhosts is a BUILD-time value:
 BLOT_HOST=example.com bash proxy/build/build.sh   # defaults to blot.im
-docker build -f proxy/Dockerfile -t blot-proxy proxy/
+# The Dockerfile has no version defaults: image.sh passes config/versions.env
+bash proxy/build/image.sh blot-proxy
 docker run --rm --cap-add SYS_NICE -p 8080:80 -p 8443:443 \
   -e BLOT_HOST=example.com blot-proxy
 curl -i http://localhost:8080/health   # -> 200
@@ -89,6 +90,29 @@ CI runs the same steps in the `proxy-behaviour` job of
 [`.github/workflows/integration.yml`](../.github/workflows/integration.yml)
 on any change under `proxy/` (plus `package.json` and
 `config/index.js`, which the generator reads).
+
+## Local development
+
+`npm start` (`scripts/development/start.sh`) serves `local.blot` with this
+config. The stack's `node-app` is a unit (the root `Dockerfile`'s `dev-unit`
+target: the `dev` image plus OpenResty from this Dockerfile's `runtime` stage,
+tagged `blot-proxy-runtime`), running node-a under nodemon and the node-b it
+forks. On every start
+[`scripts/development/unit/start.sh`](../scripts/development/unit/start.sh)
+renders `config/` from the bind-mounted source with
+`LOCAL_DEVELOPMENT=true`, so an edit to `config/` takes
+`docker compose -f scripts/development/docker-compose.yml restart node-app`.
+OpenResty's logs are in the container, under `/var/log/openresty`.
+
+`LOCAL_DEVELOPMENT=true` renders the `development*.conf` partials, which
+production never does: routing for the worktree preview slots
+(`a-local.blot`, ... `e-local.blot`, see `scripts/development/worktrees.md`),
+MinIO standing in for Bunny on the CDN host's `blog_*` paths, no rate limits
+for private addresses, and include hooks under `/etc/openresty/development`
+that Agentation fills. The rest differs from production only in its runtime
+settings: one unit, so the other unit's sockets are absent; blogs and
+dashboard reads go through toxiproxy for latency, with node-a's own socket as
+the backup; and the mkcert certificate stands in for the wildcard one.
 
 ## Certificate issuance for custom domains
 
@@ -343,7 +367,9 @@ checks OpenResty in the result, boots it with [`unit/smoke.sh`](unit/smoke.sh) a
 
 To build it locally, generate the config and build this image as `blot-proxy`
 (see "Build and run locally"), then `docker build --target unit .` from the
-repository root, or `docker buildx bake unit` to build both as CI does.
+repository root with the `--build-arg`s for the pairs in `config/versions.env`,
+or `set -a; . config/versions.env; set +a` and `docker buildx bake unit` to build
+both as CI does.
 
 - **User.** One user at uid 1000, `ec2-user` (the Node image's `node` user,
   renamed), for the app and for OpenResty's workers. As in this image, the
@@ -367,16 +393,19 @@ repository root, or `docker buildx bake unit` to build both as CI does.
 
 ## Pinned dependencies
 
-Reproducibility relies on pinning, because the upstream toolchain has drifted:
+Reproducibility relies on pinning, because the upstream toolchain has drifted.
+Every version, commit and checksum below lives in
+[`config/versions.env`](../config/versions.env), shared with the rest of the
+repository; the Dockerfile declares them as build arguments with no defaults,
+and `scripts/security/check-versions.js` fails CI if one creeps back in.
 
-- Base image: the same `node:24.22.1-alpine` as the Node app, pinned by
-  multi-architecture digest in the `NODE_BASE` argument of both `Dockerfile`s
-  (`scripts/security/check-base-image.js` fails CI if they differ). OpenResty
-  1.31.8.1 is compiled on it in the Dockerfile's `openresty` stage with the
+- Base image: the same `node:<NODE_VERSION>-alpine` as the Node app, pinned by
+  multi-architecture digest in `NODE_BASE`, which both `Dockerfile`s take.
+  OpenResty (`OPENRESTY_VERSION`) is compiled on it in the Dockerfile's `openresty` stage with the
   configure flags and bundled OpenSSL and PCRE2 of the official
   `openresty/openresty:alpine` image (docker-openresty `alpine/Dockerfile`),
   each download checked against a sha256. Where that image lags OpenResty's
-  own packaging (`openresty-packaging`), as with OpenSSL 3.5.9, the packaging
+  own packaging (`openresty-packaging`), as with OpenSSL (`RESTY_OPENSSL_VERSION`), the packaging
   version wins. The `-fat` extras (perl, `resty`,
   `opm`, `restydoc`, luarocks, wget, unzip, outils-md5, the build packages) are
   not installed; nothing here uses them. The geoip, image_filter and xslt

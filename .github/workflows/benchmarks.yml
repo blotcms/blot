@@ -143,10 +143,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - id: versions
+        uses: ./.github/actions/versions
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 24.22.1
+          node-version: ${{ steps.versions.outputs.NODE_VERSION }}
 
       # Flip the sticky comment to a loading state straight away, before the
       # (slow) image build, so the PR shows the run is in flight.
@@ -189,6 +192,7 @@ jobs:
         with:
           context: .
           target: dev
+          build-args: ${{ steps.versions.outputs.build-args }}
           load: true
           tags: blot-bench:latest
           # Reuse node.yml's registry buildcache when it applies (arm64), plus a

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Runs this git worktree in its own Node container on a-local.blot … e-local.blot,
-# sharing the main stack's nginx, Redis and data/. See worktrees.md.
+# sharing the main stack's proxy, Redis and data/. See worktrees.md.
 #
 #   scripts/development/preview.sh up [url-or-path]
 #                                         claim a slot (or reuse this worktree's) and print
@@ -78,17 +78,19 @@ up() {
 
   local host="$slot-local.blot" i
   for i in $(seq 1 60); do
-    # Ask the sidecar itself: until nginx routes the slot, $host would hit the main stack
+    # Ask the sidecar itself: until the proxy routes the slot, $host would hit the main stack
     if docker exec "blot-node-$slot" node -e "fetch('http://localhost:8080/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))" 2>/dev/null; then break; fi
     sleep 2
   done
 
-  # The slot block lives in development_server.conf, which the main stack's nginx
-  # mounts from the main checkout. Without it, <slot>-local.blot shows "no site here".
-  if ! docker exec blot-nginx-1 grep -q preview_upstream /etc/nginx/nginx.conf 2>/dev/null; then
-    echo "WARNING: the running nginx has no preview routing, so https://$host will not reach this sidecar." >&2
-    echo "  Update the main checkout to a commit containing scripts/development/proxy/development_server.conf's" >&2
-    echo "  preview block, then: docker compose -f $MAIN_ROOT/scripts/development/docker-compose.yml restart nginx" >&2
+  # The slot block is proxy/config/development.conf, rendered by the main
+  # stack's node-app from the main checkout (an older main stack ran it in a
+  # separate nginx container). Without it, <slot>-local.blot shows "no site here".
+  if ! docker exec blot-node-app-1 grep -q preview_upstream /usr/local/openresty/nginx/conf/nginx.conf 2>/dev/null &&
+    ! docker exec blot-nginx-1 grep -q preview_upstream /etc/nginx/nginx.conf 2>/dev/null; then
+    echo "WARNING: the running proxy has no preview routing, so https://$host will not reach this sidecar." >&2
+    echo "  Update the main checkout to a commit containing proxy/config/development.conf, then:" >&2
+    echo "  docker compose -f $MAIN_ROOT/scripts/development/docker-compose.yml restart node-app" >&2
   fi
 
   local login work

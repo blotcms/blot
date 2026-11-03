@@ -1,6 +1,8 @@
-# Keep NODE_BASE identical to the one in proxy/Dockerfile (the proxy image is
-# built on the same base); scripts/security/check-base-image.js checks it.
-ARG NODE_BASE=node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
+# The versions below have no defaults here: config/versions.env holds them, and
+# whatever builds this image passes them as build args (scripts/development/start.sh,
+# docker-bake.hcl, the workflows). A build without them fails.
+# NODE_BASE is shared with the proxy image (proxy/Dockerfile).
+ARG NODE_BASE
 ## Stage 1 (base)
 # Runtime-only foundation shared by every downstream stage. It carries the
 # things that must exist at *run* time (git, tini, pandoc, the libvips and
@@ -10,7 +12,7 @@ ARG NODE_BASE=node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa
 # `dev` test image (pulled by all ~17 CI matrix jobs) and the `prod` image.
 FROM ${NODE_BASE} AS base
 
-ARG PANDOC_VERSION=3.6.1
+ARG PANDOC_VERSION
 # sharp 0.35 needs libvips >= 8.18.6 but the Alpine release this base image is
 # built on ships 8.18.2, so the vips packages (and whatever they pull in) come
 # from Alpine edge. Drop these once the stable release catches up.
@@ -58,7 +60,8 @@ ENTRYPOINT ["/sbin/tini", "--"]
 
 # Install Pandoc. Version is pinned (build arg) for reproducible document
 # conversion output across rebuilds.
-RUN ARCH=$(echo ${TARGETPLATFORM} | sed -nE 's/^linux\/(amd64|arm64)$/\1/p') \
+RUN : "${PANDOC_VERSION:?}" \
+ && ARCH=$(echo ${TARGETPLATFORM} | sed -nE 's/^linux\/(amd64|arm64)$/\1/p') \
   && if [ -z "$ARCH" ]; then echo "Unsupported architecture: $TARGETPLATFORM" && exit 1; fi \
   && curl -L https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-linux-${ARCH}.tar.gz | tar xz \
   && mv pandoc-${PANDOC_VERSION}/bin/pandoc /usr/local/bin/pandoc \
@@ -281,16 +284,16 @@ CMD ["node", "/usr/src/app/app/index.js"]
 # unit stage fails the build if so. The commit is checked, not just the tag.
 FROM base AS nsjail
 ARG ALPINE_EDGE
-ARG NSJAIL_VERSION=3.6
-ARG NSJAIL_COMMIT=f78475530b46d0186111a9096b30725f816b55fe
+ARG NSJAIL_VERSION
+ARG NSJAIL_COMMIT
 
 RUN apk add --no-cache --upgrade $ALPINE_EDGE \
     build-base bison flex protobuf-dev libnl3-dev linux-headers git pkgconf bsd-compat-headers
 
 # -Werror off and -D_LARGEFILE64_SOURCE for musl (its rlim_t is long long)
-RUN git clone --depth 1 --branch ${NSJAIL_VERSION} https://github.com/google/nsjail.git /nsjail \
+RUN git clone --depth 1 --branch ${NSJAIL_VERSION:?} https://github.com/google/nsjail.git /nsjail \
  && cd /nsjail \
- && [ "$(git rev-parse HEAD)" = "${NSJAIL_COMMIT}" ] \
+ && [ "$(git rev-parse HEAD)" = "${NSJAIL_COMMIT:?}" ] \
  && git submodule update --init \
  && sed -i s/-Werror// Makefile \
  && make -j4 USER_DEFINES="-D_LARGEFILE64_SOURCE -DNDEBUG" \
@@ -373,3 +376,41 @@ EXPOSE 80 443
 
 # tini (the base image's entrypoint) is PID 1; it runs the supervisor
 CMD ["/usr/local/bin/unit-supervisor"]
+
+## Stage 8 (dev-unit; local development only)
+# What scripts/development/docker-compose.yml runs as node-app: the `dev` image
+# plus the unit's OpenResty, so local.blot is served by the production proxy
+# config. Source, proxy/ included, is bind mounted as for `dev`;
+# scripts/development/unit/start.sh renders the config from proxy/config and
+# runs the supervisor from proxy/unit, so editing either needs only a restart.
+# OpenResty comes from proxy/Dockerfile's `runtime` stage, the proxy image
+# without its generated config, which scripts/development/start.sh builds and
+# tags blot-proxy-runtime. The sandbox is left out: it is off in development.
+FROM blot-proxy-runtime AS proxy-runtime
+
+FROM dev AS dev-unit
+
+# The unit stage's runtime packages and user (see there). The dev image has no
+# USER, so git is configured again for ec2-user, who runs node-a; bind mounts
+# can be owned by anyone, hence the wildcard safe.directory.
+RUN apk add --no-cache bash openssl gettext brotli findutils libgcc zlib su-exec \
+ && deluser node \
+ && addgroup -g 1000 ec2-user \
+ && adduser -S -u 1000 -G ec2-user -h /home/node -H ec2-user \
+ && su-exec ec2-user git config --global --add safe.directory '*' \
+ && su-exec ec2-user git config --global user.email "you@example.com" \
+ && su-exec ec2-user git config --global user.name "Your Name"
+
+COPY --from=proxy-runtime /usr/local/openresty /usr/local/openresty
+COPY --from=proxy-runtime /usr/bin/resty-auto-ssl /usr/bin/resty-auto-ssl
+COPY --from=proxy-runtime /usr/local/bin/render-config /usr/local/bin/diskcache-evict /usr/local/bin/proxy-start /usr/local/bin/
+ENV PATH=$PATH:/usr/local/openresty/luajit/bin:/usr/local/openresty/nginx/sbin:/usr/local/openresty/bin
+
+RUN mkdir -p /etc/openresty /etc/ssl/private /etc/resty-auto-ssl/storage /etc/resty-auto-ssl/letsencrypt/conf \
+    /var/log/openresty /var/cache/openresty /run/openresty /run/blot \
+ && chmod 755 /etc/resty-auto-ssl \
+ && chown -R ec2-user:ec2-user /etc/resty-auto-ssl /var/log/openresty /var/cache/openresty /run/blot
+
+EXPOSE 80 443
+
+CMD ["/usr/src/app/scripts/development/unit/start.sh"]

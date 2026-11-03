@@ -1,8 +1,12 @@
 # Every stage builds on the same node:alpine image as the Node app (the root
-# Dockerfile), so the two can later be combined in one container. Keep
-# NODE_BASE identical in both Dockerfiles: scripts/security/check-base-image.js
-# (run in CI and by the daily advisories check) fails if they differ. It pins
-# the release and the multi-architecture index digest.
+# Dockerfile), so the two can later be combined in one container. NODE_BASE
+# pins the release and the multi-architecture index digest.
+#
+# Every version, commit and checksum ARG below is declared without a default:
+# config/versions.env holds them, and whatever builds this image passes them as
+# build args (proxy/build/image.sh, docker-bake.hcl, the workflows). A build
+# without them fails. scripts/security/check-versions.js (CI, and the daily
+# advisories check) fails if a default creeps back in.
 #
 # OpenResty is compiled in the `openresty` stage the way the official
 # openresty/openresty:alpine image is (docker-openresty tag 1.31.8.1-0,
@@ -13,12 +17,12 @@
 # Lua dependencies are fetched as version-pinned, checksummed .src.rock archives
 # from luarocks.org rather than installed with a luarocks, whose remote manifest
 # no longer loads.
-ARG NODE_BASE=node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
+ARG NODE_BASE
 
 # The OpenResty release, shared by the openresty and brotli stages
-ARG OPENRESTY_VERSION=1.31.8.1
-ARG OPENRESTY_SHA256=b569c63b420f80a4ac8466f2deffe73ed93ab760026532e039c3658409a997f4
-ARG NGINX_VERSION=1.31.8
+ARG OPENRESTY_VERSION
+ARG OPENRESTY_SHA256
+ARG NGINX_VERSION
 
 # ---------------------------------------------------------------------------
 # Stage 0: OpenResty, built from source on the shared base
@@ -29,18 +33,18 @@ ARG OPENRESTY_VERSION
 ARG OPENRESTY_SHA256
 
 # https://github.com/openresty/openresty-packaging/blob/master/alpine/openresty-openssl3/APKBUILD
-ARG RESTY_OPENSSL_VERSION=3.5.9
-ARG RESTY_OPENSSL_SHA256=603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a
+ARG RESTY_OPENSSL_VERSION
+ARG RESTY_OPENSSL_SHA256
 # OpenResty's patch for it, from the release tag
-ARG RESTY_OPENSSL_PATCH_VERSION=3.5.5
-ARG RESTY_OPENSSL_PATCH_SHA256=0a30cc762a9d72901e8415a33f7671bb68469d46121061e26afe7b718f47581e
+ARG RESTY_OPENSSL_PATCH_VERSION
+ARG RESTY_OPENSSL_PATCH_SHA256
 ARG RESTY_OPENSSL_BUILD_OPTIONS="enable-camellia enable-seed enable-rfc3779 enable-cms enable-md2 enable-rc5 \
         enable-weak-ssl-ciphers enable-ssl3 enable-ssl3-method enable-md2 enable-ktls enable-fips \
         "
 
 # https://github.com/openresty/openresty-packaging/blob/master/alpine/openresty-pcre2/APKBUILD
-ARG RESTY_PCRE_VERSION=10.49
-ARG RESTY_PCRE_SHA256=929f0b20e62879252a15886b06c89f1edef61a363cbd5826fb041080a5e557ae
+ARG RESTY_PCRE_VERSION
+ARG RESTY_PCRE_SHA256
 ARG RESTY_PCRE_BUILD_OPTIONS="--enable-jit --enable-pcre2grep-jit --disable-bsr-anycrlf --disable-coverage --disable-ebcdic --disable-fuzz-support \
     --disable-jit-sealloc --disable-never-backslash-C --enable-newline-is-lf --enable-pcre2-8 --enable-pcre2-16 --enable-pcre2-32 \
     --enable-pcre2grep-callout --enable-pcre2grep-callout-fork --disable-pcre2grep-libbz2 --disable-pcre2grep-libz --disable-pcre2test-libedit \
@@ -100,12 +104,12 @@ RUN apk add --no-cache build-base binutils coreutils curl gd-dev geoip-dev \
 
 WORKDIR /tmp
 
-RUN curl -fsSL -o openssl.tar.gz "https://github.com/openssl/openssl/releases/download/openssl-${RESTY_OPENSSL_VERSION}/openssl-${RESTY_OPENSSL_VERSION}.tar.gz" && \
-    echo "${RESTY_OPENSSL_SHA256}  openssl.tar.gz" | sha256sum -c - && \
-    curl -fsSL -o openssl.patch "https://raw.githubusercontent.com/openresty/openresty/v${OPENRESTY_VERSION}/patches/openssl-${RESTY_OPENSSL_PATCH_VERSION}-sess_set_get_cb_yield.patch" && \
-    echo "${RESTY_OPENSSL_PATCH_SHA256}  openssl.patch" | sha256sum -c - && \
+RUN curl -fsSL -o openssl.tar.gz "https://github.com/openssl/openssl/releases/download/openssl-${RESTY_OPENSSL_VERSION:?}/openssl-${RESTY_OPENSSL_VERSION:?}.tar.gz" && \
+    echo "${RESTY_OPENSSL_SHA256:?}  openssl.tar.gz" | sha256sum -c - && \
+    curl -fsSL -o openssl.patch "https://raw.githubusercontent.com/openresty/openresty/v${OPENRESTY_VERSION:?}/patches/openssl-${RESTY_OPENSSL_PATCH_VERSION:?}-sess_set_get_cb_yield.patch" && \
+    echo "${RESTY_OPENSSL_PATCH_SHA256:?}  openssl.patch" | sha256sum -c - && \
     tar xzf openssl.tar.gz && \
-    cd "openssl-${RESTY_OPENSSL_VERSION}" && \
+    cd "openssl-${RESTY_OPENSSL_VERSION:?}" && \
     patch -p1 < ../openssl.patch && \
     ./config shared zlib -g \
       --prefix=/usr/local/openresty/openssl3 \
@@ -114,20 +118,20 @@ RUN curl -fsSL -o openssl.tar.gz "https://github.com/openssl/openssl/releases/do
       ${RESTY_OPENSSL_BUILD_OPTIONS} && \
     make -j"$(nproc)" && make install_sw
 
-RUN curl -fsSL -o pcre2.tar.gz "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${RESTY_PCRE_VERSION}/pcre2-${RESTY_PCRE_VERSION}.tar.gz" && \
-    echo "${RESTY_PCRE_SHA256}  pcre2.tar.gz" | sha256sum -c - && \
+RUN curl -fsSL -o pcre2.tar.gz "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${RESTY_PCRE_VERSION:?}/pcre2-${RESTY_PCRE_VERSION:?}.tar.gz" && \
+    echo "${RESTY_PCRE_SHA256:?}  pcre2.tar.gz" | sha256sum -c - && \
     tar xzf pcre2.tar.gz && \
-    cd "pcre2-${RESTY_PCRE_VERSION}" && \
+    cd "pcre2-${RESTY_PCRE_VERSION:?}" && \
     CFLAGS="-g -O3" ./configure \
       --prefix=/usr/local/openresty/pcre2 \
       --libdir=/usr/local/openresty/pcre2/lib \
       ${RESTY_PCRE_BUILD_OPTIONS} && \
     CFLAGS="-g -O3" make -j"$(nproc)" && CFLAGS="-g -O3" make install
 
-RUN curl -fsSL -o openresty.tar.gz "https://openresty.org/download/openresty-${OPENRESTY_VERSION}.tar.gz" && \
-    echo "${OPENRESTY_SHA256}  openresty.tar.gz" | sha256sum -c - && \
+RUN curl -fsSL -o openresty.tar.gz "https://openresty.org/download/openresty-${OPENRESTY_VERSION:?}.tar.gz" && \
+    echo "${OPENRESTY_SHA256:?}  openresty.tar.gz" | sha256sum -c - && \
     tar xzf openresty.tar.gz && \
-    cd "openresty-${OPENRESTY_VERSION}" && \
+    cd "openresty-${OPENRESTY_VERSION:?}" && \
     eval ./configure -j"$(nproc)" ${_RESTY_CONFIG_DEPS} ${RESTY_CONFIG_OPTIONS} ${RESTY_LUAJIT_OPTIONS} ${RESTY_PCRE_OPTIONS} && \
     make -j"$(nproc)" && make install
 
@@ -177,9 +181,9 @@ RUN curl -fsSL -o /vendor/lualib/resty/auto-ssl/vendor/shell.lua \
 # (bin/resty-auto-ssl/letsencrypt_hooks) is unchanged and it tolerates any
 # extra hooks 0.7.x adds. The bare-metal OpenResty install this
 # replaced, now gone from the host, had the 0.6.5 pin.
-ARG DEHYDRATED_TAG=v0.7.2
+ARG DEHYDRATED_TAG
 RUN curl -fsSL -o /vendor/resty-auto-ssl/dehydrated \
-      "https://raw.githubusercontent.com/dehydrated-io/dehydrated/${DEHYDRATED_TAG}/dehydrated" && \
+      "https://raw.githubusercontent.com/dehydrated-io/dehydrated/${DEHYDRATED_TAG:?}/dehydrated" && \
     echo "6f45ea1e9ad0d781ecc05ea7171036c4d3e0e10611f2080df6120458323c8d5b  /vendor/resty-auto-ssl/dehydrated" | sha256sum -c - && \
     chmod 0755 /vendor/resty-auto-ssl/dehydrated
 
@@ -187,10 +191,10 @@ RUN curl -fsSL -o /vendor/resty-auto-ssl/dehydrated \
 # Pinned to the commit lua-resty-auto-ssl's own Makefile uses.
 # Give its SIGCHLD handler an explicit prototype for modern C compilers;
 # keep the upstream Makefile's -Wall -Werror checks.
-ARG SOCKPROC_COMMIT=92aba736027bb5d96e190b71555857ac5bb6b2be
+ARG SOCKPROC_COMMIT
 COPY patches/sockproc-sigchld.patch /tmp/sockproc-sigchld.patch
 RUN git clone https://github.com/juce/sockproc.git /tmp/sockproc && \
-    git -C /tmp/sockproc checkout --detach "${SOCKPROC_COMMIT}" && \
+    git -C /tmp/sockproc checkout --detach "${SOCKPROC_COMMIT:?}" && \
     git -C /tmp/sockproc apply /tmp/sockproc-sigchld.patch && \
     make -C /tmp/sockproc && \
     install -m 0755 /tmp/sockproc/sockproc /vendor/resty-auto-ssl/sockproc
@@ -208,20 +212,20 @@ FROM ${NODE_BASE} AS brotli
 ARG OPENRESTY_VERSION
 ARG OPENRESTY_SHA256
 ARG NGINX_VERSION
-ARG NGX_BROTLI_COMMIT=53e0fb55f250f48fe80c0ddbf6c0f7103cdbaae1
+ARG NGX_BROTLI_COMMIT
 
 RUN apk add --no-cache git cmake make gcc g++ musl-dev linux-headers curl \
       pcre2-dev zlib-dev openssl-dev
 
 WORKDIR /tmp/brotli-build
 
-RUN curl -fsSL -o openresty.tar.gz "https://openresty.org/download/openresty-${OPENRESTY_VERSION}.tar.gz" && \
-    echo "${OPENRESTY_SHA256}  openresty.tar.gz" | sha256sum -c - && \
+RUN curl -fsSL -o openresty.tar.gz "https://openresty.org/download/openresty-${OPENRESTY_VERSION:?}.tar.gz" && \
+    echo "${OPENRESTY_SHA256:?}  openresty.tar.gz" | sha256sum -c - && \
     tar xzf openresty.tar.gz
 
 # The module's brotli submodule is pinned by the commit's gitlink
 RUN git clone https://github.com/google/ngx_brotli.git && \
-    git -C ngx_brotli checkout --detach "${NGX_BROTLI_COMMIT}" && \
+    git -C ngx_brotli checkout --detach "${NGX_BROTLI_COMMIT:?}" && \
     git -C ngx_brotli submodule update --init --recursive
 
 # The module links Brotli statically from deps/brotli/out; build the libraries
@@ -234,7 +238,7 @@ RUN mkdir ngx_brotli/deps/brotli/out && cd ngx_brotli/deps/brotli/out && \
 
 # The filter module compresses responses on the fly; the static module serves
 # the .br copies diskcache.lua makes of cached bodies.
-RUN cd "openresty-${OPENRESTY_VERSION}/bundle/nginx-${NGINX_VERSION}" && \
+RUN cd "openresty-${OPENRESTY_VERSION:?}/bundle/nginx-${NGINX_VERSION:?}" && \
     ./configure --with-compat --add-dynamic-module=/tmp/brotli-build/ngx_brotli && \
     make modules && \
     mkdir -p /vendor/modules && \
@@ -243,7 +247,7 @@ RUN cd "openresty-${OPENRESTY_VERSION}/bundle/nginx-${NGINX_VERSION}" && \
 # ---------------------------------------------------------------------------
 # Stage 3: the proxy image
 # ---------------------------------------------------------------------------
-FROM ${NODE_BASE}
+FROM ${NODE_BASE} AS runtime
 
 # What the image runs or shells out to, besides what the base provides:
 # - bash: entrypoint.sh, render-config.sh and dehydrated
@@ -307,21 +311,6 @@ RUN openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
       -keyout /etc/ssl/private/letsencrypt-domain.key \
       -out /etc/ssl/private/letsencrypt-domain.pem
 
-# Copy the generated configuration. Run proxy/build/build.sh first to produce
-# proxy/build/data/latest (CI does this in .github/workflows/integration.yml).
-# The generated config is a template: entrypoint.sh renders it to nginx.conf
-# (render-config.sh) so the Redis host, upstreams, resolver and server label
-# can be set with environment variables at `docker run` time. defaults.env
-# holds the values used when they are not set; cdn-ips.default.conf is the
-# Bunny edge list used when the current one cannot be fetched at start.
-COPY build/data/latest/openresty.conf /usr/local/openresty/nginx/conf/nginx.conf.template
-COPY build/data/latest/defaults.env /etc/openresty/defaults.env
-COPY build/data/latest/cdn-ips.conf /etc/openresty/cdn-ips.default.conf
-COPY build/data/latest/wildcard_cert.lua /etc/openresty/wildcard_cert.lua
-COPY build/data/latest/ban.lua /etc/openresty/ban.lua
-COPY build/data/latest/diskcache.lua /etc/openresty/diskcache.lua
-COPY build/data/latest/html /etc/openresty/html
-
 COPY render-config.sh /usr/local/bin/render-config
 COPY evict.sh /usr/local/bin/diskcache-evict
 # What entrypoint.sh, and the unit image's supervisor, run before OpenResty
@@ -340,3 +329,25 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \
 EXPOSE 80 443
 
 ENTRYPOINT ["/entrypoint.sh"]
+
+# The proxy image is `runtime` plus the generated configuration. Local
+# development builds `runtime` alone (--target runtime, tagged
+# blot-proxy-runtime) for the root Dockerfile's dev-unit, which renders the
+# config from proxy/config each time it starts
+# (scripts/development/unit/start.sh).
+FROM runtime
+
+# Copy the generated configuration. Run proxy/build/build.sh first to produce
+# proxy/build/data/latest (CI does this in .github/workflows/integration.yml).
+# The generated config is a template: entrypoint.sh renders it to nginx.conf
+# (render-config.sh) so the Redis host, upstreams, resolver and server label
+# can be set with environment variables at `docker run` time. defaults.env
+# holds the values used when they are not set; cdn-ips.default.conf is the
+# Bunny edge list used when the current one cannot be fetched at start.
+COPY build/data/latest/openresty.conf /usr/local/openresty/nginx/conf/nginx.conf.template
+COPY build/data/latest/defaults.env /etc/openresty/defaults.env
+COPY build/data/latest/cdn-ips.conf /etc/openresty/cdn-ips.default.conf
+COPY build/data/latest/wildcard_cert.lua /etc/openresty/wildcard_cert.lua
+COPY build/data/latest/ban.lua /etc/openresty/ban.lua
+COPY build/data/latest/diskcache.lua /etc/openresty/diskcache.lua
+COPY build/data/latest/html /etc/openresty/html

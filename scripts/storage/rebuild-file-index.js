@@ -1,7 +1,13 @@
 // Rebuilds a blog's folder index (models/file) from a full listing of its
-// folder in the storage bucket, {blogID}/folder/. Only for blogs whose folder
-// is in S3, which none is yet (#2258 Phase C): for any other blog the listing
+// folder in the storage bucket, {blogID}/folder/. Only for blogs with a copy
+// in S3 (mirrored and backfilled, or on S3): for any other blog the listing
 // is empty and the index would be emptied.
+//
+// For a blog on S3 (config.folder_primary, #2258 Phase D), the index is what
+// every read goes by, and --apply empties it before refilling it. Reads which
+// come in meanwhile (visitors take no lock) see a partial or empty folder.
+// Run it at a quiet time, or roll the blog back to
+// disk first (scripts/storage/backfill-folder.js, then unset its flag).
 //
 //   node scripts/storage/rebuild-file-index.js <blogID> [--apply] [--no-hash]
 //
