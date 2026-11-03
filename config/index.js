@@ -38,7 +38,7 @@ const reverse_proxies = process.env.BLOT_REVERSE_PROXY_URLS
 
 // See the "egress" and "sandbox" config blocks below. This is a warning, not a
 // thrown error: a unit deployed without the sandbox must not crash on boot. It
-// does NOT mean user-controlled URLs are fetched directly - helper/egress
+// does NOT mean user-controlled URLs are fetched directly - sandbox/fetch
 // and helper/screenshot fail those operations closed in production (the post
 // builds without the image or screenshot, the domain check errors) rather
 // than falling back to an unprotected fetch. The warning just flags that this
@@ -203,20 +203,19 @@ module.exports = {
     gc_delay: parseInt(process.env.BLOT_GIT_GC_DELAY_MS) || 60 * 1000,
   },
 
-  // The single egress point for fetching untrusted, user-supplied URLs (remote
-  // images in posts, imports, domain checks): the forward proxy in the
-  // sandbox's proxy jail in each unit, which replaced the airlock container
-  // (#2257). When unset the app talks to the network directly - fine
-  // for local development, but with no SSRF protection (see the production
-  // warning above). See app/sandbox/README.md.
+  // Untrusted, user-supplied URLs (remote images in posts, imports, domain
+  // checks) are fetched in the sandbox's fetch and fetch-image jobs, behind the
+  // jail's egress filter (app/sandbox/README.md). What is here is for the
+  // fail-closed checks and the proxy jail's health check.
   egress: {
-    // HTTP(S) forward proxy, e.g. http://127.0.0.1:18988 - consumed by
-    // app/helper/transformer/download and every other user-controlled fetch
-    // via helper/egress.
+    // The forward proxy in the sandbox's proxy jail in each unit, e.g.
+    // http://127.0.0.1:18988, which replaced the airlock container (#2257).
+    // Nothing in the app fetches through it now; the alerts still watch it.
     proxy: process.env.BLOT_EGRESS_PROXY_URL || null,
-    // When true (production), helper/egress refuses a user-controlled fetch
-    // that isn't going through the proxy instead of falling back to a
-    // direct one. Read this rather than re-deriving from environment.
+    // When true (production), a user-controlled fetch or screenshot that
+    // can't run in the sandbox fails instead of falling back to a direct one
+    // (helper/egress, sandbox/fetch, helper/transformer/download). Read this
+    // rather than re-deriving from environment.
     required: environment === "production",
   },
 

@@ -6,7 +6,7 @@
 //     bad input ("failed") is the expected answer to a corrupt file, so it is
 //     not reported, except from a job that answers bad input with meta.error
 //     (FAILS_ONLY_WHEN_BROKEN), where it means the jail itself is broken. A
-//     busy fetch-image is backpressure, logged and not reported.
+//     busy fetch-image or fetch is backpressure, logged and not reported.
 //   - from each web process (not the worker child), every five minutes, the
 //     unit's fetch proxy, the sandbox's proxy jail. It must answer,
 //     and must refuse the metadata address (tinyproxy says 500).
@@ -36,12 +36,13 @@ const REPORTED = new Set([
 
 // Jobs that turn whatever their input does into meta.error, so a failure is
 // the jail's: its cgroup, network or filter
-const FAILS_ONLY_WHEN_BROKEN = new Set(["fetch-image"]);
+const FAILS_ONLY_WHEN_BROKEN = new Set(["fetch-image", "fetch"]);
 
 // Jobs whose queue filling up is expected backpressure, not trouble: a build
-// with many remote images queues past fetch-image's short queue by design. A
-// busy answer is logged, with a count, instead of emailed.
-const BUSY_IS_BACKPRESSURE = new Set(["fetch-image"]);
+// with many remote images queues past fetch-image's short queue by design, and
+// so does a big import past fetch's. A busy answer is logged, with a count,
+// instead of emailed.
+const BUSY_IS_BACKPRESSURE = new Set(["fetch-image", "fetch"]);
 const busyCounts = new Map();
 
 const counts = new Map();

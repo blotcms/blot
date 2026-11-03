@@ -1,6 +1,6 @@
-// host is a user-set custom domain (blog.domain); fetch it through the
-// egress proxy so an internal address can't be reached. See helper/egress.
-const fetch = require("helper/egress").fetch;
+// host is a user-set custom domain (blog.domain); fetch it in the sandbox so an
+// internal address can't be reached. See app/sandbox/README.md.
+const sandboxFetch = require("sandbox/fetch");
 const Bottleneck = require("bottleneck");
 
 // Create a single global limiter
@@ -14,11 +14,21 @@ const check = async host => {
 
     console.log("Checking if " + host + " is online...");
 
-    const res = await fetch("https://" + host + "/verify/domain-setup", {
-      timeout: 5000 // 5 seconds
-    });
+    // Whatever the status, the body is what is judged. Anything over 100
+    // characters is rejected below, so 1 KiB of it says enough.
+    const res = await sandboxFetch.one(
+      {
+        url: "https://" + host + "/verify/domain-setup",
+        kind: "text",
+        anyStatus: true,
+        truncate: true,
+        maxBytes: 1024,
+        timeoutMs: 5000 // 5 seconds
+      },
+      { label: "featured/verifySiteIsOnline" }
+    );
 
-    const body = await res.text();
+    const body = res.text;
 
     if (!body || body.indexOf(" ") > -1 || body.length > 100)
       throw new Error("Host " + host + " is not online");

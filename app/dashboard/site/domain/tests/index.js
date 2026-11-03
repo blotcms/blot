@@ -241,7 +241,7 @@ describe("domain verifier", function () {
       Promise.resolve(["ns1.correct.com", "ns2.correct.com"])
     );
 
-    nock(`http://1.2.3.4`)
+    nock(`http://${hostname}`)
       .get(`/verify/domain-setup`)
       .reply(200, handle, { "Content-Type": "text/plain" });
 
@@ -262,7 +262,7 @@ describe("domain verifier", function () {
       Promise.resolve(["ns1.incorrect.com", "ns2.incorrect.com"])
     );
 
-    nock(`http://1.2.3.4`)
+    nock(`http://${hostname}`)
       .get(`/verify/domain-setup`)
       .reply(200, "wrong-handle", { "Content-Type": "text/plain" });
 
@@ -290,7 +290,7 @@ describe("domain verifier", function () {
       Promise.resolve(["ns1.request-fails.com", "ns2.request-fails.com"])
     );
 
-    nock(`http://1.2.3.4`)
+    nock(`http://${hostname}`)
       .get(`/verify/domain-setup`)
       .replyWithError("Network Error");
 
@@ -306,33 +306,55 @@ describe("domain verifier", function () {
     }
   });
 
+  it("pins the request to the A record it resolved, in the sandbox's fetch job", async () => {
+    const hostname = "pinned-request.com";
+    const handle = "example";
+
+    resolver.resolveCname.and.returnValue(Promise.reject(new Error("ENOTFOUND")));
+    resolver.resolve4.and.returnValue(Promise.resolve(["1.2.3.4", "5.6.7.8"]));
+    dns.resolveNs.and.returnValue(Promise.resolve(["ns1.pinned.com"]));
+
+    const sandboxFetch = require("sandbox/fetch");
+    spyOn(sandboxFetch, "one").and.returnValue(Promise.resolve({ text: handle }));
+
+    delete require.cache[verifyPath];
+    verify = require(verifyPath);
+
+    expect(await verify({ hostname, handle, ourIP, ourIPv6, ourHost })).toBe(true);
+    expect(sandboxFetch.one).toHaveBeenCalledTimes(1);
+    expect(sandboxFetch.one.calls.argsFor(0)[0]).toEqual(
+      jasmine.objectContaining({
+        url: "http://pinned-request.com/verify/domain-setup",
+        ip: "1.2.3.4",
+        kind: "text",
+        anyStatus: true,
+        timeoutMs: 5000,
+      })
+    );
+  });
+
+  it("should compare the body of an error page, as it always has", async () => {
+    const hostname = "error-page.com";
+    const handle = "example";
+
+    resolver.resolveCname.and.returnValue(Promise.reject(new Error("ENOTFOUND")));
+    resolver.resolve4.and.returnValue(Promise.resolve(["1.2.3.4"]));
+    dns.resolveNs.and.returnValue(Promise.resolve(["ns1.error-page.com"]));
+
+    nock(`http://${hostname}`).get(`/verify/domain-setup`).reply(404, "Not found here");
+
+    await expectAsync(verify({ hostname, handle, ourIP, ourIPv6, ourHost })).toBeRejectedWith(
+      jasmine.objectContaining({ message: "HANDLE_MISMATCH", received: "Not found here" })
+    );
+  });
+
   it("should timeout if the verification endpoint hangs", async () => {
-    // verify.js now reaches the endpoint through helper/egress.getViaIP
-    // (a raw http.request through the egress proxy), not node-fetch, so the
-    // hang is simulated at that boundary: a promise that only settles when
-    // the AbortController fires.
-    const egress = require("helper/egress");
-    spyOn(egress, "getViaIP").and.callFake((ip, path, options = {}) => {
-      const { signal } = options;
-      return new Promise((resolve, reject) => {
-        if (!signal) {
-          return;
-        }
-
-        const handleAbort = () => {
-          const abortError = new Error("Aborted");
-          abortError.name = "AbortError";
-          reject(abortError);
-        };
-
-        if (signal.aborted) {
-          handleAbort();
-          return;
-        }
-
-        signal.addEventListener("abort", handleAbort, { once: true });
-      });
-    });
+    // The sandbox's fetch job gives up after the request's timeout, with a
+    // timeout the client marks as one
+    const sandboxFetch = require("sandbox/fetch");
+    spyOn(sandboxFetch, "one").and.callFake(() =>
+      Promise.reject(Object.assign(new Error("timed out"), { type: "request-timeout" }))
+    );
 
     delete require.cache[verifyPath];
     verify = require(verifyPath);
@@ -349,24 +371,6 @@ describe("domain verifier", function () {
       Promise.resolve(["ns1.timeout.com", "ns2.timeout.com"])
     );
 
-    spyOn(global, "setTimeout").and.callFake((fn, delay, ...args) => {
-      const timer = { cleared: false };
-      process.nextTick(() => {
-        if (!timer.cleared) {
-          fn(...args);
-        }
-      });
-      return timer;
-    });
-
-    spyOn(global, "clearTimeout").and.callFake((timer) => {
-      if (timer) {
-        timer.cleared = true;
-      }
-    });
-
-    const start = Date.now();
-
     await expectAsync(
       verify({ hostname, handle, ourIP, ourIPv6, ourHost })
     ).toBeRejectedWith(
@@ -376,8 +380,5 @@ describe("domain verifier", function () {
         nameservers: ["ns1.timeout.com", "ns2.timeout.com"],
       })
     );
-
-    const elapsed = Date.now() - start;
-    expect(elapsed).toBeLessThan(100);
   });
 });

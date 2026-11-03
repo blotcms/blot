@@ -78,6 +78,58 @@ starts `SANDBOX_`, and it never falls back to in-process.
   output. Whatever the URL does is `meta.error` (with `meta.code` for a network
   error), so the job only fails when the jail is broken, and that is alerted.
 
+- `fetch` a batch of up to 32 URLs, fetched one after the other in one jail, for
+  everything else the app fetches from a URL it doesn't trust: an import's
+  images, audio and PDFs (`dashboard/site/import/helper/download.js`), domain
+  verification, the featured-site checks and the SSL warm-up of a new blog or
+  domain. Callers use the client, `sandbox/fetch` (`one(request)`, which throws,
+  and `many(requests)`, which answers each URL by itself), not `sandbox.run`. It
+  shares `jobs/fetching.js` with `fetch-image`, so it has the same limits: 5
+  redirects, a byte limit on the wire and again after gzip, deflate or brotli is
+  undone, 5s without data in a body, and a time for the whole request with its
+  redirects (`timeoutMs`, 20s by default and 30s at most), which is also how
+  long it waits for any response's headers (10s for `fetch-image`): the first
+  visit to a domain can wait on its certificate.
+  Args are `{ requests: [...] }`, and each request is `url`, `kind` and options:
+  - `kind: "text"` (the default) a body of at most `maxBytes` (1 MiB by default,
+    8 MiB at most), decompressed in the jail and returned as the string `text`.
+    `truncate` keeps the first `maxBytes` instead of failing on a longer one.
+  - `kind: "file"` the bytes, at most 50 MiB, after a check of what they are:
+    `check: "pdf"` wants `%PDF-` at the start, and `check: "audio"`, like no
+    check, refuses a body that starts like HTML, SVG, XML or JSON or has an
+    `<html>`, `<svg>` or `<script>` near the start. The importer writes these
+    into a blog's folder, so what the remote server calls a PDF can't be a page
+    that is served as one.
+  - `kind: "image"` a JPEG, PNG, GIF or WebP, decoded and encoded again exactly as
+    `fetch-image` does (`jobs/reencode.js`): its `format`, `width` and `height`
+    come back, and anything else, SVG included, is an error. The importer's
+    images use this, so what it writes into a folder is libvips's output, not
+    the server's.
+  - `ip` connects the first request to that address, with the URL's host as the
+    Host header and the TLS name, as domain verification needs (the address it
+    resolved itself, which the resolver in the jail may not agree with yet). A
+    redirect goes where the server says. The egress filter still applies: a
+    private address is refused as for any other.
+  - `method` (`GET`, `HEAD`), `redirect` (`follow`, `manual`), `anyStatus` (a body
+    for any status, not only 2xx: the status is in the answer) and `headers`
+    (`userAgent`, `referer`, `accept`: no others are sent).
+
+  `meta.results` has one entry for each request, in order, and `outputs` one
+  buffer for each. A request that can't be fetched is `{ error }` (with `status`,
+  `code` for a network error or `timedOut`), so the job fails only when the jail
+  is broken. A batch keeps one body of any size up to the limits and others only
+  while all of them together stay under 16 MiB, so the jail's memory is the
+  first body's plus 16 MiB (and an image's decode: see below); a request left
+  over is `{ error, deferred: true }`, not tried or not kept, and the client
+  sends it again in a later jail. A batch has 60s in all and its jail 75s.
+  `many` splits a longer list across jails of 32, and everything it returns is
+  in memory at once. In production a unit with no sandbox refuses, as the old
+  egress boundary did.
+
+  The importer collects a post's images, then its audio, then its PDFs, and
+  fetches each kind in one batch (`download.prefetch`) before it goes through the
+  post, so a bulk import pays for a jail's start once for each, not for each file.
+
 Callers write any output files themselves: the jail can't reach the data mount.
 Args are JSON and every job checks them, since they come from the less trusted side.
 
@@ -118,8 +170,8 @@ container went (#2257) production has no other browser. Every URL is treated as 
 customer sites run their own template code. The job starts its own Chromium, driven
 over a pipe so there is no DevTools port, and all of it goes when the job ends.
 
-`fetch-image` fetches a remote image with Node's `http` and `https`, not
-through the proxy jail: its own jail is behind the same filter.
+`fetch-image` and `fetch` fetch with Node's `http` and `https`, not through the
+proxy jail: their own jail is behind the same filter.
 
 Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js`):
 
@@ -141,12 +193,29 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   its own, at most 8, inside the broker's, so a backlog of them never fills
   the queue the dashboard's jobs wait in: past it, or after a minute queued,
   the answer is `busy` (logged, not emailed: see Alerts) and the post keeps its remote link.
+- **`fetch` is in the same cgroup, with a queue of its own.** An import's
+  files, the domain checks and the featured-site checks take turns with the
+  post builds' images in the one slot, and add no memory. What keeps them from
+  blocking each other is the queues: the broker starts whichever job has waited
+  longest, and each job's queue is its own (`fetch` 16, `fetch-image` 8), so a
+  big import queues only its own batches, one at a time, and a post build's
+  images wait behind at most one batch (the most 75s, usually a few seconds),
+  not behind the import; and the import waits behind at most one image (30s),
+  not behind the build's whole backlog. `busy` for either is logged, and the
+  caller carries on without that file or link. A second cgroup for imports was
+  weighed and left. It would have to be 128 MiB or less (the proxy jail's 128 +
+  `fetch-image`'s 256 + 128 is the whole 512 MiB), so the image jobs would have
+  nothing when all three were busy, and 128 MiB can't hold a 50 MiB file in the
+  jail together with the copy made when it is joined, nor an image's decode.
+  The cost of one slot is that a domain check, which waits in the same queue,
+  can wait for an import batch that is running (the verification's 5s covers the
+  request, not the wait).
 - **The fetch shares the unit's sandbox subtree** (`blot-sandbox/<unit>`,
   512 MiB) with the proxy jail (128 MiB at most) and the image jobs (each up
-  to 512 MiB, four at once). The fetch and the proxy together take at most
-  384 MiB of it; the image jobs have the rest and whatever those two aren't
-  using. The subtree's final size is for the unit memory work (TODO) to set
-  from measured peaks.
+  to 512 MiB, four at once). The fetch jobs and the proxy together take at most
+  384 MiB of it (256 + 128), whichever fetch job is running; the image jobs have
+  the rest and whatever those two aren't using. The subtree's final size is for
+  the unit memory work (TODO) to set from measured peaks.
 - **`/proc` is the container's, read-only, for the browser job only.** Chromium aborts without a real one.
   A job can read the unit's process list and command lines, so no secret may
   ever be on a command line. Other uids' `environ`, `maps` and `fd` are denied.
@@ -169,8 +238,9 @@ is a job failure.
 
 ## The proxy jail
 
-The app's fetches of user-supplied URLs (`helper/egress`) go through tinyproxy, in a long-running jail in
-the unit, whenever the unit has a sandbox. It isn't a job, so the broker has no part in it: the supervisor
+Nothing in the app fetches through it now: the fetches of user-supplied URLs are the `fetch` and `fetch-image`
+jobs, and `helper/egress` is left with the screenshot job's fail-closed check. tinyproxy still runs, in a long-running
+jail in the unit, whenever the unit has a sandbox, until it is retired (TODO). It isn't a job, so the broker has no part in it: the supervisor
 keeps `proxy/unit/sandbox/proxy.js` running, which is root like the broker, makes
 `/sandbox-cgroup/proxy` (128 MiB, 128 pids) and starts the jail.
 
@@ -204,10 +274,13 @@ is cut short or answers nonsense, when the broker can't be reached or its queue
 is full, and, checked every five minutes from each web process, when the unit's
 fetch proxy jail stops answering or lets the metadata
 address through. A job that fails on bad input isn't reported, except
-`fetch-image`, which answers bad input with `meta.error`, so its failing means
-the jail is broken. A busy `fetch-image` is the other way round: its short
-queue fills by design when builds have many remote images, so that is logged
-with a count (`sandbox: job fetch-image busy`) rather than emailed. At most one
+`fetch-image` and `fetch`, which answer bad input with `meta.error`, so their
+failing means the jail is broken. A busy `fetch-image` or `fetch` is the other
+way round: their short queues fill by design when builds have many remote
+images and when an import is big, so that is logged with a count (`sandbox: job
+fetch-image busy`, `sandbox: job fetch busy`) rather than emailed. A fetch that
+is killed, times out (the job, not a URL), can't reach the broker or answers
+nonsense is emailed like any job's. At most one
 email per process every ten minutes, with counts for what happened in between.
 
 ## Why

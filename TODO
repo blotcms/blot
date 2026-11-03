@@ -123,6 +123,7 @@ Bump katex to >= 0.18.2 (low, prototype pollution Dependabot alert).
 Sandbox follow-ups (#2257):
 - Hardening: a seccomp filter for OpenResty, like Node's (proxy/unit/supervisor.sh, proxy/unit/sandbox/node-filter.js): its workers parse hostile requests and it is the one unit process left unfiltered.
 - Hardening: a CI job that runs the real jail (nsjail, pasta, the seccomp profile and a cgroup) against the unit image. Today the jail is only exercised by the deploy's verify-container checks on the host.
+- Retire the proxy jail (tinyproxy, proxy/unit/sandbox/proxy.js, egress-proxy.nft, BLOT_EGRESS_PROXY_URL, the proxy check in app/sandbox/alerts.js and verify-container's "sandbox proxy", sandboxProxyPort): the fetch and fetch-image jobs replaced every fetch through it. It frees its 128 MiB cgroup, which is when the image jobs' share of the unit's sandbox subtree grows.
 - Count successful sandbox jobs, not only failures: the broker logs only failed jobs, so how much each job is used shows only in the sampler's cgroup peaks.
 - Before dashboard screenshots of customer sites and template previews: size the browser cgroup and queue for that load (one Chromium per unit at a time today; heavy pages need up to about twice the median), from the sampler's blot-sandbox-<unit>-browser lines.
 - CJK fonts for the browser jail, so sites in those languages don't render as boxes. They are large, so weigh them against the unit image's size.

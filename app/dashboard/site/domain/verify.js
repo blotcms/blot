@@ -27,14 +27,19 @@
 
 const dns = require('dns').promises;
 // The domain-setup check connects to an A-record this function resolved
-// itself and sends Host: <hostname>. It goes through the egress proxy
-// (helper/egress.getViaIP, app/sandbox/README.md) so the egress filter
-// rejects an A-record that resolves to an internal address, while still
-// pinning the exact resolved IP rather than letting the proxy re-resolve.
-const egress = require('helper/egress');
+// itself and sends Host: <hostname>. It is the sandbox's fetch job
+// (sandbox/fetch, app/sandbox/README.md) with the address pinned, so the egress
+// filter in the jail rejects an A-record that resolves to an internal address,
+// while still connecting to the exact resolved IP rather than resolving again,
+// and Node never parses the response of a customer's server.
+const sandboxFetch = require('sandbox/fetch');
 const { parse } = require('tldts');
 
 const VERIFICATION_TIMEOUT_MS = 5000;
+const VERIFICATION_USER_AGENT = 'Blot (+https://blot.im)';
+// The page that answers is the handle, a few bytes; past this it is some other
+// site's page, which is a mismatch whatever is in the rest of it
+const VERIFICATION_MAX_BYTES = 64 * 1024;
 const VERIFICATION_TIMEOUT_SECONDS = VERIFICATION_TIMEOUT_MS / 1000;
 const VERIFICATION_TIMEOUT_LABEL = Number.isInteger(VERIFICATION_TIMEOUT_SECONDS)
     ? `${VERIFICATION_TIMEOUT_SECONDS} seconds`
@@ -167,22 +172,19 @@ async function validate({ hostname, handle, ourIP, ourIPv6, ourHost }) {
 
     let text;
 
-    // Proceed with the verification using the resolved A record IP
-    const controller = typeof AbortController !== 'undefined'
-        ? new AbortController()
-        : null;
-
-    const timeout = controller
-        ? setTimeout(() => controller.abort(), VERIFICATION_TIMEOUT_MS)
-        : null;
-
+    // Proceed with the verification using the resolved A record IP. Whatever
+    // the status, the body is what is compared, as it was before the sandbox.
     try {
-        const response = await egress.getViaIP(aRecordIPs[0], '/verify/domain-setup', {
-            host: hostname,
-            ...(controller
-                ? { signal: controller.signal }
-                : { timeout: VERIFICATION_TIMEOUT_MS })
-        });
+        const response = await sandboxFetch.one({
+            url: `http://${hostname}/verify/domain-setup`,
+            ip: aRecordIPs[0],
+            kind: 'text',
+            anyStatus: true,
+            truncate: true,
+            maxBytes: VERIFICATION_MAX_BYTES,
+            timeoutMs: VERIFICATION_TIMEOUT_MS,
+            headers: { userAgent: VERIFICATION_USER_AGENT }
+        }, { label: 'domain/verify' });
 
         text = response.text;
 
@@ -199,10 +201,6 @@ async function validate({ hostname, handle, ourIP, ourIPv6, ourHost }) {
         }
         error.nameservers = nameservers;
         throw attachNameserverDetails(error);
-    } finally {
-        if (timeout) {
-            clearTimeout(timeout);
-        }
     }
 
     // Verify the response text matches the handle

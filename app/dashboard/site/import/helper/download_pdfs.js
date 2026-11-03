@@ -7,14 +7,22 @@ var assetDirectory = require("./asset_directory");
 var boundedDownload = require("./download");
 var lifecycle = require("../lifecycle");
 
-function download(url, callback) {
-  boundedDownload(url, { egressLabel: "import/download_pdfs" })
+function download(url, prefetched, callback) {
+  boundedDownload(url, { kind: "file", check: "pdf", prefetched })
     .then(({ data }) => callback(null, data), callback);
 }
 
-module.exports = function download_pdfs(post, callback) {
-  var changes = false;
+// The links the importer downloads: those to a .pdf
+function pdfLink(href) {
+  try {
+    nameFrom(href);
+  } catch (e) {
+    return false;
+  }
+  return require("path").extname(href) === ".pdf";
+}
 
+module.exports = function download_pdfs(post, callback) {
   // if (post.html.indexOf('pdf-embedder') > -1) {
   //   console.log('<<- ', post.html, ' ->>');
   //   throw new Error();
@@ -32,6 +40,23 @@ module.exports = function download_pdfs(post, callback) {
   // post.html = post.html.split('"\\]').join("</a>\n\n");
 
   var $ = cheerio.load(post.html, { decodeEntities: false });
+
+  // The post's PDFs in one jail, where there are several
+  var urls = [];
+  $("a").each(function (i, el) {
+    var href = $(el).attr("href");
+    if (pdfLink(href)) urls.push(href);
+  });
+
+  boundedDownload
+    .prefetch(urls, { kind: "file", check: "pdf" })
+    .then(function (prefetched) {
+      downloadAll(post, $, prefetched, callback);
+    }, callback);
+};
+
+function downloadAll(post, $, prefetched, callback) {
+  var changes = false;
 
   each_el(
     $,
@@ -52,7 +77,7 @@ module.exports = function download_pdfs(post, callback) {
 
       console.log("Attempting to download", href);
 
-      download(href, function (err, data) {
+      download(href, prefetched, function (err, data) {
         if (err) {
           console.log("PDF error:", href, err.name, err.statusCode);
           return next(lifecycle.current() && lifecycle.current().signal.aborted ? err : null);
@@ -83,7 +108,7 @@ module.exports = function download_pdfs(post, callback) {
       callback(null, post);
     }
   );
-};
+}
 
 function nameFrom(src) {
   return "_" + basename(parse(src).pathname);

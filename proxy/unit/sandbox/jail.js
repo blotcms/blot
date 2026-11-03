@@ -26,7 +26,8 @@ const BROWSER_CGROUP = "/sandbox-browser-cgroup";
 const PROXY_CGROUP = CGROUP_MOUNT + "/proxy";
 // The fetch-image job's, in the unit's subtree too, so it shares that budget
 // with the image jobs and the proxy jail. The broker makes it (./cgroup.js),
-// with the job's cgroupLimits.
+// with the job's cgroupLimits. The fetch job runs in it too, so the two take
+// turns and add no memory.
 const FETCH_CGROUP = CGROUP_MOUNT + "/fetch";
 
 // pasta can't start from a root nsjail, so a jail with a network is started by
@@ -151,6 +152,22 @@ const JOBS = {
     maxInputBytes: 64 * 1024,
     maxOutputBytes: 50 * MiB,
   },
+  // A batch of up to 32 URLs fetched one after the other in one jail: an
+  // import's images, audio and PDFs, domain and featured-site checks. The same
+  // jail as fetch-image and the same cgroup, which fetch-image's entry makes
+  // and sizes, so the two take turns on one slot and no memory is added. Its
+  // own queue (the broker queues oldest first across both) is what keeps a big
+  // import from filling fetch-image's, and the reverse. A batch is at most 60s,
+  // its bodies together at most 50 MiB (app/sandbox/jobs/fetch.js).
+  fetch: {
+    command: node("fetch"),
+    network: true,
+    cgroups: [FETCH_CGROUP],
+    maxQueued: 16,
+    timeSeconds: 75,
+    maxInputBytes: 256 * 1024,
+    maxOutputBytes: 52 * MiB,
+  },
 };
 
 // Read-only binds, and nothing else. nsjail binds are recursive, so never bind
@@ -211,6 +228,11 @@ const NETWORK_JOBS = {
     ],
   },
   "fetch-image": {
+    binds: [],
+    nofile: 256,
+    env: ["NODE_PATH=/usr/src/app/node_modules"],
+  },
+  fetch: {
     binds: [],
     nofile: 256,
     env: ["NODE_PATH=/usr/src/app/node_modules"],

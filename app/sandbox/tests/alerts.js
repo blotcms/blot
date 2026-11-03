@@ -58,6 +58,29 @@ describe("sandbox alerts", function () {
     expect(email.SANDBOX_ALERT.calls.argsFor(0)[1].lines).toBe("1 × job fetch-image: failed");
   });
 
+  it("logs a busy fetch job like fetch-image's, and emails the real failures", async function () {
+    spyOn(console, "log");
+    alerts.jobFailed("fetch", error("SANDBOX_BUSY"));
+    await tick();
+
+    expect(email.SANDBOX_ALERT).not.toHaveBeenCalled();
+    expect(console.log.calls.argsFor(0)[1]).toBe("sandbox: job fetch busy (1 since start)");
+
+    alerts.jobFailed("fetch", error("SANDBOX_FAILED"));
+    alerts.jobFailed("fetch", error("SANDBOX_KILLED"));
+    alerts.jobFailed("fetch", error("SANDBOX_TIMEOUT"));
+    alerts.jobFailed("fetch", error("SANDBOX_UNAVAILABLE"));
+    await tick();
+
+    expect(email.SANDBOX_ALERT).toHaveBeenCalledTimes(1);
+    expect(email.SANDBOX_ALERT.calls.argsFor(0)[1].lines.split("\n").sort()).toEqual([
+      "1 × job fetch: failed",
+      "1 × job fetch: killed",
+      "1 × job fetch: timeout",
+      "1 × job fetch: unavailable",
+    ]);
+  });
+
   describe("checkProxy", function () {
     let server;
 

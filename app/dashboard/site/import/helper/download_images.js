@@ -4,19 +4,19 @@ var extname = require("path").extname;
 var parse = require("url").parse;
 var each_el = require("./each_el");
 var fs = require("fs-extra");
-var sandbox = require("sandbox");
 var mime = require("mime-types");
 var assetDirectory = require("./asset_directory");
 var boundedDownload = require("./download");
 var lifecycle = require("../lifecycle");
 
-function download(url, callback) {
-  boundedDownload(url, { egressLabel: "import/download_images" })
-    .then(async ({ data, headers }) => {
+// The jail re-encodes each image (app/sandbox/jobs/fetch.js), so what is
+// written is what libvips made of it and its format is known. One that isn't a
+// JPEG, PNG, GIF or WebP stays a remote link.
+function download(url, prefetched, callback) {
+  boundedDownload(url, { kind: "image", prefetched })
+    .then(({ data, format, headers }) => {
       lifecycle.check();
-      const { meta } = await sandbox.run("metadata", {}, data);
-      lifecycle.check();
-      return { data, format: meta.format, headers: {
+      return { data, format, headers: {
         contentType: headers.get("content-type"),
         contentDisposition: headers.get("content-disposition"),
       }};
@@ -24,14 +24,14 @@ function download(url, callback) {
     .then(result => callback(null, result.data, result.format, result.headers), callback);
 }
 
-function download_thumbnail(post, callback) {
+function download_thumbnail(post, prefetched, callback) {
   if (!post || !post.metadata || !post.metadata.thumbnail) return callback();
 
   var thumbnail = post.metadata.thumbnail;
 
   if (!thumbnail) return callback();
 
-  download(thumbnail, function (err, data, format, headers) {
+  download(thumbnail, prefetched, function (err, data, format, headers) {
     if (err || !data) return callback(lifecycle.current() && lifecycle.current().signal.aborted ? err : null);
 
     var name = nameFrom(thumbnail, headers, format);
@@ -48,11 +48,26 @@ function download_thumbnail(post, callback) {
 }
 
 module.exports = function download_images(post, callback) {
-  var changes = false;
   var $ = cheerio.load(post.html, { decodeEntities: false });
 
+  // The post's images in one jail, where there are several
+  var urls = [post.metadata && post.metadata.thumbnail];
+  $("img").each(function (i, el) {
+    urls.push($(el).attr("src"));
+  });
+
+  boundedDownload
+    .prefetch(urls.filter(Boolean), { kind: "image" })
+    .then(function (prefetched) {
+      downloadAll(post, $, prefetched, callback);
+    }, callback);
+};
+
+function downloadAll(post, $, prefetched, callback) {
+  var changes = false;
+
   // The directory is created lazily only if a download succeeds.
-  download_thumbnail(post, function (err, thumbnail) {
+  download_thumbnail(post, prefetched, function (err, thumbnail) {
     if (err) return callback(err);
 
     if (thumbnail) {
@@ -68,7 +83,7 @@ module.exports = function download_images(post, callback) {
 
         if (!src) return next();
 
-        download(src, function (err, data, format, headers) {
+        download(src, prefetched, function (err, data, format, headers) {
           if (err || !data) {
             return next(lifecycle.current() && lifecycle.current().signal.aborted ? err : null);
           }
@@ -100,7 +115,7 @@ module.exports = function download_images(post, callback) {
       }
     );
   });
-};
+}
 
 function nameFrom(src, headers, format) {
   var name =
