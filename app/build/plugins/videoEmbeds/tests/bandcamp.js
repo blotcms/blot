@@ -140,4 +140,55 @@ describe("bandcamp embeds", function () {
       done();
     });
   });
+
+  // The page is parsed in the sandbox's fetch job (sandbox/jobs/html.js), which
+  // returns a validated player address and size, never the page
+  describe("a page that is not what it should be", function () {
+    const href = "https://oliviachaney.bandcamp.com/album/circus-of-desire";
+    const reply = (body) => nock("https://oliviachaney.bandcamp.com").get("/album/circus-of-desire").reply(200, body);
+    const refused = (done) => (err, template) => {
+      expect(err.message).toEqual("Could not retrieve song properties");
+      expect(template).toEqual(undefined);
+      done();
+    };
+
+    it("refuses a player address that is not http(s)", function (done) {
+      reply(bandcampOgHtml({ src: "javascript:alert(1)", width: 400, height: 120 }));
+      bandcamp(href, refused(done));
+    });
+
+    it("refuses a player address that would break out of the attribute", function (done) {
+      reply(bandcampOgHtml({ src: "https://bandcamp.com/x&quot; onload=&quot;alert(1)", width: 400, height: 120 }));
+      bandcamp(href, refused(done));
+    });
+
+    it("refuses a size that is not a number of pixels", function (done) {
+      reply(bandcampOgHtml({ src: "https://bandcamp.com/EmbeddedPlayer/", width: "400px", height: "120;x" }));
+      bandcamp(href, refused(done));
+    });
+
+    it("refuses a page with no player", function (done) {
+      reply("<!doctype html><html><head><title>x</title></head><body></body></html>");
+      bandcamp(href, refused(done));
+    });
+
+    it("refuses a page nested too deeply to parse, and one with too many tags", function (done) {
+      reply(bandcampOgHtml({ src: "https://bandcamp.com/EmbeddedPlayer/", width: 400, height: 120 }) + "<div>".repeat(29000));
+      bandcamp(href, function (err, template) {
+        expect(err.message).toEqual("Could not retrieve song properties");
+        expect(template).toEqual(undefined);
+        reply("<a></a>".repeat(30000));
+        bandcamp(href, refused(done));
+      });
+    });
+
+    it("reads the player from the head of a page too long to read whole", function (done) {
+      reply(bandcampOgHtml({ src: "https://bandcamp.com/EmbeddedPlayer/v=2/album=1/", width: 400, height: 120 }) + "x".repeat(3 * 1024 * 1024));
+      bandcamp(href, function (err, template) {
+        expect(err).toEqual(null);
+        expect(template).toContain('src="https://bandcamp.com/EmbeddedPlayer/v=2/album=1/"');
+        done();
+      });
+    });
+  });
 });

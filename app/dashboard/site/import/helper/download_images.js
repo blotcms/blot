@@ -1,8 +1,8 @@
-var cheerio = require("cheerio");
+var async = require("async");
 var basename = require("path").basename;
 var extname = require("path").extname;
 var parse = require("url").parse;
-var each_el = require("./each_el");
+var htmlAssets = require("./html_assets");
 var fs = require("fs-extra");
 var mime = require("mime-types");
 var assetDirectory = require("./asset_directory");
@@ -48,41 +48,32 @@ function download_thumbnail(post, prefetched, callback) {
 }
 
 module.exports = function download_images(post, callback) {
-  var $ = cheerio.load(post.html, { decodeEntities: false });
+  // The post's images (each http(s) <img src> once) are found by the sandbox's
+  // parse-html job, not by Node
+  htmlAssets.scan("images", post.html).then(function (scanned) {
+    // The post's images in one jail, where there are several
+    var urls = [post.metadata && post.metadata.thumbnail].concat(scanned.urls);
 
-  // The post's images in one jail, where there are several
-  var urls = [post.metadata && post.metadata.thumbnail];
-  $("img").each(function (i, el) {
-    urls.push($(el).attr("src"));
-  });
-
-  boundedDownload
-    .prefetch(urls.filter(Boolean), { kind: "image" })
-    .then(function (prefetched) {
-      downloadAll(post, $, prefetched, callback);
-    }, callback);
+    boundedDownload
+      .prefetch(urls.filter(Boolean), { kind: "image" })
+      .then(function (prefetched) {
+        downloadAll(post, scanned, prefetched, callback);
+      }, callback);
+  }, callback);
 };
 
-function downloadAll(post, $, prefetched, callback) {
-  var changes = false;
+function downloadAll(post, scanned, prefetched, callback) {
+  var replacements = [];
 
   // The directory is created lazily only if a download succeeds.
   download_thumbnail(post, prefetched, function (err, thumbnail) {
     if (err) return callback(err);
 
-    if (thumbnail) {
-      changes = true;
-      post.metadata.thumbnail = thumbnail;
-    }
+    if (thumbnail) post.metadata.thumbnail = thumbnail;
 
-    each_el(
-      $,
-      "img",
-      function (el, next) {
-        var src = $(el).attr("src");
-
-        if (!src) return next();
-
+    async.eachSeries(
+      scanned.urls,
+      function (src, next) {
         download(src, prefetched, function (err, data, format, headers) {
           if (err || !data) {
             return next(lifecycle.current() && lifecycle.current().signal.aborted ? err : null);
@@ -95,12 +86,7 @@ function downloadAll(post, $, prefetched, callback) {
 
             fs.outputFile(directory + "/" + name, data, function (err) {
               if (err) return next();
-              changes = true;
-
-              $(el).attr("src", name);
-
-              if ($(el).parent().attr("href") === src)
-                $(el).parent().attr("href", name);
+              replacements.push([src, name]);
 
               next();
             });
@@ -109,9 +95,20 @@ function downloadAll(post, $, prefetched, callback) {
       },
       function (err) {
         if (err) return callback(err);
-        post.html = $.html();
 
-        callback(null, post);
+        // With nothing downloaded, the HTML is what the parser wrote back
+        if (!replacements.length) {
+          post.html = scanned.html;
+          return callback(null, post);
+        }
+
+        // Changes the src of each downloaded image, and the link around it
+        // if that went to the same URL. From the post's own HTML, so it is
+        // parsed and written once, as it was when Node did it.
+        htmlAssets.rewrite("images", post.html, replacements).then(function (html) {
+          post.html = html;
+          callback(null, post);
+        }, callback);
       }
     );
   });

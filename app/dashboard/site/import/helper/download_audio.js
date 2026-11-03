@@ -1,44 +1,32 @@
-var cheerio = require("cheerio");
+var async = require("async");
 var basename = require("path").basename;
 var parse = require("url").parse;
-var each_el = require("./each_el");
 var fs = require("fs-extra");
+var htmlAssets = require("./html_assets");
 var assetDirectory = require("./asset_directory");
 var download = require("./download");
 var lifecycle = require("../lifecycle");
 
-// Only fetchable http(s) URLs with a hostname; skip data: URIs and anything
-// unparseable, the same way the image importer does.
-function fetchable(href) {
-  return !!href && href.indexOf("data:") !== 0 && !!parse(href).hostname;
-}
-
 module.exports = function download_audio(post, callback) {
-  var $ = cheerio.load(post.html, { decodeEntities: false });
-
-  // The post's audio in one jail, where there are several
-  var urls = [];
-  $("audio").each(function (i, el) {
-    var href = $(el).attr("src");
-    if (fetchable(href)) urls.push(href);
-  });
-
-  download
-    .prefetch(urls, { kind: "file", check: "audio" })
-    .then(function (prefetched) {
-      downloadAll(post, $, prefetched, callback);
-    }, callback);
+  // The post's audio (each http(s) <audio src> once) is found by the sandbox's
+  // parse-html job, not by Node
+  htmlAssets.scan("audio", post.html).then(function (scanned) {
+    // The post's audio in one jail, where there are several
+    download
+      .prefetch(scanned.urls, { kind: "file", check: "audio" })
+      .then(function (prefetched) {
+        downloadAll(post, scanned, prefetched, callback);
+      }, callback);
+  }, callback);
 };
 
-function downloadAll(post, $, prefetched, callback) {
-  each_el(
-    $,
-    "audio",
-    function (el, next) {
-      var href = $(el).attr("src");
-      var name;
+function downloadAll(post, scanned, prefetched, callback) {
+  var replacements = [];
 
-      if (!fetchable(href)) return next();
+  async.eachSeries(
+    scanned.urls,
+    function (href, next) {
+      var name;
 
       try {
         name = nameFrom(href);
@@ -56,7 +44,7 @@ function downloadAll(post, $, prefetched, callback) {
             fs.outputFile(directory + "/" + name, data, function (err) {
               if (err) return next();
 
-              $(el).attr("src", name);
+              replacements.push([href, name]);
 
               next();
             });
@@ -69,8 +57,17 @@ function downloadAll(post, $, prefetched, callback) {
     },
     function (err) {
       if (err) return callback(err);
-      post.html = $.html();
-      callback(null, post);
+
+      // With nothing downloaded, the HTML is what the parser wrote back
+      if (!replacements.length) {
+        post.html = scanned.html;
+        return callback(null, post);
+      }
+
+      htmlAssets.rewrite("audio", post.html, replacements).then(function (html) {
+        post.html = html;
+        callback(null, post);
+      }, callback);
     }
   );
 }

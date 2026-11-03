@@ -15,13 +15,19 @@
 //                  no check it must not be one either. Never HTML, SVG or script
 //                  for a caller to serve as one;
 //                "image" a JPEG, PNG, GIF or WebP, decoded and encoded again
-//                  as fetch-image does (reencode.js), with its format and size.
+//                  as fetch-image does (reencode.js), with its format and size;
+//                "html" a web page, parsed here: the request names the fixed
+//                  `extract`ion to run on it (./html.js: "og-video", a video
+//                  the page names in its Open Graph tags), and what comes
+//                  back is that small, validated structure, never the page.
+//                  maxBytes is 2 MiB by default and at most; truncate as
+//                  for text.
 //   ip           connect the first request to this address, with the URL's
 //                host as Host (and TLS name), as domain verification needs
 //   method       "GET" (the default) or "HEAD"
 //   redirect     "follow" (the default, up to 5) or "manual"
 //   anyStatus    keep a response whatever its status; otherwise only 2xx
-//   truncate     for text, stop at maxBytes instead of failing
+//   truncate     for text and html, stop at maxBytes instead of failing
 //   maxBytes     as above
 //   timeoutMs    for the whole request with its redirects (20s by default and
 //                at most 30s); the batch as a whole has 60s
@@ -29,7 +35,8 @@
 //
 // meta.results has one entry per request, in order, and outputs one buffer each
 // (empty for a request that failed or has no body). An entry is { status,
-// headers, kind } with, for an image, format, width and height; or { error },
+// headers, kind } with, for an image, format, width and height, and for html
+// `extracted`; or { error },
 // with status for a refused status, code for a network error and timedOut; or
 // { error, deferred: true } for a request not tried or not kept for want of
 // room in this batch, which the caller sends again by itself. That is only
@@ -38,6 +45,7 @@
 // of the job.
 
 const net = require("net");
+const html = require("./html");
 const {
   FetchError,
   checkURL,
@@ -52,7 +60,7 @@ const {
 } = require("./fetching");
 
 const MAX_REQUESTS = 32;
-const KINDS = ["text", "file", "image"];
+const KINDS = ["text", "file", "image", "html"];
 
 const TEXT_DEFAULT_BYTES = 1 * MiB;
 const TEXT_MAX_BYTES = 8 * MiB;
@@ -125,6 +133,9 @@ async function fetchOne(request, { held, deadline }) {
   if (request.ip !== undefined && !net.isIP(request.ip)) {
     throw new FetchError("invalid address");
   }
+  if (kind === "html" && !html.EXTRACTIONS.includes(request.extract)) {
+    throw new FetchError("unknown extraction");
+  }
   if (request.check !== undefined && !["pdf", "audio"].includes(request.check)) {
     throw new FetchError("unknown check");
   }
@@ -137,10 +148,17 @@ async function fetchOne(request, { held, deadline }) {
   let limit =
     kind === "text"
       ? positive(request.maxBytes, TEXT_DEFAULT_BYTES, TEXT_MAX_BYTES)
+      : kind === "html"
+      ? positive(request.maxBytes, html.MAX_HTML_BYTES, html.MAX_HTML_BYTES)
       : kind === "file"
       ? positive(request.maxBytes, FILE_MAX_BYTES, FILE_MAX_BYTES)
       : MAX_BODY_BYTES;
-  let tooLarge = kind === "text" ? "response is too large" : kind === "file" ? "file is too large" : "image is too large";
+  let tooLarge =
+    kind === "text" || kind === "html"
+      ? "response is too large"
+      : kind === "file"
+      ? "file is too large"
+      : "image is too large";
   if (held && held + limit > BATCH_BYTES) {
     limit = Math.max(0, BATCH_BYTES - held);
     tooLarge = FULL;
@@ -153,7 +171,7 @@ async function fetchOne(request, { held, deadline }) {
     ip: request.ip,
     maxBytes: limit,
     tooLarge,
-    truncate: kind === "text" && request.truncate === true,
+    truncate: (kind === "text" || kind === "html") && request.truncate === true,
     anyStatus: request.anyStatus === true,
     timeout,
     // A server that is slow to answer is as slow as the request allows: a
@@ -168,6 +186,17 @@ async function fetchOne(request, { held, deadline }) {
 
   if (kind === "file" && method === "GET" && output.length) {
     checkFile(output, request.check);
+  } else if (kind === "html") {
+    // A HEAD has no body: nothing to extract from
+    if (method === "GET") {
+      try {
+        meta.extracted = html.extract(request.extract, output.toString("utf8"));
+      } catch (err) {
+        if (err instanceof html.MarkupError) throw new FetchError(err.message);
+        throw err;
+      }
+    }
+    output = Buffer.alloc(0);
   } else if (kind === "image") {
     const image = await require("./reencode").reencode(output);
     output = image.data;
