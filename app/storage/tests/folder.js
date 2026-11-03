@@ -328,6 +328,53 @@ describe("storage/folder", function () {
       });
     });
 
+    describe("withLocal", function () {
+      it("calls fn with a local file holding the bytes, and resolves to its result", async function () {
+        await folder.write(this.blog.id, "/a.txt", "held");
+
+        var seen;
+        var result = await folder.withLocal(this.blog.id, "/a.txt", async function (local) {
+          seen = await fs.readFile(local, "utf8");
+          return "result";
+        });
+
+        expect(seen).toEqual("held");
+        expect(result).toEqual("result");
+      });
+
+      it("follows a change to the file", async function () {
+        await folder.write(this.blog.id, "/a.txt", "one");
+        await folder.withLocal(this.blog.id, "/a.txt", async function () {});
+        await folder.write(this.blog.id, "/a.txt", "two");
+
+        expect(
+          await folder.withLocal(this.blog.id, "/a.txt", function (local) {
+            return fs.readFile(local, "utf8");
+          })
+        ).toEqual("two");
+      });
+
+      it("passes on fn's failure", async function () {
+        await folder.write(this.blog.id, "/a.txt", "x");
+
+        var err = await rejection(
+          folder.withLocal(this.blog.id, "/a.txt", async function () {
+            throw new Error("the tool failed");
+          })
+        );
+
+        expect(err.message).toEqual("the tool failed");
+      });
+
+      it("rejects a missing file without calling fn", async function () {
+        var fn = jasmine.createSpy("fn");
+        var err = await rejection(folder.withLocal(this.blog.id, "/nope.txt", fn));
+
+        expect(err instanceof folder.NotFoundError).toBe(true);
+        expect(fn).not.toHaveBeenCalled();
+      });
+    });
+
     describe("mkdir, rmdir, remove and move", function () {
       it("makes nested directories", async function () {
         await folder.mkdir(this.blog.id, "/a/b/c");
@@ -993,6 +1040,14 @@ describe("storage/folder", function () {
         await folder.write(this.blog.id, "/a.txt", "x");
 
         expect(await folder.ensureLocal(this.blog.id, "/a.txt")).toEqual(join(this.blogDirectory, "a.txt"));
+      });
+
+      it("withLocal gives the file itself", async function () {
+        await folder.write(this.blog.id, "/a.txt", "x");
+
+        expect(await folder.withLocal(this.blog.id, "/a.txt", async (local) => local)).toEqual(
+          join(this.blogDirectory, "a.txt")
+        );
       });
 
       it("stat's modified time is the file's", async function () {

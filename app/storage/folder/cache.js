@@ -46,12 +46,27 @@ var { join, dirname, basename } = require("path");
 // last saw, so with several processes the cap is a soft one, corrected at
 // each scan.
 //
-// A path handed out may be evicted later, so callers use it at once. Nothing
-// is evicted while this process has it pinned (use() pins it for the length
-// of a callback), nor, in any process, within GRACE_MS of its last use: that
-// is what keeps a path ensureLocal just returned alive while a tool opens
-// it. A long-running tool which keeps a path open longer than that should
-// hold a pin; storage/folder has no call for that yet.
+// A path handed out may be evicted later, so callers use it at once, or hold
+// it with use(), which is what storage/folder's withLocal does for a
+// long-running tool (pandoc, sharp, a big upload). Nothing is evicted while
+// this process has it pinned, nor, in any process, within GRACE_MS of its
+// last use: that is what keeps a path ensureLocal just returned alive while a
+// tool opens it.
+//
+// The pin reaches the other processes through that same recency. While use()
+// holds an entry, a heartbeat sets its modification time again every third of
+// the grace period, so to every other process it is always recent. Eviction
+// checks the time on disk just before deleting (removeEntry), not the one it
+// saw at its last scan, so no scan has to catch the touch for it to count. A
+// holder which dies stops touching and the entry is evictable GRACE_MS later:
+// there is no pin to clear and nothing for a crash to leave behind. A holder
+// whose event loop is blocked for longer than the grace period loses the
+// pin, which is the best effort the cache promises everywhere.
+//
+// A pinned entry may keep the cache over its budget: eviction skips it, and
+// a fill is never refused for lack of room, since the reader asking for it is
+// waiting on it. The overshoot lasts as long as the tools hold their paths,
+// and the next scan after the release brings the cache back under its budget.
 
 function noop() {}
 
@@ -109,6 +124,8 @@ function createCache(options) {
   var counters = { hits: 0, misses: 0, evictions: 0, fetchedBytes: 0, changed: 0, filled: 0 };
   var timer = null;
   var checking = null;
+  // Heartbeats of the entries use() is holding
+  var heartbeats = new Set();
 
   function add(name, entry) {
     forget(name);
@@ -359,15 +376,45 @@ function createCache(options) {
     counters.filled++;
   }
 
+  // Keeps an entry recent on disk, for the other processes, while it is held
+  function hold(name, file) {
+    if (!(graceMs > 0)) return null;
+
+    var beat = setInterval(function () {
+      var entry = entries.get(name);
+      var now = new Date();
+
+      if (entry && entry.file === file) entry.used = now.getTime();
+
+      // Gone (removeBlog, or evicted by a process which saw no recent use):
+      // there is nothing to keep
+      fs.utimes(file, now, now).catch(noop);
+    }, Math.max(1, Math.floor(graceMs / 3)));
+
+    beat.unref();
+    heartbeats.add(beat);
+
+    return beat;
+  }
+
+  function release(beat) {
+    if (!beat) return;
+    clearInterval(beat);
+    heartbeats.delete(beat);
+  }
+
   // Calls fn with the local path of the file spec describes, which is not
-  // evicted until the promise fn returns has settled
+  // evicted, here or by any other process using the directory, until the
+  // promise fn returns has settled
   async function use(spec, open, fn) {
     var file = await get(spec, open, true);
     var { name } = locate(spec);
+    var heartbeat = hold(name, file);
 
     try {
       return await fn(file);
     } finally {
+      release(heartbeat);
       var entry = entries.get(name);
       if (entry && entry.file === file && entry.pins > 0) entry.pins--;
     }
@@ -499,6 +546,8 @@ function createCache(options) {
   function stop() {
     if (timer) clearInterval(timer);
     timer = null;
+    heartbeats.forEach(clearInterval);
+    heartbeats.clear();
   }
 
   function stats() {

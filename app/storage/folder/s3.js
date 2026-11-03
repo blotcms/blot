@@ -562,23 +562,58 @@ async function commit(blogID, relPath) {
   }
 }
 
+// The index record of the file at path, which must be a file
+async function fileAt(blogID, path, relPath) {
+  var found = await File.get(blogID, path);
+
+  if (!found) throw new NotFoundError("No such file: " + relPath);
+  if (found.type === "dir") throw failure("EISDIR", "Is a directory: " + relPath);
+
+  return found;
+}
+
 // The path of a copy of the file in the content cache. The copy is
 // read-only, and may be evicted once it is no longer recent, so use it
 // straight away: open it, or hand it to a tool, rather than keeping the path.
+// For a tool which runs for longer, see withLocal.
 async function ensureLocal(blogID, relPath) {
   var path = locate(blogID, relPath);
 
   // A second try picks up the index catching up with a write in progress
   for (var attempt = 0; ; attempt++) {
-    var found = await File.get(blogID, path);
-
-    if (!found) throw new NotFoundError("No such file: " + relPath);
-    if (found.type === "dir") throw failure("EISDIR", "Is a directory: " + relPath);
+    var found = await fileAt(blogID, path, relPath);
 
     try {
       return await contentCache().get(cached(blogID, path, found), opener(blogID, path));
     } catch (err) {
       if (err.code !== "ECHANGED" || attempt) throw err;
+    }
+  }
+}
+
+// Calls fn with the path of a copy of the file in the content cache, and
+// resolves to what fn resolves to. The copy is pinned until fn has settled,
+// in this process and in every other one sharing the cache directory (see
+// ./cache.js), so a tool may take as long as it needs. The path is read-only
+// and is not valid after fn returns.
+async function withLocal(blogID, relPath, fn) {
+  var path = locate(blogID, relPath);
+
+  for (var attempt = 0; ; attempt++) {
+    var found = await fileAt(blogID, path, relPath);
+    var failedInside = false;
+
+    try {
+      return await contentCache().use(cached(blogID, path, found), opener(blogID, path), async function (local) {
+        try {
+          return await fn(local);
+        } catch (err) {
+          failedInside = true;
+          throw err;
+        }
+      });
+    } catch (err) {
+      if (failedInside || err.code !== "ECHANGED" || attempt) throw err;
     }
   }
 }
@@ -946,6 +981,7 @@ module.exports = {
   path,
   commit,
   ensureLocal,
+  withLocal,
   mkdir,
   rmdir,
   remove,
