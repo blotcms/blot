@@ -95,7 +95,10 @@ async function watch(blogID) {
   try {
     // chokidar needs a real directory, so this asks for the local path and a
     // blog on the Local client stays on the local-disk backend of
-    // storage/folder. To stop this watcher, call watcher.close();
+    // storage/folder, whatever BLOT_FOLDER_PRIMARY says (storage/folder/
+    // primary.js keeps it there). TODO: the Local client rework in #2258
+    // Phase E, watching a directory of its own, lets these blogs run on S3.
+    // To stop this watcher, call watcher.close();
     const root = await folder.ensureLocal(blogID, "/");
 
     if (watchers[blogID]) return;

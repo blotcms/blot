@@ -417,7 +417,9 @@ should consolidate into one storage-layer method, exposed explicitly
   - **D, S3 authoritative, blog by blog**, behind a per-blog flag: the test
     blogs first, then cohorts, then everyone, watching the performance gates
     at each step. Rolling back a blog is a reconcile from S3 to disk and a
-    flag flip.
+    flag flip. The flag (`BLOT_FOLDER_PRIMARY`), its guard, the disk copy and
+    the reverse reconcile are built (§ "S3 as a blog's primary store" below);
+    no production blog is on S3 yet.
   - **E, remove the disk.** Stop writing blog folders to EBS, delete
     `data/blogs`, and shrink the data volume to git client data until
     Phase 3.
@@ -496,10 +498,12 @@ or uses `.listAll()` for small directories.
 `storage/assets`: `read`, `createReadStream`, `serve`, `write`, `writeFrom`,
 `path` + `commit`, `ensureLocal`, `mkdir`, `rmdir`, `remove`, `move`, `stat`,
 `exists`, `list`, `listNames`, `listAll`, `walk`, `resolveCaseInsensitive` and `removeAll`.
-`index.js` is the public surface and documents each function; `local.js` is
-the backend every blog uses, and keeps the folder on disk exactly as the app has always resolved it.
+`index.js` is the public surface and documents each function, and sends each
+call to a backend chosen per blog: `local.js`, which keeps the folder on disk
+exactly as the app has always resolved it and which every blog uses unless
+`BLOT_FOLDER_PRIMARY` names it, or `s3.js` (below).
 
-`s3.js` is the S3 backend (Phase C, built but unused): objects at
+`s3.js` is the S3 backend: objects at
 `{blogID}/folder/{path}`, a zero-byte marker `{blogID}/folder/{dir}/` for a
 directory with nothing in it, and every metadata read (`stat`, `list`,
 `walk`, `resolveCaseInsensitive`, ...) from the Redis index `models/file`
@@ -507,11 +511,11 @@ directory with nothing in it, and every metadata read (`stat`, `list`,
 computed as the bytes upload; removes delete from S3 first. `move` is copy
 plus delete. `path` returns a staging path under the tmp directory which
 `commit` uploads. Bytes are read through the content cache (`cache.js`,
-below). Nothing in the app or its
-config selects it: `useBackend` in `index.js` switches every blog at once
+below). A blog's calls go to it when `config.folder_primary` names the blog
+(below, Phase D). `useBackend` in `index.js` switches every blog at once
 and is only for specs, which run `app/storage/tests/folder.js` against both
 backends (on MinIO for S3). `scripts/storage/rebuild-file-index.js` rebuilds
-a blog's index from a listing of the bucket. Per-blog selection is Phase D.
+a blog's index from a listing of the bucket.
 
 The content cache (`cache.js`) keeps the bytes the S3 backend has read on
 the instance store, under `config.folder_cache.directory` (by default
@@ -616,6 +620,9 @@ longer exists has its whole copy removed: its deletion could not remove it. It i
 rerun. Turn mirroring on for a blog before its backfill, so nothing written
 in between is missed.
 
+The backfill and the reconcile work the other way round for a blog on S3
+(below): they bring its disk copy in line with S3 and change nothing in S3.
+
 ### Shadow reads (#2258 Phase C)
 
 For mirrored blogs, `BLOT_FOLDER_SHADOW_RATE` (`config.folder_shadow.rate`,
@@ -633,3 +640,71 @@ compared. Counters go to an hourly Redis hash, `storage:folder:shadow:YYYYMMDDHH
 as `[storage/folder shadow] mismatch blog=... op=... kind=... path=...`.
 `node scripts/storage/shadow-report.js --hours 24` prints the mismatch rate,
 local and S3 latency percentiles per call, and the content cache's hit rate.
+Reads which go to S3 in the first place (a blog on S3, below) are not
+shadowed.
+
+### S3 as a blog's primary store (#2258 Phase D)
+
+For the blogs `config.folder_primary` names, S3 and `models/file` are the
+source of truth: `folder/index.js` sends every read and write to the S3
+backend instead of the disk, and the disk keeps a copy to roll back to.
+
+- **The flag** is `BLOT_FOLDER_PRIMARY` (`config.folder_primary`), in the
+  same form as the mirror's switch: `off` (the default: every blog on disk,
+  and no Redis read or other change for any call), `all`, or blog IDs
+  separated by commas. It is read on every call.
+- **The guard** (`folder/primary.js`, `usesS3`): a named blog goes to S3 only
+  if the mirror covers it (so S3 is kept in step whenever it is on disk), its
+  copy in S3 is known to be complete (it is in
+  `storage:folder:mirror:complete`), its mirror is not dirty (S3 is not
+  behind its disk), and its client is not Local, Git or Google Drive.
+  Otherwise it stays on disk, logged once per process as `[storage/folder
+  primary] blog=... stays on disk: ...`. That is one Redis round trip per
+  call for named blogs only. An index alone proves nothing: the mirror
+  starts one with a blog's first mirrored write, before its backfill. A blog
+  joins the complete set when a backfill or reconcile of it finishes with no
+  errors, or a check under its lock (the daily run, `--verify`) finds
+  nothing to change, while the mirror covers it; it leaves when a backfill
+  of it starts or a mirror write fails. So existing mirrored blogs become
+  eligible after their next clean backfill or daily check, a blog named
+  before that moves over by itself, and a half-made copy is never read. A
+  complete blog whose folder becomes empty stays on S3. A blog also leaves
+  the set when its disk changes while the mirror doesn't cover it, and when
+  it leaves the Local client (whose watcher changes the disk directly), so
+  either needs a clean backfill first. Blogs on the Local client stay on disk because the client
+  watches the folder there with chokidar (until the Phase E rework of the
+  Local client). Blogs on the Git client stay on disk because live clones
+  run git in the folder and the setup import uses the folder as git's work
+  tree (until #2259). Blogs on Google Drive stay on disk because its sync
+  reads directory entries from the disk and fingerprints files by their
+  nanosecond mtime there, which the content cache's copies don't keep (until
+  it keeps `{ sha1, md5Checksum }` pairs against the index).
+- **The disk copy**: each change is made in S3 first, which is what the
+  caller waits for and what counts, then copied to disk by the mirror's
+  copier run the other way round (`mirror.copier`, S3 to disk), with the
+  file's modified time from the index. A file is copied down through the
+  content cache, which also warms the cache for the build which usually
+  reads it next. A failure never fails the caller: it is logged as
+  `[storage/folder disk copy] failed blog=...` and the blog added to
+  `storage:folder:primary:dirty`. A blog on S3 is never mirrored.
+- **Repair**: `backfill-folder.js` and the reconcile pick a direction per
+  blog. For a blog on S3 they compare its disk with the index (by size, then
+  modified time, then SHA-1) and repair the disk: copy down what differs,
+  make missing directories, delete what S3 does not have, and fix modified
+  times. They never change S3 for it. The hourly run covers both dirty sets
+  and the daily run every mirrored or named blog. A blog off S3 whose disk
+  copy is still marked as behind is refused in both directions (it has
+  changes on both sides), reported, and left for a person.
+- **Rolling a blog back**: run `backfill-folder.js --blog <id> --apply`
+  while it is still on S3, so its disk copy is complete and it leaves
+  `storage:folder:primary:dirty`, then take it out of the flag. The mirror
+  takes over again from there.
+- **What does not work on S3 yet**: the Local, Git and Google Drive clients
+  (kept on disk above); switching a blog on S3 to one of them moves it to
+  disk, so its disk copy must be clean; `stat` with `{ hash: true }`
+  downloads the file (Dropbox, until it keeps its own `{ sha1, content_hash }`
+  pairs), so a Dropbox reset reads every file from S3; the shadow reads do not run
+  in reverse, so nothing samples a blog on S3 against its disk between daily
+  checks; `rebuild-file-index.js --apply` empties a blog's index before
+  refilling it, so a blog on S3 reads a partial (or empty) folder
+  while it runs.
