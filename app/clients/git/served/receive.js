@@ -161,8 +161,8 @@ async function push(req, res, blog, hooks, fields) {
 
   // Held around the store's manifest swap: the ref lock, and the alarm armed
   // once, before master can move
-  // The store reports a failure here to the client in these words
-  // (pushStatus)
+  // A failure here is reported to the client in these words (pushStatus,
+  // which the store's receive passes on)
   async function lock(fn) {
     let release;
 

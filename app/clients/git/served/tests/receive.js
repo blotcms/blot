@@ -150,6 +150,40 @@ describe("git store: pushes", function () {
     expect(context.cache().stats().reservedBytes).toBe(0);
   });
 
+  it("takes a push whose changed tree names a .gitattributes the push does not carry", async function () {
+    await this.local.commitFiles({ "/.gitattributes": "*.md text\n", "/.gitmodules": "", "/a.txt": "A" });
+    await this.local.push();
+
+    // The root tree changes, so it is in the pack; the .gitattributes and
+    // .gitmodules blobs it names are not, being in the store already
+    await this.local.commitFiles({ "/b.txt": "B" });
+    var pushed = await this.local.tryPush();
+
+    expect(pushed.code).toBe(0);
+    expect((await manifest.read(store(this))).refs["refs/heads/master"]).toBe(await this.local.head());
+  });
+
+  it("says another change is being applied when the ref lock stays taken", async function () {
+    await this.local.writeAndPush("/a.txt", "A");
+
+    var before = await manifest.read(store(this));
+    var release = await require("clients/git/repo").holdRefLock(this.blog.id);
+
+    try {
+      await this.local.commitFiles({ "/b.txt": "B" });
+      var pushed = await this.local.tryPush();
+
+      expect(pushed.code).not.toBe(0);
+      expect(pushed.stderr).toContain("another change to this repository is being applied; please try again in a few seconds");
+      expect((await manifest.read(store(this))).seq).toBe(before.seq);
+    } finally {
+      await release();
+    }
+
+    // And with the lock free again, the same push lands
+    expect((await this.local.tryPush()).code).toBe(0);
+  });
+
   it("answers git's 0000 probe and a body which is not git", async function () {
     await this.local.writeAndPush("/a.txt", "A");
 

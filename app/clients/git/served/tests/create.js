@@ -94,6 +94,27 @@ describe("git store: new-folder setup", function () {
     expect((await manifest.read(this.stores[this.blog.id])).refs["refs/heads/master"]).toBe(await local.remoteHead());
   });
 
+  it("refuses to set up over a store copy the blog already has, and leaves it alone", async function () {
+    await fs.outputFile(this.blogDirectory + "/first.txt", "Hello");
+    await connect(this);
+
+    var store = this.stores[this.blog.id];
+    var before = await manifest.read(store);
+
+    var failed = await setClientToGit(this.user, this.blog, this.server.port).then(
+      () => null,
+      (err) => err
+    );
+
+    expect(failed).not.toBe(null);
+    expect(failed.code).toBe("EEXIST");
+    expect(failed.message).toContain("already has a repository in the git store");
+
+    var after = await manifest.read(store);
+    expect(after.seq).toBe(before.seq);
+    expect(after.refs).toEqual(before.refs);
+  });
+
   it("leaves the store empty when it fails before the import", async function () {
     await fs.outputFile(this.blogDirectory + "/first.txt", "Hello");
 

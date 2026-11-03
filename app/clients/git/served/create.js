@@ -265,6 +265,8 @@ async function create(blog, folder) {
     try {
       result = await importRepo({ store, cache, lock: context.refLock(blogID), gitDir, scratchDir: base, pack: { "pack.window": "0" }, gate: limiter.gate("background") });
     } catch (err) {
+      // Refused as not empty, or another writer's first manifest landed:
+      // what is in the store is someone else's, and is left alone
       if (err && (err.code === "ENOTEMPTY" || err.code === "EMOVED")) imported = false;
       throw err;
     }

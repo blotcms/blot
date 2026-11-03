@@ -191,8 +191,9 @@ async function writeBlob(blogID, reader, parts, oid, stats) {
 }
 
 // Whether one path is the other, or a directory above it, as storage/folder
-// names them (in NFC: a rename from a name's NFD form to its NFC form is the
-// same file)
+// names them (in NFC): a rename from a name's NFD form to its NFC form is the
+// same file, and moving it onto itself would remove it, so it is a removal
+// and a write
 function nested(a, b) {
   const shorter = a.length <= b.length ? a : b;
   const longer = shorter === a ? b : a;
