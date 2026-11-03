@@ -8,7 +8,8 @@ description: Investigate a "Dropbox sync issue" alert email from Blot's hourly D
 ## What the alert means
 
 `app/clients/dropbox/init.js` (`validateAllBlogs`) runs at minute 0 of every
-hour in the **green** container. For each Dropbox blog with a `last_sync`
+hour on whichever unit process wins the `dropbox-validation` exclusive lock
+(`scheduleExclusive`), so **blue or green, node-a or node-b**. For each Dropbox blog with a `last_sync`
 in the last hour it takes the folder lock, does a full resync of the folder
 from Dropbox (`resetToBlotWithLock`), and counts how many files it had to
 change. If the count is > 0 the blog goes in the email
@@ -48,11 +49,14 @@ access <handle>
 and stick to read-only commands** (see `investigate-production-container-restarts`
 for the SSH host/architecture background: host `blot`, helpers in the
 remote `~/.bashrc`, containers `blot-{blue,green}`).
-Sync/validation logs are in **green** only.
+Validation can run in either container, and the email's `logs green` hint
+can be wrong: grep both. A deploy recreates the containers and wipes their
+logs, so check which container still has the run (`Running hourly sync
+validation`).
 
 ## Method
 
-Run everything as `ssh blot "docker logs blot-green --timestamps 2>&1 | …"`.
+Run everything as `ssh blot "docker logs blot-<blue|green> --timestamps 2>&1 | …"`.
 (`logs green` is a bashrc function and lacks `--timestamps`; use `docker logs`
 directly so you can window by time.) Docker logs are lost when the container
 is recreated by a deploy, so investigate promptly and say so if the window is
@@ -303,3 +307,26 @@ Entry template:
   modified within the grace. An empty folder, or a failed lookup, is still counted.
   Tip: use `sync_` ids, not webhook lines, to tell which webhooks were for this
   blog. Webhook POSTs are shared across all Dropbox accounts.
+
+### 2026-11-03 10:00:00 UTC validation run — transient network error during a deploy
+
+- Alert: "error during walk: request to …/files/list_folder failed, reason:"
+  with an empty reason, for 1 blog. The run was on **blue**/node-a, which
+  had started at 09:59:40 in a deploy. Green was replaced at 10:01:01, which
+  wiped its logs, so look in blue.
+- Key events (UTC): blue's startup resync of the blog (`sync_9115066`) walked
+  it fine, 09:59:41–09:59:57. Validation (`sync_887b998`) took the lock at
+  10:00:05.56 but reached only file 1 of the walk by 10:00:21.7. The walk
+  failed by 10:00:25.09, and the error was logged at 10:00:38.05 after the
+  template rebuild. `[LOCK] slow heartbeat` showed tickDelay up to 2.3s and
+  Redis roundTrip up to 2.6s, so the freshly started process was heavily
+  loaded.
+- Cause: a network-level `FetchError` that wasn't retried, because
+  `retryRequest` only retries 5xx/429. The empty reason fits Node 24's
+  happy-eyeballs `AggregateError`, which has an empty message: every address
+  attempt timed out (250ms each), likely because the event loop was stalling
+  during startup. The `#2422` uid firewall rules were applied after the error,
+  so they're not the cause. Not reproduced, and it shouldn't recur.
+- Follow-up: retry network errors in `retryRequest`, and report `err.code`
+  (and the `AggregateError`'s inner codes) so the reason isn't blank.
+  Tip: `grep -A12 'Error validating'` shows the error's code fields.
