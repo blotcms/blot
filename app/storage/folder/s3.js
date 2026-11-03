@@ -145,12 +145,9 @@ async function fromS3(fn) {
   }
 }
 
-// Directory entries sort by plain code-unit order, as on the local backend,
-// so a cursor is just the last name of the previous page
-function byName(a, b) {
-  return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
-}
-
+// Directory entries sort by plain code-unit order, as on the local backend
+// (models/file keeps that order), so a cursor is just the last name of the
+// previous page
 function encodeCursor(name) {
   return Buffer.from(JSON.stringify({ after: name })).toString("base64url");
 }
@@ -200,7 +197,7 @@ async function keepParent(blogID, path) {
 
   var page = await File.list(blogID, parent, { limit: 1 });
 
-  if (page && !page.entries.length && !page.cursor) await writeMarker(blogID, parent);
+  if (page && !page.entries.length && page.next === null) await writeMarker(blogID, parent);
 }
 
 // Resolves to the record written
@@ -793,8 +790,19 @@ async function entriesOf(blogID, path, relDir) {
   return entries;
 }
 
-// The directory's hash is read whole and sorted, as the local backend reads
-// a directory whole, since HSCAN has no order to page by
+function toEntry(entry) {
+  var isDirectory = entry.type === "dir";
+
+  return {
+    name: entry.name,
+    isDirectory: isDirectory,
+    size: isDirectory ? 0 : entry.size,
+    modified: entry.modified,
+  };
+}
+
+// One page from the index, which keeps each directory's names in order, so
+// a page costs the same however large the directory is
 async function list(blogID, relDir, options) {
   options = options || {};
 
@@ -806,23 +814,13 @@ async function list(blogID, relDir, options) {
 
   var after = options.cursor ? decodeCursor(options.cursor) : null;
   var path = locate(blogID, relDir);
-  var entries = (await entriesOf(blogID, path, relDir)).filter(function (entry) {
-    return after === null || entry.name > after;
-  });
-  var page = entries.slice(0, limit);
+  var page = await File.list(blogID, path, { after: after, limit: limit });
+
+  if (!page) throw new NotFoundError("No such directory: " + relDir);
 
   return {
-    entries: page.map(function (entry) {
-      var isDirectory = entry.type === "dir";
-
-      return {
-        name: entry.name,
-        isDirectory: isDirectory,
-        size: isDirectory ? 0 : entry.size,
-        modified: entry.modified,
-      };
-    }),
-    cursor: entries.length > limit ? encodeCursor(page[page.length - 1].name) : null,
+    entries: page.entries.map(toEntry),
+    cursor: page.next === null ? null : encodeCursor(page.next),
   };
 }
 
@@ -835,34 +833,43 @@ async function listNames(blogID, relDir) {
 }
 
 async function listAll(blogID, relDir) {
-  var page = await list(blogID, relDir, { limit: Number.MAX_SAFE_INTEGER });
+  var path = locate(blogID, relDir);
 
-  return page.entries;
+  return (await entriesOf(blogID, path, relDir)).map(toEntry);
 }
 
-// Depth first and sorted by name, a directory at a time, as on the local
-// backend. A directory which vanishes mid-walk is skipped; the one asked for
-// must exist.
+// Depth first and sorted by name, as on the local backend, a page of a
+// directory at a time, so a large directory is not held whole (except one
+// without a names set, see models/file's README). A directory
+// which vanishes mid-walk is skipped; the one asked for must exist.
 async function* walk(blogID, relDir, options) {
   var path = locate(blogID, relDir);
   var directories = !!(options && options.directories);
 
   async function* visit(current, top) {
-    var entries = await File.listAll(blogID, current);
+    var pages = File.pages(blogID, current);
+    var page;
 
-    if (!entries) {
-      if (top) throw new NotFoundError("No such directory: " + relDir);
-      return;
-    }
+    while (true) {
+      try {
+        page = await pages.next();
+      } catch (err) {
+        if (err.code !== "ENOENT") throw err;
+        if (top) throw new NotFoundError("No such directory: " + relDir);
+        return;
+      }
 
-    for (var entry of entries) {
-      var full = current === "/" ? "/" + entry.name : current + "/" + entry.name;
+      if (page.done) return;
 
-      if (entry.type === "dir") {
-        if (directories) yield full;
-        yield* visit(full, false);
-      } else {
-        yield full;
+      for (var entry of page.value) {
+        var full = current === "/" ? "/" + entry.name : current + "/" + entry.name;
+
+        if (entry.type === "dir") {
+          if (directories) yield full;
+          yield* visit(full, false);
+        } else {
+          yield full;
+        }
       }
     }
   }
