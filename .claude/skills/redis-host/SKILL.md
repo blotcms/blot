@@ -464,7 +464,11 @@ Entry template:
   the handshakes were accounted for.
 - Fix / outcome: `disableClientInfo: true` for every client
   (`app/models/redis.js` `connectionOptions`).
-- Follow-up: the burst of new connections itself (most of the 16 per 30s at
-  13:04 UTC weren't node-redis) wasn't traced. If the alert returns, look at
-  `CLIENT LIST` for short-lived clients.
+- The burst: a verification script run as one `docker exec … node scripts/…`
+  process per blog, from about 12:37 to 13:10 UTC. Each process opened its own
+  Redis connection and exited after a few seconds. Run per-item loops inside
+  one Node process instead. The other new connections (16 per 30s at 13:04
+  UTC) sent no `HELLO` and caused no errors.
+- Follow-up: if the alert returns, look at `CLIENT LIST` for short-lived
+  clients, and ask whoever is running scripts in the units.
 
