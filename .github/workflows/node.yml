@@ -379,9 +379,12 @@ jobs:
           sparse-checkout: |
             /package.json
             /app/**/*.js
+            /config/versions.env
+            /.github/actions/versions/action.yml
           sparse-checkout-cone-mode: false
 
       - id: versions
+        if: env.COLLECT_COVERAGE == 'true'
         uses: ./.github/actions/versions
 
       - name: Setup Node.js

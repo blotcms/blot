@@ -62,6 +62,12 @@ jobs:
           sparse-checkout: |
             scripts/deploy
             proxy/deploy
+            config
+            .github/actions/versions
+
+      # Before the target commit is checked out, which may predate the file
+      - id: versions
+        uses: ./.github/actions/versions
 
       - name: Resolve and check out target commit
         id: resolve
@@ -126,9 +132,6 @@ jobs:
           ssh blot "echo 'SSH connection successful'"
 
       # No npm install: scripts/deploy only uses Node built-ins.
-      - id: versions
-        uses: ./.github/actions/versions
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
