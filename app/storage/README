@@ -537,7 +537,18 @@ entries (the cap is a soft one between scans). The same check evicts more
 when the disk has under `min_free_percent` free. Nothing is evicted while
 pinned in this process (`use`) or within a minute of its last use in any
 process, which is what keeps a path from `ensureLocal` alive while a tool
-opens it. `ensureLocal` caches any size; `read`, `createReadStream` and
+opens it. For a tool which runs longer, `withLocal(blogID, path, fn)` calls
+`fn(localPath)` with the entry pinned until `fn` settles (on disk it just
+passes the file's path). The pin is a heartbeat: while held, the entry's
+mtime is set again every third of the grace period, and eviction re-checks
+the mtime on disk just before deleting, so every process sees a held entry as
+recent with no pin files and nothing for a crash to leave behind; a holder
+which dies stops touching and the entry is evictable a minute later. Pinned
+entries are skipped by eviction and a fill is never refused, so the cache can
+run over `max_bytes` for as long as tools hold paths; the next scan after the
+release brings it back. The converters (docx, odt, img), the transformer's
+folder lookups and the Dropbox uploads use `withLocal`; callers that use the
+path at once keep `ensureLocal`. `ensureLocal` caches any size; `read`, `createReadStream` and
 `serve` go through the cache for files up to `max_file_bytes` and stream
 bigger ones from S3. Writes fill it too (write-through): once `write`,
 `writeFrom` or `commit` (which goes through `writeFrom`) has recorded a file
@@ -553,8 +564,7 @@ and copying every big write would churn the cache. A source changed since its
 upload (a mirrored file rewritten on disk) fails the check and is not cached,
 and an entry is keyed by its own write's version, so a newer write never
 finds it. `stats()` counts hits, misses, bytes, evictions, downloads and
-fills. Still to do: a pin for long-running tools which keep a path from
-`ensureLocal`.
+fills.
 
 What it keeps from today:
 

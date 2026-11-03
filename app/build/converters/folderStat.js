@@ -17,5 +17,15 @@ async function withLocal(blogID, path) {
   return { localPath, stat: await folderStat(blogID, path) };
 }
 
+// The same, for a tool which may run for a long time: calls fn(localPath) with
+// the file pinned in the cache until fn settles (storage/folder's withLocal),
+// and resolves to { stat, value } with fn's result as value
+async function withLocalHeld(blogID, path, fn) {
+  const value = await folder.withLocal(blogID, path, fn);
+
+  return { stat: await folderStat(blogID, path), value };
+}
+
 module.exports = folderStat;
+module.exports.withLocalHeld = withLocalHeld;
 module.exports.withLocal = withLocal;
