@@ -170,7 +170,10 @@ during a promotion; outside one, clients are talking to a replica: check
 `redis6-cli ROLE` on the host, and which host has
 `/etc/blot-redis/active`. `WRONGTYPE` or `ERR` in bulk is an app bug:
 find the error text and the calling code in the containers' logs and fix it
-in the app.
+in the app. An error the app swallows leaves no log line: compare
+`INFO commandstats`' `failed_calls` per command, and `total_connections_received`,
+30 seconds apart, to see which command fails and whether each new connection
+brings errors with it (see the 2026-11-03 entry).
 
 ### Rejected connections
 
@@ -445,3 +448,23 @@ Entry template:
 - Follow-up: `launch.sh --drill` hosts get termination protection from the
   launch template, so a teardown is refused until it is lifted. Presigned
   downloads are in `TODO`.
+
+### 2026-11-03 — "Redis errors: ERR" alert (at least 100 within 5 minutes)
+
+- Trigger / evidence: alert at 12:57 UTC. `errorstat_ERR` was rising about
+  0.5/s, with no `ERR` lines in the units' logs. Over 30s at 13:04 UTC,
+  `errorstat_ERR` rose by 4, `cmdstat_client` `failed_calls` by 4 and
+  `cmdstat_hello` (new node-redis RESP3 connections) by 2. Over Redis's
+  uptime, `cmdstat_client` `failed_calls` equalled `errorstat_ERR`.
+- Cause: node-redis sends `CLIENT SETINFO LIB-VER` and `LIB-NAME` in every
+  connection's handshake and ignores the reply. Redis 6.2 has no `SETINFO`
+  (it came in 7.2), so each new node-redis connection added two `ERR`. A burst
+  of new connections crossed the alert's threshold. It was not the
+  client-side cache's `CLIENT CACHING YES`: no failures were left over once
+  the handshakes were accounted for.
+- Fix / outcome: `disableClientInfo: true` for every client
+  (`app/models/redis.js` `connectionOptions`).
+- Follow-up: the burst of new connections itself (most of the 16 per 30s at
+  13:04 UTC weren't node-redis) wasn't traced. If the alert returns, look at
+  `CLIENT LIST` for short-lived clients.
+
