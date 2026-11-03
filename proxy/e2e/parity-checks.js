@@ -673,9 +673,9 @@ function diff(spec, ra, rb) {
       a = a.map((v) => v.replace(/boundary=0+\d+/, "boundary=BOUNDARY"));
       b = b.map((v) => v.replace(/boundary=0+\d+/, "boundary=BOUNDARY"));
     }
-    if (name.startsWith("blot-")) {
+    if (name.startsWith("blot-") || name === "alt-svc") {
       // nginx's own answers (416, 412) carry an add_header value twice, on
-      // either side: compare the set of values
+      // either side: compare the set of values (the proxy locations' headers)
       a = [...new Set(a)];
       b = [...new Set(b)];
     }
