@@ -17,7 +17,9 @@
 // here), so the folder may be on disk or in the bucket (#2258):
 //
 //   - an exact rename (the same blob removed at one path and added at
-//     another) is one move();
+//     another) is one move(), if neither path is inside the other and the
+//     file there is still the old blob (its git blob ID, read back);
+//     anything else is a removal and a write;
 //   - then the removals;
 //   - then the writes, each streamed from the store's packs (reader.stream,
 //     checked against the blob's ID as it goes, no temporary file). A blob
@@ -102,6 +104,41 @@ async function writeBlob(blogID, reader, parts, oid, stats) {
   }
 }
 
+// Whether one path is the other, or a directory above it
+function nested(a, b) {
+  const shorter = a.length <= b.length ? a : b;
+  const longer = shorter === a ? b : a;
+  return shorter.every((part, i) => longer[i] === part);
+}
+
+// Whether the file at `parts` holds exactly the blob `oid`: its git blob ID,
+// hashed as it is read, is that ID. Read through storage/folder (on S3, a
+// download, which still saves the upload a write would be).
+async function holds(blogID, parts, oid) {
+  const file = join(parts);
+
+  if ((await kind(blogID, file)) !== "file") return false;
+
+  const found = await statOf(blogID, file);
+  if (!found || found.isDirectory) return false;
+
+  const hash = crypto.createHash("sha1").update("blob " + found.size + "\0");
+  let size = 0;
+
+  try {
+    for await (const chunk of storage.createReadStream(blogID, file)) {
+      size += chunk.length;
+      if (size > found.size) return false;
+      hash.update(chunk);
+    }
+  } catch (err) {
+    if (err.code === "ENOENT" || err.code === "ELOOP" || err.code === "ENOTDIR" || err.name === "NotFoundError") return false;
+    throw err;
+  }
+
+  return size === found.size && hash.digest("hex") === oid;
+}
+
 // Moves the file at `from` to `to`, then removes the directories this leaves
 // empty, as a removal would
 async function moveFile(blogID, from, to) {
@@ -167,24 +204,32 @@ async function materialize({ blogID, reader, from = null, to, log = function () 
   for (const write of writes) {
     const candidates = write.added && gone.get(write.oid);
     if (!candidates || !candidates.length) continue;
-    const removal = candidates.shift();
+
+    // One path inside the other (a/b.txt to a, or a to a/b.txt): making room
+    // for the target would remove the source, so it is a removal and a write
+    const at = candidates.findIndex((removal) => !nested(removal.parts, write.parts));
+    if (at === -1) continue;
+
+    const removal = candidates.splice(at, 1)[0];
     removal.moved = true;
     write.moved = true;
-    moves.push({ from: removal.parts, to: write.parts });
+    moves.push({ removal, write });
   }
 
   // A file may become a directory of the same name, or the reverse: what goes
   // away is gone before anything comes in
-  for (const move of moves) {
-    // A move whose source is not there (a run before this one got that far)
-    // is a write after all
-    if ((await kind(blogID, join(move.from))) !== "file") {
-      const write = writes.find((w) => w.parts === move.to);
+  for (const { removal, write } of moves) {
+    // Only a source which is the old blob is moved. One which is not there (a
+    // run before this one got that far), or holds other bytes (a sync which
+    // failed part way and left the folder ahead of the applied commit), is a
+    // removal and a write from the store after all.
+    if (!(await holds(blogID, removal.parts, removal.oid))) {
+      removal.moved = false;
       write.moved = false;
       continue;
     }
 
-    await moveFile(blogID, move.from, move.to);
+    await moveFile(blogID, removal.parts, write.parts);
     stats.moved++;
   }
 
