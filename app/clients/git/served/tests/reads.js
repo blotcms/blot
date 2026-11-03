@@ -267,8 +267,8 @@ describe("git store served: reads on the normal route", function () {
     var store = this.stores[this.blog.id];
     var seq = (await manifest.read(store)).seq;
 
-    // Blot's write still lands on EBS (until Blot's writes go to the store),
-    // and nothing is mirrored from it
+    // Blot's write is made in the store itself (served/commit.js), once, and
+    // nothing is mirrored for it
     await new Promise(
       function (resolve, reject) {
         repo.commit(this.blog.id, { path: "/blot.txt", contents: "Blot" }, function (err) {
@@ -284,8 +284,10 @@ describe("git store served: reads on the normal route", function () {
 
     await shadow.idle(this.blog.id);
 
+    // The write's own swap (a compaction may follow it); no mirror's
     expect(this.shadowLines("write").length).toBe(0);
-    expect((await manifest.read(store)).seq).toBe(seq);
+    expect(this.shadowLines("push").filter((line) => line.indexOf("outcome=skipped") === -1).length).toBe(0);
+    expect((await manifest.read(store)).seq).toBeGreaterThan(seq);
   });
 
   it("drops shadow work queued before the switch", async function () {
