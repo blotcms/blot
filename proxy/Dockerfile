@@ -8,7 +8,8 @@
 # openresty/openresty:alpine image is (docker-openresty tag 1.31.8.1-0,
 # alpine/Dockerfile: same configure flags and bundled PCRE2; OpenSSL follows
 # openresty-packaging, 3.5.9, where that image lags at 3.5.8), with every
-# download checked against a pinned sha256. The `-fat` variant's extras are left out; see "Pinned dependencies" in proxy/README.md.
+# download checked against a pinned sha256. The `-fat` variant's extras are
+# left out; see "Pinned dependencies" in proxy/README.md.
 # Lua dependencies are fetched as version-pinned, checksummed .src.rock archives
 # from luarocks.org rather than installed with a luarocks, whose remote manifest
 # no longer loads.
