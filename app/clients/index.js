@@ -24,6 +24,17 @@ if (config.google_drive.service_accounts.length) {
   clients['google-drive'] = require("./google-drive");
 }
 
+// If we have the required GitHub App credentials
+if (
+  config.github.app_id &&
+  config.github.client_id &&
+  config.github.client_secret &&
+  config.github.private_key &&
+  config.github.webhook_secret
+) {
+  clients.github = require("./github");
+}
+
 // If we have the required creds to run the iCloud integration
 if (config.icloud.server_address) {
   clients['icloud'] = require("./icloud");
