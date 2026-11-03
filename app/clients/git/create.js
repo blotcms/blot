@@ -5,7 +5,6 @@ const clfdate = require("helper/clfdate");
 const sync = require("sync");
 
 const setStatus = promisify(database.setStatus.bind(database));
-const setApplied = promisify(database.setApplied.bind(database));
 const createToken = promisify(database.createToken.bind(database));
 
 function delay(ms) {
@@ -50,7 +49,8 @@ async function createRepository(blog, folder) {
   // both are recorded the store's copy is still the setup's to take back, so
   // a failure here leaves the store empty for a retry.
   try {
-    await setApplied(blog.id, made.commit);
+    // Looked up on the module each time, so a spec can make it fail
+    await new Promise((resolve, reject) => database.setApplied(blog.id, made.commit, (err) => (err ? reject(err) : resolve())));
     await setStatus(blog.owner, "createComplete");
   } catch (err) {
     await made.rollback();

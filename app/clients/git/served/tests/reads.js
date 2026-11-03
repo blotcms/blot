@@ -196,7 +196,8 @@ describe("git store: reads", function () {
 
     expect((await request(this, "GET", "/info/refs")).status).toBe(400);
     expect((await request(this, "GET", "/info/refs?service=git-other")).status).toBe(405);
-    expect((await request(this, "POST", "/git-other-pack")).status).toBe(405);
+    // Not a git route at all (routes.js)
+    expect((await request(this, "POST", "/git-other-pack")).status).toBe(404);
     expect((await request(this, "PUT", "/info/refs?service=git-upload-pack")).status).toBe(405);
   });
 });

@@ -123,6 +123,6 @@ describe("git store: removing a blog's repository", function () {
     }
 
     expect(await packsLeft(store)).toEqual([PACK]);
-    expect(this.storeLines("remove").filter((line) => /outcome=spared pass=2/.test(line)).length).toBe(1);
+    expect(this.storeLines("remove").filter((line) => / outcome=spared .*pass=2/.test(line)).length).toBe(1);
   });
 });
