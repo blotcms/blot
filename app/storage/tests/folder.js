@@ -1118,15 +1118,15 @@ describe("storage/folder", function () {
 
     async function keys(blogID) {
       var found = [];
-      for await (var entry of s3.listEntries(blogID + "/")) found.push(entry.key);
+      for await (var entry of s3.listEntries(backend.root(blogID))) found.push(entry.key);
       return found.sort();
     }
 
     describe("objects and the index", function () {
-      it("keeps a file at {blogID}/folder/{path} and records it", async function () {
+      it("keeps a file at folder/{blogID}/{path} and records it", async function () {
         await folder.write(this.blog.id, "/a/b.txt", "hello");
 
-        expect(await keys(this.blog.id)).toEqual([this.blog.id + "/folder/a/b.txt"]);
+        expect(await keys(this.blog.id)).toEqual(["folder/" + this.blog.id + "/a/b.txt"]);
 
         var record = await File.get(this.blog.id, "/a/b.txt");
 
@@ -1134,6 +1134,16 @@ describe("storage/folder", function () {
         expect(record.size).toEqual(5);
         expect(record.sha1).toEqual(sha1("hello"));
         expect(await File.totals(this.blog.id)).toEqual({ bytes: 5, files: 1 });
+      });
+
+      it("writes nothing under the public {blogID}/ prefix", async function () {
+        await folder.write(this.blog.id, "/a/b.txt", "hello");
+        await folder.mkdir(this.blog.id, "/c");
+
+        var found = [];
+        for await (var entry of s3.listEntries(this.blog.id + "/")) found.push(entry.key);
+
+        expect(found).toEqual([]);
       });
 
       it("hashes a stream and a copied file as they upload", async function () {
@@ -1150,7 +1160,7 @@ describe("storage/folder", function () {
       it("makes a marker object for an explicit directory, and removes it with the directory", async function () {
         await folder.mkdir(this.blog.id, "/d/e");
 
-        expect(await keys(this.blog.id)).toEqual([this.blog.id + "/folder/d/e/"]);
+        expect(await keys(this.blog.id)).toEqual(["folder/" + this.blog.id + "/d/e/"]);
 
         await folder.write(this.blog.id, "/d/e/f.txt", "x");
         await folder.rmdir(this.blog.id, "/d");
@@ -1163,11 +1173,11 @@ describe("storage/folder", function () {
       it("leaves a marker when a remove empties a directory", async function () {
         await folder.write(this.blog.id, "/d/f.txt", "x");
 
-        expect(await keys(this.blog.id)).toEqual([this.blog.id + "/folder/d/f.txt"]);
+        expect(await keys(this.blog.id)).toEqual(["folder/" + this.blog.id + "/d/f.txt"]);
 
         await folder.remove(this.blog.id, "/d/f.txt");
 
-        expect(await keys(this.blog.id)).toEqual([this.blog.id + "/folder/d/"]);
+        expect(await keys(this.blog.id)).toEqual(["folder/" + this.blog.id + "/d/"]);
       });
 
       it("keeps the source's modified time when a local file is moved in", async function () {
@@ -1190,7 +1200,7 @@ describe("storage/folder", function () {
         await folder.move(this.blog.id, "/d", "/e");
 
         expect(await File.get(this.blog.id, "/e/a/1.txt")).toEqual(before);
-        expect(await keys(this.blog.id)).toEqual([this.blog.id + "/folder/e/a/1.txt"]);
+        expect(await keys(this.blog.id)).toEqual(["folder/" + this.blog.id + "/e/a/1.txt"]);
         expect(await File.totals(this.blog.id)).toEqual({ bytes: 3, files: 1 });
       });
 
@@ -1202,16 +1212,16 @@ describe("storage/folder", function () {
         await folder.move(this.blog.id, "/theme.txt", "/theme.css");
         await folder.move(this.blog.id, "/d", "/e");
 
-        expect((await s3.head(this.blog.id + "/folder/theme.css")).contentType).toMatch(/^text\/css/);
-        expect((await s3.head(this.blog.id + "/folder/e/style.txt")).contentType).toMatch(/^text\/plain/);
-        expect(await s3.head(this.blog.id + "/folder/e/empty/")).not.toBeNull();
+        expect((await s3.head("folder/" + this.blog.id + "/theme.css")).contentType).toMatch(/^text\/css/);
+        expect((await s3.head("folder/" + this.blog.id + "/e/style.txt")).contentType).toMatch(/^text\/plain/);
+        expect(await s3.head("folder/" + this.blog.id + "/e/empty/")).not.toBeNull();
       });
 
       it("uploads nothing below a file", async function () {
         await folder.write(this.blog.id, "/f", "file");
 
         expect((await rejection(folder.write(this.blog.id, "/f/g.txt", "x"))).code).toEqual("ENOTDIR");
-        expect(await keys(this.blog.id)).toEqual([this.blog.id + "/folder/f"]);
+        expect(await keys(this.blog.id)).toEqual(["folder/" + this.blog.id + "/f"]);
       });
 
       it("leaves the index alone when the upload fails", async function () {
@@ -1237,7 +1247,7 @@ describe("storage/folder", function () {
 
       it("reads metadata from the index, not from S3", async function () {
         await folder.write(this.blog.id, "/a.txt", "x");
-        await s3.deleteKeys([this.blog.id + "/folder/a.txt"]);
+        await s3.deleteKeys(["folder/" + this.blog.id + "/a.txt"]);
 
         expect(await folder.exists(this.blog.id, "/a.txt")).toBe(true);
         expect(names(await folder.list(this.blog.id, "/"))).toEqual(["a.txt"]);
@@ -1249,7 +1259,8 @@ describe("storage/folder", function () {
 
         await folder.removeAll(this.blog.id);
 
-        expect(await keys(this.blog.id)).toEqual([this.blog.id + "/_assets/x.css"]);
+        expect(await keys(this.blog.id)).toEqual([]);
+        expect(await s3.head(this.blog.id + "/_assets/x.css")).not.toBeNull();
         expect(await File.totals(this.blog.id)).toEqual({ bytes: 0, files: 0 });
       });
     });
@@ -1272,7 +1283,7 @@ describe("storage/folder", function () {
 
         return function () {
           return get.calls.allArgs().filter(function (args) {
-            return args[0] === blogID + "/folder" + path;
+            return args[0] === "folder/" + blogID + path;
           }).length;
         };
       }
@@ -1342,7 +1353,7 @@ describe("storage/folder", function () {
         await folder.write(this.blog.id, "/a.txt", "old");
 
         // As if a write had reached S3 but not yet the index
-        await s3.putBuffer(this.blog.id + "/folder/a.txt", Buffer.from("new"));
+        await s3.putBuffer("folder/" + this.blog.id + "/a.txt", Buffer.from("new"));
 
         expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("new");
         expect((await rejection(folder.ensureLocal(this.blog.id, "/a.txt"))).code).toEqual("ECHANGED");

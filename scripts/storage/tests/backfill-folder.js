@@ -46,7 +46,7 @@ describe("scripts/storage/backfill-folder", function () {
 
   async function keys(blogID) {
     var found = [];
-    for await (var entry of s3.listEntries(blogID + "/folder/")) found.push(entry.key.slice((blogID + "/folder").length));
+    for await (var entry of s3.listEntries(backend.root(blogID))) found.push(entry.key.slice(backend.root(blogID).length - 1));
     return found.sort();
   }
 
@@ -60,7 +60,7 @@ describe("scripts/storage/backfill-folder", function () {
     await local.write(blogID, "/posts/2024/b.md", "# B");
     await local.mkdir(blogID, "/empty");
     await backend.write(blogID, "/stale.txt", "gone from disk");
-    await s3.putBuffer(blogID + "/folder/orphan/x.txt", "no record");
+    await s3.putBuffer(backend.root(blogID) + "orphan/x.txt", "no record");
   });
 
   it("reports in a dry run and changes nothing", async function () {
@@ -194,7 +194,7 @@ describe("scripts/storage/backfill-folder", function () {
 
       // Only the folder's copy fails to go, so the rest of the deletion runs
       spyOn(s3, "removePrefix").and.callFake(function (prefix) {
-        if (prefix === blogID + "/folder/") return Promise.reject(new Error("S3 is down"));
+        if (prefix === backend.root(blogID)) return Promise.reject(new Error("S3 is down"));
         return removePrefix.apply(s3, arguments);
       });
       spyOn(console, "error");
