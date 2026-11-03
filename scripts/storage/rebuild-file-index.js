@@ -1,5 +1,5 @@
 // Rebuilds a blog's folder index (models/file) from a full listing of its
-// folder in the storage bucket, folder/{blogID}/. Only for blogs whose folder
+// folder in the storage bucket, {blogID}/folder/. Only for blogs whose folder
 // is in S3, which none is yet (#2258 Phase C): for any other blog the listing
 // is empty and the index would be emptied.
 //
