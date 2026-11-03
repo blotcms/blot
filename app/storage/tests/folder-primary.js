@@ -685,6 +685,60 @@ describe("storage/folder primary", function () {
       expect(count("reverse:read:mismatched")).toEqual(0);
     });
 
+    it("count a failed read of a large file as an S3 error, not a match by size", async function () {
+      config.folder_shadow.max_compare_bytes = 3;
+
+      await onS3(this.blog.id);
+      await folder.write(this.blog.id, "/big.txt", "hello there");
+      spyOn(console, "error");
+
+      spyOn(backend, "read").and.callFake(function () {
+        var err = new Error("S3 timed out");
+        err.code = "TimeoutError";
+        return Promise.reject(err);
+      });
+
+      try {
+        await folder.read(this.blog.id, "/big.txt");
+        fail("expected the caller to see S3's error");
+      } catch (err) {
+        expect(err.code).toEqual("TimeoutError");
+      }
+
+      await shadow.idle();
+
+      expect(count("reverse:read:s3error")).toEqual(1);
+      expect(count("reverse:read:s3error:TimeoutError")).toEqual(1);
+      expect(count("reverse:read:matched")).toEqual(0);
+    });
+
+    it("never count a large file S3 failed to find as a match", async function () {
+      config.folder_shadow.max_compare_bytes = 3;
+
+      await onS3(this.blog.id);
+      await folder.write(this.blog.id, "/big.txt", "hello there");
+      spyOn(console, "error");
+
+      spyOn(backend, "read").and.callFake(function () {
+        return Promise.reject(new folder.NotFoundError());
+      });
+
+      try {
+        await folder.read(this.blog.id, "/big.txt");
+        fail("expected NotFoundError");
+      } catch (err) {
+        expect(err instanceof folder.NotFoundError).toBe(true);
+      }
+
+      await shadow.idle();
+
+      // The caller's read is a mismatch; only the recheck, which compares
+      // sizes, finds the file, so it is transient at most
+      expect(count("reverse:read:matched")).toEqual(0);
+      expect(count("reverse:read:mismatched") + count("reverse:read:transient")).toEqual(1);
+      expect(count("reverse:read:transient:missing-in-s3") + count("reverse:read:mismatch:missing-in-s3")).toEqual(1);
+    });
+
     it("count a mismatch on a disk copy known to be behind as behind, not as a mismatch", async function () {
       await onS3(this.blog.id);
       await backend.write(this.blog.id, "/a.txt", "z");

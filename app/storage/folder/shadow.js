@@ -342,6 +342,32 @@ async function localSize(blogID, path) {
   });
 }
 
+// Whether the disk has a file, without reading it, for comparing with a read
+// which failed on S3
+async function diskPresence(blogID, path) {
+  return attempt(async function () {
+    var stat = await local.stat(blogID, path);
+    if (stat.isDirectory) throw new NotFoundError();
+    return { size: stat.size };
+  });
+}
+
+// For a blog on S3, given the caller's own outcome from S3 (first): that is
+// looked at before anything else, so a read the caller saw fail (a timeout, a
+// missing object) is never settled by the index's size. A failed read is
+// compared with whether the disk copy has the file, a file too big to compare
+// by bytes by its size, and anything else by the disk copy's bytes.
+async function againstDiskCopy(blogID, path, first, digestFn, readLocal) {
+  var s3Side = await digest(first, digestFn);
+
+  s3Side.cache = first.cache;
+
+  if (!s3Side.ok) return { local: await diskPresence(blogID, path), s3: s3Side };
+  if (s3Side.value.large) return { local: await localSize(blogID, path), s3: s3Side };
+
+  return { local: await digest(await timed(readLocal), digestFn), s3: s3Side };
+}
+
 // A file's bytes (or a range of them) read again from both sides, for the
 // calls whose result the caller consumes as it goes: a stream and serve
 async function rereadFile(blogID, path, range) {
@@ -402,27 +428,33 @@ var RUN = {
     var blogID = args[0];
     var path = args[1];
     var trace = {};
+
+    usedCache = true;
+
+    if (reverse && first) {
+      return againstDiskCopy(blogID, path, first, digestBuffer, function () {
+        return local.read(blogID, path);
+      });
+    }
+
     var localSide = await digest(
-      (!reverse && first) ||
+      first ||
         (await timed(function () {
           return local.read(blogID, path);
         })),
       digestBuffer
     );
 
-    usedCache = true;
-
     if (localSide.ok && localSide.value.large) return { local: localSide, s3: await s3Size(blogID, path) };
 
     var s3Side = await digest(
-      (reverse && first) ||
-        (await timed(function () {
-          return s3().read(blogID, path, trace);
-        })),
+      await timed(function () {
+        return s3().read(blogID, path, trace);
+      }),
       digestBuffer
     );
 
-    s3Side.cache = reverse && first ? first.cache : trace.cache;
+    s3Side.cache = trace.cache;
 
     if (s3Side.ok && s3Side.value.large) return { local: await localSize(blogID, path), s3: s3Side };
 
@@ -433,8 +465,16 @@ var RUN = {
     var blogID = args[0];
     var path = args[1];
     var trace = {};
+
+    if (reverse && first) {
+      usedCache = true;
+      return againstDiskCopy(blogID, path, first, digestFile, function () {
+        return local.ensureLocal(blogID, path);
+      });
+    }
+
     var localSide = await digest(
-      (!reverse && first) ||
+      first ||
         (await timed(function () {
           return local.ensureLocal(blogID, path);
         })),
@@ -446,14 +486,13 @@ var RUN = {
     usedCache = true;
 
     var s3Side = await digest(
-      (reverse && first) ||
-        (await timed(function () {
-          return s3().ensureLocal(blogID, path, trace);
-        })),
+      await timed(function () {
+        return s3().ensureLocal(blogID, path, trace);
+      }),
       digestFile
     );
 
-    s3Side.cache = reverse && first ? first.cache : trace.cache;
+    s3Side.cache = trace.cache;
 
     if (s3Side.ok && s3Side.value.large) return { local: await localSize(blogID, path), s3: s3Side };
 
