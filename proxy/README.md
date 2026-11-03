@@ -78,7 +78,10 @@ list baked into the image as a fallback); CI sets `FETCH_CDN_IPS=false` so image
 builds do not depend on that API.
 
 HTTP/3 (QUIC) is served on UDP 443 alongside HTTP/2 and HTTP/1.1 on TCP 443,
-and every public server block advertises it (`Alt-Svc: h3=":443"`). Map
+and every response advertises it (`Alt-Svc: h3=":443"`, the `$alt_svc` map in
+`config/http.conf`) except on `cdn.`, which only Bunny reaches. The proxy
+locations repeat the header: a location with its own `add_header` inherits
+none from the server block. Map
 `-p 8443:443/udp` too to try it locally. It was off on OpenResty 1.31.1.1
 while that release was in range for two QUIC advisories; see
 [`SECURITY.md`](SECURITY.md).

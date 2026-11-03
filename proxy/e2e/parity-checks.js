@@ -711,15 +711,21 @@ function diff(spec, ra, rb) {
 // On master this is empty: the working tree is compared with itself as it was
 // in origin/master, and must show 0 differences. A proxy PR that changes what
 // a client sees lists each change here, so the review is of the list.
+const H3 = 'h3=":443"; ma=86400';
 const INTENDED = [{
-  id: "enable-http3",
+  id: "alt-svc-on-proxied-responses",
   class: "intended",
-  reason: "Advertise HTTP/3 again now OpenResty 1.31.8.1 has the QUIC security fixes.",
-  match: (c, d) => d.kind === "header" && d.name === "alt-svc" &&
-    header(c.ra, "alt-svc").length > 0 &&
-    header(c.ra, "alt-svc").length === header(c.rb, "alt-svc").length &&
-    header(c.ra, "alt-svc").every((v) => v === "clear") &&
-    header(c.rb, "alt-svc").every((v) => v === 'h3=":443"; ma=86400'),
+  reason: "The proxy locations now repeat the server's Alt-Svc, which their own add_header had stopped them inheriting, so proxied pages advertise HTTP/3 too.",
+  match: (c, d) => d.kind === "header" && d.name === "alt-svc" && !/^cdn\./.test(c.spec.host) &&
+    header(c.ra, "alt-svc").length === 0 &&
+    header(c.rb, "alt-svc").length === 1 && header(c.rb, "alt-svc")[0] === H3,
+}, {
+  id: "no-alt-svc-on-cdn",
+  class: "intended",
+  reason: "cdn. is reached only through Bunny, so it no longer advertises HTTP/3 on our address.",
+  match: (c, d) => d.kind === "header" && d.name === "alt-svc" && /^cdn\./.test(c.spec.host) &&
+    header(c.ra, "alt-svc").length > 0 && header(c.ra, "alt-svc").every((v) => v === H3) &&
+    header(c.rb, "alt-svc").length === 0,
 }];
 
 // ---- the run ------------------------------------------------------------
