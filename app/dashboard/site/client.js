@@ -258,6 +258,8 @@ if (config.environment === "development") {
     try {
       const openUrl = new URL(`${DEFAULT_OPEN_FOLDER_ORIGIN}/open-folder`);
       openUrl.searchParams.set("blogID", req.blog.id);
+      // The Local client's source directory is named for the handle
+      openUrl.searchParams.set("handle", req.blog.handle);
 
       // Include client type if available
       if (req.query.local) { 

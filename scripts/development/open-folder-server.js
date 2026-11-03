@@ -2,9 +2,11 @@ const http = require("http");
 const { spawn } = require("child_process");
 const path = require("path");
 const os = require("os");
+const fs = require("fs");
 
 const PORT = Number(process.env.LOCAL_OPEN_FOLDER_PORT) || 3020;
 const BLOGS_DIR = path.resolve(__dirname, "../../data/blogs");
+const SOURCES_DIR = path.resolve(__dirname, "../../data/local-sources");
 
 // Map client types to their folder paths in development
 const CLIENT_FOLDERS = {
@@ -36,8 +38,13 @@ http
       // For cloud clients, open the base folder (not blog-specific)
       folderPath = CLIENT_FOLDERS[client];
     } else {
-      // For local client (or no client specified), open the blog-specific folder
-      folderPath = path.join(BLOGS_DIR, blogID);
+      // For the local client (or no client specified), open its source
+      // directory (app/clients/local/source.js), named for the handle
+      const handle = (url.searchParams.get("handle") || "").trim();
+      const source = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(handle) && !handle.includes("..")
+        ? path.join(SOURCES_DIR, handle)
+        : null;
+      folderPath = source && fs.existsSync(source) ? source : path.join(BLOGS_DIR, blogID);
     }
 
     spawn("open", ['-R',folderPath], {

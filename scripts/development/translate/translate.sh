@@ -205,7 +205,7 @@ if [ -z "$BLOG_ID" ]; then
 fi
 
 # The container reports its own path; the operator needs the host equivalent.
-FOLDER="$ROOT/data/blogs/$BLOG_ID"
+FOLDER="$ROOT/data/local-sources/$HANDLE"
 
 echo "[translate] Site:     $SITE_URL"
 echo "[translate] Template: $TEMPLATE_SLUG"
