@@ -59,7 +59,8 @@ var { NotFoundError } = require("./errors");
 //   {op}:local:le:{ms}      latency histograms: how many calls took at most
 //   {op}:s3:le:{ms}         ms, for each bound in BUCKETS ("inf" last)
 //   cache:{counter}         the content cache's hits, misses, evictions,
-//                           fetchedBytes and changed since the last flush
+//                           fetchedBytes, changed and filled (entries its
+//                           write-through added) since the last flush
 //
 // No path goes to Redis: scripts/storage/shadow-report.js turns these into
 // a summary. A mismatch or S3 error is logged on the host with its path, once
@@ -82,7 +83,7 @@ var HASH_CHUNK = 256 * 1024;
 var LOG_LIMIT = 30;
 var LOGGED_MAX = 10000;
 
-var CACHE_COUNTERS = ["hits", "misses", "evictions", "fetchedBytes", "changed"];
+var CACHE_COUNTERS = ["hits", "misses", "evictions", "fetchedBytes", "changed", "filled"];
 
 var OPS = [
   "read",

@@ -96,6 +96,26 @@ describe("storage/folder mirror", function () {
       expect((await backend.read(this.blog.id, "/big.bin")).equals(body)).toBe(true);
     });
 
+    // So the shadow reads see the hit rate a blog on S3 would
+    it("fills the S3 backend's content cache, so a read of S3 after a write costs no GET", async function () {
+      var contentCache = require("storage/folder/cache");
+      var before = contentCache().stats();
+      var source = join(tmp, "moved.txt");
+      var get = spyOn(s3, "get").and.callThrough();
+
+      await fs.writeFile(source, "moved");
+
+      await folder.write(this.blog.id, "/a.txt", "written");
+      await folder.write(this.blog.id, "/s.txt", Readable.from(["streamed"]));
+      await folder.writeFrom(this.blog.id, "/m.txt", source, { move: true });
+
+      expect((await backend.read(this.blog.id, "/a.txt")).toString()).toEqual("written");
+      expect((await backend.read(this.blog.id, "/s.txt")).toString()).toEqual("streamed");
+      expect((await backend.read(this.blog.id, "/m.txt")).toString()).toEqual("moved");
+      expect(get).not.toHaveBeenCalled();
+      expect(contentCache().stats().filled - before.filled).toEqual(3);
+    });
+
     it("mirrors a copy in, keeping the source", async function () {
       var source = join(tmp, "copy.txt");
 

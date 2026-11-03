@@ -535,9 +535,22 @@ pinned in this process (`use`) or within a minute of its last use in any
 process, which is what keeps a path from `ensureLocal` alive while a tool
 opens it. `ensureLocal` caches any size; `read`, `createReadStream` and
 `serve` go through the cache for files up to `max_file_bytes` and stream
-bigger ones from S3. `stats()` counts hits, misses, bytes, evictions and
-downloads. Still to do: a pin for long-running tools which keep a path from
-`ensureLocal`, and filling the cache on write.
+bigger ones from S3. Writes fill it too (write-through): once `write`,
+`writeFrom` or `commit` (which goes through `writeFrom`) has recorded a file
+in the index, the bytes it still holds locally (the Buffer, the stream's
+spool file, the source file, before a move deletes it) go in with `put()`
+under the version just recorded, through the same tmp file, check and
+rename as a download. So the read which usually follows a write, a client
+syncing a file and the build reading it, is a hit with no GET, and since the
+mirror goes through `writeFrom` the shadow reads see the hit rate a blog on
+S3 would. It is best effort: a cache error never fails the write, and files
+over `max_file_bytes` are skipped, since only `ensureLocal` would find them
+and copying every big write would churn the cache. A source changed since its
+upload (a mirrored file rewritten on disk) fails the check and is not cached,
+and an entry is keyed by its own write's version, so a newer write never
+finds it. `stats()` counts hits, misses, bytes, evictions, downloads and
+fills. Still to do: a pin for long-running tools which keep a path from
+`ensureLocal`.
 
 What it keeps from today:
 
@@ -683,8 +696,8 @@ backend instead of the disk, and the disk keeps a copy to roll back to.
   caller waits for and what counts, then copied to disk by the mirror's
   copier run the other way round (`mirror.copier`, S3 to disk), with the
   file's modified time from the index. A file is copied down through the
-  content cache, which also warms the cache for the build which usually
-  reads it next. A failure never fails the caller: it is logged as
+  content cache, which the write has just filled for a file up to
+  `max_file_bytes`, so that costs no GET. A failure never fails the caller: it is logged as
   `[storage/folder disk copy] failed blog=...` and the blog added to
   `storage:folder:primary:dirty`. A blog on S3 is never mirrored.
 - **Repair**: `backfill-folder.js` and the reconcile pick a direction per

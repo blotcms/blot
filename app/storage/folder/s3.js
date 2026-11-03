@@ -31,6 +31,11 @@ var { NotFoundError } = require("./errors");
 //   instance store: ensureLocal for any size, and read, createReadStream and
 //   serve for files up to config.folder_cache.max_file_bytes. Bigger files
 //   are streamed straight from the object.
+// - Writes fill the same cache (writeThrough below): once a write is in the
+//   index, the bytes it still holds locally go in under the version just
+//   recorded, so the read which usually follows (a client syncs a file, the
+//   build reads it) costs no GET. Best effort and only for files up to
+//   max_file_bytes; a write never fails because of it.
 // - Every write goes to S3 first and to the index after it succeeds, and
 //   every remove deletes from S3 first and from the index after, so a crash
 //   in between leaves the index behind S3, never ahead of it. The SHA-1 is
@@ -198,13 +203,18 @@ async function keepParent(blogID, path) {
   if (page && !page.entries.length && !page.cursor) await writeMarker(blogID, parent);
 }
 
+// Resolves to the record written
 async function record(blogID, path, uploaded, modified) {
-  await File.set(blogID, path, {
+  var written = {
     type: "file",
     size: uploaded.size,
     modified: modified,
     sha1: uploaded.sha1,
-  });
+  };
+
+  await File.set(blogID, path, written);
+
+  return written;
 }
 
 async function slurp(stream) {
@@ -268,6 +278,33 @@ async function throughCache(blogID, path, found, fn) {
   } catch (err) {
     if (!failedInside && (err.code === "ECHANGED" || CACHE_DISK_ERRORS.has(err.code))) return undefined;
     throw err;
+  }
+}
+
+var warnedWriteThrough = false;
+
+// Puts the bytes a write has just uploaded into the content cache, under the
+// version it has just recorded, from open() (a readable stream of the local
+// copy: the Buffer, the spool file or writeFrom's source). Called after the
+// index update and before the local copy goes. The cache checks the bytes
+// against the record, so a source changed since its upload is refused, and
+// the entry is keyed by this write's version: if another write has changed
+// the file since, readers look for the newer version and never see this one.
+//
+// Never fails the write: the cache is only ever a copy, so any error (a full
+// disk, ECHANGED) just leaves the next read to miss. Files over
+// max_file_bytes are skipped, as the read paths stream those from S3; only
+// ensureLocal would find them, and copying every big write would churn the
+// cache for files most likely never asked for that way.
+async function writeThrough(blogID, path, written, open) {
+  if (written.size > config.folder_cache.max_file_bytes) return;
+
+  try {
+    await contentCache().put(cached(blogID, path, written), open);
+  } catch (err) {
+    if (err.code === "ECHANGED" || warnedWriteThrough) return;
+    warnedWriteThrough = true;
+    console.error("storage/folder: could not fill the content cache after a write (logged once)", err);
   }
 }
 
@@ -427,34 +464,42 @@ async function write(blogID, relPath, data) {
 
   await checkWritable(blogID, path, "file");
 
-  var uploaded;
+  if (!(data instanceof Readable)) {
+    var body = Buffer.isBuffer(data) ? data : Buffer.from(data);
+    var written = await record(blogID, path, await s3.putBuffer(objectKey(blogID, path), body), Date.now());
 
-  if (data instanceof Readable) {
-    if (data.errored) throw data.errored;
-
-    // An upload of unknown length needs multipart, which is more requests
-    // and more to go wrong for the small files most writes are. Spooling to
-    // disk first gives a length, and a stream which fails part way never
-    // reaches S3, so the object already there is kept.
-    var spool = join(config.tmp_directory, SPOOL_DIRECTORY, uuid());
-
-    try {
-      await fs.ensureDir(dirname(spool));
-      await pipeline(data, fs.createWriteStream(spool));
-      uploaded = await s3.uploadFile(objectKey(blogID, path), spool);
-    } finally {
-      await fs.remove(spool).catch(noop);
-    }
-  } else {
-    uploaded = await s3.putBuffer(objectKey(blogID, path), Buffer.isBuffer(data) ? data : Buffer.from(data));
+    return writeThrough(blogID, path, written, async () => Readable.from([body]));
   }
 
-  await record(blogID, path, uploaded, Date.now());
+  if (data.errored) throw data.errored;
+
+  // An upload of unknown length needs multipart, which is more requests and
+  // more to go wrong for the small files most writes are. Spooling to disk
+  // first gives a length, and a stream which fails part way never reaches
+  // S3, so the object already there is kept. The spool is copied into the
+  // cache rather than renamed: it is at most max_file_bytes by then, and a
+  // copy keeps the cache's one checked way in.
+  var spool = join(config.tmp_directory, SPOOL_DIRECTORY, uuid());
+
+  try {
+    await fs.ensureDir(dirname(spool));
+    await pipeline(data, fs.createWriteStream(spool));
+
+    var uploaded = await s3.uploadFile(objectKey(blogID, path), spool);
+    var recorded = await record(blogID, path, uploaded, Date.now());
+
+    await writeThrough(blogID, path, recorded, async () => fs.createReadStream(spool));
+  } finally {
+    await fs.remove(spool).catch(noop);
+  }
 }
 
 // A copy is modified now, as fs.copyFile makes it on disk. A move keeps the
 // source's modified time, as a rename does. options.modified (ms) overrides
-// both, for the mirror of a file already on disk (./mirror.js).
+// both, for the mirror of a file already on disk (./mirror.js). The source
+// is copied into the content cache before a move deletes it, rather than
+// moved there: it is the caller's file, maybe on another disk, and copying
+// leaves what happens to it exactly as before, whatever the cache does.
 async function writeFrom(blogID, relPath, srcPath, options) {
   var move = !!(options && options.move);
   var given = options && options.modified;
@@ -472,13 +517,15 @@ async function writeFrom(blogID, relPath, srcPath, options) {
     throw err;
   }
 
-  await record(blogID, path, uploaded, modified);
+  var written = await record(blogID, path, uploaded, modified);
+
+  await writeThrough(blogID, path, written, async () => fs.createReadStream(srcPath));
 
   if (move) await fs.remove(srcPath);
 }
 
 // A staging place for a tool which writes to a path itself. commit uploads
-// whatever is there and deletes it.
+// whatever is there, through writeFrom so it fills the cache, and deletes it.
 async function path(blogID, relPath) {
   var p = locate(blogID, relPath);
 
