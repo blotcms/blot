@@ -95,19 +95,23 @@ class AllowlistClientSideCache extends redis.BasicClientSideCache {
   // The base class stores every entry through set() and reads it through
   // get(), so these keep each capped class's own LRU order beside it.
   set(cacheKey, cacheEntry, keys) {
-    super.set(cacheKey, cacheEntry, keys);
-
     const className = keys && keys.length ? classify(keys[0]) : null;
     const cap = className && this.classCaps[className];
-    if (!cap) return;
+    if (!cap) return super.set(cacheKey, cacheEntry, keys);
 
     let order = this.cappedOrder.get(className);
     if (!order) this.cappedOrder.set(className, (order = new Map()));
+
+    // Make room in this class first: if the whole cache is full, the base
+    // class would otherwise evict its oldest entry, maybe a blog record, to
+    // fit this one, and the class would then shrink back to its cap anyway.
+    if (!order.has(cacheKey) && order.size >= cap)
+      this.trimClass(className, order, cap - 1);
+
+    super.set(cacheKey, cacheEntry, keys);
     order.delete(cacheKey);
     order.set(cacheKey, true);
     this.cappedClassOf.set(cacheKey, className);
-
-    if (order.size > cap) this.trimClass(className, order, cap);
   }
 
   get(cacheKey) {

@@ -111,6 +111,24 @@ describe("models/redis-cache", function () {
       expect((c.classStats.session || {}).evictions || 0).toBe(0);
     });
 
+    it("makes room in its own class before the cache-wide limit evicts", function () {
+      const c = new Cache({
+        ttl: 0,
+        maxEntries: 3,
+        evictPolicy: "LRU",
+        classCaps: { session: 1 },
+      });
+      store(c, "blog:b1:info");
+      store(c, "blog:b2:info");
+      store(c, "sess:a");
+      store(c, "sess:b");
+
+      expect(c.has("GET blog:b1:info")).toBe(true);
+      expect(c.has("GET blog:b2:info")).toBe(true);
+      expect(c.has("GET sess:a")).toBe(false);
+      expect(c.has("GET sess:b")).toBe(true);
+    });
+
     it("leaves uncapped classes to the cache-wide limit", function () {
       const c = cache({ session: 1 });
       for (let i = 0; i < 50; i++) store(c, "blog:b" + i + ":info");
@@ -152,8 +170,8 @@ describe("models/redis-cache", function () {
         await client.get(id + ":entry:/a");
       }
       const { classStats } = createRedisClient.getClientSideCacheStats(client);
-      expect(classStats.info).toEqual({ hits: 1, misses: 1, bypass: 0 });
-      expect(classStats.entry).toEqual({ hits: 0, misses: 0, bypass: 2 });
+      expect(classStats.info).toEqual({ hits: 1, misses: 1, bypass: 0, evictions: 0 });
+      expect(classStats.entry).toEqual({ hits: 0, misses: 0, bypass: 2, evictions: 0 });
 
       // The server only tracks the key if CACHING YES reached it right
       // before the read, so a write must invalidate the cached value.
