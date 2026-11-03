@@ -324,7 +324,7 @@ module.exports = {
   // The git object store (app/clients/git/store) in shadow mode
   // (app/clients/git/shadow): the repositories on disk stay the source of
   // truth, and every push and every one of Blot's commits is also mirrored
-  // into the storage bucket, under git/{blogID}/, to compare on real traffic.
+  // into the storage bucket, under {blogID}/git/, to compare on real traffic.
   git_store: {
     // Off unless set: "all", or a comma-separated list of blog IDs
     shadow: process.env.BLOT_GIT_STORE_SHADOW || "",

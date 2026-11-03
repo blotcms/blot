@@ -60,7 +60,12 @@ fi
 
 # Anyone may download an object whose key starts with blog_ (a blog's
 # assets, {blogID}/_*/...; its folder content is under the private
-# folder/{blogID}/, which this does not match). Nothing else is public: no listing, no writes.
+# folder/{blogID}/, which this does not match), except a blog's git
+# repository, {blogID}/git/, and any .git directory in {blogID}/folder/:
+# those Deny statements apply to unsigned requests only, so the app and the
+# account are unaffected. The 32 ? match a blog ID exactly. Why: README.md.
+# Nothing else is public: no listing, no writes.
+BLOG_ID_PATTERN="blog_$(printf '?%.0s' {1..32})"
 BUCKET_POLICY=$(cat <<JSON
 {
   "Version": "2012-10-17",
@@ -71,6 +76,17 @@ BUCKET_POLICY=$(cat <<JSON
       "Principal": "*",
       "Action": "s3:GetObject",
       "Resource": "arn:aws:s3:::${BUCKET}/blog_*"
+    },
+    {
+      "Sid": "NoPublicGitRepositories",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": [
+        "arn:aws:s3:::${BUCKET}/${BLOG_ID_PATTERN}/git/*",
+        "arn:aws:s3:::${BUCKET}/${BLOG_ID_PATTERN}/folder/*.git/*"
+      ],
+      "Condition": { "Null": { "aws:PrincipalArn": "true" } }
     }
   ]
 }
@@ -144,15 +160,15 @@ run aws s3api put-public-access-block \
   --public-access-block-configuration \
   'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=false,RestrictPublicBuckets=false'
 
-step "Bucket policy: public s3:GetObject on blog_* only"
+step "Bucket policy: public s3:GetObject on blog_* only, not git repositories"
 run aws s3api put-bucket-policy --bucket "$BUCKET" --policy "$BUCKET_POLICY"
 
 # Puts the whole lifecycle configuration, so any rule added in the console is
-# replaced: add rules here. Why git/ is a top-level prefix: README.md.
-step "Lifecycle: abort incomplete multipart uploads under git/ after 3 days"
+# replaced: add rules here
+step "Lifecycle: abort incomplete multipart uploads after 3 days"
 run aws s3api put-bucket-lifecycle-configuration \
   --bucket "$BUCKET" \
-  --lifecycle-configuration '{"Rules":[{"ID":"git-abort-incomplete-multipart","Status":"Enabled","Filter":{"Prefix":"git/"},"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":3}}]}'
+  --lifecycle-configuration '{"Rules":[{"ID":"abort-incomplete-multipart","Status":"Enabled","Filter":{"Prefix":""},"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":3}}]}'
 
 step "IAM user $IAM_USER"
 
