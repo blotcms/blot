@@ -219,6 +219,14 @@ async function removeCopy(blogID) {
   }
 }
 
+// Rejects with code EEXIST if the blog already has a repository in the store
+async function assertEmpty(blogID) {
+  if (!manifest.isEmpty(await manifest.read(context.storeFor(blogID)))) {
+    log({ blog: blogID, op: "create", outcome: "error", detail: "EEXIST" });
+    throw Object.assign(new Error("The blog already has a repository in the git store"), { code: "EEXIST" });
+  }
+}
+
 // folder is the sync lock's ({ status, log })
 async function create(blog, folder) {
   const started = Date.now();
@@ -226,6 +234,9 @@ async function create(blog, folder) {
   const store = context.storeFor(blogID);
   const cache = context.cache();
   const base = scratchDirectory();
+
+  // A repository the blog already has is never set up over, or taken back
+  await assertEmpty(blogID);
 
   await fs.mkdirp(base);
   const dir = await fs.mkdtemp(path.join(base, "setup-"));
@@ -245,10 +256,18 @@ async function create(blog, folder) {
 
     folder.status("Saving your repository");
 
-    // From here on, whatever is in the store is this setup's: importRepo
-    // refuses a store which is not empty
+    // From here on, whatever is in the store is this setup's, unless
+    // importRepo refuses it as not empty (ENOTEMPTY) or moved by another
+    // writer (EMOVED): then it is someone else's, and is left alone
     imported = true;
-    const result = await importRepo({ store, cache, lock: context.refLock(blogID), gitDir, scratchDir: base, pack: { "pack.window": "0" }, gate: limiter.gate("background") });
+    let result;
+
+    try {
+      result = await importRepo({ store, cache, lock: context.refLock(blogID), gitDir, scratchDir: base, pack: { "pack.window": "0" }, gate: limiter.gate("background") });
+    } catch (err) {
+      if (err && (err.code === "ENOTEMPTY" || err.code === "EMOVED")) imported = false;
+      throw err;
+    }
 
     // The swap may or may not have landed: only a read that finds this
     // commit on master lets the setup go on
@@ -273,4 +292,5 @@ async function create(blog, folder) {
 }
 
 module.exports = create;
+module.exports.assertEmpty = assertEmpty;
 module.exports._quote = quote;

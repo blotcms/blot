@@ -1,64 +1,30 @@
-// New-folder setup for a blog served from the git store (served/create.js):
-// the folder, read through storage/folder alone, becomes the first commit in
-// the store and on EBS, and a user can clone it, push and have Blot sync.
-describe("git store served: new-folder setup", function () {
+// New-folder setup in the git store (served/create.js): the folder, read
+// through storage/folder alone, becomes the first commit in the store, and a
+// user can clone it, push and have Blot sync.
+describe("git store: new-folder setup", function () {
   require("clients/git/tests/setup")({ setClientToGit: false, clone: false });
 
   var fs = require("fs-extra");
   var util = require("util");
   var childProcess = require("child_process");
-  var config = require("config");
   var storage = require("storage/folder");
   var Client = require("clients/git/tests/setup/client");
-  var repo = require("clients/git/repo");
   var database = require("clients/git/database");
   var context = require("clients/git/served/context");
-  var fallback = require("clients/git/served/fallback");
-  var upkeep = require("clients/git/served/upkeep");
   var setClientToGit = util.promisify(require("clients/git/tests/setup/setClientToGit"));
-  var { createMemoryStore, manifest } = require("clients/git/store");
-
-  var saved;
-
-  beforeEach(function (done) {
-    var ctx = this;
-
-    saved = Object.assign({}, config.git_store);
-    config.git_store.serve = String(ctx.blog.id);
-    config.git_store.shadow = "";
-    config.git_store.cache_directory = ctx.tmp + "/git-store-cache";
-    config.git_store.cache_bytes = 256 * 1024 * 1024;
-
-    ctx.stores = {};
-    context._setObjectStore(function (blogID) {
-      return (ctx.stores[blogID] = ctx.stores[blogID] || createMemoryStore());
-    });
-
-    require("models/blog").set(ctx.blog.id, { client: "git" }, function (err) {
-      if (err) return done.fail(err);
-      done();
-    });
-  });
-
-  afterEach(async function () {
-    await fallback.idle(this.blog.id);
-    await upkeep.idle(this.blog.id);
-    Object.assign(config.git_store, saved);
-    context._setObjectStore(null);
-  });
-
-  function bareGit(ctx, args) {
-    return childProcess
-      .execFileSync("git", args, { env: Object.assign({}, process.env, { GIT_DIR: repo.directory(ctx.blog.handle) }) })
-      .toString();
-  }
+  var { manifest } = require("clients/git/store");
+  var { verifyImport } = require("clients/git/store/import");
 
   async function connect(ctx) {
     ctx.repoUrl = await setClientToGit(ctx.user, ctx.blog, ctx.server.port);
     return Client.forContext(ctx);
   }
 
-  it("makes the first commit in the store and on EBS from the folder, without the folder as a work tree", async function () {
+  function isEmpty(ctx) {
+    return manifest.read(ctx.stores[ctx.blog.id]).then(manifest.isEmpty);
+  }
+
+  it("makes the first commit in the store from the folder, without the folder as a work tree", async function () {
     await fs.outputFile(this.blogDirectory + "/first.txt", "Hello");
     await fs.outputFile(this.blogDirectory + "/Sub Folder/ünï côdé.txt", "World");
     await fs.outputFile(this.blogDirectory + "/.gitignore", "drafts/\n*.tmp\n");
@@ -74,7 +40,7 @@ describe("git store served: new-folder setup", function () {
     expect(await fs.pathExists(this.blogDirectory + "/.git")).toBe(false);
 
     var current = await manifest.read(this.stores[this.blog.id]);
-    var master = bareGit(this, ["rev-parse", "master"]).trim();
+    var master = await local.remoteHead();
 
     expect(current.refs["refs/heads/master"]).toBe(master);
     expect(await util.promisify(database.getApplied)(this.blog.id)).toBe(master);
@@ -85,7 +51,8 @@ describe("git store served: new-folder setup", function () {
     expect(await fs.pathExists(local.path("/drafts/secret.txt"))).toBe(false);
     expect(await fs.pathExists(local.path("/scratch.tmp"))).toBe(false);
 
-    bareGit(this, ["fsck", "--strict"]);
+    // index-pack --strict and fsck --strict on a clone of the store
+    await verifyImport({ store: this.stores[this.blog.id], cache: context.cache() });
 
     // The first push is synced from the store
     await local.writeAndPush("/pushed.txt", "Pushed");
@@ -95,9 +62,7 @@ describe("git store served: new-folder setup", function () {
   it("makes an initial commit for an empty folder", async function () {
     var local = await connect(this);
 
-    var current = await manifest.read(this.stores[this.blog.id]);
-    expect(current.refs["refs/heads/master"]).toBe(bareGit(this, ["rev-parse", "master"]).trim());
-    expect(bareGit(this, ["log", "--format=%s", "master"]).trim()).toBe("Initial commit");
+    expect((await local.git(["log", "--format=%s", "master"])).stdout.trim()).toBe("Initial commit");
 
     await local.writeAndPush("/pushed.txt", "Pushed");
     await local.expectSynced();
@@ -121,25 +86,23 @@ describe("git store served: new-folder setup", function () {
     );
 
     expect(first).not.toBe(null);
-    expect(manifest.isEmpty(await manifest.read(this.stores[this.blog.id]))).toBe(true);
-    expect(await fs.pathExists(repo.directory(this.blog.handle))).toBe(false);
+    expect(await isEmpty(this)).toBe(true);
 
     var local = await connect(this);
 
     expect((await local.read("/first.txt")).toString()).toBe("Hello");
-    expect((await manifest.read(this.stores[this.blog.id])).refs["refs/heads/master"]).toBe(bareGit(this, ["rev-parse", "master"]).trim());
+    expect((await manifest.read(this.stores[this.blog.id])).refs["refs/heads/master"]).toBe(await local.remoteHead());
   });
 
-  it("removes what it made on both sides when it fails", async function () {
+  it("leaves the store empty when it fails before the import", async function () {
     await fs.outputFile(this.blogDirectory + "/first.txt", "Hello");
 
-    // The EBS side fails, after the store has its copy
-    var fetch = childProcess.spawn;
+    var spawn = childProcess.spawn;
     spyOn(childProcess, "spawn").and.callFake(function (command, args, options) {
-      if (command === "git" && args.indexOf("fetch") !== -1 && args.indexOf("--no-tags") !== -1) {
-        return fetch("git", ["this-is-not-a-command"], options);
+      if (command === "git" && args.indexOf("fast-import") !== -1) {
+        return spawn("git", ["this-is-not-a-command"], options);
       }
-      return fetch.apply(childProcess, arguments);
+      return spawn.apply(childProcess, arguments);
     });
 
     var failed = await setClientToGit(this.user, this.blog, this.server.port).then(
@@ -148,7 +111,19 @@ describe("git store served: new-folder setup", function () {
     );
 
     expect(failed).not.toBe(null);
-    expect(await fs.pathExists(repo.directory(this.blog.handle))).toBe(false);
-    expect(manifest.isEmpty(await manifest.read(this.stores[this.blog.id]))).toBe(true);
+    expect(await isEmpty(this)).toBe(true);
+  });
+
+  it("never sets up over a repository the blog has, or takes it back", async function () {
+    var local = await connect(this);
+    var master = await local.remoteHead();
+
+    var again = await util.promisify(require("clients/git/create"))(this.blog).then(
+      () => null,
+      (err) => err
+    );
+
+    expect(again && again.code).toBe("EEXIST");
+    expect((await manifest.read(this.stores[this.blog.id])).refs["refs/heads/master"]).toBe(master);
   });
 });

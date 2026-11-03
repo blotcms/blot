@@ -6,8 +6,7 @@
 // A spec using this helper should only look at what a user can observe: the
 // output of git commands run in a clone, the files in the blog folder (not
 // its .git directory), Blot's models, and the client's public functions. It
-// should not open the bare repository, the blog folder's .git directory or
-// anything under data/git: those go away or move.
+// should not open the store's objects or the blog folder's .git directory.
 //
 //   require("./setup")({ clone: false, client: true });
 //

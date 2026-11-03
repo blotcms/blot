@@ -466,10 +466,10 @@ async function orphans({ now = Date.now(), minAge = ORPHAN_MIN_AGE_MS } = {}) {
 // behind: that takes a listing per blog in the bucket, and the disconnect
 // already deletes a blog's copy twice. Resolves with a report (`orphans` is
 // null when they were not looked for); the findings are what the alert email
-// is about.
-async function daily({ now = Date.now(), deepCount = DEEP_SAMPLE, recheckDelayMs = RECHECK_DELAY_MS, scratchDir = defaultScratchDir(), orphanMinAge = ORPHAN_MIN_AGE_MS, orphanSweep = new Date(now).getUTCDate() === 1 } = {}) {
+// is about. `ids` limits it to those blogs (for specs).
+async function daily({ now = Date.now(), ids: only = null, deepCount = DEEP_SAMPLE, recheckDelayMs = RECHECK_DELAY_MS, scratchDir = defaultScratchDir(), orphanMinAge = ORPHAN_MIN_AGE_MS, orphanSweep = new Date(now).getUTCDate() === 1 } = {}) {
   const started = Date.now();
-  const ids = await gitBlogs();
+  const ids = await gitBlogs({ ids: only });
   const findings = [];
   const sweeps = { ok: 0, errors: 0, packsDeleted: 0, manifestsDeleted: 0, bytesFreed: 0 };
   const passed = new Set();

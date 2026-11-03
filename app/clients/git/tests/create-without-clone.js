@@ -1,12 +1,11 @@
 // The first import of a blog folder into a new repository (create.js) is made
-// in the bare repository, with no live clone, and a user can clone it, push
-// and have Blot sync the push straight away (#2259 PR 8).
+// in the git store, with no live clone, and a user can clone it, push and have
+// Blot sync the push straight away.
 describe("git client create without a live clone", function () {
   require("./setup")({ setClientToGit: false, clone: false });
 
   var fs = require("fs-extra");
   var util = require("util");
-  var childProcess = require("child_process");
   var Client = require("./setup/client");
   var repo = require("clients/git/repo");
   var database = require("clients/git/database");
@@ -14,18 +13,23 @@ describe("git client create without a live clone", function () {
   var setClientToGit = util.promisify(require("./setup/setClientToGit"));
   var helpers = require("./setup/helpers");
 
-  function bareGit(handle, args) {
-    return childProcess
-      .execFileSync("git", args, {
-        env: Object.assign({}, process.env, { GIT_DIR: repo.directory(handle) }),
-      })
-      .toString();
+  var inStore = util.promisify(repo.exists);
+
+  // git in a clone, its output
+  async function inClone(local, args) {
+    return (await local.git(args)).stdout;
   }
 
   function sleep(ms) {
     return new Promise(function (resolve) {
       setTimeout(resolve, ms);
     });
+  }
+
+  // The clone URL of a blog whose repository is already set up
+  async function setClientToGitUrl(ctx) {
+    var token = await util.promisify(database.getToken)(ctx.blog.owner);
+    return "http://" + encodeURIComponent(ctx.user.email) + ":" + token + "@127.0.0.1:" + ctx.server.port + "/clients/git/end/" + ctx.blog.handle + ".git";
   }
 
   async function connect(ctx) {
@@ -67,14 +71,12 @@ describe("git client create without a live clone", function () {
 
   it("records the import as the commit Blot has applied", async function () {
     await fs.outputFile(this.blogDirectory + "/first.txt", "Hello");
-    await connect(this);
+    var local = await connect(this);
 
-    expect(await util.promisify(database.getApplied)(this.blog.id)).toBe(
-      bareGit(this.blog.handle, ["rev-parse", "master"]).trim()
-    );
+    expect(await util.promisify(database.getApplied)(this.blog.id)).toBe(await local.remoteHead());
   });
 
-  it("commits a big folder in batches of files", async function () {
+  it("commits a big folder in one commit", async function () {
     for (var i = 0; i < 60; i++) {
       await fs.outputFile(this.blogDirectory + "/file-" + i + ".txt", "File " + i);
     }
@@ -82,20 +84,15 @@ describe("git client create without a live clone", function () {
     var local = await connect(this);
 
     expect(Object.keys(await local.tree()).length).toBe(60);
-    expect(bareGit(this.blog.handle, ["rev-list", "--count", "master"]).trim()).toBe("3");
-    expect(bareGit(this.blog.handle, ["log", "--format=%s", "master"]).trim().split("\n")).toEqual([
-      "Add 10 files",
-      "Add 25 files",
-      "Add 25 files",
-    ]);
+    expect((await inClone(local, ["log", "--format=%s", "master"])).trim()).toBe("Add files");
   });
 
   it("makes an initial commit for an empty folder", async function () {
     var local = await connect(this);
 
     expect(Object.keys(await local.tree())).toEqual([]);
-    expect(bareGit(this.blog.handle, ["log", "--format=%s", "master"]).trim()).toBe("Initial commit");
-    expect(bareGit(this.blog.handle, ["symbolic-ref", "HEAD"]).trim()).toBe("refs/heads/master");
+    expect((await inClone(local, ["log", "--format=%s", "master"])).trim()).toBe("Initial commit");
+    expect((await inClone(local, ["ls-remote", "--symref", "origin", "HEAD"])).split("\n")[0]).toBe("ref: refs/heads/master\tHEAD");
   });
 
   it("skips files a .gitignore in the folder ignores", async function () {
@@ -109,29 +106,25 @@ describe("git client create without a live clone", function () {
     expect(await helpers.blogHas(this, "/notes.private")).toBe(true);
   });
 
-  it("waits for the ref lock a push holds before it moves master", async function () {
+  it("waits for the ref lock a push holds before it saves the repository", async function () {
     await fs.outputFile(this.blogDirectory + "/first.txt", "Hello");
+    await util.promisify(require("models/blog").set)(this.blog.id, { client: "git" });
 
-    var handle = this.blog.handle;
     var release = await repo.holdRefLock(this.blog.id);
     var creating = create(this.blog);
 
-    // Wait for the repository to be made, then give it time to commit
-    for (var i = 0; i < 100; i++) {
-      if (await fs.pathExists(repo.directory(handle) + "/HEAD")) break;
-      await sleep(100);
-    }
-
     await sleep(1500);
 
-    // No commit has been put on master
-    expect(await fs.pathExists(repo.directory(handle) + "/HEAD")).toBe(true);
-    expect(await fs.pathExists(repo.directory(handle) + "/refs/heads/master")).toBe(false);
+    // Nothing has been saved
+    expect(await inStore(this.blog.id)).toBe(false);
 
     await release();
     await creating;
 
-    expect(bareGit(handle, ["ls-tree", "--name-only", "master"]).trim()).toBe("first.txt");
+    expect(await inStore(this.blog.id)).toBe(true);
+
+    var local = await Client.forContext(this, { url: await setClientToGitUrl(this) });
+    expect(Object.keys(await local.tree())).toEqual(["first.txt"]);
   });
 
   it("removes what it made if it fails, and leaves a .git directory in the folder alone", async function () {
@@ -146,7 +139,7 @@ describe("git client create without a live clone", function () {
     }
 
     expect(error).toEqual(jasmine.any(Error));
-    expect(await fs.pathExists(repo.directory(this.blog.handle))).toBe(false);
+    expect(await inStore(this.blog.id)).toBe(false);
     expect(await fs.pathExists(this.blogDirectory + "/.git/HEAD")).toBe(true);
   });
 });

@@ -1,9 +1,10 @@
-// IMPLEMENTATION-SPECIFIC. materialize.js brings a blog folder from one commit
-// to another by reading the repository (#2259). The specs that go through a
+// IMPLEMENTATION-SPECIFIC. served/materialize.js brings a blog folder from one
+// commit to another by reading the git store. The specs that go through a
 // real git client and a sync are in sync-paths.js and sync-history.js; these
-// call it directly, with history made by plumbing so that it can hold what a
-// push is no longer allowed to: paths a real client would not send, and
-// shapes that some filesystems cannot show at once (names that differ by case).
+// call it directly, with history made by plumbing in a scratch repository and
+// imported into a store, so that it can hold what a push is no longer allowed
+// to: paths a real client would not send, and shapes that some filesystems
+// cannot show at once (names that differ by case).
 describe("git client: materialize", function () {
   // A real blog: materialize writes its folder through storage/folder, by
   // blog ID. this.folder is that folder on disk, for looking at the result.
@@ -14,7 +15,9 @@ describe("git client: materialize", function () {
   var crypto = require("crypto");
   var path = require("path");
   var { execFile } = require("child_process");
-  var materialize = require("clients/git/materialize");
+  var materialize = require("clients/git/served/materialize");
+  var importRepo = require("clients/git/store/import");
+  var { createCache, createMemoryStore, createFsStore, createReader, manifest } = require("clients/git/store");
 
   var EMPTY_TREE = materialize.EMPTY_TREE;
   var IDENTITY = {
@@ -132,46 +135,74 @@ describe("git client: materialize", function () {
     return commitTree(spec, await build(tree));
   }
 
-  // Brings the folder from one commit to another, resolving with the paths
-  function apply(spec, from, to) {
-    return new Promise(function (resolve, reject) {
-      var folder = {
-        blogID: spec.blog.id,
-        log: function (message) {
-          spec.logs.push(message);
-        },
-      };
+  // The repository's history in a store of its own: master at the last
+  // commit made, which every commit made is an ancestor of
+  async function load(spec, store) {
+    if (spec.head) await run(spec, ["update-ref", "refs/heads/master", spec.head]);
 
-      materialize(spec.directory, folder, from, to, function (err, paths) {
-        if (err) return reject(err);
-        resolve(paths);
-      });
+    store = store || createMemoryStore();
+
+    var cache = createCache({ dir: spec.tmp + "/cache-" + crypto.randomBytes(4).toString("hex"), maxBytes: 256 * 1024 * 1024 });
+
+    if (spec.head) await importRepo({ store: store, cache: cache, lock: (fn) => fn(), gitDir: spec.directory, scratchDir: spec.tmp + "/scratch" });
+
+    return { store: store, cache: cache };
+  }
+
+  // Brings the folder from one commit to another, resolving with the paths
+  async function apply(spec, from, to) {
+    var { store, cache } = await load(spec);
+    var current = await manifest.read(store);
+    var reader = createReader({ store: store, cache: cache, manifest: current, scratch: cache });
+
+    return materialize({
+      blogID: spec.blog.id,
+      reader: reader,
+      from: from,
+      to: to,
+      log: function (message) {
+        spec.logs.push(message);
+      },
     });
   }
 
   // What applying a commit adds to the resident memory of a node process which
   // does nothing else, at its peak. This process cannot measure it. Each chunk
-  // read from git is a Buffer outside the heap, and it stays resident, though
-  // written and dead, until a GC. Once a long run has grown the young generation
-  // only V8's 64 MiB limit on external memory prompts one, so here that much
-  // garbage piles up or not depending on the specs that ran first. A 1 MiB
-  // semi-space collects the chunks every few MiB, whatever the size of the file.
+  // read from the store is a Buffer outside the heap, and it stays resident,
+  // though written and dead, until a GC. Once a long run has grown the young
+  // generation only V8's 64 MiB limit on external memory prompts one, so here
+  // that much garbage piles up or not depending on the specs that ran first. A
+  // 1 MiB semi-space collects the chunks every few MiB, whatever the size of
+  // the file. The store is a directory, which the child opens.
   var MEASURE_MEMORY = `
-    var [materialize, directory, blogID, from, to] = process.argv.slice(1);
-    var before = process.memoryUsage().rss;
-    var peak = before;
-    var timer = setInterval(function () {
-      peak = Math.max(peak, process.memoryUsage().rss);
-    }, 5);
+    var [materialize, store, directory, cacheDirectory, blogID, from, to] = process.argv.slice(1);
+    var { createCache, createReader, createFsStore, manifest } = require(store);
+    var objects = createFsStore({ root: directory });
+    var cache = createCache({ dir: cacheDirectory, maxBytes: 256 * 1024 * 1024 });
 
-    require(materialize)(directory, { blogID: blogID, log: function () {} }, from, to, function (err) {
-      clearInterval(timer);
-      if (err) throw err;
-      console.log(peak - before);
+    manifest.read(objects).then(function (current) {
+      var reader = createReader({ store: objects, cache: cache, manifest: current, scratch: cache });
+      var before = process.memoryUsage().rss;
+      var peak = before;
+      var timer = setInterval(function () {
+        peak = Math.max(peak, process.memoryUsage().rss);
+      }, 5);
+
+      return require(materialize)({ blogID: blogID, reader: reader, from: from, to: to }).then(function () {
+        clearInterval(timer);
+        console.log(peak - before);
+      });
+    }).catch(function (err) {
+      console.error(err);
+      process.exit(1);
     });
   `;
 
-  function memoryGrowth(spec, from, to) {
+  async function memoryGrowth(spec, from, to) {
+    var directory = spec.tmp + "/fs-store";
+
+    await load(spec, createFsStore({ root: directory }));
+
     return new Promise(function (resolve, reject) {
       execFile(
         process.execPath,
@@ -179,8 +210,10 @@ describe("git client: materialize", function () {
           "--max-semi-space-size=1",
           "-e",
           MEASURE_MEMORY,
-          require.resolve("clients/git/materialize"),
-          spec.directory,
+          require.resolve("clients/git/served/materialize"),
+          path.dirname(require.resolve("clients/git/store")),
+          directory,
+          spec.tmp + "/child-cache",
           spec.blog.id,
           from,
           to,
@@ -587,22 +620,12 @@ describe("git client: materialize", function () {
     }
   }
 
-  it("fails if the repository does not have a blob", async function () {
-    var first = await commit(this, { "a.txt": "A", "b.txt": "B" });
-    var oid = await write(this, "B");
+  it("fails if the store does not have a commit", async function () {
+    await commit(this, { "a.txt": "A" });
 
-    await fs.remove(this.directory + "/objects/" + oid.slice(0, 2) + "/" + oid.slice(2));
+    var err = await failure(apply(this, EMPTY_TREE, "0123456789012345678901234567890123456789"));
 
-    var err = await failure(apply(this, EMPTY_TREE, first));
-
-    expect(err.message).toContain(oid);
-  });
-
-  it("fails if a commit does not exist", async function () {
-    var err = await failure(
-      apply(this, EMPTY_TREE, "0123456789012345678901234567890123456789")
-    );
-
-    expect(err.message).toContain("diff-tree failed");
+    expect(err).toEqual(jasmine.any(Error));
+    expect(err.code).toBe("NOT_FOUND");
   });
 });

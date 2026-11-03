@@ -20,6 +20,14 @@ module.exports = function create(blog, callback) {
   sync(blog.id, async function (err, folder, done) {
     if (err) return callback(err);
 
+    // Outside the try below, whose cleanup marks the setup failed: a
+    // repository the blog already has is not this setup's
+    try {
+      await require("./served/create").assertEmpty(blog.id);
+    } catch (err) {
+      return done(err, callback);
+    }
+
     try {
       await createRepository(blog, folder);
       done(null, callback);

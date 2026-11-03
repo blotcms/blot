@@ -29,7 +29,7 @@ describe("git client limiter", function () {
 
   describe("lanes", function () {
     it("runs at most each lane's cap at once, in the order asked", async function () {
-      var lanes = createLimiter({ interactive: 2, background: 3, gc: 1 });
+      var lanes = createLimiter({ interactive: 2, background: 3 });
       var running = { interactive: 0, background: 0 };
       var most = { interactive: 0, background: 0 };
       var order = [];
@@ -76,7 +76,7 @@ describe("git client limiter", function () {
     });
 
     it("never makes interactive work wait for a full background lane", async function () {
-      var lanes = createLimiter({ interactive: 1, background: 1, gc: 1 });
+      var lanes = createLimiter({ interactive: 1, background: 1 });
       var hold = deferred();
       var background = [];
 
@@ -99,25 +99,8 @@ describe("git client limiter", function () {
       await Promise.all(background);
     });
 
-    it("runs one gc at a time, without holding a background place while it waits", async function () {
-      var lanes = createLimiter({ interactive: 1, background: 2, gc: 1 });
-      var hold = deferred();
-      var gcs = [lanes.run("background", () => hold.promise, { gc: true }), lanes.run("background", () => hold.promise, { gc: true })];
-
-      await settle();
-      expect(lanes.stats().gc.running).toBe(1);
-      expect(lanes.stats().background.running).toBe(1);
-
-      // The second gc waits for the first, and a commit still has room
-      expect(await lanes.run("background", () => "committed")).toBe("committed");
-
-      hold.resolve();
-      await Promise.all(gcs);
-      expect(lanes.stats().gc.peak).toBe(1);
-    });
-
     it("holds a place until the work has settled, however it ends", async function () {
-      var lanes = createLimiter({ interactive: 1, background: 1, gc: 1 });
+      var lanes = createLimiter({ interactive: 1, background: 1 });
 
       function failure(promise) {
         return promise.then(
@@ -140,7 +123,7 @@ describe("git client limiter", function () {
     });
 
     it("does not wait again for work started inside a place it holds, but does outside it", async function () {
-      var lanes = createLimiter({ interactive: 1, background: 1, gc: 1 });
+      var lanes = createLimiter({ interactive: 1, background: 1 });
       var later = null;
 
       var result = await lanes.run("background", async function () {
@@ -187,14 +170,9 @@ describe("git client limiter", function () {
       expect(limiter.args(["config", "--local", "gc.auto"])).toEqual(["config", "--local", "gc.auto"]);
     });
 
-    it("runs gc in the foreground and lets it run, and finds the command after git's own options", function () {
-      var args = limiter.args(["gc", "--auto", "--quiet"]);
-
-      expect(args).toContain("gc.autoDetach=false");
-      expect(args).toContain("maintenance.autoDetach=false");
-      expect(args).not.toContain("gc.auto=0");
+    it("finds the command after git's own options, and never lets one start a gc", function () {
       expect(limiter.subcommand(["-c", "gc.auto=0", "-c", "maintenance.auto=false", "fetch", "--all"])).toBe("fetch");
-      expect(limiter.isGc(["-c", "a=b", "gc"])).toBe(true);
+      expect(limiter.args(["gc", "--auto"])).toContain("gc.auto=0");
     });
 
     it("lets the stuck-process sweep recognise git started with them", async function () {
@@ -229,7 +207,7 @@ describe("git client limiter", function () {
 
     afterEach(async function () {
       spy.restore();
-      limiter.reset({ interactive: caps.interactive.max, background: caps.background.max, gc: caps.gc.max });
+      limiter.reset({ interactive: caps.interactive.max, background: caps.background.max });
       await fs.remove(this.root);
     });
 
@@ -240,23 +218,20 @@ describe("git client limiter", function () {
     }
 
     it("never runs more background git processes than the cap, each counted until it has exited", async function () {
-      var plumbing = require("clients/git/plumbing");
+      var Git = require("clients/git/git");
 
       limiter.reset({ background: 2 });
 
       await Promise.all(
-        this.repositories.map(function (directory, i) {
-          return (async function () {
-            for (var n = 0; n < 3; n++) {
-              await plumbing.commitFile(directory, { path: "/file-" + n + ".txt", contents: "Commit " + n + " in " + i });
-            }
-          })();
+        this.repositories.map(function (directory) {
+          var git = Git(directory);
+          return Promise.all([0, 1, 2, 3, 4].map(() => git.raw(["for-each-ref"])));
         })
       );
 
       var commands = spy.commands(ours(this.root));
 
-      expect(commands.length).toBeGreaterThan(4 * 3 * 5);
+      expect(commands.length).toBe(4 * 5);
       expect(spy.mostAtOnce(ours(this.root))).toBe(2);
 
       // Every command had the settings, and none was left running
@@ -264,11 +239,6 @@ describe("git client limiter", function () {
         expect(command.args).toContain("-c core.packedGitLimit=64m");
         expect(command.args).toContain("-c pack.windowMemory=16m");
         expect(command.ended).toBe(true);
-      });
-
-      // Same commits as without the settings: git agrees on every object
-      this.repositories.forEach(function (directory) {
-        childProcess.execFileSync("git", ["--git-dir", directory, "fsck", "--strict"]);
       });
     });
 
@@ -339,15 +309,11 @@ describe("git client limiter", function () {
 
       await this.local.commitFiles({ "/pushed.txt": "Pushed" });
 
-      // receive-pack's index-pack and checks, then upload-pack twice
+      // The store's receive (index-pack and its checks), then two reads
       expect((await this.local.tryPush()).code).toBe(0);
       expect(await this.local.remoteHead()).toBe(await this.local.head());
       expect((await this.local.git(["fetch", "origin"])).code).toBe(0);
-
-      // The sync the push started is Blot's own work, and waits
-      var deadline = Date.now() + 5000;
-      while (!limiter.stats().background.waiting && Date.now() < deadline) await settle();
-      expect(limiter.stats().background.waiting).toBeGreaterThan(0);
+      expect(limiter.stats().background.running).toBe(1);
 
       hold.resolve();
       await holding;

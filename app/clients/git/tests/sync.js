@@ -40,9 +40,10 @@ describe("git client sync", function () {
     var text = content(this);
 
     // What a client which hangs up on reading the push's result looks like.
-    // Only repo.js misses the event: node needs it to finish the request.
+    // Only the git client misses the event: node needs it to finish the
+    // request.
     spyOn(http.ServerResponse.prototype, "on").and.callFake(function (event) {
-      if (event === "finish" && /clients\/git\/repo\.js/.test(new Error().stack))
+      if (event === "finish" && /clients\/git\/(repo\.js|served\/)/.test(new Error().stack))
         return this;
       return on.apply(this, arguments);
     });

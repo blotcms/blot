@@ -18,8 +18,9 @@ describe("git client create", function () {
   var Git = require("./setup/git");
   var localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
   var setClientToGit = require("./setup/setClientToGit");
+  var inStore = promisify(repo.exists);
 
-  // this prevents an existing bare repo from being clobbered
+  // this prevents an existing repository from being clobbered
   it("should fail when the client has already been initialized", function (done) {
     var blog = this.blog;
 
@@ -29,7 +30,7 @@ describe("git client create", function () {
       create(blog, async function (err) {
         try {
           expect(err.code).toEqual("EEXIST");
-          expect(await fs.pathExists(repo.directory(blog.handle) + "/HEAD")).toBe(true);
+          expect(await inStore(blog.id)).toBe(true);
           expect(await fs.pathExists(localPath(blog.id, "/.git"))).toBe(false);
           done();
         } catch (e) {
@@ -39,12 +40,11 @@ describe("git client create", function () {
     });
   });
 
-  it("refuses to connect a blog to a repository left at its handle", async function () {
+  it("refuses to set up a repository over the one the blog has", async function () {
     var blog = this.blog;
-    var marker = repo.directory(blog.handle) + "/left-behind";
     var messages = [];
 
-    await fs.outputFile(marker, "someone else's history");
+    await promisify(create)(blog);
 
     var server = Express()
       .use(function (req, res, next) {
@@ -74,7 +74,7 @@ describe("git client create", function () {
 
     expect(messages.length).toBe(1);
     expect(latest.client).not.toBe("git");
-    expect(await fs.pathExists(marker)).toBe(true);
+    expect(await inStore(blog.id)).toBe(true);
   });
 
   // this prevents an existing bare repo from being clobbered
@@ -109,10 +109,10 @@ describe("git client create", function () {
 
       Git.addRemote("origin", "http://git.com/foo.git", function (err) {
         if (err) return done.fail(err);
-        create(blog, function (err) {
+        create(blog, async function (err) {
           expect(err).not.toEqual(null);
           expect(err).toEqual(jasmine.any(Error));
-          expect(fs.pathExistsSync(repo.directory(blog.handle))).toBe(false);
+          expect(await inStore(blog.id)).toBe(false);
           // It isn't one this create made
           expect(fs.pathExistsSync(localPath(blog.id, "/.git"))).toBe(true);
 
@@ -250,9 +250,7 @@ describe("git client create", function () {
           );
 
           expect(fs.existsSync(blogDir + "/.git")).toBe(false);
-          expect(
-            await Git(repo.directory(blog.handle)).silent(true).raw(["rev-list", "--count", "master"])
-          ).not.toEqual("0\n");
+          expect(await inStore(blog.id)).toBe(true);
 
           done();
         } catch (e) {
