@@ -668,8 +668,10 @@ backend instead of the disk, and the disk keeps a copy to roll back to.
   of it starts or a mirror write fails. So existing mirrored blogs become
   eligible after their next clean backfill or daily check, a blog named
   before that moves over by itself, and a half-made copy is never read. A
-  complete blog whose folder becomes empty stays on S3. If the mirror stops
-  covering a blog for a while, backfill it again before naming it. Blogs on the Local client stay on disk because the client
+  complete blog whose folder becomes empty stays on S3. A blog also leaves
+  the set when its disk changes while the mirror doesn't cover it, and when
+  it leaves the Local client (whose watcher changes the disk directly), so
+  either needs a clean backfill first. Blogs on the Local client stay on disk because the client
   watches the folder there with chokidar (until the Phase E rework of the
   Local client). Blogs on the Git client stay on disk because live clones
   run git in the folder and the setup import uses the folder as git's work
