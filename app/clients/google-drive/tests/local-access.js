@@ -66,7 +66,7 @@ describe("Drive client access to the blog folder", function () {
   });
 
   describe("localReaddir", function () {
-    it("lists names, sizes, times and fingerprints as it did from the disk", async function () {
+    it("lists names, sizes and times from storage/folder, as the disk has them", async function () {
       await folder.write(this.blog.id, "/b.txt", "bb");
       await folder.write(this.blog.id, "/a/inner.txt", "i");
 
@@ -76,18 +76,26 @@ describe("Drive client access to the blog folder", function () {
 
       expect(Object.keys(byName).sort()).toEqual(["a", "b.txt"]);
 
-      const real = await fs.stat(join(this.blogDirectory, "b.txt"), { bigint: true });
+      const real = await fs.stat(join(this.blogDirectory, "b.txt"));
 
       expect(byName["b.txt"]).toEqual({
         name: "b.txt",
         isDirectory: false,
         size: 2,
-        fingerprint: contentFingerprint(real),
+        modified: real.mtimeMs,
         modifiedTime: real.mtime.toISOString(),
       });
       expect(byName.a.isDirectory).toBe(true);
-      expect(byName.a.fingerprint).toBeNull();
       expect(byName.a.modifiedTime).toBeUndefined();
+    });
+
+    it("never asks for a local copy of the directory", async function () {
+      await folder.write(this.blog.id, "/b.txt", "bb");
+      spyOn(folder, "ensureLocal").and.callThrough();
+
+      await localReaddir(this.blog.id, "/");
+
+      expect(folder.ensureLocal).not.toHaveBeenCalled();
     });
 
     it("lists both of two names which differ only by case", async function () {

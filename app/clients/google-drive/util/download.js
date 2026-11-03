@@ -8,6 +8,7 @@ const debug = require("debug")("blot:clients:google-drive:download");
 const tempDir = require("helper/tempDir")();
 const guid = require("helper/guid");
 const verifyContent = require("./verifyContent");
+const localState = require("./localState");
 const assets = require("storage/assets");
 const hash = require("helper/hash");
 const cheerio = require("cheerio");
@@ -50,12 +51,46 @@ const ensurePlaceholder = async (blogID, path) => {
   if (!stat) await folder.write(blogID, path, "");
 };
 
-// The checksum-verified fingerprint of the file at path in the blog's folder,
-// or null if there is none
+// storage/folder's stat of a file in the blog's folder, or null if there is
+// no file there
+const statOnBlot = async (blogID, path, options) => {
+  try {
+    const stat = await folder.stat(blogID, path, options);
+    return stat.isDirectory ? null : stat;
+  } catch (err) {
+    if (err.code === "ENOENT" || err.code === "ENOTDIR") return null;
+    throw err;
+  }
+};
+
+// The record of a verified file: Drive's md5Checksum paired with the state
+// of the file Blot holds (util/localState.js), { checksum, sha1, size,
+// modified }, or null if the file at path in the blog's folder doesn't have
+// that md5. Reads the file (on S3, into the content cache); its state before
+// and after must agree, so a file changed while it was read is not vouched
+// for.
 const verifyOnBlot = async (blogID, path, md5Checksum) => {
   if (!md5Checksum) return null;
+  const before = localState.stamp(await statOnBlot(blogID, path));
+  if (!before) return null;
   const file = await localFile(blogID, path);
-  return file ? verifyContent(file, md5Checksum) : null;
+  const hashes = file ? await verifyContent(file, md5Checksum) : null;
+  if (!hashes) return null;
+  const after = localState.stamp(await statOnBlot(blogID, path));
+  return after && after.size === before.size && after.modified === before.modified
+    ? { ...hashes, ...after }
+    : null;
+};
+
+// After download() has published a file it verified in its tmp file: the
+// record of the file now in the blog's folder, if it holds those bytes. The
+// SHA-1 is free from the index on S3; on disk this reads the file, as the
+// MD5 check it replaces did.
+const verifyPublished = async (blogID, path, hashes) => {
+  if (!hashes) return null;
+  const stat = await statOnBlot(blogID, path, { sha1: true });
+  const after = localState.stamp(stat);
+  return after && stat.sha1 === hashes.sha1 ? { ...hashes, ...after } : null;
 };
 
 const streamToFile = (readStream, filePath) =>
@@ -386,13 +421,14 @@ module.exports = async (
       // Source end can precede the final disk write. Pipeline waits for the
       // destination and destroys both streams on error before we publish.
       await streamToFile(data, tempPath);
-      if (md5Checksum && !(await verifyContent(tempPath, md5Checksum))) {
+      const hashes = md5Checksum ? await verifyContent(tempPath, md5Checksum) : null;
+      if (md5Checksum && !hashes) {
         throw new Error("Downloaded content does not match the listed Drive checksum");
       }
       await folder.writeFrom(blogID, path, tempPath, { move: true });
       // Publication has succeeded. A concurrent local write (or stat failure)
       // must not suppress the caller's rebuild; simply decline to cache it.
-      const verified = await verifyOnBlot(blogID, path, md5Checksum).catch(() => null);
+      const verified = await verifyPublished(blogID, path, hashes).catch(() => null);
       settle(() => resolve({ updated: true, verifiedContent: verified }));
     } catch (e) {
       debug("download error", e);

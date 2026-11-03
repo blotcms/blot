@@ -77,8 +77,14 @@ function harness(options) {
       downloaded.push(path);
       return { updated: false };
     },
-    "../util/localFingerprint": async function () {
-      return "fingerprint";
+    "../util/localState": {
+      stamp: require("../util/localState").stamp,
+      unchanged: async function () {
+        return null;
+      },
+      describe: async function () {
+        return { size: 1, modified: 1000, sha1: "sha1" };
+      },
     },
     "../serviceAccount/createDriveClient": async function () {
       return {

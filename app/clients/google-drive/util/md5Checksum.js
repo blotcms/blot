@@ -1,9 +1,12 @@
 const crypto = require("crypto");
 const fs = require("fs");
 
-module.exports = function getChecksum(path) {
+// Resolves to { md5, sha1 } of the file at path, in hex, from one read, or
+// null if it can't be read
+const hashes = function (path) {
   return new Promise(function (resolve) {
-    const hash = crypto.createHash("md5");
+    const md5 = crypto.createHash("md5");
+    const sha1 = crypto.createHash("sha1");
     const input = fs.createReadStream(path);
 
     // Suppress errors, esp. ENOENT and EISDIR
@@ -12,11 +15,19 @@ module.exports = function getChecksum(path) {
     });
 
     input.on("data", function (chunk) {
-      hash.update(chunk);
+      md5.update(chunk);
+      sha1.update(chunk);
     });
 
-    input.on("close", function () {
-      resolve(hash.digest("hex"));
+    input.on("end", function () {
+      resolve({ md5: md5.digest("hex"), sha1: sha1.digest("hex") });
     });
   });
 };
+
+module.exports = async function getChecksum(path) {
+  const result = await hashes(path);
+  return result ? result.md5 : null;
+};
+
+module.exports.withSha1 = hashes;

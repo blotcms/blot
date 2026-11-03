@@ -24,9 +24,8 @@ var mirror = require("./mirror");
 //   A complete blog whose folder is empty (no index at all) stays on S3.
 // - Its mirror is not dirty (mirror.DIRTY_KEY): S3 may be behind the disk.
 // - Its client works on a folder in S3. The Local client watches the folder
-//   on disk with chokidar, the Git client keeps a live clone in it, and the
-//   Google Drive client reads the disk's own directory entries and times, so
-//   blogs on any of them stay on disk (DISK_CLIENTS).
+//   on disk with chokidar and the Git client keeps a live clone in it, so
+//   blogs on either stay on disk (DISK_CLIENTS).
 //
 // The disk copy: for a blog on S3, every change is made in S3 first, which is
 // what the caller waits for and what counts, then copied to disk (copy(), the
@@ -49,12 +48,11 @@ var DIRTY_KEY = "storage:folder:primary:dirty";
 // - git: live-clone detection and the setup import run git with the folder
 //   as its work tree (ensureLocal of "/"), until live clones go and a push is
 //   materialized through storage/folder (#2259).
-// - google-drive: sync/util/localReaddir.js asks ensureLocal for a directory,
-//   and its fingerprints (util/localFingerprint.js) read the nanosecond mtime
-//   of the file ensureLocal returns, which on S3 is the content cache's copy,
-//   so every file would look changed. Until the client keeps { sha1, md5 }
-//   pairs against the index (#2258, "Content hash").
-var DISK_CLIENTS = ["local", "git", "google-drive"];
+//
+// Google Drive works on either: it lists the folder through storage/folder
+// and keeps its own records of each file's size, modified time and SHA-1
+// (clients/google-drive/util/localState.js).
+var DISK_CLIENTS = ["local", "git"];
 
 var LOGGED_MAX = 10000;
 
