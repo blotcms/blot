@@ -12,7 +12,10 @@
 //   counts  { requests, bytesUp, bytesDown, waitMs }
 //
 // A call outside measure() is not counted. A stream is counted as it is read,
-// and an upload of a stream as it is consumed.
+// and an upload of a stream as it is consumed. Each call counts as one request
+// unless the store counts its own (countsOwnRequests: true) by calling sent()
+// for each request it sends: the S3 store does, since one put of a large pack
+// is several requests, and a list may be several pages.
 //
 // It also keeps the operation's lane clock: how long it spent with a git
 // command waiting for a place in the git limiter (../limiter.js), recorded by
@@ -111,20 +114,27 @@ function countedStream(source, tally) {
   return through;
 }
 
+// One request sent by a store which counts its own, in the current operation
+function sent() {
+  const t = current.getStore();
+  if (t) t.requests++;
+}
+
 function counting(inner) {
   const wrapped = { id: inner.id };
 
   const tally = () => current.getStore() || null;
+  const request = inner.countsOwnRequests ? () => {} : (t) => t.requests++;
 
   wrapped.head = (key) => {
     const t = tally();
-    if (t) t.requests++;
+    if (t) request(t);
     return inner.head(key);
   };
 
   wrapped.read = async (key, offset, length) => {
     const t = tally();
-    if (t) t.requests++;
+    if (t) request(t);
     const buffer = await inner.read(key, offset, length);
     if (t) t.bytesDown += size(buffer);
     return buffer;
@@ -132,7 +142,7 @@ function counting(inner) {
 
   wrapped.get = async (key, options) => {
     const t = tally();
-    if (t) t.requests++;
+    if (t) request(t);
     const buffer = await inner.get(key, options);
     if (t) t.bytesDown += size(buffer);
     return buffer;
@@ -142,21 +152,21 @@ function counting(inner) {
     const t = tally();
     const stream = inner.stream(key, offset, length);
     if (!t) return stream;
-    t.requests++;
+    request(t);
     return countedStream(stream, t);
   };
 
   wrapped.put = (key, body) => {
     const t = tally();
     if (!t) return inner.put(key, body);
-    t.requests++;
+    request(t);
     return inner.put(key, countedBody(body, t));
   };
 
   wrapped.putIfAbsent = (key, buffer) => {
     const t = tally();
     if (t) {
-      t.requests++;
+      request(t);
       t.bytesUp += size(buffer);
     }
     return inner.putIfAbsent(key, buffer);
@@ -164,13 +174,13 @@ function counting(inner) {
 
   wrapped.delete = (key) => {
     const t = tally();
-    if (t) t.requests++;
+    if (t) request(t);
     return inner.delete(key);
   };
 
   wrapped.list = (prefix) => {
     const t = tally();
-    if (t) t.requests++;
+    if (t) request(t);
     return inner.list(prefix);
   };
 
@@ -179,5 +189,6 @@ function counting(inner) {
 
 module.exports = counting;
 module.exports.measure = measure;
+module.exports.sent = sent;
 module.exports.waiting = waiting;
 module.exports.stopwatch = stopwatch;

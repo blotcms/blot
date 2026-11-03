@@ -147,17 +147,26 @@ function countsOf(measured) {
 
 // The object store for a blog: the storage bucket, under git/<blogID>/. The
 // S3 client is asked for on each request, because storage/s3 replaces it if
-// its configuration changes. Specs replace this with _setObjectStore.
+// its configuration changes. Each request it sends is counted (counting.js):
+// a large pack's put is several, and a long list several pages. Specs replace
+// this with _setObjectStore.
 function s3ObjectStore(blogID) {
   const s3 = require("storage/s3");
 
   s3.assertConfigured();
 
-  return createS3Store({
-    client: { send: (command) => s3.client().send(command) },
+  const store = createS3Store({
+    client: {
+      send: (command) => {
+        counting.sent();
+        return s3.client().send(command);
+      },
+    },
     bucket: config.storage.bucket,
     prefix: "git/" + blogID + "/",
   });
+
+  return Object.assign(store, { countsOwnRequests: true });
 }
 
 let makeObjectStore = s3ObjectStore;
