@@ -59,8 +59,9 @@ async function main() {
   const bound = udp.trim().split("\n").some((line) => /:01BB$/i.test(line.trim().split(/\s+/)[1] || ""));
   assert(bound, "proxy must bind UDP port 443");
   // /health is answered by the proxy; the other path goes to the upstream
-  // through the proxy locations, which repeat the server's Alt-Svc. cdn. is
-  // reached only by Bunny, so it advertises nothing.
+  // through the proxy locations, which have add_header of their own. Exactly
+  // one Alt-Svc on both. cdn. is reached only by Bunny, so it advertises
+  // nothing.
   for (const host of hosts) {
     const expected = host.startsWith("cdn.") ? undefined : ADVERTISED;
     for (const path of ["/health", "/protocol-check"]) {

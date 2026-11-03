@@ -673,9 +673,9 @@ function diff(spec, ra, rb) {
       a = a.map((v) => v.replace(/boundary=0+\d+/, "boundary=BOUNDARY"));
       b = b.map((v) => v.replace(/boundary=0+\d+/, "boundary=BOUNDARY"));
     }
-    if (name.startsWith("blot-") || name === "alt-svc") {
+    if (name.startsWith("blot-")) {
       // nginx's own answers (416, 412) carry an add_header value twice, on
-      // either side: compare the set of values (the proxy locations' headers)
+      // either side: compare the set of values
       a = [...new Set(a)];
       b = [...new Set(b)];
     }
@@ -713,19 +713,27 @@ function diff(spec, ra, rb) {
 // a client sees lists each change here, so the review is of the list.
 const H3 = 'h3=":443"; ma=86400';
 const INTENDED = [{
-  id: "alt-svc-on-proxied-responses",
+  id: "alt-svc-on-https-proxied-responses",
   class: "intended",
-  reason: "The proxy locations now repeat the server's Alt-Svc, which their own add_header had stopped them inheriting, so proxied pages advertise HTTP/3 too.",
-  match: (c, d) => d.kind === "header" && d.name === "alt-svc" && !/^cdn\./.test(c.spec.host) &&
+  reason: "Alt-Svc is set once at http level with more_set_headers, so proxied HTTPS pages, whose locations' own add_header had kept them from inheriting it, advertise HTTP/3 too.",
+  match: (c, d) => d.kind === "header" && d.name === "alt-svc" && c.spec.tls && c.spec.host !== CDN &&
     header(c.ra, "alt-svc").length === 0 &&
     header(c.rb, "alt-svc").length === 1 && header(c.rb, "alt-svc")[0] === H3,
 }, {
-  id: "no-alt-svc-on-cdn",
+  id: "no-alt-svc-over-http-or-on-cdn",
   class: "intended",
-  reason: "cdn. is reached only through Bunny, so it no longer advertises HTTP/3 on our address.",
-  match: (c, d) => d.kind === "header" && d.name === "alt-svc" && /^cdn\./.test(c.spec.host) &&
+  reason: "HTTP/3 is advertised over HTTPS only, and not on cdn., which only Bunny reaches.",
+  match: (c, d) => d.kind === "header" && d.name === "alt-svc" && (!c.spec.tls || c.spec.host === CDN) &&
     header(c.ra, "alt-svc").length > 0 && header(c.ra, "alt-svc").every((v) => v === H3) &&
     header(c.rb, "alt-svc").length === 0,
+}, {
+  id: "no-nosniff",
+  class: "intended",
+  reason: "http.conf's X-Content-Type-Options reached only the server blocks with no add_header of their own (the port 80 site redirect and internal listeners); it is removed.",
+  match: (c, d) => d.kind === "header" && d.name === "x-content-type-options" &&
+    header(c.ra, "x-content-type-options").every((v) => v === "nosniff") &&
+    header(c.ra, "x-content-type-options").length > 0 &&
+    header(c.rb, "x-content-type-options").length === 0,
 }];
 
 // ---- the run ------------------------------------------------------------
