@@ -124,4 +124,63 @@ describe("git store shadow mode: waits for the git limiter", function () {
       expect(field("storeMs")).toBeLessThan(field("waitMs"));
     });
   });
+
+  // ebsWorkMs is the EBS push's figure to compare with receiveMs: from the end
+  // of the request body to the refs moving, less the time spent waiting for a
+  // place in the interactive lane (ebsWaitMs). ebsMs, from the request's
+  // arrival, keeps the wait.
+  describe("a push to EBS", function () {
+    var caps;
+
+    setup();
+
+    beforeEach(function () {
+      caps = limiter.stats();
+      limiter.reset({ interactive: 1 });
+    });
+
+    afterEach(function () {
+      limiter.reset({ interactive: caps.interactive.max });
+    });
+
+    it("logs ebsWorkMs without the wait for the interactive lane, which is ebsWaitMs", async function () {
+      await this.local.writeAndPush("/a.txt", "A");
+      await setup.expectMirrored(this);
+
+      // index-pack asks for its place when the pack's first bytes arrive: the
+      // lane is held for HOLD ms from then
+      var held = null;
+      var acquire = limiter.acquire;
+
+      spyOn(limiter, "acquire").and.callFake(function (lane) {
+        if (!held && lane === "interactive") {
+          held = limiter.outside(function () {
+            return limiter.run("interactive", function () {
+              return sleep(HOLD);
+            });
+          });
+        }
+        return acquire.apply(limiter, arguments);
+      });
+
+      await this.local.writeAndPush("/b.txt", "B");
+      await shadow.idle(this.blog.id);
+
+      expect(held).not.toBe(null);
+      await held;
+
+      var line = this.shadowLines("push").pop();
+      expect(line).toContain("outcome=ok");
+
+      var field = function (name) {
+        return Number(new RegExp(" " + name + "=(\\d+)").exec(line)[1]);
+      };
+
+      expect(field("ebsWaitMs")).toBeGreaterThanOrEqual(HOLD - 1000);
+      expect(field("ebsMs")).toBeGreaterThanOrEqual(field("ebsWaitMs"));
+      expect(field("ebsWorkMs")).toBeGreaterThanOrEqual(0);
+      expect(field("ebsWorkMs")).toBeLessThan(field("ebsWaitMs"));
+      expect(field("ebsWorkMs")).toBeLessThan(field("ebsMs") - (HOLD - 1000));
+    });
+  });
 });
