@@ -612,3 +612,21 @@ lock is released. A blog in the dirty set (or named by `--blog`) which no
 longer exists has its whole copy removed: its deletion could not remove it. It is safe to
 rerun. Turn mirroring on for a blog before its backfill, so nothing written
 in between is missed.
+
+### Shadow reads (#2258 Phase C)
+
+For mirrored blogs, `BLOT_FOLDER_SHADOW_RATE` (`config.folder_shadow.rate`,
+0 to 1, default 0 = off) of the reads made through `storage/folder` are
+repeated against the S3 backend once the disk has answered, and the answers
+compared and timed (`folder/shadow.js`). The caller always gets the disk's
+answer, unchanged and undelayed; nothing S3 does can reach it. Content is
+compared by SHA-1 of the bytes (so stale bytes behind a correct index show
+up), metadata by type, size and modified time, listings by names. A mismatch
+is checked again a few seconds later, so a read which raced a sync counts as
+transient. At most `max_in_flight` shadows run per process (more are dropped
+and counted), and files over `max_compare_bytes` have only their sizes
+compared. Counters go to an hourly Redis hash, `storage:folder:shadow:YYYYMMDDHH`
+(kept 14 days, no paths); mismatches are logged on the host with their paths
+as `[storage/folder shadow] mismatch blog=... op=... kind=... path=...`.
+`node scripts/storage/shadow-report.js --hours 24` prints the mismatch rate,
+local and S3 latency percentiles per call, and the content cache's hit rate.

@@ -1,5 +1,6 @@
 var { NotFoundError } = require("./errors");
 var mirror = require("./mirror");
+var shadow = require("./shadow");
 
 // Every read and write of a blog's folder (the files its owner syncs) goes
 // through this module, the way generated assets go through storage/assets.
@@ -17,6 +18,11 @@ var mirror = require("./mirror");
 // names, every change made on disk is then made in S3 and models/file too,
 // once the disk has it. Reads still come from disk, and a failure to mirror
 // is logged and recorded for repair, never returned to the caller.
+//
+// Shadow reads (./shadow.js, #2258 Phase C): for mirrored blogs, a sample
+// of reads (config.folder_shadow.rate) is repeated against S3 once the disk
+// has answered, to compare the results and time both. The caller gets the
+// disk's answer, unchanged and undelayed, whatever S3 does.
 //
 // Missing files reject with NotFoundError (code "ENOENT"). A symlink in a
 // blog folder rejects with code "ELOOP" (see local.js: the no-symlink policy
@@ -165,5 +171,19 @@ MUTATIONS.forEach(function (name) {
     if (mirrored) await mirror(name, args);
 
     return result;
+  };
+});
+
+// The reads which are shadowed. walk is not: it is an iterator its caller
+// may stop part way, and its directories are listings, which are.
+shadow.OPS.forEach(function (name) {
+  var call = module.exports[name];
+
+  module.exports[name] = function () {
+    var args = Array.prototype.slice.call(arguments);
+
+    if (backend !== backends.local()) return call.apply(null, args);
+
+    return shadow(name, call, args);
   };
 });
