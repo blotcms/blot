@@ -290,7 +290,13 @@ var mirror = copier({
   logPrefix: LOG_PREFIX,
   skip: async function (op, blogID) {
     if (enabledFor(blogID)) return false;
-    if (op !== "removeAll") return true;
+
+    // The disk changes without S3, so a copy which was complete is not any
+    // more: mirroring the blog again must not promote it until a backfill
+    if (op !== "removeAll") {
+      await redis().sRem(COMPLETE_KEY, blogID).catch(function () {});
+      return true;
+    }
 
     // A deleted blog's copy is deleted, even once it is no longer
     // mirrored. With no index and no dirty flag there is nothing in S3 to
