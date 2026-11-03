@@ -22,10 +22,11 @@ const JOBS = [
   "unzip",
   "fetch-image",
   "fetch",
+  "parse-html",
 ];
 
 // The jobs that don't use sharp
-const WITHOUT_SHARP = ["exif", "pandoc", "unzip"];
+const WITHOUT_SHARP = ["exif", "pandoc", "unzip", "parse-html"];
 
 function readStdin() {
   return new Promise((resolve, reject) => {

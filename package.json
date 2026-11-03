@@ -75,6 +75,8 @@
     "node-fetch": "2.6.7",
     "node-gyp": "11.4.2",
     "node-schedule": "2.1.1",
+    "parse5": "7.3.0",
+    "parse5-htmlparser2-tree-adapter": "7.1.0",
     "path-to-regexp": "8.4.2",
     "pretty": "2.0.0",
     "puppeteer": "25.15.0",

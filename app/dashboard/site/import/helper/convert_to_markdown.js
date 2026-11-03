@@ -1,31 +1,15 @@
-var Turndown = require("turndown");
-var turndownPluginGfm = require('turndown-plugin-gfm');
-var gfm = turndownPluginGfm.gfm;
+var htmlAssets = require("./html_assets");
 
-var turndown = new Turndown({
-  bulletListMarker: '-', // defaults to *
-  codeBlockStyle: 'fenced', // defaults to indented
-  emDelimiter: '*', // defaults to _
-});
-
-turndown.use(gfm);
-
-// We override Turndown's HTML escaping function. Wordpress
-// sometimes includes Markdown inside the HTML content of
-// an item. By default, Turndown escapes this, e.g.
-// _Hey_ becomes \_Hey\_ since it assumes the input is pure
-// HTML. But we want the Markdown generally, so we remove the
-// escaping and do nothing to the HTML.
-turndown.escape = function (html) {
-  return html;
-};
-
-turndown.keep(['audio', 'video', 'iframe']);
-
+// The conversion (turndown, with the options the importers need: no escaping,
+// GFM, audio, video and iframes kept) runs in the sandbox's parse-html job, in
+// app/sandbox/jobs/html.js
 module.exports = function (post, callback) {
   if (post.html && post.content === undefined) {
-    post.content = turndown.turndown(post.html).trim();
-  } 
+    return htmlAssets.markdown(post.html).then(function (content) {
+      post.content = content;
+      callback(null, post);
+    }, callback);
+  }
 
   return callback(null, post);
 };
