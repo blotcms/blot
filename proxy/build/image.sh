@@ -29,4 +29,5 @@ if [ -n "${PROXY_IMAGE_CACHE:-}" ]; then
   CACHE=(--cache-from "type=registry,ref=$PROXY_IMAGE_CACHE")
 fi
 
-docker build "${CACHE[@]}" "${VERSION_ARGS[@]}" -f proxy/Dockerfile -t "$TAG" "$@" proxy/
+# ${CACHE[@]+...}: bash 3.2 (macOS) treats an empty array as unset under set -u
+docker build ${CACHE[@]+"${CACHE[@]}"} "${VERSION_ARGS[@]}" -f proxy/Dockerfile -t "$TAG" "$@" proxy/
