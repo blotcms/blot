@@ -274,7 +274,7 @@ The store never deletes an object a manifest can reach, and compaction keeps unr
 
 A sink has `write(path, stream, { mode, size })`, `remove(path)` and `symlink(path, target)`. Paths are relative with `/` between names and are already safe; `mode` is `0o644` or `0o755`; the stream is a Readable of exactly `size` bytes. `folderSink.js` (`createFolderSink({ root })`) is the local folder: it replaces a link or directory in the way, never follows a link, makes directories as needed, removes the directories a removal leaves empty, and writes a file to a temporary name before renaming it into place.
 
-An S3 sink (`{blogID}/folder/` through `app/storage/folder`, later) has to do the same things its way:
+An S3 sink (`folder/{blogID}/` through `app/storage/folder`, later) has to do the same things its way:
 
 - **Do not publish a file until its stream has ended without error.** The stream throws at its end if the bytes are not the blob, so an upload must be aborted (a multipart upload aborted, a single PUT never completed) rather than finished when the stream errors. A key may only ever hold a whole, checked file.
 - **`write` replaces.** A PUT over an existing key is that. There are no directories to make, and none to remove, so `remove` is a DELETE and an absent key is not an error.

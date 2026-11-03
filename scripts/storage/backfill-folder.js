@@ -1,5 +1,5 @@
 // Brings each blog's copy of its folder in the storage bucket (objects under
-// {blogID}/folder/ and the models/file index) in line with the folder on
+// folder/{blogID}/ and the models/file index) in line with the folder on
 // disk, which stays authoritative (#2258 Phase C). Run it once a blog is
 // mirrored (config.folder_mirror, BLOT_FOLDER_MIRROR) to copy what was there
 // before, and again for any blog in the mirror's dirty set
@@ -18,7 +18,7 @@
 //                      made one at a time, since models/file expects a single
 //                      writer per blog
 //
-// For each blog it lists the bucket under {blogID}/folder/, walks the folder
+// For each blog it lists the bucket under folder/{blogID}/, walks the folder
 // on disk, and then:
 //
 // - uploads every file which is missing in S3 or the index, or differs: by

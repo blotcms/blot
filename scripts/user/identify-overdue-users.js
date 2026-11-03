@@ -8,10 +8,9 @@ const fs = require("fs");
 let rolling_total = 0;
 
 // Bytes of everything stored for a blog in the storage bucket, summed over all
-// of its objects under {blogID}/. Today that is its generated assets (the
-// {blogID}/_*/ prefixes); once the blog's folder content is also stored under
-// {blogID}/folder/, this total includes it, so folderBytes below must stop
-// being added at that point.
+// of its objects under {blogID}/, which is its generated assets (the
+// {blogID}/_*/ prefixes). The mirrored folder is under folder/{blogID}/, which
+// this does not count; folderBytes below counts the folder on disk.
 async function bucketBytes(blogID) {
   let total = 0;
 
