@@ -15,12 +15,14 @@ var mirror = require("./mirror");
 //   for whatever reason below, S3 is kept in step and can be trusted when
 //   it moves back. Without that, a blog which left S3 and came back (a
 //   client switched and switched back, say) would read a stale copy.
-// - S3 has a copy of it: its models/file index exists. A flag set before the
-//   mirror or the backfill made the copy can then never show an empty folder.
+// - Its copy in S3 is complete (mirror.COMPLETE_KEY): a backfill or the
+//   reconcile last finished or checked it with no errors. An index alone
+//   proves nothing, since the mirror starts one with a blog's first
+//   mirrored write, before its backfill. Starting a backfill takes the blog
+//   out of the set, so one half way through is still read from disk, and it
+//   moves over by itself once a clean backfill or daily check puts it back.
+//   A complete blog whose folder is empty (no index at all) stays on S3.
 // - Its mirror is not dirty (mirror.DIRTY_KEY): S3 may be behind the disk.
-//   The backfill marks a named blog dirty while it copies it, so a blog
-//   half way through its first backfill is still read from disk. Once the
-//   reconcile or the backfill has repaired it, it moves over by itself.
 // - Its client works on a folder in S3. The Local client watches the folder
 //   on disk with chokidar, the Git client keeps a live clone in it, and the
 //   Google Drive client reads the disk's own directory entries and times, so
@@ -96,6 +98,11 @@ function enabledFor(blogID) {
   return true;
 }
 
+// An SISMEMBER reply, which is 0 or 1 (or a boolean)
+function isMember(reply) {
+  return !!reply && reply !== "0";
+}
+
 // Whether a call about blogID goes to S3. One Redis round trip, for named
 // blogs only.
 async function usesS3(blogID) {
@@ -106,19 +113,19 @@ async function usesS3(blogID) {
     return false;
   }
 
-  var [indexed, behind, client] = await redis()
+  var [complete, behind, client] = await redis()
     .multi()
-    .exists(require("models/file/key").paths(blogID))
+    .sIsMember(mirror.COMPLETE_KEY, blogID)
     .sIsMember(mirror.DIRTY_KEY, blogID)
     .hGet(require("models/blog/key").info(blogID), "client")
     .exec();
 
-  if (!Number(indexed)) {
-    note(blogID, "no copy in S3 (no models/file index) yet");
+  if (!isMember(complete)) {
+    note(blogID, "no complete copy in S3 yet (no clean backfill or check)");
     return false;
   }
 
-  if (behind && behind !== "0") {
+  if (isMember(behind)) {
     note(blogID, "its mirror is dirty, so S3 may be behind the disk");
     return false;
   }

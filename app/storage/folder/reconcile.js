@@ -7,8 +7,7 @@ const client = require("models/client");
 const Blog = require("models/blog");
 const blogKey = require("models/blog/key");
 const File = require("models/file");
-const fileKey = require("models/file/key");
-const { normalize } = fileKey;
+const { normalize } = require("models/file/key");
 const local = require("./local");
 const backend = require("./s3");
 const mirror = require("./mirror");
@@ -17,7 +16,7 @@ const { NotFoundError } = require("./errors");
 const hold = require("sync/hold");
 const fs = require("fs-extra");
 
-const { DIRTY_KEY } = mirror;
+const { DIRTY_KEY, COMPLETE_KEY } = mirror;
 
 // Keeps a blog's two copies of its folder in line: the one in the storage
 // bucket (objects under {blogID}/folder/ and the models/file index) and the
@@ -71,7 +70,15 @@ function ancestorsOf(path) {
 
 // Compares one blog's folder on disk with its copy in S3 and the index, and
 // with apply, brings the copy in line. Resolves to its stats. Must run under
-// the blog's sync lock when apply is set.
+// the blog's sync lock when apply is set, and the caller says so with
+// { locked: true } for a check too.
+//
+// It also keeps the set of complete copies (mirror.COMPLETE_KEY), which is
+// what lets a blog named for S3 move there (primary.js): an apply takes the
+// blog out when it starts and puts it back once it has finished with no
+// errors, and so does a check under the lock which finds nothing to do. Only
+// while the mirror covers the blog: a copy it doesn't keep in step can't
+// stay complete.
 async function backfillBlog(blogID, options) {
   options = options || {};
 
@@ -79,10 +86,9 @@ async function backfillBlog(blogID, options) {
   const stats = newStats();
   const prefix = backend.root(blogID);
 
-  // A blog named for S3 moves there once its copy exists and isn't dirty,
-  // so while its copy is being made it is marked dirty and stays on disk.
-  // The caller takes it out of the set once this has finished cleanly.
-  if (apply && primary.enabledFor(blogID)) await client.sAdd(DIRTY_KEY, blogID);
+  // While its copy is being made it is not complete, so a blog named for S3
+  // stays on disk
+  if (apply) await client.sRem(COMPLETE_KEY, blogID);
 
   // What S3 holds: files by path with their sizes, and directory markers
   const objects = new Map();
@@ -231,6 +237,10 @@ async function backfillBlog(blogID, options) {
   for (const path of markers) await stale(path);
   for await (const path of File.subtree(blogID, "/")) await stale(path);
 
+  const complete = !stats.errors && (apply || (options.locked && !differences(stats)));
+
+  if (complete && mirror.enabledFor(blogID)) await client.sAdd(COMPLETE_KEY, blogID);
+
   return stats;
 }
 
@@ -245,7 +255,7 @@ async function removeDeletedBlog(blogID, apply) {
 
   if (apply) {
     await backend.removeAll(blogID);
-    await client.sRem(DIRTY_KEY, blogID);
+    await client.multi().sRem(DIRTY_KEY, blogID).sRem(COMPLETE_KEY, blogID).exec();
 
     // A blog on S3 whose deletion could not delete its disk copy
     if (await client.sIsMember(primary.DIRTY_KEY, blogID)) {
@@ -270,10 +280,10 @@ async function restoreBlog(blogID, options) {
   const apply = !!options.apply;
   const stats = newStats();
 
-  // Every file would look stale on disk, but a missing index is more likely
-  // a problem with Redis than a blog with nothing in it, so leave the disk be
-  if (!(await client.exists(fileKey.paths(blogID)))) {
-    const skip = new Error("no copy in S3");
+  // Only a copy known to be complete is the truth. Then an empty index is an
+  // empty folder, and the disk is emptied too.
+  if (!(await client.sIsMember(COMPLETE_KEY, blogID))) {
+    const skip = new Error("no complete copy in S3");
     skip.code = "ESKIPPED";
     throw skip;
   }
@@ -433,6 +443,13 @@ async function directionOf(blogID) {
   return "s3";
 }
 
+// Marks the copy a dirty set is for as behind. A copy in S3 behind its disk
+// is no longer complete either.
+function markDirty(dirtyKey, blogID) {
+  if (dirtyKey === DIRTY_KEY) return mirror.markBehind(blogID);
+  return client.sAdd(dirtyKey, blogID);
+}
+
 // The set a blog is in while the copy direction names may be behind
 function dirtyKeyOf(direction) {
   return direction === "disk" ? primary.DIRTY_KEY : DIRTY_KEY;
@@ -553,7 +570,7 @@ async function reconcileBlog(blogID, check, report) {
       dirtyKey = dirtyKeyOf(direction);
 
       if (check) {
-        const found = await repair(blogID, { apply: false });
+        const found = await repair(blogID, { apply: false, locked: true });
 
         report.checked++;
 
@@ -567,7 +584,7 @@ async function reconcileBlog(blogID, check, report) {
       if (stats.errors) {
         // Left in the dirty set (put there if the check found it), so the
         // hourly run tries again
-        await client.sAdd(dirtyKey, blogID);
+        await markDirty(dirtyKey, blogID);
         report.errored.push(blogID);
 
         for (const message of stats.errorMessages.slice(0, 3)) console.error(clfdate(), LOG_PREFIX, message);
@@ -581,7 +598,7 @@ async function reconcileBlog(blogID, check, report) {
       // A sync is running. The blog stays dirty and is tried next time.
       report.locked.push(blogID);
     } else if (err.code === "ESKIPPED") {
-      // No folder on disk (or for a blog on S3, no index): the other copy is
+      // No folder on disk (or for a blog on S3, no complete copy): the other copy is
       // never emptied, but it is not repairable either
       report.skipped.push(blogID);
     } else {
@@ -589,7 +606,7 @@ async function reconcileBlog(blogID, check, report) {
       // put in the dirty set, so the hourly run tries again rather than the
       // next daily one. Not if the direction is unknown (or in conflict):
       // marking the wrong copy dirty would move the blog to the other one.
-      if (dirtyKey) await client.sAdd(dirtyKey, blogID).catch(function () {});
+      if (dirtyKey) await markDirty(dirtyKey, blogID).catch(function () {});
       report.errored.push(blogID);
       console.error(clfdate(), LOG_PREFIX, "failed blog=" + blogID, ((err && err.code) || "") + " " + ((err && err.message) || err));
     }

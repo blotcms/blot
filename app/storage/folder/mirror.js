@@ -45,6 +45,14 @@ var LOG_PREFIX = "[storage/folder mirror]";
 // which is in it on disk, whatever its flag says.
 var DIRTY_KEY = "storage:folder:mirror:dirty";
 
+// Blogs whose copy in S3 is known to be complete: a backfill or reconcile
+// (reconcile.js backfillBlog) last finished it, or checked it, with no
+// errors. A copy which has an index is not necessarily complete: the mirror
+// starts an index with a blog's first mirrored write, before its backfill.
+// Starting a backfill of a blog, or marking it dirty, takes it out, and
+// ./primary.js moves a blog to S3 only while it is in.
+var COMPLETE_KEY = "storage:folder:mirror:complete";
+
 var warnedNoBucket = false;
 
 // Redis, loaded on first use so requiring storage/folder connects to nothing
@@ -107,6 +115,8 @@ function enabledFor(blogID) {
 //
 //   source, target  functions returning the backends (so S3 loads lazily)
 //   dirtyKey        the Redis set a blog is added to when a copy fails
+//   incomplete      true to also take the blog out of COMPLETE_KEY then
+//                   (for the mirror: S3 is now behind)
 //   logPrefix       for the failure's log line
 //   skip            async (op, blogID): true to leave this change alone
 //
@@ -217,7 +227,7 @@ function copier(options) {
     },
     removeAll: async function (blogID) {
       await target().removeAll(blogID);
-      await redis().sRem(dirtyKey, blogID);
+      await redis().multi().sRem(dirtyKey, blogID).sRem(COMPLETE_KEY, blogID).exec();
     },
   };
 
@@ -227,7 +237,8 @@ function copier(options) {
 
   async function markDirty(blogID) {
     try {
-      await redis().sAdd(dirtyKey, blogID);
+      if (options.incomplete) await markBehind(blogID);
+      else await redis().sAdd(dirtyKey, blogID);
     } catch (err) {
       console.error(clfdate(), logPrefix, "could not mark blog=" + blogID + " as needing reconcile:", err.message);
     }
@@ -275,6 +286,7 @@ var mirror = copier({
   },
   target: backend,
   dirtyKey: DIRTY_KEY,
+  incomplete: true,
   logPrefix: LOG_PREFIX,
   skip: async function (op, blogID) {
     if (enabledFor(blogID)) return false;
@@ -285,7 +297,7 @@ var mirror = copier({
     // ask about. A dirty flag counts as a copy: a failed index write can
     // leave objects in S3 that the index doesn't know of.
     if (!hasBucket()) {
-      await redis().sRem(DIRTY_KEY, blogID);
+      await redis().multi().sRem(DIRTY_KEY, blogID).sRem(COMPLETE_KEY, blogID).exec();
       return true;
     }
 
@@ -293,8 +305,16 @@ var mirror = copier({
   },
 });
 
+// Marks a blog's copy in S3 as behind its disk: dirty, and no longer
+// complete
+function markBehind(blogID) {
+  return redis().multi().sAdd(DIRTY_KEY, blogID).sRem(COMPLETE_KEY, blogID).exec();
+}
+
 module.exports = mirror;
 module.exports.DIRTY_KEY = DIRTY_KEY;
+module.exports.COMPLETE_KEY = COMPLETE_KEY;
+module.exports.markBehind = markBehind;
 module.exports.LOG_PREFIX = LOG_PREFIX;
 module.exports.enabledFor = enabledFor;
 module.exports.names = names;

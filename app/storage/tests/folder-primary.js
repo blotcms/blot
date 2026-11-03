@@ -47,13 +47,16 @@ describe("storage/folder primary", function () {
     await fs.remove(tmp);
     await client.sRem(mirror.DIRTY_KEY, this.blog.id);
     await client.sRem(primary.DIRTY_KEY, this.blog.id);
+    await client.sRem(mirror.COMPLETE_KEY, this.blog.id);
   });
 
-  // Mirrors a folder to S3 (which makes its index), then names the blog
+  // Mirrors a folder to S3, marks the copy complete as a clean backfill
+  // would, then names the blog
   async function onS3(blogID) {
     config.folder_mirror = blogID;
     await folder.write(blogID, "/a.txt", "a");
     await folder.write(blogID, "/posts/b.md", "# B");
+    await client.sAdd(mirror.COMPLETE_KEY, blogID);
     config.folder_primary = blogID;
   }
 
@@ -171,6 +174,34 @@ describe("storage/folder primary", function () {
       }
     });
 
+    it("rejects a write whose stream fails while the backend is being chosen", async function () {
+      config.folder_primary = this.blog.id;
+
+      spyOn(primary, "usesS3").and.callFake(function () {
+        return new Promise(function (resolve) {
+          setTimeout(function () {
+            resolve(false);
+          }, 50);
+        });
+      });
+
+      var stream = new Readable({ read: function () {} });
+      var writing = folder.write(this.blog.id, "/a.txt", stream);
+
+      stream.destroy(new Error("stream failed"));
+
+      var err;
+
+      try {
+        await writing;
+      } catch (e) {
+        err = e;
+      }
+
+      expect(err && err.message).toEqual("stream failed");
+      expect(await local.exists(this.blog.id, "/a.txt")).toBe(false);
+    });
+
     it("lets a spec's useBackend win over the flag", async function () {
       await onS3(this.blog.id);
 
@@ -187,7 +218,7 @@ describe("storage/folder primary", function () {
   });
 
   describe("the guard", function () {
-    it("keeps a named blog with no copy in S3 on disk", async function () {
+    it("keeps a named blog with no complete copy in S3 on disk", async function () {
       spyOn(console, "log");
 
       // On disk from before the mirror, never backfilled
@@ -202,21 +233,58 @@ describe("storage/folder primary", function () {
       expect(
         console.log.calls.allArgs().some(function (args) {
           var line = args.join(" ");
-          return line.indexOf(primary.LOG_PREFIX) !== -1 && line.indexOf("no copy in S3") !== -1;
+          return line.indexOf(primary.LOG_PREFIX) !== -1 && line.indexOf("no complete copy") !== -1;
         })
       ).toBe(true);
     });
 
-    it("moves a named blog over once the mirror has made its copy", async function () {
+    it("keeps a named blog whose mirror has only started its index on disk until its backfill", async function () {
       spyOn(console, "log");
+
+      // On disk from before the mirror
+      await local.write(this.blog.id, "/old.txt", "old");
+
       config.folder_primary = this.blog.id;
       config.folder_mirror = this.blog.id;
 
-      expect(await folder.backendFor(this.blog.id)).toEqual("local");
-
+      // The mirror's first write starts an index which lacks /old.txt
       await folder.write(this.blog.id, "/a.txt", "a");
 
+      expect(await folder.backendFor(this.blog.id)).toEqual("local");
+      expect((await folder.read(this.blog.id, "/old.txt")).toString()).toEqual("old");
+
+      await backfill.run({ blog: this.blog.id, mode: "apply", concurrency: 1, log: function () {} });
+
       expect(await folder.backendFor(this.blog.id)).toEqual("s3");
+      expect((await folder.read(this.blog.id, "/old.txt")).toString()).toEqual("old");
+    });
+
+    it("takes a blog out of the complete set when a mirror write fails", async function () {
+      await onS3(this.blog.id);
+      config.folder_primary = "off";
+
+      spyOn(s3, "putBuffer").and.callFake(function () {
+        return Promise.reject(new Error("S3 is down"));
+      });
+      spyOn(s3, "uploadFile").and.callFake(function () {
+        return Promise.reject(new Error("S3 is down"));
+      });
+      spyOn(console, "error");
+
+      await folder.write(this.blog.id, "/c.txt", "c");
+
+      expect(await isDirty(mirror.COMPLETE_KEY, this.blog.id)).toBe(false);
+      expect(await isDirty(mirror.DIRTY_KEY, this.blog.id)).toBe(true);
+    });
+
+    it("keeps a blog on S3 when its folder becomes empty", async function () {
+      await onS3(this.blog.id);
+
+      await folder.remove(this.blog.id, "/a.txt");
+      await folder.rmdir(this.blog.id, "/posts");
+
+      expect(await folder.backendFor(this.blog.id)).toEqual("s3");
+      expect(await folder.listAll(this.blog.id, "/")).toEqual([]);
     });
 
     it("keeps a named blog the mirror doesn't cover on disk", async function () {
@@ -365,6 +433,31 @@ describe("storage/folder primary", function () {
       expect(await tree(backend, this.blog.id)).toEqual(index);
       await expectCopied(this.blog.id);
       expect(sent[0].onS3).toEqual(this.blog.id);
+    });
+
+    it("keeps an emptied blog on S3 and empties its disk when the disk copy failed", async function () {
+      var blogID = this.blog.id;
+
+      spyOn(local, "remove").and.callFake(function () {
+        return Promise.reject(new Error("disk failed"));
+      });
+      spyOn(console, "error");
+
+      await folder.remove(blogID, "/a.txt");
+      await folder.remove(blogID, "/posts");
+
+      local.remove.and.callThrough();
+
+      expect(await isDirty(primary.DIRTY_KEY, blogID)).toBe(true);
+      expect(await folder.backendFor(blogID)).toEqual("s3");
+      expect(await folder.exists(blogID, "/a.txt")).toBe(false);
+      expect(await local.exists(blogID, "/a.txt")).toBe(true);
+
+      var report = await run("dirty");
+
+      expect(report.repaired).toContain(blogID);
+      expect(await local.listNames(blogID, "/")).toEqual([]);
+      expect(await isDirty(primary.DIRTY_KEY, blogID)).toBe(false);
     });
 
     it("repairs a blog whose disk copy is dirty", async function () {

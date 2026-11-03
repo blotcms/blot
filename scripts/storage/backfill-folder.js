@@ -34,9 +34,11 @@
 // is done the other way round: S3 is its source of truth, so its copy on
 // disk, kept for rolling back, is brought in line with S3 (its index) by the
 // same rules, and nothing in S3 changes. That is how to restore a blog's disk
-// before taking it off S3. A blog named for S3 which is still on disk (no
-// copy in S3 yet) is backfilled as usual; it is marked dirty while that runs,
-// so it moves to S3 only once its copy is complete. A blog off S3 whose disk
+// before taking it off S3. Any other blog is backfilled as usual. --apply
+// takes it out of the set of complete copies (storage:folder:mirror:complete)
+// while it runs and, for a mirrored blog, puts it back once it has finished
+// with no errors, as --verify does when it finds nothing to change; a blog
+// named for S3 moves there only while it is in that set. A blog off S3 whose disk
 // copy is marked as behind S3 is refused: put it back on S3 and run this to
 // restore its disk first. --dirty covers both dirty sets.
 //
@@ -187,7 +189,7 @@ async function run(options) {
       }
 
       const work = async function () {
-        const result = await compareBlog(blogID, { apply: apply, log: log });
+        const result = await compareBlog(blogID, { apply: apply, locked: locked, log: log });
 
         direction = result.direction;
 

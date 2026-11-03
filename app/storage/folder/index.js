@@ -1,4 +1,4 @@
-var { PassThrough } = require("stream");
+var { PassThrough, Readable } = require("stream");
 var { NotFoundError } = require("./errors");
 var mirror = require("./mirror");
 var shadow = require("./shadow");
@@ -255,9 +255,18 @@ module.exports = {
 // copied by commit().
 var MUTATIONS = ["write", "writeFrom", "commit", "mkdir", "rmdir", "remove", "move", "removeAll"];
 
+function noop() {}
+
 MUTATIONS.forEach(function (name) {
   module.exports[name] = async function () {
     var args = Array.prototype.slice.call(arguments);
+
+    // A stream written can fail while the backend is being chosen (a Redis
+    // round trip for a named blog), and an "error" with no listener would
+    // take down the process. The backends check data.errored before reading
+    // it, so the write still rejects with the stream's error.
+    if (name === "write" && args[2] instanceof Readable) args[2].on("error", noop);
+
     var which = await backendFor(args[0]);
     var result = await backends[which]()[name].apply(null, args);
 

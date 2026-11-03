@@ -654,15 +654,22 @@ backend instead of the disk, and the disk keeps a copy to roll back to.
   and no Redis read or other change for any call), `all`, or blog IDs
   separated by commas. It is read on every call.
 - **The guard** (`folder/primary.js`, `usesS3`): a named blog goes to S3 only
-  if the mirror covers it (so S3 is kept in step whenever it is on disk), S3
-  has a copy of it (its `models/file` index exists), its mirror is not dirty
-  (S3 is not behind its disk), and its client is not Local, Git or Google
-  Drive. Otherwise it stays on disk, logged once per process as
-  `[storage/folder primary] blog=... stays on disk: ...`. That is one Redis round trip per
-  call for named blogs only. So a blog named before its mirror and backfill
-  made the copy reads from disk and moves over by itself once they have; the
-  backfill marks a named blog dirty while it copies it, so a half-made copy
-  is never read. Blogs on the Local client stay on disk because the client
+  if the mirror covers it (so S3 is kept in step whenever it is on disk), its
+  copy in S3 is known to be complete (it is in
+  `storage:folder:mirror:complete`), its mirror is not dirty (S3 is not
+  behind its disk), and its client is not Local, Git or Google Drive.
+  Otherwise it stays on disk, logged once per process as `[storage/folder
+  primary] blog=... stays on disk: ...`. That is one Redis round trip per
+  call for named blogs only. An index alone proves nothing: the mirror
+  starts one with a blog's first mirrored write, before its backfill. A blog
+  joins the complete set when a backfill or reconcile of it finishes with no
+  errors, or a check under its lock (the daily run, `--verify`) finds
+  nothing to change, while the mirror covers it; it leaves when a backfill
+  of it starts or a mirror write fails. So existing mirrored blogs become
+  eligible after their next clean backfill or daily check, a blog named
+  before that moves over by itself, and a half-made copy is never read. A
+  complete blog whose folder becomes empty stays on S3. If the mirror stops
+  covering a blog for a while, backfill it again before naming it. Blogs on the Local client stay on disk because the client
   watches the folder there with chokidar (until the Phase E rework of the
   Local client). Blogs on the Git client stay on disk because live clones
   run git in the folder and the setup import uses the folder as git's work
@@ -697,5 +704,5 @@ backend instead of the disk, and the disk keeps a copy to roll back to.
   pairs), so a Dropbox reset reads every file from S3; the shadow reads do not run
   in reverse, so nothing samples a blog on S3 against its disk between daily
   checks; `rebuild-file-index.js --apply` empties a blog's index before
-  refilling it, so a blog on S3 reads a partial folder (or its disk copy)
+  refilling it, so a blog on S3 reads a partial (or empty) folder
   while it runs.

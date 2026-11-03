@@ -5,8 +5,8 @@
 //
 // For a blog on S3 (config.folder_primary, #2258 Phase D), the index is what
 // every read goes by, and --apply empties it before refilling it. Reads which
-// come in meanwhile (visitors take no lock) see a partial folder, or, while it
-// is empty, the copy on disk. Run it at a quiet time, or roll the blog back to
+// come in meanwhile (visitors take no lock) see a partial or empty folder.
+// Run it at a quiet time, or roll the blog back to
 // disk first (scripts/storage/backfill-folder.js, then unset its flag).
 //
 //   node scripts/storage/rebuild-file-index.js <blogID> [--apply] [--no-hash]
