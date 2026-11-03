@@ -111,6 +111,26 @@ const JOBS = {
     maxInputBytes: 64 * MiB,
     maxOutputBytes: 60 * MiB,
   },
+  // A post's HTML from a remote source, parsed by the importer's fixed
+  // operations (app/sandbox/jobs/html.js): the URLs to download, a rewrite of
+  // them, Markdown. No network. The job refuses HTML over 2 MiB or with more
+  // than 30,000 tags (a tag costs the parser and the Markdown converter a few KB),
+  // so the heap limit is a ceiling that nothing it accepts should reach: it makes
+  // a runaway die with a clean out-of-memory exit before the cgroup kills the
+  // jail. The cgroup's limit leaves room for Node and the modules (measured
+  // peaks are in app/sandbox/README.md).
+  "parse-html": {
+    command: [
+      "/usr/local/bin/node",
+      "--max-old-space-size=256",
+      "/usr/src/app/app/sandbox/jobs/main.js",
+      "parse-html",
+    ],
+    memoryBytes: 384 * MiB,
+    timeSeconds: 30,
+    maxInputBytes: 8 * MiB,
+    maxOutputBytes: 8 * MiB,
+  },
   // Spawns perl, which runs exiftool, reading the image from stdin
   exif: {
     command: node("exif"),

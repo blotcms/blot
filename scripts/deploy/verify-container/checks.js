@@ -280,6 +280,35 @@ async function sandboxFetchWorks() {
   return `the fetch jails started and ${meta.code}`;
 }
 
+// The parse-html job, whenever there is a sandbox: the jail can load the HTML
+// parser and Markdown converter (they are read from node_modules, which a
+// missing or mismatched package would leave out) and does the importer's three
+// operations on a small post.
+async function sandboxParseHtmlWorks() {
+  if (!process.env.BLOT_SANDBOX_SOCKET) return "skipped, BLOT_SANDBOX_SOCKET is not set";
+
+  const sandbox = require("../../../app/sandbox");
+  const html = Buffer.from('<p>Hello <strong>world</strong><img src="https://example.com/a.png"></p>');
+
+  const scanned = await sandbox.run("parse-html", { op: "scan", kind: "images" }, html);
+  if (scanned.meta.error || scanned.meta.urls.join() !== "https://example.com/a.png") {
+    throw new Error(`parse-html did not find the image: ${scanned.meta.error || JSON.stringify(scanned.meta)}`);
+  }
+  const rewritten = await sandbox.run(
+    "parse-html",
+    { op: "rewrite", kind: "images", replacements: [["https://example.com/a.png", "_a.png"]] },
+    html
+  );
+  if (rewritten.meta.error || !rewritten.outputs[0].toString().includes('src="_a.png"')) {
+    throw new Error(`parse-html did not rewrite the image: ${rewritten.meta.error || "no change"}`);
+  }
+  const markdown = await sandbox.run("parse-html", { op: "markdown" }, html);
+  if (markdown.meta.error || !markdown.outputs[0].toString().startsWith("Hello **world**")) {
+    throw new Error(`parse-html did not convert to Markdown: ${markdown.meta.error || markdown.outputs[0]}`);
+  }
+  return "the jail scanned, rewrote and converted a post";
+}
+
 // The proxy jail, whenever there is a sandbox. A forward-proxy request for the
 // metadata address must not get through: tinyproxy answers 500 when the filter
 // refuses it, which also proves the proxy answers at all.
@@ -399,6 +428,7 @@ module.exports = [
   { name: "sandbox", run: sandboxWorks },
   { name: "sandbox browser", run: sandboxBrowserWorks },
   { name: "sandbox fetch", run: sandboxFetchWorks },
+  { name: "sandbox parse-html", run: sandboxParseHtmlWorks },
   { name: "node filter", run: nodeFilter },
   { name: "required environment", run: requiredEnv },
   { name: "sandbox proxy", run: sandboxProxyWorks },

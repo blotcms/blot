@@ -105,6 +105,17 @@ starts `SANDBOX_`, and it never falls back to in-process.
     come back, and anything else, SVG included, is an error. The importer's
     images use this, so what it writes into a folder is libvips's output, not
     the server's.
+  - `kind: "html"` a web page that the jail parses itself, so Node never does:
+    the request names one fixed `extract`ion (`jobs/html.js`), and what comes back
+    is its small, validated structure as `extracted`, not the page. The only one
+    is `"og-video"`, the player a page names in its Open Graph tags
+    (`{ src, width, height }`, each only if present and valid: `src` an http(s)
+    URL with no space, quote or angle bracket, the sizes whole numbers of
+    pixels up to 10,000), for bandcamp embeds
+    (`build/plugins/videoEmbeds/bandcamp.js`). `maxBytes` is 2 MiB (the most the
+    parser takes) and `truncate` reads the head of a longer page. A page the
+    parser refuses (see `parse-html`) is an error of that request. The
+    caller never supplies a selector or code.
   - `ip` connects the first request to that address, with the URL's host as the
     Host header and the TLS name, as domain verification needs (the address it
     resolved itself, which the resolver in the jail may not agree with yet). A
@@ -136,6 +147,41 @@ starts `SANDBOX_`, and it never falls back to in-process.
   `timeoutMs` left in the batch's 60s, else it is put off like one that didn't
   fit, not cut short; and `many` takes a `signal` and starts no jail after it
   aborts.
+
+- `parse-html` parses the HTML of a post the importer holds, so Node doesn't:
+  a post comes from an Are.na block (remote text) or from an export, and the
+  importer's stages used to hand it to cheerio and Turndown. The input is the
+  HTML; `args.op` names one of three fixed operations and a caller supplies no
+  selector or option (`jobs/html.js`, `jobs/parse-html.js`):
+  - `scan` (`kind` `images`, `pdfs` or `audio`) `meta.urls`, the http(s) URLs of
+    that kind in the post, each once, in order, at most 1000 of at most 2048
+    characters: every `<img src>`; every `<a href>` whose whole address ends in
+    `.pdf`; every `<audio src>`. `outputs[0]` is the post as the parser writes it
+    back, which is what the importer keeps if nothing is downloaded.
+  - `rewrite` (`kind`, `replacements`: a list of `[url, name]`) `outputs[0]` is the
+    post with each URL changed to its name: an image's `src` and the link around
+    it if that went to the same address; a PDF link's `href` and its text if
+    that was the address; audio's `src`. A name is set as an attribute value,
+    never parsed.
+  - `markdown` `outputs[0]` is the post as Markdown (Turndown, GFM, with
+    nothing escaped and audio, video and iframes kept).
+
+  The importer does a `scan` for each of its PDF, image and audio stages, one
+  `rewrite` for a stage that downloaded something, and one `markdown`
+  (`dashboard/site/import/helper/html_assets.js`). Markup it won't parse is
+  `meta.error` (the stage fails that post with the message, and downloads
+  nothing), not a failure of the job: more than 2 MiB, more than 30,000 tags
+  (each `<` that starts a tag or a closing tag), a tag with more than 256
+  attributes (parse5 takes 16s over 100,000), or nested more than 500 deep (the
+  parser and the serialiser recurse, and parse5 is slow in depth). The depth
+  limit is enforced while the tree is built (a tree adapter that checks each
+  node's depth), and the others by one pass over the text before parsing, so a
+  hostile page is refused in milliseconds. It has no network, a 384 MiB cgroup
+  and a heap limit of 256 MiB. Measured in a real jail, the worst accepted posts
+  (2 MiB of text, a comment or one attribute; 29,000 `<li>`; 14,500 links)
+  peak at about 160, 220, 275 and 300 MiB for the whole jail with Node and the
+  modules, and finish in under 5s; a post of ordinary size takes about 30 MiB
+  and 100ms.
 
 Callers write any output files themselves: the jail can't reach the data mount.
 Args are JSON and every job checks them, since they come from the less trusted side.
@@ -276,6 +322,29 @@ written when the image is built) that refuses them, and refuses 32-bit calls and
 no-new-privs comes with it, so no setuid program works under Node. The broker and
 the proxy jail start separately, as they must. OpenResty isn't filtered, and
 neither is anything run by `docker exec`.
+
+## Markup from the network
+
+The sandbox parses markup that came from the network, so the parsers' bugs and
+the cost of hostile markup stay in a jail. Where Node does still parse such
+bytes, and why:
+
+- **In the jail:** bandcamp's page (`fetch`, `kind: "html"`), and the HTML of an
+  imported post: the PDF, image and audio stages and the Markdown conversion
+  (`parse-html`). This includes the importers' Are.na blocks, and a WordPress or
+  Blogger export's posts, which go through the same stages.
+- **Not markup:** domain verification, the featured-site checks and the SSL
+  warm-ups read a status, a header, a string comparison or (the subscription
+  duration, at most 4 KiB) `JSON.parse`; Are.na's channel listing is JSON.
+- **Out of scope, parsed in Node:** the importers' own parsing of an export the
+  user uploaded (WordPress WXR and Blogger's feed, `sources/*/parse.js`,
+  `resolve_url`, `replace_embeds`, `remove_inline_images`); a blog's own files and
+  entries at build time; the Google Drive document export; the documentation
+  site's build, which fetches the maintainers' tool pages. The oEmbed embeds
+  (Twitter, Flickr, Bluesky, Vimeo, YouTube) fetch JSON from a fixed host with
+  `node-fetch` and put the `html` it names into the entry, which cheerio then
+  parses along with the entry; moving that would not stop the parse, since the
+  entry is parsed in Node anyway.
 
 ## Alerts
 

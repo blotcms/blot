@@ -9,7 +9,9 @@
 //                                                               // for a URL
 //
 // A result is { ok: true, status, headers, kind, data } plus text for the text
-// kind, and format, width and height for an image; or { ok: false, error }.
+// kind, format, width and height for an image, and extracted for the html kind
+// (the fixed extraction the request named, run on the page in the jail, so Node
+// never parses it); or { ok: false, error }.
 // headers has the names of the job's NAMES (etag, contentType, location...).
 // An error has the message the job gave, and status (a refused status), code (a
 // network error's, such as ECONNREFUSED), type "request-timeout" for a timeout.
@@ -58,6 +60,8 @@ function succeeded(meta, output) {
   if (meta.kind === "image") {
     Object.assign(result, { format: meta.format, width: meta.width, height: meta.height });
   }
+  // A named extraction's data from the jail's parse of a page (kind "html")
+  if (meta.kind === "html") result.extracted = meta.extracted || {};
   if (meta.truncated) result.truncated = true;
   return result;
 }

@@ -51,11 +51,12 @@ test("jail: an unknown job throws", () => {
 });
 
 test("jail: every job runs its own file in main.js, within its limits", () => {
-  assert.deepStrictEqual(Object.keys(jail.JOBS).sort(), ["exif", "favicon", "fetch", "fetch-image", "metadata", "pandoc", "resize", "screenshot", "template-image", "thumbnail", "to-png", "unzip"]);
+  assert.deepStrictEqual(Object.keys(jail.JOBS).sort(), ["exif", "favicon", "fetch", "fetch-image", "metadata", "pandoc", "parse-html", "resize", "screenshot", "template-image", "thumbnail", "to-png", "unzip"]);
   for (const [name, j] of Object.entries(jail.JOBS)) {
     assert.deepStrictEqual(j.command.slice(-2), ["/usr/src/app/app/sandbox/jobs/main.js", name]);
     assert(fs.existsSync(path.join(__dirname, "../../../../app/sandbox/jobs", name + ".js")));
     if (j.network) continue;
+    if (name === "parse-html") continue;
     assert.strictEqual(j.memoryBytes, 512 * 1024 * 1024);
     // a zip is read whole into memory, with its files beside it
     assert.strictEqual(j.maxInputBytes, (name === "unzip" ? 64 : 256) * 1024 * 1024);
@@ -72,6 +73,17 @@ test("jail: every job runs its own file in main.js, within its limits", () => {
 });
 
 const NETWORK_JOBS = ["screenshot", "fetch-image", "fetch"];
+
+test("jail: the parse-html job has no network, a smaller jail and a heap limit under it", () => {
+  const j = jail.JOBS["parse-html"];
+  assert(!j.network);
+  assert.strictEqual(j.memoryBytes, 384 * 1024 * 1024);
+  // the HTML parse-html accepts (2 MiB, app/sandbox/jobs/html.js) and its replacements fit
+  assert(j.maxInputBytes >= 2 * 1024 * 1024 + 4 * 1024 * 1024);
+  const heap = j.command.find((a) => a.startsWith("--max-old-space-size="));
+  assert(Number(heap.split("=")[1]) * 1024 * 1024 < j.memoryBytes);
+  assert(!jail.args("parse-html").includes("--keep_caps"));
+});
 
 test("jail: a job with a network starts as its own uid, in its cgroup, behind the filter", () => {
   assert.deepStrictEqual(

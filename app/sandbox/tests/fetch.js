@@ -493,6 +493,126 @@ describe("sandbox fetch job", function () {
     });
   });
 
+  describe("html pages", function () {
+    const page = (tags, body = "") => `<!doctype html><html><head>${tags}</head><body>${body}</body></html>`;
+    const player =
+      '<meta property="og:video" content="https://bandcamp.com/EmbeddedPlayer/v=2/album=1/">' +
+      '<meta property="og:video:width" content="400"><meta property="og:video:height" content="120">';
+    const html = (url, extra) => ({ url, kind: "html", extract: "og-video", ...extra });
+
+    it("returns the named extraction of the page, never the page", async function () {
+      routes["/album"] = send(page(player, "<p>" + "x".repeat(1000) + "</p>"), { "content-type": "text/html" });
+
+      const { meta, outputs } = await batch([html(origin + "/album")]);
+
+      expect(meta.results[0]).toEqual({
+        status: 200,
+        kind: "html",
+        headers: { contentType: "text/html" },
+        extracted: { src: "https://bandcamp.com/EmbeddedPlayer/v=2/album=1/", width: 400, height: 120 },
+      });
+      expect(outputs[0].length).toBe(0);
+    });
+
+    it("answers a page with no player as an extraction with nothing in it", async function () {
+      routes["/plain"] = send(page("<title>x</title>"));
+      const { meta } = await batch([html(origin + "/plain")]);
+      expect(meta.results[0].extracted).toEqual({});
+    });
+
+    it("answers what the page names that is not a player's address or size as nothing", async function () {
+      routes["/hostile"] = send(
+        page(
+          '<meta property="og:video" content="javascript:alert(1)"><meta property="og:video:width" content="400px">' +
+            '<meta property="og:video:height" content="-1">'
+        )
+      );
+      const { meta } = await batch([html(origin + "/hostile")]);
+      expect(meta.results[0].extracted).toEqual({});
+    });
+
+    it("needs a named extraction, and no other", async function () {
+      routes["/album"] = send(page(player));
+      for (const extract of [undefined, "", "meta", "constructor", "__proto__", "og-video; x"]) {
+        const { meta } = await batch([{ url: origin + "/album", kind: "html", extract }]);
+        expect(meta.results[0].error).toBe("unknown extraction");
+      }
+      expect(requests.length).toBe(0);
+    });
+
+    it("cuts a long page at maxBytes with truncate, and the head still answers", async function () {
+      routes["/long"] = send(page(player, "x".repeat(3 * MiB)));
+      const cut = await batch([html(origin + "/long", { truncate: true })]);
+      expect(cut.meta.results[0].truncated).toBe(true);
+      expect(cut.meta.results[0].extracted.width).toBe(400);
+
+      const whole = await batch([html(origin + "/long")]);
+      expect(whole.meta.results[0].error).toBe("response is too large");
+    });
+
+    it("does not fetch more than the extraction's limit, whatever maxBytes says", async function () {
+      routes["/long"] = send(page(player, "x".repeat(3 * MiB)));
+      const { meta } = await batch([html(origin + "/long", { maxBytes: 64 * MiB })]);
+      expect(meta.results[0].error).toBe("response is too large");
+    });
+
+    it("answers a page that is too large, deep or full of tags to parse as an error of the fetch", async function () {
+      routes["/deep"] = send(page(player, "<div>".repeat(29000)));
+      routes["/tags"] = send(page(player, "<a></a>".repeat(30000)));
+      routes["/attributes"] = send(page(player, "<img " + Array.from({ length: 50000 }, (_, i) => "a" + i).join(" ") + ">"));
+
+      const { meta } = await batch(["deep", "tags", "attributes"].map((name) => html(origin + "/" + name)));
+
+      expect(meta.results.map((r) => r.error)).toEqual([
+        "markup is nested too deeply",
+        "markup has too many tags",
+        "markup has a tag with too many attributes",
+      ]);
+    });
+
+    it("keeps the rest of the batch going after a page it can't parse", async function () {
+      routes["/deep"] = send("<div>".repeat(29000));
+      routes["/album"] = send(page(player));
+      const { meta } = await batch([html(origin + "/deep"), html(origin + "/album")]);
+      expect(meta.results[0].error).toBeTruthy();
+      expect(meta.results[1].extracted.height).toBe(120);
+    });
+
+    it("refuses a status that is not 2xx and a redirect that is not followed, as other kinds do", async function () {
+      routes["/gone"] = (req, res) => {
+        res.statusCode = 404;
+        res.end(page(player));
+      };
+      routes["/moved"] = (req, res) => {
+        res.writeHead(302, { location: origin + "/album" });
+        res.end();
+      };
+      routes["/album"] = send(page(player));
+
+      const { meta } = await batch([html(origin + "/gone"), html(origin + "/moved", { redirect: "manual" })]);
+
+      expect(meta.results[0]).toEqual({ error: jasmine.any(String), status: 404 });
+      expect(meta.results[1].status).toBe(302);
+      expect(meta.results[1].error).toBeTruthy();
+      expect(requests.map((r) => r.url)).toEqual(["/gone", "/moved"]);
+    });
+
+    it("has nothing to extract from a HEAD", async function () {
+      routes["/album"] = send(page(player));
+      const { meta } = await batch([html(origin + "/album", { method: "HEAD" })]);
+      expect(meta.results[0].status).toBe(200);
+      expect(meta.results[0].extracted).toBeUndefined();
+    });
+
+    it("gives the client the extraction as `extracted`", async function () {
+      routes["/album"] = send(page(player));
+      const result = await sandboxFetch.one(html(origin + "/album"));
+      expect(result.kind).toBe("html");
+      expect(result.extracted).toEqual({ src: "https://bandcamp.com/EmbeddedPlayer/v=2/album=1/", width: 400, height: 120 });
+      expect(result.data.length).toBe(0);
+    });
+  });
+
   describe("the client", function () {
     it("returns a result for each request, an error for one that failed", async function () {
       routes["/one"] = send("1", { ETag: '"1"' });
