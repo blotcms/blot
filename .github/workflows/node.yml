@@ -82,10 +82,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - id: versions
+        uses: ./.github/actions/versions
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24.22.1
+          node-version: ${{ steps.versions.outputs.NODE_VERSION }}
 
       # Builds and pushes the test image when nothing has pushed it yet, i.e.
       # when Dockerfile, .dockerignore or package.json changed. (Here rather
@@ -124,6 +127,7 @@ jobs:
         with:
           platforms: linux/arm64
           target: dev
+          build-args: ${{ steps.versions.outputs.build-args }}
           context: .
           # Push zstd-compressed layers instead of gzip. Every test job pays a
           # fresh image pull; zstd decompresses
@@ -257,16 +261,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # The four files that name the image, fetched from the API rather
-          # than checked out, so this needn't wait for (or narrow) a checkout
+          # The files that name the image, fetched from the API rather than
+          # checked out, so this needn't wait for (or narrow) a checkout
           SRC="$RUNNER_TEMP/image-tag"
-          mkdir -p "$SRC/scripts/tests/ci"
-          for f in Dockerfile .dockerignore package.json scripts/tests/ci/image-tag.sh; do
-            gh api -H "Accept: application/vnd.github.raw" \
-              "repos/$GITHUB_REPOSITORY/contents/$f?ref=$GITHUB_SHA" > "$SRC/$f"
+          mkdir -p "$SRC/scripts/tests/ci" "$SRC/config"
+          # Each is tried a few times: one 5xx from the API would otherwise
+          # fail the whole job before any test runs
+          for f in Dockerfile .dockerignore package.json config/versions.env scripts/tests/ci/image-tag.sh; do
+            for attempt in 1 2 3 4 5; do
+              gh api -H "Accept: application/vnd.github.raw" \
+                "repos/$GITHUB_REPOSITORY/contents/$f?ref=$GITHUB_SHA" > "$SRC/$f" && break
+              [ "$attempt" = 5 ] && exit 1
+              sleep $((attempt * 5))
+            done
           done
           IMAGE_TAG=$(bash "$SRC/scripts/tests/ci/image-tag.sh")
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+          set -a; . "$SRC/config/versions.env"; set +a
           nohup bash -c '
             # On a run that changes dependencies the lint job is still
             # building the image; wait for it to be pushed.
@@ -276,8 +287,8 @@ jobs:
               sleep 10
             done
             docker pull -q "$0" &
-            docker pull -q redis:6.2.12 &
-            docker pull -q alpine/minio:RELEASE.2025-10-15T17-29-55Z@sha256:cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4 &
+            docker pull -q "redis:$REDIS_VERSION" &
+            docker pull -q "$MINIO_IMAGE" &
             wait
             echo $? > "$1/pull.done"
           ' "$IMAGE_TAG" "$RUNNER_TEMP" > "$RUNNER_TEMP/pull.log" 2>&1 &
@@ -285,10 +296,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - id: versions
+        uses: ./.github/actions/versions
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24.22.1
+          node-version: ${{ steps.versions.outputs.NODE_VERSION }}
 
       - name: Plan
         run: |
@@ -371,13 +385,19 @@ jobs:
           sparse-checkout: |
             /package.json
             /app/**/*.js
+            /config/versions.env
+            /.github/actions/versions/action.yml
           sparse-checkout-cone-mode: false
+
+      - id: versions
+        if: env.COLLECT_COVERAGE == 'true'
+        uses: ./.github/actions/versions
 
       - name: Setup Node.js
         if: env.COLLECT_COVERAGE == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: 24.22.1
+          node-version: ${{ steps.versions.outputs.NODE_VERSION }}
 
       - name: Download coverage from every job
         if: env.COLLECT_COVERAGE == 'true'

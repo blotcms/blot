@@ -8,6 +8,9 @@
 //   verify(blogID, options)   compares the blog's EBS repository with its store
 //   orphans(options)          deletes <blogID>/git/ prefixes left behind by
 //                             blogs no longer on git
+//   scratch(options)          removes the import-, verify- and rewrite-
+//                             directories a killed process left in the
+//                             scratch directory (store/leftovers.js)
 //   daily(options)            all of the above, for every shadowed blog; the
 //                             orphans only on the first of the month
 //
@@ -38,6 +41,7 @@ const shadow = require("./index");
 const { manifest, layout } = require("../store");
 const sweep = require("../store/sweep");
 const { verifyImport } = require("../store/import");
+const { sweepScratch } = require("../store/leftovers");
 const { measure } = require("./counting");
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -55,8 +59,13 @@ const TEST_HANDLE = "gittest";
 const RECHECK_DELAY_MS = 60 * 1000;
 
 // A prefix left by a blog off git is only deleted once nothing has been
-// written to it for this long, so a reconnect in flight is not touched
-const ORPHAN_MIN_AGE_MS = DAY;
+// written to it for this long, so a reconnect in flight is not touched. It
+// also deletes the manifests a removal keeps (store/remove.js), after which a
+// reconnect numbers its manifests from 1 again; that is only safe once no
+// process can still build on a manifest from before, so this is twice the
+// age a swap allows its base (store/manifest.js, MAX_BASE_AGE), as the sweep's
+// recovery window is.
+const ORPHAN_MIN_AGE_MS = 2 * DAY;
 
 // HEADs at once for one blog, and blogs checked at once
 const HEADS_AT_ONCE = 8;
@@ -92,6 +101,21 @@ function allBlogIDs() {
 // which has far more room than the cache's budget
 function defaultScratchDir() {
   return path.dirname(config.git_store.cache_directory);
+}
+
+// Removes what a killed import, verify or rewrite left in the scratch
+// directory (a deploy replacing a container mid-import), judged by age alone:
+// the directory is shared by processes which cannot see each other. Logs one
+// line, without paths. Never throws.
+async function scratch({ scratchDir = defaultScratchDir(), minAge, now = Date.now() } = {}) {
+  try {
+    const result = await sweepScratch({ dir: scratchDir, minAge, now });
+    shadow.log({ op: "sweep", source: "scratch", outcome: result.errors ? "error" : "ok", ...result });
+    return result;
+  } catch (err) {
+    shadow.log({ op: "sweep", source: "scratch", outcome: "error", detail: shadow.scrub(err) });
+    return { removed: 0, spared: 0, bytes: 0, errors: 1, failed: shadow.scrub(err) };
+  }
 }
 
 // Whether shadow mode is set up, so there is anything to look after
@@ -193,7 +217,7 @@ async function cheapCheck(ctx) {
   const ebs = await shadow.ebsRefs(gitDir);
   const current = await manifest.read(store);
 
-  if (current.seq === 0) {
+  if (manifest.isEmpty(current)) {
     if (Object.keys(ebs).length) findings.push({ kind: "mismatch", detail: "the store is empty; EBS has " + Object.keys(ebs).length + " refs" });
     return { findings, refs: 0, files: 0 };
   }
@@ -358,7 +382,8 @@ let listPrefixes = s3Prefixes;
 // touched, and is looked up again just before the delete. Only the keys listed
 // are deleted, so anything written after the listing is left. Resolves with
 // counts, and `findings` for the alert email: a kind "orphan" finding for each
-// prefix deleted, since the disconnect should have deleted it and a leftover
+// prefix deleted that held more than the manifests the disconnect's removal
+// keeps (store/remove.js), since it should have deleted the rest and a leftover
 // means a removal path to fix, and a kind "error" finding for each prefix
 // whose lookup, listing or delete failed. A failed listing of the prefixes
 // themselves rejects.
@@ -408,6 +433,13 @@ async function orphans({ now = Date.now(), minAge = ORPHAN_MIN_AGE_MS } = {}) {
 
       counts.removed++;
       counts.deleted += keys.length;
+
+      // Only manifests is what a removal leaves on purpose (store/remove.js)
+      if (keys.every((key) => key.startsWith(layout.MANIFEST_PREFIX))) {
+        shadow.log({ blog: blogID, op: "remove", outcome: "ok", reason: "tombstone", deleted: keys.length });
+        continue;
+      }
+
       findings.push({ blog: blogID, check: "orphan", kind: "orphan", detail: "deleted " + keys.length + " objects left behind" });
       shadow.log({ blog: blogID, op: "remove", outcome: "ok", reason: "orphan", deleted: keys.length });
     } catch (err) {
@@ -478,7 +510,10 @@ async function daily({ now = Date.now(), deepCount = DEEP_SAMPLE, recheckDelayMs
     }
   }
 
-  return { blogs: ids.length, sweeps, deepChecked, findings, orphans: orphaned, ms: Date.now() - started };
+  const leftovers = await scratch({ scratchDir, now });
+  if (leftovers.failed) findings.push({ blog: "-", check: "scratch", kind: "error", detail: leftovers.failed });
+
+  return { blogs: ids.length, sweeps, deepChecked, findings, orphans: orphaned, scratch: leftovers, ms: Date.now() - started };
 }
 
 function _setPrefixLister(fn) {
@@ -490,6 +525,7 @@ module.exports = {
   sweepBlog,
   verify,
   orphans,
+  scratch,
   daily,
   configured,
   defaultScratchDir,

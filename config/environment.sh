@@ -21,7 +21,8 @@ export BLOT_REDIS_HOST=127.0.0.1
 # Name of linux user who runs the blot server
 export BLOT_USER=
 
-# Project Node.js LTS version (also pinned in .nvmrc and Dockerfile)
+# Project Node.js LTS version. This file is copied to the host, so it can't read
+# config/versions.env; scripts/security/check-versions.js checks the two match.
 export BLOT_NODE_VERSION=24.22.1
 
 # result of which pandoc

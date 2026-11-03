@@ -110,7 +110,8 @@ config/host/launch.sh --type <instance-type> --key-name <aws-key-pair> --key <pr
 
 `launch.sh` starts the instance (newest AL2023 arm64 AMI, the app subnet, the
 host security group, IMDSv2 only, a 40 GB gp3 root, termination
-protection on) and runs `bootstrap.sh` on it. `--ssh-port` goes in user data, so
+protection on) and runs `bootstrap.sh` on it. The security group admits
+TCP 80 and 443 and UDP 443 (HTTP/3) from anywhere. `--ssh-port` goes in user data, so
 the first connection already uses that port. `--redis-maxmemory` (or
 `REDIS_MAXMEMORY`) is required and has no default: the Redis setup's 70% of RAM
 is wrong on a host the units share. Afterwards it checks from your machine

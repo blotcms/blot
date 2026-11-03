@@ -18,9 +18,9 @@
 # table to $GITHUB_STEP_SUMMARY. Exits non-zero if any process failed.
 set -uo pipefail
 
-REDIS_IMAGE="redis:6.2.12"
-# Keep in step with .github/actions/start-minio and scripts/tests/invoke.sh
-MINIO_IMAGE="alpine/minio:RELEASE.2025-10-15T17-29-55Z@sha256:cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4"
+# REDIS_VERSION and MINIO_IMAGE come from config/versions.env
+set -a; . "$(dirname "$0")/../../../config/versions.env"; set +a
+REDIS_IMAGE="redis:${REDIS_VERSION}"
 # A spec that starves the event loop stops Jasmine's own timeout firing, so
 # cap each process rather than hold the runner.
 PROCESS_TIMEOUT="${PROCESS_TIMEOUT:-12m}"

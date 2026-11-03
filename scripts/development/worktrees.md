@@ -24,8 +24,9 @@ Requires `npm start` to be running. Refuses to run in the main checkout.
 
 Five fixed sibling hosts, `a-local.blot` … `e-local.blot`. Each claimed slot is
 one extra container, `blot-node-<slot>`, with this worktree's `app`, `config`,
-`scripts` and `tests` mounted (nodemon reloads on edit). nginx, Redis and `data/`
-are shared with the main stack.
+`scripts` and `tests` mounted (nodemon reloads on edit). The main stack's
+proxy (OpenResty in `node-app`), Redis and `data/` are shared with it. Sidecars
+are plain Node: requests to a slot skip the proxy's cache and routing.
 
 `BLOT_HOST=<slot>-local.blot` is all the app needs: dashboard
 (`https://a-local.blot`), CDN, blogs (`https://example.a-local.blot`) and
@@ -36,12 +37,13 @@ Sibling hosts rather than `*.wt.local.blot`: `*.local.blot` does not cover
 wildcard certs. `a-local.blot` has the same shape as `local.blot`, so one
 wildcard per slot works. dnsmasq already answers everything under `.blot`.
 
-- **TLS:** `scripts/development/proxy/setup.sh` adds `a-local.blot`/`*.a-local.blot` …
+- **TLS:** `scripts/development/setup-certs.sh` adds `a-local.blot`/`*.a-local.blot` …
   to the mkcert cert and regenerates an existing cert that lacks them.
-- **nginx:** one regex `server` block in `scripts/development/proxy/development_server.conf` sends
-  `[a-e]-local.blot` (and subdomains) to `blot-node-<slot>:8080`. It uses a
-  variable `proxy_pass` with Docker's resolver, so nginx boots with no sidecars
-  and a free slot returns 502. Nothing reloads on claim.
+- **Proxy:** one regex `server` block in `proxy/config/development.conf`
+  (rendered only for local development) sends `[a-e]-local.blot` (and
+  subdomains) to `blot-node-<slot>:8080`. It uses a variable `proxy_pass` with
+  Docker's resolver, so OpenResty boots with no sidecars and a free slot
+  returns 502. Nothing reloads on claim.
 - **Compose:** `docker-compose.worktree.yml`, project `blot-<slot>`, joined to
   the `blot_default` network, no published ports, 768m / 0.25 CPU,
   `CONTAINER_NAME=blot-container-<slot>` (log tag only) and `BLOT_PREVIEW=true`.
@@ -80,7 +82,7 @@ Unverified: whether anything cached in shared Redis embeds `config.host`
 
 ## Alternatives considered
 
-- **Nested `*.wt.local.blot`.** Needs nested wildcard certs and regex nginx.
+- **Nested `*.wt.local.blot`.** Needs nested wildcard certs and regex server names.
 - **Branch-named hosts.** Unbounded cert SANs / server names.
 - **Auto-start per worktree.** Wastes RAM; most agents never need HTTP.
 - **Full compose clone per worktree.** Empty data, port clashes.

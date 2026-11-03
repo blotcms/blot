@@ -1,7 +1,7 @@
 # Local Agentation
 
 Toolbar and MCP server for Blot's server-rendered pages, enabled by `npm start`.
-Requires Codex CLI, Node 24.22.1 (LTS) on the host, and Docker Compose v2. Run from the main
+Requires Codex CLI, the Node.js LTS in config/versions.env on the host, and Docker Compose v2. Run from the main
 checkout, whose proxy also serves worktree preview slots.
 
 ## Start and stop
@@ -15,8 +15,10 @@ startup with a registration command. Rerun registration after moving the checkou
 or upgrading from `scripts/agentation/`.
 
 After the normal stack starts, `npm start` calls `run.sh up`, which checks Codex
-again, builds the pinned packages, generates Nginx config from the current
-development config, starts the HTTP service and recreates Nginx with its mounts.
+again, builds the pinned packages, writes the proxy's include hooks to
+`generated/openresty` (see `proxy/config/development.conf`), starts the HTTP
+service and reloads OpenResty in `node-app`, which already mounts that directory.
+Node is not restarted.
 Ctrl+C or startup failure runs `run.sh down` before stopping the rest of the stack
 and folder opener; annotation volumes are retained. Cleanup is installed before
 startup so failed builds are covered.
@@ -27,7 +29,7 @@ To temporarily disable Agentation with the app still running:
 bash scripts/development/agentation/run.sh down
 ```
 
-This restores the original Nginx configuration and stops Agentation. Reload open
+This empties the hooks, reloads OpenResty and stops Agentation. Reload open
 pages. `npm start` enables it again next time. You can also run `run.sh up` to
 reenable it on an already-running stack. The standalone tool does not start or
 reconfigure the application's dependencies. `down` and `mcp` do not check Codex
@@ -83,12 +85,12 @@ with `agentation_resolve`. See the repository's preview skill for source tracing
 
 ## Routing and state
 
-The generated config preserves the normal proxy's upstreams, CDN and slot routing.
-Only `BLOT_HOST`, its subdomains and `a-local.blot` through `e-local.blot` (and
+The hooks add to the normal proxy config rather than replacing it. Only `BLOT_HOST`, its subdomains and `a-local.blot` through `e-local.blot` (and
 their subdomains) receive the toolbar. CDN hosts and unrelated hosts are excluded.
 HTML must contain a closing `</body>`; JSON, feeds and other content types are
-unchanged. Upstream compression is disabled only in application proxy locations
-so Nginx can inject the loader.
+unchanged. While Agentation is on, proxied and cached locations ignore the
+browser's Accept-Encoding, so the proxy serves uncompressed pages it can inject
+the loader into.
 
 The bundle includes React, React DOM and Agentation, served locally at
 `/__agentation/toolbar.js`. There are no CDN imports. Agentation uses an isolated
@@ -97,7 +99,7 @@ by `process.env.NODE_ENV`; compiling the toolbar with `"production"` disables it
 and uses optimized React. This does not enable the toolbar in production Blot.
 The proposed `reactComponents` component prop does not exist in this release.
 
-Browser requests use `https://<page-host>/__agentation/api/...`; Nginx strips the
+Browser requests use `https://<page-host>/__agentation/api/...`; the proxy strips the
 prefix and streams SSE without buffering. It verifies exact same-origin browser
 requests before removing Origin on the internal hop. The backend rejects all
 direct browser origins (`AGENTATION_CORS_ORIGINS=""`); there is no wildcard CORS.

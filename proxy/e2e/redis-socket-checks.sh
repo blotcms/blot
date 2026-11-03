@@ -26,6 +26,10 @@
 # sends when it stops reading at the first match.
 set -eu
 
+# REDIS_VERSION from config/versions.env
+. "$(dirname "$0")/../../config/versions.env"
+REDIS_IMAGE=redis:$REDIS_VERSION-alpine
+
 : "${HOSTIP:?}" "${TEST_DOMAIN:?}" "${CA_BUNDLE:?}"
 IMAGE=${PROXY_IMAGE:-blot-proxy:acme}
 MINICA=${MINICA:-$PWD/pebble.minica.pem}
@@ -123,9 +127,9 @@ echo "=== Setup: Redis on a socket only, the proxy mounting it ==="
 docker rm -f proxy >/dev/null 2>&1 || true
 docker stop redis >/dev/null 2>&1 || true
 
-docker run --rm --user root -v "$SOCKDIR:/s" redis:6.2.12-alpine \
+docker run --rm --user root -v "$SOCKDIR:/s" $REDIS_IMAGE \
   sh -c 'chown redis:redis /s && chmod 755 /s'
-docker run -d --name "$REDIS" -v "$SOCKDIR:/run/blot/redis" redis:6.2.12-alpine \
+docker run -d --name "$REDIS" -v "$SOCKDIR:/run/blot/redis" $REDIS_IMAGE \
   redis-server --port 0 --unixsocket "$SOCKET" --unixsocketperm 777 >/dev/null
 wait_for_redis
 redis set "domain:$TEST_DOMAIN" 1 >/dev/null

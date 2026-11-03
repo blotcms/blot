@@ -44,7 +44,9 @@ async function runPostListenTasks() {
   try {
     await new Promise((resolve, reject) => {
       const development = config.environment === "development";
-      templates({ watch: development, skipUnchanged: development }, (err) =>
+      // One watcher is enough: node-a's (node-b runs in local development too)
+      const watch = development && !config.worker_child;
+      templates({ watch, skipUnchanged: development }, (err) =>
         err ? reject(err) : resolve()
       );
     });
@@ -306,6 +308,8 @@ function main(callback) {
       async function () {
         // The docker build stage for production runs this script ahead of time
         if (config.environment !== "development") return;
+        // node-a builds and watches them for both processes
+        if (config.worker_child) return;
         log("Building documentation assets");
         await documentation({ watch: true });
         log("Built documentation assets");

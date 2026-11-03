@@ -24,7 +24,8 @@ on:
       - "docker-bake.hcl"
       - "proxy/**"
       - "Dockerfile"
-      - "scripts/security/check-base-image.js"
+      - "scripts/security/check-versions.js"
+      - "config/versions.env"
       - "package.json"
       - "app/config.js"
       - "config/index.js"
@@ -56,9 +57,12 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
+      - id: versions
+        uses: ./.github/actions/versions
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 24.22.1
+          node-version: ${{ steps.versions.outputs.NODE_VERSION }}
 
       - name: Record template commit times
         run: node app/documentation/build/latest-commits.js
@@ -75,8 +79,8 @@ jobs:
       # The proxy image is production-shaped: file logging (LOG_TO_STDOUT=false,
       # so fail2ban and logrotate on the host keep working) and BLOT_HOST=blot.im.
       # Host specific settings are runtime values; see proxy/README.md.
-      - name: Check the proxy and app images share a base
-        run: node scripts/security/check-base-image.js
+      - name: Check the version pins
+        run: node scripts/security/check-versions.js
 
       - name: Install config generator dependencies
         run: |
@@ -140,7 +144,7 @@ jobs:
 
       - name: Start Redis
         run: |
-          docker run -d --name redis --network host redis:6.2.12-alpine
+          docker run -d --name redis --network host redis:${REDIS_VERSION}-alpine
           for i in $(seq 1 30); do
             docker exec redis redis-cli ping > /dev/null 2>&1 && exit 0
             sleep 1

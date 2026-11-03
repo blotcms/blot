@@ -33,6 +33,8 @@ const fs = require("fs-extra");
 const { execFileSync } = require("child_process");
 const { BENCHMARK_DEFAULTS } = require("./spec/util/defaults");
 
+const versions = require("../versions");
+
 const ROOT_DIR = path.resolve(__dirname, "../..");
 
 function parseArgs(argv) {
@@ -178,7 +180,7 @@ function main() {
     "rm -f /data/dump.rdb && redis-server",
   ]);
   // A simulated S3 for the storage bucket (the benchmark creates the bucket).
-  // Keep the image in step with .github/actions/start-minio.
+  // The image is MINIO_IMAGE in config/versions.env.
   run("docker", [
     "run",
     "-d",
@@ -193,11 +195,11 @@ function main() {
     "MINIO_ROOT_USER=blot-test",
     "-e",
     "MINIO_ROOT_PASSWORD=blot-test-secret",
-    "alpine/minio:RELEASE.2025-10-15T17-29-55Z@sha256:cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4",
+    versions.get().MINIO_IMAGE,
     "server",
     "/data",
   ]);
-  run("docker", ["build", "--target", "dev", "-t", image, ROOT_DIR]);
+  run("docker", ["build", "--target", "dev", ...versions.buildArgs(), "-t", image, ROOT_DIR]);
 
   const benchmarkArgs = [
     "--corpus-mode",

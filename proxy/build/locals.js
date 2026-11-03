@@ -123,6 +123,13 @@ function container({ env = process.env, config }) {
     // instead (the production image does this, so the host's log rotation
     // and the log-reading scripts keep working).
     log_to_stdout: env.LOG_TO_STDOUT !== "false",
+
+    // Local development (scripts/development/unit/start.sh) sets
+    // LOCAL_DEVELOPMENT=true for the few things only local.blot needs, all in
+    // development*.conf: routing for the worktree preview slots, the storage
+    // bucket behind the CDN host, no rate limits for private addresses and
+    // the include hooks Agentation fills. Production renders none of it.
+    development: env.LOCAL_DEVELOPMENT === "true",
   };
 }
 

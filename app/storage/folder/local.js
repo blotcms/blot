@@ -261,6 +261,12 @@ async function writeFrom(blogID, relPath, srcPath, options) {
 
   if (options && options.move) await fs.move(srcPath, local, { overwrite: true });
   else await attempt(fs.copyFile(srcPath, local));
+
+  // The time the file has in another backend, for a copy between them
+  if (options && options.modified !== undefined) {
+    var modified = new Date(options.modified);
+    await fs.utimes(local, modified, modified);
+  }
 }
 
 // On this backend the path is the file's real place, so there is nothing to

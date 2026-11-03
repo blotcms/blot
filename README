@@ -14,15 +14,15 @@ Blog pages, on subdomains and custom domains, are served by the reverse proxy di
 
 Self-hosting Blot is currently unsupported. Please don’t file issues or contact support about it. I hope to support this properly someday, but not yet.
 
-To run Blot locally, you will need Node.js 24.22.1 (LTS), Docker, mkcert and dnsmasq. Then:
+To run Blot locally, you will need Node.js (the LTS release named by NODE_VERSION in config/versions.env), Docker, mkcert and dnsmasq. Then:
 
 git clone https://github.com/blotcms/blot --depth 1
 cd blot
-nvm install
-nvm use
+nvm install "$(sed -n 's/^NODE_VERSION=//p' config/versions.env)"
+nvm use "$(sed -n 's/^NODE_VERSION=//p' config/versions.env)"
 npm start
 
-The nvm commands use the version pinned in .nvmrc. If you use another Node version manager, select Node.js 24.22.1 before running npm start.
+The nvm commands read the version from config/versions.env, which also holds every other version Blot is built with. If you use another Node version manager, select that Node.js version before running npm start.
 
 The dashboard is https://local.blot and the example site is https://example.local.blot. For the full setup, see:
 

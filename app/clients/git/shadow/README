@@ -4,6 +4,10 @@ Shadow mode mirrors every push and every one of Blot's own commits into the git 
 
 All of shadow mode's git (its own commands in the repository on disk, with the git client's memory settings, and the store's, through the `gate` it passes to `receive`, `compact`, `importRepo` and `verifyImport`) waits for a place in the background lane of `../limiter.js`, the mirror of a push included, so it never holds up a user's push or clone. The read route below runs no git.
 
+## A mirror refused, then accepted on the retry
+
+A refused mirror is tried once more from the store's refs (`runMirror`), and `attempt=2` on an `op=push` line means the first try was refused. Twice in the shadow specs (2 Nov 2026) the first try was refused with "missing necessary objects" with `packBytes=0 objects=0`: the pack never reached `receive`. `packFor` then handed `receive` git's stdout itself, and `receive` only starts reading once it has reserved scratch. A small pack's `pack-objects` could exit before that, and Node drains an exited child's stdout that no one has started reading, so the pack arrived empty with git's exit 0, and the push's tip was in neither the pack nor the store. `packFor` now pipes stdout into a buffer as git starts (`tests/pack.js`), and a refusal like that is logged as "the pack git made reached receive empty". It was never the store: a direct push gives `receive` the request body, which nothing drains, and the store's own git commands read their output from the start.
+
 ## Comparing pushes and writes with EBS
 
 Each push, write, import and compaction logs one line (`index.js` has the details):

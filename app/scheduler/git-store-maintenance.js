@@ -2,7 +2,8 @@
 // blog, the store's sweep and the cheap check of its copy against the
 // repository on disk, a deep check (a whole clone) of a few blogs in turn and
 // the git test blog, and on the first of the month deleting <blogID>/git/
-// prefixes left behind by blogs no longer on git. See
+// prefixes left behind by blogs no longer on git, and clearing the scratch
+// directories a killed import or verify left (older than 12 hours). See
 // app/clients/git/shadow/maintenance.js.
 //
 // It does nothing unless shadow mode is set (BLOT_GIT_STORE_SHADOW) and there
@@ -44,6 +45,8 @@ async function run(options = {}) {
     "orphansRemoved=" + (orphans ? orphans.removed : "-"),
     "orphansSpared=" + (orphans ? orphans.spared : "-"),
     "orphanErrors=" + (orphans ? orphans.errors : "-"),
+    "scratchRemoved=" + report.scratch.removed,
+    "scratchBytes=" + report.scratch.bytes,
     "ms=" + report.ms
   );
 

@@ -40,8 +40,6 @@ scripts/git/repair.js swaps the blog folder for a fresh clone of the bare repo, 
 
 Speed up ci / simplify proxy and e2e testing slightly
 
-- PR 8 (#2119): production proxy in local dev. Local docker-compose runs the unit image with the real OpenResty config instead of `scripts/development/proxy`.
-- After moving the app host to AL2023 (kernel 5.14+), check that `net.ipv4.tcp_migrate_req=1` is set on the host and that stopping a unit no longer resets queued connections (reuseport listener close; the deploy e2e sets it, AL2's 5.10 kernel can't). The proxy deploy e2e still drops a request or two now and then even with it set; find out why (#2119)
 - Watch unit memory (`stats`) for the first days after the #2119 cutover: each unit's limit assumes one unit can carry all traffic
 Deploy macserver
 
@@ -50,10 +48,6 @@ Tune the render LRU caches once #2233 has run on prod for a day (it adds `render
 ---
 
 Set up Redis redundancy using a primary on the main server, a replica on the Frankfurt server, and three Redis Sentinel instances (main, Frankfurt, Mac) for automatic failover with quorum 2. Configure Node.js to discover the current primary via Sentinel. When the original main server recovers, it should rejoin as a replica; restore it as primary through a controlled manual failback using SENTINEL FAILOVER.
-
----
-
-Track OpenResty releases so we can re-enable HTTP/3: require fixes or documented backports for CVE-2026-42530 (QUIC use-after-free; nginx fix 1.31.2) and CVE-2026-95101 (HTTP/3 request-body injection; nginx fix 1.31.7), and review all newer nginx HTTP/3 advisories. Verify the actual bundled nginx/OpenSSL versions and patch coverage, update the pinned image digest and matching Brotli source/checksum, restore QUIC listeners and Alt-Svc advertisements, then rebuild on GitHub and pass proxy e2e checks for site/custom-domain HTTP/3 and wildcard certificates from Redis before deployment. See proxy/SECURITY.md and PR #2225.
 
 Proxy follow ups:
 - Can we modify the proxy disk_cache to key requests off blogID in some way? SO we could also cache preview subdomains and purge them efficiently?
@@ -86,11 +80,9 @@ Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 - Custom-domain certs renew inside the container: none within ~20 days of expiry apart from domains that no longer point at Blot; after a daily renewal run, error.log should show no "certificate for ... expired at" warnings for domains still pointing at Blot (the proxy now refuses to serve an expired stored cert; no host cron)
 - auto-ssl's daily renewal timer first fires 24h after a container starts, so a proxy restarted more often than daily never runs it: confirm proxy deploys are far enough apart, or kick the first run from init_worker
 - Reboot the host once in a maintenance window: mount-instance-store mounts without reformatting, docker starts after it, the proxy comes back with cache/log mounts, :80/:443 answer
-- HTTP/3 is not advertised (no Alt-Svc on either stack); decide whether to open UDP 443 and make fail2ban bans cover UDP too
 - http://www.blot.im/ returns 404: confirm intended
 - app/blog/static has no copy on the host, so those cdn. files fall through to Node: export them from the Node image on deploy, or accept
 - cdn. responses carry Cache-Control twice (expires 1y + add_header), as on bare metal
-- Use the proxy container in local development instead of the nginx:alpine in scripts/development/proxy, so local.blot runs the production proxy config
 - Does proxy container deploy check for enough free memory and disk on host before proceeding?
 - Get proxy horizontally scalable and multi-region
 - Can we add modern compression to proxy? (brotli is in; zstd is not)
@@ -1337,6 +1329,7 @@ Self-hosting:
 ---
 
 Flaky specs (newest first; see "Flaky specs" in CLAUDE.md). Remove an entry when its fix merges.
+- 3 Nov 2026, `.github/workflows` unit-deploy-e2e (the swap-load check after `proxy/deploy/blue-green.sh` replaces blot-blue then blot-green): `total=103 bad=2` (`1 000`, `1 curl-err`, "2 requests did not get a 200") on an unrelated PR (#2449, production-proxy-local-dev, d4235bc73, which only changes local development). Run: https://github.com/blotcms/blot/actions/runs/41641275280/job/125935119037. Investigate: the known occasional dropped request during a unit swap (#2119, the old `tcp_migrate_req` note), which 74e7df179 started reporting apart from drain-timeout cuts; find which side resets the connection.
 - 2 Nov 2026, `app/clients/git/store/tests/scratch.js` "git store reader scratch one pack with a chain of OFS_DELTA entries builds the deepest in chunks of at most 64 KB, and the files are gone by…": `Error: ENOTEMPTY, Directory not empty: '/tmp/git-store-spec-…'` in its setup or teardown, on an unrelated PR (screenshot-reencode-2257, eb479a959); passed on re-run. Run: https://github.com/blotcms/blot/actions/runs/41518327555/job/125527518301. Investigate: the spec removes its temp directory while something it started (a scratch file write or a child git process) is still creating files in it, so wait for that to finish or remove with retries (fs.rm maxRetries).
 - 2 Nov 2026, `app/models/template/tests/create.js` "template creates multiple templates in parallel": `Failed: No template: blog_…:<uuid>` on an unrelated PR (rename-egress, 13cf5b5ca). Run: https://github.com/blotcms/blot/actions/runs/41517695943/job/125525345596. Investigate: a template created in parallel isn't readable yet when the spec reads it back, so look for a create that resolves before its Redis writes (or the template index update) finish, or the spec reading through a cache.
 - 2 Nov 2026, `app/clients/icloud/tests/macserverDisconnect.js` "removeLimiterForBlogID drops waiting jobs, lets the running job finish and rejects the dropped ones": `TypeError: release is not a function` and `Error: This limiter has been stopped.` on an unrelated PR (node-b-oom-score, 9b930a320); passed on re-run. Run: https://github.com/blotcms/blot/actions/runs/41446374389/job/125280368697. Investigate: the running job's release callback is missing when the limiter is stopped mid-job, so check the order of stop() against the job's completion in the limiter (Bottleneck) and whether the spec relies on timing.

@@ -89,6 +89,14 @@ Something the load generator does not hide, printed in the summary:
   the moment the old container closes its idle connections, is retried on a new
   connection like any HTTP client retries a GET (`requests reset on an idle
   kept-alive connection and retried`).
+- A request the old container had accepted and was still working on when its
+  drain ran out (`worker_shutdown_timeout` or `docker stop --time`; a 24 MB
+  upload under this load can take over 30 s) is cut, which is the drain timeout
+  doing its job. One that had run for at least `DRAIN_CUT_MS` (10 s, the
+  shortest drain) is counted, not a failure (`requests cut at the drain
+  timeout`); one cut sooner fails the run. It is told apart from a queued
+  connection reset by its TLS handshake, which a queued connection never
+  finishes.
 
 ### `net.ipv4.tcp_migrate_req` is a host kernel setting
 
@@ -99,8 +107,14 @@ before 5.14, or one with `net.ipv4.tcp_migrate_req=0` (the default), a swap can
 reset a connection or two at a few hundred new connections a second (measured:
 49 resets in 65,000 requests over 10 swaps at ~1000 a second; none in 10 swaps
 with the setting at 1). That is a property of the host's kernel configuration,
-not of the deploy scripts, and **production may not have it set**: the zero
-failed requests the CI job asserts depends on it.
+not of the deploy scripts: production sets it (`config/host/host/setup.sh`),
+and the zero failed requests the CI job asserts depends on it.
+
+On the host, `nstat -az TcpExtTCPMigrateReqSuccess TcpExtTCPMigrateReqFailure`
+shows it working. Failures still tick up by a few per deploy, but checked against
+a deploy (3 Nov 2026) they came well after the last listener had closed, when
+nothing queued can be reset, so most likely half-open handshakes (a SYN never completed) that
+expired after being moved, which the kernel counts as failed migrations.
 
 `swap-load.sh` therefore sets it to 1 (so that CI does not flake), and with
 `TCP_MIGRATE_REQ=0` leaves the host alone and instead **reports** how many new

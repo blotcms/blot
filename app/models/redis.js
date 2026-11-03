@@ -36,9 +36,16 @@ function connectionOptions() {
     reconnectStrategy,
   };
 
-  if (config.redis.socket) return { socket: { ...socket, path: config.redis.socket } };
+  // node-redis sends CLIENT SETINFO on every new connection and ignores the
+  // reply, but Redis 6.2 has no SETINFO (it came in 7.2): each connection
+  // added two ERR to Redis's errorstats, which set off the "Redis errors"
+  // alert when connections came in bursts (3 Nov 2026).
+  const common = { disableClientInfo: true };
 
-  return { url, socket };
+  if (config.redis.socket)
+    return { ...common, socket: { ...socket, path: config.redis.socket } };
+
+  return { ...common, url, socket };
 }
 
 // Makes the client drop cached keys as it sends a command which names them,

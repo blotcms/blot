@@ -42,6 +42,7 @@ const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
 const { execFileSync, spawnSync } = require("child_process");
+const versions = require("../../scripts/versions");
 
 const REPO = path.resolve(__dirname, "../..");
 const STUB = path.join(__dirname, "stub-upstream.js");
@@ -148,7 +149,7 @@ async function startProxy(c) {
 }
 
 function startStub(c) {
-  docker("run", "-d", "--name", c.name + "-stub", "--network", "container:" + c.name, "-e", "STUB_PARITY=1", "-v", `${STUB}:/s.js:ro`, "node:24.22.1-alpine", "node", "/s.js");
+  docker("run", "-d", "--name", c.name + "-stub", "--network", "container:" + c.name, "-e", "STUB_PARITY=1", "-v", `${STUB}:/s.js:ro`, versions.nodeImage(), "node", "/s.js");
 }
 
 async function waitStub(c) {
@@ -711,14 +712,14 @@ function diff(spec, ra, rb) {
 // in origin/master, and must show 0 differences. A proxy PR that changes what
 // a client sees lists each change here, so the review is of the list.
 const INTENDED = [{
-  id: "disable-http3",
+  id: "enable-http3",
   class: "intended",
-  reason: "Clear cached HTTP/3 routes while QUIC is disabled pending OpenResty security fixes.",
+  reason: "Advertise HTTP/3 again now OpenResty 1.31.8.1 has the QUIC security fixes.",
   match: (c, d) => d.kind === "header" && d.name === "alt-svc" &&
     header(c.ra, "alt-svc").length > 0 &&
     header(c.ra, "alt-svc").length === header(c.rb, "alt-svc").length &&
-    header(c.ra, "alt-svc").every((v) => v === 'h3=":443"; ma=86400') &&
-    header(c.rb, "alt-svc").every((v) => v === "clear"),
+    header(c.ra, "alt-svc").every((v) => v === "clear") &&
+    header(c.rb, "alt-svc").every((v) => v === 'h3=":443"; ma=86400'),
 }];
 
 // ---- the run ------------------------------------------------------------
