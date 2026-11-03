@@ -253,13 +253,19 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   decode fail that page. Node still checks the PNG signature before writing them.
 - **A batch has limits of its own.** Args are `{ pages: [{ url, width, height, mobile }] }`,
   1 to 8 pages (the single-page form still works). A page keeps its limits
-  (HTML 10 s, render grace 8 s, screenshot 5 s, closing 3 s: 26 s at worst), so 8 hostile
-  pages could not fit in any limit the client would wait for. The job therefore
-  stops starting pages 90 s in, and a page it didn't reach, or whose PNG would
+  (HTML 10 s, render grace 8 s, screenshot 5 s, closing 3 s: 26 s at worst), and the
+  browser cgroup runs one job at a time while the broker answers `busy` to a
+  request queued for 60 s, so a batch must be short enough to wait behind. The
+  job therefore starts no page after 40 s (typical pages take 3-7 s, so 8 fit
+  in 30-40 s), and a page it didn't reach, or whose PNG would
   take the replies past 56 MiB, comes back `deferred` for the client to send
   again in a later batch (without counting as a failed attempt). The jail's limit
-  is 100 s, the backstop, and the client waits 170 s (a minute queued, then a
-  job). If Chromium dies mid-batch the pages done are returned and the rest are
+  is 70 s, the backstop (40 s plus a page started at the last moment, 26 s, plus
+  closing), and the client's 150 s covers a minute queued and then a job. A
+  `busy` answer to a batch is backpressure: `helper/screenshot` sends its pages
+  again after 5 s, up to 6 times, before failing them, and it is logged, not
+  emailed (`alerts.js`). A `deferred` page is a result, not an error, so
+  `alerts.js` never sees it. If Chromium dies mid-batch the pages done are returned and the rest are
   deferred. If the job as a whole is killed (the 1 GiB browser cgroup's OOM kill
   takes the group) or times out, `helper/screenshot` sends each page of that
   batch on its own, so a heavy page costs only itself.

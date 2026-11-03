@@ -96,7 +96,7 @@ test("jail: a job with a network starts as its own uid, in its cgroup, behind th
   }
   assert.deepStrictEqual(jail.JOBS.screenshot.cgroups, [jail.BROWSER_CGROUP]);
   // a batch of 8 pages (app/sandbox/jobs/screenshot.js)
-  assert.strictEqual(jail.JOBS.screenshot.timeSeconds, 100);
+  assert.strictEqual(jail.JOBS.screenshot.timeSeconds, 70);
   assert.strictEqual(jail.JOBS.screenshot.maxOutputBytes, 60 * 1024 * 1024);
 });
 

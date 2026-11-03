@@ -422,6 +422,21 @@ describe("sandbox screenshot job", function () {
         for (const n of ["a", "b", "c", "d", "e"]) expect(await fs.pathExists(file(n))).toBe(true);
       }, 10000);
 
+      it("sends a batch the broker answered busy again, before failing its pages", async function () {
+        const run = spyOn(sandbox, "run").and.callFake(async (name, args) => {
+          if (run.calls.count() === 1) {
+            throw Object.assign(new Error("sandbox: busy"), { code: "SANDBOX_BUSY" });
+          }
+          return ok(args.pages.map((p) => p.url));
+        });
+
+        await Promise.all([screenshot("https://a", file("a")), screenshot("https://b", file("b"))]);
+
+        expect(run).toHaveBeenCalledTimes(2);
+        expect(urls(run.calls.argsFor(1))).toEqual(["https://a", "https://b"]);
+        expect(await fs.pathExists(file("b"))).toBe(true);
+      }, screenshot.BUSY_DELAY_MS + 10000);
+
       ["SANDBOX_KILLED", "SANDBOX_TIMEOUT"].forEach(function (code) {
         it("sends each page alone when a batch ends in " + code, async function () {
           const heavy = "https://heavy";

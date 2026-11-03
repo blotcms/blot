@@ -42,7 +42,9 @@ const FAILS_ONLY_WHEN_BROKEN = new Set(["fetch-image", "fetch"]);
 // with many remote images queues past fetch-image's short queue by design, and
 // so does a big import past fetch's. A busy answer is logged, with a count,
 // instead of emailed.
-const BUSY_IS_BACKPRESSURE = new Set(["fetch-image", "fetch"]);
+// The screenshot batches queue behind each other in the one browser cgroup;
+// helper/screenshot sends a busy batch again.
+const BUSY_IS_BACKPRESSURE = new Set(["fetch-image", "fetch", "screenshot"]);
 const busyCounts = new Map();
 
 const counts = new Map();

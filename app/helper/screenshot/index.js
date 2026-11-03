@@ -399,6 +399,10 @@ const BATCH_ARGS_BYTES = 48 * 1024;
 // of them together, so each page is tried again on its own.
 const JOB_LIMIT_CODES = ["SANDBOX_TIMEOUT", "SANDBOX_KILLED", "SANDBOX_OUTPUT_TOO_LARGE"];
 
+// A batch the broker answered busy is sent again this often, this far apart
+const BUSY_TRIES = 6;
+const BUSY_DELAY_MS = 5000;
+
 let waiting = []; // { args, path, resolve, reject }
 let windowTimer = null;
 let batchRunning = false;
@@ -461,6 +465,20 @@ async function runBatch(items) {
       Buffer.alloc(0)
     );
   } catch (error) {
+    if (error.code === "SANDBOX_BUSY") {
+      // The browser is taken and the queue was full or waited out: backpressure,
+      // not the pages' doing. Back they go, a few times, before they fail.
+      const fresh = items.filter((item) => (item.busy = (item.busy || 0) + 1) <= BUSY_TRIES);
+      for (const item of items) if (!fresh.includes(item)) item.reject(error);
+      if (fresh.length) {
+        const timer = setTimeout(() => {
+          waiting.unshift(...fresh);
+          schedule();
+        }, BUSY_DELAY_MS);
+        timer.unref();
+      }
+      return;
+    }
     if (JOB_LIMIT_CODES.includes(error.code)) {
       if (items.length > 1) {
         // One heavy or hung page must only cost itself. Each is sent alone,
@@ -566,5 +584,6 @@ module.exports.configure = configure;
 module.exports.MIN_TIME_BETWEEN_OPS = MIN_TIME_BETWEEN_OPS;
 module.exports.BATCH_MAX = BATCH_MAX;
 module.exports.COALESCE_MS = COALESCE_MS;
+module.exports.BUSY_DELAY_MS = BUSY_DELAY_MS;
 module.exports.restart = restart;
 module.exports.shutdown = shutdown;

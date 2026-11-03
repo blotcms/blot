@@ -50,12 +50,15 @@ const PAGE_WORST_CASE =
   PAGE_TIMEOUT + RENDER_GRACE + SCREENSHOT_TIMEOUT + CLOSE_TIMEOUT;
 
 const MAX_PAGES = 8;
-// A page is started only if it could finish by this long after the job began,
-// launching included (the first page always is). Pages take 3-7s typically, so
-// a full batch fits with room to spare; a batch of slow pages stops early and
-// the rest come back deferred, for the caller to send again, rather than the
-// job meeting its limit in jail.js (100s), which would lose the pages done.
-const BATCH_BUDGET = 90 * 1000;
+// No page is started later than this after the job began, launching included
+// (the first page always is). The unit's browser cgroup runs one job at a time
+// and the broker answers "busy" to a request queued for 60s, so another
+// process's batch must be able to wait behind this one: it is short on
+// purpose. Pages take 3-7s typically, so 8 fit in 30-40s; a batch of slow
+// pages stops early and the rest come back deferred, for the caller to send
+// again. A page started at the last moment can take PAGE_WORST_CASE more, so
+// the job's limit in jail.js (70s) is this plus that plus the close.
+const BATCH_BUDGET = 40 * 1000;
 // The re-encoded PNGs of a batch together stay under this, which is below the
 // job's maxOutputBytes in jail.js and the 64 MiB a reply may hold. A PNG that
 // would pass it is deferred, unless it is the first, which has all the room.
@@ -264,7 +267,7 @@ async function run(args) {
         results[i] = deferred("Chromium stopped before this page");
         continue;
       }
-      if (ran && Date.now() - started + PAGE_WORST_CASE > limits.batchBudget) {
+      if (ran && Date.now() - started >= limits.batchBudget) {
         results[i] = deferred("the batch ran out of time");
         continue;
       }
