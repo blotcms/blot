@@ -56,7 +56,10 @@ module.exports = function () {
         classCounts.push(
           "redis_cache_" + name + "_hits=" + c.hits,
           "redis_cache_" + name + "_misses=" + c.misses,
-          "redis_cache_" + name + "_bypass=" + c.bypass
+          "redis_cache_" + name + "_bypass=" + c.bypass,
+          // A capped class (CLASS_CAPS in models/redis-cache) evicting its
+          // own entries; the cache-wide evictionCount includes these
+          "redis_cache_" + name + "_evictions=" + (c.evictions || 0)
         );
       });
 

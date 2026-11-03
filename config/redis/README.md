@@ -450,8 +450,20 @@ invalidation after the write's reply; every other process's cache learns of
 the write from that push. Keys named after a request path (entries, entry and
 template URLs, redirects) stay out: Redis tracks every key a client reads,
 even a missing one, until it is written, so crawler and scanner paths would
-refill the tracking table. Measured on production in November 2026, which is
-why it was kept:
+refill the tracking table.
+
+The cache is bounded by entry count, so the classes share its room in a way
+that keeps the blog keys in: URL patterns, template owner sets, sessions and
+users each have their own cap (`CLASS_CAPS` in `app/models/redis-cache.js`) and
+evict only their own least recently used entries, and the cache's `maxEntries`
+leaves room above those caps for a few hot keys per blog (its handle or domain,
+info, template metadata). A full capped class then never makes the cache evict
+a blog record. The `[STATS]` lines log each class's evictions
+(`redis_cache_<class>_evictions`) beside the cache-wide `evictionCount`; a
+cache-wide count above the classes' sum means the blog keys no longer fit and
+`maxEntries` needs raising.
+
+Measured on production in November 2026, which is why it was kept:
 
 - Hit rates were roughly 70-85% per process, saving a few sequential round
   trips per blog request. An uncached read over the Unix socket is cheap from

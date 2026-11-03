@@ -64,6 +64,80 @@ describe("models/redis-cache", function () {
       .toEqual(["CLIENT", "TRACKING", "ON", "OPTIN"]);
   });
 
+  describe("per-class caps", function () {
+    function cache(classCaps) {
+      return new Cache({ ttl: 0, maxEntries: 100, evictPolicy: "LRU", classCaps });
+    }
+
+    function store(c, key) {
+      c.set("GET " + key, c.createValueEntry(null, key), [key]);
+    }
+
+    it("evicts a capped class's own oldest entry, never another class's", function () {
+      const c = cache({ session: 2 });
+      store(c, "blog:b1:info");
+      store(c, "sess:a");
+      store(c, "sess:b");
+      store(c, "sess:c");
+
+      expect(c.has("GET blog:b1:info")).toBe(true);
+      expect(c.has("GET sess:a")).toBe(false);
+      expect(c.has("GET sess:b")).toBe(true);
+      expect(c.has("GET sess:c")).toBe(true);
+      expect(c.classStats.session.evictions).toBe(1);
+      expect(c.stats().evictionCount).toBe(1);
+    });
+
+    it("keeps a capped entry that was just read", function () {
+      const c = cache({ session: 2 });
+      store(c, "sess:a");
+      store(c, "sess:b");
+      c.get("GET sess:a");
+      store(c, "sess:c");
+
+      expect(c.has("GET sess:a")).toBe(true);
+      expect(c.has("GET sess:b")).toBe(false);
+    });
+
+    it("doesn't count entries the cache already dropped against the cap", function () {
+      const c = cache({ session: 2 });
+      store(c, "sess:a");
+      store(c, "sess:b");
+      c.invalidate("sess:a");
+      store(c, "sess:c");
+
+      expect(c.has("GET sess:b")).toBe(true);
+      expect(c.has("GET sess:c")).toBe(true);
+      expect((c.classStats.session || {}).evictions || 0).toBe(0);
+    });
+
+    it("leaves uncapped classes to the cache-wide limit", function () {
+      const c = cache({ session: 1 });
+      for (let i = 0; i < 50; i++) store(c, "blog:b" + i + ":info");
+      expect(c.size()).toBe(50);
+      expect(c.stats().evictionCount).toBe(0);
+    });
+
+    it("forgets its order when the cache is cleared", function () {
+      const c = cache({ session: 2 });
+      store(c, "sess:a");
+      store(c, "sess:b");
+      c.clear();
+      store(c, "sess:c");
+      store(c, "sess:d");
+      expect(c.has("GET sess:c")).toBe(true);
+      expect(c.has("GET sess:d")).toBe(true);
+    });
+
+    it("leaves room above the caps for the blog keys", function () {
+      const createRedisClient = require("models/redis");
+      const client = createRedisClient();
+      const { maxEntries } = createRedisClient.getClientSideCacheStats(client);
+      const capped = Object.values(Cache.CLASS_CAPS).reduce((a, b) => a + b, 0);
+      expect(maxEntries).toBeGreaterThan(capped * 2);
+    });
+  });
+
   // Needs a live Redis, like the other specs in this folder
   it("caches an info key but not an entry key", async function () {
     const createRedisClient = require("models/redis");

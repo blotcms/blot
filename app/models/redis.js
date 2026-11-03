@@ -75,9 +75,12 @@ function createRedisClient({ clientSideCache: useCache = true } = {}) {
   const clientSideCache = useCache
     ? new AllowlistClientSideCache({
         ttl: 0,
-        // Room for every allowlisted class (models/redis-cache) at once:
-        // template URL patterns add about one entry per template in use
-        maxEntries: 5000,
+        // Above the capped classes' shares (CLASS_CAPS in models/redis-cache)
+        // plus a few hot keys for every blog (its handle or domain, info,
+        // template and patterns), so the blog keys are never evicted to make
+        // room. Entries are a few KB at most, so a full cache is a few tens
+        // of MB.
+        maxEntries: 10000,
         evictPolicy: "LRU",
       })
     : undefined;

@@ -34,6 +34,20 @@ const ALLOWED = new Set([
   "user",
 ]);
 
+// Classes with their own bounded share of the cache, each evicting its own
+// least recently used entry when full, so they can never push out the blog,
+// domain, handle and template keys every blog request reads. Those share the
+// rest, and models/redis sizes the whole cache's maxEntries above these caps
+// plus every blog's hot keys, so a full capped class never makes the cache
+// evict anything else. URL patterns are read on every render too, but there is
+// a set for every template, installed or not, so previews could flood it.
+const CLASS_CAPS = {
+  patterns: 2000,
+  owners: 500,
+  session: 500,
+  user: 500,
+};
+
 function classify(key) {
   key = String(key);
   for (const [name, pattern] of CLASSES) if (pattern.test(key)) return name;
@@ -66,10 +80,76 @@ function classifyKeys(keys) {
 class AllowlistClientSideCache extends redis.BasicClientSideCache {
   constructor(options) {
     super(options);
-    // Cumulative per-class counters: { info: { hits, misses, bypass } }
+    // Cumulative per-class counters:
+    // { info: { hits, misses, bypass, evictions } }
     this.classStats = {};
     // True while a read is being sent, so it is not mistaken for a write
     this.sendingRead = false;
+    this.classCaps = (options && options.classCaps) || CLASS_CAPS;
+    // Per capped class, its cache keys from least to most recently used,
+    // and each listed cache key's class
+    this.cappedOrder = new Map();
+    this.cappedClassOf = new Map();
+  }
+
+  // The base class stores every entry through set() and reads it through
+  // get(), so these keep each capped class's own LRU order beside it.
+  set(cacheKey, cacheEntry, keys) {
+    super.set(cacheKey, cacheEntry, keys);
+
+    const className = keys && keys.length ? classify(keys[0]) : null;
+    const cap = className && this.classCaps[className];
+    if (!cap) return;
+
+    let order = this.cappedOrder.get(className);
+    if (!order) this.cappedOrder.set(className, (order = new Map()));
+    order.delete(cacheKey);
+    order.set(cacheKey, true);
+    this.cappedClassOf.set(cacheKey, className);
+
+    if (order.size > cap) this.trimClass(className, order, cap);
+  }
+
+  get(cacheKey) {
+    const entry = super.get(cacheKey);
+    const className = entry !== undefined && this.cappedClassOf.get(cacheKey);
+    if (className) {
+      const order = this.cappedOrder.get(className);
+      order.delete(cacheKey);
+      order.set(cacheKey, true);
+    }
+    return entry;
+  }
+
+  delete(cacheKey) {
+    super.delete(cacheKey);
+    const className = this.cappedClassOf.get(cacheKey);
+    if (!className) return;
+    this.cappedOrder.get(className).delete(cacheKey);
+    this.cappedClassOf.delete(cacheKey);
+  }
+
+  clear(resetStats) {
+    super.clear(resetStats);
+    this.cappedOrder.clear();
+    this.cappedClassOf.clear();
+  }
+
+  // Entries the base class dropped without going through delete() (an
+  // invalidation, or its own eviction) are still listed: forget those first,
+  // so they don't count against the cap, then evict this class's least
+  // recently used entries until it fits.
+  trimClass(className, order, cap) {
+    for (const cacheKey of order.keys()) {
+      if (this.has(cacheKey)) continue;
+      order.delete(cacheKey);
+      this.cappedClassOf.delete(cacheKey);
+    }
+    while (order.size > cap) {
+      this.delete(order.keys().next().value);
+      this.recordEvictions(1);
+      this.count(className, "evictions");
+    }
   }
 
   // Drops the cached values for every allowlisted key named in a command's
@@ -101,7 +181,12 @@ class AllowlistClientSideCache extends redis.BasicClientSideCache {
   count(className, field) {
     const stats =
       this.classStats[className] ||
-      (this.classStats[className] = { hits: 0, misses: 0, bypass: 0 });
+      (this.classStats[className] = {
+        hits: 0,
+        misses: 0,
+        bypass: 0,
+        evictions: 0,
+      });
     stats[field]++;
   }
 
@@ -148,5 +233,6 @@ class AllowlistClientSideCache extends redis.BasicClientSideCache {
 
 AllowlistClientSideCache.classify = classify;
 AllowlistClientSideCache.classifyKeys = classifyKeys;
+AllowlistClientSideCache.CLASS_CAPS = CLASS_CAPS;
 
 module.exports = AllowlistClientSideCache;
