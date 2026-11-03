@@ -9,6 +9,7 @@ const limiter = require("./limiter");
 const clfdate = require("helper/clfdate");
 const sync = require("sync");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
+const servedSwitch = require("./served/switch");
 
 const GC_INTERVAL = 100;
 const COMMIT_BATCH_SIZE = 25;
@@ -146,6 +147,22 @@ module.exports = function create(blog, callback) {
 async function createRepository(blog, folder) {
   const bareDirectory = repos.directory(blog.handle);
 
+  // A blog served from the git store (#2259) is set up there, from the
+  // folder as storage/folder has it, and EBS from the same commit
+  if (servedSwitch.enabled(blog.id)) {
+    report(folder, "Creating token");
+    await prepareMetadata(blog, { local: false });
+
+    const commit = await require("./served/create")(blog, folder, bareDirectory);
+
+    await setApplied(blog.id, commit);
+    await setStatus(blog.owner, "createComplete");
+    console.log(clfdate() + " Git: create: done (git store)");
+    await delay(1000);
+    folder.status("Repository created successfully");
+    return;
+  }
+
   report(folder, "Creating token");
   await prepareMetadata(blog);
 
@@ -192,11 +209,13 @@ async function createRepository(blog, folder) {
   folder.status("Repository created successfully");
 }
 
-async function prepareMetadata(blog) {
+// With { local: false } the folder is not looked for on local disk: a blog
+// set up in the git store may have no copy there (#2258)
+async function prepareMetadata(blog, { local = true } = {}) {
   await Promise.all([
     setStatus(blog.owner, "createInProgress"),
     createToken(blog.owner),
-    assertDirectoryOwnership(blog.id),
+    local ? assertDirectoryOwnership(blog.id) : null,
     assertNoLiveClone(blog.id),
   ]);
 }
