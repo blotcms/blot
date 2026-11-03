@@ -193,6 +193,48 @@ describe("git store shadow mode: the test-only read route", function () {
     await lineMatching(this, / op=fetch source=ebs outcome=ok /);
   });
 
+  it("gives upload-pack the whole body while the fetch waits for a place in the git limiter", async function () {
+    var limiter = require("clients/git/limiter");
+
+    await this.local.writeAndPush("/a.txt", "A");
+    await setup.expectMirrored(this);
+
+    function packet(text) {
+      return (text.length + 4).toString(16).padStart(4, "0") + text;
+    }
+
+    var advertised = await request(this, "GET", "end", "/info/refs?service=git-upload-pack");
+    var tip = /([0-9a-f]{40}) HEAD/.exec(advertised.body)[1];
+    var body = packet("want " + tip + " multi_ack_detailed side-band-64k ofs-delta\n") + "0000" + packet("done\n");
+
+    var caps = limiter.stats();
+    limiter.reset({ interactive: 1 });
+
+    try {
+      // The interactive lane is busy while the body arrives
+      var held = limiter.outside(function () {
+        return limiter.run("interactive", function () {
+          return new Promise(function (resolve) {
+            setTimeout(resolve, 1000);
+          });
+        });
+      });
+
+      var response = await request(this, "POST", "end", "/git-upload-pack", {
+        body: body,
+        headers: { "Content-Type": "application/x-git-upload-pack-request" },
+      });
+
+      await held;
+    } finally {
+      limiter.reset({ interactive: caps.interactive.max });
+    }
+
+    expect(response.status).toBe(200);
+    expect(response.body).toContain("PACK");
+    await lineMatching(this, / op=clone source=ebs outcome=ok /);
+  });
+
   it("gives a 404 for a blog which is not in shadow mode", async function () {
     await this.local.writeAndPush("/a.txt", "A");
     await setup.expectMirrored(this);

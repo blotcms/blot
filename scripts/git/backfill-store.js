@@ -84,9 +84,10 @@ async function main() {
   }
 
   // A cache directory of this process's own: in a unit's container the app's
-  // process has the label this one would otherwise get, and a cache must own
-  // its directory (see sharedCache in app/clients/git/shadow/index.js)
-  config.container = "backfill-store";
+  // process has the label this one would otherwise get, a second backfill
+  // may run at the same time, and a cache must own its directory (see
+  // sharedCache in app/clients/git/shadow/index.js)
+  config.container = "backfill-store-" + process.pid;
 
   const backfill = require("clients/git/shadow/backfill");
   const summary = await backfill(options);

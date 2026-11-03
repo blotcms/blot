@@ -281,11 +281,23 @@ function timeEbs(req, res, blogID) {
       const pieces = [];
       const gzipped = req.headers["content-encoding"] === "gzip";
 
-      req.on("data", function (chunk) {
+      function inspect(chunk) {
         if (inspected >= MAX_INSPECT) return;
         inspected += chunk.length;
         pieces.push(chunk);
-      });
+      }
+
+      // Watches the body only once smartHttp.js pipes it into upload-pack. A
+      // data listener added now would start the body flowing while the
+      // request waits for a place in the git limiter, and git would get none
+      // of what flowed past. Added after the pipe, it follows the pipe's pace.
+      const pipe = req.pipe;
+      req.pipe = function () {
+        req.pipe = pipe;
+        const destination = pipe.apply(req, arguments);
+        req.on("data", inspect);
+        return destination;
+      };
 
       whenDone(res, function () {
         try {

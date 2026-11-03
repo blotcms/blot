@@ -85,6 +85,34 @@ describe("git store shadow mode: removing a blog's copy", function () {
       expect(await keys(store)).toEqual([]);
     });
 
+    it("keeps the copy when the later lookup of the blog fails", async function () {
+      shadow._setRemoveAgainMs(100);
+
+      await this.local.writeAndPush("/a.txt", "A");
+      await setup.expectMirrored(this);
+
+      var store = this.stores[this.blog.id];
+      var Blog = require("models/blog");
+      var get = Blog.get;
+
+      await disconnected(this.blog.id);
+
+      // Reconnected, and imported by another process, but Redis fails the lookup
+      await store.put("manifests/0000000001.json", Buffer.from("{}"));
+      Blog.get = function (by, callback) {
+        callback(new Error("Redis went away"));
+      };
+
+      try {
+        await sleep(1000);
+      } finally {
+        Blog.get = get;
+      }
+
+      expect(await keys(store)).toEqual(["manifests/0000000001.json"]);
+      expect(this.shadowLines("remove").filter((line) => /outcome=spared pass=2/.test(line)).length).toBe(1);
+    });
+
     it("disconnects with shadow mode off and no bucket", async function () {
       await this.local.writeAndPush("/a.txt", "A");
 

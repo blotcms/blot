@@ -935,8 +935,11 @@ async function removeBlog(blogID) {
   const again = setTimeout(() => {
     removeAgainTimers.delete(again);
     require("models/blog").get({ id: blogID }, async (err, blog) => {
-      // Back on git: its new copy is not ours to delete
-      if (err || !blog || blog.client !== "git") await deleteAndLog(blogID, 2);
+      // Back on git: its new copy is not ours to delete. A failed lookup
+      // doesn't say it is gone, so the copy is kept: the daily check's orphan
+      // pass deletes it if the blog is still off git.
+      if (err) log({ blog: blogID, op: "remove", outcome: "spared", pass: 2, detail: scrub(err) });
+      else if (!blog || blog.client !== "git") await deleteAndLog(blogID, 2);
       removed.delete(blogID);
     });
   }, removeAgainMs);
