@@ -30,8 +30,20 @@ var followUps = followUpSync("git", function (blogID) {
   });
 });
 
+// Whether the blog has a repository, or one is being made for it
+function hasRepository(blog, callback) {
+  database.getStatus(blog.owner, function (err, status) {
+    if (err) return callback(err);
+    if (status === "createInProgress") return callback(null, true);
+
+    repo.exists(blog.id, callback);
+  });
+}
+
 dashboard.get("/", function (req, res, next) {
-  repo.exists(req.blog.handle, function (exists) {
+  hasRepository(req.blog, function (err, exists) {
+    if (err) return next(err);
+
     if (exists) {
       res.locals.repo = true;
       return next();
@@ -74,10 +86,12 @@ dashboard.post("/create", function (req, res, next) {
     return disconnect(req.blog.id, next);
   }
 
-  // A repository here wasn't made by this blog, or is still being made. If
-  // create failed on it the owner would get a token for it, and could clone
-  // whatever it holds.
-  repo.exists(req.blog.handle, function (exists) {
+  // A repository the blog already has, or one still being made: setup would
+  // refuse a store which is not empty, and a second setup would race the
+  // first
+  hasRepository(req.blog, function (err, exists) {
+    if (err) return next(err);
+
     if (exists) {
       console.log(clfdate() + " Git: Refused to create over repo for blog", req.blog.id);
       return res.message(
@@ -130,10 +144,7 @@ dashboard.post("/disconnect", function (req, res, next) {
 // /end//handle.git indistinguishable from /end/handle.git. Blog handles are
 // canonical lowercase alphanumerics between 2 and 70 characters (the same
 // shape stored by the blog model).
-//
-// /store-end is a test-only read route served from the git store, for blogs in
-// shadow mode (shadow/reads.js, shadow/README). It is removed at cutover.
-var GIT_REQUEST = /^(?![^#]*%(?:2[fF]|5[cC]))\/(end|store-end)(\/([a-z0-9]{2,70})\.git\/(?:info\/refs|HEAD|git-(?:upload|receive)-pack)(?:\?[^#]*)?)$/;
+var GIT_REQUEST = /^(?![^#]*%(?:2[fF]|5[cC]))\/(end)(\/([a-z0-9]{2,70})\.git\/(?:info\/refs|HEAD|git-(?:upload|receive)-pack)(?:\?[^#]*)?)$/;
 
 function parseGitRequest(req, res, next) {
   var match = GIT_REQUEST.exec(req.url);
@@ -271,8 +282,6 @@ site.use(parseGitRequest, redirectRenamedGitHandle, authenticate, function (req,
 
     debug("Git response error", err);
   });
-
-  if (req.gitRoute === "store-end") return require("./shadow/reads").handle(req, res, req.blog);
 
   repo.handleSmartHttp(req, res, req.blog.id, req.blog);
 });

@@ -97,13 +97,13 @@ describe("scheduler prune-tmp", function () {
     }
   });
 
-  it("leaves the shadow log and its .1 alone, in a directory or directly in tmp", async function () {
+  it("leaves the git store's log and its .1 alone, in a directory or directly in tmp", async function () {
     const config = require("config");
-    const saved = config.git_store.shadow_log;
+    const saved = config.git_store.log;
 
     try {
-      for (const relative of ["shadow-log/shadow.log", "shadow.log"]) {
-        config.git_store.shadow_log = this.tmp + "/" + relative;
+      for (const relative of ["git-store-log/git-store.log", "git-store.log"]) {
+        config.git_store.log = this.tmp + "/" + relative;
 
         await write(this.tmp, relative, 3 * DAY, relative.split("/")[0]);
         await write(this.tmp, relative + ".1", 3 * DAY);
@@ -116,7 +116,7 @@ describe("scheduler prune-tmp", function () {
         expect(await exists(this.tmp + "/old-upload")).toBe(false);
       }
     } finally {
-      config.git_store.shadow_log = saved;
+      config.git_store.log = saved;
     }
   });
 

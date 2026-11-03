@@ -1,13 +1,16 @@
-// A push to a blog served from the git store (#2259): the store's receive
-// (../store/receive.js) on the normal route, with what receivePack.js does
-// around a push on EBS.
+// A push to a blog's repository in the git store (#2259): the store's receive
+// (../store/receive.js), with what Blot does around a push.
 //
 //   handle(req, res, blog, hooks)   hooks are repo.js's receiveHooks: lock,
 //                                   prepare, abandoned, accepted
 //
-// 1. The commands are read and parsed by receivePack.js's own functions, so
-//    the capabilities, the 0000 probe and the push-client log line are the
-//    same.
+// A push is applied whole or not at all: if any ref is refused or stale, none
+// is updated. Blot syncs master; tags are kept but do nothing; there are no
+// other branches, or other kinds of ref.
+//
+// 1. The commands are read and parsed by receivePack.js, which also has the
+//    capabilities advertised; git's 0000 probe is answered, and each push
+//    logs a push-client line with the client's agent.
 // 2. The store's receive takes the push, with the interactive lane as its
 //    gate, progress on side-band (store/sideband.js: "Saving to Blot..." and
 //    the keepalives), the Content-Length as its size hint, Blot's tree rule
@@ -18,12 +21,11 @@
 //    tried again after another writer won uses the same alarm. If the push
 //    then does not land the alarm is cancelled (hooks.abandoned). So a push
 //    the client is told succeeded is never lost to a crash.
-// 4. ok: the sync starts (hooks.accepted), a compaction is asked for
-//    (./upkeep.js) and the EBS fallback queued (./fallback.js). refused or
-//    failed: reported as on EBS. unknown: reported as neither (the store
-//    tells the user to fetch before pushing again), the alarm is kept, so a
-//    sync then applies whatever master is, and the fallback is queued, which
-//    reads the store as it is.
+// 4. ok: the sync starts (hooks.accepted) and a compaction is asked for
+//    (./upkeep.js). refused or failed: reported to the client. unknown:
+//    reported as neither (the store tells the user to fetch before pushing
+//    again), and the alarm is kept, so a sync then applies whatever master
+//    is.
 //
 // One line per push:
 //
@@ -38,7 +40,6 @@ const receive = require("../store/receive");
 const createResponse = require("../store/sideband");
 const context = require("./context");
 const upkeep = require("./upkeep");
-const fallback = require("./fallback");
 const log = require("./log");
 
 const MASTER = "refs/heads/master";
@@ -48,8 +49,8 @@ const MASTER = "refs/heads/master";
 // indexed there, so a push needs about its own size again on top; half the
 // budget leaves room for the clones and fetches the cache serves meanwhile.
 // With the default 1 GiB cache that is 512 MiB. The limit is the smaller of
-// this and receive.maxInputSize, EBS's limit (agreed with the operator, 3 Nov
-// 2026: no larger cache for this).
+// this and receive.maxInputSize, git's limit in the Docker image (agreed with
+// the operator, 3 Nov 2026: no larger cache for this).
 const PUSH_CACHE_SHARE = 0.5;
 
 // receive.maxInputSize, from git's config (the Docker image sets it for every
@@ -73,9 +74,9 @@ function readMaxInputSize() {
 // The most bytes of pack a push to the store may carry
 async function pushLimit(cache) {
   const share = Math.floor(cache.maxBytes * PUSH_CACHE_SHARE);
-  const ebs = await readMaxInputSize();
+  const configured = await readMaxInputSize();
 
-  return ebs > 0 ? Math.min(ebs, share) : share;
+  return configured > 0 ? Math.min(configured, share) : share;
 }
 
 // The request's body, decompressed if it was sent gzipped
@@ -234,11 +235,7 @@ async function push(req, res, blog, hooks, fields) {
     upkeep.compactAfter(blogID, result.manifest);
   }
 
-  // EBS follows the store in the background; after an unknown outcome it
-  // takes whatever the store turned out to hold
   const outcome = result ? result.outcome : "error";
-
-  if (outcome === "ok" || outcome === "unknown") fallback.request(blogID, { reason: "push" });
 
   if (outcome !== "ok" && outcome !== "unknown" && readied) {
     // Did not land: the alarm goes. An unknown outcome keeps it, so a sync

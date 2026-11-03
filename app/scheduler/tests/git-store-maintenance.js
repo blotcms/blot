@@ -50,24 +50,15 @@ describe("scheduler git-store-maintenance", function () {
     expect(gitStoreMaintenance.job).toHaveBeenCalledTimes(1);
   });
 
-  it("does nothing without shadow mode or a bucket", async function () {
-    const saved = config.git_store.shadow;
+  it("does nothing without a bucket", async function () {
     const sendEmail = jasmine.createSpy("sendEmail");
+    const bucket = config.storage.bucket;
 
     try {
-      config.git_store.shadow = "";
-      expect((await gitStoreMaintenance.run({ sendEmail })).skipped).toBe(true);
-
-      config.git_store.shadow = "all";
-      const bucket = config.storage.bucket;
       config.storage.bucket = "";
-      try {
-        expect((await gitStoreMaintenance.run({ sendEmail })).skipped).toBe(true);
-      } finally {
-        config.storage.bucket = bucket;
-      }
+      expect((await gitStoreMaintenance.run({ sendEmail })).skipped).toBe(true);
     } finally {
-      config.git_store.shadow = saved;
+      config.storage.bucket = bucket;
     }
 
     expect(sendEmail).not.toHaveBeenCalled();

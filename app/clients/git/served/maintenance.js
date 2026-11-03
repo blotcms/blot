@@ -1,62 +1,66 @@
-// The git store's upkeep in shadow mode (see ./index.js and #2259), run once a
-// day by the scheduler (app/scheduler/git-store-maintenance.js), and by hand
-// with scripts/git/verify-store.js and scripts/git/backfill-store.js:
+// The git store's upkeep (#2259), run once a day by the scheduler
+// (app/scheduler/git-store-maintenance.js), and by hand with
+// scripts/git/verify-store.js:
 //
-//   gitBlogs({ all, ids })    the blogs on the git client which are shadowed
-//                             (BLOT_GIT_STORE_SHADOW), or every one with `all`
+//   gitBlogs({ ids })         the blogs on the git client
 //   sweepBlog(blogID)         the store's sweep(), with its defaults
-//   verify(blogID, options)   compares the blog's EBS repository with its store
+//   verify(blogID, options)   checks the blog's repository in the store
 //   orphans(options)          deletes <blogID>/git/ prefixes left behind by
 //                             blogs no longer on git
-//   scratch(options)          removes the import-, verify- and rewrite-
-//                             directories a killed process left in the
+//   scratch(options)          removes the import-, verify-, rewrite- and
+//                             setup- directories a killed process left in the
 //                             scratch directory (store/leftovers.js)
-//   daily(options)            all of the above, for every shadowed blog; the
+//   daily(options)            all of the above, for every blog on git; the
 //                             orphans only on the first of the month
 //
-// The verifier has two checks:
+// The store is the only copy of each repository, so the verifier checks the
+// copy on its own:
 //
-//   cheap  the branches and tags are the same on both sides (and the store's
-//          peeled tags are what EBS peels them to), and every file the newest
-//          manifest names is in the bucket, at the size it says: each pack's
-//          .pack, .idx and .rev, and the history pack's and pieces' .pack and
-//          .idx (they have no .rev). One manifest read and a HEAD a file.
+//   cheap  the newest manifest has the repository (a blog on git with an
+//          empty store has lost it), and every file it names is in the
+//          bucket, at the size it says: each pack's .pack, .idx and .rev, and
+//          the history pack's and pieces' .pack and .idx (they have no .rev).
+//          One manifest read and a HEAD a file.
 //   deep   a clone of the store through its own clone code, into scratch,
-//          index-pack --strict, fsck --strict, and every branch, tag, HEAD and
-//          peeled tag compared with EBS (the store's verifyImport).
+//          index-pack --strict, fsck --strict, and every branch, tag, HEAD
+//          and peeled tag of the manifest made in it (the store's
+//          verifyImport, with no source). A sample of blogs a day, in turn,
+//          and the git test blog.
 //
-// A push in flight can make the two sides differ for a moment, so a check
-// which finds anything is run once more after a short delay, and only what
-// that finds counts. Each finding is logged in shadow mode's format:
+// A write in flight (a compaction swapping packs, say) can make a check find
+// something for a moment, so a check which finds anything is run once more
+// after a short delay, and only what that finds counts. Each finding is
+// logged:
 //
-//   [git-store-shadow] blog=<id> op=verify outcome=ok|mismatch|missing|error
+//   [git-store-served] blog=<id> op=verify outcome=ok|mismatch|missing|error
 //     check=cheap|deep ... detail=...
 //
-// Nothing here modifies an EBS repository. Blog handles stay out of the logs.
+// Blog handles stay out of the logs.
 const path = require("path");
 const config = require("config");
 const Blog = require("models/blog");
-const hook = require("./hook");
-const servedSwitch = require("../served/switch");
-const shadow = require("./index");
 const { manifest, layout } = require("../store");
 const sweep = require("../store/sweep");
 const { verifyImport } = require("../store/import");
 const { sweepScratch } = require("../store/leftovers");
-const { measure } = require("./counting");
+const limiter = require("../limiter");
+const counting = require("./counting");
+const context = require("./context");
+const log = require("./log");
+const { measure } = counting;
 
 const DAY = 24 * 60 * 60 * 1000;
 
 // How many blogs a day get the deep check, besides the git test blog. The
-// sample moves on each day, so every shadowed blog is cloned in turn.
+// sample moves on each day, so every blog is cloned in turn.
 const DEEP_SAMPLE = 5;
 
 // The handle of the production test blog for the git client, which is deep
-// checked every day if it is shadowed
+// checked every day
 const TEST_HANDLE = "gittest";
 
 // How long to wait before checking a blog again, when the first check found
-// something: long enough for a push in flight, and its mirror, to land
+// something
 const RECHECK_DELAY_MS = 60 * 1000;
 
 // A prefix left by a blog off git is only deleted once nothing has been
@@ -97,60 +101,70 @@ function allBlogIDs() {
   return new Promise((resolve, reject) => Blog.getAllIDs((err, ids) => (err ? reject(err) : resolve(ids || []))));
 }
 
-// Where an import or a deep check builds what it needs: the directory the
-// shadow cache lives in, on the host's instance store in production (tmp),
-// which has far more room than the cache's budget
+// An error's message on one line
+function scrub(err) {
+  return String((err && (err.message || err)) || "unknown error")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// The gate the store's git goes through: the background lane, with each wait
+// on the operation's lane clock (./counting.js), so waitMs records it and ms
+// leaves it out
+function gate(start) {
+  const granted = counting.waiting();
+
+  return limiter
+    .run("background", () => {
+      granted();
+      return start();
+    })
+    .finally(granted);
+}
+
+// Where a deep check builds its clone: the directory the store's cache lives
+// in, on the host's instance store in production (tmp), which has far more
+// room than the cache's budget
 function defaultScratchDir() {
   return path.dirname(config.git_store.cache_directory);
 }
 
-// Removes what a killed import, verify or rewrite left in the scratch
+// Removes what a killed import, verify, rewrite or setup left in the scratch
 // directory (a deploy replacing a container mid-import), judged by age alone:
 // the directory is shared by processes which cannot see each other. Logs one
 // line, without paths. Never throws.
 async function scratch({ scratchDir = defaultScratchDir(), minAge, now = Date.now() } = {}) {
   try {
     const result = await sweepScratch({ dir: scratchDir, minAge, now });
-    shadow.log({ op: "sweep", source: "scratch", outcome: result.errors ? "error" : "ok", ...result });
+    log({ op: "sweep", source: "scratch", outcome: result.errors ? "error" : "ok", ...result });
     return result;
   } catch (err) {
-    shadow.log({ op: "sweep", source: "scratch", outcome: "error", detail: shadow.scrub(err) });
-    return { removed: 0, spared: 0, bytes: 0, errors: 1, failed: shadow.scrub(err) };
+    log({ op: "sweep", source: "scratch", outcome: "error", detail: scrub(err) });
+    return { removed: 0, spared: 0, bytes: 0, errors: 1, failed: scrub(err) };
   }
 }
 
-// Whether shadow mode is set up, so there is anything to look after
+// Whether there is a store to look after
 function configured() {
-  return !!(setting("shadow") || setting("serve")) && shadow.hasStore();
+  return context.hasStore();
 }
 
-function setting(name) {
-  return String((config.git_store && config.git_store[name]) || "").trim();
-}
-
-// Whether the blog is looked after: shadowed, or served from the store
-function lookedAfter(blogID) {
-  return hook.enabled(blogID) || servedSwitch.enabled(blogID);
+// The blog's store, or null if the blog is gone or off git
+async function storeOf(blogID) {
+  const blog = await getBlog({ id: blogID });
+  if (!blog || blog.client !== "git") return null;
+  return context.storeFor(blogID);
 }
 
 // ---- Which blogs ----------------------------------------------------------
 
-// The IDs of the blogs on the git client, sorted: those shadow mode is on
-// for, or with `all` every one. `ids` limits them to those blogs. There is no
-// index of blogs by client, so a setting of "all" (or `all`) walks every blog.
-async function gitBlogs({ all = false, ids = null } = {}) {
-  const listed = [setting("shadow"), setting("serve")];
-  let candidates = ids;
-
-  if (!candidates) {
-    if (!all && listed.indexOf("all") === -1) candidates = listed.join(",").split(",").map((id) => id.trim()).filter(Boolean);
-    else candidates = await allBlogIDs();
-  }
-
+// The IDs of the blogs on the git client, sorted. `ids` limits them to those
+// blogs. There is no index of blogs by client, so this walks every blog.
+async function gitBlogs({ ids = null } = {}) {
+  const candidates = ids || (await allBlogIDs());
   const found = [];
 
   await each([...new Set(candidates)], 16, async (blogID) => {
-    if (!all && !lookedAfter(blogID)) return;
     const blog = await getBlog({ id: blogID });
     if (blog && blog.client === "git") found.push(blogID);
   });
@@ -161,18 +175,18 @@ async function gitBlogs({ all = false, ids = null } = {}) {
 // ---- The sweep ------------------------------------------------------------
 
 async function sweepBlog(blogID) {
-  const ctx = await shadow.contextFor(blogID);
-  if (!ctx) return null;
+  const store = await storeOf(blogID);
+  if (!store) return null;
 
   try {
-    const measured = await measure(() => sweep({ store: ctx.store }));
+    const measured = await measure(() => sweep({ store }));
     const stats = measured.result;
 
-    shadow.log({
+    log({
       blog: blogID,
       op: "sweep",
       outcome: "ok",
-      storeMs: measured.ms,
+      ms: measured.ms,
       requests: measured.counts.requests,
       bytesDown: measured.counts.bytesDown,
       manifestsDeleted: stats.manifestsDeleted,
@@ -185,8 +199,8 @@ async function sweepBlog(blogID) {
 
     return stats;
   } catch (err) {
-    shadow.log({ blog: blogID, op: "sweep", outcome: "error", detail: shadow.scrub(err, ctx) });
-    return { error: shadow.scrub(err, ctx) };
+    log({ blog: blogID, op: "sweep", outcome: "error", detail: scrub(err) });
+    return { error: scrub(err) };
   }
 }
 
@@ -212,37 +226,15 @@ function expectedFiles(current) {
   return files.filter((file) => !seen.has(file.key) && seen.add(file.key));
 }
 
-// What EBS peels each tag to, as { oid: target }
-async function peel(gitDir, oids) {
-  if (!oids.length) return {};
-  const output = await shadow.git(gitDir, ["cat-file", "--batch-check=%(objectname)"], oids.map((oid) => oid + "^{}").join("\n") + "\n");
-  const lines = output.stdout.split("\n");
-  return Object.fromEntries(oids.map((oid, i) => [oid, lines[i]]));
-}
-
-// The cheap check: { findings, refs, files }
-async function cheapCheck(ctx) {
-  const { gitDir, store } = ctx;
+// The cheap check: { findings, refs, files, seq }
+async function cheapCheck(store) {
   const findings = [];
-  const ebs = await shadow.ebsRefs(gitDir);
   const current = await manifest.read(store);
 
   if (manifest.isEmpty(current)) {
-    if (Object.keys(ebs).length) findings.push({ kind: "mismatch", detail: "the store is empty; EBS has " + Object.keys(ebs).length + " refs" });
+    findings.push({ kind: "missing", detail: "the store has no copy of the repository" });
     return { findings, refs: 0, files: 0 };
   }
-
-  const differ = [];
-  for (const ref of [...new Set([...Object.keys(ebs), ...Object.keys(current.refs)])].sort()) {
-    if (ebs[ref] !== current.refs[ref]) differ.push(ref + " store " + (current.refs[ref] || "none") + " EBS " + (ebs[ref] || "none"));
-  }
-  if (differ.length) findings.push({ kind: "mismatch", detail: "refs differ: " + differ.join(", ") });
-
-  const peeled = current.peeled || {};
-  const tags = [...new Set(Object.values(current.refs))].filter((oid) => peeled[oid]);
-  const ebsPeeled = await peel(gitDir, tags);
-  const wrong = tags.filter((oid) => ebsPeeled[oid] !== peeled[oid]);
-  if (wrong.length) findings.push({ kind: "mismatch", detail: "peeled tags differ: " + wrong.map((oid) => oid + " store " + peeled[oid] + " EBS " + ebsPeeled[oid]).join(", ") });
 
   const files = expectedFiles(current);
 
@@ -260,52 +252,49 @@ const LOCAL_TROUBLE = /No space left on device|Permission denied|Too many open f
 
 // The verdict a deep check's failure is about the store: "missing" for a
 // file the store does not have, "mismatch" for bytes or refs that are wrong
-// (the store's CorruptError, which verifyImport also throws when refs, HEAD
-// or a peeled tag differ, or index-pack or fsck failing on the clone). Null
-// for anything else (scratch space, the filesystem, the network, the cache's
-// room): an error in checking, which says nothing about the store.
+// (the store's CorruptError, which verifyImport also throws when a ref, HEAD
+// or a peeled tag cannot be made, or index-pack or fsck failing on the
+// clone). Null for anything else (scratch space, the filesystem, the network,
+// the cache's room): an error in checking, which says nothing about the
+// store.
 function verdict(err) {
   if (!err) return null;
   if (err.code === "NOT_FOUND") return "missing";
   if (err.code === "CORRUPT") return "mismatch";
 
   const message = String(err.message || "");
-  if (!err.code && /^git (index-pack|fsck)\b/.test(message) && !LOCAL_TROUBLE.test(message)) return "mismatch";
+  if (!err.code && /^git (index-pack|fsck|update-ref|symbolic-ref)\b/.test(message) && !LOCAL_TROUBLE.test(message)) return "mismatch";
 
   return null;
 }
 
 // The deep check. A verdict on the store is a finding; any other failure is
 // thrown, so twice() counts it as an error.
-async function deepCheck(ctx, scratchDir) {
-  const { gitDir, store, cache } = ctx;
-
+async function deepCheck(store, scratchDir) {
   try {
-    // Background work for the git limiter, like the rest of shadow mode, with
-    // its waits on the lane clock (waitMs, and left out of storeMs)
-    const result = await verifyImport({ store, cache, gitDir, scratchDir, gate: shadow.gate });
+    const result = await verifyImport({ store, cache: context.cache(), scratchDir, gate });
     return { findings: [], refs: result.refs, objects: result.objects };
   } catch (err) {
     const kind = verdict(err);
     if (!kind) throw err;
-    return { findings: [{ kind, detail: shadow.scrub(err, ctx) }] };
+    return { findings: [{ kind, detail: scrub(err) }] };
   }
 }
 
 // Runs a check, and once more after a delay if it found anything; a check
 // which throws is an "error" finding
-async function twice(ctx, check, recheckDelayMs, between) {
+async function twice(check, recheckDelayMs) {
   let result;
 
   for (let attempt = 1; attempt <= 2; attempt++) {
-    if (attempt === 2) await (between ? between() : sleep(recheckDelayMs));
+    if (attempt === 2) await sleep(recheckDelayMs);
 
     try {
       result = await measure(check);
       result.attempts = attempt;
       if (!result.result.findings.length) return result;
     } catch (err) {
-      result = { result: { findings: [{ kind: "error", detail: shadow.scrub(err, ctx) }] }, attempts: attempt, ms: 0, counts: {} };
+      result = { result: { findings: [{ kind: "error", detail: scrub(err) }] }, attempts: attempt, ms: 0, counts: {} };
     }
   }
 
@@ -319,7 +308,7 @@ function report(blogID, check, measured) {
   const fields = {
     blog: blogID,
     op: "verify",
-    storeMs: measured.ms,
+    ms: measured.ms,
     requests: measured.counts.requests,
     bytesDown: measured.counts.bytesDown,
     waitMs: measured.counts.waitMs,
@@ -331,8 +320,8 @@ function report(blogID, check, measured) {
     objects: rest.objects,
   };
 
-  if (!findings.length) shadow.log({ ...fields, outcome: "ok" });
-  for (const finding of findings) shadow.log({ ...fields, outcome: finding.kind, detail: finding.detail });
+  if (!findings.length) log({ ...fields, outcome: "ok" });
+  for (const finding of findings) log({ ...fields, outcome: finding.kind, detail: finding.detail });
 
   return findings.map((finding) => ({ blog: blogID, check, ...finding }));
 }
@@ -342,24 +331,26 @@ function report(blogID, check, measured) {
 // had it). Resolves with { blog, skipped, deep, findings }; never rejects for
 // a failure of the check itself, which is an "error" finding.
 async function verify(blogID, { deep = false, cheap = true, scratchDir = defaultScratchDir(), recheckDelayMs = RECHECK_DELAY_MS } = {}) {
-  const ctx = await shadow.contextFor(blogID);
+  let store;
 
-  if (!ctx) {
-    shadow.log({ blog: blogID, op: "verify", outcome: "skipped", detail: "the blog is gone, off git or has no repository" });
+  try {
+    store = await storeOf(blogID);
+  } catch (err) {
+    log({ blog: blogID, op: "verify", outcome: "error", detail: scrub(err) });
+    return { blog: blogID, findings: [{ blog: blogID, check: "lookup", kind: "error", detail: scrub(err) }], deep: false };
+  }
+
+  if (!store) {
+    log({ blog: blogID, op: "verify", outcome: "skipped", detail: "the blog is gone or off git" });
     return { blog: blogID, skipped: true, deep: false, findings: [] };
   }
 
-  // A blog served from the store: EBS is the copy that follows. A difference
-  // is caught up by the fallback (../served/fallback.js) rather than waited
-  // out, and only what is left after it counts.
-  const between = servedSwitch.enabled(blogID) ? () => require("../served/fallback").request(blogID, { reason: "verify" }) : null;
-
   if (cheap) {
-    const found = report(blogID, "cheap", await twice(ctx, () => cheapCheck(ctx), recheckDelayMs, between));
+    const found = report(blogID, "cheap", await twice(() => cheapCheck(store), recheckDelayMs));
     if (found.length || !deep) return { blog: blogID, findings: found, deep: false };
   }
 
-  const deepFindings = report(blogID, "deep", await twice(ctx, () => deepCheck(ctx, scratchDir), recheckDelayMs));
+  const deepFindings = report(blogID, "deep", await twice(() => deepCheck(store, scratchDir), recheckDelayMs));
   return { blog: blogID, findings: deepFindings, deep: true };
 }
 
@@ -392,13 +383,13 @@ let listPrefixes = s3Prefixes;
 
 // Deletes <blogID>/git/ for each blog which no longer exists, or is no longer
 // on git, once nothing has been written to it for minAge: what an operation
-// in another process left after the disconnect's two passes (see removeBlog
-// in ./index.js), or a disconnect cut off by a restart. A blog on git is never
-// touched, and is looked up again just before the delete. Only the keys listed
-// are deleted, so anything written after the listing is left. Resolves with
-// counts, and `findings` for the alert email: a kind "orphan" finding for each
-// prefix deleted that held more than the manifests the disconnect's removal
-// keeps (store/remove.js), since it should have deleted the rest and a leftover
+// in another process left after the disconnect's two passes (./remove.js), or
+// a disconnect cut off by a restart. A blog on git is never touched, and is
+// looked up again just before the delete. Only the keys listed are deleted,
+// so anything written after the listing is left. Resolves with counts, and
+// `findings` for the alert email: a kind "orphan" finding for each prefix
+// deleted that held more than the manifests the disconnect's removal keeps
+// (store/remove.js), since it should have deleted the rest and a leftover
 // means a removal path to fix, and a kind "error" finding for each prefix
 // whose lookup, listing or delete failed. A failed listing of the prefixes
 // themselves rejects.
@@ -421,7 +412,7 @@ async function orphans({ now = Date.now(), minAge = ORPHAN_MIN_AGE_MS } = {}) {
         continue;
       }
 
-      const store = shadow.objectStoreFor(blogID);
+      const store = context.objectStoreFor(blogID);
       const keys = [];
       let newest = 0;
 
@@ -434,7 +425,7 @@ async function orphans({ now = Date.now(), minAge = ORPHAN_MIN_AGE_MS } = {}) {
 
       if (now - newest < minAge) {
         counts.spared++;
-        shadow.log({ blog: blogID, op: "remove", outcome: "spared", reason: "orphan", keys: keys.length, detail: "written in the last " + Math.round(minAge / 3600000) + " hours" });
+        log({ blog: blogID, op: "remove", outcome: "spared", reason: "orphan", keys: keys.length, detail: "written in the last " + Math.round(minAge / 3600000) + " hours" });
         continue;
       }
 
@@ -451,17 +442,17 @@ async function orphans({ now = Date.now(), minAge = ORPHAN_MIN_AGE_MS } = {}) {
 
       // Only manifests is what a removal leaves on purpose (store/remove.js)
       if (keys.every((key) => key.startsWith(layout.MANIFEST_PREFIX))) {
-        shadow.log({ blog: blogID, op: "remove", outcome: "ok", reason: "tombstone", deleted: keys.length });
+        log({ blog: blogID, op: "remove", outcome: "ok", reason: "tombstone", deleted: keys.length });
         continue;
       }
 
       findings.push({ blog: blogID, check: "orphan", kind: "orphan", detail: "deleted " + keys.length + " objects left behind" });
-      shadow.log({ blog: blogID, op: "remove", outcome: "ok", reason: "orphan", deleted: keys.length });
+      log({ blog: blogID, op: "remove", outcome: "ok", reason: "orphan", deleted: keys.length });
     } catch (err) {
-      const detail = shadow.scrub(err);
+      const detail = scrub(err);
       counts.errors++;
       findings.push({ blog: blogID, check: "orphan", kind: "error", detail });
-      shadow.log({ blog: blogID, op: "remove", outcome: "error", reason: "orphan", detail });
+      log({ blog: blogID, op: "remove", outcome: "error", reason: "orphan", detail });
     }
   }
 
@@ -470,8 +461,8 @@ async function orphans({ now = Date.now(), minAge = ORPHAN_MIN_AGE_MS } = {}) {
 
 // ---- The daily run --------------------------------------------------------
 
-// Sweeps and checks every shadowed blog, deep checks today's sample, and on
-// the first of the month (UTC), or with `orphanSweep`, deletes prefixes left
+// Sweeps and checks every blog on git, deep checks today's sample, and on the
+// first of the month (UTC), or with `orphanSweep`, deletes prefixes left
 // behind: that takes a listing per blog in the bucket, and the disconnect
 // already deletes a blog's copy twice. Resolves with a report (`orphans` is
 // null when they were not looked for); the findings are what the alert email
@@ -521,7 +512,7 @@ async function daily({ now = Date.now(), deepCount = DEEP_SAMPLE, recheckDelayMs
       findings.push(...failed);
     } catch (err) {
       orphaned = { prefixes: 0, live: 0, removed: 0, spared: 0, ignored: 0, errors: 1, deleted: 0 };
-      findings.push({ blog: "-", check: "orphan", kind: "error", detail: shadow.scrub(err) });
+      findings.push({ blog: "-", check: "orphan", kind: "error", detail: scrub(err) });
     }
   }
 

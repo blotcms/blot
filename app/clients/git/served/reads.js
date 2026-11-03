@@ -1,20 +1,20 @@
-// The read side of git's smart HTTP for a blog served from the git store
+// The read side of git's smart HTTP for a blog's repository in the git store
 // (#2259): the ref advertisements, clones and fetches, and the dumb HTTP HEAD
-// probe, all from the store's manifest and packs, on the normal route
+// probe, all from the store's manifest and packs, on the route
 // /clients/git/end/<handle>.git with its authentication and handle redirect
-// (routes.js). repo.handleSmartHttp hands a switched blog's requests here.
+// (routes.js). repo.handleSmartHttp hands requests here.
 //
 //   handle(req, res, blog, { receive })   answers the request; a push
 //                                         (POST git-receive-pack) goes to
 //                                         receive(req, res, blog)
 //   read(req, res, options)               one advertisement, clone or fetch
-//                                         from the store; shadow mode's
-//                                         test-only route uses it too
+//                                         from the store
 //
-// A clone or fetch takes a place in the git limiter's interactive lane, as
-// `git upload-pack` does on EBS, so the cap on concurrent clones is the one
-// users already have; the store's streaming keeps the memory of each bounded
-// whatever the repository's size. Protocol v0 only, with no shallow clones or
+// A clone or fetch takes a place in the git limiter's interactive lane, so
+// the cap on concurrent clones is BLOT_GIT_INTERACTIVE_PROCESSES; the store's
+// streaming keeps the memory of each bounded whatever the repository's size.
+// The statuses for wrong methods and unknown paths are the ones Blot's git
+// server has always given. Protocol v0 only, with no shallow clones or
 // filters: the store answers those with an ERR packet, which git shows as
 // "remote error". A store with no copy of the repository answers 503, never
 // an empty repository.
@@ -27,7 +27,7 @@ const zlib = require("zlib");
 const querystring = require("querystring");
 const receivePack = require("../receivePack");
 const limiter = require("../limiter");
-const { measure } = require("../shadow/counting");
+const { measure } = require("./counting");
 const { advertise, CONTENT_TYPE: ADVERTISEMENT } = require("../store/advertise");
 const { serve, parseRequest, CONTENT_TYPE: RESULT } = require("../store/clone");
 const manifest = require("../store/manifest");
@@ -127,8 +127,8 @@ function statusOf(err) {
 // ---- The store ------------------------------------------------------------
 
 // The receive-pack advertisement, from the manifest: the refs, sorted as git
-// sorts them, with the capabilities receivePack.js implements, as the EBS
-// advertisement has them. Receive-pack advertises no HEAD and no peeled tags.
+// sorts them, with the capabilities in receivePack.js, as git advertises
+// them. Receive-pack advertises no HEAD and no peeled tags.
 function receiveAdvertisement(current) {
   const capabilities = receivePack.CAPABILITIES.join(" ");
   const names = Object.keys(current.refs).sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
@@ -251,9 +251,8 @@ async function read(req, res, { kind, store, cache, limiter: clones = interactiv
 
 // ---- The route ------------------------------------------------------------
 
-// Answers a smart HTTP request for a blog served from the store. As
-// smartHttp.handle: the request is authenticated, req.gitHandle is the handle
-// routes.js parsed, and the statuses for anything else are smartHttp's.
+// Answers a smart HTTP request for a blog's repository in the store: the
+// request is authenticated, and req.gitHandle is the handle routes.js parsed.
 // options.receive(req, res, blog) answers a push. Never rejects.
 async function handle(req, res, blog, options) {
   const url = req.url;
@@ -266,7 +265,7 @@ async function handle(req, res, blog, options) {
 
   if (!req.gitHandle) return reply(res, 404, "not found");
 
-  // A blog off the git client has no repository, as on EBS once it is removed
+  // A blog off the git client has no repository
   if (blog.client !== undefined && blog.client !== "git") return reply(res, 404, "repository not found");
 
   if (req.method === "GET" && pathname === repository + "/info/refs") {

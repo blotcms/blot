@@ -1,6 +1,6 @@
 Git store: {{{summary}}}
 
-Today's check of the git store (shadow mode, #2259) against the repositories on disk found these, each still there when checked again a minute later. The repositories on disk are the source of truth, so no blog has lost anything: this is about the store's copy. {{checked}} blogs checked, {{deepChecked}} cloned in full.
+Today's check of the git store (#2259) found these, each still there when checked again a minute later. The store is the only copy of each blog's repository; the blog folders are not affected. {{checked}} blogs checked, {{deepChecked}} cloned in full.
 
 {{#findings}}
 - `{{{blog}}}` **{{kind}}** ({{check}}): {{detail}}
@@ -9,16 +9,16 @@ Today's check of the git store (shadow mode, #2259) against the repositories on 
 **What to do**
 
 {{#hasMissing}}
-- **missing**: a file the newest manifest names is not in the bucket, so the store has lost data for that blog. Look for what deleted it: `logs green | grep "git-store-shadow" | grep "<blogID>" | grep -E "op=(sweep|remove|compact)"`. Then repair the copy, just before a deploy (the app keeps the last manifest it read): `docker exec -u 1000 blot-blue node scripts/git/backfill-store.js --blog <blogID> --reset`, and check it with `scripts/git/verify-store.js --blog <blogID> --deep` after.
+- **missing**: a file the newest manifest names is not in the bucket, or a blog on git has no copy at all, so the store has lost data for that blog. Look for what deleted it: `logs green | grep "git-store-served" | grep "<blogID>" | grep -E "op=(sweep|remove|compact)"`. To repair it, either import a full clone of the repository (the owner's, say) into the blog's prefix with `scripts/git/import-repo.js` once its copy is removed, or disconnect and reconnect git for the blog, which starts a new history from the blog folder (the owner then clones again). Check it with `scripts/git/verify-store.js --blog <blogID> --deep` after.
 {{/hasMissing}}
 {{#hasMismatch}}
-- **mismatch**: the store's refs or files differ from the repository on disk, or a full clone failed index-pack or fsck. Look at the blog's last `op=push` and `op=write` lines. `docker exec -u 1000 blot-blue node scripts/git/backfill-store.js --blog <blogID>` brings refs up to date; for a failed clone or a wrong size, add `--reset`, as for a missing file.
+- **mismatch**: a file is not the size the manifest says, or a full clone failed index-pack, fsck or making a ref. Look at the blog's last `op=push`, `op=write` and `op=compact` lines, and repair it as for a missing file.
 {{/hasMismatch}}
 {{#hasOrphans}}
-- **orphan**: the monthly sweep found and deleted a blog's copy under `<blogID>/git/` though the blog is deleted or off git. Removing the blog from git, or deleting it, should already have deleted it, twice, so a removal path missed it: find the blog's last `op=remove` lines (`logs green | grep "git-store-shadow" | grep "<blogID>" | grep "op=remove"`) and fix the code path that should have run.
+- **orphan**: the monthly sweep found and deleted a blog's copy under `<blogID>/git/` though the blog is deleted or off git. Removing the blog from git, or deleting it, should already have deleted it, twice, so a removal path missed it: find the blog's last `op=remove` lines (`logs green | grep "git-store-served" | grep "<blogID>" | grep "op=remove"`) and fix the code path that should have run.
 {{/hasOrphans}}
 {{#hasErrors}}
 - **error**: a check, sweep or the orphan cleanup could not run (often a failed request to the bucket). Checks and sweeps run again tomorrow, the orphan cleanup next month; check by hand with `docker exec -u 1000 blot-blue node scripts/git/verify-store.js --blog <blogID> --deep`.
 {{/hasErrors}}
 
-Every finding is also in the log as `op=verify` (or `op=sweep`, `op=remove`): `logs green | grep "git-store-shadow" | grep -E "op=(verify|sweep|remove)"` (or `logs blue`, whichever unit ran the job).
+Every finding is also in the log as `op=verify` (or `op=sweep`, `op=remove`): `logs green | grep "git-store-served" | grep -E "op=(verify|sweep|remove)"` (or `logs blue`, whichever unit ran the job), and in the store's log file in tmp (`git-store-log/git-store.log`).

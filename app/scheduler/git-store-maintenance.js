@@ -1,18 +1,13 @@
-// The git store's daily upkeep in shadow mode (#2259): for every shadowed
-// blog, the store's sweep and the cheap check of its copy against the
-// repository on disk, a deep check (a whole clone) of a few blogs in turn and
-// the git test blog, and on the first of the month deleting <blogID>/git/
-// prefixes left behind by blogs no longer on git, and clearing the scratch
-// directories a killed import or verify left (older than 12 hours). See
-// app/clients/git/shadow/maintenance.js.
+// The git store's daily upkeep (#2259): for every blog on git, the store's
+// sweep and the cheap check of its copy, a deep check (a whole clone) of a
+// few blogs in turn and the git test blog, on the first of the month deleting
+// <blogID>/git/ prefixes left behind by blogs no longer on git, and clearing
+// the scratch directories a killed import or verify left (older than 12
+// hours). See app/clients/git/served/maintenance.js.
 //
-// Blogs served from the store (BLOT_GIT_STORE_SERVE) are looked after too:
-// for them a difference is caught up by the EBS fallback before the check
-// runs again, and only what is left is reported.
-//
-// It does nothing unless shadow mode or the served path is set
-// (BLOT_GIT_STORE_SHADOW, BLOT_GIT_STORE_SERVE) and there is a storage bucket. The scheduler runs it in one process (lock.cron).
-// Emails the admin once, with every finding, only if something was found.
+// It does nothing unless there is a storage bucket. The scheduler runs it in
+// one process (lock.cron). Emails the admin once, with every finding, only if
+// something was found.
 const config = require("config");
 const clfdate = require("helper/clfdate");
 
@@ -20,14 +15,9 @@ const NAME = "git-store-maintenance";
 
 // options: sendEmail(view), and what maintenance.daily takes
 async function run(options = {}) {
-  const shadowSetting = String((config.git_store && config.git_store.shadow) || "").trim();
-  const serveSetting = String((config.git_store && config.git_store.serve) || "").trim();
+  if (!(config.storage && config.storage.bucket)) return { skipped: true, sent: false };
 
-  if ((!shadowSetting && !serveSetting) || !(config.storage && config.storage.bucket)) {
-    return { skipped: true, sent: false };
-  }
-
-  const maintenance = require("clients/git/shadow/maintenance");
+  const maintenance = require("clients/git/served/maintenance");
 
   if (!maintenance.configured()) return { skipped: true, sent: false };
 
@@ -98,7 +88,7 @@ async function job() {
     sendEmail: (locals) => new Promise((resolve, reject) => email.GIT_STORE_ALERT(null, locals, (err) => (err ? reject(err) : resolve()))),
   });
 
-  if (skipped) console.log(clfdate(), "Git store: shadow mode is off, nothing to look after");
+  if (skipped) console.log(clfdate(), "Git store: no storage bucket, nothing to look after");
   if (sent) console.log(clfdate(), "Sent git store alert email");
 }
 

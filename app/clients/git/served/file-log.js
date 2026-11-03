@@ -1,5 +1,5 @@
-// Appends shadow mode's log lines to a file as well as stdout (see log() in
-// ./index.js and config.git_store.shadow_log). The containers' stdout is lost
+// Appends the git store's log lines to a file as well as stdout (see ./log.js
+// and config.git_store.log). The containers' stdout is lost
 // when a deploy replaces them, and the lines are wanted for a week or more.
 //
 // The units, both processes in each, and one-off scripts can all append to the
@@ -27,7 +27,7 @@ function warn(err) {
   if (warned) return;
   warned = true;
   try {
-    console.warn("[git-store-shadow] cannot write the log file:", err && err.message);
+    console.warn("[git-store-served] cannot write the log file:", err && err.message);
   } catch (e) {}
 }
 

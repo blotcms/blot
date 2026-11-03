@@ -601,3 +601,4 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
 }
 
 module.exports = commit;
+module.exports.treePath = treePath;
