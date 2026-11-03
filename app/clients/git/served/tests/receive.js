@@ -93,7 +93,9 @@ describe("git store served: pushes on the normal route", function () {
 
     await this.local.commitFiles({ "/b.txt": "B" });
     await this.local.git(["tag", "-a", "v1", "-m", "A tag"]);
-    var pushed = await this.local.push(["origin", "master", "--tags"]);
+    // --progress: git sends "quiet" when its stderr is not a terminal, as
+    // here, and a quiet client is sent no progress; a user at a terminal is
+    var pushed = await this.local.push(["--progress", "origin", "master", "--tags"]);
 
     expect(pushed.stderr).toContain("Saving to Blot...");
 
@@ -162,11 +164,12 @@ describe("git store served: pushes on the normal route", function () {
 
   it("refuses a push over the limit, with the size, and gives the cache its room back", async function () {
     await this.local.writeAndPush("/a.txt", "A");
+    await mirrorAndSwitch(this);
 
-    // A small cache: the limit is the share of it
+    // A small cache, once the store is filled (an import into a cache this
+    // small would not fit): the limit is the share of it
     config.git_store.cache_bytes = 4 * 1024 * 1024;
     context._reset();
-    await mirrorAndSwitch(this);
 
     var limit = Math.floor(config.git_store.cache_bytes * PUSH_CACHE_SHARE);
     var before = await manifest.read(store(this));
