@@ -222,12 +222,19 @@ describe("git client limiter", function () {
 
       limiter.reset({ background: 2 });
 
-      await Promise.all(
-        this.repositories.map(function (directory) {
-          var git = Git(directory);
-          return Promise.all([0, 1, 2, 3, 4].map(() => git.raw(["for-each-ref"])));
-        })
-      );
+      // Long enough that, without the cap, they would overlap
+      process.env.GIT_SPY_SLEEP = "0.2";
+
+      try {
+        await Promise.all(
+          this.repositories.map(function (directory) {
+            var git = Git(directory);
+            return Promise.all([0, 1, 2, 3, 4].map(() => git.raw(["for-each-ref"])));
+          })
+        );
+      } finally {
+        delete process.env.GIT_SPY_SLEEP;
+      }
 
       var commands = spy.commands(ours(this.root));
 
