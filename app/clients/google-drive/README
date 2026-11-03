@@ -138,7 +138,7 @@ Google Drive API client management and monitoring:
 Helper functions:
 
 - `download.js` — Downloads files from Google Drive; handles Google Docs by exporting to `.gdoc` format or HTML; tracks MD5 checksums. Does not set the local file's mtime. Its callers (`sync/sync.js` and the hot-doc poller) record the applied `modifiedTime` and the file's state only after a call here succeeds.
-- `localState.js` — The state of the file Blot holds at a path, as the client's records keep it: storage/folder's `size` and `modified` (rounded to the millisecond, as `models/file` stores it) plus its SHA-1 when known. `unchanged()` checks a record against a listing entry; `describe()` gives a fresh one.
+- `localState.js` — The state of the file Blot holds at a path, as the client's records keep it: storage/folder's `size` and `modified` (rounded to the millisecond, as `models/file` stores it) plus its SHA-1 when known. `unchanged()` checks a record against a listing entry; `stateOf()` gives a fresh one.
 - `contentFingerprint.js`, `localFingerprint.js` — The older record form, size and nanosecond mtime on disk, still honoured in records written before `localState.js` until they're replaced.
 - `md5Checksum.js` — Computes MD5 hash of a local file, or MD5 and SHA-1 in one read (`withSha1`).
 - `checkWeCanContinue.js` — Checks if a sync should proceed (used during setup to detect user cancellation or email changes).

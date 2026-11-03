@@ -41,7 +41,7 @@ function harness(files) {
     "../util/localState": {
       stamp: require("../util/localState").stamp,
       unchanged: async () => null,
-      describe: async () => ({ size: 1, modified: 1000, sha1: "sha1" }),
+      stateOf: async () => ({ size: 1, modified: 1000, sha1: "sha1" }),
     },
     "../util/download": async (blog, drive, path, remote) => {
       state.downloads.push(remote.id);

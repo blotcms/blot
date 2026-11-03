@@ -82,7 +82,7 @@ function harness(options) {
       unchanged: async function () {
         return null;
       },
-      describe: async function () {
+      stateOf: async function () {
         return { size: 1, modified: 1000, sha1: "sha1" };
       },
     },

@@ -344,7 +344,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
               modifiedTime,
               ...(!isGoogleAppFile && result?.verifiedContent
                 ? stateFields(result.verifiedContent)
-                : await localState.describe(blogID, path)),
+                : await localState.stateOf(blogID, path)),
             });
           } catch (err) {
             publish("Download failed", path);

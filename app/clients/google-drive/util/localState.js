@@ -89,7 +89,7 @@ const unchanged = async (blogID, path, record, entry) => {
 
 // { size, modified, sha1 } of the file now at path, for a fresh record, or
 // {} if it can't be read. On disk this reads the file to hash it.
-const describe = async (blogID, path) => {
+const stateOf = async (blogID, path) => {
   try {
     const stat = await folder.stat(blogID, path, { sha1: true });
     const current = stamp(stat);
@@ -99,4 +99,4 @@ const describe = async (blogID, path) => {
   }
 };
 
-module.exports = { stamp, unchanged, describe };
+module.exports = { stamp, unchanged, stateOf };
