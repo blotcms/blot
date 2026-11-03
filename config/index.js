@@ -327,6 +327,13 @@ module.exports = {
   git_store: {
     // Off unless set: "all", or a comma-separated list of blog IDs
     shadow: process.env.BLOT_GIT_STORE_SHADOW || "",
+    // Where shadow mode also appends its log lines, so they outlive the
+    // containers (app/clients/git/shadow/file-log.js). Empty is off (the
+    // shadow specs turn it off, or point it at their own file). app/scheduler/prune-tmp.js leaves its directory alone.
+    shadow_log:
+      process.env.BLOT_GIT_STORE_SHADOW_LOG !== undefined
+        ? process.env.BLOT_GIT_STORE_SHADOW_LOG
+        : BLOT_TMP_DIRECTORY + "/shadow-log/shadow.log",
     // The store's local cache and scratch space. In production tmp is on the
     // host's instance store (/var/instance-ssd/tmp), which is where this
     // belongs: nothing in it needs to survive. Each process takes a

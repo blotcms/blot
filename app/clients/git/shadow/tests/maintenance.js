@@ -340,7 +340,10 @@ describe("git store shadow mode: daily maintenance", function () {
       expect(result.report.blogs).toBe(1);
       expect(result.report.sweeps.ok).toBe(1);
       expect(result.report.deepChecked).toBe(1);
-      expect(this.shadowLines("sweep").length).toBe(1);
+      // The blog's sweep, and the scratch directory's (source=scratch)
+      var sweeps = this.shadowLines("sweep");
+      expect(sweeps.filter((line) => / source=scratch /.test(line)).length).toBe(1);
+      expect(sweeps.filter((line) => !/ source=scratch /.test(line)).length).toBe(1);
     });
 
     it("sends one email for several findings", async function () {

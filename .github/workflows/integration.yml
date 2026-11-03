@@ -113,7 +113,8 @@ jobs:
       - name: Check OpenResty release and record build options
         run: |
           docker run --rm --entrypoint openresty blot-proxy:ci -V 2>&1 | tee openresty-version.txt
-          grep -Fq 'nginx version: openresty/1.31.1.1' openresty-version.txt
+          grep -Fq 'nginx version: openresty/1.31.8.1' openresty-version.txt
+          grep -Fq 'built with OpenSSL 3.5.9 ' openresty-version.txt
 
       - name: Validate generated OpenResty config
         # The image holds a template; render it (as the entrypoint does) first
