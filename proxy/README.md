@@ -76,8 +76,9 @@ when running `build.sh` to change the domain the config is built for.
 list baked into the image as a fallback); CI sets `FETCH_CDN_IPS=false` so image
 builds do not depend on that API.
 
-HTTP/3 (QUIC) is temporarily disabled pending OpenResty security fixes (see
-[`SECURITY.md`](SECURITY.md) and the task at the top of `TODO`). There are no
+HTTP/3 (QUIC) is disabled. OpenResty 1.31.8.1 has the QUIC security fixes,
+but re-enabling it also needs UDP 443 opened on the host (see
+[`SECURITY.md`](SECURITY.md) and the "Re-enable HTTP/3" task in `TODO`). There are no
 QUIC listeners; public server blocks send `Alt-Svc: clear` to expire cached
 HTTP/3 routes. HTTPS continues over HTTP/2 and HTTP/1.1 on TCP 443.
 
@@ -358,10 +359,12 @@ Reproducibility relies on pinning, because the upstream toolchain has drifted:
 - Base image: the same `node:24.22.1-alpine` as the Node app, pinned by
   multi-architecture digest in the `NODE_BASE` argument of both `Dockerfile`s
   (`scripts/security/check-base-image.js` fails CI if they differ). OpenResty
-  1.31.1.1 is compiled on it in the Dockerfile's `openresty` stage with the
+  1.31.8.1 is compiled on it in the Dockerfile's `openresty` stage with the
   configure flags and bundled OpenSSL and PCRE2 of the official
   `openresty/openresty:alpine` image (docker-openresty `alpine/Dockerfile`),
-  each download checked against a sha256. The `-fat` extras (perl, `resty`,
+  each download checked against a sha256. Where that image lags OpenResty's
+  own packaging (`openresty-packaging`), as with OpenSSL 3.5.9, the packaging
+  version wins. The `-fat` extras (perl, `resty`,
   `opm`, `restydoc`, luarocks, wget, unzip, outils-md5, the build packages) are
   not installed; nothing here uses them. The geoip, image_filter and xslt
   dynamic modules are built as in the official image but their libraries are
