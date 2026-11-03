@@ -1259,7 +1259,8 @@ describe("storage/folder", function () {
 
         await folder.removeAll(this.blog.id);
 
-        expect(await keys(this.blog.id)).toEqual([this.blog.id + "/_assets/x.css"]);
+        expect(await keys(this.blog.id)).toEqual([]);
+        expect(await s3.head(this.blog.id + "/_assets/x.css")).not.toBeNull();
         expect(await File.totals(this.blog.id)).toEqual({ bytes: 0, files: 0 });
       });
     });
