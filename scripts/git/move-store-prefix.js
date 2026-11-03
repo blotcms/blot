@@ -5,9 +5,11 @@
 //
 // For each blog under git/: copies every object to the new prefix (a copy
 // inside the bucket, nothing downloaded), checks each copy's size, then
-// deletes the old objects. A blog whose new prefix already holds anything is
-// left alone and reported: a push mirrored after the deploy and before the
-// move started a new copy there, so repair that blog with
+// deletes the old objects. Shadow mode keeps mirroring while it runs, so run
+// it when nothing is pushed to or written in the blogs being moved. A blog
+// whose new prefix already holds anything, or holds anything besides the
+// copies once they are made, met a mirror: it is reported, and its old prefix
+// is kept. Repair that blog with
 // `scripts/git/backfill-store.js --blog <blogID> --reset` and delete its old
 // prefix by hand. Objects over 5 GB can't be copied in one request; a blog
 // with one is reported and left alone. Safe to run again: a blog already
@@ -58,6 +60,11 @@ async function moveBlog(blogID, dryRun) {
     if (!copied || copied.size !== o.size) throw new Error("copy of " + o.key.slice(from.length) + " is the wrong size");
   });
 
+  // A mirror that wrote here meanwhile may have had a manifest overwritten
+  const copied = new Set(objects.map((o) => to + o.key.slice(from.length)));
+  const extra = (await list(to)).filter((o) => !copied.has(o.key));
+  if (extra.length) return { outcome: "raced", detail: "a mirror wrote to the new prefix during the move", objects: objects.length };
+
   const keys = objects.map((o) => o.key);
   for (let i = 0; i < keys.length; i += 1000) await s3.deleteKeys(keys.slice(i, i + 1000));
 
@@ -99,7 +106,7 @@ async function main() {
   }
 
   console.log("[git-store-move] done blogs=" + blogs.length + " " + Object.entries(counts).map(([k, v]) => k + "=" + v).join(" "));
-  process.exit(counts.error || counts.skipped ? 1 : 0);
+  process.exit(counts.error || counts.skipped || counts.raced ? 1 : 0);
 }
 
 main().catch((err) => {

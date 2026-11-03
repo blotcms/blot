@@ -62,10 +62,12 @@ fi
 # assets, {blogID}/_*/...; its folder content is under the private
 # folder/{blogID}/, which this does not match), except a blog's git
 # repository, {blogID}/git/, and any .git directory in {blogID}/folder/:
-# those Deny statements apply to unsigned requests only, so the app and the
-# account are unaffected. The 32 ? match a blog ID exactly. Why: README.md.
-# Nothing else is public: no listing, no writes.
+# reads of those are denied to everyone outside this AWS account, unsigned
+# requests (the public, the CDN) and other accounts' signed ones alike, so the
+# app and the account are unaffected. The 32 ? match a blog ID exactly. Why:
+# README.md. Nothing else is public: no listing, no writes.
 BLOG_ID_PATTERN="blog_$(printf '?%.0s' {1..32})"
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 BUCKET_POLICY=$(cat <<JSON
 {
   "Version": "2012-10-17",
@@ -86,7 +88,7 @@ BUCKET_POLICY=$(cat <<JSON
         "arn:aws:s3:::${BUCKET}/${BLOG_ID_PATTERN}/git/*",
         "arn:aws:s3:::${BUCKET}/${BLOG_ID_PATTERN}/folder/*.git/*"
       ],
-      "Condition": { "Null": { "aws:PrincipalArn": "true" } }
+      "Condition": { "StringNotEquals": { "aws:PrincipalAccount": "${ACCOUNT_ID}" } }
     }
   ]
 }

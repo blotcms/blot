@@ -43,11 +43,16 @@ egress cost, and would get around the git password. So the bucket policy
   `/.git` in it (`app/blog/routes/assets.js`). `*` also matches a directory
   named like `notes.git/`, which errs towards private.
 
-Each Deny applies only when the request is unsigned (`aws:PrincipalArn` is
-absent), which is every public read, including the CDN's pulls: Bunny fetches
-`blog_*` from the bucket without credentials. The app's IAM user and anyone
-signed in to the AWS account are not affected, so the Deny needs no list of
-exempt principals. Policy wildcards match across `/`, so `blog_*/git/*` would
+The Deny applies to every request from outside the AWS account
+(`aws:PrincipalAccount` is not the account's ID), which is every public read,
+including the CDN's pulls (Bunny fetches `blog_*` from the bucket without
+credentials, and an unsigned request has no account, so it doesn't match),
+and also a request signed with another account's credentials, which the
+`Principal: "*"` Allow would otherwise let through. The app's IAM user and
+anyone signed in to the account are not affected, so the Deny needs no list
+of exempt principals. `setup.sh` reads the account ID with
+`aws sts get-caller-identity`, so it stays out of this repository.
+Policy wildcards match across `/`, so `blog_*/git/*` would
 also match a folder's `photos/git/` directory; the 32 `?` match exactly a
 blog ID (`blog_` and 32 hex characters, `app/models/blog/generateID.js`),
 which pins the Deny to the blog's top level.
