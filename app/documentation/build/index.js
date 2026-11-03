@@ -528,6 +528,10 @@ async function buildDocumentation({ watch = false, skipZip = false } = {}) {
           await recordBuildHash(await computeViewsHash(), skipZip);
         }
       });
+      // The local proxy caches the site's pages, as in production, where a
+      // deploy restarts Node and setup flushes them. Required here: it opens
+      // a Redis client, which the image's build of the docs has no use for.
+      require("../tools/flush-cache")();
     });
 
     chokidar

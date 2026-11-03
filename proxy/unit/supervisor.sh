@@ -11,7 +11,8 @@
 #              seccomp filter that keeps the calls the sandbox needs from them
 #              (proxy/unit/sandbox/node-filter.js). If node-a exits it is started again after a
 #              delay that doubles from 1s to 30s and resets once it has run
-#              for 60s. OpenResty is not touched.
+#              for 60s. OpenResty is not touched. Local development runs
+#              nodemon instead (UNIT_NODE_COMMAND, scripts/development/unit).
 #
 #   broker     only if BLOT_SANDBOX_SOCKET is set (the host turned the sandbox
 #              on): the root process that starts nsjail jails for the app
@@ -84,7 +85,7 @@ run_node() {
   while [ -z "$stopping" ]; do
     started=$(date +%s)
     # OpenResty's master stays root; the app does not
-    HOME=/home/node $filter su-exec ec2-user:ec2-user node app/index.js &
+    HOME=/home/node $filter su-exec ec2-user:ec2-user ${UNIT_NODE_COMMAND:-node app/index.js} &
     child=$!
     echo "supervisor: started node-a pid=$child"
     reap "$child"

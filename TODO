@@ -43,7 +43,6 @@ scripts/git/repair.js swaps the blog folder for a fresh clone of the bare repo, 
 
 Speed up ci / simplify proxy and e2e testing slightly
 
-- PR 8 (#2119): production proxy in local dev. Local docker-compose runs the unit image with the real OpenResty config instead of `scripts/development/proxy`.
 - After moving the app host to AL2023 (kernel 5.14+), check that `net.ipv4.tcp_migrate_req=1` is set on the host and that stopping a unit no longer resets queued connections (reuseport listener close; the deploy e2e sets it, AL2's 5.10 kernel can't). The proxy deploy e2e still drops a request or two now and then even with it set; find out why (#2119)
 - Watch unit memory (`stats`) for the first days after the #2119 cutover: each unit's limit assumes one unit can carry all traffic
 Deploy macserver
@@ -93,7 +92,6 @@ Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 - http://www.blot.im/ returns 404: confirm intended
 - app/blog/static has no copy on the host, so those cdn. files fall through to Node: export them from the Node image on deploy, or accept
 - cdn. responses carry Cache-Control twice (expires 1y + add_header), as on bare metal
-- Use the proxy container in local development instead of the nginx:alpine in scripts/development/proxy, so local.blot runs the production proxy config
 - Does proxy container deploy check for enough free memory and disk on host before proceeding?
 - Get proxy horizontally scalable and multi-region
 - Can we add modern compression to proxy? (brotli is in; zstd is not)

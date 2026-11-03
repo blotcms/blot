@@ -242,7 +242,7 @@ RUN cd "openresty-${OPENRESTY_VERSION}/bundle/nginx-${NGINX_VERSION}" && \
 # ---------------------------------------------------------------------------
 # Stage 3: the proxy image
 # ---------------------------------------------------------------------------
-FROM ${NODE_BASE}
+FROM ${NODE_BASE} AS runtime
 
 # What the image runs or shells out to, besides what the base provides:
 # - bash: entrypoint.sh, render-config.sh and dehydrated
@@ -306,21 +306,6 @@ RUN openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
       -keyout /etc/ssl/private/letsencrypt-domain.key \
       -out /etc/ssl/private/letsencrypt-domain.pem
 
-# Copy the generated configuration. Run proxy/build/build.sh first to produce
-# proxy/build/data/latest (CI does this in .github/workflows/integration.yml).
-# The generated config is a template: entrypoint.sh renders it to nginx.conf
-# (render-config.sh) so the Redis host, upstreams, resolver and server label
-# can be set with environment variables at `docker run` time. defaults.env
-# holds the values used when they are not set; cdn-ips.default.conf is the
-# Bunny edge list used when the current one cannot be fetched at start.
-COPY build/data/latest/openresty.conf /usr/local/openresty/nginx/conf/nginx.conf.template
-COPY build/data/latest/defaults.env /etc/openresty/defaults.env
-COPY build/data/latest/cdn-ips.conf /etc/openresty/cdn-ips.default.conf
-COPY build/data/latest/wildcard_cert.lua /etc/openresty/wildcard_cert.lua
-COPY build/data/latest/ban.lua /etc/openresty/ban.lua
-COPY build/data/latest/diskcache.lua /etc/openresty/diskcache.lua
-COPY build/data/latest/html /etc/openresty/html
-
 COPY render-config.sh /usr/local/bin/render-config
 COPY evict.sh /usr/local/bin/diskcache-evict
 # What entrypoint.sh, and the unit image's supervisor, run before OpenResty
@@ -339,3 +324,25 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \
 EXPOSE 80 443
 
 ENTRYPOINT ["/entrypoint.sh"]
+
+# The proxy image is `runtime` plus the generated configuration. Local
+# development builds `runtime` alone (--target runtime, tagged
+# blot-proxy-runtime) for the root Dockerfile's dev-unit, which renders the
+# config from proxy/config each time it starts
+# (scripts/development/unit/start.sh).
+FROM runtime
+
+# Copy the generated configuration. Run proxy/build/build.sh first to produce
+# proxy/build/data/latest (CI does this in .github/workflows/integration.yml).
+# The generated config is a template: entrypoint.sh renders it to nginx.conf
+# (render-config.sh) so the Redis host, upstreams, resolver and server label
+# can be set with environment variables at `docker run` time. defaults.env
+# holds the values used when they are not set; cdn-ips.default.conf is the
+# Bunny edge list used when the current one cannot be fetched at start.
+COPY build/data/latest/openresty.conf /usr/local/openresty/nginx/conf/nginx.conf.template
+COPY build/data/latest/defaults.env /etc/openresty/defaults.env
+COPY build/data/latest/cdn-ips.conf /etc/openresty/cdn-ips.default.conf
+COPY build/data/latest/wildcard_cert.lua /etc/openresty/wildcard_cert.lua
+COPY build/data/latest/ban.lua /etc/openresty/ban.lua
+COPY build/data/latest/diskcache.lua /etc/openresty/diskcache.lua
+COPY build/data/latest/html /etc/openresty/html

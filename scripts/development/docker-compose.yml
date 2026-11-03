@@ -1,5 +1,9 @@
 name: blot
 services:
+  # A unit, as production runs blot-blue and blot-green: OpenResty with the
+  # production proxy config on :80 and :443, node-a (under nodemon) and the
+  # node-b it forks, built from the bind-mounted source by unit/start.sh. One
+  # unit only, so the other unit's sockets, the upstreams' backups, are absent.
   node-app:
     image: blot
     # even though the os.cpu stats don't reflect this, it does seem capable
@@ -14,8 +18,10 @@ services:
     build:
       context: ../../
       dockerfile: Dockerfile
-      target: dev   # This line specifies which stage to build
+      target: dev-unit
     ports:
+      - "80:80"
+      - "443:443"
       - "8080:8080"
     depends_on:
       redis:
@@ -29,10 +35,18 @@ services:
     environment:
       - BLOT_HOST=${BLOT_HOST}
       - BLOT_REDIS_HOST=${BLOT_REDIS_HOST:-redis}
-      - CONTAINER_NAME=blot-container-green
+      - BLOT_UNIT=blue
+      # A unit's node-a serves on its socket only; this keeps :8080 for
+      # toxiproxy (below) and for scripts that call Node directly
+      - BLOT_PORT=8080
+      # The proxy's purge listener, as in production, so Node empties its
+      # disk cache when a blog or the site changes
+      - BLOT_REVERSE_PROXY_URLS=http://127.0.0.1:80
       - DEBUG=${DEBUG:-}
       # Survives nodemon restarts, so each one recompiles only what changed
       - NODE_COMPILE_CACHE=/tmp/node-compile-cache
+      # unit/node.sh gives Node this heap
+      - BLOT_MAX_OLD_SPACE_SIZE=${BLOT_MAX_OLD_SPACE_SIZE:-750}
       # Generated assets live only in this simulated S3 (MinIO, below), as in
       # production; the app won't start without a bucket. The credentials are
       # MinIO's development root user, set below.
@@ -40,6 +54,17 @@ services:
       - BLOT_STORAGE_ENDPOINT=http://minio:9000
       - BLOT_AWS_KEY=blot-dev
       - BLOT_AWS_SECRET=blot-dev-secret
+      # The proxy (proxy/README.md, "Runtime settings"). Docker's DNS, for
+      # the redis, minio and preview sidecar names.
+      - PROXY_REDIS_HOST=redis
+      - PROXY_RESOLVER=127.0.0.11 ipv6=off
+      - PROXY_FETCH_CDN_IPS=false
+      # Blogs and the dashboard go through toxiproxy for production-like
+      # latency (enable-toxiproxy-latency.sh). The upstreams' backup, normally
+      # the other unit, is node-a's own socket, so with toxiproxy refusing
+      # connections (BLOT_USE_TOXIPROXY=false) they go straight to Node.
+      - PROXY_UNIT_MAIN=toxiproxy:8081
+      - PROXY_PEER_MAIN=unix:/run/blot/blue-a.sock
     volumes:
       - ../../data:/usr/src/app/data
       - ../../.git:/usr/src/app/.git
@@ -49,7 +74,21 @@ services:
       - ../../scripts:/usr/src/app/scripts
       - ../../TODO:/usr/src/app/TODO
       - ../../config:/usr/src/app/config
-    command: npx --node-options="--max-old-space-size=${BLOT_MAX_OLD_SPACE_SIZE:-750} --trace-deprecation --require /usr/src/app/scripts/development/fake-dropbox-errors.js --require /usr/src/app/scripts/development/fake-google-drive-errors.js" nodemon /usr/src/app/app/index.js --watch /usr/src/app/app -e js,html,css --ignore /usr/src/app/app/documentation/data --ignore /usr/src/app/app/documentation/output --ignore /usr/src/app/app/views --ignore /usr/src/app/app/views-built  --ignore /usr/src/app/app/clients/*/views --ignore /usr/src/app/app/templates/folders --ignore /usr/src/app/app/templates/source --ignore "**/tests/**"
+      - ../../proxy:/usr/src/app/proxy
+      # The mkcert certificate from setup-certs.sh, where the proxy looks for
+      # production's wildcard certificate
+      - ../../data/ssl/certs/wildcard.crt:/etc/ssl/private/letsencrypt-domain.pem:ro
+      - ../../data/ssl/private/wildcard.key:/etc/ssl/private/letsencrypt-domain.key:ro
+      # Filled by agentation/run.sh; see proxy/config/development.conf
+      - ./agentation/generated/openresty:/etc/openresty/development:ro
+      - ./agentation/generated/dist:/srv/agentation:ro
+    healthcheck:
+      test: ["CMD", "sh", "/usr/src/app/proxy/unit/healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      start_period: 120s
+      start_interval: 2s
+      retries: 3
 
   redis:
     image: "redis:6.2.12-alpine"
@@ -119,21 +158,3 @@ services:
     expose:
       - "26379"
       - "8081"
-
-  nginx:
-    build:
-      context: ./proxy
-      dockerfile: Dockerfile
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./proxy/development_server.conf:/etc/nginx/nginx.conf:ro
-      - ./proxy/init.sh:/etc/nginx/init.sh:ro
-      - ../../data/ssl:/etc/ssl:ro
-    depends_on:
-      - node-app
-      - toxiproxy
-      # the cdn host proxies /blog_* to it
-      - minio
-    command: /bin/sh -c "sh /etc/nginx/init.sh"
