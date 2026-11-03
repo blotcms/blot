@@ -24,16 +24,15 @@ in 1.31.2) and CVE-2026-95101 (request-body injection, fixed in 1.31.7).
 
 ## HTTP/3
 
-HTTP/3 stays disabled for now. The six public servers have no QUIC listener
-and send `Alt-Svc: clear` where server headers apply, expiring clients' cached
-HTTP/3 advertisements; HTTP/2 and HTTP/1.1 stay enabled. The binary still
-includes the HTTP/3 module. Turning QUIC back on is tracked in `TODO` and needs
-host changes (UDP 443, fail2ban) as well as config.
+HTTP/3 is enabled on all six public servers, which listen for QUIC on UDP 443
+and advertise it with `Alt-Svc: h3=":443"; ma=86400`. The fail2ban jails ban
+over UDP as well as TCP.
 
 It was disabled in PR #2225, on OpenResty 1.31.1.1 (nginx 1.31.1), because
 that release was in range for CVE-2026-42530 and CVE-2026-95101, and the
 previous OpenResty 1.25.3.1 had publicly served HTTP/3 through the six 2024
-QUIC advisories.
+QUIC advisories. Any future nginx HTTP/3 advisory is a reason to drop the
+`quic` listeners again until a fixed release ships.
 
 ## Advisory applicability
 
@@ -98,10 +97,12 @@ A `proxy/**` change triggers the existing GitHub workflows:
   version, logs `openresty -V`, parses the generated config, then runs
   routing, compression/Brotli, disk cache, request matrix and parity, wildcard
   certificates, ACME/sockproc, Redis outages, graceful proxy handover and
-  Node swaps. Protocol checks assert no QUIC configuration or live UDP 443
-  listener, no HTTP/3 advertisements, and successful HTTP/1.1 and HTTP/2
-  requests across all public vhosts, repeated with the Redis wildcard
-  certificate.
+  Node swaps. Protocol checks assert the QUIC listeners and a live UDP 443
+  socket, HTTP/1.1 and HTTP/2 with the HTTP/3 advertisement on every public
+  vhost, and real HTTP/3 requests to the site, a custom domain and the Redis
+  wildcard certificate. `cert-issuance` also makes a verified HTTP/3 request
+  to a custom domain with a Pebble-issued certificate on a freshly started
+  container, before any TCP handshake has cached it.
 - `unit-image`: builds the production arm64 unit image (OpenResty included),
   checks OpenResty in it and publishes it to GHCR.
 - `app-e2e` and `proxy-deploy-e2e`: real application requests and deployment

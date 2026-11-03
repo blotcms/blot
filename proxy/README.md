@@ -76,11 +76,11 @@ when running `build.sh` to change the domain the config is built for.
 list baked into the image as a fallback); CI sets `FETCH_CDN_IPS=false` so image
 builds do not depend on that API.
 
-HTTP/3 (QUIC) is disabled. OpenResty 1.31.8.1 has the QUIC security fixes,
-but re-enabling it also needs UDP 443 opened on the host (see
-[`SECURITY.md`](SECURITY.md) and the "Re-enable HTTP/3" task in `TODO`). There are no
-QUIC listeners; public server blocks send `Alt-Svc: clear` to expire cached
-HTTP/3 routes. HTTPS continues over HTTP/2 and HTTP/1.1 on TCP 443.
+HTTP/3 (QUIC) is served on UDP 443 alongside HTTP/2 and HTTP/1.1 on TCP 443,
+and every public server block advertises it (`Alt-Svc: h3=":443"`). Map
+`-p 8443:443/udp` too to try it locally. It was off on OpenResty 1.31.1.1
+while that release was in range for two QUIC advisories; see
+[`SECURITY.md`](SECURITY.md).
 
 `--cap-add SYS_NICE` avoids a harmless `setpriority(-20) failed` alert from
 `worker_priority` in an unprivileged container.
@@ -151,6 +151,18 @@ start).
   or a new container, so do not restart or redeploy the proxy while Redis is
   down. `PROXY_AUTO_SSL_CACHE_TTL` (seconds) shortens the hour; it exists for
   the CI checks and is unset in production.
+- **Kept warm for HTTP/3**: a handshake that yields in
+  `ssl_certificate_by_lua` (to read Redis) fails over HTTP/3
+  ([openresty#1049](https://github.com/openresty/openresty/issues/1049)), and
+  a browser only tries HTTP/3 after a TCP response advertised it, possibly
+  from the other unit or before a deploy. So worker 0 reads every stored
+  certificate when the container starts and every 30 minutes after
+  (`auto_ssl_warm_start` in `config/init.conf`), and caches each in the
+  `auto_ssl` dict for 75 minutes (or `PROXY_AUTO_SSL_CACHE_TTL`), refreshing
+  any stale copy too. Handshakes then find the certificate cached and never
+  read Redis. Expired certificates are left to the handshake path, and a pass
+  stops rather than evict when the dict is full. Each pass is a `SCAN` of the
+  keyspace and one pipelined `GET` per certificate.
 
 - **Expired certificates**: lua-resty-auto-ssl 0.13.1 serves whatever is
   stored for a domain without looking at its expiry, and only deletes a
@@ -413,10 +425,11 @@ and "Proxy container follow-ups". The main ones:
     renders, a seeded user signs in / reaches the dashboard / signs out, and a
     seeded blog (`proxy/e2e/seed-blog.js`) renders on its own vhost with the
     proxy cache going MISS then HIT.
-  - `proxy-behaviour` checks that the rendered config and live UDP sockets expose no QUIC listener, and that HTTP/1.1 and HTTP/2 still serve every public vhost without advertising HTTP/3. It repeats the checks with the wildcard certificate from Redis. `proxy/e2e/h3-check.py` is retained for re-enabling HTTP/3 after the security fixes.
+  - `proxy-behaviour` checks that the rendered config has QUIC listeners and the container binds UDP 443, that HTTP/1.1 and HTTP/2 serve every public vhost and advertise HTTP/3 (`proxy/e2e/protocol-checks.js`), and makes real HTTP/3 requests (`proxy/e2e/h3-check.py`) to the site and a custom domain. It repeats them with the wildcard certificate from Redis.
   - `cert-issuance` issues a real custom-domain certificate through the proxy
     against a Pebble ACME server, checks it persists across a container
-    recreate, and checks that a Redis which stops answering neither stalls the
+    recreate and is served over HTTP/3 by the recreated container before any
+    TCP handshake (so from the warmed cache), and checks that a Redis which stops answering neither stalls the
     handshake nor lets the proxy start issuing for an unlisted domain. Then
     [`e2e/redis-outage-checks.sh`](e2e/redis-outage-checks.sh) stops Redis
     and checks the issued certificate is still served past the (shortened)
