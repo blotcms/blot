@@ -1314,7 +1314,7 @@
     "line_height": 1.4,
     "line_width": 38,
     "font_size": 16,
-    "styles": "@font-face{font-family:'VCR OSD Mono';font-style:normal;font-weight:400;src:url('{{{config.cdn.origin}}}/fonts/vcr-osd-mono/400.woff2?version=457b2c&extension=.woff2') format('woff2'),url('{{{config.cdn.origin}}}/fonts/vcr-osd-mono/400.woff?version=33b234&extension=.woff') format('woff')}.pull-double{margin-left:-.5859375em}.push-double{margin-right:.5859375em}.pull-single{margin-left:-.5859375em}.push-single{margin-right:.5859375em}.push-double,.push-single{display:inline-block}"
+    "styles": "@font-face{font-family:'VCR OSD Mono';font-style:normal;font-weight:400;src:url('{{{config.cdn.origin}}}/fonts/vcr-osd-mono/400.woff2?version=125d80&extension=.woff2') format('woff2'),url('{{{config.cdn.origin}}}/fonts/vcr-osd-mono/400.woff?version=33b234&extension=.woff') format('woff')}.pull-double{margin-left:-.5859375em}.push-double{margin-right:.5859375em}.pull-single{margin-left:-.5859375em}.push-single{margin-right:.5859375em}.push-double,.push-single{display:inline-block}"
   },
   {
     "name": "Verdana",
