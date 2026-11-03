@@ -36,14 +36,15 @@ describe("git store shadow mode: the log file", function () {
       await this.local.writeAndPush("/a.txt", "A");
       await setup.expectMirrored(this);
 
+      // A first push into an empty store is mirrored as an import
       var found = await lines(file);
-      var pushes = found.filter(function (line) {
-        return line.indexOf(" op=push ") !== -1;
+      var imports = found.filter(function (line) {
+        return line.indexOf(" op=import ") !== -1;
       });
 
-      expect(pushes.length).toBe(1);
-      expect(pushes[0]).toMatch(/^\[\d\d\/\w{3}\/\d{4}:[\d: +-]+\] .*\[git-store-shadow\] blog=/);
-      expect(pushes[0]).toContain("blog=" + this.blog.id);
+      expect(imports.length).toBe(1);
+      expect(imports[0]).toMatch(/^\[\d\d\/\w{3}\/\d{4}:[\d: +-]+\] .*\[git-store-shadow\] blog=/);
+      expect(imports[0]).toContain("blog=" + this.blog.id);
     });
 
     it("does not throw, or stop the mirror, when it cannot write", async function () {
@@ -55,7 +56,7 @@ describe("git store shadow mode: the log file", function () {
       await this.local.writeAndPush("/a.txt", "A");
       await setup.expectMirrored(this);
 
-      expect(this.shadowLines("push").length).toBe(1);
+      expect(this.shadowLines("import").length).toBe(1);
       await sleep(100);
       expect(console.warn.calls.count()).toBe(1);
     });
