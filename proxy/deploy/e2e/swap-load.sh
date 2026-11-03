@@ -134,7 +134,7 @@ swap_under_load() {
     const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
     console.log(`[${process.argv[2]}] ${s.requests} requests in ${s.seconds}s (${JSON.stringify(s.byKind)}),`,
       `${s.sse} event streams, ${s.purges} purges (${s.purgeRetries} retried), ${s.keepAliveRetries} requests reset on an idle kept-alive connection and retried,`, `cache: ${JSON.stringify(s.cache)},`, `slowest ${s.maxMs} ms`);
-    console.log(`[${process.argv[2]}] problems:`, JSON.stringify(s.counts), `new connections reset before any response byte: ${s.handshakeResets}`);
+    console.log(`[${process.argv[2]}] problems:`, JSON.stringify(s.counts), `new connections reset before any response byte: ${s.handshakeResets},`, `requests cut at the drain timeout: ${s.drainCuts}`);
     if (s.problems) console.log(JSON.stringify(s.problems, null, 1));
     process.exit(s.requests >= 400 && s.purges >= 5 ? 0 : 3);' "$WORK/$name.json" "$name" || { [ "$?" = 3 ] && fail "$name: too few requests or purges for the run to mean anything"; }
   local n resets
