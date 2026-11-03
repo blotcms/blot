@@ -352,6 +352,86 @@ describe("storage/folder cache", function () {
     expect(await fs.pathExists(b)).toBe(true);
   });
 
+  describe("put", function () {
+    it("stores bytes the caller has, so the next get is a hit", async function () {
+      var cache = open();
+      var s3 = source("written");
+
+      await cache.put(spec("/a.txt", "written"), source("written"));
+
+      var local = await cache.get(spec("/a.txt", "written"), s3);
+
+      expect(await fs.readFile(local, "utf8")).toEqual("written");
+      expect(s3).not.toHaveBeenCalled();
+      expect(cache.stats()).toEqual(jasmine.objectContaining({ filled: 1, hits: 1, misses: 0, fetchedBytes: 0, entries: 1, bytes: 7 }));
+    });
+
+    it("doesn't pass its failure to a get which joined it: the get downloads", async function () {
+      var cache = open();
+      var s3 = source("written");
+      var release;
+      var gone = jasmine.createSpy("open").and.callFake(function () {
+        return new Promise(function (resolve, reject) {
+          release = function () {
+            var err = new Error("source removed");
+            err.code = "ENOENT";
+            reject(err);
+          };
+        });
+      });
+
+      var putting = rejection(cache.put(spec("/a.txt", "written"), gone));
+
+      // Let the put start its fill, so the get joins it
+      while (!release) await new Promise(setImmediate);
+
+      var getting = cache.get(spec("/a.txt", "written"), s3);
+
+      await new Promise(setImmediate);
+      release();
+
+      expect((await putting).code).toEqual("ENOENT");
+      expect(await fs.readFile(await getting, "utf8")).toEqual("written");
+      expect(s3).toHaveBeenCalledTimes(1);
+    });
+
+    it("leaves an entry which is there already, opening nothing", async function () {
+      var cache = open();
+      var again = source("same");
+
+      await cache.get(spec("/a.txt", "same"), source("same"));
+      await cache.put(spec("/a.txt", "same"), again);
+
+      expect(again).not.toHaveBeenCalled();
+      expect(cache.stats()).toEqual(jasmine.objectContaining({ filled: 0, entries: 1 }));
+    });
+
+    it("refuses bytes which are not the version it was given", async function () {
+      var cache = open();
+
+      var err = await rejection(cache.put(spec("/a.txt", "recorded"), source("changed since")));
+
+      expect(err.code).toEqual("ECHANGED");
+      expect(await files()).toEqual([]);
+
+      // Not S3 holding the wrong version, so not counted as that
+      expect(cache.stats()).toEqual(jasmine.objectContaining({ changed: 0, filled: 0, entries: 0 }));
+    });
+
+    it("counts towards the budget like any other entry", async function () {
+      var cache = open({ maxBytes: 10 });
+
+      await cache.put(spec("/a.txt", "aaaa"), source("aaaa"));
+      await cache.put(spec("/b.txt", "bbbb"), source("bbbb"));
+
+      expect(cache.stats()).toEqual(jasmine.objectContaining({ entries: 2, bytes: 8 }));
+
+      await cache.get(spec("/c.txt", "cccc"), source("cccc"));
+
+      expect(cache.stats()).toEqual(jasmine.objectContaining({ entries: 2, bytes: 8, evictions: 1 }));
+    });
+  });
+
   it("removes a blog's entries", async function () {
     var cache = open();
 

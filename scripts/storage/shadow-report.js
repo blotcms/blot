@@ -146,6 +146,7 @@ function summarise(total) {
       fetchedBytes: total["cache:fetchedBytes"] || 0,
       evictions: total["cache:evictions"] || 0,
       changed: total["cache:changed"] || 0,
+      filled: total["cache:filled"] || 0,
     },
   };
 }
@@ -275,7 +276,9 @@ function format(report) {
       cache.evictions +
       " evictions, " +
       cache.changed +
-      " changed under the index"
+      " changed under the index, " +
+      cache.filled +
+      " filled by writes"
   );
 
   return lines.join("\n");

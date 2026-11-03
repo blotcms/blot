@@ -177,6 +177,10 @@ describe("storage/folder shadow reads", function () {
     spyOn(console, "error");
     await s3.putBuffer(this.blog.id + "/folder/a.txt", Buffer.from("hellp"));
 
+    // The mirror's write put "hello" in the content cache under that hash,
+    // which would otherwise answer the S3 side of the read
+    await require("storage/folder/cache")().removeBlog(this.blog.id);
+
     await folder.read(this.blog.id, "/a.txt");
     await consume(folder.createReadStream(this.blog.id, "/a.txt"));
     await shadow.idle();
@@ -377,7 +381,7 @@ describe("storage/folder shadow reads", function () {
       expect(summary.ops.read.mismatchRate).toEqual(0);
       expect(summary.ops.read.s3.p50).not.toBeNull();
       expect(summary.ops.exists.sampled).toEqual(1);
-      // The first read of a.txt misses the content cache, the second hits
+      // Both reads of a.txt hit the content cache its mirrored write filled
       expect(summary.cache.hits + summary.cache.misses).toBeGreaterThan(0);
       expect(report.format(summary)).toContain("read");
 
