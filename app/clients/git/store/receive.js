@@ -76,6 +76,8 @@
 //   results   [{ ref, error? }], one for each command, as receivePack's
 //   messages  lines to show the user
 //   seq       the manifest the push made, when it was ok
+//   manifest  that manifest itself, when it was ok, so a host can plan a
+//             compaction (compact.plan) without reading it again
 //   stats     { bytes, objects, basesFetched, packs }, for logs
 const fs = require("fs");
 const fsp = require("fs/promises");
@@ -712,7 +714,7 @@ async function receive({ store, cache, lock, commands, pack = null, limit = DEFA
 
     stats.packs = added.packs.map((piece) => piece.name);
     say("Push saved.");
-    return answer(commands, { outcome: "ok", extra: { seq: next.seq, stats } });
+    return answer(commands, { outcome: "ok", extra: { seq: next.seq, manifest: next, stats } });
   } catch (err) {
     await incoming.drain();
     return failure(commands, err, stats);

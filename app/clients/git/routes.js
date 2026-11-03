@@ -130,15 +130,19 @@ dashboard.post("/disconnect", function (req, res, next) {
 // /end//handle.git indistinguishable from /end/handle.git. Blog handles are
 // canonical lowercase alphanumerics between 2 and 70 characters (the same
 // shape stored by the blog model).
-var GIT_REQUEST = /^(?![^#]*%(?:2[fF]|5[cC]))\/end(\/([a-z0-9]{2,70})\.git\/(?:info\/refs|HEAD|git-(?:upload|receive)-pack)(?:\?[^#]*)?)$/;
+//
+// /store-end is a test-only read route served from the git store, for blogs in
+// shadow mode (shadow/reads.js, shadow/README). It is removed at cutover.
+var GIT_REQUEST = /^(?![^#]*%(?:2[fF]|5[cC]))\/(end|store-end)(\/([a-z0-9]{2,70})\.git\/(?:info\/refs|HEAD|git-(?:upload|receive)-pack)(?:\?[^#]*)?)$/;
 
 function parseGitRequest(req, res, next) {
   var match = GIT_REQUEST.exec(req.url);
 
   if (!match) return res.sendStatus(404);
 
-  req.url = match[1];
-  req.gitHandle = match[2];
+  req.gitRoute = match[1];
+  req.url = match[2];
+  req.gitHandle = match[3];
   next();
 }
 
@@ -156,7 +160,8 @@ function redirectRenamedGitHandle(req, res, next) {
       "https://" +
         host +
         req.baseUrl +
-        "/end" +
+        "/" +
+        req.gitRoute +
         "/" +
         blog.handle +
         ".git" +
@@ -266,6 +271,8 @@ site.use(parseGitRequest, redirectRenamedGitHandle, authenticate, function (req,
 
     debug("Git response error", err);
   });
+
+  if (req.gitRoute === "store-end") return require("./shadow/reads").handle(req, res, req.blog);
 
   repo.handleSmartHttp(req, res, req.blog.id);
 });

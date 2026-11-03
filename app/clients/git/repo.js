@@ -17,6 +17,7 @@ var dataDir = require("./dataDir");
 var checkGitRepoExists = require("./checkGitRepoExists");
 var smartHttp = require("./smartHttp");
 var database = require("./database");
+var shadow = require("./shadow/hook");
 
 // Set with onPush
 var pushed = function () {};
@@ -63,6 +64,12 @@ function receiveHooks(blogID) {
     accepted: function (master, prepared) {
       pushed(blogID, master.old, master.new, prepared);
     },
+    // Mirrors the push into the git store in the background (shadow/index.js)
+    applied: function (ms) {
+      shadow(blogID, function (mirror) {
+        mirror.pushed(blogID, ms);
+      });
+    },
   };
 }
 
@@ -82,6 +89,11 @@ function exists(handle, callback) {
 // blog, and its URL names the blog's current handle (req.gitHandle).
 function handleSmartHttp(req, res, blogID) {
   req.blogID = blogID;
+
+  // Times clones and fetches for comparison with the store's (shadow/reads.js)
+  shadow(blogID, function () {
+    require("./shadow/reads").timeEbs(req, res, blogID);
+  });
 
   smartHttp.handle(req, res, directory(req.gitHandle), receiveHooks(blogID));
 }
@@ -255,14 +267,21 @@ async function commitChange(blogID, change) {
     await folder.write(blogID, path, contents);
   }
 
+  // Timed from the ref lock to the commit landing, for shadow mode's log
+  // (the wait for a place in the lane is not part of it)
+  var commitMs;
+
   // One place in the background lane for the whole commit, taken before the
   // ref lock: its commands run one after another in it, and none waits for
   // room with the lock held, which would hold up a push to the blog
   var result = await limiter.run("background", async function () {
+    var started = Date.now();
     var release = await holdRefLock(blogID);
 
     try {
-      return await plumbing.commitFile(bareRepoDirectory, change);
+      var committed = await plumbing.commitFile(bareRepoDirectory, change);
+      commitMs = Date.now() - started;
+      return committed;
     } finally {
       try {
         await release();
@@ -276,6 +295,11 @@ async function commitChange(blogID, change) {
   if (!result.commit) return;
 
   debug("Blog:", blogID, "Committed", path);
+
+  // Mirrors the commit into the git store in the background (shadow/index.js)
+  shadow(blogID, function (mirror) {
+    mirror.committed(blogID, change, result, commitMs);
+  });
 
   plumbing.collect(bareRepoDirectory);
 
