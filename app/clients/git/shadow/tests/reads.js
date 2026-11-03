@@ -193,6 +193,71 @@ describe("git store shadow mode: the test-only read route", function () {
     await lineMatching(this, / op=fetch source=ebs outcome=ok /);
   });
 
+  it("notes shallow and partial requests on the EBS line, and only those", async function () {
+    await this.local.writeAndPush("/a.txt", "A");
+    await this.local.writeAndPush("/b.txt", "B");
+    await setup.expectMirrored(this);
+
+    var ctx = this;
+    function ebsLines() {
+      return ctx.lines.filter(function (line) {
+        return / source=ebs /.test(line) && / op=(clone|fetch) /.test(line);
+      });
+    }
+
+    // A normal clone and fetch carry none of the fields
+    var normal = await Client.clone({ url: this.repoUrl, directory: directory(this, "shape-normal") });
+    await lineMatching(this, / op=clone source=ebs outcome=ok /);
+    await this.local.writeAndPush("/c.txt", "C");
+    await normal.git(["fetch", "origin"]);
+    await lineMatching(this, / op=fetch source=ebs outcome=ok /);
+    expect(ebsLines().length).toBeGreaterThan(1);
+    ebsLines().forEach(function (line) {
+      expect(line).not.toMatch(/ (deepen|shallow|filter)=/);
+    });
+
+    // A shallow clone sends a deepen line, and a fetch into it shallow lines
+    var shallow = await Client.clone({ url: this.repoUrl, directory: directory(this, "shape-shallow"), args: ["--depth", "1"] });
+    await lineMatching(this, / op=clone source=ebs outcome=ok .* deepen=deepen$/);
+    await this.local.writeAndPush("/d.txt", "D");
+    await shallow.git(["fetch", "origin"]);
+    await lineMatching(this, / op=fetch source=ebs outcome=ok .* shallow=1$/);
+
+    // A repository which does not allow filters does not advertise the
+    // capability, so a real client would not send one: send the requests by
+    // hand, plain and gzipped
+    var advertised = await request(this, "GET", "end", "/info/refs?service=git-upload-pack");
+    var tip = /([0-9a-f]{40}) HEAD/.exec(advertised.body)[1];
+
+    function packet(text) {
+      return (text.length + 4).toString(16).padStart(4, "0") + text;
+    }
+
+    var plain = Buffer.from(
+      packet("want " + tip + " multi_ack_detailed side-band-64k ofs-delta\n") +
+        packet("deepen-since 1700000000\n") +
+        packet("deepen-not refs/heads/other\n") +
+        packet("filter blob:none\n") +
+        "0000" +
+        packet("done\n")
+    );
+    var zipped = require("zlib").gzipSync(
+      Buffer.from(packet("want " + tip + " ofs-delta\n") + packet("filter tree:0\n") + "0000" + packet("done\n"))
+    );
+
+    await request(this, "POST", "end", "/git-upload-pack", {
+      body: plain,
+      headers: { "Content-Type": "application/x-git-upload-pack-request" },
+    });
+    await request(this, "POST", "end", "/git-upload-pack", {
+      body: zipped,
+      headers: { "Content-Type": "application/x-git-upload-pack-request", "Content-Encoding": "gzip" },
+    });
+
+    await lineMatching(this, / deepen=deepen-since,deepen-not filter=blob:none$/);
+    await lineMatching(this, / filter=tree:0$/);
+  });
+
   it("gives upload-pack the whole body while the fetch waits for a place in the git limiter", async function () {
     var limiter = require("clients/git/limiter");
 
