@@ -29,8 +29,9 @@
 //
 // The steps, in the order they run:
 //
-//   1. Read the newest manifest. Anything but the empty one (seq 0) is refused
-//      with code ENOTEMPTY: a live repository is never overwritten.
+//   1. Read the newest manifest. Anything but an empty one (seq 0, or the
+//      tombstone a removal leaves: manifest.isEmpty) is refused with code
+//      ENOTEMPTY: a live repository is never overwritten.
 //   2. Read the refs with `git for-each-ref`. Only refs/heads/* and refs/tags/*
 //      are imported; everything else (refs/remotes, refs/stash, notes) is
 //      listed in `skipped`, and so is a branch which does not point at a
@@ -51,9 +52,11 @@
 //      (no .rev, as for a piece) at once. The packs stream from scratch to the
 //      store, which uploads a large stream in parts, so memory does not depend
 //      on the size of the repository.
-//   6. Swap in manifest 1. The conditional create is the only thing that
-//      decides: if someone else wrote seq 1 first the import fails with code
-//      EMOVED and is not retried (what was uploaded is left for the sweep).
+//   6. Swap in the manifest after the empty one: seq 1, or the one after a
+//      removal's tombstone (never 1 again: see remove.js). The conditional
+//      create is the only thing that decides: if someone else wrote that seq
+//      first the import fails with code EMOVED and is not retried (what was
+//      uploaded is left for the sweep).
 //
 // A repository with nothing to import (no branch or tag) writes nothing and
 // resolves { outcome: "empty" }. Otherwise it resolves
@@ -62,7 +65,7 @@
 //             "unknown"  the swap may or may not have happened and reading back
 //                        failed (OutcomeUnknownError, as `error`), as for
 //                        commit() and compact(): neither success nor failure.
-//   seq       1
+//   seq       1, or the one after a removal's tombstone
 //   head      the branch HEAD points at in the store, or null
 //   refs      { name: oid } as imported
 //   pack      { name, size, idxSize, objects }
@@ -428,7 +431,7 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
   }
 
   const base = await manifest.read(store, { clock });
-  if (base.seq !== 0) {
+  if (!manifest.isEmpty(base)) {
     throw coded("The store repository already has a manifest (seq " + base.seq + "). An import only goes into an empty repository.", "ENOTEMPTY", { seq: base.seq });
   }
 
@@ -523,7 +526,7 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
         refs,
         head,
         packs: [entryOf(main)],
-        history: commits ? { ...entryOf(commits), through: 1 } : null,
+        history: commits ? { ...entryOf(commits), through: on.seq + 1 } : null,
         peeled,
       });
     let next = build(base);
@@ -549,7 +552,7 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
         // reads the manifest again: still empty, it swaps on that, once
         if (!(err instanceof StaleManifestError) || manifest.isFresh(base, clock)) throw err;
         const fresh = await manifest.read(store, { clock });
-        if (fresh.seq !== 0) throw err;
+        if (!manifest.isEmpty(fresh)) throw err;
         next = build(fresh);
         result.seq = next.seq;
         await manifest.swap({ store, lock, base: fresh, next, uploaded, clock });
@@ -584,7 +587,7 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
 // scratch is the size of the clone.
 async function verifyImport({ store, cache, gitDir, scratchDir = null, gate = null }) {
   const current = await manifest.read(store);
-  if (current.seq === 0) throw new CorruptError("The store repository is empty");
+  if (manifest.isEmpty(current)) throw new CorruptError("The store repository is empty");
 
   const children = createChildren(gate);
   let reservation = null;

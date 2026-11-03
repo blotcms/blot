@@ -1,0 +1,274 @@
+// Removing a repository (remove.js), and why it leaves a tombstone: processes
+// keep the manifest they last read, and a removal followed by an import must
+// never let one of them build on, or read, the old history as if it were the
+// new one. "Processes" here are copies of one memory store object, since the
+// manifest module keeps what it read per store object. The last spec imports
+// a real repository with git after a removal.
+const fs = require("fs");
+const path = require("path");
+const fx = require("./helpers/fixture");
+const timeout = require("./helpers/timeout");
+const manifest = require("../manifest");
+const removeRepo = require("../remove");
+const importRepo = require("../import");
+const { verifyImport } = importRepo;
+const createCache = require("../cache");
+const createMemoryStore = require("../objectStore/memory");
+const { LATEST_KEY, SWEEP_KEY, manifestKey, manifestSeq, packKey, idxKey, revKey } = require("../layout");
+
+const MASTER = "refs/heads/master";
+const lock = (fn) => fn();
+const oid = (n) => String(n % 10).repeat(40);
+
+async function fails(promise) {
+  try {
+    await promise;
+  } catch (err) {
+    return err;
+  }
+  return null;
+}
+
+describe("git store removal", function () {
+  timeout(30 * 1000);
+
+  let inner;
+  let made;
+
+  beforeEach(function () {
+    inner = createMemoryStore();
+    made = 0;
+  });
+
+  // Another process: its own memory of manifests, the same objects
+  const processOf = () => ({ ...inner });
+
+  async function upload(store) {
+    const n = ++made;
+    const name = "pack-" + String(n).padStart(40, "0");
+    const entry = { name, size: 100 + n, idxSize: 1100 + n, objects: 1 };
+    await store.put(packKey(name), Buffer.alloc(entry.size, n));
+    await store.put(idxKey(name), Buffer.alloc(entry.idxSize, n));
+    await store.put(revKey(name), Buffer.alloc(30, n));
+    return entry;
+  }
+
+  // A push of master to oid(n) with a pack of its own, by `store`
+  async function pushOf(store, n) {
+    const pack = await upload(store);
+    const base = await manifest.read(store);
+    const next = manifest.advance(base, { refs: { [MASTER]: oid(n) }, head: MASTER, packs: [pack] });
+    await manifest.swap({ store, lock, base, next });
+    return next;
+  }
+
+  // An import as importRepo makes it, onto whatever empty manifest is there
+  async function importOf(store, n) {
+    const pack = await upload(store);
+    const base = await manifest.read(store);
+    expect(manifest.isEmpty(base)).toBe(true);
+    const next = manifest.advance(base, { refs: { [MASTER]: oid(n) }, head: MASTER, packs: [pack] });
+    await manifest.swap({ store, lock, base, next });
+    return next;
+  }
+
+  const keys = () => [...inner.objects.keys()].sort();
+
+  describe("the bug it fixes", function () {
+    it("deleting everything and importing again let a process holding the old newest manifest land on the new history", async function () {
+      const a = processOf();
+      await pushOf(a, 1);
+      await pushOf(a, 2);
+      const stale = await manifest.read(a);
+      expect(stale.seq).toBe(2);
+
+      // The old removal: every key deleted, then a fresh import and a push
+      for (const key of keys()) await inner.delete(key);
+      const b = processOf();
+      await importOf(b, 7);
+      await pushOf(b, 8);
+      expect((await manifest.read(processOf())).seq).toBe(2);
+
+      // A builds on the old seq 2: seq 3 is free, so it lands, on the new
+      // history, with the old history's refs
+      await manifest.swap({ store: a, lock, base: stale, next: manifest.advance(stale, { refs: { [MASTER]: oid(3) } }) });
+      const newest = await manifest.read(processOf());
+      expect(newest.seq).toBe(3);
+      expect(newest.refs[MASTER]).toBe(oid(3));
+    });
+  });
+
+  describe("removeRepo", function () {
+    it("swaps in a tombstone, deletes every pack and the sweep's record, and keeps the manifests and the hint", async function () {
+      await pushOf(inner, 1);
+      const before = await pushOf(inner, 2);
+      await inner.put(SWEEP_KEY, Buffer.from("{}"));
+
+      const result = await removeRepo({ store: processOf() });
+      expect(result).toEqual({ outcome: "removed", seq: before.seq + 1, deleted: 3 * 2 + 1 });
+
+      expect(keys()).toEqual([manifestKey(1), manifestKey(2), manifestKey(3), LATEST_KEY]);
+      const tombstone = await manifest.read(processOf());
+      expect(tombstone.seq).toBe(3);
+      expect(manifest.isEmpty(tombstone)).toBe(true);
+      expect(manifest.epochOf(tombstone)).not.toBe(manifest.epochOf(before));
+      expect(tombstone.refs).toEqual({});
+      expect(tombstone.packs).toEqual([]);
+    });
+
+    it("writes no second tombstone when run again, and deletes what was uploaded since", async function () {
+      await pushOf(inner, 1);
+      await removeRepo({ store: processOf() });
+      const late = await upload(inner);
+
+      const again = await removeRepo({ store: processOf() });
+      expect(again).toEqual({ outcome: "removed", seq: 2, deleted: 3 });
+      expect(inner.objects.has(packKey(late.name))).toBe(false);
+      expect(keys().map(manifestSeq).filter((seq) => seq !== null)).toEqual([1, 2]);
+    });
+
+    it("deletes everything from a repository with no manifest, and writes no tombstone", async function () {
+      await upload(inner);
+      expect(await removeRepo({ store: processOf() })).toEqual({ outcome: "removed", seq: 0, deleted: 3 });
+      expect(keys()).toEqual([]);
+      expect(await removeRepo({ store: processOf() })).toEqual({ outcome: "removed", seq: 0, deleted: 0 });
+    });
+
+    it("builds its tombstone again on a manifest swapped in meanwhile, and deletes nothing until it lands", async function () {
+      await pushOf(inner, 1);
+      const racing = processOf();
+      let raced = false;
+      const store = {
+        ...inner,
+        putIfAbsent: async (key, bytes) => {
+          if (!raced) {
+            raced = true;
+            await pushOf(racing, 2);
+            expect(inner.objects.size).toBe(2 * 3 + 3);
+          }
+          return inner.putIfAbsent(key, bytes);
+        },
+      };
+
+      const result = await removeRepo({ store });
+      expect(result.seq).toBe(3);
+      expect(manifest.isEmpty(await manifest.read(processOf()))).toBe(true);
+      expect(keys().filter((key) => manifestSeq(key) === null && key !== LATEST_KEY)).toEqual([]);
+    });
+
+    it("throws, deleting nothing, when its tombstone keeps losing", async function () {
+      await pushOf(inner, 1);
+      const racing = processOf();
+      let n = 1;
+      const store = {
+        ...inner,
+        putIfAbsent: async (key, bytes) => {
+          await pushOf(racing, ++n);
+          return inner.putIfAbsent(key, bytes);
+        },
+      };
+      const before = keys().length;
+
+      const error = await fails(removeRepo({ store }));
+      expect(error && error.code).toBe("EMOVED");
+      expect(keys().length).toBe(before + 3 * 4);
+      expect(manifest.isEmpty(await manifest.read(processOf()))).toBe(false);
+    });
+  });
+
+  describe("after a removal and an import", function () {
+    let a;
+    let stale;
+    let older;
+
+    beforeEach(async function () {
+      // Process A pushes twice and keeps both manifests it read
+      a = processOf();
+      await pushOf(a, 1);
+      older = await manifest.read(a);
+      await pushOf(a, 2);
+      stale = await manifest.read(a);
+      expect(stale.seq).toBe(2);
+
+      // Another process removes the repository, and imports it again
+      await removeRepo({ store: processOf() });
+      await importOf(processOf(), 7);
+    });
+
+    it("numbers the import after the tombstone, never 1", async function () {
+      const newest = await manifest.read(processOf());
+      expect(newest.seq).toBe(4);
+      expect(newest.refs[MASTER]).toBe(oid(7));
+      expect(newest.packs.map((pack) => pack.seq)).toEqual([4]);
+      expect(newest.snapshots.map((snapshot) => snapshot.seq)).toEqual([4]);
+    });
+
+    it("refuses a write built on the old newest manifest, which then reads the new one", async function () {
+      const error = await fails(manifest.swap({ store: a, lock, base: stale, next: manifest.advance(stale, { refs: { [MASTER]: oid(3) } }) }));
+      expect(error && error.name).toBe("StaleManifestError");
+
+      const newest = await manifest.read(a);
+      expect(newest.seq).toBe(4);
+      expect(newest.refs[MASTER]).toBe(oid(7));
+    });
+
+    it("refuses a write built on an older manifest, which stalled across the removal", async function () {
+      const error = await fails(manifest.swap({ store: a, lock, base: older, next: manifest.advance(older, { refs: { [MASTER]: oid(3) } }) }));
+      expect(error && error.name).toBe("StaleManifestError");
+      expect((await manifest.read(processOf())).refs[MASTER]).toBe(oid(7));
+    });
+
+    it("never serves the old manifest a process kept in memory, with the hint lagging behind it", async function () {
+      await inner.put(LATEST_KEY, Buffer.from(JSON.stringify({ seq: 1 })));
+      const newest = await manifest.read(a);
+      expect(newest.seq).toBe(4);
+      expect(newest.refs[MASTER]).toBe(oid(7));
+    });
+
+    it("gives the new history the tombstone's epoch, so nothing cached by object for the old one is used", async function () {
+      const newest = await manifest.read(processOf());
+      expect(manifest.epochOf(newest)).not.toBe(manifest.epochOf(stale));
+      expect(manifest.epochOf(newest)).not.toBe("");
+    });
+  });
+
+  describe("with a real import", function () {
+    let root;
+
+    beforeEach(function () {
+      root = fx.tempDir();
+    });
+
+    afterEach(function () {
+      fx.remove(root);
+    });
+
+    it("imports into a removed repository above the tombstone, with its history through that seq, and verifies", async function () {
+      const work = path.join(root, "work");
+      fs.mkdirSync(work);
+      fx.git(work, ["init", "-q", "-b", "master"]);
+      for (let i = 1; i <= 3; i++) {
+        fs.writeFileSync(path.join(work, "post-" + i + ".md"), "# Post " + i + "\n");
+        fx.git(work, ["add", "-A"]);
+        fx.git(work, ["commit", "-q", "-m", "Post " + i]);
+      }
+      const gitDir = path.join(work, ".git");
+      const cache = () => createCache({ dir: path.join(root, "cache-" + ++made), maxBytes: 64 * 1024 * 1024 });
+
+      const first = await importRepo({ store: processOf(), cache: cache(), lock, gitDir });
+      expect(first.seq).toBe(1);
+
+      const again = await fails(importRepo({ store: processOf(), cache: cache(), lock, gitDir }));
+      expect(again && again.code).toBe("ENOTEMPTY");
+
+      await removeRepo({ store: processOf() });
+      const second = await importRepo({ store: processOf(), cache: cache(), lock, gitDir });
+      expect(second.outcome).toBe("imported");
+      expect(second.seq).toBe(3);
+
+      const newest = await manifest.read(processOf());
+      expect(newest.history.through).toBe(3);
+      await verifyImport({ store: processOf(), cache: cache(), gitDir });
+    });
+  });
+});

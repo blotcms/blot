@@ -60,7 +60,9 @@
 // hint is missing, damaged or names something which doesn't exist.
 //
 // Old manifests are not deleted here: sweep.js does that, keeping the newest
-// ones and any written recently. Snapshots are trimmed from the old end by
+// ones and any written recently. Removing a whole repository (remove.js)
+// leaves its newest number taken by a tombstone, so the numbering never starts
+// again at 1 under a process that still holds a manifest of the old history. Snapshots are trimmed from the old end by
 // compacted() (see trimSnapshots), never by a push.
 const crypto = require("crypto");
 const {
@@ -526,6 +528,33 @@ function rewritten(base, { epoch, pack = null, history = null, peeled }) {
   };
 }
 
+// The manifest which follows `base` when the repository is removed (remove.js):
+// no refs, packs, snapshots or history, and a new epoch. It is a tombstone
+// which keeps the numbering going: whatever is built later (an import) goes
+// above it, never back at seq 1, where a process still holding an older
+// manifest of the removed history could build on it.
+function removed(base) {
+  return {
+    version: VERSION,
+    seq: base.seq + 1,
+    writer: crypto.randomBytes(16).toString("hex"),
+    epoch: newEpoch(),
+    head: null,
+    refs: {},
+    packs: [],
+    snapshots: [],
+    history: null,
+    historyPieces: [],
+  };
+}
+
+// Whether `m` holds nothing: the empty manifest (seq 0), or a removal's
+// tombstone. An import goes into either, and a host treats both as no copy
+// at all.
+function isEmpty(m) {
+  return !Object.keys(m.refs).length && !m.packs.length && !m.history && !(m.historyPieces || []).length;
+}
+
 // How many snapshots a manifest keeps, and how many bytes of them, once
 // compaction trims it (see trimSnapshots). A snapshot is about 100 bytes for a
 // blog with a ref or two, so 1000 of them is about 100 KB; the byte cap is for
@@ -749,6 +778,8 @@ module.exports = {
   advance,
   compacted,
   rewritten,
+  removed,
+  isEmpty,
   epochOf,
   newEpoch,
   trimSnapshots,

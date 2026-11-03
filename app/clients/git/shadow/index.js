@@ -75,6 +75,7 @@ const receive = require("../store/receive");
 const storeCommit = require("../store/commit");
 const compact = require("../store/compact");
 const importRepo = require("../store/import");
+const removeRepo = require("../store/remove");
 const limiter = require("../limiter");
 const counting = require("./counting");
 const { measure } = counting;
@@ -406,7 +407,7 @@ async function runMirror(ctx, task) {
 
     const measured = await measure(async () => {
       const base = await manifest.read(store);
-      if (base.seq === 0) return { imported: true, base };
+      if (manifest.isEmpty(base)) return { imported: true, base };
 
       const refs = new Set(Object.keys(ebs).concat(Object.keys(base.refs)));
       const commands = [];
@@ -617,7 +618,7 @@ async function runWrite(ctx, task) {
     const base = await manifest.read(store);
     const master = base.refs[MASTER] || null;
 
-    if (base.seq === 0 || master !== (ebs.parent || null)) return { base, master };
+    if (manifest.isEmpty(base) || master !== (ebs.parent || null)) return { base, master };
 
     // commit() runs no git today; the stopwatch leaves out any lane wait anyway
     const elapsed = counting.stopwatch();
@@ -637,7 +638,7 @@ async function runWrite(ctx, task) {
 
   const { base, master, result, commitMs } = measured.result;
 
-  if (base.seq === 0) {
+  if (manifest.isEmpty(base)) {
     log({ ...fields, outcome: "skipped", ...countsOf(measured), detail: "the store is empty" });
     return "mirror";
   }
@@ -888,23 +889,15 @@ let removeAgainMs = 5 * 60 * 1000;
 // disconnect would otherwise reach into a spec running minutes later
 const removeAgainTimers = new Set();
 
-// Deletes every object under the blog's prefix, a few at a time
+// Removes the blog's copy (the store's removeRepo: a tombstone manifest, then
+// every pack deleted; the manifests stay, so the numbering never starts again
+// at 1 under another process). Resolves with the number of keys deleted.
 async function deleteCopy(blogID) {
   if (makeObjectStore === s3ObjectStore && !(config.storage && config.storage.bucket)) return null;
 
-  const store = makeObjectStore(blogID);
-  const keys = [];
+  const { deleted } = await removeRepo({ store: makeObjectStore(blogID) });
 
-  for await (const entry of store.list("")) keys.push(entry.key);
-
-  let next = 0;
-  const worker = async () => {
-    while (next < keys.length) await store.delete(keys[next++]);
-  };
-
-  await Promise.all(Array.from({ length: Math.min(16, keys.length) }, worker));
-
-  return keys.length;
+  return deleted;
 }
 
 async function deleteAndLog(blogID, pass) {
