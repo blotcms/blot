@@ -18,35 +18,45 @@ async function reconcileSource(blogID, dir) {
   dir = dir || (await source.directory(blogID));
 
   if (!(await fs.pathExists(dir))) {
-    const copied = await seed(blogID, dir);
     // The old watcher changed the disk behind storage/folder's back, so S3's
-    // copy may be behind
-    await require("storage/folder/mirror").markBehind(blogID).catch(function () {});
+    // copy may be behind. Marked first, so the folder is read from the disk
+    // (storage/folder does not use S3 for a blog whose mirror is behind).
+    await require("storage/folder/mirror").markBehind(blogID);
+    const copied = await seed(blogID, dir);
     console.log(prefix(), "Copied", copied, "files of the folder of", blogID, "to its new source directory", dir);
     return dir;
   }
 
-  const changed = await reconcile(blogID, dir);
+  // The lock is taken before anything in the folder changes, and held until
+  // every changed path is updated. If it can't be taken, nothing was touched.
+  const { folder, done } = await establishSyncLock(blogID);
+  const changed = [];
+  let failure;
 
-  if (changed.length) {
-    const { folder, done } = await establishSyncLock(blogID);
-    let failure;
-
+  try {
     try {
-      for (const path of changed) {
-        try {
-          await folder.update(path);
-        } catch (err) {
-          if (!failure) failure = err;
-        }
-      }
-    } finally {
-      await done(failure || null);
+      await reconcile(blogID, dir, changed);
+    } catch (err) {
+      failure = err;
     }
 
+    // Even after a failure, whatever was applied gets its entries updated
+    for (const path of new Set(changed)) {
+      try {
+        await folder.update(path);
+      } catch (err) {
+        if (!failure) failure = err;
+      }
+    }
+  } finally {
+    await done(failure || null);
+  }
+
+  if (changed.length) {
     console.log(prefix(), "Reconciled", blogID, "with", dir + ":", changed.length, "changes");
   }
 
+  if (failure) throw failure;
   return dir;
 }
 

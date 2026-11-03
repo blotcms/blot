@@ -13,6 +13,7 @@ describe("local client source directory", function () {
   const source = require("clients/local/source");
   const watch = require("clients/local/watch");
   const { reconcileSource } = require("clients/local/setup");
+  const { reconcile } = require("clients/local/sync");
 
   let base;
   let saved;
@@ -111,6 +112,68 @@ describe("local client source directory", function () {
         // The source is never changed by a reconcile
         expect(await fs.readFile(join(dir, "differs.txt"), "utf8")).toBe("source version");
         expect(await fs.pathExists(join(dir, "extra.txt"))).toBe(false);
+      });
+
+      it("compares names as NFC, so a decomposed source name is kept", async function () {
+        const id = this.blog.id;
+        const decomposed = "café.txt";
+        const composed = "/café.txt";
+
+        await fs.outputFile(join(dir, decomposed), "latte");
+        await reconcileSource(id, dir);
+
+        expect(await text(id, composed)).toBe("latte");
+
+        // A second pass finds nothing to change and nothing to remove
+        await reconcileSource(id, dir);
+        expect(await text(id, composed)).toBe("latte");
+        expect(await reconcile(id, dir)).toEqual([]);
+      });
+
+      it("drops the entries below a directory which a source file replaces", async function () {
+        const id = this.blog.id;
+
+        await folder.write(id, "/x/inner.txt", "inner");
+        await fs.outputFile(join(dir, "x"), "now a file");
+
+        const changed = await reconcile(id, dir);
+
+        expect(changed).toContain("/x");
+        expect(changed).toContain("/x/inner.txt");
+        expect(await text(id, "/x")).toBe("now a file");
+        expect(await folder.exists(id, "/x/inner.txt")).toBe(false);
+      });
+
+      it("leaves no source directory behind when a copy fails, and copies on retry", async function () {
+        const id = this.blog.id;
+
+        await folder.write(id, "/a.txt", "a");
+        await folder.write(id, "/b.txt", "b");
+
+        const real = folder.read;
+        let calls = 0;
+        spyOn(folder, "read").and.callFake(function () {
+          calls++;
+          if (calls === 2) return Promise.reject(new Error("read failed"));
+          return real.apply(folder, arguments);
+        });
+
+        let error;
+        try {
+          await reconcileSource(id, dir);
+        } catch (err) {
+          error = err;
+        }
+
+        expect(error).toBeDefined();
+        expect(await fs.pathExists(dir)).toBe(false);
+        expect(await fs.pathExists(dir + ".seeding")).toBe(false);
+
+        folder.read.and.callThrough();
+        await reconcileSource(id, dir);
+
+        expect(await fs.readFile(join(dir, "a.txt"), "utf8")).toBe("a");
+        expect(await fs.readFile(join(dir, "b.txt"), "utf8")).toBe("b");
       });
 
       it("copies the folder of a blog with no source directory into a new one", async function () {

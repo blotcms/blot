@@ -38,7 +38,7 @@ The provider of a Local blog is a directory outside the blog folder, so the blog
 
 ### Existing blogs
 
-Before this change the blog folder `data/blogs/{blogID}` was the watched directory. On first setup of a Local blog whose source directory does not exist, setup copies the blog's folder into `data/local-sources/{handle}` (the folder is not touched, and the blog's S3 mirror is marked behind so it is repaired from the disk). Nothing is lost; from then on edit the files in `data/local-sources/{handle}`. If the handle changes, the new name has no directory, so the folder is copied there again. `npm run fork` and `translate` now write into the source directory too.
+Before this change the blog folder `data/blogs/{blogID}` was the watched directory. On first setup of a Local blog whose source directory does not exist, setup copies the blog's folder into `data/local-sources/{handle}` (the folder is not touched, and the blog's S3 mirror is marked behind so it is repaired from the disk). Nothing is lost; from then on edit the files in `data/local-sources/{handle}`. The copy is made in `{dir}.seeding` and renamed into place once complete, so a failed copy leaves no partial directory. If the handle changes, the watcher moves to the new name, which has no directory, so the folder is copied there; the old directory is left where it is and never deleted. `npm run fork` and `translate` now write into the source directory too.
  It serves as a reference implementation that demonstrates the core responsibilities and contract that all clients must fulfill.
 
 ## Architecture

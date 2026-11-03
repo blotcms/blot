@@ -4,6 +4,7 @@ const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const establishSyncLock = require("sync/establishSyncLock");
 const clfdate = require("helper/clfdate");
 const { syncPath } = require("./sync");
+const source = require("./source");
 const prefix = () => clfdate() + " Local folder client:";
 
 const watchers = {};
@@ -19,7 +20,7 @@ async function watch(blogID, dir) {
   let running = false;
   let watcher;
 
-  const handle = { close };
+  const handle = { close, dir };
 
   function close() {
     clearTimeout(flushTimer);
@@ -34,13 +35,32 @@ async function watch(blogID, dir) {
 
     if (!blog || blog.client !== "local") return close();
 
+    // The handle changed, so the source directory is another one now. Copy
+    // the folder into the new directory (the old one stays where it is) and
+    // watch that instead.
+    if ((await source.directory(blogID)) !== dir) {
+      close();
+      console.log(prefix(), "Source directory of", blogID, "changed from", dir);
+      require("./setup")
+        .reconcileSource(blogID)
+        .then((newDir) => watch(blogID, newDir))
+        .catch((err) => console.error(prefix(), "Unable to move to the new source directory", blogID, err));
+      return;
+    }
+
     const { folder, done } = await establishSyncLock(blogID);
     let batchError;
 
     try {
       for (const path of paths) {
         try {
-          await syncPath(blogID, dir, path);
+          const removed = [];
+          try {
+            await syncPath(blogID, dir, path, removed);
+          } finally {
+            // Entries of what was removed along with a directory
+            for (const child of removed) await folder.update(child);
+          }
           // Always, even when nothing changed: Blot wrote a file to both
           // places itself (write.js) and the entry still has to be built
           await folder.update(path);
@@ -79,7 +99,12 @@ async function watch(blogID, dir) {
     flushTimer = setTimeout(flush, debounceInterval);
   }
 
-  if (watchers[blogID]) return watchers[blogID];
+  // One watcher per blog. A watcher on another directory (the blog's handle
+  // changed) is replaced; its old directory is left alone, never deleted.
+  if (watchers[blogID]) {
+    if (watchers[blogID].dir === dir) return watchers[blogID];
+    watchers[blogID].close();
+  }
 
   watcher = chokidar.watch(dir, {
     cwd: dir,
