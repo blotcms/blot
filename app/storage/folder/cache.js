@@ -313,19 +313,30 @@ function createCache(options) {
   }
 
   // Downloads the entry spec describes and adds it. Concurrent fills of one
-  // entry share one download.
+  // entry share one download. A read (fetched) which joined a put's fill
+  // does not inherit that fill's failure, since a put's source is the
+  // writer's own copy and is optional: it fills the entry itself instead.
   async function fill(spec, open, fetched) {
     var { name, file } = locate(spec);
 
     if (!downloads.has(name)) {
       var fetching = download(spec, open, file, fetched).finally(function () {
-        downloads.delete(name);
+        if (downloads.get(name) === current) downloads.delete(name);
       });
+      var current = { promise: fetching, fetched: fetched };
 
-      downloads.set(name, fetching);
+      downloads.set(name, current);
     }
 
-    await downloads.get(name);
+    var joined = downloads.get(name);
+
+    try {
+      await joined.promise;
+    } catch (err) {
+      if (!fetched || joined.fetched) throw err;
+
+      return fill(spec, open, fetched);
+    }
 
     var now = Date.now();
     var entry = entries.get(name);

@@ -366,6 +366,35 @@ describe("storage/folder cache", function () {
       expect(cache.stats()).toEqual(jasmine.objectContaining({ filled: 1, hits: 1, misses: 0, fetchedBytes: 0, entries: 1, bytes: 7 }));
     });
 
+    it("doesn't pass its failure to a get which joined it: the get downloads", async function () {
+      var cache = open();
+      var s3 = source("written");
+      var release;
+      var gone = jasmine.createSpy("open").and.callFake(function () {
+        return new Promise(function (resolve, reject) {
+          release = function () {
+            var err = new Error("source removed");
+            err.code = "ENOENT";
+            reject(err);
+          };
+        });
+      });
+
+      var putting = rejection(cache.put(spec("/a.txt", "written"), gone));
+
+      // Let the put start its fill, so the get joins it
+      while (!release) await new Promise(setImmediate);
+
+      var getting = cache.get(spec("/a.txt", "written"), s3);
+
+      await new Promise(setImmediate);
+      release();
+
+      expect((await putting).code).toEqual("ENOENT");
+      expect(await fs.readFile(await getting, "utf8")).toEqual("written");
+      expect(s3).toHaveBeenCalledTimes(1);
+    });
+
     it("leaves an entry which is there already, opening nothing", async function () {
       var cache = open();
       var again = source("same");
