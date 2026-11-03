@@ -450,7 +450,8 @@ const allEntries = await store.folder.listAll(path); // buffers everything; for 
 ```
 
 On S3 the listing comes from the Redis index, one directory at a time
-(`HSCAN`'s cursor is `.list()`'s cursor), not from `ListObjectsV2`. On
+(a page is a `ZRANGEBYLEX` of the directory's names set, see
+`app/models/file/README`), not from `ListObjectsV2`. On
 local disk, `fs.promises.opendir()` gives an unbuffered async-iterable
 directory handle — implementing `.list()` on top of it starts fixing
 `retrieve/folder.js`'s existing memory-crash risk immediately, independent
@@ -459,9 +460,8 @@ or the quota-reconciliation script that genuinely need everything; the
 `folder` template local — the one place a huge directory has actually
 caused problems — should call `.list()` directly, never `.listAll()`.
 
-Neither `opendir` nor `HSCAN` guarantees an order, so `.list()` doesn't
-either; a caller that needs one (the `folder` template local) sorts a page
-or uses `.listAll()` for small directories.
+`.list()` is sorted by name (UTF-16 code-unit order) on both backends, and
+its cursor is the last name of the previous page.
 
 ## 7. Open questions
 
