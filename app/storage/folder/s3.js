@@ -246,12 +246,16 @@ function opener(blogID, path) {
 
 // The index record of a file small enough to read through the cache, or
 // null for one to read straight from S3. Rejects if there is no such file.
-async function smallFile(blogID, path, relPath) {
+async function smallFile(blogID, path, relPath, trace) {
   var found = path === "/" ? null : await File.get(blogID, path);
 
   if (!found || found.type === "dir") throw new NotFoundError("Not a file: " + relPath);
 
-  return found.size <= config.folder_cache.max_file_bytes ? found : null;
+  if (found.size <= config.folder_cache.max_file_bytes) return found;
+
+  if (trace) trace.cache = "direct";
+
+  return null;
 }
 
 // Errors from the cache's own disk, which mean the cache can't hold the file
@@ -263,22 +267,44 @@ var CACHE_DISK_ERRORS = new Set(["ENOSPC", "EDQUOT", "EROFS", "EIO", "EACCES", "
 // disk failing (full, say), resolves to undefined, so the caller reads S3
 // directly instead. An error from fn itself is passed on: by then a response
 // may have started.
-async function throughCache(blogID, path, found, fn) {
+//
+// trace is optional (the shadow reads pass one): an object whose cache
+// property is set to how this read was served, "hit" (the cache had the
+// file), "miss" (it fetched it from S3) or "direct" (not through the cache:
+// over max_file_bytes, or the cache fell back as above). Set per call, so
+// concurrent reads can't mix up their outcomes.
+async function throughCache(blogID, path, found, fn, trace) {
   var failedInside = false;
 
   try {
-    return await contentCache().use(cached(blogID, path, found), opener(blogID, path), async function (local) {
-      try {
-        return await fn(local);
-      } catch (err) {
-        failedInside = true;
-        throw err;
-      }
-    });
+    return await contentCache().use(
+      cached(blogID, path, found),
+      opener(blogID, path),
+      async function (local) {
+        try {
+          return await fn(local);
+        } catch (err) {
+          failedInside = true;
+          throw err;
+        }
+      },
+      noteCache(trace)
+    );
   } catch (err) {
-    if (!failedInside && (err.code === "ECHANGED" || CACHE_DISK_ERRORS.has(err.code))) return undefined;
+    if (!failedInside && (err.code === "ECHANGED" || CACHE_DISK_ERRORS.has(err.code))) {
+      if (trace) trace.cache = "direct";
+      return undefined;
+    }
     throw err;
   }
+}
+
+// What the content cache calls with "hit" or "miss", for a trace
+function noteCache(trace) {
+  if (!trace) return undefined;
+  return function (outcome) {
+    trace.cache = outcome;
+  };
 }
 
 var warnedWriteThrough = false;
@@ -308,10 +334,10 @@ async function writeThrough(blogID, path, written, open) {
   }
 }
 
-async function read(blogID, relPath) {
+async function read(blogID, relPath, trace) {
   var path = locate(blogID, relPath);
-  var found = await smallFile(blogID, path, relPath);
-  var data = found && (await throughCache(blogID, path, found, (local) => fs.readFile(local)));
+  var found = await smallFile(blogID, path, relPath, trace);
+  var data = found && (await throughCache(blogID, path, found, (local) => fs.readFile(local), trace));
 
   if (data) return data;
 
@@ -322,7 +348,7 @@ async function read(blogID, relPath) {
 
 // The stream is returned at once and the object opened when it starts, so
 // any failure is emitted as its "error" event, as on the local backend
-function createReadStream(blogID, relPath, options) {
+function createReadStream(blogID, relPath, options, trace) {
   var path = locate(blogID, relPath);
   var stream = new PassThrough();
   var source;
@@ -359,10 +385,10 @@ function createReadStream(blogID, relPath, options) {
         });
         file.on("error", reject);
       });
-    });
+    }, trace);
   }
 
-  smallFile(blogID, path, relPath)
+  smallFile(blogID, path, relPath, trace)
     .then(async function (found) {
       var file = found && (await fromCache(found));
 
@@ -576,7 +602,7 @@ async function fileAt(blogID, path, relPath) {
 // read-only, and may be evicted once it is no longer recent, so use it
 // straight away: open it, or hand it to a tool, rather than keeping the path.
 // For a tool which runs for longer, see withLocal.
-async function ensureLocal(blogID, relPath) {
+async function ensureLocal(blogID, relPath, trace) {
   var path = locate(blogID, relPath);
 
   // A second try picks up the index catching up with a write in progress
@@ -584,7 +610,7 @@ async function ensureLocal(blogID, relPath) {
     var found = await fileAt(blogID, path, relPath);
 
     try {
-      return await contentCache().get(cached(blogID, path, found), opener(blogID, path));
+      return await contentCache().get(cached(blogID, path, found), opener(blogID, path), noteCache(trace));
     } catch (err) {
       if (err.code !== "ECHANGED" || attempt) throw err;
     }

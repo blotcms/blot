@@ -211,6 +211,13 @@ function recordError(report, blog, phase, err) {
     message = message.trimEnd() + " (" + err.code + ")";
   }
 
+  // Likewise a Dropbox API error's message is just its status ("Response
+  // failed with a 409 code"); the reason is in its body's error_summary.
+  const summary = err && err.error && err.error.error_summary;
+  if (typeof summary === "string" && !message.includes(summary)) {
+    message = message.trimEnd() + " (" + summary + ")";
+  }
+
   if (message.length > MAX_ERROR_MESSAGE_LENGTH) {
     message = message.slice(0, MAX_ERROR_MESSAGE_LENGTH) + "...";
   }

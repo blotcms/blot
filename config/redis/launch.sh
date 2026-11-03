@@ -37,7 +37,7 @@ set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
 LAUNCH_TEMPLATE=lt-09f38dac82c204d58
-SECURITY_GROUP=sg-0b3b200323d36ce2e
+SECURITY_GROUP=sg-0d1c2c28e0c7084ad
 AMI_PARAMETER=/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
 TYPE=""; FROM=""; DRY_RUN=""; DRILL=""; LIST=""
 KEY=${REDIS_SSH_KEY:-}; SSH_USER=ec2-user; SSH_PORT=22
