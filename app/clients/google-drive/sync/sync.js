@@ -9,8 +9,7 @@ const {
   sourceMissingFields,
 } = require("../database/error");
 const download = require("../util/download");
-const localFingerprint = require("../util/localFingerprint");
-const { sameFingerprint } = require("../util/contentFingerprint");
+const localState = require("../util/localState");
 const createDriveClient = require("../serviceAccount/createDriveClient");
 const CheckWeCanContinue = require("../util/checkWeCanContinue");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
@@ -28,6 +27,9 @@ const truncateToSecond = require("./util/truncateToSecond");
 const transformDriveItems = require("./util/transformDriveItems");
 
 const SHORTCUT = "application/vnd.google-apps.shortcut";
+
+// The fields of a record which describe the file Blot holds
+const stateFields = ({ size, modified, sha1 }) => ({ size, modified, sha1 });
 
 // Resolves to a summary of what changed (truthy) when the walk finishes, or
 // false when it fails part way through or the folder lookup fails. In that
@@ -224,12 +226,13 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
         }
 
         // Compare against the Drive modifiedTime of the version we last
-        // wrote locally, not the local file's mtime: storage backends other
-        // than local disk won't offer a settable mtime. The record is only
-        // trusted while the local file is unchanged since that write. Files
-        // synced before this change have no record yet; their local mtime
-        // was set from Drive after each successful download, so fall back
-        // to it until they converge below.
+        // wrote to the blog folder, not the file's own modified time, which
+        // storage backends other than local disk won't let us set. The
+        // record is only trusted while the file is unchanged since that
+        // write (util/localState.js). Files synced before applied records
+        // existed have none yet; their local mtime was set from Drive after
+        // each successful download, so fall back to it until they converge
+        // below.
         const applied = await getApplied(id);
 
         // Ensure the file is stored in the database (id <-> path mapping);
@@ -242,20 +245,34 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
           "application/vnd.google-apps."
         );
 
-        const isModifiedTimeCurrent = applied
-          ? truncateToSecond(applied.modifiedTime) === truncateToSecond(modifiedTime) &&
-            sameFingerprint(applied.fingerprint, existsLocally?.fingerprint)
-          : truncateToSecond(existsLocally?.modifiedTime) === truncateToSecond(modifiedTime);
+        // The file's state as its applied or verified record describes it,
+        // brought up to date, or null when the file may have changed since
+        // that record was written
+        let appliedState = null;
+        let verifiedState = null;
+        let identical;
 
-        const cached = verifiedById.get(id);
-        const verified = cached && cached.path === path &&
-          cached.checksum === md5Checksum &&
-          sameFingerprint(cached.fingerprint, existsLocally?.fingerprint);
-        const identical = isGoogleAppFile
-          ? isModifiedTimeCurrent
-          : md5Checksum
-            ? Boolean(verified)
+        if (isGoogleAppFile || !md5Checksum) {
+          const isModifiedTimeCurrent = applied
+            ? truncateToSecond(applied.modifiedTime) === truncateToSecond(modifiedTime) &&
+              Boolean(appliedState = await localState.unchanged(blogID, path, applied, existsLocally))
+            : truncateToSecond(existsLocally?.modifiedTime) === truncateToSecond(modifiedTime);
+
+          identical = isGoogleAppFile
+            ? isModifiedTimeCurrent
             : existsLocally?.size === size && isModifiedTimeCurrent;
+        } else {
+          // Drive's md5Checksum is the one Blot verified the file at this
+          // path against, and the file is unchanged since: no download and
+          // no read. Anything else falls back to download(), which compares
+          // the file's md5 with Drive's before it downloads anything.
+          const cached = verifiedById.get(id);
+          verifiedState = cached && cached.path === path &&
+            cached.checksum === md5Checksum
+            ? await localState.unchanged(blogID, path, cached, existsLocally)
+            : null;
+          identical = Boolean(verifiedState);
+        }
 
         if (!existsLocally || !identical) {
           await checkWeCanContinue();
@@ -320,10 +337,14 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
             // Only trust the remote modifiedTime once download() has
             // returned without throwing: the blog folder now reflects that remote
             // state. A failed download must not be treated as up to date, so
-            // this must not run in the catch below.
+            // this must not run in the catch below. A verified download
+            // already knows the file's state; anything else is described
+            // afresh.
             await setApplied(id, {
               modifiedTime,
-              fingerprint: await localFingerprint(blogID, path),
+              ...(!isGoogleAppFile && result?.verifiedContent
+                ? stateFields(result.verifiedContent)
+                : await localState.stateOf(blogID, path)),
             });
           } catch (err) {
             publish("Download failed", path);
@@ -333,11 +354,37 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
           }
         } else {
           progress.publishThrottled("Checking", path);
+
+          // Unchanged, but the record was in the older form, or the file's
+          // modified time moved while its SHA-1 didn't (the same bytes
+          // written again): bring the record up to date, so the next sync
+          // matches on size and modified time alone
+          if (verifiedState && verifiedState.stale) {
+            await setVerifiedContent(id, {
+              path,
+              checksum: md5Checksum,
+              ...stateFields(verifiedState),
+            });
+          }
+
+          if (appliedState && appliedState.stale) {
+            await setApplied(id, {
+              modifiedTime: applied.modifiedTime,
+              ...stateFields(appliedState),
+            });
+          }
+
           // Converge: the local file already matches remotely, even though
-          // we only know that via the local-mtime fallback. Store the
-          // remote modifiedTime now so future syncs no longer need it.
+          // we only know that via the local-mtime fallback (or, for a file
+          // with an md5Checksum, its verified record). Store the remote
+          // modifiedTime now so future syncs no longer need it.
           if (!applied) {
-            await setApplied(id, { modifiedTime, fingerprint: existsLocally?.fingerprint });
+            await setApplied(id, {
+              modifiedTime,
+              ...(verifiedState
+                ? stateFields(verifiedState)
+                : localState.stamp(existsLocally)),
+            });
           }
         }
       } else {
