@@ -29,7 +29,8 @@ back, deploy an older image.
 ```sh
 # Base domain for the generated vhosts is a BUILD-time value:
 BLOT_HOST=example.com bash proxy/build/build.sh   # defaults to blot.im
-docker build -f proxy/Dockerfile -t blot-proxy proxy/
+# The Dockerfile has no version defaults: image.sh passes config/versions.env
+bash proxy/build/image.sh blot-proxy
 docker run --rm --cap-add SYS_NICE -p 8080:80 -p 8443:443 \
   -e BLOT_HOST=example.com blot-proxy
 curl -i http://localhost:8080/health   # -> 200
@@ -330,7 +331,9 @@ checks OpenResty in the result, boots it with [`unit/smoke.sh`](unit/smoke.sh) a
 
 To build it locally, generate the config and build this image as `blot-proxy`
 (see "Build and run locally"), then `docker build --target unit .` from the
-repository root, or `docker buildx bake unit` to build both as CI does.
+repository root with the `--build-arg`s for the pairs in `config/versions.env`,
+or `set -a; . config/versions.env; set +a` and `docker buildx bake unit` to build
+both as CI does.
 
 - **User.** One user at uid 1000, `ec2-user` (the Node image's `node` user,
   renamed), for the app and for OpenResty's workers. As in this image, the
@@ -354,16 +357,19 @@ repository root, or `docker buildx bake unit` to build both as CI does.
 
 ## Pinned dependencies
 
-Reproducibility relies on pinning, because the upstream toolchain has drifted:
+Reproducibility relies on pinning, because the upstream toolchain has drifted.
+Every version, commit and checksum below lives in
+[`config/versions.env`](../config/versions.env), shared with the rest of the
+repository; the Dockerfile declares them as build arguments with no defaults,
+and `scripts/security/check-versions.js` fails CI if one creeps back in.
 
-- Base image: the same `node:24.22.1-alpine` as the Node app, pinned by
-  multi-architecture digest in the `NODE_BASE` argument of both `Dockerfile`s
-  (`scripts/security/check-base-image.js` fails CI if they differ). OpenResty
-  1.31.8.1 is compiled on it in the Dockerfile's `openresty` stage with the
+- Base image: the same `node:<NODE_VERSION>-alpine` as the Node app, pinned by
+  multi-architecture digest in `NODE_BASE`, which both `Dockerfile`s take.
+  OpenResty (`OPENRESTY_VERSION`) is compiled on it in the Dockerfile's `openresty` stage with the
   configure flags and bundled OpenSSL and PCRE2 of the official
   `openresty/openresty:alpine` image (docker-openresty `alpine/Dockerfile`),
   each download checked against a sha256. Where that image lags OpenResty's
-  own packaging (`openresty-packaging`), as with OpenSSL 3.5.9, the packaging
+  own packaging (`openresty-packaging`), as with OpenSSL (`RESTY_OPENSSL_VERSION`), the packaging
   version wins. The `-fat` extras (perl, `resty`,
   `opm`, `restydoc`, luarocks, wget, unzip, outils-md5, the build packages) are
   not installed; nothing here uses them. The geoip, image_filter and xslt

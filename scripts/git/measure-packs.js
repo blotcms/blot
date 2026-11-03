@@ -20,6 +20,7 @@
 // Each is run cold (empty cache, fresh store object) and then warm (the same
 // cache, another change of the same kind).
 //
+//   set -a; . config/versions.env; set +a   # the image versions
 //   docker compose -f scripts/git/measure-packs/docker-compose.yml up -d --wait
 //   node scripts/git/measure-packs.js [--packs 1,8,32,64,128] [--reps 3]
 //        [--commits 128] [--files 250] [--latency 25] [--jitter 5]

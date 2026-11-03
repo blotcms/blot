@@ -14,6 +14,9 @@ fi
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && cd ../../ && pwd)"
 : "${BLOT_HOST:=local.blot}"
 
+# Versions for the compose file's build args and images (config/versions.env)
+set -a; . "$DIR/config/versions.env"; set +a
+
 # Files
 SETUP="$DIR/scripts/development/proxy/setup.sh"
 COMPOSE_FILE="$DIR/scripts/development/docker-compose.yml"

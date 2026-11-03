@@ -50,10 +50,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - id: versions
+        uses: ./.github/actions/versions
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 24.22.1
+          node-version: ${{ steps.versions.outputs.NODE_VERSION }}
 
       # build-corpus.js is the host-side orchestrator (it shells out to
       # `docker run` itself for the actual corpus build) and `require`s
@@ -80,6 +83,7 @@ jobs:
         with:
           context: .
           target: dev
+          build-args: ${{ steps.versions.outputs.build-args }}
           load: true
           tags: blot-bench:latest
           cache-from: |

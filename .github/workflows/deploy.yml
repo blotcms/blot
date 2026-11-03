@@ -126,10 +126,13 @@ jobs:
           ssh blot "echo 'SSH connection successful'"
 
       # No npm install: scripts/deploy only uses Node built-ins.
+      - id: versions
+        uses: ./.github/actions/versions
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24.22.1
+          node-version: ${{ steps.versions.outputs.NODE_VERSION }}
 
       - name: Login to GHCR
         uses: docker/login-action@v3

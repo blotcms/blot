@@ -3,6 +3,8 @@ set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$DIR/../../.." && pwd)"
 export BLOT_HOST="${BLOT_HOST:-local.blot}"
+# The compose files take their versions from config/versions.env
+set -a; . "$ROOT/config/versions.env"; set +a
 BASE=(-f "$ROOT/scripts/development/docker-compose.yml")
 # Optional machine-specific mounts/build secrets, kept outside tracked config.
 compose() {

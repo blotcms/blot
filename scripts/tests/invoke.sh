@@ -23,12 +23,14 @@ REDIS_CONTAINER="test-redis-${BLOT_TEST_ID}"
 MINIO_CONTAINER="test-minio-${BLOT_TEST_ID}"
 TEST_CONTAINER="test-runner-${BLOT_TEST_ID}"
 
+# Versions (NODE_BASE, PANDOC_VERSION, MINIO_IMAGE) from config/versions.env
+set -a; . "$(dirname "$0")/../../config/versions.env"; set +a
+
 # Image names
 REDIS_IMAGE="redis:alpine"
 # MinIO stands in for S3: generated assets live only in the storage bucket, so
-# every test run needs one. MinIO no longer publishes images itself; this is a pinned build of the upstream release. Keep it in
-# step with .github/actions/start-minio and scripts/development/docker-compose.yml
-MINIO_IMAGE="alpine/minio:RELEASE.2025-10-15T17-29-55Z@sha256:cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4"
+# every test run needs one. MinIO no longer publishes images itself; the image
+# is a pinned build of the upstream release (MINIO_IMAGE in config/versions.env).
 MINIO_USER="blot-test"
 MINIO_PASSWORD="blot-test-secret"
 # Created by the test runner (scripts/tests/util/bucket.js) when it starts
@@ -78,6 +80,8 @@ esac
 docker build \
   --target dev \
   --build-arg TARGETPLATFORM="$TARGETPLATFORM" \
+  --build-arg NODE_BASE="$NODE_BASE" \
+  --build-arg PANDOC_VERSION="$PANDOC_VERSION" \
   -t $TEST_IMAGE \
   $(realpath "$TESTS_DIR/../..")
 

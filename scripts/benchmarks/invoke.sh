@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR=$(dirname "$0")
 ROOT_DIR=$(realpath "$SCRIPT_DIR/../..")
+# NODE_BASE and PANDOC_VERSION for the image build, from config/versions.env
+set -a; . "$ROOT_DIR/config/versions.env"; set +a
 
 # Parse --output <path> so we can mount the host dir and pass container path
 BENCH_ARGS=()
@@ -73,6 +75,8 @@ docker run -d \
 
 docker build \
   --target dev \
+  --build-arg NODE_BASE="$NODE_BASE" \
+  --build-arg PANDOC_VERSION="$PANDOC_VERSION" \
   -t "$BENCH_IMAGE" \
   "$ROOT_DIR" >/dev/null
 

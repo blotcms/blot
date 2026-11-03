@@ -48,10 +48,13 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
+      - id: versions
+        uses: ./.github/actions/versions
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24.22.1
+          node-version: ${{ steps.versions.outputs.NODE_VERSION }}
 
       # The image is built without .git, so record each template's latest
       # commit time now for the docs site to read at runtime.
@@ -82,6 +85,8 @@ jobs:
           with: |
             context: .
             target: prod
+            # JSON-encoded: wretry reads this block as YAML, and the value spans lines
+            build-args: ${{ toJSON(steps.versions.outputs.build-args) }}
             platforms: ${{ matrix.platform }}
             push: ${{ env.PUSH_IMAGES == 'true' }}
             load: ${{ env.PUSH_IMAGES != 'true' }}

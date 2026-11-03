@@ -17,6 +17,9 @@
 # sends when it stops reading at the first match.
 set -eu
 
+# REDIS_VERSION from config/versions.env
+. "$(dirname "$0")/../../config/versions.env"
+
 # Seconds between the proxy's reads of Redis: INTERVAL in
 # proxy/config/wildcard_cert.lua. Keep the two in step.
 INTERVAL=10
@@ -69,7 +72,7 @@ wait_for blot-proxy-placeholder localhost
 wait_for blot-proxy-placeholder anything.localhost
 
 echo "a certificate put in Redis is served without a reload"
-docker run -d --name "$REDIS" --network "container:$PROXY" redis:6.2.12-alpine >/dev/null
+docker run -d --name "$REDIS" --network "container:$PROXY" redis:$REDIS_VERSION-alpine >/dev/null
 for _ in $(seq 1 30); do
   [ "$(redis ping 2>/dev/null || true)" = PONG ] && break
   sleep 1

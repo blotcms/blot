@@ -59,10 +59,13 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
 
+      - id: versions
+        uses: ./head/.github/actions/versions
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 24.22.1
+          node-version: ${{ steps.versions.outputs.NODE_VERSION }}
 
       - name: Find the pull request and the base commit
         id: refs
@@ -126,6 +129,7 @@ jobs:
         with:
           context: head
           target: dev
+          build-args: ${{ steps.versions.outputs.build-args }}
           load: true
           tags: blot-bench:latest
           cache-from: |
