@@ -19,6 +19,13 @@
 // side is given, since that is what a visitor waits for. Hours recorded
 // before the split have only the blended S3 latency, as does a read which
 // failed before reaching the cache; the report counts those as unclassified.
+//
+// Blogs on S3 (BLOT_FOLDER_PRIMARY, #2258 Phase D) are shadowed the other way
+// round: S3 answered the caller, and the disk copy is checked against it. They
+// get a second table, "S3-primary vs disk copy", from the reverse:* counters;
+// there a mismatch means S3 served something the disk would not have, and its
+// S3 latencies are those of the caller's own reads. "disk copy behind" counts
+// mismatches on a blog whose disk copy was already known to be behind S3.
 
 const shadow = require("storage/folder/shadow");
 
@@ -105,30 +112,35 @@ function stats(histogram) {
   return { count: n, p50: percentile(histogram, 0.5), p95: percentile(histogram, 0.95), p99: percentile(histogram, 0.99) };
 }
 
-// Per call and for the cache, from the summed fields
-function summarise(total) {
+// Per call, for one direction: prefix is "" for the forward fields (a blog
+// on disk, S3 checked against it) or shadow.REVERSE + ":" for the reverse
+// ones (a blog on S3, its disk copy checked against it)
+function summariseOps(total, prefix) {
   const ops = {};
 
   shadow.OPS.forEach(function (op) {
     const histograms = { local: {}, s3: {}, byCache: {}, ttfb: { local: {}, s3: {} } };
-    const kinds = { mismatch: {}, transient: {}, s3error: {} };
+    const kinds = { mismatch: {}, transient: {}, s3error: {}, behind: {} };
     const counts = {};
 
-    Object.keys(total).forEach(function (field) {
+    Object.keys(total).forEach(function (name) {
+      if (prefix && name.indexOf(prefix) !== 0) return;
+
+      const field = name.slice(prefix.length);
       const parts = field.split(":");
 
       if (parts[0] !== op) return;
 
       if ((parts[1] === "local" || parts[1] === "s3") && parts[2] === "le") {
-        histograms[parts[1]][parts[3]] = total[field];
+        histograms[parts[1]][parts[3]] = total[name];
       } else if (parts[1] === "s3" && shadow.CACHE_OUTCOMES.indexOf(parts[2]) !== -1 && parts[3] === "le") {
-        (histograms.byCache[parts[2]] = histograms.byCache[parts[2]] || {})[parts[4]] = total[field];
+        (histograms.byCache[parts[2]] = histograms.byCache[parts[2]] || {})[parts[4]] = total[name];
       } else if ((parts[1] === "local" || parts[1] === "s3") && parts[2] === "ttfb" && parts[3] === "le") {
-        histograms.ttfb[parts[1]][parts[4]] = total[field];
+        histograms.ttfb[parts[1]][parts[4]] = total[name];
       } else if (parts.length === 3 && kinds[parts[1]]) {
-        kinds[parts[1]][parts[2]] = total[field];
+        kinds[parts[1]][parts[2]] = total[name];
       } else if (parts.length === 2) {
-        counts[parts[1]] = total[field];
+        counts[parts[1]] = total[name];
       }
     });
 
@@ -145,10 +157,14 @@ function summarise(total) {
       dropped: counts.dropped || 0,
       large: counts.large || 0,
       skipped: counts.skipped || 0,
+      // Reverse only: mismatches on a blog whose disk copy was known to be
+      // behind S3 (a failed copy, which the reconcile repairs)
+      behind: counts.behind || 0,
       mismatchRate: sampled ? (counts.mismatched || 0) / sampled : 0,
       mismatchKinds: kinds.mismatch,
       transientKinds: kinds.transient,
       s3errorCodes: kinds.s3error,
+      behindKinds: kinds.behind,
       local: {
         p50: percentile(histograms.local, 0.5),
         p95: percentile(histograms.local, 0.95),
@@ -180,11 +196,19 @@ function summarise(total) {
     if (CACHE_AWARE.indexOf(op) !== -1) ops[op].s3Unclassified = Math.max(0, count(histograms.s3) - split);
   });
 
+  return ops;
+}
+
+// Per call in each direction, and for the cache, from the summed fields.
+// ops is the forward direction (as before there were two), reverse.ops the
+// reverse one.
+function summarise(total) {
   const hits = total["cache:hits"] || 0;
   const misses = total["cache:misses"] || 0;
 
   return {
-    ops: ops,
+    ops: summariseOps(total, ""),
+    reverse: { ops: summariseOps(total, shadow.REVERSE + ":") },
     cache: {
       hits: hits,
       misses: misses,
@@ -241,18 +265,11 @@ function breakdown(kinds) {
     .join(", ");
 }
 
-// The report as lines of text
-function format(report) {
+// Lines for one direction's calls: the table, the latency splits and the
+// kinds of mismatch
+function opsLines(ops) {
   const lines = [];
-  const ops = Object.keys(report.ops);
-
-  lines.push("Shadow reads, last " + report.hours + " hours (" + report.from + " to " + report.to + " UTC)");
-  lines.push("");
-
-  if (!ops.length) {
-    lines.push("Nothing sampled. Is BLOT_FOLDER_SHADOW_RATE above 0, and BLOT_FOLDER_MIRROR on for some blogs?");
-    return lines.join("\n");
-  }
+  const names = Object.keys(ops);
 
   const columns = [
     ["op", 22, true],
@@ -268,8 +285,8 @@ function format(report) {
 
   lines.push(columns.map((c) => pad(c[0], c[1], c[2])).join(" "));
 
-  ops.forEach(function (op) {
-    const row = report.ops[op];
+  names.forEach(function (op) {
+    const row = ops[op];
 
     lines.push(
       [
@@ -286,8 +303,8 @@ function format(report) {
     );
   });
 
-  const splits = ops.filter(function (op) {
-    const row = report.ops[op];
+  const splits = names.filter(function (op) {
+    const row = ops[op];
     return Object.keys(row.s3ByCache).length || row.s3Unclassified || row.ttfb.local || row.ttfb.s3;
   });
 
@@ -296,7 +313,7 @@ function format(report) {
     lines.push("S3 latency by content cache outcome, and time to first byte (ms p50 / p95 / p99):");
 
     splits.forEach(function (op) {
-      const row = report.ops[op];
+      const row = ops[op];
       const outcomes = shadow.CACHE_OUTCOMES.filter((outcome) => row.s3ByCache[outcome]).map(
         (outcome) => outcome + " " + row.s3ByCache[outcome].count + " " + latencies(row.s3ByCache[outcome])
       );
@@ -312,9 +329,9 @@ function format(report) {
     });
   }
 
-  const details = ops.filter(function (op) {
-    const row = report.ops[op];
-    return row.mismatched || row.transient || row.s3errors;
+  const details = names.filter(function (op) {
+    const row = ops[op];
+    return row.mismatched || row.transient || row.s3errors || row.behind;
   });
 
   if (details.length) {
@@ -322,14 +339,45 @@ function format(report) {
     lines.push("Mismatches, transient mismatches and S3 errors by kind:");
 
     details.forEach(function (op) {
-      const row = report.ops[op];
+      const row = ops[op];
 
       if (row.mismatched) lines.push("  " + op + " mismatch: " + breakdown(row.mismatchKinds));
       if (row.transient) lines.push("  " + op + " transient: " + breakdown(row.transientKinds));
+      if (row.behind) lines.push("  " + op + " disk copy behind: " + breakdown(row.behindKinds));
       if (row.s3errors) lines.push("  " + op + " s3 errors: " + breakdown(row.s3errorCodes));
     });
 
     lines.push("  (paths are in the app's log: grep '" + shadow.LOG_PREFIX + "')");
+  }
+
+  return lines;
+}
+
+// The report as lines of text
+function format(report) {
+  const lines = [];
+  const forward = report.ops;
+  const reverse = (report.reverse && report.reverse.ops) || {};
+
+  lines.push("Shadow reads, last " + report.hours + " hours (" + report.from + " to " + report.to + " UTC)");
+  lines.push("");
+
+  if (!Object.keys(forward).length && !Object.keys(reverse).length) {
+    lines.push("Nothing sampled. Is BLOT_FOLDER_SHADOW_RATE above 0, and BLOT_FOLDER_MIRROR on for some blogs?");
+    return lines.join("\n");
+  }
+
+  lines.push("Blogs on disk: S3 checked against the disk");
+  lines.push("");
+
+  if (Object.keys(forward).length) lines.push(...opsLines(forward));
+  else lines.push("Nothing sampled.");
+
+  if (Object.keys(reverse).length) {
+    lines.push("");
+    lines.push("S3-primary vs disk copy: blogs on S3, the disk copy checked against S3 (mismatch = S3 served what the disk would not have)");
+    lines.push("");
+    lines.push(...opsLines(reverse));
   }
 
   const cache = report.cache;
@@ -375,4 +423,4 @@ if (require.main === module) {
   );
 }
 
-module.exports = { keysFor, sum, percentile, summarise, load, format };
+module.exports = { keysFor, sum, percentile, summarise, summariseOps, load, format };

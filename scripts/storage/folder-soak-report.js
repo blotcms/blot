@@ -15,7 +15,7 @@
 //                cost, and egress
 //
 //   node scripts/storage/folder-soak-report.js [--hours 72 | --since <ISO>]
-//     [--json] [--rate <fraction>]
+//     [--json] [--rate <fraction>] [--reverse-rate <fraction>]
 //     [--unit-mem <file> --before <ISO>/<ISO>]
 //     [--no-index] [--sample 2000] [--scan-count 1000] [--max-scan-calls 5000]
 //     [--stored-bytes N] [--ebs-gb N --ebs-price-gb-month N]
@@ -42,10 +42,16 @@
 // one GET, so requests per call = (miss + direct) / (hit + miss + direct)
 // over the samples which have an outcome.
 //
+// Blogs on S3 (BLOT_FOLDER_PRIMARY) are shadowed the other way round (S3
+// answered, the disk copy is compared) and get a table of their own, from the
+// reverse counters; their S3 latencies are those of the requests themselves.
+//
 // Cost: S3 storage is --stored-bytes (the S3 folder prefix total; if omitted,
 // the sum of the index's per-blog totals when the index is scanned). Reads
 // per month are the sampled calls divided by the sample rate (--rate, or
-// config.folder_shadow.rate), scaled to a month, times the GET estimate.
+// config.folder_shadow.rate; for blogs on S3 --reverse-rate, or
+// config.folder_shadow.reverse_rate, or the rate), scaled to a month, times
+// the GET estimate.
 // Writes per month are --writes-per-day, or the content cache's "filled"
 // counter (one per mirrored write of a file under the cache's size limit, so
 // a lower bound) per day. The % is of --ebs-gb * --ebs-price-gb-month.
@@ -77,6 +83,7 @@ const KIND_TYPES = { dir: "hash", lower: "hash", names: "zset", paths: "zset", t
 
 const NUMERIC = {
   "--rate": "rate",
+  "--reverse-rate": "reverseRate",
   "--sample": "sample",
   "--scan-count": "scanCount",
   "--max-scan-calls": "maxScanCalls",
@@ -212,6 +219,27 @@ function operationsMarkdown(summary) {
   }
 
   return lines;
+}
+
+// One line on what the reverse shadow found: S3 serving something the disk
+// copy would not have is what the ramp watches for
+function reverseMismatchMarkdown(ops) {
+  let sampled = 0;
+  let mismatched = 0;
+  let transient = 0;
+  let behind = 0;
+
+  Object.keys(ops).forEach(function (op) {
+    sampled += ops[op].sampled;
+    mismatched += ops[op].mismatched;
+    transient += ops[op].transient;
+    behind += ops[op].behind || 0;
+  });
+
+  return [
+    "Reverse mismatches: " + mismatched + " of " + sampled + " sampled (" + transient + " transient, cleared on the recheck; " + behind +
+      " on a disk copy already marked behind)."
+  ];
 }
 
 // --- unit memory -------------------------------------------------------
@@ -471,20 +499,30 @@ function costEstimate(summary, hours, options, storedBytes) {
   // outcomes in the window (hours from before the split), so not counted as 0
   let unclassifiedPerMonth = 0;
 
-  CACHE_AWARE.forEach(function (op) {
-    const row = summary.ops[op];
+  // Blogs on disk are sampled at the rate, blogs on S3 at the reverse rate:
+  // together they are every read, wherever the ramp is
+  const reverseRate = options.reverseRate !== undefined ? options.reverseRate : rate;
+  const directions = [
+    [summary.ops, rate],
+    [(summary.reverse && summary.reverse.ops) || {}, reverseRate],
+  ];
 
-    if (!row || !(rate > 0)) return;
+  directions.forEach(function ([ops, sampledAt]) {
+    CACHE_AWARE.forEach(function (op) {
+      const row = ops[op];
 
-    // A dropped shadow was selected by the rate too, then skipped for
-    // concurrency, so it counts towards the volume of calls
-    const calls = ((row.sampled + (row.dropped || 0)) / rate / hours) * HOURS_PER_MONTH;
-    const per = requestsPerOp(row);
+      if (!row || !(sampledAt > 0)) return;
 
-    readsPerMonth += calls;
+      // A dropped shadow was selected by the rate too, then skipped for
+      // concurrency, so it counts towards the volume of calls
+      const calls = ((row.sampled + (row.dropped || 0)) / sampledAt / hours) * HOURS_PER_MONTH;
+      const per = requestsPerOp(row);
 
-    if (per === null) unclassifiedPerMonth += calls;
-    else getsPerMonth += calls * per;
+      readsPerMonth += calls;
+
+      if (per === null) unclassifiedPerMonth += calls;
+      else getsPerMonth += calls * per;
+    });
   });
 
   const writesPerDay = options.writesPerDay !== undefined ? options.writesPerDay : (summary.cache.filled / hours) * 24;
@@ -554,10 +592,21 @@ function markdown(report) {
     "",
   ];
 
-  if (!Object.keys(report.summary.ops).length) {
+  const reverse = (report.summary.reverse && report.summary.reverse.ops) || {};
+
+  if (!Object.keys(report.summary.ops).length && !Object.keys(reverse).length) {
     lines.push("Nothing sampled in this window. Is BLOT_FOLDER_SHADOW_RATE above 0, and BLOT_FOLDER_MIRROR on for some blogs?", "");
   } else {
-    lines.push(...operationsMarkdown(report.summary), "");
+    if (Object.keys(report.summary.ops).length) lines.push(...operationsMarkdown(report.summary), "");
+
+    if (Object.keys(reverse).length) {
+      lines.push(
+        "Blogs on S3 (S3-primary vs disk copy): S3 answered the request, the disk copy was read to compare.",
+        ""
+      );
+      lines.push(...operationsMarkdown({ ops: reverse }), "");
+      lines.push(...reverseMismatchMarkdown(reverse), "");
+    }
   }
 
   if (report.memory) lines.push(...memoryMarkdown(report.memory), "");
@@ -581,6 +630,11 @@ async function build(options, now) {
   if (hours < 1 || hours > maxHours) throw new Error("The window must be 1 to " + maxHours + " hours (the counters are kept that long)");
 
   options.rate = options.rate !== undefined ? options.rate : Number(config.folder_shadow.rate) || 0;
+
+  if (options.reverseRate === undefined) {
+    const setting = config.folder_shadow.reverse_rate;
+    options.reverseRate = setting === undefined || setting === null || setting === "" ? options.rate : Number(setting) || 0;
+  }
 
   const summary = await shadowReport.load(hours, now);
   const first = new Date(summary.from.replace(" ", "T") + ":00Z");
@@ -637,6 +691,7 @@ module.exports = {
   parseRange,
   requestsPerOp,
   operationsMarkdown,
+  reverseMismatchMarkdown,
   parseUnitMemLine,
   nearestRank,
   unitMemory,

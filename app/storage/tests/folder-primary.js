@@ -1,8 +1,9 @@
 // S3 as a blog's primary store (app/storage/folder/primary.js, #2258 Phase
 // D), on MinIO: the per-blog flag and its guard, the copy of every change to
-// disk, and the reconcile, the backfill and the shadow reads leaving S3 alone
-// for a blog on S3. The folder's own contract is run for a flagged blog in
-// folder.js.
+// disk, the reconcile and the backfill leaving S3 alone for a blog on S3, the
+// reverse shadow reads checking it against its disk copy, and
+// rebuild-file-index refusing to empty its index under it. The folder's own
+// contract is run for a flagged blog in folder.js.
 describe("storage/folder primary", function () {
   var config = require("config");
   var crypto = require("crypto");
@@ -560,6 +561,8 @@ describe("storage/folder primary", function () {
   });
 
   describe("shadow reads", function () {
+    var report = require("../../../scripts/storage/shadow-report");
+
     beforeEach(function () {
       config.folder_shadow = { rate: 1, max_in_flight: 4, max_compare_bytes: 1024 * 1024, recheck_ms: 0 };
       shadow.reset();
@@ -570,18 +573,156 @@ describe("storage/folder primary", function () {
       shadow.reset();
     });
 
-    it("are not taken for a blog on S3", async function () {
+    function count(field) {
+      return shadow.counters()[field] || 0;
+    }
+
+    function fieldsMatching(pattern) {
+      return Object.keys(shadow.counters()).filter(function (field) {
+        return pattern.test(field);
+      });
+    }
+
+    function consume(stream) {
+      return new Promise(function (resolve, reject) {
+        var chunks = [];
+        stream.on("data", function (chunk) {
+          chunks.push(chunk);
+        });
+        stream.on("error", reject);
+        // The shadow of a stream starts once it has closed
+        stream.on("close", function () {
+          resolve(Buffer.concat(chunks));
+        });
+      });
+    }
+
+    it("are taken in reverse for a blog on S3, never forward", async function () {
       await onS3(this.blog.id);
 
-      await folder.read(this.blog.id, "/a.txt");
-      await folder.stat(this.blog.id, "/a.txt");
-      await shadow.idle();
+      var blogID = this.blog.id;
+      var reads = [
+        () => folder.read(blogID, "/a.txt"),
+        () => folder.stat(blogID, "/a.txt", { sha1: true }),
+        () => folder.exists(blogID, "/a.txt"),
+        () => folder.list(blogID, "/"),
+        () => folder.listNames(blogID, "/"),
+        () => folder.listAll(blogID, "/posts"),
+        () => folder.resolveCaseInsensitive(blogID, "/POSTS/B.md"),
+        () => folder.ensureLocal(blogID, "/posts/b.md"),
+        () => consume(folder.createReadStream(blogID, "/a.txt")),
+      ];
 
-      expect(shadow.counters()["read:sampled"]).toBeUndefined();
-      expect(shadow.counters()["stat:sampled"]).toBeUndefined();
+      // One at a time, so none is dropped at the in-flight cap
+      for (var read of reads) {
+        await read();
+        await shadow.idle();
+      }
+
+      var ops = ["read", "stat", "exists", "list", "listNames", "listAll", "resolveCaseInsensitive", "ensureLocal", "createReadStream"];
+
+      ops.forEach(function (op) {
+        expect(op + " sampled " + count("reverse:" + op + ":sampled")).toEqual(op + " sampled 1");
+        expect(op + " matched " + count("reverse:" + op + ":matched")).toEqual(op + " matched 1");
+        expect(count(op + ":sampled")).toEqual(0);
+      });
+
+      expect(fieldsMatching(/^reverse:read:s3:le:/).length).toBeGreaterThan(0);
+      expect(fieldsMatching(/^reverse:read:local:le:/).length).toBeGreaterThan(0);
+      // The caller's own read says how the content cache served it
+      expect(fieldsMatching(/^reverse:read:s3:(hit|miss|direct):le:/).length).toEqual(1);
+      expect(fieldsMatching(/mismatched$|s3error$|dropped$/)).toEqual([]);
     });
 
-    it("are still taken for a named blog the guard keeps on disk", async function () {
+    it("give the caller S3's answer, and detect a disk copy which differs", async function () {
+      await onS3(this.blog.id);
+      spyOn(console, "error");
+
+      // Straight to S3, past the disk copy: same length, other bytes
+      await backend.write(this.blog.id, "/a.txt", "z");
+      await backend.write(this.blog.id, "/only-in-s3.txt", "s3");
+
+      expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("z");
+      await shadow.idle();
+      expect(await folder.exists(this.blog.id, "/only-in-s3.txt")).toBe(true);
+      await shadow.idle();
+
+      expect(count("reverse:read:mismatched")).toEqual(1);
+      expect(count("reverse:read:mismatch:bytes")).toEqual(1);
+      expect(count("reverse:exists:mismatch:extra-in-s3")).toEqual(1);
+      expect(count("read:mismatched")).toEqual(0);
+
+      var lines = console.error.calls.allArgs().map((args) => args.join(" "));
+
+      expect(
+        lines.filter(function (line) {
+          return line.indexOf(shadow.LOG_PREFIX) !== -1 && line.indexOf("direction=reverse") !== -1 && line.indexOf("kind=bytes") !== -1;
+        }).length
+      ).toEqual(1);
+    });
+
+    it("do not flag a write whose disk copy was still in flight", async function () {
+      await onS3(this.blog.id);
+      await folder.write(this.blog.id, "/a.txt", "new");
+
+      // The disk copy comes just after S3: the first look at the disk sees
+      // the old bytes, the recheck the new ones
+      var calls = 0;
+      var real = local.read;
+
+      spyOn(local, "read").and.callFake(function () {
+        calls++;
+        if (calls === 1) return Promise.resolve(Buffer.from("a"));
+        return real.apply(null, arguments);
+      });
+
+      expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("new");
+      await shadow.idle();
+
+      expect(calls).toEqual(2);
+      expect(count("reverse:read:transient")).toEqual(1);
+      expect(count("reverse:read:transient:size")).toEqual(1);
+      expect(count("reverse:read:mismatched")).toEqual(0);
+    });
+
+    it("count a mismatch on a disk copy known to be behind as behind, not as a mismatch", async function () {
+      await onS3(this.blog.id);
+      await backend.write(this.blog.id, "/a.txt", "z");
+      await client.sAdd(primary.DIRTY_KEY, this.blog.id);
+
+      await folder.read(this.blog.id, "/a.txt");
+      await shadow.idle();
+
+      expect(count("reverse:read:behind")).toEqual(1);
+      expect(count("reverse:read:behind:bytes")).toEqual(1);
+      expect(count("reverse:read:mismatched")).toEqual(0);
+    });
+
+    it("follow reverse_rate when it is set", async function () {
+      await onS3(this.blog.id);
+      config.folder_shadow.reverse_rate = 0;
+
+      await folder.read(this.blog.id, "/a.txt");
+      await shadow.idle();
+
+      expect(shadow.counters()).toEqual({});
+    });
+
+    it("are not taken when a spec chose the backend, which leaves no disk copy", async function () {
+      folder.useBackend("s3");
+
+      try {
+        await folder.write(this.blog.id, "/a.txt", "a");
+        await folder.read(this.blog.id, "/a.txt");
+        await shadow.idle();
+      } finally {
+        folder.useBackend();
+      }
+
+      expect(shadow.counters()).toEqual({});
+    });
+
+    it("are still taken forward for a named blog the guard keeps on disk", async function () {
       await onS3(this.blog.id);
       await client.sAdd(mirror.DIRTY_KEY, this.blog.id);
       spyOn(console, "log");
@@ -589,7 +730,132 @@ describe("storage/folder primary", function () {
       await folder.read(this.blog.id, "/a.txt");
       await shadow.idle();
 
-      expect(shadow.counters()["read:sampled"]).toEqual(1);
+      expect(count("read:sampled")).toEqual(1);
+      expect(count("reverse:read:sampled")).toEqual(0);
+    });
+
+    describe("counters in Redis", function () {
+      var keys;
+
+      beforeEach(async function () {
+        keys = report.keysFor(2, new Date());
+        await client.del(keys);
+      });
+
+      afterEach(async function () {
+        await client.del(keys);
+      });
+
+      it("are kept apart by direction, and the report shows each", async function () {
+        await onS3(this.blog.id);
+        await folder.read(this.blog.id, "/a.txt");
+        await shadow.idle();
+        await folder.stat(this.blog.id, "/a.txt");
+        await shadow.idle();
+        await shadow.flush();
+
+        var hash = await client.hGetAll(shadow.hourKey(new Date()));
+
+        expect(hash["reverse:read:sampled"]).toEqual("1");
+        expect(hash["read:sampled"]).toBeUndefined();
+
+        var summary = await report.load(2);
+
+        expect(summary.ops.read).toBeUndefined();
+        expect(summary.reverse.ops.read.sampled).toEqual(1);
+        expect(summary.reverse.ops.read.matched).toEqual(1);
+        expect(summary.reverse.ops.stat.sampled).toEqual(1);
+        expect(summary.reverse.ops.read.s3.p50).not.toBeNull();
+        expect(report.format(summary)).toContain("S3-primary vs disk copy");
+      });
+    });
+  });
+
+  describe("rebuild-file-index", function () {
+    var { rebuild } = require("../../../scripts/storage/rebuild-file-index");
+
+    it("rebuilds the index of a blog on disk", async function () {
+      config.folder_mirror = this.blog.id;
+      await folder.write(this.blog.id, "/a.txt", "a");
+      await client.sAdd(mirror.COMPLETE_KEY, this.blog.id);
+
+      var result = await rebuild(this.blog.id, { hash: true });
+
+      expect(result.files).toEqual(1);
+      expect(result.viaDisk).toBe(false);
+      expect(await isDirty(mirror.DIRTY_KEY, this.blog.id)).toBe(false);
+    });
+
+    it("refuses a blog on S3, leaving its index alone", async function () {
+      await onS3(this.blog.id);
+
+      var index = await tree(backend, this.blog.id);
+      var spy = spyOn(backend, "rebuildIndex").and.callThrough();
+
+      try {
+        await rebuild(this.blog.id, { hash: true });
+        fail("expected EONS3");
+      } catch (err) {
+        expect(err.code).toEqual("EONS3");
+      }
+
+      expect(spy).not.toHaveBeenCalled();
+      expect(await tree(backend, this.blog.id)).toEqual(index);
+      expect(await folder.backendFor(this.blog.id)).toEqual("s3");
+    });
+
+    it("refuses --via-disk while the disk copy is behind S3", async function () {
+      await onS3(this.blog.id);
+      await client.sAdd(primary.DIRTY_KEY, this.blog.id);
+
+      try {
+        await rebuild(this.blog.id, { hash: true, viaDisk: true, settleMs: 0 });
+        fail("expected ECONFLICT");
+      } catch (err) {
+        expect(err.code).toEqual("ECONFLICT");
+      }
+
+      expect(await folder.backendFor(this.blog.id)).toEqual("s3");
+    });
+
+    it("with --via-disk, serves the blog from disk meanwhile, and the reconcile puts it back on S3", async function () {
+      await onS3(this.blog.id);
+      spyOn(console, "log");
+
+      var email = require("helper/email");
+
+      spyOn(email, "FOLDER_MIRROR_RECONCILE").and.callFake(function (uid, locals, callback) {
+        callback();
+      });
+
+      var seen;
+      var real = backend.rebuildIndex;
+      var blogID = this.blog.id;
+
+      spyOn(backend, "rebuildIndex").and.callFake(function () {
+        var args = arguments;
+
+        // Reads go to the disk copy while the index is rebuilt
+        return folder.backendFor(blogID).then(function (which) {
+          seen = which;
+          return real.apply(null, args);
+        });
+      });
+
+      var result = await rebuild(this.blog.id, { hash: true, viaDisk: true, settleMs: 0 });
+
+      expect(seen).toEqual("local");
+      expect(result.viaDisk).toBe(true);
+      expect(result.files).toEqual(2);
+      expect(await folder.backendFor(this.blog.id)).toEqual("local");
+      expect(await isDirty(mirror.DIRTY_KEY, this.blog.id)).toBe(true);
+
+      await reconcile({ mode: "dirty", pauseMs: 0, quietMs: 0 });
+
+      expect(await isDirty(mirror.DIRTY_KEY, this.blog.id)).toBe(false);
+      expect(await folder.backendFor(this.blog.id)).toEqual("s3");
+      expect((await folder.read(this.blog.id, "/posts/b.md")).toString()).toEqual("# B");
+      await expectCopied(this.blog.id);
     });
   });
 });
