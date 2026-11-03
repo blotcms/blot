@@ -28,7 +28,7 @@ describe("git store shadow mode: mirroring", function () {
     var pushes = this.shadowLines("push");
     expect(pushes.length).toBe(1);
     expect(pushes[0]).toContain("outcome=ok");
-    expect(pushes[0]).toMatch(/ storeMs=\d+ receiveMs=\d+ ebsMs=\d+ requests=\d+ bytesUp=\d+ bytesDown=\d+ refs=1 /);
+    expect(pushes[0]).toMatch(/ storeMs=\d+ receiveMs=\d+ ebsMs=\d+ ebsWorkMs=\d+ ebsWaitMs=\d+ requests=\d+ bytesUp=\d+ bytesDown=\d+ refs=1 /);
     expect(current.refs["refs/heads/master"]).toBe(await this.local.head());
 
     // Blog handles stay out of the logs
@@ -124,7 +124,7 @@ describe("git store shadow mode: mirroring", function () {
 
     expect(writes.length).toBe(1);
     expect(writes[0]).toContain("outcome=ok");
-    expect(writes[0]).toMatch(/ storeMs=\d+ commitMs=\d+ ebsMs=\d+ requests=\d+ bytesUp=\d+ bytesDown=\d+ refs=1 /);
+    expect(writes[0]).toMatch(/ storeMs=\d+ commitMs=\d+ ebsMs=\d+ ebsWorkMs=\d+ ebsWaitMs=\d+ requests=\d+ bytesUp=\d+ bytesDown=\d+ refs=1 /);
     expect(current.refs["refs/heads/master"]).toBe(setup.ebsRefs(this.gitDir)["refs/heads/master"]);
 
     await commit(this, { path: "/Drafts/hello.txt", contents: null });

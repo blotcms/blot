@@ -32,8 +32,14 @@
 //                           the push without moving anything.
 //     accepted(master, p),  after the refs have moved
 //     abandoned(master, p), after prepare, if the refs did not move
-//     applied(ms),          after the refs have moved, whichever refs they
+//     applied(ms, timing),  after the refs have moved, whichever refs they
 //                           were, with how long the push took to get there
+//                           (from the request's arrival) and timing, which is
+//                           { workMs, waitMs }: workMs is the time from the
+//                           last byte of the request body to the refs moving,
+//                           less the time spent waiting for a place in the
+//                           interactive lane (limiter.js), and waitMs all the
+//                           time the push waited for a place in it
 //   })
 var fs = require("fs-extra");
 var path = require("path");
@@ -280,9 +286,41 @@ function isTrue(value) {
 // Runs a short git command in the repository and collects its output. A push
 // is interactive work (see limiter.js).
 function runGit(context, args, options) {
-  return limiter.run("interactive", function () {
-    return spawnGit(context, args, options);
+  return waitingFor(context, function (start) {
+    return limiter.run("interactive", function () {
+      start();
+      return spawnGit(context, args, options);
+    });
   });
+}
+
+// Notes how long fn waits for a place in the interactive lane, for the push's
+// timing: fn(start) calls start once it has the place (or has no need to wait)
+function waitingFor(context, fn) {
+  var asked = Date.now();
+
+  return fn(function () {
+    context.waits.push([asked, Date.now()]);
+  });
+}
+
+// How long the push took from the end of its request body to the refs moving,
+// less the lane waits in that window, and the lane waits altogether. The pack
+// is streamed into index-pack as it arrives, so a push's upload and its
+// processing overlap and cannot be told apart; the end of the body is the
+// nearest point after which the client's upload is no longer part of the time.
+function timing(context) {
+  var now = Date.now();
+  var from = context.bodyEnded === null ? context.started : context.bodyEnded;
+  var work = now - from;
+  var wait = 0;
+
+  context.waits.forEach(function (span) {
+    wait += span[1] - span[0];
+    work -= Math.max(0, span[1] - Math.max(span[0], from));
+  });
+
+  return { workMs: Math.max(0, work), waitMs: wait };
 }
 
 function spawnGit(context, args, options) {
@@ -415,7 +453,11 @@ async function unpack(context, first, iterator, limits) {
     if (limits.strict) args.push("--strict");
     if (limits.maxInputSize) args.push("--max-input-size=" + limits.maxInputSize);
 
+    var asked = Date.now();
     var release = await limiter.acquire("interactive");
+
+    context.waits.push([asked, Date.now()]);
+
     var child = spawn("git", limiter.args(args), {
       cwd: context.directory,
       env: quarantineEnv(context),
@@ -722,7 +764,7 @@ async function apply(context, commands, options) {
 
     if (options.applied) {
       try {
-        options.applied(Date.now() - context.started);
+        options.applied(Date.now() - context.started, timing(context));
       } catch (err) {
         console.error(clfdate(), "Git: error after push", context.handle, err);
       }
@@ -760,6 +802,10 @@ async function receive(req, res, options) {
     directory: directory,
     handle: options.handle,
     started: started,
+    // When the request body was read to its end, and the spans of time the
+    // push waited for a place in the interactive lane ([from, to] in ms)
+    bodyEnded: null,
+    waits: [],
     env: env,
     children: new Set(),
     quarantine: null,
@@ -821,7 +867,16 @@ async function receive(req, res, options) {
   }
 
   try {
-    var iterator = source[Symbol.asyncIterator]();
+    var body = source[Symbol.asyncIterator]();
+    var iterator = {
+      next: async function () {
+        var next = await body.next();
+
+        if (next.done && context.bodyEnded === null) context.bodyEnded = Date.now();
+
+        return next;
+      },
+    };
     var packets = await readPackets(iterator);
 
     parsed = parseCommands(packets.lines);
@@ -877,8 +932,11 @@ async function receive(req, res, options) {
         // One place in the interactive lane, taken before the ref lock, for
         // the commands run under it: none of them waits for room with the
         // lock held
-        var applied = await limiter.run("interactive", function () {
-          return apply(context, commands, options);
+        var applied = await waitingFor(context, function (start) {
+          return limiter.run("interactive", function () {
+            start();
+            return apply(context, commands, options);
+          });
         });
 
         if (applied) {
