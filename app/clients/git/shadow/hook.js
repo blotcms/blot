@@ -3,7 +3,7 @@
 // with it the git store and the S3 client), so with it off no store code runs
 // and nothing is required that could fail.
 //
-//   shadow(blogID, function (mirror) { mirror.pushed(blogID, ms); });
+//   shadow(blogID, function (mirror) { mirror.pushed(blogID, ms, timing); });
 //
 // Nothing here throws into the push or the write that called it.
 var config = require("config");

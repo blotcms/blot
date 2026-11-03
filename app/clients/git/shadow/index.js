@@ -7,7 +7,7 @@
 // repo.js calls two functions here, through ./hook.js, which loads this module
 // only when shadow mode is on for the blog (config.git_store.shadow):
 //
-//   pushed(blogID, ebsMs)                     a push has moved some refs
+//   pushed(blogID, ebsMs, ebs)                a push has moved some refs
 //   committed(blogID, change, result, ebsMs)  Blot's commit has landed
 //
 // Both only queue work and return. Nothing here runs on the push path or the
@@ -36,19 +36,31 @@
 // Each operation logs one line (see log() below):
 //
 //   [git-store-shadow] blog=<id> op=push|write|import|compact outcome=...
-//     storeMs=... [receiveMs=...|commitMs=...] ebsMs=... requests=...
+//     storeMs=... [receiveMs=...|commitMs=...] ebsMs=... [ebsWorkMs=...
+//     ebsWaitMs=...] requests=...
 //     bytesUp=... bytesDown=... refs=... waitMs=...
 //
 // storeMs is all the store's side took (for a push, reading its manifest and
 // making the pack from the EBS repository too), less waitMs: the time its git
 // commands spent waiting for a place in the git limiter's background lane
-// (see below). receiveMs and commitMs leave those waits out too, and ebsMs
-// never had them, so the figures compare the work alone however busy the
-// lane was. The figures to compare are:
+// (see below). receiveMs and commitMs leave those waits out too, and so does
+// ebsWorkMs, so the figures compare the work alone however busy the lane was.
+// The figures to compare are:
 //
-//   push    ebsMs (receivePack's start to the refs moving on EBS) with
-//           receiveMs (the store's receive, from the pack's first byte to the
-//           swap landing). Neither includes the client's upload.
+//   push    ebsWorkMs with receiveMs (the store's receive, from the pack's
+//           first byte to the swap landing, less waitMs). ebsWorkMs is the
+//           EBS side's time from the last byte of the request body to the
+//           refs moving, less ebsWaitMs's share of it. ebsMs runs from the
+//           request's arrival, so it includes the client's upload and any
+//           wait for the interactive lane; it is kept for continuity, and
+//           ebsWaitMs is all the time the push waited for a place in the
+//           interactive lane. A write's line has neither.
+//           receivePack streams the pack into index-pack as it arrives, so
+//           the upload cannot be separated from the processing: ebsWorkMs
+//           starts when the body has ended, which leaves out the upload but
+//           also whatever index-pack did while the pack was still arriving.
+//           It is smaller than receiveMs for a large pack from a slow link,
+//           and about the same for a small push, whose body arrives at once.
 //   write   ebsMs (the EBS ref lock and plumbing.commitFile) with commitMs
 //           (the store's commit() alone)
 //
@@ -111,7 +123,7 @@ const STDERR_BYTES = 4096;
 
 // ---- Logging ----------------------------------------------------------------
 
-const ORDER = ["blog", "op", "source", "outcome", "storeMs", "receiveMs", "commitMs", "ebsMs", "firstByteMs", "requests", "bytesUp", "bytesDown", "bytesSent", "refs", "waitMs"];
+const ORDER = ["blog", "op", "source", "outcome", "storeMs", "receiveMs", "commitMs", "ebsMs", "ebsWorkMs", "ebsWaitMs", "firstByteMs", "requests", "bytesUp", "bytesDown", "bytesSent", "refs", "waitMs"];
 
 function value(v) {
   const text = String(v);
@@ -426,7 +438,7 @@ function mirrorable(ref) {
 
 async function runMirror(ctx, task) {
   const { blogID, gitDir, store, cache, lock } = ctx;
-  const extra = { ebsMs: task.ebsMs, pushes: task.requests > 1 ? task.requests : undefined, reason: task.reason };
+  const extra = { ebsMs: task.ebsMs, ebsWorkMs: task.ebsWorkMs, ebsWaitMs: task.ebsWaitMs, pushes: task.requests > 1 ? task.requests : undefined, reason: task.reason };
 
   for (let attempt = 1; ; attempt++) {
     const ebs = await ebsRefs(gitDir);
@@ -808,7 +820,7 @@ async function drain(blogID, state) {
 
 // Queues a mirror, unless the last thing queued is one already, which then
 // covers this request too: it reads both sides when it starts.
-function requestMirror(blogID, { op = "push", ebsMs, reason, scratchDir } = {}) {
+function requestMirror(blogID, { op = "push", ebsMs, ebs, reason, scratchDir } = {}) {
   if (removed.has(blogID)) return Promise.resolve();
 
   const state = stateOf(blogID);
@@ -816,13 +828,17 @@ function requestMirror(blogID, { op = "push", ebsMs, reason, scratchDir } = {}) 
 
   if (last && last.type === "mirror") {
     last.requests++;
-    if (ebsMs !== undefined) last.ebsMs = ebsMs;
+    if (ebsMs !== undefined) {
+      last.ebsMs = ebsMs;
+      last.ebsWorkMs = ebs && ebs.workMs;
+      last.ebsWaitMs = ebs && ebs.waitMs;
+    }
     if (last.reason !== reason) last.reason = undefined;
     if (scratchDir) last.scratchDir = scratchDir;
     return last.done;
   }
 
-  const task = { type: "mirror", op, ebsMs, reason, scratchDir, requests: 1 };
+  const task = { type: "mirror", op, ebsMs, ebsWorkMs: ebs && ebs.workMs, ebsWaitMs: ebs && ebs.waitMs, reason, scratchDir, requests: 1 };
   task.done = new Promise((resolve) => (task.resolve = resolve));
   state.queue.push(task);
   start(blogID, state);
@@ -866,10 +882,10 @@ function requestCompact(blogID, state, ctx, current) {
 }
 
 // A push has moved the EBS repository's refs. ebsMs is how long the push took
-// from its start to the refs moving.
-function pushed(blogID, ebsMs) {
+// from its start to the refs moving; ebs is { workMs, waitMs }, see the top.
+function pushed(blogID, ebsMs, ebs) {
   try {
-    requestMirror(blogID, { op: "push", ebsMs });
+    requestMirror(blogID, { op: "push", ebsMs, ebs });
   } catch (err) {
     log({ blog: blogID, op: "push", outcome: "error", detail: scrub(err) });
   }

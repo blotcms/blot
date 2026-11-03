@@ -65,9 +65,9 @@ function receiveHooks(blogID) {
       pushed(blogID, master.old, master.new, prepared);
     },
     // Mirrors the push into the git store in the background (shadow/index.js)
-    applied: function (ms) {
+    applied: function (ms, timing) {
       shadow(blogID, function (mirror) {
-        mirror.pushed(blogID, ms);
+        mirror.pushed(blogID, ms, timing);
       });
     },
   };
