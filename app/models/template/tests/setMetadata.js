@@ -42,6 +42,23 @@ describe("template", function () {
     expect((await getMetadata(this.template.id)).cacheID).toEqual(after);
   });
 
+  it("compares object values by content, not identity", async function () {
+    await setBlog(this.blog.id, { template: this.template.id });
+    await setMetadata(this.template.id, { errors: {}, localEditing: true });
+
+    const blogCacheID = (await getBlog({ id: this.blog.id })).cacheID;
+    const templateCacheID = (await getMetadata(this.template.id)).cacheID;
+
+    // a fresh but equal object, as readFromFolder passes on every sync
+    await setMetadata(this.template.id, { errors: {}, localEditing: true });
+    expect((await getBlog({ id: this.blog.id })).cacheID).toEqual(blogCacheID);
+    expect((await getMetadata(this.template.id)).cacheID).toEqual(templateCacheID);
+
+    await setMetadata(this.template.id, { errors: { "entries.html": "Unclosed tag" } });
+    expect((await getBlog({ id: this.blog.id })).cacheID).not.toEqual(blogCacheID);
+    expect((await getMetadata(this.template.id)).cacheID).not.toEqual(templateCacheID);
+  });
+
   it("never writes a template cache ID it was given or had read", async function () {
     const client = require("models/client");
     const key = require("../key");
