@@ -80,7 +80,7 @@ async function main() {
     writableData: true,
     // Builds fetch remote images through blot-blue's proxy jail. A probe has
     // no browser, so link screenshots fail (scripts/probe/run.js).
-    airlock: true,
+    egressProxy: true,
     nodeFlags: [
       "--expose-gc",
       ...(mode === "build" ? ["--heapsnapshot-signal=SIGUSR2", `--diagnostic-dir=${OUT}`] : []),

@@ -1,4 +1,10 @@
-const Tags = require("models/tags");
+// The entry IDs tagged with one or more slugs, with the tag's display names
+// and pagination: what /tagged/:tag pages and a tag-filtered {{#posts}} list.
+// Uncached; render reads it through getCachedTagged (./cachedTagged.js).
+//
+// tagged(blogID, slugs, options) resolves to { entryIDs, tag, tagged,
+// prettyTags, slugs, total, pagination }. options: limit and offset (a page),
+// pathPrefix, sortBy and order (see blog/sortOptions).
 const {
   normalizePathPrefix,
   filterEntryIDsByPathPrefix,
@@ -121,11 +127,13 @@ function getTag(blogID, slug, opts) {
             prettyTag: prettyTag || slug,
             total,
           });
+    // Required here: models/tags requires this module (and specs spy on get)
+    const Tags = require("models/tags");
     opts ? Tags.get(blogID, slug, opts, cb) : Tags.get(blogID, slug, cb);
   });
 }
 
-async function fetchTaggedEntriesInternal(blogID, slugs, options) {
+async function getTagged(blogID, slugs, options) {
   options = options || {};
 
   const pg = parsePaginationOptions(options);
@@ -205,6 +213,6 @@ async function fetchTaggedEntriesInternal(blogID, slugs, options) {
   });
 }
 
-module.exports = function fetchTaggedEntries(blogID, slugs, options) {
-  return fetchTaggedEntriesInternal(blogID, slugs, options || {});
+module.exports = function tagged(blogID, slugs, options) {
+  return getTagged(blogID, slugs, options || {});
 };

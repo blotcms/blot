@@ -17,7 +17,7 @@ describe("post sorting across retrieve helpers", function () {
   function run(helper, locals) {
     return new Promise((resolve, reject) => {
       helper(
-        { blog: { id: "b1" }, query: { q: "x" }, params: {}, template: { locals } },
+        { blog: { id: "b1", cacheID: 1 }, query: { q: "x" }, params: {}, template: { locals } },
         { locals: {} },
         (err, value) => (err ? reject(err) : resolve(value))
       );
@@ -26,9 +26,10 @@ describe("post sorting across retrieve helpers", function () {
 
   describe("recent_entries (feeds)", function () {
     const recentEntries = require("../recent_entries");
+    const cachedRecent = require("models/entries/cachedRecent");
 
     beforeEach(function () {
-      recentEntries._clear();
+      cachedRecent._clear();
       spyOn(Entries, "getRecent").and.callFake((blogID, options, cb) => cb(newestFirst()));
     });
 

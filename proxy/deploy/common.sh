@@ -324,7 +324,7 @@ sync_static() { # sync_static <image>
 #     Screenshots run in its browser jail, and the app's fetches of untrusted
 #     URLs go through the proxy jail in this unit, on its own port
 #     (proxy/unit/sandbox/proxy.js). Without it there is neither, and production
-#     refuses those features (helper/airlock, helper/screenshot) rather than
+#     refuses those features (helper/egress, helper/screenshot) rather than
 #     fetching directly; load_unit_settings has already refused if a subtree is
 #     missing.
 # The env files: secrets.env (what Node gets), then proxy.env,
@@ -385,7 +385,9 @@ run_args() { # run_args <name>
       -e BLOT_SANDBOX_SOCKET=/run/blot-sandbox/broker.sock
       --device /dev/net/tun
       --mount "type=bind,source=$SANDBOX_CGROUP_DIR/$unit-browser,target=/sandbox-browser-cgroup"
-      # the variable keeps the airlock's name; the proxy is the jail's now
+      -e "BLOT_EGRESS_PROXY_URL=http://127.0.0.1:$proxy_port"
+      # the same, under the name images from before #2417 read, so a rollback
+      # to one with units.sh still finds its proxy
       -e "BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:$proxy_port"
     )
   fi
@@ -558,11 +560,53 @@ cert_sweep() {
     echo "$3 ${fp:-none}"' _ "$SITE_IP" "$port" {} | sort
 }
 
+# stored_cert_fps: domains on stdin -> "<domain> <fingerprint>" lines for the
+# ones with a certificate in ssl:<domain>:latest (the first in fullchain_pem,
+# the one the proxy serves). One pipelined redis-cli call reads them all; the
+# fingerprints are computed here. Read with awk and sed, as no JSON tool is
+# guaranteed on the host; the JSON string is unescaped as lua-cjson writes it
+# (newlines as \n, every / as \/).
+stored_cert_fps() {
+  local domains d pem fp
+  domains="$(sed '/^$/d')"
+  [ -n "$domains" ] || return 0
+  while IFS= read -r d <&3 && IFS= read -r pem <&4; do
+    [ "$pem" != - ] || continue
+    fp=$(printf '%s\n' "$pem" | sed -e 's/\\\//\//g' -e 's/\\r//g' -e 's/\\n/\n/g' -e 's/\\\\/\\/g' | openssl x509 -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)
+    [ -z "$fp" ] || echo "$d $fp"
+  done 3< <(printf '%s\n' "$domains") 4< <(printf '%s\n' "$domains" | sed 's/^/get ssl:/; s/$/:latest/' | redis_cli --raw 2>/dev/null \
+    | awk '{ if (match($0, /"fullchain_pem":"[^"]*"/)) print substr($0, RSTART + 17, RLENGTH - 18); else print "-" }')
+}
+
 # Every domain that presented a certificate before must present the same one
-# now. (A domain with none before is not held against the replacement.)
+# now, or the one Redis holds for it now. (A domain with none before is not
+# held against the replacement.) A renewal is written to Redis at once, but a
+# unit keeps serving the old certificate from auto-ssl's in-memory cache for up
+# to an hour, so for that hour the two units differ for that domain and the
+# unit now answering may be either. Serving what Redis holds is correct; a
+# different certificate, or none, fails. A renewal pass changes a few percent
+# of the domains at once; if more than a quarter changed (and more than 10),
+# that is a broken replacement, and nothing is looked up.
 certs_unchanged() { # certs_unchanged <baseline> <now>
-  local bad
+  local bad total count stored
   bad=$(comm -23 <(printf '%s\n' "$1" | grep -v ' none$' | sort) <(printf '%s\n' "$2" | sort) | drop_expired)
+  if [ -n "$bad" ]; then
+    total=$(printf '%s\n' "$1" | grep -vc ' none$')
+    count=$(printf '%s\n' "$bad" | wc -l | tr -d ' ')
+    if [ "$count" -le 10 ] || [ $((count * 4)) -le "$total" ]; then
+      stored="$(printf '%s\n' "$bad" | awk '{ print $1 }' | stored_cert_fps)"
+      bad=$(printf '%s\n' "$bad" | while read -r domain fp; do
+        now=$(printf '%s\n' "$2" | awk -v d="$domain" '$1 == d { print $2 }')
+        # From a here-string, not a pipe: grep -q stops at the first match,
+        # and with pipefail a writer cut off by that would fail the check
+        if [ -n "$now" ] && [ "$now" != none ] && grep -qxF "$domain $now" <<< "$stored"; then
+          log "  $domain was renewed and serves the certificate Redis holds" >&2
+        else
+          echo "$domain $fp"
+        fi
+      done)
+    fi
+  fi
   [ -z "$bad" ] || {
     log "custom-domain certificates changed or went missing ($(printf '%s\n' "$bad" | wc -l | tr -d ' ')): first few, as they were:"
     printf '%s\n' "$bad" | head -5 | while read -r line; do log "  $line"; done

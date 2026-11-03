@@ -45,15 +45,6 @@ function searchEntries(blogID, query, options) {
   });
 }
 
-function listTags(blogID, options) {
-  return new Promise((resolve, reject) => {
-    Tags.list(blogID, options, (err, tags) => {
-      if (err) reject(err);
-      else resolve(tags);
-    });
-  });
-}
-
 function popularTags(blogID, options) {
   return new Promise((resolve, reject) => {
     Tags.popular(blogID, options, (err, tags) => {
@@ -139,20 +130,12 @@ function randomEntry(blogID) {
   });
 }
 
-// getAll / getRecent callback with (entries) only, never an error argument,
-// and resolve [] on a Redis failure. onError makes them reject on a Redis
-// outage instead, so that no caller renders or caches an empty list as real.
+// getAll calls back with (entries) only, never an error argument, and
+// resolves [] on a Redis failure. onError makes it reject on a Redis outage
+// instead, so that no caller renders or caches an empty list as real.
 function getAll(blogID) {
   return new Promise((resolve, reject) => {
     Entries.getAll(blogID, { onError: reject }, (entries) => resolve(entries));
-  });
-}
-
-function getRecent(blogID) {
-  return new Promise((resolve, reject) => {
-    Entries.getRecent(blogID, { onError: reject }, (entries) =>
-      resolve(entries)
-    );
   });
 }
 
@@ -171,7 +154,6 @@ module.exports = {
   getFullView,
   getPage,
   searchEntries,
-  listTags,
   popularTags,
   checkRedirect,
   getUserById,
@@ -182,6 +164,5 @@ module.exports = {
   adjacentTo,
   randomEntry,
   getAll,
-  getRecent,
   getTotal,
 };

@@ -1,11 +1,13 @@
 const entriesModel = require("models/entries");
 const postsRetrieve = require("../render/retrieve/posts");
+const cachedTagged = require("models/tags/cachedTagged");
+const cachedPage = require("models/entries/cachedPage");
 
 // app/blog/render/retrieve/tests/posts.js already covers the {{#posts}}
 // local's pagination, tag filtering, and cache-key/mutation-isolation
 // behavior in depth. This file only adds the scenarios that suite doesn't:
-// cache invalidation via the real incremental sync path, tag-array-order
-// independence, and the tagged/untagged branch split.
+// cache invalidation via the real incremental sync path, tagged
+// cache-key order, and the tagged/untagged branch split.
 describe("posts", function () {
   describe("rendering", function () {
     require("./util/setup")();
@@ -34,7 +36,8 @@ describe("posts", function () {
 
   describe("caching", function () {
     beforeEach(function () {
-      postsRetrieve._clear();
+      cachedPage._clear();
+      cachedTagged._clear();
     });
 
     function fakeReqRes(overrides = {}) {
@@ -67,31 +70,20 @@ describe("posts", function () {
       });
     });
 
-    it("builds equal cache keys regardless of tag array order", function () {
-      const base = {
-        branch: "tagged",
-        sortBy: undefined,
-        order: undefined,
-        pathPrefix: undefined,
-        pageNumber: 1,
-        pageSize: 100,
+    it("keeps tag order in the tagged cache key", function () {
+      const query = {
         limit: 100,
         offset: 0,
+        pathPrefix: undefined,
+        sortBy: undefined,
+        order: undefined,
       };
 
-      const keyA = postsRetrieve._createCacheKey(
-        { blog: { id: "blog-1", cacheID: 111 } },
-        {},
-        Object.assign({}, base, { tags: ["a", "b"] })
+      // tagged builds tag/slugs/prettyTags from the original sequence, so
+      // the two orders must not share an entry
+      expect(cachedTagged._createCacheKey("blog-1", 111, ["a", "b"], query, [])).not.toBe(
+        cachedTagged._createCacheKey("blog-1", 111, ["b", "a"], query, [])
       );
-
-      const keyB = postsRetrieve._createCacheKey(
-        { blog: { id: "blog-1", cacheID: 111 } },
-        {},
-        Object.assign({}, base, { tags: ["b", "a"] })
-      );
-
-      expect(keyA).toBe(keyB);
     });
   });
 });

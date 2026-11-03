@@ -7,10 +7,10 @@ describe("Blogger importer", function () {
   const legacyFixture = path.join(__dirname, "fixtures", "export.xml");
   const atomFixture = path.join(__dirname, "fixtures", "export.atom");
 
-  // Stub the actual airlock boundary used by the download helpers. These
+  // Stub the actual egress boundary used by the download helpers. These
   // conversion specs deliberately leave assets remote and never need egress.
   beforeEach(function () {
-    spyOn(require("helper/airlock"), "fetch").and.returnValue(Promise.resolve({
+    spyOn(require("helper/egress"), "fetch").and.returnValue(Promise.resolve({
       ok: false,
       status: 404,
       headers: { get: () => null },

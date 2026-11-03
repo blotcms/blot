@@ -15,7 +15,7 @@ const { HttpsProxyAgent } = require("https-proxy-agent");
 //
 // Fail closed: in production a caller that hands us a user-controlled URL
 // must go through the proxy. If the proxy isn't configured (a deploy that
-// missed BLOT_AIRLOCK_PROXY_URL on some container) we throw here rather than
+// missed BLOT_EGRESS_PROXY_URL on some container) we throw here rather than
 // letting the caller fall back to fetching the URL directly with no SSRF
 // protection. The individual operation fails and its caller degrades
 // gracefully (a post builds without the image, a domain check errors) - the
@@ -23,11 +23,11 @@ const { HttpsProxyAgent } = require("https-proxy-agent");
 // required and fetches go direct.
 
 // True in production (see config/index.js). A unit deployed with
-// BLOT_SANDBOX=1 gets BLOT_AIRLOCK_PROXY_URL and the sandbox's browser; see
+// BLOT_SANDBOX=1 gets BLOT_EGRESS_PROXY_URL and the sandbox's browser; see
 // app/sandbox/README.md.
-const required = !!(config.airlock && config.airlock.required);
+const required = !!(config.egress && config.egress.required);
 
-const proxyUrl = (config.airlock && config.airlock.proxy) || null;
+const proxyUrl = (config.egress && config.egress.proxy) || null;
 
 const proxyConfigured = !!proxyUrl;
 const browserConfigured = !!(config.sandbox && config.sandbox.browser);
@@ -49,9 +49,9 @@ const proxyAgent = proxyUrl
 function assertProxyReady(label) {
   if (required && !proxyConfigured) {
     throw new Error(
-      `airlock: refusing to fetch a user-controlled URL${
+      `egress: refusing to fetch a user-controlled URL${
         label ? " (" + label + ")" : ""
-      } - BLOT_AIRLOCK_PROXY_URL is not set. See app/sandbox/README.md.`
+      } - BLOT_EGRESS_PROXY_URL is not set. See app/sandbox/README.md.`
     );
   }
 }
@@ -59,7 +59,7 @@ function assertProxyReady(label) {
 function assertBrowserReady(label) {
   if (required && !browserConfigured) {
     throw new Error(
-      `airlock: refusing to screenshot a user-controlled URL${
+      `egress: refusing to screenshot a user-controlled URL${
         label ? " (" + label + ")" : ""
       } - this unit has no sandbox (BLOT_SANDBOX). See app/sandbox/README.md.`
     );
@@ -67,12 +67,12 @@ function assertBrowserReady(label) {
 }
 
 // Drop-in replacement for require("node-fetch") at a user-controlled sink:
-// applies the airlock proxy agent and enforces fail-closed. Any options the
+// applies the egress proxy agent and enforces fail-closed. Any options the
 // caller passes (headers, signal, redirect, timeout, ...) are forwarded
 // unchanged; an explicit `agent` wins over the proxy agent.
 async function fetch(url, options = {}) {
-  assertProxyReady(options.airlockLabel);
-  const { airlockLabel, ...fetchOptions } = options;
+  assertProxyReady(options.egressLabel);
+  const { egressLabel, ...fetchOptions } = options;
   if (fetchOptions.agent === undefined && proxyAgent !== undefined) {
     fetchOptions.agent = proxyAgent;
   }
@@ -85,11 +85,11 @@ function abortError() {
   return e;
 }
 
-// GET a path from a fixed destination IP through the airlock, with an
+// GET a path from a fixed destination IP through the egress proxy, with an
 // explicit Host header. This exists for app/dashboard/site/domain/verify.js:
 // it resolves the domain itself (authoritative nameservers + public fallback
 // resolvers) and must make the FIRST connection to THAT IP - during DNS
-// propagation or split-horizon the airlock's own resolver can disagree, and
+// propagation or split-horizon the proxy jail's own resolver can disagree, and
 // a normal proxied fetch can't express this (http-proxy-agent rebuilds the
 // request-line URI from the Host header, so the IP is dropped and the proxy
 // re-resolves the name).

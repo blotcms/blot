@@ -23,6 +23,7 @@ const readHostMemory = require("./host-memory");
 const sweepGit = require("./sweep-git");
 const pruneTmp = require("./prune-tmp");
 const gitStoreMaintenance = require("./git-store-maintenance");
+const folderMirror = require("storage/folder/reconcile");
 
 // If any other disk has less than 2GB of space, we should notify the admin.
 // The data disk is watched by percentage instead (free-disk-space.js).
@@ -428,6 +429,31 @@ module.exports = function () {
         );
     } catch (err) {
       console.log(clfdate(), "Error: Reconciling scheduled entry alarms", err);
+    }
+  });
+
+  // Keeps the S3 copy of blog folders honest (#2258 Phase C), where the
+  // mirror's own writes can miss. Both do nothing unless BLOT_FOLDER_MIRROR is
+  // on and the bucket is set, and each runs on the one container which wins
+  // the lock.cron run, working one blog at a time (storage/folder/reconcile).
+  // The data directory is shared by the containers of a host, so any of them
+  // can do it. Should become scope "host" once BLOT_HOST_ID is set and there
+  // is more than one host. Not on the hour, when other jobs start.
+  console.log(clfdate(), "Scheduled hourly repair of blogs whose folder mirror write failed");
+  lock.cron("folder-mirror-repair", "25 * * * *", async function () {
+    try {
+      await folderMirror.reconcile({ mode: "dirty" });
+    } catch (err) {
+      console.log(clfdate(), "Error: Repairing the folder mirror", err);
+    }
+  });
+
+  console.log(clfdate(), "Scheduled daily check of the folder mirror");
+  lock.cron("folder-mirror-verify", { hour: 4, minute: 15 }, async function () {
+    try {
+      await folderMirror.reconcile({ mode: "full" });
+    } catch (err) {
+      console.log(clfdate(), "Error: Checking the folder mirror", err);
     }
   });
 

@@ -65,13 +65,19 @@ function forgetOwnWrites(client, cache) {
   });
 }
 
+// The client-side cache serves the blog, domain, handle and template reads
+// the render path makes on every request, including the cacheIDs the render
+// caches are keyed on. Kept on production evidence, see "Client-side
+// caching" in config/redis/README.md.
 // Pass { clientSideCache: false } for a client which never reads cacheable
 // keys (the pubsub subscriber), so Redis does not track anything for it.
 function createRedisClient({ clientSideCache: useCache = true } = {}) {
   const clientSideCache = useCache
     ? new AllowlistClientSideCache({
         ttl: 0,
-        maxEntries: 3333,
+        // Room for every allowlisted class (models/redis-cache) at once:
+        // template URL patterns add about one entry per template in use
+        maxEntries: 5000,
         evictPolicy: "LRU",
       })
     : undefined;

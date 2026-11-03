@@ -42,7 +42,7 @@ const REQUIRED_ENV = [
   "BLOT_STRIPE_WEBHOOK_SECRET",
   // the sandbox: production has no other browser or egress proxy
   "BLOT_SANDBOX_SOCKET",
-  "BLOT_AIRLOCK_PROXY_URL",
+  "BLOT_EGRESS_PROXY_URL",
 ];
 
 // Where this process serves: 127.0.0.1:<port>, or its socket when it has no
@@ -241,13 +241,31 @@ async function sandboxBrowserWorks() {
   return `Chromium started and ${metadata.meta.error}`;
 }
 
+// The fetch-image job, whenever there is a sandbox: its jail starts in its
+// cgroup, and the egress filter refuses the metadata address. A jail that
+// reaches it, or times out on it, is not one to go live with.
+async function sandboxFetchWorks() {
+  if (!process.env.BLOT_SANDBOX_SOCKET) return "skipped, BLOT_SANDBOX_SOCKET is not set";
+
+  const sandbox = require("../../../app/sandbox");
+  const { meta } = await sandbox.run(
+    "fetch-image",
+    { url: "http://169.254.169.254/latest/meta-data/" },
+    Buffer.alloc(0)
+  );
+  if (!/^(ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|EACCES|EPERM)$/.test(meta.code || "")) {
+    throw new Error(`the metadata address was not refused: ${meta.error || "it answered"}`);
+  }
+  return `the fetch jail started and ${meta.code}`;
+}
+
 // The proxy jail, whenever there is a sandbox. A forward-proxy request for the
 // metadata address must not get through: tinyproxy answers 500 when the filter
 // refuses it, which also proves the proxy answers at all.
 async function sandboxProxyWorks({ config }) {
   if (!process.env.BLOT_SANDBOX_SOCKET) return "skipped, BLOT_SANDBOX_SOCKET is not set";
 
-  const { hostname, port } = new URL(config.airlock.proxy);
+  const { hostname, port } = new URL(config.egress.proxy);
   const metadata = "http://169.254.169.254/latest/meta-data/";
   const res = await request({
     url: metadata,
@@ -255,7 +273,7 @@ async function sandboxProxyWorks({ config }) {
     options: { hostname, port, path: metadata },
   });
   if (res.status !== 500) throw new Error(`the metadata address answered ${res.status} through the proxy`);
-  return `the metadata address was refused through ${config.airlock.proxy}`;
+  return `the metadata address was refused through ${config.egress.proxy}`;
 }
 
 // With the sandbox on, Node runs under one seccomp filter more than this process,
@@ -333,6 +351,7 @@ module.exports = [
   { name: "sharp", run: sharpWorks },
   { name: "sandbox", run: sandboxWorks },
   { name: "sandbox browser", run: sandboxBrowserWorks },
+  { name: "sandbox fetch", run: sandboxFetchWorks },
   { name: "node filter", run: nodeFilter },
   { name: "required environment", run: requiredEnv },
   { name: "sandbox proxy", run: sandboxProxyWorks },

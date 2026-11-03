@@ -7,15 +7,32 @@ const CLASSES = [
   ["domain", /^domain:/],
   ["handle", /^handle:/],
   ["template", /^template:[^:]+:[^:]+:info$/], // template IDs are owner:slug
+  ["patterns", /^template:[^:]+:[^:]+:url_patterns$/],
+  ["owners", /^template:owned_by:[^:]+$/],
+  ["session", /^sess:/],
+  ["user", /^user:[^:]+:info$/],
   ["url", /^blog:[^:]+:url:/],
   ["entry", /^blog:[^:]+:entry:/],
   ["tags", /^blog:[^:]+:tags:/],
   ["list", /^blog:/],
 ];
 
-// Small, hot keys read on nearly every request. Entries and URLs are left out
-// because a big blog (or a crawler) would flood the cache and evict these.
-const ALLOWED = new Set(["info", "domain", "handle", "template"]);
+// Small, hot keys read on nearly every blog or dashboard request, rarely
+// written, and no more numerous than blogs, templates, users or sessions.
+// Keys named after a request path (entries, entry and template URLs,
+// redirects) are left out: crawlers and scanners would flood the cache and
+// evict these, and Redis tracks every key read, even a missing one, until it
+// is written, so they would also refill the server's tracking table.
+const ALLOWED = new Set([
+  "info",
+  "domain",
+  "handle",
+  "template",
+  "patterns",
+  "owners",
+  "session",
+  "user",
+]);
 
 function classify(key) {
   key = String(key);

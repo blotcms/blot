@@ -75,7 +75,7 @@ module.exports = async function retrieve(req, res, needed) {
         if (err && err.code === "BADTEMPLATE") throw err;
         // Known trade-off: /, /tagged/:tag and /search used to have their
         // own try/catch -> next(err), so any fetch error (a Redis hiccup in
-        // fetchTaggedEntries/Entry.get, a bug in Entry.search, ...) rendered
+        // Tags.tagged/Entry.get, a bug in Entry.search, ...) rendered
         // the error.html page. Now that those routes fetch through the same
         // retrieve pass as every other local, an error here without a
         // statusCode is just logged and the page renders as if that local

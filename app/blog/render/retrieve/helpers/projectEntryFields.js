@@ -93,7 +93,19 @@ function projectEntryFields(entries, retrieve, keys) {
   return entries;
 }
 
+// The heavy fields a model's cached read must keep for these aliases: the
+// ones projectEntryFields would leave, so the model strips the rest before
+// storing. undefined (keep them all) when projection would be skipped.
+function heavyFieldsToKeep(retrieve, keys) {
+  var fields = resolveFields(retrieve, Array.isArray(keys) ? keys : [keys]);
+  if (!fields) return undefined;
+  return HEAVY_FIELDS.filter(function (field) {
+    return fields[field];
+  });
+}
+
 projectEntryFields.HEAVY_FIELDS = HEAVY_FIELDS;
+projectEntryFields.heavyFieldsToKeep = heavyFieldsToKeep;
 projectEntryFields.resolveFields = resolveFields;
 
 module.exports = projectEntryFields;

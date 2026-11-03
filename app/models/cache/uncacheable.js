@@ -5,7 +5,8 @@
 // but still have to render). Throwing this instead rejects cache.fetch()
 // for the fetchMethod call and every request coalesced onto it, without
 // writing anything to the cache; each catch block unwraps .payload to get
-// the real value back. See recent_entries.js, latest_entry.js, tagged.js.
+// the real value back. See models/entries/cachedRecent.js,
+// models/tags/cachedTagged.js.
 class Uncacheable extends Error {
   constructor(payload) {
     super("uncacheable fetch result");

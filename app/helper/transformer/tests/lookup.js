@@ -392,7 +392,7 @@ describe("transformer", function () {
     var transform = jasmine.createSpy().and.callFake(test.transform);
 
     // A compressible body: the gzip Content-Length is far smaller than the
-    // bytes node-fetch yields after decoding, which must not read as a
+    // bytes the fetch-image job reads after decoding, which must not read as a
     // truncated download.
     test.queueRemoteResponse({
       gzip: true,
