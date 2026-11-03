@@ -1,6 +1,7 @@
 // The contract of storage/folder, run against both backends: the local disk,
-// which every blog uses, and S3 (MinIO here), which is built but not yet
-// selected (#2258 Phase C). Behaviour only one backend has (symlinks and the
+// which every blog uses by default, and S3 (MinIO here), and once more for a
+// blog which config.folder_primary puts on S3 (#2258 Phase D), so through
+// the per-blog routing and with its copy to disk. Behaviour only one backend has (symlinks and the
 // on-disk place of a file locally; objects, markers and the index on S3) is
 // specified after the shared contract, under that backend.
 describe("storage/folder", function () {
@@ -1107,7 +1108,7 @@ describe("storage/folder", function () {
     });
 
     afterAll(function () {
-      folder.useBackend("local");
+      folder.useBackend();
     });
 
     contract();
@@ -1500,5 +1501,39 @@ describe("storage/folder", function () {
         expect(await fs.readFile(await folder.ensureLocal(this.blog.id, "/a.txt"), "utf8")).toEqual("x");
       });
     });
+  });
+
+  // Routed per blog, as the app does it: the flag names the blog, so every
+  // call goes to S3 and every change is copied to disk too. The guard's
+  // checks (an index, a clean mirror, the client) have their own specs in
+  // folder-primary.js; here the blog starts empty, with no index, so the
+  // guard is stood in for.
+  describe("for a blog on S3 by its flag", function () {
+    var config = require("config");
+    var client = require("models/client");
+    var primary = require("storage/folder/primary");
+
+    require("./minio")();
+
+    var saved;
+
+    beforeEach(function () {
+      saved = config.folder_primary;
+      config.folder_primary = this.blog.id;
+      spyOn(primary, "usesS3").and.callFake(function () {
+        return Promise.resolve(true);
+      });
+    });
+
+    afterEach(async function () {
+      config.folder_primary = saved;
+      await client.sRem(primary.DIRTY_KEY, this.blog.id);
+    });
+
+    it("goes to S3", async function () {
+      expect(await folder.backendFor(this.blog.id)).toEqual("s3");
+    });
+
+    contract();
   });
 });

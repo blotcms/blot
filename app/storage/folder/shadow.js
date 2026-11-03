@@ -626,8 +626,9 @@ function start(op, args, first) {
   }
 }
 
-// Called by index.js in place of call(...args) for each read it shadows,
-// while the local backend is current. Returns exactly what call returned.
+// Called by index.js in place of call(...args) for each read it sends to
+// the local backend, so never for a blog on S3 (./primary.js), whose reads
+// have no disk answer to check. Returns exactly what call returned.
 function shadow(op, call, args) {
   if (!pick(blogOf(op, args))) return call.apply(null, args);
 

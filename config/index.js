@@ -275,6 +275,20 @@ module.exports = {
   // Read on every write, so it can be changed in place by specs.
   folder_mirror: process.env.BLOT_FOLDER_MIRROR || "off",
 
+  // Which blogs' folders live in S3 rather than on disk
+  // (app/storage/folder/primary.js, #2258 Phase D), in the same form: "off"
+  // (the default, every blog on disk), "all", or blog IDs separated by
+  // commas. A named blog moves to S3 only once S3 has a copy of it which is
+  // not behind its disk, and only while the mirror above covers it (so S3 is
+  // kept in step whenever the blog is on disk): the mirror and
+  // scripts/storage/backfill-folder.js make that copy, so name a blog here
+  // only once it is mirrored and backfilled (in development, set
+  // BLOT_FOLDER_MIRROR too). Blogs on the
+  // Local, Git or Google Drive client stay on disk. Changes to a blog on S3
+  // are copied to disk, so unsetting this rolls it back (restore its disk
+  // copy first if it is dirty: see app/storage/README). Read on every call.
+  folder_primary: process.env.BLOT_FOLDER_PRIMARY || "off",
+
   // Shadow reads (app/storage/folder/shadow.js, #2258 Phase C): for the
   // mirrored blogs above, this fraction of folder reads is repeated against
   // the S3 backend once the disk has answered, and the two results compared

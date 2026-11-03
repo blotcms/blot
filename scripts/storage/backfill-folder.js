@@ -13,7 +13,8 @@
 //   --verify           change nothing; exit non-zero if anything differs
 //   --blog <blogID>    only this blog
 //   --from <blogID>    start at this blog (inclusive, in ID order), to resume
-//   --dirty            only the blogs in the mirror's dirty set
+//   --dirty            only the blogs in the mirror's dirty set, or whose
+//                      disk copy is behind S3
 //   --concurrency <n>  blogs at once (default 4); a blog's own changes are
 //                      made one at a time, since models/file expects a single
 //                      writer per blog
@@ -28,6 +29,16 @@
 //   corrected in the index. The upload keeps the file's modified time.
 // - writes a marker for every empty directory on disk which has none;
 // - deletes objects and index records for paths which are not on disk.
+//
+// A blog on S3 (config.folder_primary, BLOT_FOLDER_PRIMARY, #2258 Phase D)
+// is done the other way round: S3 is its source of truth, so its copy on
+// disk, kept for rolling back, is brought in line with S3 (its index) by the
+// same rules, and nothing in S3 changes. That is how to restore a blog's disk
+// before taking it off S3. A blog named for S3 which is still on disk (no
+// copy in S3 yet) is backfilled as usual; it is marked dirty while that runs,
+// so it moves to S3 only once its copy is complete. A blog off S3 whose disk
+// copy is marked as behind S3 is refused: put it back on S3 and run this to
+// restore its disk first. --dirty covers both dirty sets.
 //
 // A blog named by --blog or --dirty which no longer exists (its deletion
 // could not delete its copy) has its whole copy in S3 and any index removed,
@@ -55,9 +66,18 @@ const s3 = require("storage/s3");
 const client = require("models/client");
 const Blog = require("models/blog");
 const { DIRTY_KEY } = require("storage/folder/mirror");
+const primary = require("storage/folder/primary");
 const { createPool } = require("storage/util");
 const hold = require("sync/hold");
-const { backfillBlog, removeDeletedBlog, newStats, differences, MAX_LISTED_ERRORS } = require("storage/folder/reconcile");
+const {
+  backfillBlog,
+  compareBlog,
+  dirtyKeyOf,
+  removeDeletedBlog,
+  newStats,
+  differences,
+  MAX_LISTED_ERRORS,
+} = require("storage/folder/reconcile");
 
 function usage(message) {
   if (message) console.error(message + "\n");
@@ -116,7 +136,7 @@ async function blogIDs(options) {
   let ids;
 
   if (options.blog) ids = [options.blog];
-  else if (options.dirty) ids = await client.sMembers(DIRTY_KEY);
+  else if (options.dirty) ids = Array.from(new Set((await client.sMembers(DIRTY_KEY)).concat(await client.sMembers(primary.DIRTY_KEY))));
   else ids = await promisify(Blog.getAllIDs)();
 
   ids = ids.slice().sort();
@@ -153,6 +173,7 @@ async function run(options) {
 
   async function one(blogID) {
     let stats;
+    let direction;
 
     try {
       // Only --blog and --dirty can name a blog which no longer exists
@@ -166,19 +187,22 @@ async function run(options) {
       }
 
       const work = async function () {
-        const result = await backfillBlog(blogID, { apply: apply, log: log });
+        const result = await compareBlog(blogID, { apply: apply, log: log });
 
-        // The copy now matches the disk, so the blog no longer needs repair.
-        // Cleared before the lock is released, so a mirror failure in a
-        // sync which runs after this backfill is never erased.
-        if (apply && !result.errors) await client.sRem(DIRTY_KEY, blogID);
+        direction = result.direction;
 
-        return result;
+        // The copy now matches its source, so the blog no longer needs
+        // repair. Cleared before the lock is released, so a mirror (or disk
+        // copy) failure in a sync which runs after this backfill is never
+        // erased.
+        if (apply && !result.stats.errors) await client.sRem(dirtyKeyOf(result.direction), blogID);
+
+        return result.stats;
       };
 
       stats = locked ? await hold(blogID, work) : await work();
     } catch (err) {
-      if (err.code === "ELOCKED" || err.code === "ESKIPPED") {
+      if (err.code === "ELOCKED" || err.code === "ESKIPPED" || err.code === "ECONFLICT") {
         totals.skipped.push(blogID);
         log("[backfill-folder] " + blogID + " skipped: " + err.message);
       } else {
@@ -203,7 +227,7 @@ async function run(options) {
 
     if (differences(stats) || stats.errors) {
       log(
-        "[backfill-folder] " + blogID,
+        "[backfill-folder] " + blogID + (direction === "disk" ? " (on S3: its disk copy)" : ""),
         "files=" + stats.files,
         "dirs=" + stats.dirs,
         (apply ? "uploaded=" : "to-upload=") + stats.uploads + " (" + formatBytes(stats.bytes) + ")",
@@ -250,7 +274,7 @@ function summarise(totals, options) {
 
   if (totals.skipped.length) {
     lines.push("");
-    lines.push(totals.skipped.length + " blogs skipped (locked, or no folder on disk), retry each with --blog:");
+    lines.push(totals.skipped.length + " blogs skipped (locked, no folder on disk, or a disk copy behind S3), retry each with --blog:");
     for (const id of totals.skipped) lines.push("  " + id);
   }
 
