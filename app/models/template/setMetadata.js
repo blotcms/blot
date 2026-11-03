@@ -1,3 +1,4 @@
+var _ = require("lodash");
 var key = require("./key");
 var client = require("models/client");
 var getMetadata = require("./getMetadata");
@@ -22,8 +23,10 @@ module.exports = function setMetadata(id, updates, callback) {
     var changes;
     metadata = metadata || {};
 
+    // By value: readFromFolder passes a fresh errors object on every sync,
+    // which by identity would always count as a change and purge the blog
     for (var i in updates) {
-      if (metadata[i] !== updates[i]) changes = true;
+      if (!_.isEqual(metadata[i], updates[i])) changes = true;
       metadata[i] = updates[i];
     }
 

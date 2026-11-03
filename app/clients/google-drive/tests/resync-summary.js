@@ -38,7 +38,11 @@ function harness(files) {
         setApplied: async () => {},
       }),
     },
-    "../util/localFingerprint": async (blogID, path) => "local-" + path,
+    "../util/localState": {
+      stamp: require("../util/localState").stamp,
+      unchanged: async () => null,
+      stateOf: async () => ({ size: 1, modified: 1000, sha1: "sha1" }),
+    },
     "../util/download": async (blog, drive, path, remote) => {
       state.downloads.push(remote.id);
       if (state.downloadError) throw state.downloadError;
@@ -135,7 +139,7 @@ describe("google-drive sync() resync summary", function () {
     const h = harness([file({ modifiedTime: ago(60 * 60 * 1000) })]);
     h.downloadResult = {
       updated: false,
-      verifiedContent: { checksum: "md5", fingerprint: "f" },
+      verifiedContent: { checksum: "md5", sha1: "sha1", size: 1, modified: 1000 },
     };
 
     const summary = await h.run();

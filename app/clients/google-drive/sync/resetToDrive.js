@@ -2,7 +2,7 @@ const folder = require("storage/folder");
 const { join } = require("path");
 const clfdate = require("helper/clfdate");
 const database = require("../database");
-const { sameFingerprint } = require("../util/contentFingerprint");
+const localState = require("../util/localState");
 const createDriveClient = require("../serviceAccount/createDriveClient");
 const CheckWeCanContinue = require("../util/checkWeCanContinue");
 const driveReaddir = require("./util/driveReaddir");
@@ -15,18 +15,20 @@ const truncateToSecond = require("./util/truncateToSecond");
 // that; an id we've never recorded (or don't yet know about) falls back to
 // comparing the local file's mtime, matching the previous behaviour.
 // Trust the applied record only while the local file is unchanged since
-// Blot wrote it; otherwise fall back to the local mtime.
-const isRemoteModifiedTimeCurrent = (
+// Blot wrote it (util/localState.js); otherwise fall back to the local mtime.
+// entry is the file's listing from localReaddir.
+const isRemoteModifiedTimeCurrent = async (
+  blogID,
+  path,
   priorModifiedTimeById,
   id,
   remoteModifiedTime,
-  localModifiedTime,
-  localFingerprint
+  entry
 ) => {
   const applied = priorModifiedTimeById.get(id);
-  return applied && sameFingerprint(applied.fingerprint, localFingerprint)
+  return applied && (await localState.unchanged(blogID, path, applied, entry))
     ? truncateToSecond(applied.modifiedTime) === truncateToSecond(remoteModifiedTime)
-    : truncateToSecond(localModifiedTime) === truncateToSecond(remoteModifiedTime);
+    : truncateToSecond(entry.modifiedTime) === truncateToSecond(remoteModifiedTime);
 };
 
 module.exports = async (blogID, publish, options = {}) => {
@@ -82,7 +84,8 @@ module.exports = async (blogID, publish, options = {}) => {
       }
     }
 
-    for (const { name, isDirectory, modifiedTime, size, fingerprint } of localContents) {
+    for (const entry of localContents) {
+      const { name, isDirectory, modifiedTime, size } = entry;
       const path = join(dir, name);
 
       if (shouldIgnoreFile(path)) continue;
@@ -121,12 +124,13 @@ module.exports = async (blogID, publish, options = {}) => {
         const identicalOnRemote =
           existsOnRemote &&
           (isGoogleAppFile
-            ? isRemoteModifiedTimeCurrent(
+            ? await isRemoteModifiedTimeCurrent(
+                blogID,
+                path,
                 priorModifiedTimeById,
                 existsOnRemote.id,
                 existsOnRemote.modifiedTime,
-                modifiedTime,
-                fingerprint
+                entry
               )
             : existsOnRemote.size === size);
 
@@ -189,7 +193,8 @@ const countTransferItems = async (drive, blogID, dir, dirId, priorModifiedTimeBy
     localReaddir(blogID, dir),
   ]);
 
-  for (const { name, isDirectory, modifiedTime, size, fingerprint } of localContents) {
+  for (const entry of localContents) {
+    const { name, isDirectory, size } = entry;
     const path = join(dir, name);
 
     if (shouldIgnoreFile(path)) continue;
@@ -221,12 +226,13 @@ const countTransferItems = async (drive, blogID, dir, dirId, priorModifiedTimeBy
     const identicalOnRemote =
       existsOnRemote &&
       (isGoogleAppFile
-        ? isRemoteModifiedTimeCurrent(
+        ? await isRemoteModifiedTimeCurrent(
+            blogID,
+            path,
             priorModifiedTimeById,
             existsOnRemote.id,
             existsOnRemote.modifiedTime,
-            modifiedTime,
-            fingerprint
+            entry
           )
         : existsOnRemote.size === size);
 

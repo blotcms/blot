@@ -420,7 +420,7 @@ phase_replicate() {
     die "$NEW replicates from $(info_field "$info" master_host), not $primary. promote.sh needs the old host's own address"
   else
     say "Replicating $NEW from $primary"
-    # From redis/launch.sh: a full sync under write load overflows 6.2's default
+    # A full sync under write load overflows 6.2's default
     # replica output buffer, and the sync starts over, again and again.
     act on "$NEW" "redis6-cli -h $primary CONFIG SET client-output-buffer-limit 'replica 1073741824 536870912 120' | grep -qx OK"
     act on "$NEW" "redis6-cli REPLICAOF $primary 6379 | grep -qx OK"

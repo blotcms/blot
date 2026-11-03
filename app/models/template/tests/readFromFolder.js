@@ -52,6 +52,33 @@ describe("template", function () {
     });
   });
 
+  it("leaves the blog's cache alone when a sync reads an unchanged template", async function () {
+    var { promisify } = require("util");
+    var read = promisify(readFromFolder);
+    var getMetadata = promisify(require("../index").getMetadata);
+    var getBlog = promisify(require("models/blog").get);
+    var setBlog = promisify(require("models/blog").set);
+    var makeID = require("../util/makeID");
+    var id = makeID(this.blog.id, this.blog.handle);
+
+    fs.outputFileSync(this.tmp + "/entries.html", "{{title}}");
+    await read(this.blog.id, this.dir);
+    await setBlog(this.blog.id, { template: id });
+
+    var blogCacheID = (await getBlog({ id: this.blog.id })).cacheID;
+    var templateCacheID = (await getMetadata(id)).cacheID;
+
+    await read(this.blog.id, this.dir);
+
+    expect((await getBlog({ id: this.blog.id })).cacheID).toEqual(blogCacheID);
+    expect((await getMetadata(id)).cacheID).toEqual(templateCacheID);
+
+    fs.outputFileSync(this.tmp + "/entries.html", "{{title}}!");
+    await read(this.blog.id, this.dir);
+
+    expect((await getBlog({ id: this.blog.id })).cacheID).not.toEqual(blogCacheID);
+  });
+
   it("explains what is wrong with an invalid package.json", function (done) {
     fs.outputFileSync(this.tmp + "/package.json", '{\n  "name": "Example",\n}');
 

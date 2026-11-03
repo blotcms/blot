@@ -16,8 +16,9 @@ module.exports = function contentFingerprint(stat) {
 // Treating those as mismatches would re-download every file of every Drive
 // blog, so an old-form record matches when its size and mtime still match;
 // it is rewritten in the new form when its file is next downloaded. Falsy
-// values never match. Drop the old-form branch once #2258's index replaces
-// the fingerprint.
+// values never match. New records describe the file by storage/folder's size
+// and modified time instead (./localState.js); drop this, and
+// ./localFingerprint.js, once no record holds a fingerprint.
 module.exports.sameFingerprint = function sameFingerprint(stored, current) {
   if (!stored || !current) return false;
   if (stored === current) return true;
