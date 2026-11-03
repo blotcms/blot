@@ -236,7 +236,9 @@ describe("git store served: reads on the normal route", function () {
     );
 
     expect(shallow).not.toBe(null);
-    expect(shallow.stderr).toContain("remote error");
+    // The advertisement offers no shallow, so git refuses before asking; a
+    // client which asks anyway is sent an ERR packet ("remote error")
+    expect(shallow.stderr).toMatch(/does not support shallow|remote error/);
   });
 
   it("says so when the store has no copy, and never serves an empty repository", async function () {
