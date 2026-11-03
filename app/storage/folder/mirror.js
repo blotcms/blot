@@ -292,9 +292,15 @@ var mirror = copier({
     if (enabledFor(blogID)) return false;
 
     // The disk changes without S3, so a copy which was complete is not any
-    // more: mirroring the blog again must not promote it until a backfill
+    // more: mirroring the blog again must not promote it until a backfill.
+    // With the mirror off for every blog no copy is complete, and this must
+    // not open a Redis connection (tools and specs run storage/folder in
+    // processes which exit when their work is done).
     if (op !== "removeAll") {
-      await redis().sRem(COMPLETE_KEY, blogID).catch(function () {});
+      var setting = String(config.folder_mirror || "").trim();
+
+      if (setting && setting !== "off") await redis().sRem(COMPLETE_KEY, blogID).catch(function () {});
+
       return true;
     }
 
