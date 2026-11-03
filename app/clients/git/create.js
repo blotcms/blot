@@ -153,10 +153,19 @@ async function createRepository(blog, folder) {
     report(folder, "Creating token");
     await prepareMetadata(blog, { local: false });
 
-    const commit = await require("./served/create")(blog, folder, bareDirectory);
+    const made = await require("./served/create")(blog, folder, bareDirectory);
 
-    await setApplied(blog.id, commit);
-    await setStatus(blog.owner, "createComplete");
+    // Until both are recorded the store's copy is still the setup's to take
+    // back, so a failure here leaves the store empty for a retry; the outer
+    // catch removes EBS's as for any failed create
+    try {
+      await new Promise((resolve, reject) => database.setApplied(blog.id, made.commit, (err) => (err ? reject(err) : resolve())));
+      await setStatus(blog.owner, "createComplete");
+    } catch (err) {
+      await made.rollback();
+      throw err;
+    }
+
     console.log(clfdate() + " Git: create: done (git store)");
     await delay(1000);
     folder.status("Repository created successfully");

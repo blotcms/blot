@@ -103,6 +103,33 @@ describe("git store served: new-folder setup", function () {
     await local.expectSynced();
   });
 
+  it("takes back the store's copy when recording the setup fails, so a retry works", async function () {
+    await fs.outputFile(this.blogDirectory + "/first.txt", "Hello");
+
+    var setApplied = database.setApplied;
+    var failed = false;
+
+    spyOn(database, "setApplied").and.callFake(function (blogID, commit, callback) {
+      if (failed) return setApplied.apply(database, arguments);
+      failed = true;
+      callback(new Error("Redis is down"));
+    });
+
+    var first = await setClientToGit(this.user, this.blog, this.server.port).then(
+      () => null,
+      (err) => err
+    );
+
+    expect(first).not.toBe(null);
+    expect(manifest.isEmpty(await manifest.read(this.stores[this.blog.id]))).toBe(true);
+    expect(await fs.pathExists(repo.directory(this.blog.handle))).toBe(false);
+
+    var local = await connect(this);
+
+    expect((await local.read("/first.txt")).toString()).toBe("Hello");
+    expect((await manifest.read(this.stores[this.blog.id])).refs["refs/heads/master"]).toBe(bareGit(this, ["rev-parse", "master"]).trim());
+  });
+
   it("removes what it made on both sides when it fails", async function () {
     await fs.outputFile(this.blogDirectory + "/first.txt", "Hello");
 

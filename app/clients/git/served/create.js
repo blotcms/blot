@@ -31,9 +31,11 @@
 // budget, as a backfill's import is: a folder can be larger than the cache.
 // store/leftovers.js clears what a killed setup leaves.
 //
-// Resolves with the commit. On failure the store's copy is removed if this
-// made it (not one that was already there, which importRepo refuses), and
-// the EBS repository is left for create.js to remove.
+// Resolves with { commit, rollback }. An import whose outcome is unknown goes
+// on only if a read finds the commit on master. On failure the store's copy
+// is removed if this setup may have made it (not one that was already there,
+// which importRepo refuses), and the EBS repository is left for create.js to
+// remove; create.js calls rollback() if it then fails to record the setup.
 const fs = require("fs-extra");
 const path = require("path");
 // Called through the module, so a spec can make one command fail
@@ -44,6 +46,7 @@ const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const limiter = require("../limiter");
 const importRepo = require("../store/import");
 const removeRepo = require("../store/remove");
+const manifest = require("../store/manifest");
 const context = require("./context");
 const log = require("./log");
 
@@ -200,6 +203,28 @@ async function fastImport(blogID, files, gitDir, folder) {
   return (await git(["rev-parse", "--verify", "refs/heads/master^{commit}"], { env: { GIT_DIR: gitDir } })).toString().trim();
 }
 
+// Whether master in the store's newest manifest is the commit. A read which
+// fails says nothing, so it is no.
+async function landed(store, commit) {
+  try {
+    const current = await manifest.read(store);
+    return current.refs["refs/heads/master"] === commit;
+  } catch (err) {
+    return false;
+  }
+}
+
+// Takes back the store copy this setup made: removeRepo's tombstone, so the
+// numbering of manifests never starts again. A failure is logged; the daily
+// verifier sees a store copy EBS does not have.
+async function removeCopy(blogID) {
+  try {
+    await removeRepo({ store: context.objectStoreFor(blogID) });
+  } catch (err) {
+    log({ blog: blogID, op: "create", outcome: "error", detail: "could not remove the store copy: " + ((err && (err.code || err.message)) || "error") });
+  }
+}
+
 // folder is the sync lock's ({ status, log }); ebsDirectory the empty
 // directory create.js made for the bare repository
 async function create(blog, folder, ebsDirectory) {
@@ -226,18 +251,31 @@ async function create(blog, folder, ebsDirectory) {
     const commit = await fastImport(blogID, files, gitDir, folder);
 
     folder.status("Saving your repository");
-    await importRepo({ store, cache, lock: context.refLock(blogID), gitDir, scratchDir: base, pack: { "pack.window": "0" }, gate: limiter.gate("background") });
+
+    // From here on, whatever is in the store is this setup's: importRepo
+    // refuses a store which is not empty
     imported = true;
+    const result = await importRepo({ store, cache, lock: context.refLock(blogID), gitDir, scratchDir: base, pack: { "pack.window": "0" }, gate: limiter.gate("background") });
+
+    // The swap may or may not have landed: only a read that finds this
+    // commit on master lets the setup go on
+    if (result.outcome !== "imported" && !(await landed(store, commit))) {
+      throw Object.assign(new Error("Blot could not confirm that the repository was saved"), { code: "EUNKNOWN" });
+    }
 
     await git(["init", "-q", "--bare", "--initial-branch=master", ebsDirectory]);
     await git(["fetch", "-q", "--no-tags", gitDir, "refs/heads/master:refs/heads/master"], { env: { GIT_DIR: ebsDirectory } });
 
     log({ blog: blogID, op: "create", outcome: "ok", ms: Date.now() - started, files: files.length, ignored: ignored.size });
-    return commit;
+
+    // The store's copy stays this setup's to take back until create.js has
+    // recorded the setup (the applied pointer, the status): a failure there
+    // calls rollback, so a retry finds the store empty
+    return { commit, rollback: () => removeCopy(blogID) };
   } catch (err) {
     log({ blog: blogID, op: "create", outcome: "error", ms: Date.now() - started, detail: (err && (err.code || err.message)) || "error" });
 
-    if (imported) await removeRepo({ store: context.objectStoreFor(blogID) }).catch(() => {});
+    if (imported) await removeCopy(blogID);
     throw err;
   } finally {
     await fs.remove(dir).catch(() => {});
