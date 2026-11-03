@@ -594,10 +594,17 @@ async function check(context, commands) {
     if (updates[i].ref !== MASTER) continue;
 
     try {
-      await validateTree(
-        Git(context.directory, { env: quarantineEnv(context), lane: "interactive" }),
-        updates[i].new
-      );
+      // One place in the interactive lane, recorded as a wait, which the
+      // commands validateTree runs reuse
+      await waitingFor(context, function (start) {
+        return limiter.run("interactive", function () {
+          start();
+          return validateTree(
+            Git(context.directory, { env: quarantineEnv(context), lane: "interactive" }),
+            updates[i].new
+          );
+        });
+      });
     } catch (err) {
       problems[MASTER] = oneLine(err.message);
     }
