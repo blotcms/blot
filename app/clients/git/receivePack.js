@@ -1108,6 +1108,8 @@ module.exports = {
   refusal: refusal,
   formatResponse: formatResponse,
   CAPABILITIES: CAPABILITIES,
+  capability: capability,
+  parseSize: parseSize,
   noCache: noCache,
   pktLine: pktLine,
 };

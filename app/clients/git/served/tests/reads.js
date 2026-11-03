@@ -11,7 +11,6 @@ describe("git store served: reads on the normal route", function () {
   var repo = require("clients/git/repo");
   var shadow = require("clients/git/shadow");
   var { manifest } = require("clients/git/store");
-  var { REFUSED } = require("clients/git/served/receive");
 
   setup();
 
@@ -184,42 +183,6 @@ describe("git store served: reads on the normal route", function () {
     expect(served.status).toBe(200);
     expect(served.body).toBe(ebs.body);
     expect(served.body).toBe("ref: refs/heads/master\n");
-  });
-
-  it("refuses a push with a message, and moves nothing on either side", async function () {
-    await this.local.writeAndPush("/a.txt", "A");
-    await mirrorAndSwitch(this);
-
-    var master = await this.local.head();
-    var store = this.stores[this.blog.id];
-    var before = await keys(store);
-
-    await this.local.commitFiles({ "/b.txt": "B" });
-    var pushed = await this.local.try(["push", "origin", "master"]);
-
-    expect(pushed.code).not.toBe(0);
-    expect(pushed.stderr).toContain(REFUSED);
-    expect(pushed.stderr).toContain("[remote rejected]");
-
-    expect(setup.ebsRefs(this.gitDir)["refs/heads/master"]).toBe(master);
-    expect(await keys(store)).toEqual(before);
-    expect(this.shadowLines("push").length).toBe(0);
-
-    await lineMatching(this, /\[git-store-served\] .* op=push outcome=refused /);
-
-    // Git's 0000 probe gets the empty answer git expects
-    var probe = await request(this, "POST", "/git-receive-pack", {
-      body: "0000",
-      headers: { "Content-Type": "application/x-git-receive-pack-request" },
-    });
-    expect(probe.status).toBe(200);
-    expect(probe.body).toBe("");
-
-    var bad = await request(this, "POST", "/git-receive-pack", {
-      body: "not git",
-      headers: { "Content-Type": "application/x-git-receive-pack-request" },
-    });
-    expect(bad.status).toBe(400);
   });
 
   it("refuses a shallow clone with a remote error", async function () {

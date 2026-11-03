@@ -95,7 +95,9 @@ function handleSmartHttp(req, res, blogID, blog) {
   // entirely: EBS is not read (#2259)
   if (servedSwitch.enabled(blogID)) {
     return require("./served/reads").handle(req, res, blog || { id: blogID }, {
-      receive: require("./served/receive").handle,
+      receive: function (req, res, blog) {
+        return require("./served/receive").handle(req, res, blog, receiveHooks(blogID));
+      },
     });
   }
 
