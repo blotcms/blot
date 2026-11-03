@@ -1110,6 +1110,8 @@ module.exports = {
   CAPABILITIES: CAPABILITIES,
   capability: capability,
   parseSize: parseSize,
+  // Moves a pack out of quarantine, { quarantine, directory }
+  migrate: migrate,
   noCache: noCache,
   pktLine: pktLine,
 };

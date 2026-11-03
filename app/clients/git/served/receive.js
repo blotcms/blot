@@ -18,10 +18,12 @@
 //    tried again after another writer won uses the same alarm. If the push
 //    then does not land the alarm is cancelled (hooks.abandoned). So a push
 //    the client is told succeeded is never lost to a crash.
-// 4. ok: the sync starts (hooks.accepted) and a compaction is asked for
-//    (./upkeep.js). refused or failed: reported as on EBS. unknown: reported
-//    as neither (the store tells the user to fetch before pushing again), and
-//    the alarm is kept, so a sync then applies whatever master is.
+// 4. ok: the sync starts (hooks.accepted), a compaction is asked for
+//    (./upkeep.js) and the EBS fallback queued (./fallback.js). refused or
+//    failed: reported as on EBS. unknown: reported as neither (the store
+//    tells the user to fetch before pushing again), the alarm is kept, so a
+//    sync then applies whatever master is, and the fallback is queued, which
+//    reads the store as it is.
 //
 // One line per push:
 //
@@ -36,6 +38,7 @@ const receive = require("../store/receive");
 const createResponse = require("../store/sideband");
 const context = require("./context");
 const upkeep = require("./upkeep");
+const fallback = require("./fallback");
 const log = require("./log");
 
 const MASTER = "refs/heads/master";
@@ -229,7 +232,15 @@ async function push(req, res, blog, hooks, fields) {
     }
 
     upkeep.compactAfter(blogID, result.manifest);
-  } else if (readied && (!result || result.outcome !== "unknown")) {
+  }
+
+  // EBS follows the store in the background; after an unknown outcome it
+  // takes whatever the store turned out to hold
+  const outcome = result ? result.outcome : "error";
+
+  if (outcome === "ok" || outcome === "unknown") fallback.request(blogID, { reason: "push" });
+
+  if (outcome !== "ok" && outcome !== "unknown" && readied) {
     // Did not land: the alarm goes. An unknown outcome keeps it, so a sync
     // applies whatever master turned out to be.
     await Promise.resolve(limiter.outside(() => hooks.abandoned(master, armed))).catch(function () {});

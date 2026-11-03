@@ -9,6 +9,7 @@ describe("git store served: pushes on the normal route", function () {
   var path = require("path");
   var context = require("clients/git/served/context");
   var upkeep = require("clients/git/served/upkeep");
+  var fallback = require("clients/git/served/fallback");
   var { PUSH_CACHE_SHARE } = require("clients/git/served/receive");
   var { manifest } = require("clients/git/store");
 
@@ -25,6 +26,7 @@ describe("git store served: pushes on the normal route", function () {
   });
 
   afterEach(async function () {
+    await fallback.idle(this.blog.id);
     await upkeep.idle(this.blog.id);
   });
 
@@ -88,7 +90,6 @@ describe("git store served: pushes on the normal route", function () {
     await this.local.writeAndPush("/a.txt", "A");
     await mirrorAndSwitch(this);
 
-    var ebsBefore = setup.ebsRefs(this.gitDir);
     var before = await manifest.read(store(this));
 
     await this.local.commitFiles({ "/b.txt": "B" });
@@ -105,8 +106,9 @@ describe("git store served: pushes on the normal route", function () {
     expect(current.refs["refs/tags/v1"]).toBeDefined();
     expect(current.peeled[current.refs["refs/tags/v1"]]).toBe(head);
 
-    // EBS catches up in the background later (the fallback), not here
-    expect(setup.ebsRefs(this.gitDir)).toEqual(ebsBefore);
+    // EBS catches up in the background (the fallback), not during the push
+    await fallback.idle(this.blog.id);
+    expect(setup.ebsRefs(this.gitDir)).toEqual(current.refs);
 
     // What the normal route now serves is the push
     expect(await this.local.remoteHead("master")).toBe(head);
