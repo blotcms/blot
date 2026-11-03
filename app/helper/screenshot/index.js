@@ -369,44 +369,184 @@ async function takeScreenshot(site, path, options = {}) {
 
 const PNG_SIGNATURE = Buffer.from("89504e470d0a1a0a", "hex");
 
-// In a jail of its own, with its own Chromium: nothing here is shared, so none
-// of the pooling above applies. The bytes come from a process that ran the
-// page, so only write them if they at least claim to be a PNG.
-async function takeScreenshotInSandbox(site, path, options) {
-  const { width, height, mobile } = validateOptions(options);
-  console.log(prefix(), "Taking screenshot of", site, "in the sandbox");
+// Pages from different sites and customers deliberately share a batch, hence
+// one Chromium in one jail, to save the ~2.1s start-up per page (measured on
+// production, 3 Nov 2026). A hostile page can tamper with or break the others
+// of its batch, or kill it (each page is then retried alone); that is accepted,
+// because the jail boundary (no secrets, egress filter, no capabilities,
+// seccomp) protects the host and is the same for one page or eight. Keep that
+// boundary intact; isolation between screenshots is not a goal. Don't split
+// batches by site or customer. See app/sandbox/README.md.
+//
+// Screenshots in the sandbox are batched. A job costs about 2s before it
+// touches a page (the jail, Chromium, the re-encode), so requests that arrive
+// close together share one job of up to BATCH_MAX pages (the job's limit,
+// app/sandbox/jobs/screenshot.js), taken one after the other in one Chromium.
+//
+// A request waits at most COALESCE_MS for company before its batch goes out,
+// and a batch that reaches BATCH_MAX goes at once. Only one batch is out at a
+// time per process, because the unit's browser cgroup runs one job at a time
+// anyway: requests that arrive meanwhile wait for it and go out together the
+// moment it is done, without the window. The pacing of the limiter, meant for
+// a browser of this process's own, is not applied.
+const BATCH_MAX = 8;
+const COALESCE_MS = 150;
+// The job takes 64 KiB of arguments; a batch of long URLs is cut short of it
+const BATCH_ARGS_BYTES = 48 * 1024;
+
+// The job as a whole failed rather than a page: it ran out of time or memory,
+// or its reply was too big. In a batch the cause is one of its pages, or all
+// of them together, so each page is tried again on its own.
+const JOB_LIMIT_CODES = ["SANDBOX_TIMEOUT", "SANDBOX_KILLED", "SANDBOX_OUTPUT_TOO_LARGE", "SANDBOX_INPUT_TOO_LARGE"];
+
+// A batch the broker answered busy is sent again this often, this far apart
+const BUSY_TRIES = 6;
+const BUSY_DELAY_MS = 5000;
+
+let waiting = []; // { args, path, resolve, reject }
+let windowTimer = null;
+let batchRunning = false;
+
+function takeScreenshotInSandbox(site, path, options) {
+  return new Promise((resolve, reject) => {
+    let args;
+    try {
+      const { width, height, mobile } = validateOptions(options);
+      args = { url: site, width, height, mobile: !!mobile };
+    } catch (error) {
+      error.retryable = false;
+      return reject(error);
+    }
+
+    console.log(prefix(), "Taking screenshot of", site, "in the sandbox");
+    waiting.push({ args, path, resolve, reject });
+    schedule();
+  });
+}
+
+function schedule() {
+  if (batchRunning || !waiting.length) return;
+  if (waiting.length >= BATCH_MAX) return sendBatch();
+  if (!windowTimer) windowTimer = setTimeout(sendBatch, COALESCE_MS);
+}
+
+function sendBatch() {
+  clearTimeout(windowTimer);
+  windowTimer = null;
+  if (batchRunning || !waiting.length) return;
+
+  const items = [];
+  let bytes = 0;
+  while (waiting.length && items.length < BATCH_MAX) {
+    bytes += Buffer.byteLength(JSON.stringify(waiting[0].args));
+    if (items.length && bytes > BATCH_ARGS_BYTES) break;
+    items.push(waiting.shift());
+  }
+
+  batchRunning = true;
+  runBatch(items)
+    .catch((error) => console.error(prefix(), "Screenshot batch failed:", error))
+    .finally(() => {
+      batchRunning = false;
+      // What came in while it ran goes out now, with no window
+      if (waiting.length) sendBatch();
+    });
+}
+
+// Settles every item in the batch, one way or another
+async function runBatch(items) {
+  console.log(prefix(), `Sending a batch of ${items.length} to the sandbox`);
 
   let result;
   try {
     result = await sandbox.run(
       "screenshot",
-      { url: site, width, height, mobile: !!mobile },
+      { pages: items.map((item) => item.args) },
       Buffer.alloc(0)
     );
   } catch (error) {
-    // The job ran out of time or memory, which is the page's doing. Trying
-    // again would hold the unit's one browser for as long again.
-    if (error.code === "SANDBOX_TIMEOUT" || error.code === "SANDBOX_KILLED") {
+    if (error.code === "SANDBOX_BUSY") {
+      // The browser is taken and the queue was full or waited out: backpressure,
+      // not the pages' doing. Back they go, a few times, before they fail.
+      const fresh = items.filter((item) => (item.busy = (item.busy || 0) + 1) <= BUSY_TRIES);
+      for (const item of items) if (!fresh.includes(item)) item.reject(error);
+      if (fresh.length) {
+        const timer = setTimeout(() => {
+          waiting.unshift(...fresh);
+          schedule();
+        }, BUSY_DELAY_MS);
+        timer.unref();
+      }
+      return;
+    }
+    if (JOB_LIMIT_CODES.includes(error.code)) {
+      if (items.length > 1) {
+        // One heavy or hung page must only cost itself. Each is sent alone,
+        // one after the other, as the browser cgroup holds one job at a time.
+        for (const item of items) await runBatch([item]);
+        return;
+      }
+      // Alone, so it is the page's doing. Trying again would hold the unit's
+      // one browser for as long again.
       error.retryable = false;
     }
-    throw error;
+    for (const item of items) item.reject(error);
+    return;
   }
 
+  const results = result.meta && result.meta.results;
   if (result.meta && result.meta.error) {
     const error = new Error(result.meta.error);
     error.retryable = result.meta.retryable === true;
-    throw error;
+    for (const item of items) item.reject(error);
+    return;
   }
-
-  const png = result.outputs[0];
-  if (!png || !png.subarray(0, 8).equals(PNG_SIGNATURE)) {
-    const error = new Error("The sandbox did not return a PNG");
+  if (
+    !Array.isArray(results) ||
+    results.length !== items.length ||
+    result.outputs.length !== items.length
+  ) {
+    const error = new Error("The sandbox answered a different number of pages");
     error.retryable = false;
-    throw error;
+    for (const item of items) item.reject(error);
+    return;
   }
 
-  await fs.ensureDir(dirname(path));
-  await fs.writeFile(path, png);
+  const again = [];
+  await Promise.all(
+    items.map(async (item, i) => {
+      const entry = results[i] || {};
+
+      if (entry.error) {
+        // Not reached, for want of time or room: next in line for the next
+        // batch, not a failed attempt
+        if (entry.deferred === true && items.length > 1) return again.push(item);
+        const error = new Error(entry.error);
+        error.retryable = entry.retryable === true;
+        return item.reject(error);
+      }
+
+      // The bytes come from a process that ran the page, so only write them if
+      // they at least claim to be a PNG.
+      const png = result.outputs[i];
+      if (!png || !png.subarray(0, 8).equals(PNG_SIGNATURE)) {
+        const error = new Error("The sandbox did not return a PNG");
+        error.retryable = false;
+        return item.reject(error);
+      }
+
+      try {
+        await fs.ensureDir(dirname(item.path));
+        await fs.writeFile(item.path, png);
+      } catch (error) {
+        return item.reject(error);
+      }
+      item.resolve();
+    })
+  );
+
+  // Ahead of whatever has arrived since, which sendBatch() sends next
+  waiting.unshift(...again);
 }
 
 // Shutdown handler
@@ -426,12 +566,13 @@ const screenshot = async (site, path, options = {}) => {
     egress.assertBrowserReady("build/plugins/linkScreenshot");
   }
 
-  const take = config.sandbox.browser ? takeScreenshotInSandbox : takeScreenshot;
+  // In the sandbox the batching is the pacing, so no limiter
+  const take = config.sandbox.browser
+    ? () => takeScreenshotInSandbox(site, path, options)
+    : () => limiter.schedule(() => takeScreenshot(site, path, options));
 
   try {
-    return await retry(() =>
-      limiter.schedule(() => take(site, path, options))
-    );
+    return await retry(take);
   } catch (error) {
     console.error(prefix(), "Screenshot failed after retries:", error);
     throw error;
@@ -441,5 +582,8 @@ const screenshot = async (site, path, options = {}) => {
 module.exports = screenshot;
 module.exports.configure = configure;
 module.exports.MIN_TIME_BETWEEN_OPS = MIN_TIME_BETWEEN_OPS;
+module.exports.BATCH_MAX = BATCH_MAX;
+module.exports.COALESCE_MS = COALESCE_MS;
+module.exports.BUSY_DELAY_MS = BUSY_DELAY_MS;
 module.exports.restart = restart;
 module.exports.shutdown = shutdown;
