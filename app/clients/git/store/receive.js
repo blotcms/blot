@@ -794,8 +794,11 @@ function failure(commands, err, stats) {
     });
   }
 
+  // A host's lock(fn) may say why it failed, in words for the user
   const status =
-    err instanceof NoRoomError
+    err && typeof err.pushStatus === "string"
+      ? err.pushStatus
+      : err instanceof NoRoomError
       ? "Blot has no room to receive this push right now; please try again in a moment"
       : "Blot hit an error receiving the push; please try again in a moment";
   return answer(commands, { outcome: "failed", status, extra: { stats, error: err } });
@@ -910,7 +913,10 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, read
       await reservation.extend(stats.bytes + scanned.count * 32 + 4096);
       await scratch.git(["init", "-q", "--bare", gitDir]);
       try {
-        await scratch.git(["index-pack", "--stdin", "--fix-thin", "--fsck-objects"], {
+        // A .gitattributes or .gitmodules blob a changed tree names but the
+        // push does not carry is in the store already (checked when it was
+        // pushed), not in scratch: fsck is told not to look for it
+        await scratch.git(["index-pack", "--stdin", "--fix-thin", "--fsck-objects=gitattributesMissing=ignore,gitmodulesMissing=ignore"], {
           gitDir,
           inputFile: incomingFile,
           env: { GIT_ALTERNATE_OBJECT_DIRECTORIES: basesDir },

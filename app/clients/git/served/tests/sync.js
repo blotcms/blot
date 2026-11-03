@@ -125,6 +125,22 @@ describe("git store served: the blog folder from the store", function () {
     expect(await fs.pathExists(this.blogDirectory + "/old.txt")).toBe(false);
   });
 
+  it("keeps a file renamed from its NFD name to its NFC name", async function () {
+    var nfd = "/Cafe\u0301.txt";
+    var nfc = "/Caf\u00e9.txt";
+
+    await this.local.writeAndPush(nfd, "Same bytes");
+    await mirrorAndSwitch(this);
+
+    // storage/folder names it in NFC, so both names are one file there
+    await fs.move(this.local.path(nfd), this.local.path(nfc));
+    await this.local.commit("NFD to NFC");
+    await this.local.push();
+
+    expect(await fs.readFile(this.blogDirectory + nfc, "utf8")).toBe("Same bytes");
+    await this.local.expectSynced();
+  });
+
   it("does not write a file whose bytes are already there", async function () {
     await this.local.commitFiles({ "/a.txt": "A", "/b.txt": "B" });
     await this.local.push();

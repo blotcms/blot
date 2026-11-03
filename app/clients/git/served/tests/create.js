@@ -130,6 +130,32 @@ describe("git store served: new-folder setup", function () {
     expect((await manifest.read(this.stores[this.blog.id])).refs["refs/heads/master"]).toBe(bareGit(this, ["rev-parse", "master"]).trim());
   });
 
+  it("refuses to set up over a store copy the blog already has, and leaves it alone", async function () {
+    await fs.outputFile(this.blogDirectory + "/first.txt", "Hello");
+    await connect(this);
+
+    var store = this.stores[this.blog.id];
+    var before = await manifest.read(store);
+
+    // A second setup, with the EBS repository gone (create.js would not get
+    // past an existing one)
+    await fs.remove(repo.directory(this.blog.handle));
+
+    var failed = await setClientToGit(this.user, this.blog, this.server.port).then(
+      () => null,
+      (err) => err
+    );
+
+    expect(failed).not.toBe(null);
+    expect(failed.code).toBe("EEXIST");
+    // Not create.js's own mkdir: the directory was removed above
+    expect(failed.message).toContain("already has a repository in the git store");
+
+    var after = await manifest.read(store);
+    expect(after.seq).toBe(before.seq);
+    expect(after.refs).toEqual(before.refs);
+  });
+
   it("removes what it made on both sides when it fails", async function () {
     await fs.outputFile(this.blogDirectory + "/first.txt", "Hello");
 

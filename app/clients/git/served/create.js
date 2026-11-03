@@ -234,6 +234,13 @@ async function create(blog, folder, ebsDirectory) {
   const cache = context.cache();
   const base = scratchDirectory();
 
+  // A repository the blog already has in the store is never set up over, or
+  // taken back
+  if (!manifest.isEmpty(await manifest.read(store))) {
+    log({ blog: blogID, op: "create", outcome: "error", detail: "EEXIST" });
+    throw Object.assign(new Error("The blog already has a repository in the git store"), { code: "EEXIST" });
+  }
+
   await fs.mkdirp(base);
   const dir = await fs.mkdtemp(path.join(base, "setup-"));
   const gitDir = path.join(dir, "repo.git");
@@ -255,7 +262,16 @@ async function create(blog, folder, ebsDirectory) {
     // From here on, whatever is in the store is this setup's: importRepo
     // refuses a store which is not empty
     imported = true;
-    const result = await importRepo({ store, cache, lock: context.refLock(blogID), gitDir, scratchDir: base, pack: { "pack.window": "0" }, gate: limiter.gate("background") });
+    let result;
+
+    try {
+      result = await importRepo({ store, cache, lock: context.refLock(blogID), gitDir, scratchDir: base, pack: { "pack.window": "0" }, gate: limiter.gate("background") });
+    } catch (err) {
+      // Refused as not empty, or another writer's first manifest landed:
+      // what is in the store is someone else's, and is left alone
+      if (err && (err.code === "ENOTEMPTY" || err.code === "EMOVED")) imported = false;
+      throw err;
+    }
 
     // The swap may or may not have landed: only a read that finds this
     // commit on master lets the setup go on
