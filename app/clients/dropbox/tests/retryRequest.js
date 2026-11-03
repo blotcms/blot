@@ -46,6 +46,20 @@ describe("dropbox retryRequest", function () {
     expect(Date.now() - started).not.toBeLessThan(950);
   });
 
+  it("retries a network error", async function () {
+    const networkError = Object.assign(
+      new Error("request to https://api.dropboxapi.com/2/files/list_folder failed, reason: "),
+      { name: "FetchError", type: "system", code: "ETIMEDOUT" }
+    );
+    let calls = 0;
+    const result = await retryRequest(async () => {
+      if (++calls === 1) throw networkError;
+      return "ok";
+    });
+    expect(result).toEqual("ok");
+    expect(calls).toEqual(2);
+  });
+
   it("throws a persistent 500 after the retries are used up", async function () {
     let calls = 0;
     let error;

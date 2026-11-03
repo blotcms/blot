@@ -204,6 +204,13 @@ function recordError(report, blog, phase, err) {
   const record = entry(report, blog);
   let message = String((err && err.message) || err);
 
+  // A network error's message can say nothing about the cause (node-fetch
+  // prints "reason: " with nothing after it for a failed connect), but its
+  // code does.
+  if (err && err.code && !message.includes(String(err.code))) {
+    message = message.trimEnd() + " (" + err.code + ")";
+  }
+
   if (message.length > MAX_ERROR_MESSAGE_LENGTH) {
     message = message.slice(0, MAX_ERROR_MESSAGE_LENGTH) + "...";
   }
