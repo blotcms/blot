@@ -63,7 +63,9 @@ function loadCDNIPs() {
   return fetchCDNIPs();
 }
 
-const OUTPUT = __dirname + "/data/latest";
+// Local development renders into the container instead
+// (scripts/development/unit/start.sh)
+const OUTPUT = process.env.PROXY_BUILD_OUTPUT || __dirname + "/data/latest";
 const PREVIOUS = OUTPUT + "-previous-" + Date.now();
 const CONFIG_DIRECTORY = path.resolve(__dirname, "../config");
 
