@@ -94,9 +94,12 @@ jobs:
           sudo sysctl -w net.ipv4.tcp_migrate_req=1
           cat /proc/sys/net/ipv4/tcp_migrate_req
 
+      - id: versions
+        uses: ./.github/actions/versions
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 24.22.1
+          node-version: ${{ steps.versions.outputs.NODE_VERSION }}
 
       # The `runner` context (RUNNER_TEMP) isn't available in a job-level
       # `env:` block, only in steps - so these are exported to $GITHUB_ENV
@@ -374,9 +377,12 @@ jobs:
           sudo sysctl -w net.ipv4.tcp_migrate_req=1
           cat /proc/sys/net/ipv4/tcp_migrate_req
 
+      - id: versions
+        uses: ./.github/actions/versions
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 24.22.1
+          node-version: ${{ steps.versions.outputs.NODE_VERSION }}
 
       - name: Compute harness paths
         run: |

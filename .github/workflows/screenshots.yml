@@ -137,15 +137,6 @@ jobs:
           needs.detect-templates.outputs.templates != ''))
     runs-on: macos-latest
 
-    strategy:
-      matrix:
-        node-version: [24.22.1]
-        # Matches the version installed in the Dockerfile. The macOS build must
-        # be arm64: the runners are Apple silicon and an x86_64 pandoc would be
-        # translated by Rosetta on every conversion, which the folder build does
-        # thousands of.
-        pandoc-version: [3.6.1]
-
     env:
       # How many screenshots to take at once. A tuning knob for the runner
       # rather than something to vary per run, so it lives here rather than
@@ -172,18 +163,25 @@ jobs:
           ref: ${{ github.head_ref || github.ref }}
           token: ${{ secrets.SCREENSHOTS_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
 
+      # The Node and Pandoc versions are those of the Dockerfile. The macOS
+      # Pandoc build must be arm64: the runners are Apple silicon and an x86_64
+      # pandoc would be translated by Rosetta on every conversion, which the
+      # folder build does thousands of.
+      - id: versions
+        uses: ./.github/actions/versions
+
       # hashFiles() only works inside a step (job-level env can't see the
       # checked-out files yet), so the key is computed here and exported for
       # the restore/delete/save steps below to share - keeping the three from
       # drifting apart.
       - name: Compute demo blogs cache key
         run: |
-          echo "DEMO_BLOGS_CACHE_KEY=demo-blogs-v1-pandoc${{ matrix.pandoc-version }}-${{ hashFiles('app/templates/folders/**', 'app/build/**', 'app/sync/**', 'app/models/**', 'package.json') }}" >> "$GITHUB_ENV"
+          echo "DEMO_BLOGS_CACHE_KEY=demo-blogs-v1-pandoc${{ steps.versions.outputs.PANDOC_VERSION }}-${{ hashFiles('app/templates/folders/**', 'app/build/**', 'app/sync/**', 'app/models/**', 'package.json') }}" >> "$GITHUB_ENV"
 
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: ${{ steps.versions.outputs.NODE_VERSION }}
           cache: "npm"
           cache-dependency-path: ./package.json
 
@@ -192,17 +190,17 @@ jobs:
         uses: actions/cache@v4
         with:
           path: data/pandoc
-          key: pandoc-${{ matrix.pandoc-version }}-arm64-macos
+          key: pandoc-${{ steps.versions.outputs.PANDOC_VERSION }}-arm64-macos
 
       - name: Set up Pandoc
         run: |
           # The archive unpacks to pandoc-<version>-arm64/
-          PANDOC_DIR="$(pwd)/data/pandoc/pandoc-${{ matrix.pandoc-version }}-arm64"
+          PANDOC_DIR="$(pwd)/data/pandoc/pandoc-${{ steps.versions.outputs.PANDOC_VERSION }}-arm64"
           if [ ! -x "$PANDOC_DIR/bin/pandoc" ]; then
             mkdir -p data/pandoc
             cd data/pandoc
             curl -fsSL -o pandoc.zip \
-              https://github.com/jgm/pandoc/releases/download/${{ matrix.pandoc-version }}/pandoc-${{ matrix.pandoc-version }}-arm64-macOS.zip
+              https://github.com/jgm/pandoc/releases/download/${{ steps.versions.outputs.PANDOC_VERSION }}/pandoc-${{ steps.versions.outputs.PANDOC_VERSION }}-arm64-macOS.zip
             unzip -q -o pandoc.zip
             rm pandoc.zip
             cd ../..
@@ -220,7 +218,7 @@ jobs:
           path: |
             node_modules
             ~/.cache/puppeteer
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ matrix.node-version }}-${{ hashFiles('package.json') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ steps.versions.outputs.NODE_VERSION }}-${{ hashFiles('package.json') }}
 
       - name: Install dependencies
         if: steps.cache-node-modules.outputs.cache-hit != 'true'

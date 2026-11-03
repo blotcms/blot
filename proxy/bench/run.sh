@@ -12,6 +12,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."   # repo root, so the build paths below work from anywhere
 ROOT=$(pwd)
+set -a; . "$ROOT/config/versions.env"; set +a   # NODE_VERSION etc.
 BENCH="$ROOT/proxy/bench"
 
 DURATION=${DURATION:-20s}
@@ -53,6 +54,8 @@ trap cleanup EXIT
 # exceed at ~30k req/s, so raising the rate is not enough), then bake the
 # image. proxy/config is not touched. The tree renders with its own
 # proxy/build and proxy/config; only mustache and fs-extra come from here.
+VERSION_ARGS=()
+while IFS= read -r pair; do VERSION_ARGS+=(--build-arg "$pair"); done < <(grep -E '^[A-Z][A-Z0-9_]*=' "$ROOT/config/versions.env")
 build_image() { # tree tag source-description
   local tree=$1 tag=$2
   NODE_PATH="$tree/app:$DEPS:${NODE_PATH:-}" FETCH_CDN_IPS=false BLOT_HOST=example.com \
@@ -60,7 +63,7 @@ build_image() { # tree tag source-description
   sed -i.bak '/limit_req zone=hostlimit burst=30;/d' "$tree/proxy/build/data/latest/openresty.conf"
   rm -f "$tree/proxy/build/data/latest/openresty.conf.bak"
   if grep -q 'limit_req zone=hostlimit burst=30;' "$tree/proxy/build/data/latest/openresty.conf"; then echo "hostlimit still present" >&2; exit 1; fi
-  docker build -q --label "bench.source=$3" -f "$tree/proxy/Dockerfile" -t "$tag" "$tree/proxy/" >/dev/null
+  docker build -q --label "bench.source=$3" "${VERSION_ARGS[@]}" -f "$tree/proxy/Dockerfile" -t "$tag" "$tree/proxy/" >/dev/null
 }
 
 if [ "$SKIP_BUILD" != 1 ]; then
@@ -91,8 +94,8 @@ cat > "$WORK/cdn-ips.conf" <<'WL'
 192.168.0.0/16 1;
 WL
 
-docker run -d --name "$REDIS" --network "$NET" redis:7-alpine >/dev/null
-docker run -d --name "$STUB" --network "$NET" -v "$BENCH/stub.js:/stub.js:ro" node:24.22.1-alpine node /stub.js >/dev/null
+docker run -d --name "$REDIS" --network "$NET" "$REDIS_E2E_IMAGE" >/dev/null
+docker run -d --name "$STUB" --network "$NET" -v "$BENCH/stub.js:/stub.js:ro" "node:$NODE_VERSION-alpine" node /stub.js >/dev/null
 docker run -d --name "$WRK" --network "$NET" "$WRK_IMAGE" sleep infinity >/dev/null
 sleep 2
 docker logs "$STUB" 2>&1 | head -2

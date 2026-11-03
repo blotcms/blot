@@ -14,6 +14,9 @@ fi
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && cd ../../ && pwd)"
 : "${BLOT_HOST:=local.blot}"
 
+# Versions for the compose file's build args and images (config/versions.env)
+set -a; . "$DIR/config/versions.env"; set +a
+
 # Files
 SETUP="$DIR/scripts/development/setup-certs.sh"
 COMPOSE_FILE="$DIR/scripts/development/docker-compose.yml"
@@ -121,9 +124,10 @@ docker builder prune -f --filter until=168h >/dev/null 2>&1 || true
 
 # node-app (Dockerfile target dev-unit) takes OpenResty from this image: the
 # proxy image without its generated config. Compiling OpenResty takes a few
-# minutes the first time; after that the build is cached.
+# minutes the first time; after that the build is cached. image.sh passes the
+# versions in config/versions.env as build args.
 echo "[start] Building the OpenResty runtime image"
-docker build -q --target runtime -t blot-proxy-runtime "$DIR/proxy" >/dev/null
+(cd "$DIR" && bash proxy/build/image.sh blot-proxy-runtime -q --target runtime) >/dev/null
 
 # Agentation's hooks for the proxy; empty until it fills them
 mkdir -p "$DIR/scripts/development/agentation/generated/openresty" \

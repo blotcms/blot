@@ -15,6 +15,7 @@ set -euo pipefail
 E2E_ROOT="${E2E_ROOT:?E2E_ROOT must be set}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+set -a; . "$REPO_ROOT/config/versions.env"; set +a
 HOSTIP="$(hostname -I | awk '{print $1}')"
 
 log() { printf '[setup] %s\n' "$*"; }
@@ -79,7 +80,7 @@ docker volume create "$PROXY_AUTOSSL_VOLUME" >/dev/null
 # configured, which is how the proxy containers and the check below reach it
 # - over $HOSTIP, not loopback.
 log "Starting Redis"
-docker run -d --name blot-e2e-redis --network host redis:7-alpine \
+docker run -d --name blot-e2e-redis --network host "$REDIS_E2E_IMAGE" \
   redis-server --protected-mode no >/dev/null
 for i in $(seq 1 30); do
   timeout 2 bash -c "</dev/tcp/$HOSTIP/6379" 2>/dev/null && break
@@ -96,7 +97,7 @@ log "Starting the stub upstream"
 docker run -d --name blot-e2e-stub --network host -e STUB_BIND=0.0.0.0 \
   -v "${STUB_JS:-$REPO_ROOT/proxy/e2e/stub-upstream.js}":/s.js:ro \
   -v "$HERE/swap-load-lib.js":/swap-load-lib.js:ro \
-  node:24.22.1-alpine node /s.js >/dev/null
+  "node:$NODE_VERSION-alpine" node /s.js >/dev/null
 for i in $(seq 1 30); do
   curl -sf -o /dev/null http://127.0.0.1:8088/ && break
   sleep 1

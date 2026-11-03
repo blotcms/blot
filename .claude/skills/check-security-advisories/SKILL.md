@@ -23,8 +23,8 @@ node scripts/security/check-advisories.js --json     # machine output
 node scripts/security/check-advisories.js --days 7 --npm --dependabot
 ```
 
-It reads the pins from `Dockerfile` (Node, Pandoc), `proxy/Dockerfile`
-(OpenResty, nginx), fetches public
+It reads the pins from `config/versions.env` (Node, Pandoc, OpenResty,
+nginx), fetches public
 sources (each independently, 15s timeout; a failure shows as "source
 unavailable" and the rest continue), and prints three sections: **ACTION
 NEEDED**, **WATCH**, **OK**. Exit code 1 if anything is in ACTION NEEDED.
@@ -94,11 +94,11 @@ ssh macserver "node -v; sw_vers"
 
 ## Step 4: what to do
 
-- **Runtime pin bump**: open a PR bumping the pin everywhere it lives:
-  `Dockerfile`, `proxy/Dockerfile` (OpenResty/nginx ARGs, with the new
-  `OPENRESTY_SHA256`), the `node-version` pins in
-  `.github/workflows/*.yml`, `BLOT_NODE_VERSION` in `config/environment.sh`,
-  and `config/node/scripts/setup-ec2-user.sh`. Follow the PR rules in
+- **Runtime pin bump**: open a PR bumping the pin in `config/versions.env`,
+  the one place the versions live (Node with its `NODE_BASE` digest, or
+  OpenResty/nginx with the new `OPENRESTY_SHA256`), plus `BLOT_NODE_VERSION` in
+  `config/environment.sh`, which can't read it.
+  `scripts/security/check-versions.js` checks they agree. Follow the PR rules in
   `CLAUDE.md`: if hosts or the macserver need manual steps (re-run Node setup
   on the host, `npm i -g`/nvm on the macserver, deploying the proxy), add a
   **Deployment plan** section and the `manual-deploy` label.

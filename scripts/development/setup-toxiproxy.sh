@@ -2,6 +2,8 @@
 set -euo pipefail
 
 COMPOSE_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/docker-compose.yml"
+# The compose file takes its versions from config/versions.env
+set -a; . "$(dirname "$COMPOSE_FILE")/../../config/versions.env"; set +a
 
 # Measured against the previous production Redis host (Oct 2026, before the
 # move to config/redis/'s one-CPU host; the numbers may be lower now) via

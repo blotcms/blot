@@ -3,9 +3,12 @@
 # are not ext4). It holds its own Docker daemon, so the proxy containers use
 # --network host in THIS container's network namespace and bind-mount
 # directories of its own filesystem, as on a GitHub runner. See local.sh.
-FROM node:24.22.1-bookworm-slim AS node
+# The versions come from config/versions.env (local.sh passes them).
+ARG NODE_VERSION
+ARG UBUNTU_IMAGE
+FROM node:${NODE_VERSION}-bookworm-slim AS node
 
-FROM ubuntu:24.04
+FROM ${UBUNTU_IMAGE}
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       docker.io iptables iproute2 ca-certificates curl redis-tools openssl \
