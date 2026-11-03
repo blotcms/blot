@@ -161,12 +161,29 @@ async function push(req, res, blog, hooks, fields) {
 
   // Held around the store's manifest swap: the ref lock, and the alarm armed
   // once, before master can move
+  // The store reports a failure here to the client in these words
+  // (pushStatus)
   async function lock(fn) {
-    const release = await hooks.lock();
+    let release;
+
+    try {
+      release = await hooks.lock();
+    } catch (err) {
+      if (err && err.code === "ELOCKED") err.pushStatus = "another change to this repository is being applied; please try again in a few seconds";
+      else if (err) err.pushStatus = "Blot could not accept the push right now; please try again in a moment";
+      throw err;
+    }
 
     try {
       if (master && !readied) {
-        armed = await limiter.outside(() => hooks.prepare(master));
+        try {
+          armed = await limiter.outside(() => hooks.prepare(master));
+        } catch (err) {
+          console.error(clfdate(), "Git: could not record push", blogID, err && err.message);
+          throw Object.assign(new Error("Could not record the push: " + ((err && err.message) || err)), {
+            pushStatus: "Blot could not record the push; please try again in a moment",
+          });
+        }
         readied = true;
       }
 

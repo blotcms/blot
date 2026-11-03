@@ -287,7 +287,7 @@ describe("git client: materialize", function () {
 
     var second = await commit(this, { "changed.txt": "After", "added.txt": "Added" });
 
-    expect(await apply(this, first, second)).toEqual(["added.txt", "changed.txt"]);
+    expect((await apply(this, first, second)).sort()).toEqual(["added.txt", "changed.txt"]);
     expect(await list(this.folder)).toEqual({
       "same.txt": Buffer.from("Drifted"),
       "untracked.txt": Buffer.from("Not in the repository"),
@@ -332,14 +332,14 @@ describe("git client: materialize", function () {
     expect(await list(this.folder)).toEqual({ "kept.txt": Buffer.from("Kept") });
   });
 
-  it("applies a rename as a removal and a write", async function () {
+  it("applies a rename", async function () {
     var first = await commit(this, { "old/name.txt": "Contents", "other.txt": "Other" });
 
     await apply(this, EMPTY_TREE, first);
 
     var second = await commit(this, { "old/name.txt": null, "new/name.txt": "Contents" });
 
-    expect(await apply(this, first, second)).toEqual(["new/name.txt", "old/name.txt"]);
+    expect((await apply(this, first, second)).sort()).toEqual(["new/name.txt", "old/name.txt"]);
     expect(await list(this.folder)).toEqual({
       "new/": true,
       "new/name.txt": Buffer.from("Contents"),

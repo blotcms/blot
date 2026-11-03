@@ -190,11 +190,13 @@ async function writeBlob(blogID, reader, parts, oid, stats) {
   }
 }
 
-// Whether one path is the other, or a directory above it
+// Whether one path is the other, or a directory above it, as storage/folder
+// names them (in NFC: a rename from a name's NFD form to its NFC form is the
+// same file)
 function nested(a, b) {
   const shorter = a.length <= b.length ? a : b;
   const longer = shorter === a ? b : a;
-  return shorter.every((part, i) => longer[i] === part);
+  return shorter.every((part, i) => longer[i].normalize("NFC") === part.normalize("NFC"));
 }
 
 // Whether the file at `parts` holds exactly the blob `oid`: its git blob ID,

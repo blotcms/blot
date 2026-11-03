@@ -24,8 +24,9 @@ const context = require("./context");
 const { EMPTY_TREE } = materialize;
 const MASTER = "refs/heads/master";
 
-const getApplied = promisify(database.getApplied.bind(database));
-const setApplied = promisify(database.setApplied.bind(database));
+// Looked up on the module each time, so a spec can watch them
+const getApplied = (...args) => promisify(database.getApplied.bind(database))(...args);
+const setApplied = (...args) => promisify(database.setApplied.bind(database))(...args);
 
 async function hasCommit(reader, oid) {
   try {
