@@ -112,6 +112,20 @@ describe("clients/util syncReport", function () {
     expect(second.message).toEqual("connect ECONNRESET");
   });
 
+  it("adds a Dropbox error's error_summary to its message", function () {
+    const report = syncReport.create();
+    const dropbox = Object.assign(new Error("Response failed with a 409 code"), {
+      status: 409,
+      error: { error_summary: "path/not_found/.." },
+    });
+
+    syncReport.recordError(report, blog, "walk", dropbox);
+
+    expect(syncReport.view(report).blogs[0].errors[0].message).toEqual(
+      "Response failed with a 409 code (path/not_found/..)"
+    );
+  });
+
   it("summarizes a Fix() report on one line", function () {
     expect(syncReport.summarize({ a: [1, 2, 3], b: [1] })).toEqual("a=3 b=1");
     expect(syncReport.summarize({})).toEqual("");
