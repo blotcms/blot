@@ -889,8 +889,8 @@ let removeAgainMs = 5 * 60 * 1000;
 // disconnect would otherwise reach into a spec running minutes later
 const removeAgainTimers = new Set();
 
-// Removes the blog's copy (the store's removeRepo: a tombstone manifest, then
-// every pack deleted; the manifests stay, so the numbering never starts again
+// Removes the blog's copy (the store's removeRepo: every pack deleted, then a
+// tombstone manifest; the manifests stay, so the numbering never starts again
 // at 1 under another process). Resolves with the number of keys deleted.
 async function deleteCopy(blogID) {
   if (makeObjectStore === s3ObjectStore && !(config.storage && config.storage.bucket)) return null;

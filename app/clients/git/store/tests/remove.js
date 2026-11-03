@@ -43,8 +43,9 @@ describe("git store removal", function () {
   // Another process: its own memory of manifests, the same objects
   const processOf = () => ({ ...inner });
 
-  async function upload(store) {
-    const n = ++made;
+  // A pack of made-up bytes; the same `n` makes the same pack, as an import of
+  // the same refs does (packs are named by their content)
+  async function upload(store, n = ++made) {
     const name = "pack-" + String(n).padStart(40, "0");
     const entry = { name, size: 100 + n, idxSize: 1100 + n, objects: 1 };
     await store.put(packKey(name), Buffer.alloc(entry.size, n));
@@ -63,8 +64,8 @@ describe("git store removal", function () {
   }
 
   // An import as importRepo makes it, onto whatever empty manifest is there
-  async function importOf(store, n) {
-    const pack = await upload(store);
+  async function importOf(store, n, packN) {
+    const pack = await upload(store, packN);
     const base = await manifest.read(store);
     expect(manifest.isEmpty(base)).toBe(true);
     const next = manifest.advance(base, { refs: { [MASTER]: oid(n) }, head: MASTER, packs: [pack] });
@@ -73,6 +74,12 @@ describe("git store removal", function () {
   }
 
   const keys = () => [...inner.objects.keys()].sort();
+
+  // Every pack the newest manifest names has its .pack and .idx in the store
+  async function namedAreThere() {
+    const newest = await manifest.read(processOf());
+    return manifest.packsNamed(newest).every((name) => inner.objects.has(packKey(name)) && inner.objects.has(idxKey(name)));
+  }
 
   describe("the bug it fixes", function () {
     it("deleting everything and importing again let a process holding the old newest manifest land on the new history", async function () {
@@ -116,15 +123,31 @@ describe("git store removal", function () {
       expect(tombstone.packs).toEqual([]);
     });
 
-    it("writes no second tombstone when run again, and deletes what was uploaded since", async function () {
+    it("writes no second tombstone when run again with nothing to delete", async function () {
       await pushOf(inner, 1);
       await removeRepo({ store: processOf() });
-      const late = await upload(inner);
+
+      expect(await removeRepo({ store: processOf() })).toEqual({ outcome: "removed", seq: 2, deleted: 0 });
+      expect(keys().map(manifestSeq).filter((seq) => seq !== null)).toEqual([1, 2]);
+    });
+
+    it("deletes what was uploaded since and puts a new tombstone on top, so the uploader cannot swap it in", async function () {
+      await pushOf(inner, 1);
+      await removeRepo({ store: processOf() });
+
+      // An import reads the tombstone and uploads its pack, then stalls
+      const importer = processOf();
+      const tombstone = await manifest.read(importer);
+      const late = await upload(importer);
 
       const again = await removeRepo({ store: processOf() });
-      expect(again).toEqual({ outcome: "removed", seq: 2, deleted: 3 });
+      expect(again).toEqual({ outcome: "removed", seq: 3, deleted: 3 });
       expect(inner.objects.has(packKey(late.name))).toBe(false);
-      expect(keys().map(manifestSeq).filter((seq) => seq !== null)).toEqual([1, 2]);
+
+      const next = manifest.advance(tombstone, { refs: { [MASTER]: oid(7) }, head: MASTER, packs: [late] });
+      const error = await fails(manifest.swap({ store: importer, lock, base: tombstone, next, uploaded: [late.name] }));
+      expect(error && error.name).toBe("StaleManifestError");
+      expect(await namedAreThere()).toBe(true);
     });
 
     it("deletes everything from a repository with no manifest, and writes no tombstone", async function () {
@@ -134,7 +157,7 @@ describe("git store removal", function () {
       expect(await removeRepo({ store: processOf() })).toEqual({ outcome: "removed", seq: 0, deleted: 0 });
     });
 
-    it("builds its tombstone again on a manifest swapped in meanwhile, and deletes nothing until it lands", async function () {
+    it("starts again from a manifest swapped in while it deleted, and deletes that one's packs too", async function () {
       await pushOf(inner, 1);
       const racing = processOf();
       let raced = false;
@@ -144,7 +167,6 @@ describe("git store removal", function () {
           if (!raced) {
             raced = true;
             await pushOf(racing, 2);
-            expect(inner.objects.size).toBe(2 * 3 + 3);
           }
           return inner.putIfAbsent(key, bytes);
         },
@@ -156,7 +178,7 @@ describe("git store removal", function () {
       expect(keys().filter((key) => manifestSeq(key) === null && key !== LATEST_KEY)).toEqual([]);
     });
 
-    it("throws, deleting nothing, when its tombstone keeps losing", async function () {
+    it("throws when its tombstone keeps losing, and running it again finishes", async function () {
       await pushOf(inner, 1);
       const racing = processOf();
       let n = 1;
@@ -167,12 +189,127 @@ describe("git store removal", function () {
           return inner.putIfAbsent(key, bytes);
         },
       };
-      const before = keys().length;
 
       const error = await fails(removeRepo({ store }));
       expect(error && error.code).toBe("EMOVED");
-      expect(keys().length).toBe(before + 3 * 4);
       expect(manifest.isEmpty(await manifest.read(processOf()))).toBe(false);
+
+      const result = await removeRepo({ store: processOf() });
+      expect(result.seq).toBe(n + 1);
+      expect(manifest.isEmpty(await manifest.read(processOf()))).toBe(true);
+      expect(keys().filter((key) => manifestSeq(key) === null && key !== LATEST_KEY)).toEqual([]);
+    });
+
+    describe("racing an import of the same refs, whose pack has the same name as one it deletes", function () {
+      let old;
+
+      beforeEach(async function () {
+        old = await pushOf(inner, 1);
+      });
+
+      // The importer tries whenever the removal deletes a key: it only builds
+      // on an empty manifest, and re-uploads the old pack (same name)
+      function racingImport() {
+        const importer = processOf();
+        const state = { imported: null, tries: 0 };
+        const store = {
+          ...inner,
+          delete: async (key) => {
+            await inner.delete(key);
+            if (state.imported) return;
+            state.tries++;
+            const base = await manifest.read(importer);
+            if (manifest.isEmpty(base)) state.imported = await importOf(importer, 7, 1);
+          },
+        };
+        return { store, state, importer };
+      }
+
+      it("never lets the import publish before the deletes are done, so the import's packs survive", async function () {
+        const { store, state, importer } = racingImport();
+
+        await removeRepo({ store });
+        expect(state.tries).toBeGreaterThan(0);
+        expect(state.imported).toBe(null);
+
+        // The import after the removal: the same pack name, uploaded again
+        const imported = await importOf(importer, 7, 1);
+        expect(imported.packs[0].name).toBe(old.packs[0].name);
+        expect(await namedAreThere()).toBe(true);
+      });
+
+      it("puts a second removal's tombstone over an import that landed on the first while it deleted", async function () {
+        await removeRepo({ store: processOf() });
+
+        // The import uploads the old pack's name again, then the second
+        // removal (disconnect's second pass) lists it, and the import swaps
+        // in while the removal deletes it
+        const importer = processOf();
+        const tombstone = await manifest.read(importer);
+        const pack = await upload(importer, 1);
+        let swapped = null;
+        const store = {
+          ...inner,
+          delete: async (key) => {
+            if (!swapped) {
+              swapped = manifest.advance(tombstone, { refs: { [MASTER]: oid(7) }, head: MASTER, packs: [pack] });
+              await manifest.swap({ store: importer, lock, base: tombstone, next: swapped, uploaded: [pack.name] });
+            }
+            await inner.delete(key);
+          },
+        };
+
+        const result = await removeRepo({ store });
+        expect(swapped.seq).toBe(3);
+        expect(result.seq).toBe(4);
+        expect(manifest.isEmpty(await manifest.read(processOf()))).toBe(true);
+        expect(await namedAreThere()).toBe(true);
+      });
+    });
+
+    describe("with a damaged newest manifest", function () {
+      for (const [what, bytes] of [
+        ["not JSON", Buffer.from("{ not json")],
+        ["not a valid manifest", Buffer.from(JSON.stringify({ version: 99, seq: 2 }))],
+      ]) {
+        it("puts its tombstone after the largest number listed when the newest is " + what, async function () {
+          await pushOf(inner, 1);
+          await inner.put(manifestKey(2), bytes);
+          await inner.put(LATEST_KEY, Buffer.from(JSON.stringify({ seq: 2 })));
+          expect(await fails(manifest.read(processOf()))).not.toBe(null);
+
+          const result = await removeRepo({ store: processOf() });
+          expect(result).toEqual({ outcome: "removed", seq: 3, deleted: 3 });
+
+          const tombstone = await manifest.read(processOf());
+          expect(tombstone.seq).toBe(3);
+          expect(manifest.isEmpty(tombstone)).toBe(true);
+          expect(manifest.epochOf(tombstone)).not.toBe("");
+
+          // An import goes above it
+          expect((await importOf(processOf(), 7)).seq).toBe(4);
+        });
+      }
+
+      it("starts again when another writer takes the number after the damaged one first", async function () {
+        await pushOf(inner, 1);
+        await inner.put(manifestKey(2), Buffer.from("{ not json"));
+        let raced = false;
+        const store = {
+          ...inner,
+          putIfAbsent: async (key, bytes) => {
+            if (!raced) {
+              raced = true;
+              await inner.putIfAbsent(manifestKey(3), Buffer.from("{ also damaged"));
+            }
+            return inner.putIfAbsent(key, bytes);
+          },
+        };
+
+        const result = await removeRepo({ store });
+        expect(result.seq).toBe(4);
+        expect(manifest.isEmpty(await manifest.read(processOf()))).toBe(true);
+      });
     });
   });
 
