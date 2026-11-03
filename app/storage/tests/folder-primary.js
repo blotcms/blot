@@ -303,7 +303,7 @@ describe("storage/folder primary", function () {
       expect(await folder.backendFor(this.blog.id)).toEqual("local");
     });
 
-    it("keeps blogs on the Local and Git clients on disk", async function () {
+    it("keeps blogs on the Git client on disk, and lets Local and Google Drive use S3", async function () {
       spyOn(console, "log");
       await onS3(this.blog.id);
 
@@ -311,12 +311,12 @@ describe("storage/folder primary", function () {
       var before = await client.hGet(info, "client");
 
       try {
-        for (var name of ["local", "git"]) {
+        for (var name of ["git"]) {
           await client.hSet(info, "client", name);
           expect(await folder.backendFor(this.blog.id)).toEqual("local");
         }
 
-        for (var other of ["dropbox", "google-drive", "icloud"]) {
+        for (var other of ["dropbox", "google-drive", "icloud", "local"]) {
           await client.hSet(info, "client", other);
           expect(await folder.backendFor(this.blog.id)).toEqual("s3");
         }

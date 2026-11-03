@@ -1,15 +1,64 @@
+// Development only (see README): sets up a blog on the Local client.
+const fs = require("fs-extra");
 const Blog = require("models/blog");
 const config = require("config");
-const chokidar = require("chokidar");
-const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
-const folder = require("storage/folder");
 const Fix = require("sync/fix");
 const syncReport = require("clients/util/syncReport");
 const establishSyncLock = require("sync/establishSyncLock");
 const clfdate = require("helper/clfdate");
+const source = require("./source");
+const { reconcile, seed } = require("./sync");
+const watch = require("./watch");
 const prefix = () => clfdate() + " Local folder client:";
 
-let watchers = {};
+// Brings the blog's folder in line with its source directory, creating the
+// directory first for a blog which has none (see README, "Existing blogs").
+// Resolves the directory.
+async function reconcileSource(blogID, dir) {
+  dir = dir || (await source.directory(blogID));
+
+  if (!(await fs.pathExists(dir))) {
+    // The old watcher changed the disk behind storage/folder's back, so S3's
+    // copy may be behind. Marked first, so the folder is read from the disk
+    // (storage/folder does not use S3 for a blog whose mirror is behind).
+    await require("storage/folder/mirror").markBehind(blogID);
+    const copied = await seed(blogID, dir);
+    console.log(prefix(), "Copied", copied, "files of the folder of", blogID, "to its new source directory", dir);
+    return dir;
+  }
+
+  // The lock is taken before anything in the folder changes, and held until
+  // every changed path is updated. If it can't be taken, nothing was touched.
+  const { folder, done } = await establishSyncLock(blogID);
+  const changed = [];
+  let failure;
+
+  try {
+    try {
+      await reconcile(blogID, dir, changed);
+    } catch (err) {
+      failure = err;
+    }
+
+    // Even after a failure, whatever was applied gets its entries updated
+    for (const path of new Set(changed)) {
+      try {
+        await folder.update(path);
+      } catch (err) {
+        if (!failure) failure = err;
+      }
+    }
+  } finally {
+    await done(failure || null);
+  }
+
+  if (changed.length) {
+    console.log(prefix(), "Reconciled", blogID, "with", dir + ":", changed.length, "changes");
+  }
+
+  if (failure) throw failure;
+  return dir;
+}
 
 function setup(blogID, callback) {
   Blog.get({ id: blogID }, function (err, blog) {
@@ -20,7 +69,13 @@ function setup(blogID, callback) {
       if (repaired) console.log(prefix(), "Fix repaired", blogID, repaired);
       if (err) return callback();
       if (config.environment === "development") {
-        await watch(blogID);
+        try {
+          const dir = await reconcileSource(blogID);
+          await watch(blogID, dir);
+        } catch (e) {
+          console.error(prefix(), "Unable to set up", blogID, e);
+          return callback();
+        }
       }
       console.log(prefix(), "Setup complete", blogID);
       callback();
@@ -28,98 +83,5 @@ function setup(blogID, callback) {
   });
 }
 
-async function watch(blogID) {
-  const debounceInterval = 50;
-  const maximumBatchSize = 100;
-  const pending = new Set();
-  let flushTimer;
-  let running = false;
-
-  async function processBatch(paths) {
-    const blog = await new Promise((resolve, reject) => {
-      Blog.get({ id: blogID }, (err, blog) =>
-        err ? reject(err) : resolve(blog)
-      );
-    });
-
-    if (!blog || blog.client !== "local") {
-      if (watchers[blogID]) {
-        watchers[blogID].close();
-        delete watchers[blogID];
-      }
-      return;
-    }
-
-    const { folder, done } = await establishSyncLock(blogID);
-    let batchError;
-
-    try {
-      for (const path of paths) {
-        try {
-          await folder.update(path);
-        } catch (err) {
-          if (!batchError) batchError = err;
-        }
-      }
-    } finally {
-      await done(batchError || null);
-    }
-
-    if (batchError) throw batchError;
-  }
-
-  async function flush() {
-    flushTimer = undefined;
-    if (running) return;
-    running = true;
-
-    try {
-      while (pending.size) {
-        const paths = [...pending].slice(0, maximumBatchSize);
-        paths.forEach((path) => pending.delete(path));
-        await processBatch(paths);
-      }
-    } catch (err) {
-      console.error(prefix(), "Unable to process watcher batch", blogID, err);
-    } finally {
-      running = false;
-      if (pending.size) scheduleFlush();
-    }
-  }
-
-  function scheduleFlush() {
-    if (flushTimer || running) return;
-    flushTimer = setTimeout(flush, debounceInterval);
-  }
-
-  try {
-    // chokidar needs a real directory, so this asks for the local path and a
-    // blog on the Local client stays on the local-disk backend of
-    // storage/folder, whatever BLOT_FOLDER_PRIMARY says (storage/folder/
-    // primary.js keeps it there). TODO: the Local client rework in #2258
-    // Phase E, watching a directory of its own, lets these blogs run on S3.
-    // To stop this watcher, call watcher.close();
-    const root = await folder.ensureLocal(blogID, "/");
-
-    if (watchers[blogID]) return;
-
-    const watcher = chokidar.watch(root, {
-      cwd: root,
-      ignored: shouldIgnoreFile,
-      ignoreInitial: true,
-    });
-
-    watcher.on("all", (event, path) => {
-      if (!path) return;
-      // Blot likes leading slashes
-      pending.add("/" + path);
-      scheduleFlush();
-    });
-
-    watchers[blogID] = watcher;
-  } catch (e) {
-    return console.error(e);
-  }
-}
-
 module.exports = setup;
+module.exports.reconcileSource = reconcileSource;
