@@ -14,7 +14,6 @@ var normalizeImageExif = require("./util/imageExif").normalize;
 var normalizeConverters = require("./util/converters").normalize;
 var updateCdnManifest = require("../template/util/updateCdnManifest");
 var forkSiteTemplate = require("../template/util/forkSiteTemplate");
-var renameGitRepo = require("clients/git/renameRepo");
 var serializeRedisHashValues = require("models/redisHashSerializer");
 var promisify = require("util").promisify;
 var updateCdnManifestAsync = promisify(updateCdnManifest);
@@ -176,33 +175,9 @@ module.exports = function (blogID, blog, callback) {
 
       multi.hSet(key.info(blogID), serializeRedisHashValues(serial(latest)));
 
-      // The repository moves before the handle is saved. The former handle
-      // is recorded nowhere else, so if the move fails the blog must still
-      // be on it, with its repository, for the user to try again.
-      var movesGitRepo =
-        changes.handle &&
-        former.handle &&
-        (former.client === "git" || latest.client === "git");
-
-      if (movesGitRepo) {
-        try {
-          await renameGitRepo(former.handle, latest.handle);
-        } catch (renameError) {
-          return callback(renameError, []);
-        }
-      }
-
       try {
         await multi.exec();
       } catch (err) {
-        if (movesGitRepo) {
-          try {
-            await renameGitRepo(latest.handle, former.handle);
-          } catch (renameError) {
-            console.log('Blog.set', blogID, 'Error moving git repository back', renameError);
-          }
-        }
-
         // We didn't manage to apply any changes
         // to this blog, so empty the list of changes
         return callback(err, []);

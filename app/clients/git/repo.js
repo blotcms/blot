@@ -246,8 +246,8 @@ async function commitChange(blogID, change) {
   // Before anything is touched
   plumbing.treePath(path);
 
-  // Required here because models/blog requires renameRepo, which requires
-  // this module.
+  // Required here, not at the top, so that loading this module doesn't load
+  // the blog model.
   var blog = await new Promise(function (resolve, reject) {
     require("models/blog").get({ id: blogID }, function (err, blog) {
       if (err) return reject(err);
