@@ -1,5 +1,5 @@
 // Read-only scan of blog folders for filenames which are fine on a POSIX disk
-// but awkward as S3 keys (folder/{blogID}/{path}), ahead of moving blog
+// but awkward as S3 keys ({blogID}/folder/{path}), ahead of moving blog
 // folders to S3 (app/storage/README §7, #2258). Nothing is written, renamed or
 // deleted, and symlinks are not followed.
 //
@@ -15,7 +15,7 @@
 // issues, PRs and chat.
 //
 // Categories:
-//   key-too-long     folder/{blogID}/{path} is over 1024 bytes of UTF-8
+//   key-too-long     {blogID}/folder/{path} is over 1024 bytes of UTF-8
 //   invalid-utf8     the name is not valid UTF-8
 //   control-char     C0, DEL or C1 control character in the name
 //   edge-whitespace  leading or trailing whitespace
@@ -169,7 +169,7 @@ function child(directory, name) {
 
 // Walks one blog's folder, calling report(category, pathBuffer, isDirectory)
 // for each problem, depth first, one directory at a time. `prefixBytes` is the
-// length of "folder/{blogID}/".
+// length of "{blogID}/folder/".
 async function scanFolder(root, prefixBytes, report) {
   async function visit(directory, relative) {
     const entries = [];

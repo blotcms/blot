@@ -5,7 +5,7 @@ var local = require("./local");
 var { NotFoundError } = require("./errors");
 
 // Mirrors changes to a blog's folder on disk into the S3 backend (objects
-// under folder/{blogID}/ plus the models/file index), #2258 Phase C: "write
+// under {blogID}/folder/ plus the models/file index), #2258 Phase C: "write
 // to both, disk first". Disk stays authoritative and every read still comes
 // from it; the mirror is a copy the reconcile can check and shadow reads can
 // try later.

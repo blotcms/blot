@@ -175,7 +175,7 @@ describe("storage/folder shadow reads", function () {
 
     // Same length, so only the bytes differ; the index still has the old hash
     spyOn(console, "error");
-    await s3.putBuffer("folder/" + this.blog.id + "/a.txt", Buffer.from("hellp"));
+    await s3.putBuffer(this.blog.id + "/folder/a.txt", Buffer.from("hellp"));
 
     await folder.read(this.blog.id, "/a.txt");
     await consume(folder.createReadStream(this.blog.id, "/a.txt"));
