@@ -144,8 +144,9 @@ start).
 - **When Redis is down**: auto-ssl caches each certificate in memory for an
   hour, then reads Redis again. A handshake that cannot read Redis falls back
   to the last certificate this proxy read for that domain (the
-  `auto_ssl_stale` shared dict, kept until the certificate expires), so
-  domains served recently keep HTTPS through a longer outage. Domains it has
+  `auto_ssl_stale` shared dict, kept until the certificate expires; the
+  warmer below fills it for every stored certificate), so custom domains
+  keep HTTPS through a longer outage. Domains it has
   no copy of get the fallback certificate, and nothing new is issued. The
   copies are in memory: they survive `openresty -s reload` but not a restart
   or a new container, so do not restart or redeploy the proxy while Redis is
@@ -158,8 +159,8 @@ start).
   from the other unit or before a deploy. So worker 0 reads every stored
   certificate when the container starts and every 30 minutes after
   (`auto_ssl_warm_start` in `config/init.conf`), and caches each in the
-  `auto_ssl` dict for 75 minutes (or `PROXY_AUTO_SSL_CACHE_TTL`), refreshing
-  any stale copy too. Handshakes then find the certificate cached and never
+  `auto_ssl` dict for 75 minutes (or `PROXY_AUTO_SSL_CACHE_TTL`), and keeps
+  its `auto_ssl_stale` copy for Redis outages. Handshakes then find the certificate cached and never
   read Redis. Expired certificates are left to the handshake path, and a pass
   stops rather than evict when the dict is full. Each pass is a `SCAN` of the
   keyspace and one pipelined `GET` per certificate.

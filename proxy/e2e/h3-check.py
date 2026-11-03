@@ -45,6 +45,8 @@ async def main(host, port, authority, path, sni=None):
         client.h3.send_headers(stream, [
             (b":method", b"GET"), (b":scheme", b"https"),
             (b":authority", authority.encode()), (b":path", path.encode()),
+            # An empty User-Agent is a bad bot (server.conf) and gets a 403
+            (b"user-agent", b"Mozilla/5.0 (proxy HTTP/3 check)"),
         ], end_stream=True)
         client.transmit()
         headers = await asyncio.wait_for(client.headers, 10)
