@@ -1,8 +1,9 @@
 // The git store's daily upkeep in shadow mode (#2259): for every shadowed
 // blog, the store's sweep and the cheap check of its copy against the
 // repository on disk, a deep check (a whole clone) of a few blogs in turn and
-// the git test blog, and deleting git/<blogID>/ prefixes left behind by blogs
-// no longer on git. See app/clients/git/shadow/maintenance.js.
+// the git test blog, and on the first of the month deleting <blogID>/git/
+// prefixes left behind by blogs no longer on git. See
+// app/clients/git/shadow/maintenance.js.
 //
 // It does nothing unless shadow mode is set (BLOT_GIT_STORE_SHADOW) and there
 // is a storage bucket. The scheduler runs it in one process (lock.cron).
@@ -39,10 +40,10 @@ async function run(options = {}) {
     "bytesFreed=" + sweeps.bytesFreed,
     "deepChecked=" + report.deepChecked,
     "findings=" + findings.length,
-    "orphanPrefixes=" + orphans.prefixes,
-    "orphansRemoved=" + orphans.removed,
-    "orphansSpared=" + orphans.spared,
-    "orphanErrors=" + orphans.errors,
+    "orphanPrefixes=" + (orphans ? orphans.prefixes : "-"),
+    "orphansRemoved=" + (orphans ? orphans.removed : "-"),
+    "orphansSpared=" + (orphans ? orphans.spared : "-"),
+    "orphanErrors=" + (orphans ? orphans.errors : "-"),
     "ms=" + report.ms
   );
 
@@ -64,6 +65,7 @@ function view(report) {
     count("missing") && plural(count("missing"), "missing file"),
     count("mismatch") && plural(count("mismatch"), "mismatch"),
     count("error") && plural(count("error"), "error"),
+    count("orphan") && plural(count("orphan"), "leftover"),
   ]
     .filter(Boolean)
     .join(", ");
@@ -76,6 +78,7 @@ function view(report) {
     hasMissing: count("missing") > 0,
     hasMismatch: count("mismatch") > 0,
     hasErrors: count("error") > 0,
+    hasOrphans: count("orphan") > 0,
   };
 }
 

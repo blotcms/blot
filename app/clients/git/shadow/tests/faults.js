@@ -186,7 +186,7 @@ describe("git store shadow mode: failures, coalescing and switching off", functi
   });
 
   // The store the app uses: the storage bucket (MinIO in tests), under
-  // git/<blogID>/. Only when the test runner provides MinIO.
+  // <blogID>/git/. Only when the test runner provides MinIO.
   (config.storage.endpoint ? describe : xdescribe)("in the storage bucket", function () {
     setup({ objectStore: null });
 
@@ -196,7 +196,7 @@ describe("git store shadow mode: failures, coalescing and switching off", functi
 
     it("mirrors pushes and writes", async function () {
       var s3 = require("storage/s3");
-      var store = createS3Store({ client: s3.client(), bucket: config.storage.bucket, prefix: "git/" + this.blog.id + "/" });
+      var store = createS3Store({ client: s3.client(), bucket: config.storage.bucket, prefix: this.blog.id + "/git/" });
 
       // The import, then a push through receive, then a write
       await this.local.writeAndPush("/a.txt", "A");

@@ -14,8 +14,11 @@ Today's check of the git store (shadow mode, #2259) against the repositories on 
 {{#hasMismatch}}
 - **mismatch**: the store's refs or files differ from the repository on disk, or a full clone failed index-pack or fsck. Look at the blog's last `op=push` and `op=write` lines. `docker exec -u 1000 blot-blue node scripts/git/backfill-store.js --blog <blogID>` brings refs up to date; for a failed clone or a wrong size, add `--reset`, as for a missing file.
 {{/hasMismatch}}
+{{#hasOrphans}}
+- **orphan**: the monthly sweep found and deleted a blog's copy under `<blogID>/git/` though the blog is deleted or off git. Removing the blog from git, or deleting it, should already have deleted it, twice, so a removal path missed it: find the blog's last `op=remove` lines (`logs green | grep "git-store-shadow" | grep "<blogID>" | grep "op=remove"`) and fix the code path that should have run.
+{{/hasOrphans}}
 {{#hasErrors}}
-- **error**: a check, sweep or the orphan cleanup could not run (often a failed request to the bucket). It runs again tomorrow; check by hand with `docker exec -u 1000 blot-blue node scripts/git/verify-store.js --blog <blogID> --deep`.
+- **error**: a check, sweep or the orphan cleanup could not run (often a failed request to the bucket). Checks and sweeps run again tomorrow, the orphan cleanup next month; check by hand with `docker exec -u 1000 blot-blue node scripts/git/verify-store.js --blog <blogID> --deep`.
 {{/hasErrors}}
 
 Every finding is also in the log as `op=verify` (or `op=sweep`, `op=remove`): `logs green | grep "git-store-shadow" | grep -E "op=(verify|sweep|remove)"` (or `logs blue`, whichever unit ran the job).

@@ -1,7 +1,7 @@
 // The object store interface (see memory.js) over an S3 bucket.
 //
 // The host passes in a configured S3Client, the bucket, and the prefix every
-// key sits under (git/{blogID}/). Only the S3 API subset Backblaze B2 also
+// key sits under ({blogID}/git/). Only the S3 API subset Backblaze B2 also
 // supports is used: plain and multipart PUT, ranged GET, HEAD, DELETE and
 // LIST, and one conditional write: a PUT with If-None-Match: * (putIfAbsent),
 // which is what makes a manifest swap safe. No tagging or storage classes.

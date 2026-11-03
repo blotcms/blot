@@ -1,5 +1,5 @@
 // Where things live inside one repository's object store (S3 keys under the
-// store's prefix, which the host sets to git/{blogID}/).
+// store's prefix, which the host sets to {blogID}/git/).
 //
 //   manifests/<seq>.json         seq zero-padded, so keys sort in order
 //   manifests/latest.json        a hint at the newest seq, nothing more

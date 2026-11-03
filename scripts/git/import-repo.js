@@ -12,7 +12,7 @@
 //
 // Usage:
 //   node scripts/git/import-repo.js <git-dir> --dir <folder> [options]
-//   node scripts/git/import-repo.js <git-dir> --bucket <name> --prefix <git/blog_x/> [options]
+//   node scripts/git/import-repo.js <git-dir> --bucket <name> --prefix <blog_x/git/> [options]
 //
 // Target (one of):
 //   --dir <folder>     a local directory used as the object store

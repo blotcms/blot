@@ -59,8 +59,14 @@ if [ "${#IAM_USER}" -gt 64 ] || ! [[ "$IAM_USER" =~ ^[A-Za-z0-9+=,.@_-]+$ ]]; th
 fi
 
 # Anyone may download an object whose key starts with blog_ (a blog's
-# assets, {blogID}/_*/..., and its folder content, {blogID}/folder/...).
-# Nothing else is public: no listing, no writes.
+# assets, {blogID}/_*/..., and its folder content, {blogID}/folder/...), except
+# a blog's git repository, {blogID}/git/, and any .git directory in
+# {blogID}/folder/: reads of those are denied to everyone outside this AWS
+# account, unsigned requests (the public, the CDN) and other accounts' signed
+# ones alike, so the app and the account are unaffected. The 32 ? match a blog
+# ID exactly. Why: README.md. Nothing else is public: no listing, no writes.
+BLOG_ID_PATTERN="blog_$(printf '?%.0s' {1..32})"
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 BUCKET_POLICY=$(cat <<JSON
 {
   "Version": "2012-10-17",
@@ -71,6 +77,17 @@ BUCKET_POLICY=$(cat <<JSON
       "Principal": "*",
       "Action": "s3:GetObject",
       "Resource": "arn:aws:s3:::${BUCKET}/blog_*"
+    },
+    {
+      "Sid": "NoPublicGitRepositories",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": [
+        "arn:aws:s3:::${BUCKET}/${BLOG_ID_PATTERN}/git/*",
+        "arn:aws:s3:::${BUCKET}/${BLOG_ID_PATTERN}/folder/*.git/*"
+      ],
+      "Condition": { "StringNotEquals": { "aws:PrincipalAccount": "${ACCOUNT_ID}" } }
     }
   ]
 }
@@ -144,8 +161,15 @@ run aws s3api put-public-access-block \
   --public-access-block-configuration \
   'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=false,RestrictPublicBuckets=false'
 
-step "Bucket policy: public s3:GetObject on blog_* only"
+step "Bucket policy: public s3:GetObject on blog_* only, not git repositories"
 run aws s3api put-bucket-policy --bucket "$BUCKET" --policy "$BUCKET_POLICY"
+
+# Puts the whole lifecycle configuration, so any rule added in the console is
+# replaced: add rules here
+step "Lifecycle: abort incomplete multipart uploads after 3 days"
+run aws s3api put-bucket-lifecycle-configuration \
+  --bucket "$BUCKET" \
+  --lifecycle-configuration '{"Rules":[{"ID":"abort-incomplete-multipart","Status":"Enabled","Filter":{"Prefix":""},"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":3}}]}'
 
 step "IAM user $IAM_USER"
 

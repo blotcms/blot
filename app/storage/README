@@ -91,9 +91,9 @@ at sync/build time instead.
   - `{blogID}/folder/{path}`: the blog's folder content (`.folder`, Phase 2).
     It is public like the rest of `blog_*`, since the blog's own domain
     already serves these files; the exception is `.git` directories inside a
-    folder, which the bucket policy denies to unsigned requests.
-  - `{blogID}/git/...`: Git client repos (Phase 3), also denied to unsigned
-    requests by the bucket policy.
+    folder, which the bucket policy denies to everyone outside the AWS
+    account (`config/storage-bucket/README.md`).
+  - `{blogID}/git/...`: Git client repos (Phase 3), denied the same way.
 
   **The assets scope is exactly a blog's top-level directories whose names
   start with `_`.** `storage/assets` enforces it: a relPath whose first
@@ -109,7 +109,7 @@ at sync/build time instead.
   prefix-filtered lifecycle rules. The whole bucket is public-read for
   `blog_*` keys (no listing, no public writes) because both scopes are
   public by design (except `.git` directories in a folder and
-  `{blogID}/git/`, which the policy denies to unsigned requests): assets are
+  `{blogID}/git/`, which the policy denies outside the AWS account): assets are
   served on the CDN, and a blog's folder is served at the blog's domain and
   through the CDN's `/folder/v-:version` route. Folder content goes in the same bucket: a second, versioned bucket
   for folders (for a "restore deleted file" feature) was considered and
@@ -193,7 +193,7 @@ at sync/build time instead.
   `ListBucket`, never write. A blog's folder content is under
   `{blogID}/folder/`, public like the rest of `blog_*` because the blog's own
   domain already serves it; `.git` directories in a folder and
-  `{blogID}/git/` are denied to unsigned requests. Asset
+  `{blogID}/git/` are denied outside the AWS account. Asset
   keys are `{blogID}/{path}`, identical to the CDN path, which is what lets
   Bunny fetch them with no rewriting. `config/storage-bucket`
   has the setup script and the operator steps.
@@ -425,8 +425,9 @@ should consolidate into one storage-layer method, exposed explicitly
   [#2259](https://github.com/blotcms/blot/issues/2259). Bare repos live in
   `{data_directory}/git/{handle}.git` (`app/clients/git/dataDir.js`)
   today. They move to a walgit-style store: immutable packs plus a small
-  manifest under the private `git/{blogID}/` prefix, with the SSD caching
-  refs, pack indexes and commits/trees, and blobs fetched on demand, so a
+  manifest under `{blogID}/git/`, kept private by the bucket policy, with
+  the SSD caching refs, pack indexes and commits/trees, and blobs fetched on
+  demand, so a
   repo can be larger than the SSD. No whole-repo archive and no S3
   filesystem mount. A push is acknowledged once its pack is in S3, under the
   per-blog lock, and the blog folder is materialized from the repo with no

@@ -16,12 +16,81 @@ bucket allows public `s3:GetObject` on `blog_*` keys, which covers the assets
 and the folder content, and nothing else public: no listing, no writes. The
 exceptions are `.git` directories inside a folder and the Git client repos
 under `{blogID}/git/` ([#2259](https://github.com/blotcms/blot/issues/2259)),
-which the bucket policy denies to unsigned requests.
+which the bucket policy denies to everyone outside the AWS account (see below).
 
 Tools that need a local path (sharp, pandoc, puppeteer) write to a staging
 directory under the app's tmp directory, `{tmp}/storage-assets-staging/
 {blogID}/...`; `assets.commit()` uploads it and deletes what it uploaded. The
 daily tmp prune removes staged files a week after they were last written.
+
+## Git repositories: `{blogID}/git/`, and what is not public under `blog_*`
+
+The git client's store (`app/clients/git/store`, [#2259](https://github.com/blotcms/blot/issues/2259))
+keeps each blog's repository, its packs, `.idx` files and numbered manifests,
+under `{blogID}/git/`, so everything of a blog sits under one prefix. Decided
+on 3 Nov 2026, over a private top-level `git/{blogID}/`.
+
+A repository must not be public, though `blog_*` is. A blog's folder is
+roughly what it publishes; its repository is every version of every file ever
+pushed, including deleted drafts and secrets someone committed and later
+removed. Blog IDs are in every CDN URL and manifests are numbered from 1, so
+a public copy could be downloaded whole, through `cdn.blot.im` at Blot's
+egress cost, and would get around the git password. So the bucket policy
+**denies anonymous reads** of two things under `blog_*`:
+
+- `{blogID}/git/*`, the repositories;
+- `{blogID}/folder/*.git/*`, any `.git` directory in a blog's folder content,
+  at any depth (a folder can hold a checkout of some other repository, whose
+  `.git/config` can hold a token). The blog itself never serves a path with
+  `/.git` in it (`app/blog/routes/assets.js`). `*` also matches a directory
+  named like `notes.git/`, which errs towards private.
+
+The Deny applies to every request from outside the AWS account
+(`aws:PrincipalAccount` is not the account's ID), which is every public read,
+including the CDN's pulls (Bunny fetches `blog_*` from the bucket without
+credentials, and an unsigned request has no account, so it doesn't match),
+and also a request signed with another account's credentials, which the
+`Principal: "*"` Allow would otherwise let through. The app's IAM user and
+anyone signed in to the account are not affected, so the Deny needs no list
+of exempt principals. `setup.sh` reads the account ID with
+`aws sts get-caller-identity`, so it stays out of this repository.
+Policy wildcards match across `/`, so `blog_*/git/*` would
+also match a folder's `photos/git/` directory; the 32 `?` match exactly a
+blog ID (`blog_` and 32 hex characters, `app/models/blog/generateID.js`),
+which pins the Deny to the blog's top level.
+
+Why not the private top-level prefix:
+
+- **Blot is public by default** ([privacy](https://blot.im/privacy)), and one
+  prefix a blog is simpler to reason about, list and delete. A mistake in the
+  Deny exposes repositories; that is an accepted risk, checked after every
+  policy change (below).
+- **The lifecycle rule doesn't need the prefix.** Lifecycle filters take a
+  literal prefix, no wildcards, so nothing can target every `blog_*/git/`.
+  The one rule there is, aborting incomplete multipart uploads, applies to
+  the whole bucket instead. A cheaper storage class for packs alone would
+  save a negligible amount at the store's size.
+- **Leftovers are found once a month.** Removing a blog from git, or deleting
+  it, deletes `{blogID}/git/` (again five minutes later, for work another
+  process had started). The store's sweep for copies left behind lists each
+  blog's `git/`, a listing per blog, so it runs on the first of the month,
+  and each copy it deletes is in the alert email as a removal path to fix.
+
+After changing the policy, check that an anonymous read of a git object is
+refused, directly and through the CDN, and a signed one is not:
+
+```
+curl -sI https://<bucket>.s3.us-west-2.amazonaws.com/<blogID>/git/manifests/0000000001.json   # 403
+curl -sI https://cdn.blot.im/<blogID>/git/manifests/0000000001.json                       # 403 or 404
+aws s3api head-object --bucket <bucket> --key <blogID>/git/manifests/0000000001.json      # 200
+```
+
+The bucket has one lifecycle rule, `abort-incomplete-multipart`: a multipart
+upload anywhere in the bucket (a git pack over 8 MiB, a large asset) still
+incomplete after 3 days is aborted, so a failed upload's parts don't stay
+billed. `setup.sh` puts it. The IAM policy above doesn't grant
+`s3:AbortMultipartUpload`, so the store's own abort after a failed upload is
+refused, and this rule is what cleans up.
 
 ## Create the bucket and the app's IAM user
 
