@@ -276,6 +276,22 @@ module.exports = {
   // Read on every write, so it can be changed in place by specs.
   folder_mirror: process.env.BLOT_FOLDER_MIRROR || "off",
 
+  // Shadow reads (app/storage/folder/shadow.js, #2258 Phase C): for the
+  // mirrored blogs above, this fraction of folder reads is repeated against
+  // the S3 backend once the disk has answered, and the two results compared
+  // and timed. 0 (the default) is off, 1 is every read. Read on every call.
+  // scripts/storage/shadow-report.js prints what it found.
+  folder_shadow: {
+    rate: Number(process.env.BLOT_FOLDER_SHADOW_RATE) || 0,
+    // Shadow reads running at once in a process; a sample over this is dropped
+    max_in_flight: 4,
+    // Files bigger than this have their size compared, not their bytes
+    max_compare_bytes: 16 * 1024 * 1024,
+    // A mismatch is checked again after this long, so a read which raced a
+    // sync (disk changed, S3 not yet) counts as transient, not as drift
+    recheck_ms: 5000,
+  },
+
   // Credentials for the S3 client in app/storage/s3.js. When these aren't
   // set the AWS SDK's default provider chain is used instead.
   aws: {
