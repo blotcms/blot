@@ -5,19 +5,20 @@
 # the release and the multi-architecture index digest.
 #
 # OpenResty is compiled in the `openresty` stage the way the official
-# openresty/openresty:alpine image is (docker-openresty tag 1.31.1.1-1,
-# alpine/Dockerfile: same configure flags and bundled OpenSSL and PCRE2),
-# with every download checked against a pinned sha256. The `-fat` variant's
-# extras are left out; see "Pinned dependencies" in proxy/README.md.
+# openresty/openresty:alpine image is (docker-openresty tag 1.31.8.1-0,
+# alpine/Dockerfile: same configure flags and bundled PCRE2; OpenSSL follows
+# openresty-packaging, 3.5.9, where that image lags at 3.5.8), with every
+# download checked against a pinned sha256. The `-fat` variant's extras are
+# left out; see "Pinned dependencies" in proxy/README.md.
 # Lua dependencies are fetched as version-pinned, checksummed .src.rock archives
 # from luarocks.org rather than installed with a luarocks, whose remote manifest
 # no longer loads.
 ARG NODE_BASE=node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
 
 # The OpenResty release, shared by the openresty and brotli stages
-ARG OPENRESTY_VERSION=1.31.1.1
-ARG OPENRESTY_SHA256=65b78baadd3f0984055de89bf13f4a1932e5bfe9c31932037a134ea2b1a0ce42
-ARG NGINX_VERSION=1.31.1
+ARG OPENRESTY_VERSION=1.31.8.1
+ARG OPENRESTY_SHA256=b569c63b420f80a4ac8466f2deffe73ed93ab760026532e039c3658409a997f4
+ARG NGINX_VERSION=1.31.8
 
 # ---------------------------------------------------------------------------
 # Stage 0: OpenResty, built from source on the shared base
@@ -28,8 +29,8 @@ ARG OPENRESTY_VERSION
 ARG OPENRESTY_SHA256
 
 # https://github.com/openresty/openresty-packaging/blob/master/alpine/openresty-openssl3/APKBUILD
-ARG RESTY_OPENSSL_VERSION=3.5.6
-ARG RESTY_OPENSSL_SHA256=deae7c80cba99c4b4f940ecadb3c3338b13cb77418409238e57d7f31f2a3b736
+ARG RESTY_OPENSSL_VERSION=3.5.9
+ARG RESTY_OPENSSL_SHA256=603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a
 # OpenResty's patch for it, from the release tag
 ARG RESTY_OPENSSL_PATCH_VERSION=3.5.5
 ARG RESTY_OPENSSL_PATCH_SHA256=0a30cc762a9d72901e8415a33f7671bb68469d46121061e26afe7b718f47581e
@@ -38,8 +39,8 @@ ARG RESTY_OPENSSL_BUILD_OPTIONS="enable-camellia enable-seed enable-rfc3779 enab
         "
 
 # https://github.com/openresty/openresty-packaging/blob/master/alpine/openresty-pcre2/APKBUILD
-ARG RESTY_PCRE_VERSION=10.47
-ARG RESTY_PCRE_SHA256=c08ae2388ef333e8403e670ad70c0a11f1eed021fd88308d7e02f596fcd9dc16
+ARG RESTY_PCRE_VERSION=10.49
+ARG RESTY_PCRE_SHA256=929f0b20e62879252a15886b06c89f1edef61a363cbd5826fb041080a5e557ae
 ARG RESTY_PCRE_BUILD_OPTIONS="--enable-jit --enable-pcre2grep-jit --disable-bsr-anycrlf --disable-coverage --disable-ebcdic --disable-fuzz-support \
     --disable-jit-sealloc --disable-never-backslash-C --enable-newline-is-lf --enable-pcre2-8 --enable-pcre2-16 --enable-pcre2-32 \
     --enable-pcre2grep-callout --enable-pcre2grep-callout-fork --disable-pcre2grep-libbz2 --disable-pcre2grep-libz --disable-pcre2test-libedit \

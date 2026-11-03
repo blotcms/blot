@@ -2,7 +2,7 @@
   font-family: 'VCR OSD Mono';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/vcr-osd-mono/400.woff2?version=457b2c&extension=.woff2') format('woff2'),
+  src: url('{{{config.cdn.origin}}}/fonts/vcr-osd-mono/400.woff2?version=125d80&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/vcr-osd-mono/400.woff?version=33b234&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.5859375em}
