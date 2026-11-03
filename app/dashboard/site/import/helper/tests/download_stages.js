@@ -32,7 +32,7 @@ describe("import download stages", function () {
     post.metadata.thumbnail = "https://example.com/thumb.jpg";
     post.html =
       '<p><img src="https://example.com/a.png"><img src="https://example.com/gone.png"><img src="data:image/png;base64,AAAA"><img src="https://example.com/a.png"></p>';
-    spyOn(sandboxFetch, "many").and.callFake(async (requests) =>
+    spyOn(sandboxFetch, "batch").and.callFake(async (requests) =>
       requests.map((request) =>
         request.url.includes("gone")
           ? refused()
@@ -42,8 +42,8 @@ describe("import download stages", function () {
 
     const result = await run(downloadImages, post);
 
-    expect(sandboxFetch.many).toHaveBeenCalledTimes(1);
-    const sent = sandboxFetch.many.calls.argsFor(0)[0];
+    expect(sandboxFetch.batch).toHaveBeenCalledTimes(1);
+    const sent = sandboxFetch.batch.calls.argsFor(0)[0];
     expect(sent.map((r) => r.url)).toEqual([
       "https://example.com/thumb.jpg",
       "https://example.com/a.png",
@@ -72,7 +72,7 @@ describe("import download stages", function () {
   it("fetches a post's audio in one jail and keeps links it could not fetch", async function () {
     post.html =
       '<audio src="https://example.com/a.mp3"></audio><audio src="https://example.com/b.mp3"></audio><audio src="data:audio/mp3;base64,AA"></audio>';
-    spyOn(sandboxFetch, "many").and.callFake(async (requests) =>
+    spyOn(sandboxFetch, "batch").and.callFake(async (requests) =>
       requests.map((request) =>
         request.url.endsWith("b.mp3")
           ? refused()
@@ -83,8 +83,8 @@ describe("import download stages", function () {
 
     const result = await run(downloadAudio, post);
 
-    expect(sandboxFetch.many).toHaveBeenCalledTimes(1);
-    expect(sandboxFetch.many.calls.argsFor(0)[0]).toEqual([
+    expect(sandboxFetch.batch).toHaveBeenCalledTimes(1);
+    expect(sandboxFetch.batch.calls.argsFor(0)[0]).toEqual([
       jasmine.objectContaining({ url: "https://example.com/a.mp3", kind: "file", check: "audio" }),
       jasmine.objectContaining({ url: "https://example.com/b.mp3", kind: "file", check: "audio" }),
     ]);
@@ -95,15 +95,15 @@ describe("import download stages", function () {
   it("fetches a post's PDF links in one jail, and only the .pdf ones", async function () {
     post.html =
       '<a href="https://example.com/a.pdf">a</a><a href="https://example.com/page.html">page</a><a href="https://example.com/b.pdf">b</a>';
-    spyOn(sandboxFetch, "many").and.callFake(async (requests) =>
+    spyOn(sandboxFetch, "batch").and.callFake(async (requests) =>
       requests.map(() => ({ ok: true, status: 200, kind: "file", data: Buffer.from("%PDF-1"), headers: {} }))
     );
     spyOn(console, "log");
 
     const result = await run(downloadPdfs, post);
 
-    expect(sandboxFetch.many).toHaveBeenCalledTimes(1);
-    expect(sandboxFetch.many.calls.argsFor(0)[0].map((r) => [r.url, r.check])).toEqual([
+    expect(sandboxFetch.batch).toHaveBeenCalledTimes(1);
+    expect(sandboxFetch.batch.calls.argsFor(0)[0].map((r) => [r.url, r.check])).toEqual([
       ["https://example.com/a.pdf", "pdf"],
       ["https://example.com/b.pdf", "pdf"],
     ]);

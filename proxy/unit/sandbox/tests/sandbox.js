@@ -339,6 +339,7 @@ async function withBroker(options, fn) {
     spawnJail: (name, cgroup) => {
       counter++;
       if (options.spawned) options.spawned.push(cgroup);
+      if (options.started) options.started.push(name);
       return spawn("sh", ["-c", script], { stdio: ["pipe", "pipe", "ignore"] });
     },
   });
@@ -633,6 +634,29 @@ test("broker: two jobs in one cgroup take turns, oldest first, each with a queue
       assert.strictEqual(reply.header.ok, true);
     }
   });
+});
+
+test("broker: jobs in one cgroup alternate, so a long queue of one doesn't hold the cgroup against the other", async () => {
+  const shared = ["/c/shared"];
+  const jobs = {
+    ...JOBS(),
+    images: { ...JOBS().echo, cgroups: shared },
+    batch: { ...JOBS().echo, cgroups: shared },
+  };
+  const started = [];
+  const { script, release } = hold();
+  await withBroker({ jobs, maxRunning: 4, maxQueued: 8, script, started, clearCgroup: () => {} }, async (socket, broker) => {
+    const replies = [request(socket, line("batch"), "")];
+    await until(() => broker.running.size === 1);
+    // three import batches queue up, and then a post build's image
+    for (const name of ["batch", "batch", "images"]) {
+      replies.push(request(socket, line(name), ""));
+      await until(() => broker.queue.length === replies.length - 1);
+    }
+    release();
+    for (const reply of await Promise.all(replies)) assert.strictEqual(reply.header.ok, true);
+  });
+  assert.deepStrictEqual(started, ["batch", "images", "batch", "batch"]);
 });
 
 test("broker: makes the cgroups jobs ask for when it listens, and logs one it can't", async () => {

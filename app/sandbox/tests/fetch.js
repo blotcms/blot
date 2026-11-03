@@ -182,6 +182,54 @@ describe("sandbox fetch job", function () {
     });
   });
 
+  describe("the batch's time", function () {
+    it("puts off a request that would have less than its whole time, instead of cutting it short", async function () {
+      const real = Date.now.bind(Date);
+      let offset = 0;
+      spyOn(Date, "now").and.callFake(() => real() + offset);
+      routes["/first"] = (req, res) => {
+        offset = 58 * 1000; // the batch has 2s of its 60s left
+        res.end("first");
+      };
+      routes["/second"] = send("second");
+
+      const { meta, outputs } = await batch([
+        { url: origin + "/first" },
+        { url: origin + "/second", timeoutMs: 5000 },
+        { url: origin + "/second", timeoutMs: 1000 },
+      ]);
+
+      expect(String(outputs[0])).toBe("first");
+      expect(meta.results[1]).toEqual(jasmine.objectContaining({ deferred: true, error: "batch timed out" }));
+      expect(meta.results[1].timedOut).toBeUndefined();
+      // one that fits in what is left is fetched
+      expect(meta.results[2].status).toBe(200);
+    });
+
+    it("sends a put-off request again, in a jail of its own, with its whole time", async function () {
+      const real = Date.now.bind(Date);
+      let offset = 0;
+      spyOn(Date, "now").and.callFake(() => real() + offset);
+      routes["/first"] = (req, res) => {
+        offset = 58 * 1000;
+        res.end("first");
+      };
+      routes["/second"] = (req, res) => {
+        offset = 0;
+        res.end("second");
+      };
+      spyOn(sandbox, "run").and.callThrough();
+
+      const results = await sandboxFetch.many([
+        { url: origin + "/first" },
+        { url: origin + "/second", timeoutMs: 5000 },
+      ]);
+
+      expect(results.map((r) => r.text)).toEqual(["first", "second"]);
+      expect(sandbox.run).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe("text", function () {
     it("returns the body decompressed, with the caching and type headers", async function () {
       routes["/page"] = send(zlib.gzipSync("<p>hello</p>"), {
@@ -520,6 +568,42 @@ describe("sandbox fetch job", function () {
       expect(results.length).toBe(MAX_REQUESTS * 2 + 1);
       expect(results.every((r) => r.ok && r.text === "n")).toBe(true);
       expect(sandbox.run.calls.allArgs().map(([, args]) => args.requests.length)).toEqual([MAX_REQUESTS, MAX_REQUESTS, 1]);
+    });
+
+    it("starts no more jails once the signal aborts", async function () {
+      const big = Buffer.alloc(BATCH_BYTES - 10, "x");
+      routes["/big"] = send(big);
+      routes["/small"] = send("b".repeat(100));
+      const controller = new AbortController();
+      spyOn(sandbox, "run").and.callFake(async (...args) => {
+        const result = await sandbox.run.and.originalFn(...args);
+        controller.abort(new Error("cancelled"));
+        return result;
+      });
+
+      let error;
+      try {
+        await sandboxFetch.many(
+          [
+            { url: origin + "/big", kind: "file", maxBytes: 20 * MiB },
+            { url: origin + "/small", kind: "file" },
+            { url: origin + "/small", kind: "file" },
+          ],
+          { signal: controller.signal }
+        );
+      } catch (e) {
+        error = e;
+      }
+
+      // the first jail kept the first body and put the rest off; the second was never started
+      expect(error.message).toBe("cancelled");
+      expect(sandbox.run).toHaveBeenCalledTimes(1);
+
+      const aborted = new AbortController();
+      aborted.abort();
+      sandbox.run.calls.reset();
+      await expectAsync(sandboxFetch.many([{ url: origin + "/small" }], { signal: aborted.signal })).toBeRejected();
+      expect(sandbox.run).not.toHaveBeenCalled();
     });
 
     it("gives every request the sandbox's error when the sandbox fails", async function () {

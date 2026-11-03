@@ -16,10 +16,8 @@ const MAX_IMPORT_BYTES = 1024 * 1024 * 1024;
 // "image", as the fetch job takes them. Resolves with { data, headers, format,
 // width, height }: headers is a Map of the content-type and
 // content-disposition the server sent, for an image its format is what the
-// jail found. prefetched is the Map prefetch() returned, to take the answer
+// jail found. prefetched is what prefetch() returned, to take the answer
 // from instead of a jail for this one URL.
-
-const KEY = (url, kind, check) => [kind, check || "", url].join("|");
 
 function isFetchable(url) {
   if (typeof url !== "string") return false;
@@ -66,34 +64,58 @@ function currentSignal() {
   return state && state.signal;
 }
 
-// Fetches several URLs in one jail, so an import pays for its start once for a
-// post's images, or its audio, or its PDFs, not for each. Resolves with a Map
-// to pass to download() as prefetched, which gives each URL's answer, error
-// included. A URL the sandbox itself failed on (busy, unavailable) is
-// left out of it, so download() tries it again by itself.
+// Fetches a post's URLs a jail's worth at a time, so an import pays for a
+// jail's start once for several images, or audio files, or PDFs, not for each.
+// Nothing is fetched until download() asks for the first URL; then it and the
+// URLs after it, up to a jail's batch, are fetched together, and the next batch
+// only when download() reaches a URL that isn't in the last. So the answers held
+// in memory are one batch's (the job keeps a batch to its first body and 16
+// MiB more), and the import's byte limit, which download() checks as it takes
+// each answer, stops the next batch from being fetched at all.
+//
+// Resolves with the object to pass to download() as prefetched. A URL the
+// sandbox itself failed on (busy, unavailable) is left to download(), which
+// tries it again by itself.
 async function prefetch(urls, options = {}) {
-  const prefetched = new Map();
   lifecycle.check();
-  const wanted = [...new Set(urls)].filter(isFetchable);
-  if (wanted.length < 2) return prefetched;
+  const pending = [...new Set(urls)].filter(isFetchable);
+  const results = new Map();
 
-  const { kind = "file", check } = options;
-  let results;
-  try {
-    results = await whileRunning(
-      sandboxFetch.many(wanted.map((url) => toRequest(url, options)), { label: "import" }),
-      currentSignal()
-    );
-  } catch (error) {
-    if (error && error.name === "AbortError") throw error;
-    return prefetched;
-  }
-  lifecycle.check();
-  wanted.forEach((url, i) => {
-    const sandboxFailed = !results[i].ok && /^SANDBOX_/.test(results[i].error.code || "");
-    if (!sandboxFailed) prefetched.set(KEY(url, kind, check), results[i]);
-  });
-  return prefetched;
+  return {
+    // The answer for url, or undefined to fetch it by itself
+    async take(url, signal) {
+      if (results.has(url)) {
+        const result = results.get(url);
+        results.delete(url);
+        return result;
+      }
+
+      const start = pending.indexOf(url);
+      if (start === -1) return undefined;
+      const window = pending.slice(start, start + sandboxFetch.MAX_REQUESTS);
+      if (window.length < 2) return undefined;
+
+      // What the last batch left that wasn't asked for is dropped, not kept
+      results.clear();
+      if (signal && signal.aborted) throw lifecycle.cancelled();
+      const answers = await sandboxFetch.batch(
+        window.map((each) => toRequest(each, options)),
+        { label: "import" }
+      );
+
+      window.forEach((each, i) => {
+        // Put off for want of room: stays in line for a batch of its own
+        if (answers[i].deferred) return;
+        pending.splice(pending.indexOf(each), 1);
+        const sandboxFailed = !answers[i].ok && /^SANDBOX_/.test(answers[i].error.code || "");
+        if (!sandboxFailed) results.set(each, answers[i]);
+      });
+
+      const result = results.get(url);
+      results.delete(url);
+      return result;
+    },
+  };
 }
 
 module.exports = async function download(url, options = {}) {
@@ -104,13 +126,10 @@ module.exports = async function download(url, options = {}) {
 
   if (!isFetchable(url)) throw new Error("Only HTTP(S) URLs can be imported: " + String(url).slice(0, 100));
 
-  const key = KEY(url, kind, check);
-  let result;
-  if (prefetched && prefetched.has(key)) {
-    result = prefetched.get(key);
-  } else {
+  let result = prefetched ? await whileRunning(prefetched.take(url, signal), signal) : undefined;
+  if (!result) {
     result = await whileRunning(
-      sandboxFetch.many([toRequest(url, options)], { label: "import" }).then((results) => results[0]),
+      sandboxFetch.many([toRequest(url, options)], { label: "import", signal }).then((results) => results[0]),
       signal
     );
   }

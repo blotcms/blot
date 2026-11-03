@@ -144,15 +144,35 @@ function createBroker(options = {}) {
     });
   }
 
+  // Jobs that share a cgroup take turns: a job that ran last in the cgroup it
+  // is about to use lets another job waiting for it go first. Without this, a
+  // big import's batches, queued ahead of a post build's images, would hold the
+  // one fetch slot until they were all done.
+  const lastNameIn = new Map();
+  function yieldsTurn({ name, job }) {
+    if (!job.cgroups) return false;
+    const directory = freeCgroup(job);
+    if (!directory || lastNameIn.get(directory) !== name) return false;
+    return queue.some(
+      (other) =>
+        other.name !== name &&
+        !other.socket.destroyed &&
+        other.job.cgroups &&
+        other.job.cgroups.includes(directory) &&
+        hasRoom(other)
+    );
+  }
+
   function next() {
-    // Oldest first, passing over a job that is at its own limit
+    // Oldest first, passing over a job that is at its own limit, or that ran
+    // last in a cgroup another waiting job could use
     for (let i = 0; i < queue.length && running.size < maxRunning; ) {
       const request = queue[i];
       if (request.socket.destroyed) queue.splice(i, 1);
       else if (Date.now() - request.queued > maxQueuedMs) {
         queue.splice(i, 1);
         fail(request.socket, "busy");
-      } else if (hasRoom(request)) {
+      } else if (hasRoom(request) && !yieldsTurn(request)) {
         queue.splice(i, 1);
         start(request);
       } else i++;
@@ -176,6 +196,7 @@ function createBroker(options = {}) {
     }
     const entry = { child, name, cgroup: directory };
     running.add(entry);
+    if (directory) lastNameIn.set(directory, name);
 
     const kill = (error) => {
       if (!failure) failure = error || "disconnected";

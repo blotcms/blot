@@ -78,56 +78,106 @@ describe("bounded import downloads", function () {
 
   describe("prefetch", function () {
     const urls = ["https://example.com/a.pdf", "https://example.com/b.pdf", "https://example.com/c.pdf"];
+    const answer = (request) =>
+      request.url.endsWith("b.pdf") ? refused("404", { status: 404 }) : file(request.url);
 
-    it("fetches the URLs in one batch, and download takes them from it", async function () {
-      spyOn(sandboxFetch, "many").and.callFake(async (requests) =>
-        requests.map(({ url }) => (url.endsWith("b.pdf") ? refused("404", { status: 404 }) : file(url)))
-      );
+    it("fetches the URLs in one batch when the first is asked for, and download takes them from it", async function () {
+      spyOn(sandboxFetch, "batch").and.callFake(async (requests) => requests.map(answer));
+      spyOn(sandboxFetch, "many");
 
       const prefetched = await download.prefetch(
         urls.concat(urls[0], "data:text/plain,hi", "/relative"),
         { kind: "file", check: "pdf", timeout: 777 }
       );
-
-      expect(sandboxFetch.many).toHaveBeenCalledTimes(1);
-      const sent = sandboxFetch.many.calls.argsFor(0)[0];
-      expect(sent.map((r) => r.url)).toEqual(urls);
-      expect(sent.every((r) => r.check === "pdf" && r.timeoutMs === 777)).toBe(true);
+      expect(sandboxFetch.batch).not.toHaveBeenCalled();
 
       const options = { kind: "file", check: "pdf", prefetched };
       expect((await download(urls[0], options)).data.toString()).toBe(urls[0]);
-      expect((await download(urls[0], options)).data.toString()).toBe(urls[0]);
+      expect(sandboxFetch.batch).toHaveBeenCalledTimes(1);
+      const sent = sandboxFetch.batch.calls.argsFor(0)[0];
+      expect(sent.map((r) => r.url)).toEqual(urls);
+      expect(sent.every((r) => r.check === "pdf" && r.timeoutMs === 777)).toBe(true);
+
       let error;
       try { await download(urls[1], options); } catch (e) { error = e; }
       expect(error.message).toBe("404");
-      expect(sandboxFetch.many).toHaveBeenCalledTimes(1);
-
-      // not what was prefetched: fetched by itself
-      await download(urls[0], { kind: "file", prefetched });
-      expect(sandboxFetch.many).toHaveBeenCalledTimes(2);
-    });
-
-    it("leaves one URL, or none, to download", async function () {
-      spyOn(sandboxFetch, "many");
-      expect((await download.prefetch(urls.slice(0, 1))).size).toBe(0);
-      expect((await download.prefetch([])).size).toBe(0);
+      expect((await download(urls[2], options)).data.toString()).toBe(urls[2]);
+      expect(sandboxFetch.batch).toHaveBeenCalledTimes(1);
       expect(sandboxFetch.many).not.toHaveBeenCalled();
     });
 
-    it("leaves out what the sandbox itself failed on, so download tries it again", async function () {
-      spyOn(sandboxFetch, "many").and.returnValues(
-        Promise.resolve(urls.map(() => refused("sandbox: busy", { code: "SANDBOX_BUSY" }))),
-        Promise.resolve([file("second try")])
-      );
+    it("fetches the next batch only when the import gets to it", async function () {
+      const many = Array.from({ length: sandboxFetch.MAX_REQUESTS + 3 }, (_, i) => `https://example.com/${i}.pdf`);
+      spyOn(sandboxFetch, "batch").and.callFake(async (requests) => requests.map((r) => file(r.url)));
 
-      const prefetched = await download.prefetch(urls, { kind: "file" });
-      expect(prefetched.size).toBe(0);
-      expect((await download(urls[0], { prefetched })).data.toString()).toBe("second try");
+      const prefetched = await download.prefetch(many, { kind: "file" });
+      const options = { kind: "file", prefetched };
+
+      await download(many[0], options);
+      await download(many[sandboxFetch.MAX_REQUESTS - 1], options);
+      expect(sandboxFetch.batch).toHaveBeenCalledTimes(1);
+      expect(sandboxFetch.batch.calls.argsFor(0)[0].length).toBe(sandboxFetch.MAX_REQUESTS);
+
+      await download(many[sandboxFetch.MAX_REQUESTS], options);
+      expect(sandboxFetch.batch).toHaveBeenCalledTimes(2);
+      expect(sandboxFetch.batch.calls.argsFor(1)[0].map((r) => r.url)).toEqual(many.slice(sandboxFetch.MAX_REQUESTS));
     });
 
-    it("gives up when the fetch itself fails, and download tries again", async function () {
-      spyOn(sandboxFetch, "many").and.returnValue(Promise.reject(new Error("unit has no sandbox")));
-      expect((await download.prefetch(urls)).size).toBe(0);
+    it("stops fetching once the import's byte limit is reached", async function () {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), "import-window-"));
+      const state = lifecycle.create(directory);
+      const many = Array.from({ length: sandboxFetch.MAX_REQUESTS + 1 }, (_, i) => `https://example.com/${i}.pdf`);
+      spyOn(sandboxFetch, "batch").and.callFake(async (requests) => requests.map((r) => file(r.url)));
+      try {
+        await state.run(async () => {
+          const prefetched = await download.prefetch(many, { kind: "file" });
+          state.bytes = 1024 * 1024 * 1024 - 5;
+          let error;
+          try { await download(many[0], { kind: "file", prefetched }); } catch (e) { error = e; }
+          expect(error.code).toBe("IMPORT_BYTE_LIMIT");
+          // the import is stopped: no second batch is fetched
+          error = null;
+          try { await download(many[sandboxFetch.MAX_REQUESTS], { kind: "file", prefetched }); } catch (e) { error = e; }
+          expect(error.code).toBe("IMPORT_BYTE_LIMIT");
+        });
+        expect(sandboxFetch.batch).toHaveBeenCalledTimes(1);
+      } finally {
+        state.dispose();
+        fs.removeSync(directory);
+      }
+    });
+
+    it("leaves a URL put off for want of room in line for a batch of its own", async function () {
+      spyOn(sandboxFetch, "batch").and.returnValues(
+        Promise.resolve([file("a"), { deferred: true }, { deferred: true }]),
+        Promise.resolve([file("b"), file("c")])
+      );
+      const prefetched = await download.prefetch(urls, { kind: "file" });
+      const options = { kind: "file", prefetched };
+
+      expect((await download(urls[0], options)).data.toString()).toBe("a");
+      expect((await download(urls[1], options)).data.toString()).toBe("b");
+      expect((await download(urls[2], options)).data.toString()).toBe("c");
+      expect(sandboxFetch.batch.calls.argsFor(1)[0].map((r) => r.url)).toEqual(urls.slice(1));
+    });
+
+    it("leaves one URL, or none, to download", async function () {
+      spyOn(sandboxFetch, "batch");
+      spyOn(sandboxFetch, "many").and.callFake(async () => [file("alone")]);
+      const prefetched = await download.prefetch(urls.slice(0, 1));
+      expect((await download(urls[0], { prefetched })).data.toString()).toBe("alone");
+      await download.prefetch([]);
+      expect(sandboxFetch.batch).not.toHaveBeenCalled();
+    });
+
+    it("leaves out what the sandbox itself failed on, so download tries it again", async function () {
+      spyOn(sandboxFetch, "batch").and.returnValue(
+        Promise.resolve(urls.map(() => refused("sandbox: busy", { code: "SANDBOX_BUSY" })))
+      );
+      spyOn(sandboxFetch, "many").and.callFake(async () => [file("second try")]);
+
+      const prefetched = await download.prefetch(urls, { kind: "file" });
+      expect((await download(urls[0], { prefetched })).data.toString()).toBe("second try");
     });
   });
 

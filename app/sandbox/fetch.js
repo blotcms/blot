@@ -17,7 +17,9 @@
 //
 // many sends up to MAX_REQUESTS to a jail at a time and sends again, in a later
 // jail, the ones the job put off for want of room, so it holds every body it
-// returns in memory at once: give it what the caller can hold.
+// returns in memory at once: give it what the caller can hold. batch is one
+// jail, with the put-off ones answered { deferred: true } for the caller to
+// send again when it has room; it holds at most one jail's bodies.
 //
 // In production a unit without a sandbox refuses, as helper/egress used to:
 // the job would run in this process, with nothing to keep it off internal
@@ -61,8 +63,9 @@ function succeeded(meta, output) {
 }
 
 // One jail's worth. Resolves with the result of each request, or { deferred }
-// for one the job put off.
-async function batch(requests) {
+// for one the job put off for want of room, which the caller sends again.
+async function batch(requests, { label } = {}) {
+  assertReady(label);
   let reply;
   try {
     reply = await sandbox.run("fetch", { requests }, NONE);
@@ -84,7 +87,9 @@ async function batch(requests) {
   });
 }
 
-async function many(requests, { label } = {}) {
+// options: { label, signal }. Once signal aborts no further jail is started,
+// and many rejects with its reason.
+async function many(requests, { label, signal } = {}) {
   assertReady(label);
   if (!Array.isArray(requests)) throw new Error("sandbox/fetch: requests must be a list");
 
@@ -92,9 +97,10 @@ async function many(requests, { label } = {}) {
   let pending = requests.map((request, i) => i);
 
   while (pending.length) {
+    if (signal && signal.aborted) throw signal.reason || new Error("sandbox/fetch: aborted");
     const indexes = pending.slice(0, MAX_REQUESTS);
     pending = pending.slice(MAX_REQUESTS);
-    const answers = await batch(indexes.map((i) => requests[i]));
+    const answers = await batch(indexes.map((i) => requests[i]), { label });
 
     let progress = false;
     answers.forEach((answer, j) => {
@@ -122,4 +128,4 @@ async function one(request, options) {
   return result;
 }
 
-module.exports = { one, many, MAX_REQUESTS };
+module.exports = { one, many, batch, MAX_REQUESTS };

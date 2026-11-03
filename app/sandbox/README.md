@@ -127,8 +127,15 @@ starts `SANDBOX_`, and it never falls back to in-process.
   egress boundary did.
 
   The importer collects a post's images, then its audio, then its PDFs, and
-  fetches each kind in one batch (`download.prefetch`) before it goes through the
-  post, so a bulk import pays for a jail's start once for each, not for each file.
+  fetches each kind a jail's worth at a time (`download.prefetch`): a batch is
+  fetched when the import reaches its first URL, and the next only when it
+  reaches a URL that isn't in it, so Node holds one batch's bodies, not the
+  post's, and the import's 1 GiB limit, checked as each is taken, stops the
+  next batch from being fetched. A bulk import pays for a jail's start once for
+  several files, not for each. A request is started only with the whole of its
+  `timeoutMs` left in the batch's 60s, else it is put off like one that didn't
+  fit, not cut short; and `many` takes a `signal` and starts no jail after it
+  aborts.
 
 Callers write any output files themselves: the jail can't reach the data mount.
 Args are JSON and every job checks them, since they come from the less trusted side.
@@ -196,11 +203,13 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
 - **`fetch` is in the same cgroup, with a queue of its own.** An import's
   files, the domain checks and the featured-site checks take turns with the
   post builds' images in the one slot, and add no memory. What keeps them from
-  blocking each other is the queues: the broker starts whichever job has waited
-  longest, and each job's queue is its own (`fetch` 16, `fetch-image` 8), so a
-  big import queues only its own batches, one at a time, and a post build's
-  images wait behind at most one batch (the most 75s, usually a few seconds),
-  not behind the import; and the import waits behind at most one image (30s),
+  blocking each other is the queues and the broker's turn-taking: each job's
+  queue is its own (`fetch` 16, `fetch-image` 8), and when a cgroup is free the
+  broker starts the oldest request, except that a job that ran last in it yields
+  to a waiting job of the other name. So a big import's batches, however many
+  are queued ahead, alternate with the post build's images, and a post build's
+  image waits behind at most one batch (75s at most, usually a few seconds); and
+  the import waits behind at most one image (30s),
   not behind the build's whole backlog. `busy` for either is logged, and the
   caller carries on without that file or link. A second cgroup for imports was
   weighed and left. It would have to be 128 MiB or less (the proxy jail's 128 +

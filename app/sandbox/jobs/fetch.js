@@ -129,11 +129,10 @@ async function fetchOne(request, { held, deadline }) {
     throw new FetchError("unknown check");
   }
 
-  const timeout = Math.min(
-    positive(request.timeoutMs, DEADLINE, MAX_REQUEST_TIMEOUT),
-    deadline - Date.now()
-  );
-  if (timeout <= 0) throw new FetchError("batch timed out", { deferred: true });
+  // A request gets the whole of its time or none: with less left in the batch
+  // it is put off to a jail of its own, not cut short as if the server were slow
+  const timeout = positive(request.timeoutMs, DEADLINE, MAX_REQUEST_TIMEOUT);
+  if (timeout > deadline - Date.now()) throw new FetchError("batch timed out", { deferred: true });
 
   let limit =
     kind === "text"
