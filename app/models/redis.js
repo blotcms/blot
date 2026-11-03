@@ -78,8 +78,19 @@ function createRedisClient({ clientSideCache: useCache = true } = {}) {
         // Above the capped classes' shares (CLASS_CAPS in models/redis-cache)
         // plus a few hot keys for every blog (its handle or domain, info,
         // template and patterns), so the blog keys are never evicted to make
-        // room. Entries are a few KB at most, so a full cache is a few tens
-        // of MB.
+        // room.
+        //
+        // Memory, measured 3 Nov 2026: a cached entry costs about its value's
+        // size in the heap plus about 300 bytes of bookkeeping (patterns and
+        // owner sets about 2.5x, being many small strings). Worst case per
+        // process (node-a, node-b, and each `docker exec` script that walks
+        // many blogs) is about 25 MB filled with production's real keys, and
+        // at most about 80 MB with every cap full and every entry the size
+        // of its class's largest key. To measure again: on the host, sum
+        // `MEMORY USAGE` per allowlisted pattern for the largest keys up to
+        // each class's cap (read-only); then locally fill this cache with
+        // values of those sizes built from flat strings (random bytes, not
+        // padEnd, which V8 can share) and compare heapUsed after gc().
         maxEntries: 10000,
         evictPolicy: "LRU",
       })
