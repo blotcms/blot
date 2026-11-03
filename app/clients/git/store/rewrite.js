@@ -391,7 +391,7 @@ async function rewriteRepo({ store: objects, cache, lock, scratchDir = null, pur
   });
 
   let current = await manifest.read(store, { clock });
-  if (current.seq === 0) return finish({ outcome: "empty", seq: 0, epoch: "", purged: none });
+  if (manifest.isEmpty(current)) return finish({ outcome: "empty", seq: current.seq, epoch: manifest.epochOf(current), purged: none });
 
   let made = null;
   for (let attempt = 1; ; attempt++) {

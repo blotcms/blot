@@ -59,8 +59,13 @@ const TEST_HANDLE = "gittest";
 const RECHECK_DELAY_MS = 60 * 1000;
 
 // A prefix left by a blog off git is only deleted once nothing has been
-// written to it for this long, so a reconnect in flight is not touched
-const ORPHAN_MIN_AGE_MS = DAY;
+// written to it for this long, so a reconnect in flight is not touched. It
+// also deletes the manifests a removal keeps (store/remove.js), after which a
+// reconnect numbers its manifests from 1 again; that is only safe once no
+// process can still build on a manifest from before, so this is twice the
+// age a swap allows its base (store/manifest.js, MAX_BASE_AGE), as the sweep's
+// recovery window is.
+const ORPHAN_MIN_AGE_MS = 2 * DAY;
 
 // HEADs at once for one blog, and blogs checked at once
 const HEADS_AT_ONCE = 8;
@@ -212,7 +217,7 @@ async function cheapCheck(ctx) {
   const ebs = await shadow.ebsRefs(gitDir);
   const current = await manifest.read(store);
 
-  if (current.seq === 0) {
+  if (manifest.isEmpty(current)) {
     if (Object.keys(ebs).length) findings.push({ kind: "mismatch", detail: "the store is empty; EBS has " + Object.keys(ebs).length + " refs" });
     return { findings, refs: 0, files: 0 };
   }
@@ -377,7 +382,8 @@ let listPrefixes = s3Prefixes;
 // touched, and is looked up again just before the delete. Only the keys listed
 // are deleted, so anything written after the listing is left. Resolves with
 // counts, and `findings` for the alert email: a kind "orphan" finding for each
-// prefix deleted, since the disconnect should have deleted it and a leftover
+// prefix deleted that held more than the manifests the disconnect's removal
+// keeps (store/remove.js), since it should have deleted the rest and a leftover
 // means a removal path to fix, and a kind "error" finding for each prefix
 // whose lookup, listing or delete failed. A failed listing of the prefixes
 // themselves rejects.
@@ -427,6 +433,13 @@ async function orphans({ now = Date.now(), minAge = ORPHAN_MIN_AGE_MS } = {}) {
 
       counts.removed++;
       counts.deleted += keys.length;
+
+      // Only manifests is what a removal leaves on purpose (store/remove.js)
+      if (keys.every((key) => key.startsWith(layout.MANIFEST_PREFIX))) {
+        shadow.log({ blog: blogID, op: "remove", outcome: "ok", reason: "tombstone", deleted: keys.length });
+        continue;
+      }
+
       findings.push({ blog: blogID, check: "orphan", kind: "orphan", detail: "deleted " + keys.length + " objects left behind" });
       shadow.log({ blog: blogID, op: "remove", outcome: "ok", reason: "orphan", deleted: keys.length });
     } catch (err) {

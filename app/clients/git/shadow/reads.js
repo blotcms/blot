@@ -179,7 +179,7 @@ async function read(req, res, blog, kind) {
       const current = await manifest.read(store);
 
       // Nothing mirrored yet: a clone of nothing would look like an empty repository
-      if (current.seq === 0) {
+      if (manifest.isEmpty(current)) {
         reply(res, 503, "the store has no copy of this repository yet");
         return "empty";
       }

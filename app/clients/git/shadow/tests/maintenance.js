@@ -203,7 +203,7 @@ describe("git store shadow mode: daily maintenance", function () {
       await this.local.writeAndPush("/a.txt", "A");
       await setup.expectMirrored(this);
 
-      var gone = await old(this, "blog_gone", 2 * DAY);
+      var gone = await old(this, "blog_gone", 3 * DAY);
       var recent = await old(this, "blog_recent", 60 * 1000);
       var live = this.stores[this.blog.id];
       var liveKeys = await keys(live);
@@ -227,12 +227,27 @@ describe("git store shadow mode: daily maintenance", function () {
       expect(this.shadowLines("remove").filter((line) => / outcome=ok /.test(line)).length).toBe(2);
     });
 
+    it("deletes the manifests a disconnect's removal keeps without reporting them", async function () {
+      await this.local.writeAndPush("/a.txt", "A");
+      await setup.expectMirrored(this);
+
+      var gone = await old(this, "blog_gone", 3 * DAY);
+      await gone.delete("packs/pack-" + "a".repeat(40) + ".pack");
+
+      var counts = await maintenance.orphans({ now: Date.now() });
+
+      expect(await keys(gone)).toEqual([]);
+      expect(counts.removed).toBe(1);
+      expect(counts.findings).toEqual([]);
+      expect(this.shadowLines("remove").filter((line) => /reason=tombstone/.test(line)).length).toBe(1);
+    });
+
     it("reports a prefix it could not clean up, and goes on to the rest", async function () {
       await this.local.writeAndPush("/a.txt", "A");
       await setup.expectMirrored(this);
 
       var ctx = this;
-      var gone = await old(this, "blog_gone", 2 * DAY);
+      var gone = await old(this, "blog_gone", 3 * DAY);
       this.stores.blog_broken = {
         id: "broken",
         list: async function* () {
@@ -276,7 +291,7 @@ describe("git store shadow mode: daily maintenance", function () {
       await this.local.writeAndPush("/a.txt", "A");
       await setup.expectMirrored(this);
 
-      var gone = await old(this, "blog_gone", 2 * DAY);
+      var gone = await old(this, "blog_gone", 3 * DAY);
       var options = { deepCount: 0, recheckDelayMs: 10, scratchDir: this.tmp + "/daily-scratch" };
 
       var second = await maintenance.daily(Object.assign({ now: Date.UTC(2099, 0, 2) }, options));
@@ -293,7 +308,7 @@ describe("git store shadow mode: daily maintenance", function () {
       await gitStoreMaintenance.run(Object.assign({ orphanSweep: true, sendEmail: async (view) => sent.push(view) }, options));
       expect(sent).toEqual([]);
 
-      await old(this, "blog_gone", 2 * DAY);
+      await old(this, "blog_gone", 3 * DAY);
       await gitStoreMaintenance.run(Object.assign({ orphanSweep: true, sendEmail: async (view) => sent.push(view) }, options));
       expect(sent.length).toBe(1);
       expect(sent[0].summary).toBe("1 leftover in 1 blog");

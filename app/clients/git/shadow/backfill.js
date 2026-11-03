@@ -21,6 +21,7 @@
 const shadow = require("./index");
 const maintenance = require("./maintenance");
 const { manifest } = require("../store");
+const removeRepo = require("../store/remove");
 
 const ZERO = "0".repeat(40);
 
@@ -31,7 +32,7 @@ async function plan(blogID) {
   const ebs = await shadow.ebsRefs(ctx.gitDir);
   const current = await manifest.read(ctx.store);
 
-  if (current.seq === 0) return { blog: blogID, op: "import", outcome: Object.keys(ebs).length ? "would-import" : "empty", refs: Object.keys(ebs).length };
+  if (manifest.isEmpty(current)) return { blog: blogID, op: "import", outcome: Object.keys(ebs).length ? "would-import" : "empty", refs: Object.keys(ebs).length };
 
   const refs = new Set([...Object.keys(ebs), ...Object.keys(current.refs)]);
   const differ = [...refs].filter((ref) => (ebs[ref] || ZERO) !== (current.refs[ref] || ZERO));
@@ -39,14 +40,13 @@ async function plan(blogID) {
   return { blog: blogID, op: "push", outcome: differ.length ? "would-push" : "same", refs: differ.length, seq: current.seq };
 }
 
-// Deletes every object under the blog's prefix, for --reset: a store copy
-// the verifier found damaged is deleted and imported again
+// Removes the blog's copy, for --reset: a store copy the verifier found
+// damaged is removed and imported again. The store's removeRepo leaves a
+// tombstone manifest, so the import goes above the old numbers, never back at
+// seq 1 under a process still holding an old manifest.
 async function reset(blogID) {
-  const store = shadow.objectStoreFor(blogID);
-  const keys = [];
-  for await (const entry of store.list("")) keys.push(entry.key);
-  for (const key of keys) await store.delete(key);
-  shadow.log({ blog: blogID, op: "remove", outcome: "ok", reason: "backfill-reset", deleted: keys.length });
+  const { seq, deleted } = await removeRepo({ store: shadow.objectStoreFor(blogID) });
+  shadow.log({ blog: blogID, op: "remove", outcome: "ok", reason: "backfill-reset", deleted, seq });
 }
 
 async function backfill({ all = false, blog = null, concurrency = 1, dryRun = false, resetFirst = false, scratchDir = maintenance.defaultScratchDir() } = {}) {

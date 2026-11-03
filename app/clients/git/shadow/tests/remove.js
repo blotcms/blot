@@ -3,7 +3,7 @@ describe("git store shadow mode: removing a blog's copy", function () {
   var shadow = require("clients/git/shadow");
   var config = require("config");
   var disconnect = require("clients/git/disconnect");
-  var { createMemoryStore } = require("clients/git/store");
+  var { createMemoryStore, manifest } = require("clients/git/store");
 
   function disconnected(blogID) {
     return new Promise(function (resolve, reject) {
@@ -26,6 +26,16 @@ describe("git store shadow mode: removing a blog's copy", function () {
     return found;
   }
 
+  // What a removal leaves is the manifests (the newest a tombstone) and the
+  // hint, so the numbering never starts again at 1; everything else goes
+  async function packsLeft(store) {
+    return (await keys(store)).filter(function (key) {
+      return !key.startsWith("manifests/");
+    });
+  }
+
+  var PACK = "packs/pack-" + "a".repeat(40) + ".pack";
+
   describe("with a memory store", function () {
     setup();
 
@@ -33,17 +43,21 @@ describe("git store shadow mode: removing a blog's copy", function () {
       shadow._setRemoveAgainMs(5 * 60 * 1000);
     });
 
-    it("deletes everything under the blog's prefix on disconnect", async function () {
+    it("deletes everything under the blog's prefix but the manifests on disconnect, and leaves a tombstone", async function () {
       await this.local.writeAndPush("/a.txt", "A");
       await this.local.writeAndPush("/b.txt", "B");
-      await setup.expectMirrored(this);
+      var before = await setup.expectMirrored(this);
 
       var store = this.stores[this.blog.id];
-      expect((await keys(store)).length).toBeGreaterThan(0);
+      expect((await packsLeft(store)).length).toBeGreaterThan(0);
 
       await disconnected(this.blog.id);
 
-      expect(await keys(store)).toEqual([]);
+      expect(await packsLeft(store)).toEqual([]);
+      var fresh = Object.assign({}, store, { id: store.id });
+      var tombstone = await manifest.read(fresh);
+      expect(tombstone.seq).toBe(before.seq + 1);
+      expect(manifest.isEmpty(tombstone)).toBe(true);
       expect(this.shadowLines("remove")[0]).toContain("outcome=ok");
     });
 
@@ -64,7 +78,8 @@ describe("git store shadow mode: removing a blog's copy", function () {
       await sleep(500);
       await shadow.idle(this.blog.id);
 
-      expect(await keys(store)).toEqual([]);
+      expect(await packsLeft(store)).toEqual([]);
+      expect(manifest.isEmpty(await manifest.read(Object.assign({}, store, { id: store.id })))).toBe(true);
     });
 
     it("deletes the copy again later, for work another process had started", async function () {
@@ -77,12 +92,12 @@ describe("git store shadow mode: removing a blog's copy", function () {
 
       await disconnected(this.blog.id);
 
-      // What another process's import, already running, writes afterwards
-      await store.put("manifests/0000000001.json", Buffer.from("{}"));
+      // What another process's push, already running, uploads afterwards
+      await store.put(PACK, Buffer.from("x"));
 
       await sleep(1000);
 
-      expect(await keys(store)).toEqual([]);
+      expect(await packsLeft(store)).toEqual([]);
     });
 
     it("keeps the copy when the later lookup of the blog fails", async function () {
@@ -98,7 +113,7 @@ describe("git store shadow mode: removing a blog's copy", function () {
       await disconnected(this.blog.id);
 
       // Reconnected, and imported by another process, but Redis fails the lookup
-      await store.put("manifests/0000000001.json", Buffer.from("{}"));
+      await store.put(PACK, Buffer.from("x"));
       Blog.get = function (by, callback) {
         callback(new Error("Redis went away"));
       };
@@ -109,7 +124,7 @@ describe("git store shadow mode: removing a blog's copy", function () {
         Blog.get = get;
       }
 
-      expect(await keys(store)).toEqual(["manifests/0000000001.json"]);
+      expect(await packsLeft(store)).toEqual([PACK]);
       expect(this.shadowLines("remove").filter((line) => /outcome=spared pass=2/.test(line)).length).toBe(1);
     });
 
@@ -156,7 +171,7 @@ describe("git store shadow mode: removing a blog's copy", function () {
       await shadow.idle(this.blog.id);
       await sleep(200);
 
-      expect(await keys(this.stores[this.blog.id])).toEqual([]);
+      expect(await packsLeft(this.stores[this.blog.id])).toEqual([]);
     });
   });
 });
