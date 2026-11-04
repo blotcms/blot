@@ -59,6 +59,7 @@ describe("dropbox resetFromBlot", function () {
         callback(
           null,
           {
+            filesCreateFolder: async () => ({ result: {} }),
             usersGetSpaceUsage: async () => ({ result: spaceUsage }),
             filesListFolderGetLatestCursor: async () => ({
               result: { cursor: "new-cursor" },
@@ -274,6 +275,32 @@ describe("dropbox resetFromBlot", function () {
       (await fs.readdir(join(blogDirectory, ".git/refs/heads"))).sort()
     ).toEqual(["Feature", "feature"]);
     expect(uploadCalls.length).toEqual(1);
+  });
+
+  it("does not merge case-conflicting folders that contain ignored paths", async function () {
+    await fs.outputFile(join(blogDirectory, "a/.git/HEAD"), "one");
+    await fs.outputFile(join(blogDirectory, "A/.git/HEAD"), "two");
+
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 0,
+        allocation: { ".tag": "individual", allocated: 1000000 },
+      },
+      remote: {},
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    await resetFromBlot(blogID, () => {}, { aborted: false });
+
+    const top = (await fs.readdir(blogDirectory)).sort();
+    expect(top.length).toEqual(2);
+    expect(top.some((name) => name.includes("(conflict)"))).toEqual(true);
+    const contents = [];
+    for (const name of top) {
+      expect(await fs.readdir(join(blogDirectory, name, ".git"))).toEqual(["HEAD"]);
+      contents.push(await fs.readFile(join(blogDirectory, name, ".git/HEAD"), "utf8"));
+    }
+    expect(contents.sort()).toEqual(["one", "two"]);
   });
 
   it("does not count bytes already sitting in the target Dropbox folder against the quota check", async function () {

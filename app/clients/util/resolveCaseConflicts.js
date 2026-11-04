@@ -108,6 +108,20 @@ module.exports = async function resolveCaseConflicts(
   const isIgnored = (relDir, entry) =>
     typeof ignore === "function" && ignore(path.posix.join(relDir, entry.name));
 
+  // True if anything beneath relDir is ignored (e.g. a nested .git).
+  const containsIgnored = async (relDir) => {
+    if (typeof ignore !== "function") return false;
+    for (const entry of await listEntries(blogID, relDir)) {
+      if (isIgnored(relDir, entry)) return true;
+      if (
+        entry.isDirectory &&
+        (await containsIgnored(path.posix.join(relDir, entry.name)))
+      )
+        return true;
+    }
+    return false;
+  };
+
   if (!publish) {
     publish = () => {};
   }
@@ -234,6 +248,19 @@ module.exports = async function resolveCaseConflicts(
 
         for (const entry of dirs.slice(1)) {
           const sourceRel = path.posix.join(relDir, entry.name);
+          // Merging would combine ignored trees (two .git folders) and
+          // rename files inside them, so keep both directories intact.
+          if (
+            (await containsIgnored(sourceRel)) ||
+            (await containsIgnored(canonicalRel))
+          ) {
+            const conflictName = generateConflictName(
+              existingLowerSet,
+              entry.name
+            );
+            await renameEntry(relDir, entry.name, conflictName);
+            continue;
+          }
           await mergeDirectory(canonicalRel, sourceRel);
         }
 
