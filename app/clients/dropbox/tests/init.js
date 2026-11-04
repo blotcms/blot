@@ -345,12 +345,13 @@ describe("dropbox init", function () {
 
     const blogID = "blog_resumetransfer" + Date.now();
     const originals = {};
-    let uploads, released;
+    let uploads, released, updated;
 
     beforeEach(function () {
       paths.forEach((path) => (originals[path] = require.cache[path]));
       uploads = [];
       released = [];
+      updated = [];
     });
 
     afterEach(function () {
@@ -376,15 +377,16 @@ describe("dropbox init", function () {
         },
       };
       require.cache[resetFromBlotPath] = {
-        exports: async (id) => {
+        exports: async (id, _publish, _signal, update) => {
           uploads.push(id);
+          if (update) await update("/renamed.txt");
           if (uploadError) throw uploadError;
         },
       };
       require.cache[lockPath] = {
         exports: async () => {
           if (lockError) throw lockError;
-          return { folder: {}, done: async (err) => released.push(err) };
+          return { folder: { update: (path, cb) => (updated.push(path), cb()) }, done: async (err) => released.push(err) };
         },
       };
       require.cache[subscriberPath] = {
@@ -402,6 +404,8 @@ describe("dropbox init", function () {
       await init.resumeInterruptedTransfersOnStartup();
       expect(uploads).toEqual([blogID]);
       expect(released).toEqual([null]);
+      // resetFromBlot gets the lock's folder.update so renames are recorded
+      expect(updated).toEqual(["/renamed.txt"]);
     });
 
     it("leaves completed transfers and recorded errors alone", async function () {

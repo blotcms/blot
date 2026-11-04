@@ -128,6 +128,42 @@ describe("dropbox resetToBlot", function () {
     expect(summary.firstError).toEqual("/a.txt: download exploded");
   });
 
+  describe("a file over the download size limit", function () {
+    const oversized = (content_hash) => ({
+      ".tag": "file",
+      name: "big.txt",
+      path_display: "/big.txt",
+      content_hash,
+      size: 200 * 1024 * 1024,
+      server_modified: "2026-01-01T00:00:00Z",
+    });
+
+    it("keeps a local copy whose content hash matches (a file Blot uploaded)", async function () {
+      await fs.outputFile(join(blogDirectory, "big.txt"), "real contents");
+      const { hash } = await storage.stat(blogID, "/big.txt", { hash: true });
+      const resetToBlot = load({ "/": [oversized(hash)] });
+
+      const summary = await resetToBlot(blogID, () => {}, async () => {});
+
+      expect(summary.skipped).toEqual(1);
+      expect(await fs.readFile(join(blogDirectory, "big.txt"), "utf8")).toEqual(
+        "real contents"
+      );
+    });
+
+    it("replaces a local copy that differs, or is absent, with an empty placeholder", async function () {
+      await fs.outputFile(join(blogDirectory, "big.txt"), "something else");
+      let resetToBlot = load({ "/": [oversized("not-the-local-hash")] });
+      await resetToBlot(blogID, () => {}, async () => {});
+      expect(await fs.readFile(join(blogDirectory, "big.txt"), "utf8")).toEqual("");
+
+      await fs.remove(join(blogDirectory, "big.txt"));
+      resetToBlot = load({ "/": [oversized("not-the-local-hash")] });
+      await resetToBlot(blogID, () => {}, async () => {});
+      expect(await fs.readFile(join(blogDirectory, "big.txt"), "utf8")).toEqual("");
+    });
+  });
+
   it("updates every path inside a folder it removes", async function () {
     await fs.outputFile(join(blogDirectory, "Sub", "a.txt"), "x");
     await fs.outputFile(join(blogDirectory, "Sub", "Inner", "b.txt"), "x");

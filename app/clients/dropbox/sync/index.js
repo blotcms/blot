@@ -372,21 +372,34 @@ function Apply(client, blogID, log, status) {
           log(item.resolved_relative_path, message);
           status("Skipping oversized file " + item.resolved_relative_path);
 
-          return callbackify(storage.write)(
+          // A file we uploaded ourselves (upload sessions allow >100MB) comes
+          // back as a change: leave the real local copy alone if it matches.
+          return callbackify(contentHash)(
             blogID,
             item.resolved_relative_path,
-            "",
-            function (err) {
-              if (err) {
-                log(
-                  item.resolved_relative_path,
-                  "Error creating placeholder for oversized file",
-                  err
-                );
-                status("Error creating placeholder " + item.resolved_relative_path);
+            function (err, localHash) {
+              if (item.content_hash && localHash && localHash === item.content_hash) {
+                log(item.resolved_relative_path, "Oversized file already matches local copy");
+                return callback();
               }
 
-              callback();
+              callbackify(storage.write)(
+                blogID,
+                item.resolved_relative_path,
+                "",
+                function (err) {
+                  if (err) {
+                    log(
+                      item.resolved_relative_path,
+                      "Error creating placeholder for oversized file",
+                      err
+                    );
+                    status("Error creating placeholder " + item.resolved_relative_path);
+                  }
+
+                  callback();
+                }
+              );
             }
           );
         }

@@ -375,7 +375,7 @@ const resumeInterruptedTransfersOnStartup = async () => {
 // user disconnects meanwhile. Webhooks for the uploaded files run a normal
 // sync afterwards, so no catch-up is needed here.
 const resumeTransfer = async (blogID) => {
-  const { done } = await establishSyncLock(blogID);
+  const { folder, done } = await establishSyncLock(blogID);
   let skip = false;
 
   // The pre-lock check can be stale: a live setup may have held the lock,
@@ -411,7 +411,9 @@ const resumeTransfer = async (blogID) => {
     await resetFromBlot(
       blogID,
       (...args) => console.log(clfdate(), "Dropbox:", blogID, ...args),
-      signal
+      signal,
+      // folder.update is callback-style, resetFromBlot awaits it
+      promisify(folder.update)
     );
   } catch (err) {
     // An abort is the user disconnecting, not a failure
