@@ -250,7 +250,7 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
 if (config.environment === "development") {
   const DEFAULT_OPEN_FOLDER_ORIGIN =
     process.env.LOCAL_OPEN_FOLDER_ORIGIN ||
-    (process.env.CONTAINER_NAME
+    (config.container
       ? "http://host.docker.internal:3020"
       : "http://localhost:3020");
 
