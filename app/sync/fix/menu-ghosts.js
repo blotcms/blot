@@ -17,7 +17,7 @@ function main(blog, callback) {
   const liveIDs = new Set();
   // Raw ids reported as duplicates of an item with a different raw id (ids
   // that Entry.get normalizes to the same entry, e.g. NFC and NFD).
-  const duplicateIDs = new Set();
+  const duplicateOf = new Map();
   const keptIDs = {};
   const fixes = {};
 
@@ -32,7 +32,8 @@ function main(blog, callback) {
           next(null, null);
         } else if (entry && existing[entry.id] === true) {
           report.push(["Delete duplicate", item]);
-          if (item.id !== keptIDs[entry.id]) duplicateIDs.add(item.id);
+          if (item.id !== keptIDs[entry.id])
+            duplicateOf.set(item.id, keptIDs[entry.id]);
           changed = true;
           next(null, null);
         } else if (entry) {
@@ -83,10 +84,24 @@ function main(blog, callback) {
         if (!latest) return callback(null, report);
 
         const seen = {};
+        const present = new Set(
+          (latest.menu || [])
+            .map(function (item) {
+              return item.id;
+            })
+            .filter(function (id) {
+              return !removeIDs.has(id);
+            }),
+        );
         const menu = [];
 
         (latest.menu || []).forEach(function (item) {
-          if (removeIDs.has(item.id) || duplicateIDs.has(item.id)) return;
+          if (removeIDs.has(item.id)) return;
+
+          // Only drop a duplicate while the item it duplicates is still
+          // there, otherwise it is the menu's only link to the entry.
+          if (duplicateOf.has(item.id) && present.has(duplicateOf.get(item.id)))
+            return;
 
           if (liveIDs.has(item.id)) {
             if (seen[item.id]) return;

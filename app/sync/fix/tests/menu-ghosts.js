@@ -239,4 +239,32 @@ describe("sync/fix/menu-ghosts", function () {
       done();
     });
   });
+
+  it("keeps a normalized duplicate when a concurrent change removed the item it duplicates", function (done) {
+    var nfc = "/caf\u00e9.txt";
+    var nfd = "/cafe\u0301.txt";
+    var first = { id: nfc, label: "Cafe", url: "/cafe", metadata: {} };
+    var second = { id: nfd, label: "Cafe", url: "/cafe", metadata: {} };
+    var blog = { id: "blog-id", menu: [first, second] };
+
+    spyOn(Entry, "get").and.callFake(function (blogID, id, callback) {
+      setTimeout(
+        function () {
+          callback({ id: nfc, title: "Cafe", url: "/cafe", metadata: {} });
+        },
+        id === nfc ? 0 : 5,
+      );
+    });
+    // the kept item has been removed by the time we write
+    spyOn(Blog, "get").and.callFake(function (by, callback) {
+      callback(null, { id: blog.id, menu: [second] });
+    });
+    spyOn(Blog, "set");
+
+    fixMenuGhosts(blog, function (err) {
+      expect(err).toBeNull();
+      expect(Blog.set).not.toHaveBeenCalled();
+      done();
+    });
+  });
 });
