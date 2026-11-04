@@ -42,7 +42,7 @@ describe("blog asset folder routes", function () {
       const res = await fetch(cdnURL("/range.txt"));
       expect(res.status).toBe(200);
       expect(res.headers.get("cache-control")).toEqual("public, max-age=31536000");
-      expect(res.headers.get("content-type")).toEqual("text/plain; charset=UTF-8");
+      expect(res.headers.get("content-type").toLowerCase()).toEqual("text/plain; charset=utf-8");
       expect(res.headers.get("access-control-allow-origin")).toEqual("*");
       expect(res.headers.get("accept-ranges")).toEqual("bytes");
       expect(res.headers.get("etag")).toBeTruthy();

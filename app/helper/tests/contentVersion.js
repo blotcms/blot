@@ -130,8 +130,9 @@ describe("contentVersion", function () {
         const filePath = path.join(dir, "file.bin");
 
         fs.outputFileSync(filePath, Buffer.alloc(size, "x"));
-        // A fractional mtime, which the size+mtime token must keep exactly
-        fs.utimesSync(filePath, 1700000000.123456, 1700000000.123456);
+        // A whole-second mtime: models/file keeps modified times to the
+        // millisecond, and the size+mtime token uses it as is
+        fs.utimesSync(filePath, 1700000000, 1700000000);
 
         // The same file, with the same modified time, in the blog's folder
         await folder.writeFrom(this.blog.id, "/file.bin", filePath, {

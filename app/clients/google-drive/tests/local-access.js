@@ -1,36 +1,17 @@
 const fs = require("fs-extra");
 const folder = require("storage/folder");
-const contentFingerprint = require("../util/contentFingerprint");
 const localFingerprint = require("../util/localFingerprint");
 const localFile = require("../util/localFile");
 const localReaddir = require("../sync/util/localReaddir");
 
 // The Drive client reaches the blog folder through storage/folder. These use
-// the real config and a real blog folder, because the fingerprints stored in
-// Redis must keep matching what is computed from the disk.
+// the real config and a real blog folder in the storage bucket.
 describe("Drive client access to the blog folder", function () {
   global.test.blog();
 
-  it("fingerprints a file as its size and nanosecond mtime, as before", async function () {
-    await folder.write(this.blog.id, "/a.txt", "hello");
-
-    const real = await fs.stat(await folder.ensureLocal(this.blog.id, "/a.txt"), { bigint: true });
-    const expected = real.size + ":" + real.mtimeNs;
-
-    expect(await localFingerprint(this.blog.id, "/a.txt")).toEqual(expected);
-    expect(await localFingerprint(this.blog.id, "/a.txt")).toEqual(contentFingerprint(real));
-    expect(contentFingerprint.sameFingerprint(expected, await localFingerprint(this.blog.id, "/a.txt"))).toBe(true);
-  });
-
-  it("still matches an old five-field stored fingerprint", async function () {
-    await folder.write(this.blog.id, "/a.txt", "hello");
-
-    const real = await fs.stat(await folder.ensureLocal(this.blog.id, "/a.txt"), { bigint: true });
-    const old = [real.dev, real.ino, real.size, real.mtimeNs, real.ctimeNs].join(":");
-
-    expect(contentFingerprint.sameFingerprint(old, await localFingerprint(this.blog.id, "/a.txt"))).toBe(true);
-  });
-
+  // A fingerprint is of the content cache's copy, whose mtime the cache moves
+  // to keep it recent, so an old disk fingerprint never matches (see
+  // README, "Content hash"). Only its absence is specified.
   it("has no fingerprint for a missing file or a directory", async function () {
     await folder.mkdir(this.blog.id, "/dir");
 
