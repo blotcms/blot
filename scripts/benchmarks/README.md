@@ -410,6 +410,24 @@ this benchmark's primary signal is conversion timing, not memory; treat a
 `peak_rss_mb` regression as "something in this job's process grew," not
 necessarily "this specific converter grew."
 
+## Render-path micro benchmark (`render-pages.js`)
+
+Seeds one blog (`--shape typical`: 400 entries of about 6 KB, or
+`--shape heavy`: the mega benchmark's heavy site) into an empty Redis,
+serves it in-process through the real blog router and requests every entry
+page one at a time, as a crawler filling a cold proxy cache would. Besides
+p50/p95 it reports how many KB of entry JSON each request read from Redis
+with MGET, which stays exact when the timings are noisy. Run it on the base
+and head commits and compare; it is not wired into CI.
+
+```bash
+NODE_PATH=app node scripts/benchmarks/render-pages.js --shape heavy \
+  --phase entries --output .benchmarks/render/head-heavy.json
+```
+
+`--phase index` and `--phase notfound` time the index pages and 404s
+instead; `--template SITE:hypertext` switches the blog's template.
+
 ## How results are stored
 
 The rolling history is an append-only NDJSON file per arch
