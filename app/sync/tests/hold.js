@@ -124,4 +124,84 @@ describe("sync/hold", function () {
 
     await this.blog.update({ isDisabled: false });
   });
+
+  it("sync counts folder.status and folder.update as progress for the lock", async function () {
+    var blogID = this.blog.id;
+    var touched = 0;
+    var realLock = lock.lock;
+
+    spyOn(lock, "lock").and.callFake(async function () {
+      var handle = await realLock.apply(this, arguments);
+      var realTouch = handle.touch;
+      handle.touch = function () {
+        touched++;
+        return realTouch.apply(this, arguments);
+      };
+      return handle;
+    });
+
+    await new Promise(function (resolve, reject) {
+      sync(blogID, function (err, folder, done) {
+        if (err) return reject(err);
+        var afterAcquire = touched;
+        folder.status("Working");
+        var afterStatus = touched;
+        folder.update("/does-not-exist.txt", function () {
+          try {
+            expect(afterAcquire).toBeGreaterThan(0); // the initial "Syncing"
+            expect(afterStatus).toBeGreaterThan(afterAcquire);
+            expect(touched).toBeGreaterThan(afterStatus);
+          } catch (e) {
+            return done(null, function () {
+              reject(e);
+            });
+          }
+          done(null, resolve);
+        });
+      });
+    });
+  });
+
+  it("sync fails a hung sync via the lock's compromise path once there is no progress", async function () {
+    var blogID = this.blog.id;
+    var realLock = lock.lock;
+    var captured;
+
+    spyOn(console, "error");
+    hold.defaults.noProgressTimeout = 200;
+    spyOn(lock, "lock").and.callFake(function (id, options) {
+      captured = options;
+      // Don't let the real handler crash the test process
+      return realLock.call(this, id, {
+        ...options,
+        heartbeat: 30,
+        onCompromised: function (err) {
+          captured.error = err;
+        },
+      });
+    });
+
+    try {
+      var handle;
+      await new Promise(function (resolve, reject) {
+        sync(blogID, function (err, folder, done) {
+          if (err) return reject(err);
+          handle = done;
+          resolve();
+        });
+      });
+      expect(captured.noProgressTimeout).toEqual(200);
+      var end = Date.now() + 3000;
+      while (!captured.error && Date.now() < end) await wait(20);
+      expect(captured.error && captured.error.code).toEqual("ECOMPROMISED");
+      // No longer renewed: the TTL (10s) only counts down from here
+      var first = (await lock.inspect(blogID)).ttlMs;
+      await wait(400);
+      var second = (await lock.inspect(blogID)).ttlMs;
+      expect(second).toBeLessThan(first - 200);
+      await handle(null, function () {});
+    } finally {
+      hold.defaults.noProgressTimeout = 30 * 60 * 1000;
+    }
+  });
 });

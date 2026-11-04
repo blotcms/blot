@@ -2,7 +2,7 @@ const buildFromFolder = require("models/template").buildFromFolder;
 const Blog = require("models/blog");
 const Update = require("./update");
 const renames = require("./renames");
-const { take } = require("./hold");
+const { take, defaults } = require("./hold");
 const messenger = require("./messenger");
 const previewReload = require("helper/publishPreviewReload");
 const regenerateTemplateManifests = require("./update/regenerateTemplateManifests");
@@ -40,12 +40,20 @@ function start(blogID, callback) {
       return callback(new Error("Cannot sync blog " + blogID));
     }
 
-    const { log, status, syncID } = messenger(blog);
+    const { log, status: reportStatus, syncID } = messenger(blog);
 
     log("Starting sync");
 
     let release;
     let lockAcquiredAt;
+    let lock;
+    // Status updates and file updates are the sync's progress: the lock's
+    // watchdog fails the sync if neither happens for too long.
+    const touch = () => lock && lock.touch();
+    const status = function () {
+      touch();
+      return reportStatus.apply(this, arguments);
+    };
 
     try {
       log("Acquiring lock on folder");
@@ -53,7 +61,11 @@ function start(blogID, callback) {
       // Resolves to null if the data directory became read-only between
       // the check in sync() and taking the lock (hold.js has released it
       // again): wait for the freeze to lift and start over.
-      const lock = await take(blogID, { syncID, acquiredAt: () => lockAcquiredAt });
+      lock = await take(blogID, {
+        syncID,
+        acquiredAt: () => lockAcquiredAt,
+        noProgressTimeout: defaults.noProgressTimeout,
+      });
 
       if (!lock) {
         log("Data directory became read-only, waiting");
@@ -78,8 +90,10 @@ function start(blogID, callback) {
         return originalUpdate.apply(originalUpdate, arguments);
       }
       addPendingUpdate(blogID, syncID, path);
+      touch();
       let called = false;
       const wrappedCallback = function () {
+        touch();
         if (!called) {
           called = true;
           removePendingUpdate(blogID, syncID, path);
@@ -93,6 +107,7 @@ function start(blogID, callback) {
     const folder = {
       update: function () {
         changes = true;
+        touch();
         _update.apply(_update, arguments);
       },
       status,

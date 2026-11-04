@@ -82,4 +82,62 @@ describe("sync lock heartbeat", function () {
     expect(extendCalls).toEqual(1);
     await handle.release().catch(() => {});
   });
+
+  describe("noProgressTimeout", function () {
+    it("stops renewing and calls onCompromised after no progress", async function () {
+      const blogID = "blog_lock_noprogress_" + Date.now();
+      const compromised = [];
+      const handle = await syncLock.lock(blogID, {
+        ttl: 300,
+        heartbeat: 40,
+        noProgressTimeout: 250,
+        onCompromised: (e) => compromised.push(e),
+      });
+
+      const end = Date.now() + 3000;
+      while (!compromised.length && Date.now() < end) await sleep(20);
+
+      expect(compromised.length).toEqual(1);
+      expect(compromised[0].code).toEqual("ECOMPROMISED");
+      expect(compromised[0].message).toMatch(/No progress/);
+
+      // No longer renewed, so the key expires and the lock can be retaken
+      await sleep(500);
+      expect((await syncLock.inspect(blogID)).held).toBe(false);
+      await handle.release().catch(() => {});
+    });
+
+    it("keeps the lock while the holder touches it", async function () {
+      const blogID = "blog_lock_touch_" + Date.now();
+      const compromised = [];
+      const handle = await syncLock.lock(blogID, {
+        ttl: 300,
+        heartbeat: 40,
+        noProgressTimeout: 250,
+        onCompromised: (e) => compromised.push(e),
+      });
+
+      for (let i = 0; i < 20; i++) {
+        await sleep(40);
+        handle.touch();
+      }
+
+      expect(compromised.length).toEqual(0);
+      expect((await syncLock.inspect(blogID)).held).toBe(true);
+      await handle.release();
+    });
+
+    it("is off unless set", async function () {
+      const blogID = "blog_lock_noprogress_off_" + Date.now();
+      const compromised = [];
+      const handle = await syncLock.lock(blogID, {
+        ttl: 300,
+        heartbeat: 40,
+        onCompromised: (e) => compromised.push(e),
+      });
+      await sleep(400);
+      expect(compromised.length).toEqual(0);
+      await handle.release();
+    });
+  });
 });

@@ -405,7 +405,6 @@ Improve iCloud sync
   - close all system UI prompts (sometimes we get error for maybe accessing a revoked folder?)
 - iCloud macserver: the new-directory walk (#2147) is gated on /mkdir's directory-created header, so it is skipped if a child upload/mkdir created the folder on Blot first (some children reported, siblings missed). Decide the walk from something other than whether Blot already had the directory
 - iCloud macserver: a disk-usage eviction during the new-directory walk marks the blog eviction-suppressed and the walk skips everything left; pause and restart the walk instead
-- Sync no-progress watchdog: app/sync/lock.js renews a folder lock for as long as the process lives, so any hung sync holds a blog's lock until a container restart (7h+ on 16 Oct, #2147). Track the sync's last progress (file processed / status update) and, after N minutes with none, stop renewing and fail the sync so the lock expires and the next resync or hourly check can run
 - iCloud macserver should periodically validate the local blog folders to ensure the client is still connected on blot and clean up any failed initial transfers (i.e. non blog_... folders)
 - iCloud: a Blot edit while the folder is missing (SOURCE_MISSING) still reaches the macserver upload, which re-creates an unshared folder (write.js, remove.js should skip the remote write)
 - If we need to resolve further bugs with sync drift:

@@ -11,6 +11,12 @@ const readOnly = require("helper/readOnly");
 
 const LOCK_STALE_TIMEOUT_MS = 10 * 1000;
 const LOCK_UPDATE_INTERVAL_MS = 3 * 1000; // lowered from 5s to avoid ECOMPROMISED errors?
+// A sync which reports no progress (folder.status or folder.update) for this
+// long is treated as hung: the lock stops being renewed and the sync is failed
+// as if the lock were lost (see onCompromised). Every client reports per file,
+// so only a step stuck on one network call or file is this quiet. Tests lower
+// it through take's noProgressTimeout option or module.exports.defaults.
+const defaults = { noProgressTimeout: 30 * 60 * 1000 };
 const PROCESS_STARTED = Date.now();
 
 // Takes the blog's lock, retrying briefly. Resolves to the lock ({ release }),
@@ -20,8 +26,10 @@ const PROCESS_STARTED = Date.now();
 // crashes (see onCompromised), so nothing keeps writing without it.
 //   syncID      for the diagnostics logged if the lock is lost
 //   acquiredAt  a function returning when the caller considers it acquired
+//   noProgressTimeout  ms of silence (no lock.touch()) after which the lock is
+//               treated as compromised; off unless given, so hold() is unaffected
 async function take(blogID, options = {}) {
-  const { syncID, acquiredAt = () => undefined } = options;
+  const { syncID, acquiredAt = () => undefined, noProgressTimeout } = options;
 
   // Only retry at startup to handle stale locks from killed processes
   const timeSinceStart = Date.now() - PROCESS_STARTED;
@@ -34,6 +42,7 @@ async function take(blogID, options = {}) {
     ttl: LOCK_STALE_TIMEOUT_MS,
     heartbeat: LOCK_UPDATE_INTERVAL_MS,
     ...retries,
+    noProgressTimeout,
     onCompromised: (err) => {
       // Another process may now own the lock, so the holder can no longer
       // be trusted to be exclusive. Log diagnostics, then crash the
@@ -116,3 +125,4 @@ async function hold(blogID, fn) {
 
 module.exports = hold;
 module.exports.take = take;
+module.exports.defaults = defaults;

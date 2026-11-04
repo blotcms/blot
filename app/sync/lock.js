@@ -156,6 +156,11 @@ function key(blogID) {
 // Resolves to { release, token } or rejects with code ELOCKED once retries
 // are exhausted. onCompromised(err) fires at most once if the heartbeat finds
 // the lock is no longer ours (expired, or Redis unreachable for a full TTL).
+// If noProgressTimeout (ms) is set, the holder must call handle.touch() at
+// least that often: the heartbeat renews a lock for as long as the process
+// lives, so a hung holder would otherwise keep it until a restart. After
+// that long without a touch the heartbeat stops renewing and calls
+// onCompromised, so the holder is failed exactly as if it had lost the lock.
 async function lock(blogID, options = {}) {
   const {
     ttl = 10 * 1000,
@@ -163,6 +168,7 @@ async function lock(blogID, options = {}) {
     retries = 0,
     minTimeout = 750,
     onCompromised = () => {},
+    noProgressTimeout = 0,
   } = options;
 
   const lockKey = key(blogID);
@@ -191,6 +197,7 @@ async function lock(blogID, options = {}) {
   let compromised = false;
   let lastExtended = Date.now();
   let lastTickAt = lastExtended;
+  let lastProgressAt = lastExtended;
   // At most one EXTEND is ever outstanding: a tick that finds the previous
   // one still unanswered does nothing, so a slow Redis can't stack requests
   // on the shared connection or have an old reply race a newer one.
@@ -210,6 +217,17 @@ async function lock(blogID, options = {}) {
     const tickAt = Date.now();
     const tickDelayMs = tickAt - lastTickAt - heartbeat;
     lastTickAt = tickAt;
+    if (noProgressTimeout > 0 && tickAt - lastProgressAt >= noProgressTimeout) {
+      // Stop renewing; the key expires within a TTL.
+      return compromise(
+        new Error(
+          "No progress for " +
+            Math.round((tickAt - lastProgressAt) / 1000) +
+            "s: " +
+            lockKey
+        )
+      );
+    }
     if (inFlight) {
       // The pending EXTEND may never answer; the lock still can't outlive
       // its TTL, so give up once that has elapsed.
@@ -278,6 +296,10 @@ async function lock(blogID, options = {}) {
 
   const handle = {
     token,
+    // Records that the holder is still making progress (see noProgressTimeout)
+    touch() {
+      lastProgressAt = Date.now();
+    },
     release() {
       if (!releasing) releasing = doRelease();
       return releasing;
