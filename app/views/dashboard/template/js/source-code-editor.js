@@ -1,15 +1,13 @@
-const CodeMirror = require("./codemirror/codemirror.js");
+const CodeMirror = require("codemirror");
 const initSidebarActionMenu = require("./sidebar-action-menu");
 
-require("./codemirror/active-line.js");
-require("./codemirror/match-brackets.js");
-require("./codemirror/mode-css.js");
-require("./codemirror/mode-simple.js");
-require("./codemirror/mode-multiplex.js");
-require("./codemirror/mode-handlebars.js");
-require("./codemirror/mode-htmlmixed.js");
-require("./codemirror/mode-javascript.js");
-require("./codemirror/mode-xml.js");
+require("codemirror/addon/selection/active-line.js");
+require("codemirror/addon/edit/matchbrackets.js");
+require("codemirror/mode/css/css.js");
+require("codemirror/mode/htmlmixed/htmlmixed.js");
+require("codemirror/mode/javascript/javascript.js");
+require("codemirror/mode/xml/xml.js");
+require("./codemirror-handlebars.js");
 
 function initializeSourceEditor() {
   if (typeof window === "undefined" || !window.document || !CodeMirror) return;
