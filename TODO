@@ -344,7 +344,7 @@ Improve Dropbox sync
   - Bug: handle a sync lock failure on second blog when migrating an app folder
 - Bug: retry transient Dropbox API errors with exponential backoff while surfacing hard failures for manual intervention.
 - Fix bug with Client.write which does not propogate sync errors... to demonstrate this, revoke dropbox token then try to enable local editing.
-- Bug: Switch uploads >150 MB to the Dropbox upload session API with chunked transfer and resumable checkpoints
+- Bug: make large Dropbox upload sessions (>140 MB) resumable across process restarts by persisting the session id and offset
 - Bug: run reset-to-blot when sync fails / errors
 - Bug: ensure you can move the folder in full-folder permission mode
 - Bug: reconnecting with the same account and same permissions should not create a new folder for `full_access=true`
