@@ -232,6 +232,7 @@ const validateAllBlogs = async () => {
         if (fixed.error) {
           syncReport.recordError(report, blog, "fix", fixed.error);
         }
+        syncReport.recordChecked(report, blog);
       } finally {
         logLag(blogID, "fix", entryCount, stopFixMeasure());
       }
