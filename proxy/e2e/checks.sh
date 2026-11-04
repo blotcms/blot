@@ -45,6 +45,8 @@ expect "cdn. serves a file from the global static dir" \
   "$(code -H 'Host: cdn.localhost' "$HTTP/cdn-test.txt")" 200
 expect_match "cdn. sets the long Cache-Control for it" \
   "$(hdr -H 'Host: cdn.localhost' "$HTTP/cdn-test.txt")" "Cache-Control: public, max-age=31536000"
+expect "cdn. sends exactly one Cache-Control for it" \
+  "$(hdr -H 'Host: cdn.localhost' "$HTTP/cdn-test.txt" | grep -ic '^cache-control:')" 1
 expect_match "cdn. sets CORS for it" \
   "$(hdr -H 'Host: cdn.localhost' "$HTTP/cdn-test.txt")" "Access-Control-Allow-Origin: *"
 
