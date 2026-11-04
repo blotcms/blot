@@ -68,6 +68,23 @@ const isEvictionSuppressed = (blogID, pathInBlogDirectory) => {
   return Boolean(blogSuppression?.suppressUntil > Date.now());
 };
 
+// Resolves true once the blog is no longer eviction-suppressed, or false if it
+// still is after timeoutMs (the suppression record itself expires after the
+// TTL, so a stuck eviction cannot hold callers forever).
+const waitForEvictionSuppressionToClear = async (
+  blogID,
+  { timeoutMs = EVICTION_SUPPRESSION_TTL_MS + EVICTION_SUPPRESSION_POST_MS, pollMs = 500 } = {}
+) => {
+  const deadline = Date.now() + timeoutMs;
+
+  while (isEvictionSuppressed(blogID)) {
+    if (Date.now() >= deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+
+  return true;
+};
+
 const pruneEvictionSuppressions = () => {
   const now = Date.now();
   for (const [key, suppression] of evictionSuppressionMap.entries()) {
@@ -82,5 +99,6 @@ export {
   markEvictionSuppressed,
   extendEvictionSuppression,
   isEvictionSuppressed,
+  waitForEvictionSuppressionToClear,
   pruneEvictionSuppressions,
 };
