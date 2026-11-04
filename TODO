@@ -77,7 +77,7 @@ Analyze the new log line paramater for accept encoding to determine if we should
 - Check the access log for the Accept-Encoding of feed requests (/feed.rss etc.): if most are gzip-only, store gzip -9 copies too (gzip_static), since those hits still compress on the fly, 
 
 Redis host follow-ups (from #2041, new host since 8 Oct):
-- Remaining dropped write errors: write order in Blog.create; the list-ghosts restore path; error paths for background resave and rebuild; a callback for the messenger's setStatus; make Entry.set atomic
+- Remaining dropped write errors: write order in Blog.create; error paths for background resave and rebuild; make Entry.set atomic
 - Proxy: auto-ssl's lock and hook calls can reuse a timed-out Redis connection
 - Deploy log archive (scripts/deploy/units.sh, proxy/deploy/blue-green.sh): before a unit is replaced, archive its container logs with docker logs -t, outside /tmp, more than 3 files, size-capped
 - TLS handshakes were about a quarter of billed egress on 21 Oct (#2107): ECDSA certificates shrink each by about a third, and few TLS connections resume today, so look at session reuse and keep-alive (about 1.7 requests per connection). No `ssl_session_tickets` without a shared key (#2271)
