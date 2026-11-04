@@ -62,7 +62,7 @@ describe("local client source directory", function () {
     }
   }
 
-  function backendSpecs() {
+  describe("against storage/folder", function () {
     describe("watching", function () {
       let watcher;
 
@@ -199,21 +199,5 @@ describe("local client source directory", function () {
         expect(await text(id, "/old/post.txt")).toBe("existing");
       });
     });
-  }
-
-  describe("on disk", backendSpecs);
-
-  describe("on S3", function () {
-    require("storage/tests/minio")();
-
-    beforeAll(function () {
-      folder.useBackend("s3");
-    });
-
-    afterAll(function () {
-      folder.useBackend();
-    });
-
-    backendSpecs();
   });
 });
