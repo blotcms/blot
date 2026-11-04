@@ -114,7 +114,7 @@ How to reduce likelihood of downtime?
 
 ---
 
-Harden app against S3 being unavailable (generated assets today, blog folders once #2258 lands)
+Harden app against S3 being unavailable (generated assets and blog folders)
 
 Implement folder storage limits (include generated files in this amount?). #2258's Redis index keeps the per-blog byte totals to enforce them from.
 
@@ -173,7 +173,7 @@ Add rebuild button to each file on dashboard
 
 benchmarks-render.yml is manual only because benchmarks-corpus.yml fails, leaving no corpus: fix the corpus build (probably needed since #2111 dropped data/static from the corpus), then give the render benchmark a daily schedule
 
-Back up blot-storage-prod off AWS (Backblaze B2, hourly, no --delete): _avatars and _template_assets can't be regenerated
+Back up blot-storage-prod off AWS before the data volume and its EBS snapshots go (#2258 Phase E): a daily rclone sync of the whole bucket (folders, git, assets) with rclone's native B2 backend, into its own prefix of the Redis offsite bucket, a key without delete rights, a 30-day version lifecycle on that prefix (and the Redis rule limited to its own), a freshness check in the daily email, and a test restore of one blog
 
 Bunny: decide Volume vs Standard tier (more PoPs, faster first byte far from Volume PoPs) once we've run the numbers on cost and latency; also why cache HIT is low (Statistics: status codes, top uncached URLs)
 
@@ -234,7 +234,7 @@ How do we think about a shared asset library across templates?
 
 Decide whether or not to revert the preset system – should it only be used for the templates index for explaining the customization features?
 
-Test script for point-in-time restoration of specific blog folders at specific time (e.g. 2 days ago)
+Test script for point-in-time restoration of specific blog folders at specific time (e.g. 2 days ago), from the B2 copy of the bucket (restore-folder.sh restored from EBS snapshots and went with the folder cleanup)
 
 Under templates index
 - Clicking on file in folder pulls up post on preview site ?
@@ -258,7 +258,6 @@ Make sure next bill amount is in all billing emails to customers
 Explain on the about page the websites started out as files in a folder. But they had to be HTML. Blot makes other file types possible too.
 
 Get node container horizontally scalable and multi-region (#1932)
-- blog folders to S3 (#2258)
 - git repos to S3 (#2259)
 
 Add clear bill change info to new blog flow

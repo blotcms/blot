@@ -275,10 +275,17 @@ nothing is rewritten. Only `/blog_*` changes origin. Everything else
 
 ## Backup
 
-`_avatars` and `_template_assets` exist only here and can't be regenerated, so
-the bucket is to be backed up hourly to Backblaze B2 (see `app/storage/README`
-§3). That isn't set up yet (see TODO); once it is, check it before anything
-which could lose objects.
+Blog folders (`{blogID}/folder/`), Git repos (`{blogID}/git/`), `_avatars` and
+`_template_assets` exist only here and can't be regenerated, and the bucket has
+no versioning, so the bucket is to be copied to Backblaze B2: a daily
+`rclone sync` of the whole bucket from the host, with rclone's native B2
+backend, into its own prefix of the Redis offsite bucket, with a key which
+can't delete and a lifecycle rule which keeps hidden and prior versions for 30
+days (agreed in #2258, Phase E). It replaces the data volume's EBS snapshots,
+and goes in place, with a test restore of one blog, before the data volume is
+deleted. The `models/file` index is rebuilt from the bucket
+(`scripts/storage/rebuild-file-index.js`), so it isn't backed up. Check the
+backup before anything which could lose objects.
 
 ## Re-seeding from a local copy
 

@@ -11,7 +11,7 @@
 // that for every unchanged file it checks, at the cost of a stat, but only on
 // disk: on S3 an old fingerprint can't match, so the file would be read from
 // S3 (one with an md5) or exported from Drive again (a Google Doc). Run this
-// before a Drive blog is named in BLOT_FOLDER_PRIMARY.
+// before a Drive blog moved to S3 (#2258), which every blog now has.
 //
 // Default is a dry run: reports, per blog, how many non-directory files in the
 // ID <-> path mapping have no valid applied record, and how many have an old

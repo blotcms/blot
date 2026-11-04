@@ -3,8 +3,8 @@
 ## Default site and folder-operation shorthand
 
 - Unless the operator indicates another site, the default blog to edit is the dashboard site with handle `local`.
-- When the operator asks to “load in the `david` folder,” this means the complete folder-replacement task: resolve the `local` blog ID, copy the contents of `app/templates/folders/david/` into that blog’s live source folder under `data/blogs/blog_<id>/`, replacing the existing contents, then wait for the watcher/rebuild to finish and verify the rendered site. If another blog handle is specified, use that handle instead of `local`.
-- When the operator asks to “clear the folder,” remove everything inside the validated live source folder under `data/blogs/blog_<id>/`, including hidden files and nested directories, but leave the source folder itself in place. Use `local` unless another blog handle is specified, then wait for the watcher/rebuild to finish and verify that the live site and Archives reflect the empty source.
+- When the operator asks to “load in the `david` folder,” this means the complete folder-replacement task: resolve the `local` blog ID, copy the contents of `app/templates/folders/david/` into that blog’s source directory, `data/local-sources/<handle>/` (the Local client copies it into the blog's folder in the bucket), replacing the existing contents, then wait for the watcher/rebuild to finish and verify the rendered site. If another blog handle is specified, use that handle instead of `local`.
+- When the operator asks to “clear the folder,” remove everything inside the validated source directory `data/local-sources/<handle>/`, including hidden files and nested directories, but leave the source folder itself in place. Use `local` unless another blog handle is specified, then wait for the watcher/rebuild to finish and verify that the live site and Archives reflect the empty source.
 - Treat the replacement as exact: include all source-folder contents, including hidden files, and clear only the validated destination folder. Confirm the source and destination paths before removing existing destination contents.
 
 ## Edit, fork, and preview

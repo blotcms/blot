@@ -256,7 +256,7 @@ The Redis key generator. Methods:
 | `storage/folder` | Creates and removes a blog's content folder |
 | `helper/punycode` | Encodes/decodes internationalized domain names |
 | `helper/flushCache` | Clears reverse-proxy cache directories for specified hostnames |
-| `config` | Provides `config.host`, `config.blog_folder_dir`, and `config.reverse_proxies` |
+| `config` | Provides `config.host` and `config.reverse_proxies` |
 | `build/plugins` | Provides the default plugin list (`defaultList`) used in `defaults.js` |
 | `clients` | Loaded dynamically in `remove` to disconnect the blog's sync client |
 | `clients/git/renameRepo` | Called in `set` when a handle change affects a Git-backed blog |

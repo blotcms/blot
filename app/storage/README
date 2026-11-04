@@ -7,26 +7,24 @@ off EBS onto S3, for cost/scalability/deployment reasons, and enforce
 per-blog storage quotas — with no added read-path latency, paying any cost
 at sync/build time instead.
 
-- **Done:** `.assets` is in S3 and nowhere else (Phase 1), and the EBS
-  volume has shrunk to blog folders plus git repos.
-- **Next:** blog folders, with S3 as the source of truth, a Redis metadata
-  index and a per-file content cache on the instance SSD (Phase 2,
+- **Done:** `.assets` is in S3 and nowhere else (Phase 1), and so are
+  blog folders, with a Redis metadata index and a per-file content cache on
+  the instance SSD (Phase 2,
   [#2258](https://github.com/blotcms/blot/issues/2258)). Git client repos
-  follow (Phase 3, [#2259](https://github.com/blotcms/blot/issues/2259)).
+  are in S3 too (Phase 3, [#2259](https://github.com/blotcms/blot/issues/2259)).
 - **Long term:** node containers scale horizontally with no EBS mount
   (one EBS volume can't be attached to several containers). Each host's
   ephemeral SSD is a cache, never the source of truth.
 
 ## 2. Current state
 
-- `config/index.js` derives `blog_folder_dir` (`/blogs`) off
-  `BLOT_DATA_DIRECTORY`. There is no longer a static files directory: generated
-  assets are in the storage bucket (`config.storage`).
-- A blog's folder is `blog_folder_dir/<blogID>`. Only `app/storage/folder`
-  (the local-disk backend) builds paths into it: `helper/localPath` is gone
-  and `scripts/tests/ci/check-folder-access.js` fails CI for any other
-  non-spec file which names `blog_folder_dir`, apart from a short allowlist
-  of scripts which work on the disk itself.
+- Neither blog folders nor generated assets are on disk: both are in the
+  storage bucket (`config.storage`). There is no `blog_folder_dir` and no
+  `data/blogs`.
+- A blog's folder is the objects under `{blogID}/folder/`, reached only
+  through `app/storage/folder` (§8). `scripts/tests/ci/check-folder-access.js`
+  fails CI for anything which names `blog_folder_dir`, `helper/localPath`,
+  `data/blogs` or a spec's `this.blogDirectory`.
 - Per-blog asset IO all goes through `app/storage/assets.js`: `path`, `url`,
   `commit`, `write`, `writeFrom`, `read`, `exists`, `list`, `walk`,
   `createReadStream`, `ensureLocal`, `serve`, `remove`, `removeAll`, and a
@@ -62,10 +60,10 @@ at sync/build time instead.
 - The per-blog sync lock is a Redis mutex (`app/sync/lock.js`:
   token-checked `SET NX PX` with a heartbeat), so it works across multiple
   app hosts as is.
-- No per-blog storage-size accounting or quota enforcement exists, except a
-  manual audit script (`scripts/user/identify-overdue-users.js`, `du -sb`
-  of the blog folder plus a sum of the blog's object sizes for disabled
-  accounts).
+- No quota enforcement exists. `models/file` keeps per-blog byte and file
+  totals, which the manual audit script
+  (`scripts/user/identify-overdue-users.js`, for disabled accounts) adds to
+  the sum of the blog's asset object sizes.
 - The AWS SDK (`@aws-sdk/client-s3`) is used only by `app/storage/s3.js`.
 - Don't store bulk file content in Redis; Redis is
   fine for small bounded metadata (locks, directory listings, cache
@@ -174,7 +172,8 @@ at sync/build time instead.
   shard start one, and the test runner creates the bucket
   (`scripts/tests/util/bucket.js`). Dev mirrors production as closely as it
   can, so the dev proxy's `cdn` host serves `/blog_*` from it. The app
-  refuses to start without a bucket. MinIO has stopped publishing its own images,
+  refuses to start without a bucket. Blog folders are in it too, in
+  development and specs as in production. MinIO has stopped publishing its own images,
   so these use a pinned third-party build of the upstream release; swap it if
   that becomes a problem. Latency isn't simulated for S3 (toxiproxy only
   fronts Redis).
@@ -256,7 +255,7 @@ with `Last-Modified`.
   its client DB. iCloud and Dropbox compare content or provider hashes.
 - Google Drive's records of the file Blot holds (`util/localState.js`) are
   storage/folder's `size` and `modified` (rounded to the millisecond, as
-  `models/file` keeps it, so the mirror and the disk copy preserve them),
+  `models/file` keeps it),
   plus the SHA-1 when it's known, checked only when those two moved. The
   older fingerprint (`util/contentFingerprint.js`, `localFingerprint.js`:
   size and nanosecond mtime on disk) is still honoured in records written
@@ -399,36 +398,20 @@ should consolidate into one storage-layer method, exposed explicitly
     is never ahead of S3; bytes are cached per file on the instance SSD (§4c),
     so a blog folder can be larger than the SSD; writes finish in S3 before
     they return; empty directories are zero-byte `{dir}/` marker objects.
-  - **A, groundwork on disk.** Things worth doing anyway that remove what
-    would make S3 slow: hash each changed file once per build (today
-    `sync/update` and `hashEntrySource` each read it, and the build reads it
-    again), bounded concurrency in `sync/rebuild.js`, cheaper misses in
-    `blog/routes/assets.js` (one directory read instead of up to seven
-    candidates), Google Drive's local fingerprint off `ino`/`ctime`/`dev`, the
-    two §4a backfills, the filename scan (§7,
-    `scripts/storage/scan-folder-filenames.js`), and this README.
-  - **B, `app/storage/folder` on a local-disk backend.** Call sites move area
-    by area (request-time readers, build, sync core, dashboard, models and
-    templates, then each sync client), each PR behaviour-neutral. It ends with
-    a lint check (`scripts/tests/ci/check-folder-access.js`) that nothing outside
-    `app/storage` uses `blog_folder_dir`, and the deletion of `helper/localPath`
-    (both done). Git blogs stop
-    holding a live `.git` in the folder here.
-  - **C, S3 backend, index and cache, with disk still authoritative.**
-    Dual writes (disk first), a backfill (`scripts/storage/backfill-folder.js`,
-    like `backfill-assets.js`), a reconcile job reporting drift, and shadow
-    reads on a sample of requests and builds to size the cache and see where
-    S3 is too slow.
-  - **D, S3 authoritative, blog by blog**, behind a per-blog flag: the test
-    blogs first, then cohorts, then everyone, watching the performance gates
-    at each step. Rolling back a blog is a reconcile from S3 to disk and a
-    flag flip. The flag (`BLOT_FOLDER_PRIMARY`), its guard, the disk copy and
-    the reverse reconcile are built, and reverse shadow reads check a blog on
-    S3 against its disk copy (§ "S3 as a blog's primary store" below). The
-    ramp is config only, in the production environment.
-  - **E, remove the disk.** Stop writing blog folders to EBS, delete
-    `data/blogs`, and shrink the data volume to git client data until
-    Phase 3.
+  - How it moved (each step shipped on its own and was reversible): A,
+    groundwork on disk (one hash per changed file per build, bounded
+    rebuild concurrency, cheaper misses in `blog/routes/assets.js`, a scan
+    of existing file names); B, every call site onto `app/storage/folder`
+    with a local-disk backend, enforced by `check-folder-access.js`; C, an
+    S3 backend, the index and the content cache, with disk authoritative: a
+    mirror of every write, a backfill, an hourly and daily reconcile and
+    sampled shadow reads, soaked in production; D, S3 authoritative blog by
+    blog behind `BLOT_FOLDER_PRIMARY`, with a disk copy kept for rollback
+    and reverse shadow reads, ramped to every blog (the cutover, #2481); E,
+    the disk removed: the local backend, the mirror, the disk copy, shadow
+    reads, the reconcile and the flags went in the cleanup PR, and
+    `data/blogs` was deleted after it. The B2 offsite sync of the whole
+    bucket replaced the data volume's EBS snapshots as the backup.
 - **Phase 3 — git client repos.** Planned in
   [#2259](https://github.com/blotcms/blot/issues/2259). Bare repos live in
   `{data_directory}/git/{handle}.git` (`app/clients/git/dataDir.js`)
@@ -455,34 +438,21 @@ const { entries, cursor } = await store.folder.list(path, { cursor, limit });
 const allEntries = await store.folder.listAll(path); // buffers everything; for callers that can afford it
 ```
 
-On S3 the listing comes from the Redis index, one directory at a time
+The listing comes from the Redis index, one directory at a time
 (a page is a `ZRANGEBYLEX` of the directory's names set, see
-`app/models/file/README`), not from `ListObjectsV2`. On
-local disk, `fs.promises.opendir()` gives an unbuffered async-iterable
-directory handle — implementing `.list()` on top of it starts fixing
-`retrieve/folder.js`'s existing memory-crash risk immediately, independent
-of S3. `.listAll()` is for callers like `buildFromFolder`'s directory scan
+`app/models/file/README`), not from `ListObjectsV2`. `.listAll()` is for callers like `buildFromFolder`'s directory scan
 or the quota-reconciliation script that genuinely need everything; the
 `folder` template local — the one place a huge directory has actually
 caused problems — should call `.list()` directly, never `.listAll()`.
 
-`.list()` is sorted by name (UTF-16 code-unit order) on both backends, and
+`.list()` is sorted by name (UTF-16 code-unit order), and
 its cursor is the last name of the previous page.
 
 ## 7. Open questions
 
 - B2 `daysFromHidingToDeleting` retention window (60? 90 days?).
-- Shadow-read sample rate for Phase 2 (1%? 5%?).
-- Redis memory per indexed file, measured during Phase 2's dual writes, to
-  size the Redis host.
 - Whether B2 becomes the primary store rather than only the backup —
   decide after measuring time to first byte from `us-west-2`.
-- The one-time scan of existing filenames for anything that's safe on POSIX
-  but odd as a raw S3 key (leading/trailing whitespace, control characters,
-  invalid UTF-8, keys over 1024 bytes, names which differ only by Unicode
-  normalisation or case) is `scripts/storage/scan-folder-filenames.js`.
-  Read-only; run it before `.folder` migrates and decide what to do with
-  what it finds (rename, or encode the key).
 - **What the index hash is, given entry `contentHash` (Phase C).** The plan
   is a Dropbox `content_hash` in the index, so the build and Dropbox can
   compare without reading the file. But entry `contentHash` is SHA-1 based
@@ -504,10 +474,9 @@ its cursor is the last name of the previous page.
 `storage/assets`: `read`, `createReadStream`, `serve`, `write`, `writeFrom`,
 `path` + `commit`, `ensureLocal`, `mkdir`, `rmdir`, `remove`, `move`, `stat`,
 `exists`, `list`, `listNames`, `listAll`, `walk`, `resolveCaseInsensitive` and `removeAll`.
-`index.js` is the public surface and documents each function, and sends each
-call to a backend chosen per blog: `local.js`, which keeps the folder on disk
-exactly as the app has always resolved it and which every blog uses unless
-`BLOT_FOLDER_PRIMARY` names it, or `s3.js` (below).
+`index.js` is the public surface and documents each function, and sends
+every call to `s3.js` (below). It is the only backend: the local-disk one
+went with the cleanup of #2258, and development and specs use MinIO.
 
 `s3.js` is the S3 backend: objects at
 `{blogID}/folder/{path}`, a zero-byte marker `{blogID}/folder/{dir}/` for a
@@ -517,11 +486,11 @@ directory with nothing in it, and every metadata read (`stat`, `list`,
 computed as the bytes upload; removes delete from S3 first. `move` is copy
 plus delete. `path` returns a staging path under the tmp directory which
 `commit` uploads. Bytes are read through the content cache (`cache.js`,
-below). A blog's calls go to it when `config.folder_primary` names the blog
-(below, Phase D). `useBackend` in `index.js` switches every blog at once
-and is only for specs, which run `app/storage/tests/folder.js` against both
-backends (on MinIO for S3). `scripts/storage/rebuild-file-index.js` rebuilds
-a blog's index from a listing of the bucket.
+below). `app/storage/tests/folder.js` is the contract, on MinIO.
+`scripts/storage/rebuild-file-index.js` checks a blog's index against a
+listing of the bucket, and with `--apply --live` rebuilds it from that
+listing: the listing is read first, but reads during the Redis writes see a
+partial folder, so it is for repair, not routine use.
 
 The content cache (`cache.js`) keeps the bytes the S3 backend has read on
 the instance store, under `config.folder_cache.directory` (by default
@@ -540,8 +509,7 @@ when the disk has under `min_free_percent` free. Nothing is evicted while
 pinned in this process (`use`) or within a minute of its last use in any
 process, which is what keeps a path from `ensureLocal` alive while a tool
 opens it. For a tool which runs longer, `withLocal(blogID, path, fn)` calls
-`fn(localPath)` with the entry pinned until `fn` settles (on disk it just
-passes the file's path). The pin is a heartbeat: while held, the entry's
+`fn(localPath)` with the entry pinned until `fn` settles. The pin is a heartbeat: while held, the entry's
 mtime is set again every third of the grace period, and eviction re-checks
 the mtime on disk just before deleting, so every process sees a held entry as
 recent with no pin files and nothing for a crash to leave behind; a holder
@@ -558,226 +526,29 @@ in the index, the bytes it still holds locally (the Buffer, the stream's
 spool file, the source file, before a move deletes it) go in with `put()`
 under the version just recorded, through the same tmp file, check and
 rename as a download. So the read which usually follows a write, a client
-syncing a file and the build reading it, is a hit with no GET, and since the
-mirror goes through `writeFrom` the shadow reads see the hit rate a blog on
-S3 would. It is best effort: a cache error never fails the write, and files
+syncing a file and the build reading it, is a hit with no GET. It is best effort: a cache error never fails the write, and files
 over `max_file_bytes` are skipped, since only `ensureLocal` would find them
 and copying every big write would churn the cache. A source changed since its
-upload (a mirrored file rewritten on disk) fails the check and is not cached,
+upload fails the check and is not cached,
 and an entry is keyed by its own write's version, so a newer write never
 finds it. `stats()` counts hits, misses, bytes, evictions, downloads and
 fills.
 
-What it keeps from today:
+What it keeps from the disk:
 
-- Paths are normalised by `helper/pathNormalizer` and resolved against the
-  blog's folder (`local.js`), so `..` cannot leave the blog's
-  folder, and a name is normalised the way it always has been.
-- The no-symlink policy (`helper/assertNoSymlinks`) guards every read and
-  write (code `ELOOP`), and `list` and `walk` skip symlinks. That check goes
-  away with the filesystem on S3.
+- Paths are normalised by `helper/pathNormalizer`, `..` cannot leave the
+  blog's folder, and a name is normalised the way it always has been.
 - `resolveCaseInsensitive` picks with `helper/caseSensitivePath.pick`.
+- There are no symlinks, so nothing raises `ELOOP` any more, and no file
+  modes.
 
-What it does not do yet:
+Limits:
 
-- Call sites move onto it one area at a time (issue #2258, Phase B). The
-  request-time readers have (`blog/routes/assets.js`, the CDN's
-  `/folder/v-` route and `retrieve/folder.js`), and so has the dashboard
-  (`dashboard/site/folder`, upload, download and export), and so has the
-  build (`build/` with its converters and wikilinks, `folderAssets`,
-  `helper/transformer`, and `helper/contentVersion.fromFolder` for the
-  folder-link version tokens), and so has everything else: nothing outside
-  `app/storage` reaches a blog's folder directly, which
-  `scripts/tests/ci/check-folder-access.js` enforces.
-- Dual writing and the backfill are below. `stat` with
-  `{ hash: true }` (Dropbox's content hash) reads the whole file on disk, and
-  downloads it on S3, whose index holds only the SHA-1.
-- On disk, `commit` does nothing but check for symlinks, because the path
-  `path()` returns is the file's real place.
-- `list` reads a directory's names whole in order to sort them (stats are
-  limited to the page), and `listAll` buffers everything.
+- `stat` with `{ hash: true }` (Dropbox's content hash) downloads the file,
+  since the index holds only the SHA-1, so a Dropbox reset reads every file
+  from S3.
+- `listAll` buffers a whole directory.
 - Missing files reject with `NotFoundError` (`code: "ENOENT"`), including
-  streams, which emit it as `error`. Other fs errors (`EISDIR`, `EACCES`) pass
-  through unchanged.
-
-### Mirroring to S3 (#2258 Phase C: write to both, disk first)
-
-For the blogs `config.folder_mirror` names, every change made through
-`storage/folder` on disk is then made in the S3 backend too: the objects under
-`{blogID}/folder/` and the `models/file` index. Disk stays authoritative and
-every read still comes from it; the copy is there for the reconcile to check
-and for shadow reads to try (the next steps of Phase C).
-
-- **The switch** is `BLOT_FOLDER_MIRROR` (`config.folder_mirror`): `off` (the
-  default), `all`, or blog IDs separated by commas (`blog_abc,blog_def`). It
-  is read on every write. With no storage bucket configured, mirroring logs
-  once and does nothing.
-- **How** (`folder/mirror.js`, called from `folder/index.js`): each mutating
-  call runs on the local backend first and, once it has succeeded, is
-  mirrored. `write` (buffer or stream) and `writeFrom` (copy or move) upload
-  the file from its place in the folder, with its modified time on disk, so a
-  stream is consumed once, by the disk, and the index's SHA-1 is computed as
-  the upload streams. `commit` makes S3 match the path on disk (a file or a
-  whole directory). `mkdir` writes a marker; `remove` and `rmdir` delete the
-  path. `move` is copy plus delete in S3, or, when S3 does not have the source
-  yet, an upload of the destination from disk. `removeAll` deletes the blog's
-  copy; it does so whenever the blog has an index, even once the blog is no
-  longer mirrored.
-- **Failures** never fail the caller: the change is on disk. The mirror logs
-  a `[storage/folder mirror] failed blog=... op=... path=... error=...` line
-  and adds the blog to the Redis set `storage:folder:mirror:dirty`, for the
-  backfill (and later the reconcile) to repair. Nothing is retried beyond
-  what `storage/s3.js` already retries per request.
-- **Locking and latency**: changes are made inside the blog's sync lock, so
-  the mirror runs under it too and the index keeps its single writer. The
-  mirror is awaited, so a blog's changes reach S3 in order, at the cost of
-  the S3 round trips on each mirrored write.
-
-**Backfill**: `scripts/storage/backfill-folder.js` brings a blog's copy in
-line with its disk: it uploads files which are missing or differ (by size,
-then modified time, then the SHA-1 when the index has one, computed on disk
-only then), writes markers for empty directories, and deletes objects and
-records for paths no longer on disk. `--dry-run` (the default) reports,
-`--apply` changes, `--verify` exits non-zero on any difference; `--blog`,
-`--from`, `--dirty` (only the blogs in the dirty set) and `--concurrency`
-(blogs at once) choose what to run over. `--apply` and `--verify` run each
-blog holding its sync lock (`app/sync/hold.js`: the lock as `sync()` takes
-it, and nothing else, so disabled blogs are included) and skip a locked
-blog, to retry with `--blog`; a blog applied without errors leaves the dirty set, before its
-lock is released. A blog in the dirty set (or named by `--blog`) which no
-longer exists has its whole copy removed: its deletion could not remove it. It is safe to
-rerun. Turn mirroring on for a blog before its backfill, so nothing written
-in between is missed.
-
-The backfill and the reconcile work the other way round for a blog on S3
-(below): they bring its disk copy in line with S3 and change nothing in S3.
-
-### Shadow reads (#2258 Phase C)
-
-For mirrored blogs, `BLOT_FOLDER_SHADOW_RATE` (`config.folder_shadow.rate`,
-0 to 1, default 0 = off) of the reads made through `storage/folder` are
-repeated against the S3 backend once the disk has answered, and the answers
-compared and timed (`folder/shadow.js`). The caller always gets the disk's
-answer, unchanged and undelayed; nothing S3 does can reach it. Content is
-compared by SHA-1 of the bytes (so stale bytes behind a correct index show
-up), metadata by type, size and modified time, listings by names. A mismatch
-is checked again a few seconds later, so a read which raced a sync counts as
-transient. At most `max_in_flight` shadows run per process (more are dropped
-and counted), and files over `max_compare_bytes` have only their sizes
-compared. Counters go to an hourly Redis hash, `storage:folder:shadow:YYYYMMDDHH`
-(kept 14 days, no paths); mismatches are logged on the host with their paths
-as `[storage/folder shadow] mismatch blog=... op=... kind=... path=...`.
-`node scripts/storage/shadow-report.js --hours 24` prints the mismatch rate,
-local and S3 latency percentiles per call, and the content cache's hit rate.
-A cache hit takes about a millisecond and a miss an S3 GET, so for `read`,
-`createReadStream`, `serve` and `ensureLocal` the S3 latency is also recorded
-by outcome: `hit`, `miss`, or `direct` (over `max_file_bytes`, or the cache
-fell back on ECHANGED or a disk error). The S3 backend reports the outcome of
-each call through an optional trailing `trace` object (`trace.cache`), which
-the cache fills in via an optional `outcome` callback on `get`/`use`; it is
-per call, unlike the cache's shared counters, so concurrent shadows can't mix
-outcomes up. For `createReadStream` and `serve` (which re-read the file from
-both sides) the time to first byte of each side is recorded as well as the
-whole transfer, since the first byte is what a visitor waits for. Hours
-recorded before this have only the blended S3 latency.
-
-**Reverse shadow reads (#2258 Phase D).** For a blog on S3 (below) the same
-thing runs the other way round: `config.folder_shadow.reverse_rate`
-(`BLOT_FOLDER_SHADOW_REVERSE_RATE`; unset, the same as `rate`) of the reads
-S3 answered are repeated against the blog's disk copy, with the same
-comparisons, the same recheck and the same limits, off the request path. A
-mismatch there means S3 served something the disk would not have, which is
-what the ramp watches for. The counters are the forward ones with `reverse:`
-in front (`reverse:read:sampled`), in the same hourly hash, so
-`shadow-report.js` and `folder-soak-report.js` print a second table,
-"S3-primary vs disk copy"; its S3 latencies are those of the caller's own
-reads, with their content cache outcome. Mismatch lines carry
-`direction=reverse`. A disk copy lags S3 by the copy after each write, so a
-read which raced one is caught by the recheck and counts as transient; a
-mismatch on a blog whose disk copy is already known to be behind
-(`storage:folder:primary:dirty`, which the reconcile repairs) counts as
-`behind`, not as a mismatch. When a spec chooses the backend
-(`useBackend`), there is no disk copy and nothing is shadowed.
-
-### S3 as a blog's primary store (#2258 Phase D)
-
-For the blogs `config.folder_primary` names, S3 and `models/file` are the
-source of truth: `folder/index.js` sends every read and write to the S3
-backend instead of the disk, and the disk keeps a copy to roll back to.
-
-- **The flag** is `BLOT_FOLDER_PRIMARY` (`config.folder_primary`), in the
-  same form as the mirror's switch: `off` (the default: every blog on disk,
-  and no Redis read or other change for any call), `all`, or blog IDs
-  separated by commas. It is read on every call.
-- **The guard** (`folder/primary.js`, `usesS3`): a named blog goes to S3 only
-  if the mirror covers it (so S3 is kept in step whenever it is on disk), its
-  copy in S3 is known to be complete (it is in
-  `storage:folder:mirror:complete`), its mirror is not dirty (S3 is not
-  behind its disk), and its client is not Git.
-  Otherwise it stays on disk, logged once per process as `[storage/folder
-  primary] blog=... stays on disk: ...`. That is one Redis round trip per
-  call for named blogs only. An index alone proves nothing: the mirror
-  starts one with a blog's first mirrored write, before its backfill. A blog
-  joins the complete set when a backfill or reconcile of it finishes with no
-  errors, or a check under its lock (the daily run, `--verify`) finds
-  nothing to change, while the mirror covers it; it leaves when a backfill
-  of it starts or a mirror write fails. So existing mirrored blogs become
-  eligible after their next clean backfill or daily check, a blog named
-  before that moves over by itself, and a half-made copy is never read. A
-  complete blog whose folder becomes empty stays on S3. A blog also leaves
-  the set when its disk changes while the mirror doesn't cover it, and when
-  it moves between clients while its mirror isn't covering it, so
-  either needs a clean backfill first. The Local client (development only,
-  never for users) watches a source directory of its own and writes through
-  `storage/folder`, so its blogs can be on S3 (Phase E). Blogs on the Git client stay on disk because live clones
-  run git in the folder and the setup import uses the folder as git's work
-  tree (until #2259). Google Drive works on either backend: its sync lists
-  the folder through storage/folder and pairs each Drive `md5Checksum` with
-  the file's size, modified time and SHA-1 in its own database
-  (`clients/google-drive/util/localState.js`), so an unchanged file costs no
-  read on S3 either. A Drive blog whose records predate that should sync
-  once on disk before it is named: on disk its old fingerprints are replaced
-  for the cost of a stat each, while on S3 they can't match, so each file is
-  read once from S3 (no Drive download) to record a fresh pair.
-- **The disk copy**: each change is made in S3 first, which is what the
-  caller waits for and what counts, then copied to disk by the mirror's
-  copier run the other way round (`mirror.copier`, S3 to disk), with the
-  file's modified time from the index. A file is copied down through the
-  content cache, which the write has just filled for a file up to
-  `max_file_bytes`, so that costs no GET. A failure never fails the caller: it is logged as
-  `[storage/folder disk copy] failed blog=...` and the blog added to
-  `storage:folder:primary:dirty`. A blog on S3 is never mirrored.
-- **Repair**: `backfill-folder.js` and the reconcile pick a direction per
-  blog. For a blog on S3 they compare its disk with the index (by size, then
-  modified time, then SHA-1) and repair the disk: copy down what differs,
-  make missing directories, delete what S3 does not have, and fix modified
-  times. They never change S3 for it. The hourly run covers both dirty sets
-  and the daily run every mirrored or named blog. A blog off S3 whose disk
-  copy is still marked as behind is refused in both directions (it has
-  changes on both sides), reported, and left for a person.
-- **Rolling a blog back**: run `backfill-folder.js --blog <id> --apply`
-  while it is still on S3, so its disk copy is complete and it leaves
-  `storage:folder:primary:dirty`, then take it out of the flag. The mirror
-  takes over again from there.
-- **What does not work on S3 yet**: the Git client
-  (kept on disk above); switching a blog on S3 to it moves the blog to
-  disk, so its disk copy must be clean; `stat` with `{ hash: true }`
-  downloads the file (Dropbox, until it keeps its own `{ sha1, content_hash }`
-  pairs), so a Dropbox reset reads every file from S3.
-- **Rebuilding the index of a blog on S3**: `rebuild-file-index.js --apply`
-  empties a blog's index before refilling it, so it refuses a blog on S3,
-  whose reads go by the index. With `--via-disk` it first marks the blog's
-  mirror behind (`mirror.markBehind`), which sends the blog's reads to its
-  disk copy (it must not be behind S3), rebuilds under the sync lock, and
-  leaves the blog in the mirror's dirty set: the next hourly reconcile
-  checks S3 against the disk, repairs anything, and puts the blog back on
-  S3.
-- **The ramp** (the cutover PR): the code's default stays `off`; the move is
-  ramped in the production environment, a deploy of a new commit each step:
-  the test blogs (not the Git one), a few real blogs, then `all`. Each step
-  is watched in `shadow-report.js`, both directions, and in the reconcile
-  emails. Narrowing the flag, or `off`, is the rollback: the disk copy is
-  kept in step, and the reconcile repairs it from S3 for every named blog.
-  Git blogs move only once #2259's cutover has reached all of them and its
-  cleanup takes `git` out of `DISK_CLIENTS`. Serving `/folder/v-*` from the
-  bucket at the CDN edge is a separate manual step after `all`.
+  streams, which emit it as `error`.
+- The Git client and its specs still assume a folder on disk until #2259's
+  cleanup (#2458) lands; this branch is rebased onto it before it merges.

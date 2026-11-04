@@ -4,7 +4,7 @@ docker ps
 
 docker stop blot-container
 
-docker exec -it blot-container ls /usr/src/app/data/blogs
+docker exec -it blot-container ls /usr/src/app/data
 
 issue to resolve: how to flush the reverse proxy cache? localhost (127.0.0.1 is now different)
 
