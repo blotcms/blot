@@ -7,6 +7,7 @@ describe("callers of the sandbox when it fails", function () {
   const os = require("os");
   const path = require("path");
   const sandbox = require("../");
+  const folder = require("storage/folder");
 
   const image = path.join(__dirname, "../../build/thumbnail/tests/images/portrait.jpg");
   let directory;
@@ -108,52 +109,56 @@ describe("callers of the sandbox when it fails", function () {
     const test = this;
     const img = require("build/converters/img");
     const source = path.join(__dirname, "../../build/converters/img/tests/car.heic");
-    fs.copySync(source, test.blogDirectory + "/car.heic");
 
-    img.read(test.blog, "/car.heic", function (err) {
-      expect(err).toBeTruthy();
-      expect(sandbox.run.calls.allArgs().map((a) => a[0])).toContain("to-png");
-      done();
-    });
+    folder.writeFrom(test.blog.id, "/car.heic", source).then(function () {
+      img.read(test.blog, "/car.heic", function (err) {
+        expect(err).toBeTruthy();
+        expect(sandbox.run.calls.allArgs().map((a) => a[0])).toContain("to-png");
+        done();
+      });
+    }, done.fail);
   });
 
   it("img converter still reads an image that needs no conversion", function (done) {
     const test = this;
     const img = require("build/converters/img");
     const source = path.join(__dirname, "../../build/converters/img/tests/bunny.png");
-    fs.copySync(source, test.blogDirectory + "/bunny.png");
 
-    img.read(test.blog, "/bunny.png", function (err, html) {
-      expect(err).toBe(null);
-      expect(html).toContain("/bunny.png");
-      done();
-    });
+    folder.writeFrom(test.blog.id, "/bunny.png", source).then(function () {
+      img.read(test.blog, "/bunny.png", function (err, html) {
+        expect(err).toBe(null);
+        expect(html).toContain("/bunny.png");
+        done();
+      });
+    }, done.fail);
   });
 
   it("docx converter fails to convert and writes no media", function (done) {
     const test = this;
     const docx = require("build/converters/docx");
     const source = path.join(__dirname, "../../build/converters/docx/tests/image.docx");
-    fs.copySync(source, test.blogDirectory + "/image.docx");
 
-    docx.read(test.blog, "/image.docx", function (err, html) {
-      expect(err.code).toEqual("SANDBOX_TIMEOUT");
-      expect(html).toBeUndefined();
-      expect(sandbox.run.calls.argsFor(0)[0]).toEqual("pandoc");
-      done();
-    });
+    folder.writeFrom(test.blog.id, "/image.docx", source).then(function () {
+      docx.read(test.blog, "/image.docx", function (err, html) {
+        expect(err.code).toEqual("SANDBOX_TIMEOUT");
+        expect(html).toBeUndefined();
+        expect(sandbox.run.calls.argsFor(0)[0]).toEqual("pandoc");
+        done();
+      });
+    }, done.fail);
   });
 
   it("markdown converter fails to convert", function (done) {
     const test = this;
     const markdown = require("build/converters/markdown");
-    fs.outputFileSync(test.blogDirectory + "/post.md", "# Hello");
 
-    markdown.read(test.blog, "/post.md", function (err, html) {
-      expect(err.code).toEqual("SANDBOX_TIMEOUT");
-      expect(html).toBeUndefined();
-      expect(sandbox.run.calls.argsFor(0)[1].from).toEqual("markdown");
-      done();
-    });
+    folder.write(test.blog.id, "/post.md", "# Hello").then(function () {
+      markdown.read(test.blog, "/post.md", function (err, html) {
+        expect(err.code).toEqual("SANDBOX_TIMEOUT");
+        expect(html).toBeUndefined();
+        expect(sandbox.run.calls.argsFor(0)[1].from).toEqual("markdown");
+        done();
+      });
+    }, done.fail);
   });
 });

@@ -143,7 +143,7 @@ Its production-scale defaults (`corpusSites: 1000`, `corpusFiles: 160000`,
 `corpusMediaFraction: 0.2`) live in [`spec/util/defaults.js`](spec/util/defaults.js)
 and are what `build-corpus.js` uses unless overridden.
 
-## The shared media pool and hard-link trick
+## The shared media pool
 
 A configurable fraction of posts (`--media-fraction`, 0 by default, 0.2 in the
 corpus defaults) reference an image or GIF. Rather than writing unique media
@@ -152,28 +152,17 @@ generates a small, fixed (~24 file) pool of genuinely valid JPEG/PNG photos
 (synthesized gradients via `sharp`, palette-quantized/mozjpeg'd to stay tiny),
 short animated GIFs (`sharp` frames assembled with ImageMagick's `convert`),
 and a couple of hand-written SVGs - deterministically, from `--seed`, into
-`data/blogs/_benchmark-media-pool/` (a fixed directory *inside*
-`config.blog_folder_dir`, sibling to the per-blog folders) the first time a
-run needs media. Nothing here is committed to git; the pool is regenerated
-fresh (idempotently - only if missing) by every run that requests media.
+`data/_benchmark-media-pool/` (a fixed directory on disk, outside every blog's
+folder) the first time a run needs media. Nothing here is committed to git;
+the pool is regenerated fresh (idempotently - only if missing) by every run
+that requests media.
 
-Each post that wants media gets a **hard link** (`fs.link`, not a symlink) to
-one of the pool files, picked pseudo-randomly from the same seeded RNG. This
-is deliberately a hard link: [`app/helper/assertNoSymlinks.js`](../../app/helper/assertNoSymlinks.js)
-is called on every path inside a blog folder during sync
-([`app/sync/update/index.js`](../../app/sync/update/index.js)) and when
-serving assets ([`app/blog/routes/assets.js`](../../app/blog/routes/assets.js)),
-and unconditionally rejects any symlink - including the final path component
-itself - with `ELOOP`. A hard link is indistinguishable from an ordinary file
-to `lstat()`, so it passes that check, and because every post referencing the
-same pool file shares one inode, `tar` still only stores that file's bytes
-once per archive (subsequent hard-linked paths become link references) - so
-`data/blogs/` stays small exactly like a symlink approach would have, without
-tripping the no-symlinks guard. Putting the pool inside `data/blogs/` (rather
-than, say, the git checkout) also means it's swept up for free by whatever
-already tars/restores `data/blogs` (see the corpus lifecycle below), so a
-restored corpus's hard links keep resolving without needing a fourth cached
-artifact.
+Each post that wants media gets a copy of one of the pool files (written into
+the blog's folder with `storage/folder`'s `writeFrom`), picked
+pseudo-randomly from the same seeded RNG. Blog folders live only in the
+storage bucket (MinIO here), which has no links, so every such post stores its
+own copy of the bytes; the pool is just the source they are copied from, and
+is not part of the corpus snapshot.
 
 ## The corpus build/cache/restore lifecycle
 
@@ -187,11 +176,10 @@ enough that no PR should pay for it. Instead:
    `blog.rebuild()` every site, then stop - no render/burst phases), then
    snapshots two artifacts into `.benchmarks/corpus/`:
    - `redis-dump.rdb` - a Redis `SAVE` dump of every entry/tag/index key
-   - `blogs.tar.gz` - `data/blogs/` (raw source + hard-linked media - small)
-
-   (The images and thumbnails the build generates are uploaded to a throwaway
-   MinIO that `build-corpus.js` starts, and are not kept: the render benchmark
-   requests pages, never those files.)
+   - `minio.tar.gz` - the data of the throwaway MinIO that `build-corpus.js`
+     starts, copied out with `docker cp`: the blogs' folders (raw source +
+     media) and the images and thumbnails the build generated, which all live
+     only in the storage bucket
 
    plus `manifest.json` (blog IDs/handles, and each site's tags/search
    keywords/hub path, so a later render-only run doesn't need to recompute
@@ -208,8 +196,8 @@ enough that no PR should pay for it. Instead:
    corpus cache (read-only - it never saves back an amended corpus), loads
    the Redis dump into its job's `redis:6` service container (`docker cp` the
    dump into the container's `/data/dump.rdb`, then `redis-cli DEBUG RELOAD`
-   to make the running server pick it up without a restart), extracts the two
-   tarballs into place, then runs the spec in `--corpus-mode render`: skip
+   to make the running server pick it up without a restart), copies the MinIO
+   tarball into a stopped MinIO container (`docker cp -`) and starts it, then runs the spec in `--corpus-mode render`: skip
    workload generation and `blog.rebuild()` entirely and just run the render
    + burst phases against what's already there. History/regression tracking
    is entirely separate from `benchmarks.yml` (`render-benchmarks-history-
@@ -218,8 +206,8 @@ enough that no PR should pay for it. Instead:
 
 `CORPUS_SCHEMA_VERSION` (a workflow env, mirrored as `corpusSchemaVersion` in
 `defaults.js`) is independent of `historySchemaVersion`: bump it whenever the
-corpus's *shape* changes (site/post/tag/media distribution, the hard-link
-layout, the converter fixture set) so a stale cached corpus doesn't silently
+corpus's *shape* changes (site/post/tag/media distribution, where blog
+folders are kept, the converter fixture set) so a stale cached corpus doesn't silently
 get reused against code that no longer matches its assumptions.
 
 ## Running it locally
@@ -271,9 +259,8 @@ node scripts/benchmarks --corpus-mode render \
 ```
 
 The last command needs the corpus's Redis dump already loaded and its
-`data/blogs` tarball already extracted into wherever your
-local container mounts `/usr/src/app/data` - `build-corpus.js` writes its
-working `data/` under `--out-dir` for exactly this reason.
+MinIO data (`minio.tar.gz`) already restored into the MinIO
+the container is pointed at (`BLOT_STORAGE_*`), as `benchmarks-render.yml` does.
 
 ### Per-converter benchmark
 
@@ -350,7 +337,7 @@ artifact, no comment, no issue.
   workflow gets a daily schedule like `benchmarks.yml`
 - restores the newest `benchmark-corpus-v*` cache (falls back to
   [`seed-corpus.js`](seed-corpus.js) if missing entirely), loads the Redis
-  dump into its job's `redis:6` service container, extracts `data/blogs`
+  dump into its job's `redis:6` service container, restores the MinIO data
 - runs render + all six burst phases via `--corpus-mode render`
 - its own sticky PR comment, its own `render-benchmarks-history-<arch>`
   cache, its own `render-benchmark-regression` issue label - not comparable
@@ -470,7 +457,7 @@ information-only, and `detect-regression.js` will not open an issue.
 |------|-----------|---------|
 | `index.js` | container | run the spec once, write result JSON |
 | `spec/build-render.spec.js` | container | the Jasmine spec itself (build/render/burst phases, plus `--corpus-mode build/render` branches) |
-| `spec/util/workload.js` | container | flat + skewed workload generation, media hard-link assignment |
+| `spec/util/workload.js` | container | flat + skewed workload generation, media assignment |
 | `spec/util/corpusSetup.js` | container | loads blogs from a corpus manifest instead of creating fresh ones (`--corpus-mode render`) |
 | `spec/util/tagBurst.js` | container | tag-burst phase: solo vs. concurrent `/tagged/<slug>` timing |
 | `spec/util/archivesBurst.js` | container | archives-burst phase: solo vs. concurrent `/archives` timing |

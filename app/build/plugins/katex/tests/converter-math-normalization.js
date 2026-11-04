@@ -1,5 +1,4 @@
-const fs = require("fs-extra");
-const LocalPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
+const folder = require("storage/folder");
 
 const markdownConvert = require("../../../converters/markdown/convert");
 const orgConvert = require("../../../converters/org/convert");
@@ -20,10 +19,8 @@ describe("converter math normalization", function () {
       katex: { enabled: true, options: {} },
     },
   };
-  const blogDirectory = LocalPath(blog.id, "/");
-
   beforeEach(async function () {
-    await fs.emptyDir(blogDirectory);
+    await folder.removeAll(blog.id);
   });
 
   function readWith(converter, filePath) {
@@ -135,7 +132,7 @@ describe("converter math normalization", function () {
           const content = fixture[mode];
 
           if (fixture.path) {
-            await fs.outputFile(LocalPath(blog.id, fixture.path), content);
+            await folder.write(blog.id, fixture.path, content);
           }
 
           const html = await fixture.convert.call(fixture, content);

@@ -127,11 +127,16 @@ describe("contentVersion", function () {
       ["a file above the hashing cap", 6 * 1024 * 1024],
     ].forEach(function ([label, size]) {
       it("gives the token contentVersion gives " + label, async function () {
-        const filePath = this.blogDirectory + "/file.bin";
+        const filePath = path.join(dir, "file.bin");
 
         fs.outputFileSync(filePath, Buffer.alloc(size, "x"));
         // A fractional mtime, which the size+mtime token must keep exactly
         fs.utimesSync(filePath, 1700000000.123456, 1700000000.123456);
+
+        // The same file, with the same modified time, in the blog's folder
+        await folder.writeFrom(this.blog.id, "/file.bin", filePath, {
+          modified: fs.statSync(filePath).mtimeMs,
+        });
 
         const stat = await folder.stat(this.blog.id, "/file.bin");
 
@@ -142,7 +147,7 @@ describe("contentVersion", function () {
     });
 
     it("doesn't read a file above the cap", async function () {
-      fs.outputFileSync(this.blogDirectory + "/big.bin", Buffer.alloc(6 * 1024 * 1024, "x"));
+      await folder.write(this.blog.id, "/big.bin", Buffer.alloc(6 * 1024 * 1024, "x"));
 
       const stat = await folder.stat(this.blog.id, "/big.bin");
 

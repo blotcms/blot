@@ -5,9 +5,9 @@
  * Per-converter build-time micro-benchmark: times N conversions of a
  * converter's own existing test fixtures using its actual `read(blog, path,
  * callback)` function directly - no full blog/Redis/rebuild machinery, since
- * a converter's `read` only touches the filesystem (via
- * config.blog_folder_dir) and, for some converters (docx/odt), shells out to
- * pandoc/soffice - it does not need Redis at all.
+ * a converter's `read` only touches the blog's folder (through storage/folder:
+ * the storage bucket and Redis, which the workflow provides) and, for some
+ * converters (docx/odt), shells out to pandoc/soffice.
  *
  * Used by .github/workflows/benchmarks-converters.yml, which only invokes
  * this for converters whose directory actually changed.
@@ -108,12 +108,11 @@ async function benchmarkConverter(name, n) {
     return { name, skipped: true, reason: "no usable fixtures found" };
   }
 
-  const config = require("../../app/config");
-  const { join } = require("path");
+  const folder = require("../../app/storage/folder");
 
-  // A throwaway blog ID so `read(blog, path, callback)` (which resolves
-  // paths under config.blog_folder_dir) has somewhere real
-  // to read from, without needing Blog.create/Redis.
+  // A throwaway blog ID so `read(blog, path, callback)` (which reads the
+  // blog's folder through storage/folder) has somewhere real to read from,
+  // without needing Blog.create.
   const blogID = `converter-bench-${name}`;
   const blog = {
     id: blogID,
@@ -128,18 +127,16 @@ async function benchmarkConverter(name, n) {
       callouts: { enabled: false },
     },
   };
-  const blogDir = join(config.blog_folder_dir, blogID, "/");
 
-  fs.mkdirSync(blogDir, { recursive: true });
+  // Copy every fixture into the fake blog folder, so read() finds them at a
+  // normal-looking blog-relative path.
+  const fixtureTasks = [];
 
-  // Copy every fixture into the fake blog folder, preserving basename, so
-  // read() finds them at a normal-looking blog-relative path.
-  const fixtureTasks = fixtures.map((sourcePath, i) => {
-    const targetName = `fixture-${i}${path.extname(sourcePath)}`;
-    const targetPath = path.join(blogDir, targetName);
-    fs.copyFileSync(sourcePath, targetPath);
-    return `/${targetName}`;
-  });
+  for (let i = 0; i < fixtures.length; i++) {
+    const targetName = `fixture-${i}${path.extname(fixtures[i])}`;
+    await folder.writeFrom(blogID, `/${targetName}`, fixtures[i]);
+    fixtureTasks.push(`/${targetName}`);
+  }
 
   const durationsMs = [];
   let errorCount = 0;
@@ -185,7 +182,7 @@ async function benchmarkConverter(name, n) {
     if (rssMb > peakRssMb) peakRssMb = rssMb;
   }
 
-  fs.rmSync(blogDir, { recursive: true, force: true });
+  await folder.removeAll(blogID);
 
   if (!durationsMs.length) {
     return {

@@ -1,6 +1,12 @@
 describe("update", function () {
   var sync = require("../index");
-  var fs = require("fs-extra");
+  var storage = require("storage/folder");
+
+  // Calls next(err) when the promise settles
+  function settle(promise, next) {
+    promise.then(function () { next(); }, next);
+  }
+
   var async = require("async");
   var redis = require("models/client");
   var entryKey = require("models/entry/key").entry;
@@ -112,8 +118,10 @@ describe("update", function () {
       async.eachSeries(
         items,
         function (item, next) {
-          fs.outputFileSync(blogDirectory + item.oldPath, item.content, "utf-8");
-          folder.update(item.oldPath, next);
+          settle(storage.write(ctx.blog.id, item.oldPath, item.content), function (err) {
+            if (err) return next(err);
+            folder.update(item.oldPath, next);
+          });
         },
         function (err) {
           if (err) return testDone.fail(err);
@@ -128,12 +136,11 @@ describe("update", function () {
               async.eachSeries(
                 items,
                 function (item, next) {
-                  fs.moveSync(
-                    blogDirectory + item.oldPath,
-                    blogDirectory + item.newPath
-                  );
-                  folder.update(item.oldPath, function () {
-                    folder.update(item.newPath, next);
+                  settle(storage.move(ctx.blog.id, item.oldPath, item.newPath), function (err) {
+                    if (err) return next(err);
+                    folder.update(item.oldPath, function () {
+                      folder.update(item.newPath, next);
+                    });
                   });
                 },
                 function (err) {
@@ -193,22 +200,26 @@ describe("update", function () {
               async.series(
                 [
                   function (next) {
-                    fs.removeSync(blogDirectory + path);
-                    folder.update(path, next);
+                    settle(storage.remove(blogID, path), function (err) {
+                      if (err) return next(err);
+                      folder.update(path, next);
+                    });
                   },
                   function (next) {
-                    fs.removeSync(blogDirectory + ghostPath);
-                    folder.update(ghostPath, function (err) {
+                    settle(storage.remove(blogID, ghostPath), function (err) {
                       if (err) return next(err);
+                      folder.update(ghostPath, function (err) {
+                        if (err) return next(err);
 
-                      ctx.checkEntry(
-                        { path: ghostPath, deleted: true },
-                        function (err, entry) {
-                          if (err) return next(err);
-                          ghostEntryID = entry.id;
-                          next();
-                        }
-                      );
+                        ctx.checkEntry(
+                          { path: ghostPath, deleted: true },
+                          function (err, entry) {
+                            if (err) return next(err);
+                            ghostEntryID = entry.id;
+                            next();
+                          }
+                        );
+                      });
                     });
                   },
                   function (next) {
@@ -273,19 +284,23 @@ describe("update", function () {
     var dateOnly = moment.utc().format("M/D/YYYY");
     var content = "Date: " + dateOnly + "\n\n" + this.fake.file();
     var ctx = this;
+    var blogID = this.blog.id;
 
     sync(this.blog.id, function (err, folder, done) {
       if (err) return testDone.fail(err);
 
-      fs.outputFileSync(blogDirectory + path, content, "utf-8");
-
-      folder.update(path, function (err) {
-        if (err) return testDone.fail(err);
-
-        fs.moveSync(blogDirectory + path, blogDirectory + newPath);
-
-        async.series(
-          [folder.update.bind(this, path), folder.update.bind(this, newPath)],
+      async.series(
+        [
+          function (next) {
+            settle(storage.write(blogID, path, content), next);
+          },
+          folder.update.bind(this, path),
+          function (next) {
+            settle(storage.move(blogID, path, newPath), next);
+          },
+          folder.update.bind(this, path),
+          folder.update.bind(this, newPath),
+        ],
           function (err) {
             if (err) return testDone.fail(err);
 
@@ -307,7 +322,6 @@ describe("update", function () {
             });
           }
         );
-      });
     });
   });
 
@@ -316,19 +330,23 @@ describe("update", function () {
     var newPath = this.fake.path(".txt");
     var content = this.fake.file();
     var checkRename = this.checkRename;
+    var blogID = this.blog.id;
 
     sync(this.blog.id, function (err, folder, done) {
       if (err) return testDone.fail(err);
 
-      fs.outputFileSync(blogDirectory + path, content, "utf-8");
-
-      folder.update(path, function (err) {
-        if (err) return testDone.fail(err);
-
-        fs.moveSync(blogDirectory + path, blogDirectory + newPath);
-
-        async.series(
-          [folder.update.bind(this, path), folder.update.bind(this, newPath)],
+      async.series(
+        [
+          function (next) {
+            settle(storage.write(blogID, path, content), next);
+          },
+          folder.update.bind(this, path),
+          function (next) {
+            settle(storage.move(blogID, path, newPath), next);
+          },
+          folder.update.bind(this, path),
+          folder.update.bind(this, newPath),
+        ],
           function (err) {
             if (err) return testDone.fail(err);
 
@@ -338,19 +356,11 @@ describe("update", function () {
             });
           }
         );
-      });
     });
   });
 
   // Set up a test blog before each test
   global.test.blog();
-
-  // The blog's folder on disk, which these specs change directly
-  let blogDirectory;
-
-  beforeEach(function () {
-    blogDirectory = this.blogDirectory;
-  });
 
   // Expose methods for creating fake files, paths, etc.
   beforeEach(function () {
@@ -386,15 +396,17 @@ describe("update", function () {
       sync(blog.id, function (err, folder, done) {
         if (err) return callback(err);
 
-        fs.removeSync(blogDirectory + path);
-
-        folder.update(path, function (err) {
+        settle(storage.remove(blog.id, path), function (err) {
           if (err) return callback(err);
 
-          done(null, function (err) {
+          folder.update(path, function (err) {
             if (err) return callback(err);
 
-            checkEntry({ path: path, deleted: true }, callback);
+            done(null, function (err) {
+              if (err) return callback(err);
+
+              checkEntry({ path: path, deleted: true }, callback);
+            });
           });
         });
       });
@@ -403,15 +415,17 @@ describe("update", function () {
       sync(blog.id, function (err, folder, done) {
         if (err) return callback(err);
 
-        fs.outputFileSync(blogDirectory + path, contents, "utf-8");
-
-        folder.update(path, function (err) {
+        settle(storage.write(blog.id, path, contents), function (err) {
           if (err) return callback(err);
 
-          done(null, function (err) {
+          folder.update(path, function (err) {
             if (err) return callback(err);
 
-            checkEntry({ path: path, deleted: false }, callback);
+            done(null, function (err) {
+              if (err) return callback(err);
+
+              checkEntry({ path: path, deleted: false }, callback);
+            });
           });
         });
       });

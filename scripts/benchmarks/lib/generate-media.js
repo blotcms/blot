@@ -12,8 +12,8 @@
  * ensureMediaPool below), deterministically (fixed seed) so its contents are
  * reproducible run to run without needing to check anything in.
  *
- * The workload generator (spec/util/workload.js) hard-links posts to files
- * in this pool - see build-render.spec.js for why hard link and not symlink.
+ * The workload generator (spec/util/workload.js) points posts at files in this
+ * pool, and build-render.spec.js copies each one into the blog's folder.
  */
 const path = require("path");
 const fs = require("fs");

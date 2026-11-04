@@ -1,10 +1,10 @@
 const build = require("build");
-const fs = require("fs-extra");
+const folder = require("storage/folder");
 
 describe("typeset plugin", function () {
   require("./util/setup")();
 
-  it("treats string false values as disabled for punctuation and small caps", function (done) {
+  it("treats string false values as disabled for punctuation and small caps", async function () {
     const path = "/typeset-disabled.txt";
     const contents = 'He said "Hello" -- and NASA.';
 
@@ -16,20 +16,20 @@ describe("typeset plugin", function () {
       },
     };
 
-    fs.outputFileSync(this.blogDirectory + path, contents);
+    await folder.write(this.blog.id, path, contents);
 
-    build(this.blog, path, function (err, entry) {
-      expect(err).toBeNull();
-      expect(entry.html).not.toContain('<span class="small-caps">');
-      expect(entry.html).not.toContain("—");
-      expect(entry.html).not.toContain("&mdash;");
-      expect(entry.html).not.toContain("&thinsp;");
-      expect(entry.html).not.toContain(" ");
-      done();
-    });
+    const entry = await new Promise((resolve, reject) =>
+      build(this.blog, path, (err, entry) => (err ? reject(err) : resolve(entry)))
+    );
+
+    expect(entry.html).not.toContain('<span class="small-caps">');
+    expect(entry.html).not.toContain("—");
+    expect(entry.html).not.toContain("&mdash;");
+    expect(entry.html).not.toContain("&thinsp;");
+    expect(entry.html).not.toContain(" ");
   });
 
-  it("treats string true values as enabled for punctuation and small caps", function (done) {
+  it("treats string true values as enabled for punctuation and small caps", async function () {
     const path = "/typeset-enabled.txt";
     const contents = 'He said "Hello" -- and NASA.';
 
@@ -41,15 +41,15 @@ describe("typeset plugin", function () {
       },
     };
 
-    fs.outputFileSync(this.blogDirectory + path, contents);
+    await folder.write(this.blog.id, path, contents);
 
-    build(this.blog, path, function (err, entry) {
-      expect(err).toBeNull();
-      expect(entry.html).toContain('<span class="small-caps">NASA</span>');
-      expect(entry.html).toContain("“");
-      expect(/&mdash;|—/.test(entry.html)).toEqual(true);
-      done();
-    });
+    const entry = await new Promise((resolve, reject) =>
+      build(this.blog, path, (err, entry) => (err ? reject(err) : resolve(entry)))
+    );
+
+    expect(entry.html).toContain('<span class="small-caps">NASA</span>');
+    expect(entry.html).toContain("“");
+    expect(/&mdash;|—/.test(entry.html)).toEqual(true);
   });
 
   describe("quotes", function () {

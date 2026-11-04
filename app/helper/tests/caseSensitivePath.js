@@ -1,13 +1,20 @@
 describe("caseSensitivePath ", function () {
-  // Creates test environment
-  require("../transformer/tests/setup")({});
-
   var resolveCaseInsensitivePathToFile = require("../caseSensitivePath");
   var fs = require("fs-extra");
+  var os = require("os");
   var async = require("async");
 
+  // The helper reads a real directory, so give it one of its own
+  beforeEach(async function () {
+    this.cwd = await fs.mkdtemp(os.tmpdir() + "/blot-case-sensitive-path-");
+  });
+
+  afterEach(async function () {
+    await fs.remove(this.cwd);
+  });
+
   it("resolves case insensitive paths to a file", function (done) {
-    var cwd = this.blogDirectory;
+    var cwd = this.cwd;
 
     async.timesSeries(
       100,

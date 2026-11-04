@@ -1,5 +1,15 @@
 const docx = require("../index");
 const fs = require("fs-extra");
+const folder = require("storage/folder");
+
+// Resolves to { err, result } so specs can assert on failures too
+function read(blog, path) {
+  return new Promise(function (resolve) {
+    docx.read(blog, path, function (err, result) {
+      resolve({ err: err, result: result });
+    });
+  });
+}
 
 describe("docx converter", function () {
   global.test.blog();
@@ -9,22 +19,20 @@ describe("docx converter", function () {
     .filter((i) => i.slice(-5) === ".docx");
 
   tests.forEach((name) => {
-    it("converts docx with " + name, function (done) {
+    it("converts docx with " + name, async function () {
       const test = this;
       const path = "/" + name;
       const expected = fs.readFileSync(__dirname + path + ".html", "utf8");
 
-      fs.copySync(__dirname + path, test.blogDirectory + path);
+      await folder.writeFrom(test.blog.id, path, __dirname + path);
 
-      docx.read(test.blog, path, function (err, result) {
-        if (err) return done.fail(err);
-        expect(result).toEqual(expected);
-        done();
-      });
+      const { err, result } = await read(test.blog, path);
+      if (err) throw err;
+      expect(result).toEqual(expected);
     });
   });
 
-  it("does not execute shell substitutions in filenames", function (done) {
+  it("does not execute shell substitutions in filenames", async function () {
     const test = this;
     const name = "paragraph$(touch docx-shell-substitution).docx";
     const path = "/" + name;
@@ -35,28 +43,24 @@ describe("docx converter", function () {
     );
 
     fs.removeSync(marker);
-    fs.copySync(__dirname + "/paragraph.docx", test.blogDirectory + path);
+    await folder.writeFrom(test.blog.id, path, __dirname + "/paragraph.docx");
 
-    docx.read(test.blog, path, function (err, result) {
-      if (err) return done.fail(err);
-      expect(result).toEqual(expected);
-      expect(fs.existsSync(marker)).toBe(false);
-      done();
-    });
+    const { err, result } = await read(test.blog, path);
+    if (err) throw err;
+    expect(result).toEqual(expected);
+    expect(fs.existsSync(marker)).toBe(false);
   });
 
-  it("returns an error when the file is not a valid docx", function (done) {
+  it("returns an error when the file is not a valid docx", async function () {
     const test = this;
     const path = "/corrupt.docx";
 
-    fs.writeFileSync(test.blogDirectory + path, "this is not a docx file");
+    await folder.write(test.blog.id, path, "this is not a docx file");
 
-    docx.read(test.blog, path, function (err, result) {
-      expect(err).toBeTruthy();
-      expect(err.message).toContain("Pandoc exited");
-      expect(result).toBeUndefined();
-      done();
-    });
+    const { err, result } = await read(test.blog, path);
+    expect(err).toBeTruthy();
+    expect(err.message).toContain("Pandoc exited");
+    expect(result).toBeUndefined();
   });
 
   it("recognizes .docx paths and rejects others", function () {
