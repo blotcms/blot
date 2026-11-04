@@ -27,11 +27,13 @@ async function retry(fn, ...args) {
 }
 
 
-module.exports = async (blogID, publish, update, { skipDeletions = false, abortOnError = false } = {}) => {
+module.exports = async (blogID, publish, update, { skipDeletions = false, abortOnError = false, skipEmptyFiles = false } = {}) => {
   publish = publish || function () {};
   update = update || function () {};
 
   const checkWeCanContinue = CheckWeCanContinue(blogID);
+
+  let skippedEmpty = 0;
 
   const walk = async (dir) => {
     const [remoteContents, localContents] = await Promise.all([
@@ -80,6 +82,23 @@ module.exports = async (blogID, publish, update, { skipDeletions = false, abortO
 
         await walk(path);
       } else {
+        // Blot writes an empty file where it could not download a file
+        // (oversized files), so a placeholder is indistinguishable from a
+        // file that really is empty. During the initial transfer we never
+        // upload empty files, which would put an empty file in iCloud or
+        // overwrite the real file already there. The cost is that genuinely
+        // empty files do not carry over to iCloud.
+        if (skipEmptyFiles && size === 0) {
+          console.log(
+            prefix(),
+            "Skipping empty file (possible placeholder)",
+            blogID,
+            path
+          );
+          skippedEmpty += 1;
+          continue;
+        }
+
         const identicalOnRemote = remoteItem && remoteItem.size === size;
 
         if (!remoteItem || !identicalOnRemote) {
@@ -108,6 +127,15 @@ module.exports = async (blogID, publish, update, { skipDeletions = false, abortO
 
   try {
     await walk("/");
+    if (skippedEmpty > 0) {
+      publish(
+        "Skipped " +
+          skippedEmpty +
+          " empty file" +
+          (skippedEmpty === 1 ? "" : "s") +
+          " (possible placeholders for files Blot could not download)"
+      );
+    }
     publish("Sync complete");
   } catch (e) {
     publish("Sync failed");
