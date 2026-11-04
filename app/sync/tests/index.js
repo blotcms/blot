@@ -324,4 +324,76 @@ describe("sync cacheID", function () {
       });
     });
   });
+
+  // Syncs a.txt with these contents
+  function syncContents(blogID, contents, callback) {
+    sync(blogID, function (err, folder, done) {
+      if (err) return callback(err);
+      fs.outputFileSync(blogDirectory + "/a.txt", contents);
+      folder.update("/a.txt", function (err, result) {
+        if (err) return callback(err);
+        done(null, function (err) {
+          callback(err, result);
+        });
+      });
+    });
+  }
+
+  // A resync (a client reconnecting, say) sends every file again: when each
+  // builds exactly the entry already stored, the blog's pages are unchanged
+  // and purging them would only make the next visitors wait on a render
+  it("leaves the cacheID alone when a sync builds the same entry", function (testDone) {
+    const blogID = this.blog.id;
+
+    syncContents(blogID, "Hello", function (err) {
+      if (err) return testDone.fail(err);
+
+      spyOn(Blog, "bumpCacheID").and.callThrough();
+
+      syncContents(blogID, "Hello", function (err, result) {
+        if (err) return testDone.fail(err);
+        expect(result).toEqual({ error: null, changed: false });
+        expect(Blog.bumpCacheID).not.toHaveBeenCalled();
+        testDone();
+      });
+    });
+  });
+
+  it("bumps the cacheID when a sync changes an entry", function (testDone) {
+    const blogID = this.blog.id;
+
+    syncContents(blogID, "Hello", function (err) {
+      if (err) return testDone.fail(err);
+
+      spyOn(Blog, "bumpCacheID").and.callThrough();
+
+      syncContents(blogID, "Hello, world", function (err, result) {
+        if (err) return testDone.fail(err);
+        expect(result.changed).not.toBe(false);
+        expect(Blog.bumpCacheID).toHaveBeenCalled();
+        testDone();
+      });
+    });
+  });
+
+  // Not every file is an entry: a public file is served from the folder as
+  // it is, so it must still purge the pages that cached it
+  it("bumps the cacheID when a sync updates a file which is not an entry", function (testDone) {
+    const blogID = this.blog.id;
+
+    spyOn(Blog, "bumpCacheID").and.callThrough();
+
+    sync(blogID, function (err, folder, done) {
+      if (err) return testDone.fail(err);
+      fs.outputFileSync(blogDirectory + "/_public/style.css", "a{}");
+      folder.update("/_public/style.css", function (err) {
+        if (err) return testDone.fail(err);
+        done(null, function (err) {
+          if (err) return testDone.fail(err);
+          expect(Blog.bumpCacheID).toHaveBeenCalled();
+          testDone();
+        });
+      });
+    });
+  });
 });

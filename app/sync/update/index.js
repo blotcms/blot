@@ -59,7 +59,8 @@ module.exports = function (blog, log, status) {
 
       var before = fingerprint(stat);
 
-      function done(err) {
+      // result: set's, e.g. { changed: false } when nothing was written
+      function done(err, result) {
         if (err) {
           console.error(clfdate(), blog.id, path, err);
         }
@@ -81,6 +82,13 @@ module.exports = function (blog, log, status) {
           if (before !== after) {
             status("Re-syncing " + path);
             return update(path, callback);
+          }
+
+          // The file built the entry already stored: nothing to purge.
+          // Calls back { changed: false } so the sync can skip its cacheID
+          // bump too, when no other file changed (see sync/index.js).
+          if (!updateError && result && result.changed === false) {
+            return callback(null, { error: null, changed: false });
           }
 
           // the cache is flushed at the end of a sync too
@@ -200,13 +208,13 @@ module.exports = function (blog, log, status) {
         });
       } else {
         log(path, "Saving file in database");
-        set(blog, path, function (err) {
+        set(blog, path, function (err, result) {
           if (err) {
             log(path, "Error saving file in database", err);
           } else {
             log(path, "Saving file in database succeeded");
           }
-          done(err);
+          done(err, result);
         });
       }
     });

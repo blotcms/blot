@@ -10,7 +10,11 @@
 // the PATH (or BLOT_PANDOC_PATH):
 //
 //   node scripts/benchmarks/build-posts.js [--files 100] [--kb 12]
-//     [--passes 2] [--profile out.cpuprofile] [--output result.json]
+//     [--passes 2] [--then rebuild|resync] [--profile out.cpuprofile]
+//     [--output result.json]
+//
+// --then resync makes the passes after the first a resync of every file
+// through sync(), as a client sends after a reconnect, instead of a rebuild.
 const fs = require("fs");
 const { promisify } = require("util");
 const seedrandom = require("seedrandom");
@@ -104,18 +108,42 @@ async function main() {
     await post("Profiler.start");
   }
 
+  // A resync: what a client sends on reconnect, an update of every file
+  // through sync(), as Dropbox, Google Drive or iCloud do after a reset
+  const sync = require("sync");
+  const paths = [];
+  for (let i = 0; i < FILES; i++) paths.push(`/Posts/post-${i}.md`);
+  const resync = () =>
+    new Promise((resolve, reject) => {
+      sync(blog.id, async (err, folder, done) => {
+        if (err) return reject(err);
+        const update = promisify(folder.update);
+        try {
+          for (const path of paths) await update(path);
+        } catch (e) {
+          return done(e, () => reject(e));
+        }
+        done(null, (err) => (err ? reject(err) : resolve()));
+      });
+    });
+
   const log = console.log;
   const passes = [];
+  // A full rebuild first, then rebuilds or resyncs of the unchanged folder
+  const kinds = ["rebuild"];
+  for (let pass = 1; pass < PASSES; pass++) kinds.push(args.then || "rebuild");
   for (let pass = 0; pass < PASSES; pass++) {
     flushes = 0;
     const cacheIDBefore = (await getBlog({ id: blog.id })).cacheID;
     console.log = function () {};
     const startedAt = performance.now();
-    await blog.rebuild();
+    if (kinds[pass] === "resync") await resync();
+    else await blog.rebuild();
     const ms = performance.now() - startedAt;
     console.log = log;
     passes.push({
       pass: pass + 1,
+      kind: kinds[pass],
       total_ms: Math.round(ms),
       ms_per_file: Math.round((ms / FILES) * 100) / 100,
       proxy_flushes: flushes,
