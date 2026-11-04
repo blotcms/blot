@@ -177,9 +177,7 @@ describe("git client: materialize", function () {
   // the file. The store is a directory, which the child opens.
   var MEASURE_MEMORY = `
     var [materialize, store, directory, cacheDirectory, blogID, from, to] = process.argv.slice(1);
-    var storage = require("storage/folder");
-  var folder = require("./setup/folder");
-  var { createCache, createReader, createFsStore, manifest } = require(store);
+    var { createCache, createReader, createFsStore, manifest } = require(store);
     var objects = createFsStore({ root: directory });
     var cache = createCache({ dir: cacheDirectory, maxBytes: 256 * 1024 * 1024 });
 

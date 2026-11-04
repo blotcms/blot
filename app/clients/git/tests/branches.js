@@ -8,6 +8,7 @@ describe("git client branches", function () {
   var fs = require("fs-extra");
   var http = require("http");
   var url = require("url");
+  var folder = require("./setup/folder");
 
   function waitForSync(ctx, done) {
     var syncUrl = url.format({
