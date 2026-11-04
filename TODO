@@ -353,7 +353,6 @@ Improve Dropbox sync
 - Bug: add a check for folder storage before doing mass upload
 - Bug: handle folder full error appropriately
 - Bug: add sync lock process to dropbox connection when writing folder contents
-- Bug: ensure the app permission access_token is destroyed when switching to full-folder and vice versa
 - Add testing for dropbox:
 - Modify setup flow:
   - Phase 1: RESET FROM BLOT (NON DESTRUCTIVE, deduplicate on conflict)

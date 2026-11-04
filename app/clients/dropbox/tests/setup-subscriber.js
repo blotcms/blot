@@ -70,6 +70,12 @@ describe("dropbox setup abort subscriber", function () {
     };
     require.cache[databasePath] = {
       exports: {
+        get: function (_id, callback) {
+          callback(null, null);
+        },
+        listBlogs: function (_id, callback) {
+          callback(null, []);
+        },
         set: function (_id, _data, callback) {
           callback(null);
         },
@@ -130,6 +136,12 @@ describe("dropbox setup abort subscriber", function () {
     require.cache[resetPath] = { exports: async function () {} };
     require.cache[databasePath] = {
       exports: {
+        get: function (_id, callback) {
+          callback(null, null);
+        },
+        listBlogs: function (_id, callback) {
+          callback(null, []);
+        },
         set: function (_id, _data, callback) {
           callback(null);
         },
