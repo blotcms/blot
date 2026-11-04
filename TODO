@@ -39,8 +39,6 @@ Diagnostics
 
 ---
 
-remove emojis from deploy summary and benchmarks and ban emojis from the project
-
 when we next cycle hosts, should we cycle the ssh key pair too?
 
 - 3 Nov 2026, after 03:05 UTC (#2261): the first daily Redis backup from the new host is in S3 and B2, and no stale-offsite email was sent
