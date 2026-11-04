@@ -8,7 +8,7 @@ const email = require("helper/email");
 const syncReport = require("clients/util/syncReport");
 const resetToBlot = require("./sync/reset-to-blot");
 const { transferIncomplete } = require("./util/constants");
-const { get: getAccount, set: setAccount } = require("./database");
+const { get: getAccount } = require("./database");
 const getHealth = require("./getHealth");
 const Fix = require("sync/fix");
 const establishSyncLock = require("sync/establishSyncLock");
@@ -18,7 +18,6 @@ const { measure: measureEventLoop } = require("helper/eventLoopMonitor");
 const getAllIDs = promisify(Blog.getAllIDs);
 const getBlog = promisify(Blog.get);
 const getDropboxAccount = promisify(getAccount);
-const setDropboxAccount = promisify(setAccount);
 // getAllTotal, not getTotal - Fix()'s entry-ghosts (Entries.each) scans the
 // "all" list (drafts/pages/scheduled/deleted included), not just published
 // "entries", so getTotal would under-count the workload this field tracks.
@@ -98,26 +97,9 @@ const fixBlog = (blog) =>
   });
 
 // Webhook syncs that arrive while we hold the lock give up waiting for it and
-// are dropped, so run a normal sync once we release it. sync() stamps
-// last_sync, which would keep the blog eligible for validation forever, so
-// put the previous value back. Errors propagate so the caller can report
-// them, after the last_sync restore.
-const catchUpSync = async (blog) => {
-  let before;
-
-  try {
-    before = await getDropboxAccount(blog.id);
-    await sync(blog);
-  } finally {
-    // Also on failure: sync() stamps last_sync as soon as it gets the lock
-    if (before && typeof before.last_sync === "number") {
-      await setDropboxAccount(blog.id, { last_sync: before.last_sync }).catch(
-        (err) =>
-          console.error(clfdate(), "Dropbox: Error restoring last_sync", err)
-      );
-    }
-  }
-};
+// are dropped, so run a normal sync once we release it. It does not stamp
+// last_sync, which would keep the blog eligible for validation forever.
+const catchUpSync = (blog) => sync(blog, { stampLastSync: false });
 
 const hasRecentSync = (account) => {
   if (!account || typeof account.last_sync !== "number") return false;
