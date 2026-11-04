@@ -19,7 +19,11 @@ module.exports = (blog) => {
   const status = function () {
     const message = [...arguments].join(" ").trim();
 
-    Blog.setStatus(blog.id, { message, syncID });
+    // Not awaited: a sync must not wait on its status write, but a failed
+    // write is logged rather than dropped.
+    Blog.setStatus(blog.id, { message, syncID }, (err) => {
+      if (err) log("failed to store sync status", err.message);
+    });
     log(message);
     client
       .publish("sync:status:" + blog.id, message)
