@@ -230,6 +230,8 @@ const validateAllBlogs = async () => {
           if (err.message !== "Failed to acquire folder lock") throw err;
           console.log(clfdate(), "Dropbox: Catch-up skipped, blog busy", blogID);
         }
+
+        syncReport.recordChecked(report, blog);
       } finally {
         logLag(blogID, "fix+catch-up", entryCount, stopFollowUpMeasure());
       }

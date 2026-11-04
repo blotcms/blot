@@ -41,6 +41,7 @@
 //   // then, as the sweep learns things:
 //   if (!syncReport.recordWalk(report, blog, summary)) continue; // skip Fix
 //   syncReport.recordFix(report, blog, finalReport);   // Fix()'s report
+//   syncReport.recordChecked(report, blog);            // walk and Fix() both ran
 //   syncReport.recordError(report, blog, "walk", err); // a phase that threw
 //   // after the last blog:
 //   await syncReport.send(report, email.DROPBOX_SYNC_ISSUE, "Dropbox:", {
@@ -55,8 +56,9 @@
 // Changes and Fix() repairs are events: the sweep fixes them itself, so they
 // are reported every time. Errors and stuck locks are states that persist
 // until someone intervenes, so send() reports one when it first appears,
-// stays quiet while it continues, and reports it again only after it has
-// cleared and come back (see reportedKey).
+// stays quiet while it continues, and reports it again only after a sweep
+// that checked the blog (recordChecked) found it clean and it came back (see
+// reportedKey).
 //
 // Fix() never emails on its own - it only returns its report - so this is
 // also where that report gets formatted (formatFix) for the digests and for
@@ -85,7 +87,17 @@ const USER_SIDE_CODES = [
 ];
 
 function create() {
-  return { blogs: new Map() };
+  return { blogs: new Map(), checked: new Set() };
+}
+
+// Says the sweep fully checked this blog: the walk completed and Fix() ran
+// (or, for iCloud, validateBlog did both). Only a checked blog's remembered
+// issues can be cleared by send(): a blog that merely wasn't reported (not
+// eligible this hour, busy lock, skipped walk) keeps what it was remembered
+// for. Call it after the last phase that ran, so a phase that threw is not
+// counted as clean.
+function recordChecked(report, blog) {
+  report.checked.add(blog.id);
 }
 
 function entry(report, blog) {
@@ -290,6 +302,7 @@ async function dropUserSide(report, getHealth) {
   for (const record of issues(report)) {
     if (await hasUserSideIssue(record.id, getHealth)) {
       report.blogs.delete(record.id);
+      report.checked.delete(record.id);
     }
   }
 }
@@ -309,13 +322,14 @@ function ongoing(report) {
   return found;
 }
 
-// What the previous sweep saw, so an ongoing problem is emailed when it first
+// What earlier sweeps reported, so an ongoing problem is emailed when it first
 // appears and then stays quiet. Per client, a Redis set of ongoing()
-// identifiers, replaced after every sweep with everything that sweep saw
-// (including what it suppressed). "Cleared" simply means "not seen this
-// sweep", which includes a blog that wasn't eligible this time (eg. its folder
-// was deleted); if the problem returns it is reported again. That is
-// accepted: the alternative is tracking why each blog went unseen.
+// identifiers. After every sweep it is replaced with what that sweep saw
+// (including what it suppressed) plus what was remembered for blogs the sweep
+// did not check. An issue is "cleared" only when its blog was checked
+// (recordChecked) and the issue was not seen; a blog that wasn't eligible this
+// hour, or whose walk was skipped, keeps its remembered issues, so a
+// continuing problem is not re-emailed after a quiet hour.
 function reportedKey(clientName) {
   return "sync:sweep:" + clientName + ":reported";
 }
@@ -426,11 +440,15 @@ async function send(report, sendEmail, logPrefix, options) {
   if (previous) {
     // A problem whose email failed was never reported, so it must not be
     // remembered as reported: it should be emailed again next sweep.
-    const remembered = sent
+    const seen = sent
       ? current
       : current.filter(function (id) {
           return previous.has(id);
         });
+    const unchecked = Array.from(previous).filter(function (id) {
+      return !report.checked.has(id.split(":")[0]);
+    });
+    const remembered = Array.from(new Set(seen.concat(unchecked)));
 
     try {
       await saveReported(clientName, remembered);
@@ -445,6 +463,7 @@ async function send(report, sendEmail, logPrefix, options) {
 module.exports = {
   create,
   recordChanges,
+  recordChecked,
   recordWalk,
   recordFix,
   recordError,
