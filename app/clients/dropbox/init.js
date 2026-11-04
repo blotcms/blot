@@ -394,6 +394,25 @@ const resumeInterruptedTransfersOnStartup = async () => {
 // sync afterwards, so no catch-up is needed here.
 const resumeTransfer = async (blogID) => {
   const { done } = await establishSyncLock(blogID);
+  let skip = false;
+
+  // The pre-lock check can be stale: a live setup may have held the lock,
+  // finished the upload and cleared transfer_pending while we waited for it,
+  // and re-uploading now would overwrite newer Dropbox edits. Recheck once
+  // the lock is ours, like resetToBlotWithLock.
+  try {
+    const current = await getDropboxAccount(blogID);
+    skip = !current || current.transfer_pending !== true || !!current.error_code;
+  } catch (err) {
+    await done(err).catch(() => {});
+    throw err;
+  }
+
+  if (skip) {
+    await done(null).catch(() => {});
+    return;
+  }
+
   const signal = { aborted: false };
   const subscription = redisSubscriber({
     channel: "sync:status:" + blogID,

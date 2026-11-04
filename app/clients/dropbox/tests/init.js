@@ -370,7 +370,8 @@ describe("dropbox init", function () {
       };
       require.cache[databasePath] = {
         exports: {
-          get: (_blogID, callback) => callback(null, account),
+          get: (_blogID, callback) =>
+            callback(null, typeof account === "function" ? account() : account),
           set: (_blogID, _values, callback) => callback(null),
         },
       };
@@ -414,6 +415,16 @@ describe("dropbox init", function () {
         await init.resumeInterruptedTransfersOnStartup();
       }
       expect(uploads).toEqual([]);
+    });
+
+    it("does not upload when a live setup finished while waiting for the lock", async function () {
+      let reads = 0;
+      // First read (pre-lock) says pending; the recheck under the lock says done
+      const init = load(() => ({ error_code: 0, transfer_pending: ++reads === 1 }));
+      await init.resumeInterruptedTransfersOnStartup();
+      expect(reads).toEqual(2);
+      expect(uploads).toEqual([]);
+      expect(released).toEqual([null]);
     });
 
     it("skips a blog whose lock is held by a live transfer", async function () {
