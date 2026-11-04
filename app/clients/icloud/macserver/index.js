@@ -6,7 +6,6 @@ import notifyServerStarted from "./httpClient/notifyServerStarted.js";
 import clfdate from "./util/clfdate.js";
 import monitorer from "./monitorer.js";
 import uploadRoute from "./routes/upload.js";
-import evictRoute from "./routes/evict.js";
 import deleteRoute from "./routes/delete.js";
 import mkdirRoute from "./routes/mkdir.js";
 import watchRoute from "./routes/watch.js";
@@ -48,8 +47,6 @@ const startServer = async () => {
   app.use(raw({ type: "application/octet-stream", limit }));
 
   app.post("/upload", asyncHandler(uploadRoute));
-
-  app.post("/evict", asyncHandler(evictRoute));
 
   app.post("/delete", asyncHandler(deleteRoute));
 
