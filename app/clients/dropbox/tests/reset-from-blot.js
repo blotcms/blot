@@ -216,6 +216,44 @@ describe("dropbox resetFromBlot", function () {
     ).toEqual(true);
   });
 
+  it("renames paths which differ only by case before uploading, since Dropbox is case-insensitive", async function () {
+    await fs.outputFile(join(blogDirectory, "a.txt"), "lower");
+    await fs.outputFile(join(blogDirectory, "A.txt"), "upper");
+
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 0,
+        allocation: { ".tag": "individual", allocated: 1000000 },
+      },
+      remote: {},
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    const updated = [];
+    // Same shape as sync()'s folder.update: callback-style, promisified by
+    // the setup route before it is handed to resetFromBlot.
+    const folderUpdate = (path, callback) => {
+      updated.push(path);
+      callback();
+    };
+    await resetFromBlot(
+      blogID,
+      () => {},
+      { aborted: false },
+      require("util").promisify(folderUpdate)
+    );
+
+    expect(uploadCalls.length).toEqual(2);
+    expect(
+      new Set(uploadCalls.map((destination) => destination.toLowerCase())).size
+    ).toEqual(2);
+    expect(uploadCalls.some((d) => d.includes("(conflict)"))).toEqual(true);
+    expect(updated).toContain("/");
+    expect(
+      saved.some((values) => values.cursor === "new-cursor")
+    ).toEqual(true);
+  });
+
   it("does not count bytes already sitting in the target Dropbox folder against the quota check", async function () {
     // 1000 bytes on disk, but only 5 bytes free - a naive check comparing
     // the full local size against free space would abort here. Since 999 of

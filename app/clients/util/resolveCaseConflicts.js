@@ -2,7 +2,7 @@ const path = require("path");
 const folder = require("storage/folder");
 const clfdate = require("helper/clfdate");
 
-const prefix = () => `${clfdate()} iCloud case-conflict:`;
+const prefix = () => `${clfdate()} case-conflict:`;
 
 const canonicalName = (name) => name.normalize("NFC").toLowerCase();
 
@@ -84,7 +84,22 @@ const generateConflictName = (existingLowerSet, originalName) => {
   return candidate;
 };
 
-module.exports = async function resolveCaseConflicts(blogID, publish, update) {
+const abortIfRequested = (signal) => {
+  if (signal && signal.aborted) {
+    const error = new Error("Case conflict resolution aborted");
+    error.name = "AbortError";
+    throw error;
+  }
+};
+
+// `signal` is optional ({ aborted: boolean }). When it is set, resolution
+// stops with an AbortError before the next rename, move or merge.
+module.exports = async function resolveCaseConflicts(
+  blogID,
+  publish,
+  update,
+  signal
+) {
   if (!publish) {
     publish = () => {};
   }
@@ -93,6 +108,7 @@ module.exports = async function resolveCaseConflicts(blogID, publish, update) {
   }
 
   const renameEntry = async (relDir, originalName, newName) => {
+    abortIfRequested(signal);
     const fromRel = path.posix.join(relDir, originalName);
     const toRel = path.posix.join(relDir, newName);
     const fromStat = await folder.stat(blogID, fromRel);
@@ -113,6 +129,7 @@ module.exports = async function resolveCaseConflicts(blogID, publish, update) {
   };
 
   const moveEntry = async (fromRel, toRel) => {
+    abortIfRequested(signal);
     const fromStat = await folder.stat(blogID, fromRel);
     const fromTreePaths = fromStat.isDirectory
       ? await collectTreePaths(blogID, fromRel)
@@ -132,6 +149,7 @@ module.exports = async function resolveCaseConflicts(blogID, publish, update) {
     const entries = await listEntries(blogID, sourceRel);
 
     for (const entry of entries) {
+      abortIfRequested(signal);
       const sourceChildRel = path.posix.join(sourceRel, entry.name);
       const targetChildRel = path.posix.join(targetRel, entry.name);
 
@@ -174,6 +192,7 @@ module.exports = async function resolveCaseConflicts(blogID, publish, update) {
   };
 
   const resolveDir = async (relDir) => {
+    abortIfRequested(signal);
     const entries = await listEntries(blogID, relDir);
     const existingLowerSet = new Set(
       entries.map((entry) => canonicalName(entry.name))
@@ -193,6 +212,7 @@ module.exports = async function resolveCaseConflicts(blogID, publish, update) {
     const resolvedDirs = new Set();
 
     for (const key of orderedKeys) {
+      abortIfRequested(signal);
       const group = groups.get(key);
       if (!group || group.length < 2) continue;
 
@@ -225,6 +245,7 @@ module.exports = async function resolveCaseConflicts(blogID, publish, update) {
       }
     }
 
+    abortIfRequested(signal);
     const updatedEntries = await listEntries(blogID, relDir);
     for (const entry of updatedEntries) {
       if (!entry.isDirectory) continue;

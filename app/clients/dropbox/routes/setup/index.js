@@ -112,7 +112,13 @@ function setup(account, session, callback) {
 
       // upload folder contents to dropbox
       // todo: pass in signal
-      await resetFromBlot(account.blog.id, folder.status, signal);
+      await resetFromBlot(
+        account.blog.id,
+        folder.status,
+        signal,
+        // folder.update is callback-style, resetFromBlot awaits it
+        promisify(folder.update)
+      );
 
       if (handleAbort()) return;
     } catch (err) {
