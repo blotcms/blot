@@ -25,6 +25,7 @@ import {
   markEvictionSuppressed,
   extendEvictionSuppression,
   isEvictionSuppressed,
+  waitForEvictionSuppressionToClear,
   pruneEvictionSuppressions,
 } from "../evictionSuppression.js";
 
@@ -110,15 +111,40 @@ const stopFsWatch = () => stopFsWatchInternal();
 // Blot has created a directory, walk it and push its contents through the same
 // actions as watcher events. The walk runs outside the per-blog limiter (each
 // performAction schedules itself), so it cannot deadlock on nested scheduling.
+//
+// A disk-usage eviction mid-walk suppresses the whole blog, so the walk would
+// skip every remaining entry. Walks report when they skipped anything for that
+// reason; syncDirectoryContents then waits for the suppression to clear and
+// walks the directory again from the top, up to MAX_WALK_RESTARTS times.
+const MAX_WALK_RESTARTS = 3;
+
 const syncDirectoryContents = async (blogID, pathInBlogDirectory) => {
+  for (let attempt = 0; attempt <= MAX_WALK_RESTARTS; attempt++) {
+    const interrupted = await walkDirectoryContents(blogID, pathInBlogDirectory);
+
+    if (!interrupted) return;
+
+    if (attempt === MAX_WALK_RESTARTS) break;
+
+    console.log(clfdate(), `Directory contents: eviction suppressed the walk, waiting to restart (${attempt + 1}/${MAX_WALK_RESTARTS}), blogID: ${blogID}, path: ${pathInBlogDirectory}`);
+
+    if (!(await waitForEvictionSuppressionToClear(blogID))) break;
+  }
+
+  console.error(clfdate(), `Directory contents: giving up on walk after eviction suppression, some entries were skipped, blogID: ${blogID}, path: ${pathInBlogDirectory}`);
+};
+
+// Returns true if any entry was skipped because of eviction suppression.
+const walkDirectoryContents = async (blogID, pathInBlogDirectory) => {
   let entries;
+  let interrupted = false;
 
   try {
     entries = await fs.readdir(buildBlogPath(blogID, pathInBlogDirectory), {
       withFileTypes: true,
     });
   } catch (error) {
-    if (error.code === "ENOENT" || error.code === "ENOTDIR") return;
+    if (error.code === "ENOENT" || error.code === "ENOTDIR") return false;
     throw error;
   }
 
@@ -128,7 +154,10 @@ const syncDirectoryContents = async (blogID, pathInBlogDirectory) => {
 
     if (!isDirectory && !entry.isFile()) continue;
     if (shouldIgnore(childPath)) continue;
-    if (isEvictionSuppressed(blogID, childPath)) continue;
+    if (isEvictionSuppressed(blogID, childPath)) {
+      interrupted = true;
+      continue;
+    }
 
     try {
       if (!(await exactCaseViaRealpath(buildBlogPath(blogID, childPath)))) continue;
@@ -137,7 +166,7 @@ const syncDirectoryContents = async (blogID, pathInBlogDirectory) => {
         if (!hasRecentChokidarEvent(blogID, childPath, "mkdir")) {
           await performAction(blogID, childPath, "mkdir");
         }
-        await syncDirectoryContents(blogID, childPath);
+        if (await walkDirectoryContents(blogID, childPath)) interrupted = true;
       } else if (!hasRecentChokidarEvent(blogID, childPath, "upload")) {
         // if chokidar did report the file it is already being uploaded
         console.log(clfdate(), `Directory contents: upload, blogID: ${blogID}, path: ${childPath}`);
@@ -148,6 +177,8 @@ const syncDirectoryContents = async (blogID, pathInBlogDirectory) => {
       console.error(clfdate(), `Error syncing directory contents (${blogID}, ${childPath}):`, error);
     }
   }
+
+  return interrupted;
 };
 
 // performAction resolves true from mkdir only if Blot did not already have the
