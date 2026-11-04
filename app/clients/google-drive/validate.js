@@ -154,6 +154,10 @@ const validateAllBlogs = async () => {
       // Before the recency filter: sync/index.js stamps lastSync when a sync
       // starts, so a lock held for over an hour belongs to a blog that no
       // longer looks recently synced.
+      // Setup holds the lock while it builds the folder, which can take over
+      // an hour, so a lock held during it isn't stuck.
+      if (account && account.preparing) return;
+
       if (await syncReport.recordStuckLock(report, blog)) return;
 
       if (!isEligible(account)) return;
