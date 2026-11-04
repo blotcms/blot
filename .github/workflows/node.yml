@@ -156,6 +156,18 @@ jobs:
         if: always()
         run: node scripts/tests/ci/check-folder-access.js
 
+      # Only ESLint's packages, at the versions package.json pins, installed
+      # outside the checkout and linked in: installing the whole dependency
+      # tree would take minutes. Existing violations are in
+      # eslint-suppressions.json, so this fails only on new ones.
+      - name: ESLint
+        if: always()
+        run: |
+          PKGS=$(node -p 'const d=require("./package.json").devDependencies; ["eslint","@eslint/js","globals"].map(n=>n+"@"+d[n]).join(" ")')
+          npm install --prefix "$RUNNER_TEMP/eslint" --no-save --no-audit --no-fund $PKGS
+          ln -s "$RUNNER_TEMP/eslint/node_modules" node_modules
+          npx eslint .
+
       - name: List test suites
         if: always()
         run: node scripts/tests/ci/plan.js --suites | jq -r '.[]' | tee matrix_suites.txt
