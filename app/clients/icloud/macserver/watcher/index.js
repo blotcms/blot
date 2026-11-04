@@ -181,15 +181,60 @@ const walkDirectoryContents = async (blogID, pathInBlogDirectory) => {
   return interrupted;
 };
 
-// performAction resolves true from mkdir only if Blot did not already have the
-// directory, so existing directories (fs.watch reports them whenever their
-// contents change) are not walked again.
-const mkdirAndSyncContents = async (blogID, pathInBlogDirectory) => {
-  const created = await performAction(blogID, pathInBlogDirectory, "mkdir");
+// Walk every directory the watcher reports, not only ones Blot did not already
+// have: a child upload or mkdir can create the folder on Blot first, which
+// would otherwise make /mkdir report "not created" and skip the walk (some
+// children synced, siblings missed). Walks are idempotent (chokidar-reported
+// entries are skipped and Blot dedupes uploads), and fs.watch reports existing
+// directories whenever their contents change, so walks of one directory are
+// spaced at least DIRECTORY_WALK_MIN_INTERVAL_MS apart. A request inside that
+// window schedules one trailing walk, so late-arriving children are still seen.
+const DIRECTORY_WALK_MIN_INTERVAL_MS = 60_000;
+const directoryWalks = new Map(); // key -> { lastStart, running, timer }
 
-  if (created) {
-    await syncDirectoryContents(blogID, pathInBlogDirectory);
+const requestDirectoryWalk = async (blogID, pathInBlogDirectory) => {
+  const key = `${blogID}:${pathInBlogDirectory}`;
+  const state = directoryWalks.get(key) || { lastStart: 0, running: false, timer: null };
+  directoryWalks.set(key, state);
+
+  if (state.timer) return; // a trailing walk is already scheduled
+
+  const wait = state.lastStart + DIRECTORY_WALK_MIN_INTERVAL_MS - Date.now();
+
+  if (state.running || wait > 0) {
+    state.timer = setTimeout(
+      () => {
+        state.timer = null;
+        requestDirectoryWalk(blogID, pathInBlogDirectory).catch((error) =>
+          console.error(clfdate(), `Error walking directory (${blogID}, ${pathInBlogDirectory}):`, error)
+        );
+      },
+      state.running ? DIRECTORY_WALK_MIN_INTERVAL_MS : wait
+    );
+    state.timer.unref?.();
+    return;
   }
+
+  state.running = true;
+  state.lastStart = Date.now();
+
+  try {
+    await syncDirectoryContents(blogID, pathInBlogDirectory);
+  } finally {
+    state.running = false;
+    // forget idle directories once their window has passed
+    const forget = setTimeout(() => {
+      if (!state.running && !state.timer && Date.now() - state.lastStart >= DIRECTORY_WALK_MIN_INTERVAL_MS) {
+        directoryWalks.delete(key);
+      }
+    }, DIRECTORY_WALK_MIN_INTERVAL_MS);
+    forget.unref?.();
+  }
+};
+
+const mkdirAndSyncContents = async (blogID, pathInBlogDirectory) => {
+  await performAction(blogID, pathInBlogDirectory, "mkdir");
+  await requestDirectoryWalk(blogID, pathInBlogDirectory);
 };
 
 // Handle file events
