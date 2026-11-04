@@ -314,9 +314,6 @@ Improve Google Drive sync
 - Improve html output for google docs and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBQFmTvLKzPkJrgsBTWZmQJWS)
   Issue: <p><img><br><img></p> should be <p><img></p><p><img></p>
 - Fix possible bug where it seems like sometimes the first sentence of Google Docs become titles unexpectedly – possibly a mis-identified title tag?
-- How do we handle two files with same name and same parent? How does our fileId:path hash handle this? Make sure we delete the right file. Will file.title as opposed to file.name give us the deduped version?
-  - Bug: move file with deduplicated name from sub folder to other folder
-  - download should check for an existing file with same name but different fileId and dedupe before storing the path?
 - Surface storage quota errors as QUOTA_EXCEEDED health for Google Drive (isQuotaError exists, nothing sets the code)
 - Retry 429s on Google Drive writes (files.create/update): reads already retry with backoff (serviceAccount/retryConfig.js), but write bodies are streams gaxios can't replay
 - Add a way for sync/build to accept a ctime as an option. We can't set this at the operating system level but google drive's API does return a createdTime value and we could use this as the true file's created date, rather than the date the file is made on the server
