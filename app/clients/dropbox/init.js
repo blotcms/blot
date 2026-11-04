@@ -155,9 +155,14 @@ const validateAllBlogs = async () => {
       // Before the recency filter: sync() stamps last_sync when it takes the
       // lock, so a lock held for over an hour belongs to a blog that no
       // longer looks recently synced.
+      const account = await getDropboxAccount(blogID);
+
+      // A big first transfer can legitimately hold the lock for over an
+      // hour, so it isn't a stuck lock (and it is skipped below anyway).
+      if (account && account.transfer_pending === true) continue;
+
       if (await syncReport.recordStuckLock(report, blog)) continue;
 
-      const account = await getDropboxAccount(blogID);
       if (!hasRecentSync(account)) continue;
       if (transferIncomplete(account)) {
         console.log(clfdate(), "Dropbox: Skipping blog with incomplete transfer", blogID);
