@@ -3,10 +3,12 @@ const redisSubscriber = require("helper/redisSubscriber");
 
 const promisify = require("util").promisify;
 const database = require("clients/dropbox/database");
+const get = promisify(database.get);
 const set = promisify(database.set);
 
 const getAccount = require("./getAccount");
 const createFolder = require("./createFolder");
+const revokePreviousToken = require("./revokePreviousToken");
 const resetFromBlot = require("../../sync/reset-from-blot");
 
 function setup(account, session, callback) {
@@ -76,6 +78,8 @@ function setup(account, session, callback) {
       if (handleAbort()) return;
       session.save();
 
+      const previous = await get(account.blog.id);
+
       await set(account.blog.id, {
         account_id: account.account_id,
         email: account.email,
@@ -93,6 +97,14 @@ function setup(account, session, callback) {
         // transfer_pending's comment in database.js and transferIncomplete()
         // in util/constants.js.
         transfer_pending: true,
+      });
+
+      // Switching permission (app folder <-> full Dropbox) or re-authorizing
+      // leaves the previous token valid at Dropbox: revoke it, best-effort.
+      await revokePreviousToken(previous, {
+        blogID: account.blog.id,
+        access_token: account.access_token,
+        refresh_token: account.refresh_token,
       });
 
       folder.status("Syncing your folder to Dropbox");
