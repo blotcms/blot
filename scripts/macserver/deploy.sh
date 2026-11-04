@@ -55,6 +55,6 @@ ssh_macserver() {
 
 # Restart the application using PM2 with nvm loaded
 echo "Restarting the macserver process with PM2..."
-ssh_macserver "export NVM_DIR=\"\$HOME/.nvm\" && [ -s \"\$NVM_DIR/nvm.sh\" ] && \. \"\$NVM_DIR/nvm.sh\" && cd $REMOTE_CODE_DIRECTORY && git pull && npm ci && pm2 restart macserver"
+ssh_macserver "export NVM_DIR=\"\$HOME/.nvm\" && [ -s \"\$NVM_DIR/nvm.sh\" ] && \. \"\$NVM_DIR/nvm.sh\" && cd $REMOTE_CODE_DIRECTORY && (git ls-files --error-unmatch package-lock.json >/dev/null 2>&1 || rm -f package-lock.json) && git pull && npm ci && pm2 restart macserver"
 
 echo "Deployment completed successfully!"
