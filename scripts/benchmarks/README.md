@@ -282,7 +282,7 @@ NODE_PATH=app node scripts/benchmarks/converter-bench.js --converter markdown --
 # docx, odt and img upload what they produce to the storage bucket: start a
 # MinIO (see scripts/tests/invoke.sh) and set BLOT_STORAGE_BUCKET,
 # BLOT_STORAGE_ENDPOINT, BLOT_STORAGE_REGION, BLOT_AWS_KEY and BLOT_AWS_SECRET.
-# The other converters don't need it.
+# gdoc does too; the other converters don't need it.
 ```
 
 No Docker needed for most converters - see "Per-converter benchmarks" below.

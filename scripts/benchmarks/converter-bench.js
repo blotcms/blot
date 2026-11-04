@@ -35,8 +35,8 @@ const { performance } = require("perf_hooks");
 // The local broker, with --sandbox (lib/local-sandbox.js)
 let sandbox = null;
 
-// Converters that upload what they extract or convert to the assets bucket
-const NEEDS_BUCKET = ["docx", "odt", "img"];
+// Converters that use the assets bucket (grep app/build/converters for storage/assets)
+const NEEDS_BUCKET = ["docx", "odt", "img", "gdoc"];
 
 function arg(name, fallback = null) {
   const i = process.argv.indexOf(name);
