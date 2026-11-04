@@ -340,7 +340,6 @@ Improve Dropbox sync
 - When you re-connect to Dropbox, you have to re-create a folder and perform a full transfer. It would be great if we could re-use the existing folder... Maybe an option during the connect flow? Would be nice to avoid requiring a full transfer
 - Bug: removing a directory in Dropbox resync only updates the directory path; child entries wait for Fix
 - Sync verification should instrument the sync/fix function to also report errors where the folder doesn't match the database.
-- Bug: ensure that when a process dies, any blogs setting up dropbox client will be re-attempted
 - Bug: Adding an additional blog to existing app folder under constant webhooks failed. New blog had correct folder but old blog still used root. To fix we need to acquire a lock on ALL blogs interacting with that dropbox account to proceed with setup process of second site.
   - Bug: handle a sync lock failure on second blog when migrating an app folder
 - Bug: retry transient Dropbox API errors with exponential backoff while surfacing hard failures for manual intervention.
