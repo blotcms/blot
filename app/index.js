@@ -75,6 +75,9 @@ async function serverStartEvent() {
 
     return result === "OK" ? "deployed" : "restarted";
   } catch (err) {
+    // A standby host started in a host cycle runs against a read-only Redis
+    // replica, and its units are not serving yet
+    if (/^READONLY\b/.test(err.message)) return null;
     console.error(clfdate(), "Could not determine server start event", err);
     return "started";
   }
@@ -181,8 +184,9 @@ setup(async (err) => {
     // Worktree preview sidecars (scripts/development/preview.sh) and forked
     // workers (their parent emails when one dies: workerExitEmail) skip it
     if (!config.preview && !config.worker_child) {
-      serverStartEvent().then((event) =>
-        email.SERVER_START(null, { container: config.container, event })
+      serverStartEvent().then(
+        (event) =>
+          event && email.SERVER_START(null, { container: config.container, event })
       );
     }
   });

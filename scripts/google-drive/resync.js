@@ -24,7 +24,7 @@ const processBlog = async (blog) => {
   const recordFailure = (message) => {
     failedResyncs++;
     console.error(
-      `❌ Google Drive resync failed for ${blog.id} (${blog.handle || "no handle"}):`,
+      `[FAIL] Google Drive resync failed for ${blog.id} (${blog.handle || "no handle"}):`,
       message
     );
     errors.push({
@@ -63,7 +63,7 @@ const processBlog = async (blog) => {
           changed.push({ blogID: blog.id, handle: blog.handle, summary, paths });
         }
         console.log(
-          `✅ Completed Google Drive resync for ${blog.id} (${blog.handle || "no handle"})`
+          `[ok] Completed Google Drive resync for ${blog.id} (${blog.handle || "no handle"})`
         );
       }
     } catch (err) {
@@ -73,7 +73,7 @@ const processBlog = async (blog) => {
         await done();
       } catch (err) {
         console.warn(
-          `⚠️  Google Drive resync failed to release sync lock for ${blog.id}:`,
+          `[WARN] Google Drive resync failed to release sync lock for ${blog.id}:`,
           err && err.message ? err.message : err
         );
       }
@@ -130,11 +130,11 @@ const summarize = () => {
   }
 
   if (failedResyncs > 0) {
-    console.log("\n⚠️  Some Google Drive resyncs failed. Review errors above.");
+    console.log("\n[WARN] Some Google Drive resyncs failed. Review errors above.");
   } else if (totalGoogleDriveBlogs > 0) {
-    console.log("\n✅ All Google Drive blogs resynced successfully!");
+    console.log("\n[ok] All Google Drive blogs resynced successfully!");
   } else {
-    console.log("\nℹ️  No Google Drive blogs were processed.");
+    console.log("\n[info] No Google Drive blogs were processed.");
   }
 };
 
