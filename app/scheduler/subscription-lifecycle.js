@@ -75,11 +75,8 @@ module.exports = function processSubscriptionLifecycle(callback) {
 
           disabled += 1;
 
-          email.OVERDUE_SUBSCRIPTION_DISABLED_GRACE("", {
-            email: user.email,
-            subscriptionOverdueOn: overdueStartedAtISO,
-          });
-
+          // OVERDUE_CLOSURE tells both the user and the admin, so no
+          // separate admin-only email is sent for the same event.
           email.OVERDUE_CLOSURE(user.uid);
 
           next();
