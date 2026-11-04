@@ -408,7 +408,6 @@ Improve iCloud sync
 - iCloud macserver: a disk-usage eviction during the new-directory walk marks the blog eviction-suppressed and the walk skips everything left; pause and restart the walk instead
 - Sync no-progress watchdog: app/sync/lock.js renews a folder lock for as long as the process lives, so any hung sync holds a blog's lock until a container restart (7h+ on 16 Oct, #2147). Track the sync's last progress (file processed / status update) and, after N minutes with none, stop renewing and fail the sync so the lock expires and the next resync or hourly check can run
 - iCloud macserver should periodically validate the local blog folders to ensure the client is still connected on blot and clean up any failed initial transfers (i.e. non blog_... folders)
-- iCloud: a Blot edit while the folder is missing (SOURCE_MISSING) still reaches the macserver upload, which re-creates an unshared folder (write.js, remove.js should skip the remote write)
 - If we need to resolve further bugs with sync drift:
   - Implement additional parsing of modified paths from monitorer.js (brctl monitor -i) and reconcile these in addition to the fswatch module with the chokidar events for additional redundancy
 - Think about adding a more efficient endpoint to sync folder state. 
