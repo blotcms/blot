@@ -268,57 +268,6 @@ module.exports = {
     secret: process.env.BLOT_YOUTUBE_SECRET,
   },
 
-  // Which blogs' folder writes are mirrored to the storage bucket and
-  // models/file after they land on disk (app/storage/folder/mirror.js,
-  // #2258 Phase C): "off" (the default), "all", or blog IDs separated by
-  // commas, e.g. "blog_abc,blog_def". Disk stays authoritative either way.
-  // Read on every write, so it can be changed in place by specs.
-  folder_mirror: process.env.BLOT_FOLDER_MIRROR || "off",
-
-  // Which blogs' folders live in S3 rather than on disk
-  // (app/storage/folder/primary.js, #2258 Phase D), in the same form: "off"
-  // (the default, every blog on disk), "all", or blog IDs separated by
-  // commas. A named blog moves to S3 only once its copy there is complete (a
-  // backfill or the daily reconcile finished or checked it cleanly) and not
-  // behind its disk, and only while the mirror above covers it (so S3 is kept
-  // in step whenever the blog is on disk). So mirror a blog and backfill it
-  // (scripts/storage/backfill-folder.js) before or after naming it here; in
-  // development, set BLOT_FOLDER_MIRROR too. Blogs on the Git client stay on
-  // disk (primary.DISK_CLIENTS) until #2259's cutover. Changes to a blog on
-  // S3 are copied to disk, so unsetting this rolls it back (restore its disk
-  // copy first if it is dirty: see app/storage/README). Read on every call.
-  //
-  // The default stays "off": the move to S3 is ramped here, in the production
-  // environment, never by changing this default. In order, each step a deploy
-  // of a new commit, watched in scripts/storage/shadow-report.js (both
-  // directions) and the reconcile emails before the next: the test blogs,
-  // then a few real blogs, then "all". Narrowing it, or "off", is the
-  // rollback. The cleanup PR which removes the disk removes this setting.
-  folder_primary: process.env.BLOT_FOLDER_PRIMARY || "off",
-
-  // Shadow reads (app/storage/folder/shadow.js, #2258 Phase C): for the
-  // mirrored blogs above, this fraction of folder reads is repeated against
-  // the S3 backend once the disk has answered, and the two results compared
-  // and timed. 0 (the default) is off, 1 is every read. Read on every call.
-  // scripts/storage/shadow-report.js prints what it found.
-  //
-  // For blogs on S3 (folder_primary) it runs the other way round, the reverse
-  // shadow: reverse_rate of the reads S3 answered are repeated against the
-  // blog's disk copy. Unset, it is the same as rate; set it higher while only
-  // a few blogs are on S3, so they give enough samples.
-  folder_shadow: {
-    rate: Number(process.env.BLOT_FOLDER_SHADOW_RATE) || 0,
-    reverse_rate: process.env.BLOT_FOLDER_SHADOW_REVERSE_RATE,
-    // Shadow reads running at once in a process; a sample over this is dropped
-    max_in_flight: 4,
-    // Files bigger than this have their size compared, not their bytes
-    max_compare_bytes: 16 * 1024 * 1024,
-    // A mismatch is checked again after this long, so a read which raced a
-    // sync (disk changed, S3 not yet; for a blog on S3, S3 changed and its
-    // disk copy not yet) counts as transient, not as drift
-    recheck_ms: 5000,
-  },
-
   // Credentials for the S3 client in app/storage/s3.js. When these aren't
   // set the AWS SDK's default provider chain is used instead.
   aws: {

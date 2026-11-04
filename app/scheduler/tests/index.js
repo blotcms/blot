@@ -22,8 +22,6 @@ describe("scheduler", function () {
     "subscription-emails",
     "welcome-email-reconcile",
     "scheduled-entries-reconcile",
-    "folder-mirror-repair",
-    "folder-mirror-verify",
   ];
 
   describe("registering jobs", function () {
