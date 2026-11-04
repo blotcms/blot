@@ -140,6 +140,30 @@ describe("dropbox sync when Redis is unavailable", function () {
     });
   });
 
+  it("stamps last_sync by default, but not for a catch-up sync", function (done) {
+    const blog = this.blog;
+
+    sync(blog, function (err) {
+      if (err) return done.fail(err);
+
+      expect(store.account.last_sync).toBeGreaterThan(0);
+      expect(saved.some((values) => "last_sync" in values)).toBe(true);
+
+      store.account.last_sync = 12345;
+      store.account.cursor = "cursor-0";
+      saved.length = 0;
+
+      sync(blog, { stampLastSync: false }, function (err) {
+        if (err) return done.fail(err);
+
+        expect(store.account.cursor).toEqual("cursor-1");
+        expect(store.account.last_sync).toEqual(12345);
+        expect(saved.some((values) => "last_sync" in values)).toBe(false);
+        done();
+      });
+    });
+  });
+
   it("still saves the cursor when update fails for another reason", function (done) {
     const blog = this.blog;
 
