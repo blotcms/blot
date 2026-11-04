@@ -254,6 +254,28 @@ describe("dropbox resetFromBlot", function () {
     ).toEqual(true);
   });
 
+  it("leaves ignored paths such as case-distinct refs inside .git untouched when resolving case conflicts", async function () {
+    await fs.outputFile(join(blogDirectory, "a.txt"), "hello");
+    await fs.outputFile(join(blogDirectory, ".git/refs/heads/Feature"), "1");
+    await fs.outputFile(join(blogDirectory, ".git/refs/heads/feature"), "2");
+
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 0,
+        allocation: { ".tag": "individual", allocated: 1000000 },
+      },
+      remote: {},
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    await resetFromBlot(blogID, () => {}, { aborted: false });
+
+    expect(
+      (await fs.readdir(join(blogDirectory, ".git/refs/heads"))).sort()
+    ).toEqual(["Feature", "feature"]);
+    expect(uploadCalls.length).toEqual(1);
+  });
+
   it("does not count bytes already sitting in the target Dropbox folder against the quota check", async function () {
     // 1000 bytes on disk, but only 5 bytes free - a naive check comparing
     // the full local size against free space would abort here. Since 999 of

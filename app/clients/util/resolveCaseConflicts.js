@@ -94,12 +94,20 @@ const abortIfRequested = (signal) => {
 
 // `signal` is optional ({ aborted: boolean }). When it is set, resolution
 // stops with an AbortError before the next rename, move or merge.
+// `ignore` is an optional predicate (relative path -> boolean). Matching
+// entries are neither renamed nor descended into, so version control
+// folders and other ignored paths are left alone. Without it every entry is
+// considered (iCloud's behaviour).
 module.exports = async function resolveCaseConflicts(
   blogID,
   publish,
   update,
-  signal
+  signal,
+  ignore
 ) {
+  const isIgnored = (relDir, entry) =>
+    typeof ignore === "function" && ignore(path.posix.join(relDir, entry.name));
+
   if (!publish) {
     publish = () => {};
   }
@@ -193,9 +201,10 @@ module.exports = async function resolveCaseConflicts(
 
   const resolveDir = async (relDir) => {
     abortIfRequested(signal);
-    const entries = await listEntries(blogID, relDir);
+    const allEntries = await listEntries(blogID, relDir);
+    const entries = allEntries.filter((entry) => !isIgnored(relDir, entry));
     const existingLowerSet = new Set(
-      entries.map((entry) => canonicalName(entry.name))
+      allEntries.map((entry) => canonicalName(entry.name))
     );
     const groups = new Map();
     const orderedKeys = [];
@@ -248,7 +257,7 @@ module.exports = async function resolveCaseConflicts(
     abortIfRequested(signal);
     const updatedEntries = await listEntries(blogID, relDir);
     for (const entry of updatedEntries) {
-      if (!entry.isDirectory) continue;
+      if (!entry.isDirectory || isIgnored(relDir, entry)) continue;
       const childRel = path.posix.join(relDir, entry.name);
       if (resolvedDirs.has(childRel)) continue;
       await resolveDir(childRel);

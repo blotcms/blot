@@ -276,7 +276,13 @@ async function resetFromBlotWithClient(
   // fail to upload. Rename the losers (same as the iCloud initial transfer)
   // before anything is counted or uploaded.
   publish("Resolving case conflicts");
-  await resolveCaseConflicts(blogID, publish, update, signal);
+  await resolveCaseConflicts(
+    blogID,
+    publish,
+    update,
+    signal,
+    isDotfileOrDotfolder
+  );
   abortIfRequested(signal);
 
   let dropboxRoot = "/";
