@@ -100,7 +100,12 @@ function setup(account, session, callback) {
 
       // upload folder contents to dropbox
       // todo: pass in signal
-      await resetFromBlot(account.blog.id, folder.status, signal);
+      await resetFromBlot(
+        account.blog.id,
+        folder.status,
+        signal,
+        folder.update
+      );
 
       if (handleAbort()) return;
     } catch (err) {

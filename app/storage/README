@@ -297,7 +297,7 @@ trade-offs:
 
 **b. Sync clients need a staging pattern, not direct S3 calls.** Google
 Drive streams to a temp file then moves it into place; Dropbox's
-`delta.js` does recursive `readdir` diffs; iCloud's `resolveCaseConflicts.js`
+`delta.js` does recursive `readdir` diffs; the shared `clients/util/resolveCaseConflicts.js`
 resolves case conflicts via rename. These all assume a real local
 filesystem underneath and need a stage-locally-then-commit pattern against
 the storage layer, not raw S3 calls threaded through each client.

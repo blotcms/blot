@@ -55,7 +55,7 @@ Core bidirectional sync logic. All sync operations acquire and hold a sync lock 
 
 - `toiCloud.js` - Syncs local Blot folder state up to remote iCloud. Recursively walks the local folder tree, comparing sizes, uploading new/modified files, creating remote directories, and removing remote files not present locally (unless skipDeletions is true). Implements retry logic with exponential backoff for failed operations. Can abort on error or continue.
 
-- `resolveCaseConflicts.js` - Detects and resolves case-sensitivity conflicts before initial transfer. iCloud Drive on macOS is case-preserving but case-insensitive; this prevents collisions.
+- `../util/resolveCaseConflicts.js` (shared with Dropbox) - Detects and resolves case-sensitivity conflicts before initial transfer. iCloud Drive on macOS is case-preserving but case-insensitive; this prevents collisions.
 
 - `/util` - Helper utilities:
   - `download.js` - Downloads a file from the macserver and writes it to local Blot storage. Does not set the local file's mtime; local storage doesn't keep a settable modification time.

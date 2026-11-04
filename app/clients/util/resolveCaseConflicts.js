@@ -2,7 +2,7 @@ const path = require("path");
 const folder = require("storage/folder");
 const clfdate = require("helper/clfdate");
 
-const prefix = () => `${clfdate()} iCloud case-conflict:`;
+const prefix = () => `${clfdate()} case-conflict:`;
 
 const canonicalName = (name) => name.normalize("NFC").toLowerCase();
 

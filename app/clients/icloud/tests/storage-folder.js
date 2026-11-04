@@ -4,7 +4,7 @@ const { join } = require("path");
 const { promisify } = require("util");
 const folder = require("storage/folder");
 const localReaddir = require("../sync/util/localReaddir");
-const resolveCaseConflicts = require("../sync/resolveCaseConflicts");
+const resolveCaseConflicts = require("../../util/resolveCaseConflicts");
 
 // The iCloud client reaches the blog folder through storage/folder. These use
 // the real config and a real blog folder.
