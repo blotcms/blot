@@ -9,7 +9,6 @@ set -euo pipefail
 
 LOCAL_CONTAINER="${BLOT_LOCAL_CONTAINER:-blot-node-app-1}"
 PROD_CONTAINER="blot-blue"
-PROD_BLOGS_DIR="/var/www/blot/data/blogs"
 
 # Local sites' source directories live in ./data/local-sources of the checkout
 # running the Docker stack. Inside a worktree that is the main checkout, not the
@@ -55,7 +54,7 @@ echo "Created $LOCAL_BLOG_ID"
 
 echo "Downloading folder $PROD_BLOG_ID..."
 mkdir -p "$LOCAL_FOLDER"
-rsync -avz "blot:$PROD_BLOGS_DIR/$PROD_BLOG_ID/" "$LOCAL_FOLDER/"
+ssh -T blot "docker exec $PROD_CONTAINER node /usr/src/app/scripts/blog/export-folder \"$PROD_BLOG_ID\"" | tar -x -C "$LOCAL_FOLDER"
 
 echo "Downloading installed template..."
 ZIP="$(mktemp /tmp/fork-template.XXXXXX)"

@@ -258,7 +258,6 @@ function main(callback) {
 
       async function () {
         log("Creating required directories");
-        await fs.ensureDir(config.blog_folder_dir);
         await fs.ensureDir(config.log_directory);
         await fs.ensureDir(config.tmp_directory);
         log("Created required directories");

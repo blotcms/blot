@@ -235,7 +235,6 @@ How do we think about a shared asset library across templates?
 Decide whether or not to revert the preset system – should it only be used for the templates index for explaining the customization features?
 
 Test script for point-in-time restoration of specific blog folders at specific time (e.g. 2 days ago)
-- test npm run restore-folder
 
 Under templates index
 - Clicking on file in folder pulls up post on preview site ?

@@ -115,7 +115,6 @@ module.exports = {
   tmp_directory: BLOT_TMP_DIRECTORY,
   log_directory:
     process.env.BLOT_LOG_DIRECTORY || BLOT_DATA_DIRECTORY + "/logs",
-  blog_folder_dir: BLOT_DATA_DIRECTORY + "/blogs",
   ip: process.env.BLOT_IP || "127.0.0.1",
   ipv6: BLOT_IPV6,
 

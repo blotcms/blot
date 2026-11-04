@@ -7,6 +7,9 @@ module.exports = function registerGlobalTest() {
 
     compareDir: require("./util/compareDir"),
 
+    // Sets up and inspects a blog's folder, which is in the storage bucket
+    folder: require("./util/folder"),
+
     fake: require("./util/fake"),
 
     user: function () {

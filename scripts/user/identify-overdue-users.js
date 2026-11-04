@@ -1,16 +1,14 @@
 const each = require("../each/user");
-const child_process = require("child_process");
-const { blog_folder_dir } = require("config");
 const s3 = require("storage/s3");
+const File = require("models/file");
 const prettySize = require("helper/prettySize");
-const fs = require("fs");
 
 let rolling_total = 0;
 
 // Bytes of a blog's generated assets in the storage bucket: its objects under
-// the {blogID}/_*/ prefixes. The mirrored folder ({blogID}/folder/) and the git
-// store ({blogID}/git/) are under {blogID}/ too and are not counted here;
-// folderBytes below counts the folder on disk.
+// the {blogID}/_*/ prefixes. The folder ({blogID}/folder/) and the git store
+// ({blogID}/git/) are under {blogID}/ too and are not counted here; the
+// folder's size comes from its index below, with no listing.
 async function bucketBytes(blogID) {
   let total = 0;
 
@@ -22,14 +20,9 @@ async function bucketBytes(blogID) {
   return total;
 }
 
-function folderBytes(blogID) {
-  if (!fs.existsSync(`${blog_folder_dir}/${blogID}`)) return 0;
-
-  const folder_space_used = child_process
-    .execSync(`du -sb ${blog_folder_dir}/${blogID}`)
-    .toString();
-
-  return parseInt(folder_space_used.trim().split("\t")[0]);
+// Bytes of the files in a blog's folder, from the totals models/file keeps
+async function folderBytes(blogID) {
+  return (await File.totals(blogID)).bytes;
 }
 
 each(
@@ -48,7 +41,7 @@ each(
         for (const blogID of user.blogs) {
           try {
             const static_space_used_in_bytes = await bucketBytes(blogID);
-            const folder_space_used_in_bytes = folderBytes(blogID);
+            const folder_space_used_in_bytes = await folderBytes(blogID);
 
             const total_kilo_bytes =
               (static_space_used_in_bytes + folder_space_used_in_bytes) / 1000;
