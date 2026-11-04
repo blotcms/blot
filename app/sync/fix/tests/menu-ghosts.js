@@ -206,4 +206,37 @@ describe("sync/fix/menu-ghosts", function () {
       done();
     });
   });
+
+  it("removes a duplicate whose raw id differs but normalizes to the same entry", function (done) {
+    var nfc = "/caf\u00e9.txt";
+    var nfd = "/cafe\u0301.txt";
+    var first = { id: nfc, label: "Cafe", url: "/cafe", metadata: {} };
+    var second = { id: nfd, label: "Cafe", url: "/cafe", metadata: {} };
+    var blog = { id: "blog-id", menu: [first, second] };
+    var stored = JSON.parse(JSON.stringify(blog.menu));
+
+    spyOn(Entry, "get").and.callFake(function (blogID, id, callback) {
+      // both ids resolve to the same entry, whose id is the NFC form
+      setTimeout(
+        function () {
+          callback({ id: nfc, title: "Cafe", url: "/cafe", metadata: {} });
+        },
+        id === nfc ? 0 : 5,
+      );
+    });
+    spyOn(Blog, "get").and.callFake(function (by, callback) {
+      callback(null, { id: blog.id, menu: stored });
+    });
+    spyOn(Blog, "set").and.callFake(function (blogID, updates, callback) {
+      expect(updates.menu).toEqual([first]);
+      callback(null);
+    });
+
+    fixMenuGhosts(blog, function (err, report) {
+      expect(err).toBeNull();
+      expect(report).toEqual([["Delete duplicate", second]]);
+      expect(Blog.set).toHaveBeenCalled();
+      done();
+    });
+  });
 });

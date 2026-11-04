@@ -15,6 +15,10 @@ function main(blog, callback) {
   // a freshly read menu (see below) rather than to the one we started with.
   const removeIDs = new Set();
   const liveIDs = new Set();
+  // Raw ids reported as duplicates of an item with a different raw id (ids
+  // that Entry.get normalizes to the same entry, e.g. NFC and NFD).
+  const duplicateIDs = new Set();
+  const keptIDs = {};
   const fixes = {};
 
   async.map(
@@ -28,6 +32,7 @@ function main(blog, callback) {
           next(null, null);
         } else if (entry && existing[entry.id] === true) {
           report.push(["Delete duplicate", item]);
+          if (item.id !== keptIDs[entry.id]) duplicateIDs.add(item.id);
           changed = true;
           next(null, null);
         } else if (entry) {
@@ -50,6 +55,7 @@ function main(blog, callback) {
           }
 
           existing[entry.id] = true;
+          keptIDs[entry.id] = item.id;
           liveIDs.add(item.id);
           fixes[item.id] = {
             label: item.label,
@@ -80,7 +86,7 @@ function main(blog, callback) {
         const menu = [];
 
         (latest.menu || []).forEach(function (item) {
-          if (removeIDs.has(item.id)) return;
+          if (removeIDs.has(item.id) || duplicateIDs.has(item.id)) return;
 
           if (liveIDs.has(item.id)) {
             if (seen[item.id]) return;
