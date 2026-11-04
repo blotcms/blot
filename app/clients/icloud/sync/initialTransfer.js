@@ -9,7 +9,21 @@ const establishSyncLock = require("sync/establishSyncLock");
 const fetch = require("../util/rateLimitedFetchWithRetriesAndTimeout");
 const health = require("clients/health");
 
-module.exports = async function initialTransfer(blogID) {
+// The verify pass aborts on the first listing that fails (after
+// remoteReaddir's own retries), so rerun it a couple of times with a
+// pause before giving up: a stalled `ls` during the upload burst is
+// usually gone a minute later.
+const VERIFY_EXTRA_ATTEMPTS = 2;
+const VERIFY_RETRY_DELAY_MS = 45 * 1000;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+module.exports = async function initialTransfer(blogID, options = {}) {
+  const verifyRetryDelayMs =
+    options.verifyRetryDelayMs !== undefined
+      ? options.verifyRetryDelayMs
+      : VERIFY_RETRY_DELAY_MS;
+
   // establish sync lock
   const { folder, done } = await establishSyncLock(blogID);
 
@@ -30,7 +44,16 @@ module.exports = async function initialTransfer(blogID) {
     // it's important to abort on error here so we can surface the error to the user
     // and avoid data loss by continuing to sync down from iCloud
     folder.status("Verifying transfer");
-    await syncToiCloud(blogID, folder.status, folder.update, { skipDeletions: true, abortOnError: true });
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await syncToiCloud(blogID, folder.status, folder.update, { skipDeletions: true, abortOnError: true });
+        break;
+      } catch (error) {
+        if (attempt >= VERIFY_EXTRA_ATTEMPTS) throw error;
+        folder.status("Verifying transfer (retrying)");
+        await sleep(verifyRetryDelayMs);
+      }
+    }
 
     // then run a sync from iCloud to pull down any files which
     // were added to the iCloud folder after the transfer.
