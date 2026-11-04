@@ -186,10 +186,6 @@ Back up blot-storage-prod off AWS (Backblaze B2, hourly, no --delete): _avatars 
 
 Bunny: decide Volume vs Standard tier (more PoPs, faster first byte far from Volume PoPs) once we've run the numbers on cost and latency; also why cache HIT is low (Statistics: status codes, top uncached URLs)
 
-We get two emails one after the other and we should only get one
-- User in overdue disabled grace period
-- User account has been closed after for late payments
-
 Add a list of billing history / invoices to subscription page
 
 Create skills which delegate cheap subagents to scan logs for issues:
