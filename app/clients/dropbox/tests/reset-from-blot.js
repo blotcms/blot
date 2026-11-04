@@ -230,8 +230,17 @@ describe("dropbox resetFromBlot", function () {
     });
 
     const updated = [];
-    await resetFromBlot(blogID, () => {}, { aborted: false }, async (path) =>
-      updated.push(path)
+    // Same shape as sync()'s folder.update: callback-style, promisified by
+    // the setup route before it is handed to resetFromBlot.
+    const folderUpdate = (path, callback) => {
+      updated.push(path);
+      callback();
+    };
+    await resetFromBlot(
+      blogID,
+      () => {},
+      { aborted: false },
+      require("util").promisify(folderUpdate)
     );
 
     expect(uploadCalls.length).toEqual(2);

@@ -104,7 +104,8 @@ function setup(account, session, callback) {
         account.blog.id,
         folder.status,
         signal,
-        folder.update
+        // folder.update is callback-style, resetFromBlot awaits it
+        promisify(folder.update)
       );
 
       if (handleAbort()) return;
