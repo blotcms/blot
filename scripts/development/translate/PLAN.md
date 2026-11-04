@@ -43,12 +43,12 @@ Two findings worth carrying forward:
 
 ---
 
-## Milestone A — Provision and scaffold  ✅ COMPLETE
+## Milestone A — Provision and scaffold (complete)
 
 *Done when: `npm run translate <url>` leaves you a working site with an empty,
 locally-edited template installed.*
 
-### A1. Script skeleton and npm entry point  ✅
+### A1. Script skeleton and npm entry point (done)
 - Create `translate.sh` with `set -euo pipefail` (matches every other script in
   `scripts/development/`).
 - Add `"translate": "./scripts/development/translate/translate.sh"` to
@@ -58,7 +58,7 @@ locally-edited template installed.*
 - **Done when:** `npm run translate` prints usage; `npm run translate https://x.com`
   gets past argument parsing.
 
-### A2. Preflight (§1.5)  ✅
+### A2. Preflight (§1.5) (done)
 - `docker ps` must list `blot-node-app-1`.
 - Resolve the host authoritatively:
   `docker exec blot-node-app-1 node -e 'console.log(require("config").host)'`
@@ -73,7 +73,7 @@ locally-edited template installed.*
 - **Done when:** it passes with the stack up, and fails fast with a clear message
   when you stop the container.
 
-### A3. Handle derivation (§7.2 default 2)  ✅
+### A3. Handle derivation (§7.2 default 2) (done)
 - Pure function, its own module: URL → handle. Strip scheme, `www.`, TLD;
   lowercase; strip to `[a-z0-9]`; 2–70 chars; numeric suffix on collision.
 - Must be **deterministic** — re-run detection (G2) depends on the same URL
@@ -82,7 +82,7 @@ locally-edited template installed.*
 - **Done when:** unit-tested against a table of URLs including punycode, deep
   paths, ports and `www.`.
 
-### A4. `index.js` — provision the blog (in container)  ✅
+### A4. `index.js` — provision the blog (in container) (done)
 - Runs via `docker exec blot-node-app-1 node scripts/development/translate …`
   (module resolution needs the container's `NODE_PATH=/usr/src/app/app`).
 - Get-or-create user `example@example.com` (hardcoded in
@@ -101,7 +101,7 @@ locally-edited template installed.*
 - **Done when:** running it twice produces one blog, and
   `https://<handle>.local.blot` responds.
 
-### A5. Template scaffold  ✅
+### A5. Template scaffold (done)
 - `Template.create(blogID, name, { cloneFrom: "SITE:blog" })` — catch
   `err.code === "EEXISTS"` and reuse (§6.2).
 - `Template.setMetadata(id, { localEditing: true })` then
@@ -111,7 +111,7 @@ locally-edited template installed.*
 - **Done when:** `data/blogs/<blogID>/Templates/<slug>/` contains the cloned views
   and the site renders with them.
 
-### A6. `git init` the folder (§6.10)  ✅
+### A6. `git init` the folder (§6.10) (done)
 - Plain `git init` at provisioning, before anything else is written, so the first
   content commit has an empty baseline.
 - Write `.gitignore` containing `.verification/`.
@@ -123,12 +123,12 @@ locally-edited template installed.*
 
 ---
 
-## Milestone B — Content gate  ✅ COMPLETE
+## Milestone B — Content gate (complete)
 
 *Done when: the script waits for content and refuses to continue until entries
 actually exist.*
 
-### B1. `content-check.js` (§3.2)  ✅
+### B1. `content-check.js` (§3.2) (done)
 - In container. `Entries.getAllIDs(blogID)` → **filter on `deleted`**; the ID index
   retains soft-deleted paths (verified).
 - Report a breakdown: posts, pages, tags, date range.
@@ -136,7 +136,7 @@ actually exist.*
 - **Done when:** it reports 0 on an empty folder, and correct counts after copying
   `app/templates/folders/david` in.
 
-### B2. The wait-and-verify prompt (§3.1)  ✅
+### B2. The wait-and-verify prompt (§3.1) (done)
 - Print the absolute host path (`data/blogs/<blogID>/`) and the three routes for
   getting content in: dashboard importer, `dynamic-importer`, or by hand.
 - Optionally open the folder — `open -R`, or reuse the host-side opener already
@@ -147,9 +147,9 @@ actually exist.*
 - **Done when:** pressing Enter with an empty folder re-prompts; pressing Enter
   after copying a demo folder proceeds and commits.
 
-### B3. Settle helper (§7.2 default 3)  ✅
+### B3. Settle helper (§7.2 default 3) (done)
 
-### B4. `rescan.js` — not in the original plan, but required  ✅
+### B4. `rescan.js` — not in the original plan, but required (done)
 The watcher cannot be relied on for content the operator drops in.
 `app/clients/local/setup.js` starts chokidar with `ignoreInitial: true`, and only
 after `sync/fix` completes — so anything already in the folder when the watcher
@@ -177,12 +177,12 @@ found on the first pass. Verified.
 
 ---
 
-## Milestone C — Screenshots  ✅ COMPLETE
+## Milestone C — Screenshots (complete)
 
 *Done when: you can produce `.verification/input-*.png` and `output-*.png` pairs by
 hand.*
 
-### C1. `screenshot.js` — host-side wrapper (§7.2 default 4)  ✅
+### C1. `screenshot.js` — host-side wrapper (§7.2 default 4) (done)
 - Runs **on the host**: the container resolves `*.local.blot` to `127.0.0.1`, which
   is itself, so it cannot reach the site (verified — connection refused).
 - Standalone rather than importing `app/helper/screenshot` (its `args.js` is tuned
@@ -192,7 +192,7 @@ hand.*
 - Host puppeteer is already installed (24.1.1, browser in `~/.cache/puppeteer/chrome`).
 - **Done when:** it captures any URL to a path at both viewports.
 
-### C2. Capture the pair  ✅
+### C2. Capture the pair (done)
 - Source URL and the local site, at matching viewports, into `.verification/`.
 - Naming: `input-<page>.png` / `output-<page>.png` so pairs are matchable by suffix.
 - Page set: homepage plus one representative entry. Resolve the entry URL from the
@@ -205,17 +205,17 @@ hand.*
 
 ---
 
-## Milestone D — Comparison UI  ✅ COMPLETE
+## Milestone D — Comparison UI (complete)
 
 *Done when: `open http://localhost:3021` shows the pairs and accepts feedback.*
 
-### D1. `compare-server.js` (§6.6.2)  ✅
+### D1. `compare-server.js` (§6.6.2) (done)
 - Plain `http.createServer` on **3021** (verified free; 3020 is the folder opener).
 - Model it on `scripts/development/open-folder-server.js`.
 - Serve the `.verification/` PNGs and a single self-contained HTML page.
 - **Done when:** the page loads and shows the images.
 
-### D2. The comparison view  ✅
+### D2. The comparison view (done)
 - Side-by-side pairs, plus an **opacity-blend slider** — far better than
   side-by-side for spotting layout drift.
 - Links that open the source and the local site in real tabs (always works, no
@@ -225,7 +225,7 @@ hand.*
   usually cannot be framed, so never depend on it.
 - **Done when:** blending between input and output works for the homepage pair.
 
-### D3. Feedback intake  ✅
+### D3. Feedback intake (done)
 - A textarea that POSTs back to the server, which holds the pending feedback for
   the shell loop to read.
 - Makes the UI and the feedback loop one mechanism instead of two.
@@ -233,11 +233,11 @@ hand.*
 
 ---
 
-## Milestone E — First agent turn  ✅ COMPLETE
+## Milestone E — First agent turn (complete)
 
 *Done when: one `claude -p` invocation produces a template that renders.*
 
-### E1. The two READMEs (§6.5)  ✅
+### E1. The two READMEs (§6.5) (done)
 - `README.folder.md` and `README.template.md` as templates, interpolated at
   scaffold time.
 - Both land as a file named `README`, **no extension**, Markdown inside. At the
@@ -248,7 +248,7 @@ hand.*
   brief for whoever (or whatever) edits the design next.
 - **Done when:** both are written at scaffold time with the right substitutions.
 
-### E2. `prompt.md` — the agent brief (§6.8)  ✅
+### E2. `prompt.md` — the agent brief (§6.8) (done)
 - Extend `/developers/guides/working-with-ai` with: retrievable locals (§4.6),
   entry properties (§3.4), the folder conventions that shape a template (§3.3),
   the `package.json` schema (§4.3), **the default-route gotcha** (§4.4 — a view's
@@ -263,7 +263,7 @@ hand.*
 - Say that content edits are permitted and when they are the right fix (§3.3).
 - **Done when:** the brief is complete enough that a human could follow it.
 
-### E3. Print the command, do not run the agent  ✅
+### E3. Print the command, do not run the agent (done)
 **Simplified deliberately.** The script prepares the workspace and prints a
 command for the operator to run in another window. It does not drive the agent.
 
@@ -289,7 +289,7 @@ Code session.
 - **Done when:** the command is printed, `brief.md` resolves from the folder it
   tells you to `cd` into, and the run's specifics are interpolated correctly.
 
-### E4. Commit every round  ✅
+### E4. Commit every round (done)
 - Each run commits whatever changed since the last one: content the operator
   supplied, and anything the agent edited in between.
 - First content commit is *"Add content as supplied"*; later ones *"Changes since
@@ -298,7 +298,7 @@ Code session.
 - **Done when:** both messages appear in the right circumstances and an unchanged
   re-run creates no commit.
 
-### E5. Feedback folds into the next brief  ✅
+### E5. Feedback folds into the next brief (done)
 - Feedback typed into the comparison UI (D3) is written to
   `.verification/feedback.txt`.
 - The next run prepends it to `brief.md` under *"Feedback on the last attempt —
@@ -319,7 +319,7 @@ acceptable because the operator is watching it run.
 
 ---
 
-## Milestone F — The loop  ✅ MOSTLY DISSOLVED
+## Milestone F — The loop (mostly dissolved)
 
 *Re-running the script is the loop.*
 
