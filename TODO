@@ -429,8 +429,6 @@ Improve iCloud sync
 - Start writing tests for icloud client
 - Start writing tests for macserver
 - Instead of our bespoke header modifiedTime we should use 'Last-Modified' and note we don't need to set this for route using res.download – res.download does this automatically
-- Fix bug: low priority, this just causes an error in the logs when freeing up disk space. Problem: attempting to evict a file within a .pages directory (a special apple file) e.g. Post.pages/preview.jpg will fail: you need to evict the parent directory perhaps?
-- Remove evict route
 - Rename /watch route to setup-complete
 - Remove recursiveReaddirRoute
   - instead, to sync folder tree, whenever readddir is called, it should maintain an internal map of the last time a blog's subfolder tree was recursively checked, and call it? or maybe just call ls and brctl download on the specific folder? or is this too slow?
