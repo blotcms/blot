@@ -79,7 +79,6 @@ Analyze the new log line paramater for accept encoding to determine if we should
 Redis host follow-ups (from #2041, new host since 8 Oct):
 - Lock heartbeat: no overlapping EXTENDs
 - Remaining dropped write errors: await set() in resetToDrive; Dropbox disconnect.js and _assign.js dropFromMenu check the wrong error; write order in Blog.create; the list-ghosts restore path; error paths for background resave and rebuild; a callback for the messenger's setStatus; make Entry.set atomic
-- Proxy: auto-ssl's lock and hook calls can reuse a timed-out Redis connection
 - Deploy log archive (scripts/deploy/units.sh, proxy/deploy/blue-green.sh): before a unit is replaced, archive its container logs with docker logs -t, outside /tmp, more than 3 files, size-capped
 - TLS handshakes were about a quarter of billed egress on 21 Oct (#2107): ECDSA certificates shrink each by about a third, and few TLS connections resume today, so look at session reuse and keep-alive (about 1.7 requests per connection). No `ssl_session_tickets` without a shared key (#2271)
 - reconcile.js can select every sync-client blog after a restore: a unit that boots with a global template changed since Redis last stored it rebuilds it and bumps every blog's cacheID (app/templates/index.js bumpCacheIDForEveryBlog), and cycle.sh restore starts the units first. The 1 Nov rehearsal selected every blog, most likely this way. Capture the cacheIDs with redis6-cli before the units start, or use a signal a boot doesn't touch (#2261). Only slower recovery, never a missed blog
