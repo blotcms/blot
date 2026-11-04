@@ -97,7 +97,6 @@ Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 - Reboot the host once in a maintenance window: mount-instance-store mounts without reformatting, docker starts after it, the proxy comes back with cache/log mounts, :80/:443 answer
 - http://www.blot.im/ returns 404: confirm intended
 - app/blog/static has no copy on the host, so those cdn. files fall through to Node: export them from the Node image on deploy, or accept
-- cdn. responses carry Cache-Control twice (expires 1y + add_header), as on bare metal
 - Get proxy horizontally scalable and multi-region
 - Can we add modern compression to proxy? (brotli is in; zstd is not)
 - Can the proxy remember bad urls and avoid repeatedly sending them to upstream?
