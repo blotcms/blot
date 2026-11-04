@@ -325,6 +325,117 @@ describe("dropbox init", function () {
     });
   });
 
+  // A process that dies mid-transfer leaves transfer_pending set with nothing
+  // running the upload; resumeInterruptedTransfersOnStartup picks those up.
+  describe("resumeInterruptedTransfersOnStartup", function () {
+    const blogPath = require.resolve("models/blog");
+    const databasePath = require.resolve("../database");
+    const resetFromBlotPath = require.resolve("../sync/reset-from-blot");
+    const lockPath = require.resolve("sync/establishSyncLock");
+    const subscriberPath = require.resolve("helper/redisSubscriber");
+    const initPath = require.resolve("../init");
+    const paths = [
+      blogPath,
+      databasePath,
+      resetFromBlotPath,
+      lockPath,
+      subscriberPath,
+      initPath,
+    ];
+
+    const blogID = "blog_resumetransfer" + Date.now();
+    const originals = {};
+    let uploads, released;
+
+    beforeEach(function () {
+      paths.forEach((path) => (originals[path] = require.cache[path]));
+      uploads = [];
+      released = [];
+    });
+
+    afterEach(function () {
+      paths.forEach((path) => {
+        if (originals[path]) require.cache[path] = originals[path];
+        else delete require.cache[path];
+      });
+    });
+
+    function load(account, { lockError, uploadError } = {}) {
+      require.cache[blogPath] = {
+        exports: {
+          getAllIDs: (callback) => callback(null, [blogID]),
+          get: (query, callback) =>
+            callback(null, { id: blogID, handle: "resume", client: "dropbox" }),
+        },
+      };
+      require.cache[databasePath] = {
+        exports: {
+          get: (_blogID, callback) => callback(null, account),
+          set: (_blogID, _values, callback) => callback(null),
+        },
+      };
+      require.cache[resetFromBlotPath] = {
+        exports: async (id) => {
+          uploads.push(id);
+          if (uploadError) throw uploadError;
+        },
+      };
+      require.cache[lockPath] = {
+        exports: async () => {
+          if (lockError) throw lockError;
+          return { folder: {}, done: async (err) => released.push(err) };
+        },
+      };
+      require.cache[subscriberPath] = {
+        exports: () => ({
+          setupPromise: Promise.resolve(),
+          cleanup: async () => {},
+        }),
+      };
+      delete require.cache[initPath];
+      return require("../init");
+    }
+
+    it("re-runs the upload under the lock for an interrupted transfer", async function () {
+      const init = load({ error_code: 0, transfer_pending: true });
+      await init.resumeInterruptedTransfersOnStartup();
+      expect(uploads).toEqual([blogID]);
+      expect(released).toEqual([null]);
+    });
+
+    it("leaves completed transfers and recorded errors alone", async function () {
+      for (const account of [
+        { error_code: 0, transfer_pending: false },
+        { error_code: 507, transfer_pending: true },
+        { error_code: 401, transfer_pending: true },
+        null,
+      ]) {
+        const init = load(account);
+        await init.resumeInterruptedTransfersOnStartup();
+      }
+      expect(uploads).toEqual([]);
+    });
+
+    it("skips a blog whose lock is held by a live transfer", async function () {
+      const init = load(
+        { error_code: 0, transfer_pending: true },
+        { lockError: new Error("Failed to acquire folder lock") }
+      );
+      await init.resumeInterruptedTransfersOnStartup();
+      expect(uploads).toEqual([]);
+    });
+
+    it("releases the lock with the error when the upload fails", async function () {
+      const uploadError = new Error("upload failed");
+      const init = load(
+        { error_code: 0, transfer_pending: true },
+        { uploadError }
+      );
+      await init.resumeInterruptedTransfersOnStartup();
+      expect(released).toEqual([uploadError]);
+    });
+  });
+
   // One digest per sweep: changes, Fix() repairs, errors and a stuck lock for
   // different blogs all land in the same DROPBOX_SYNC_ISSUE email, and blogs
   // with nothing wrong (or a briefly busy lock) don't appear in it.

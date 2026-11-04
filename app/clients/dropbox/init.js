@@ -13,6 +13,8 @@ const getHealth = require("./getHealth");
 const Fix = require("sync/fix");
 const establishSyncLock = require("sync/establishSyncLock");
 const sync = promisify(require("./sync"));
+const resetFromBlot = require("./sync/reset-from-blot");
+const redisSubscriber = require("helper/redisSubscriber");
 const { measure: measureEventLoop } = require("helper/eventLoopMonitor");
 
 const getAllIDs = promisify(Blog.getAllIDs);
@@ -340,6 +342,91 @@ const resyncRecentSyncsOnStartup = async () => {
   }
 };
 
+// The setup flow (routes/setup) sets transfer_pending before the initial
+// upload to Dropbox and clears it when the upload finishes, holding the
+// blog's folder lock throughout. A process that dies mid-upload leaves
+// transfer_pending set with nobody running the transfer, and nothing else
+// would pick it up: syncs and validation deliberately skip such blogs. So
+// once per deploy, resume the upload for every Dropbox blog in that state.
+// A recorded error_code (revoked access, full Dropbox) needs the user, so
+// those are left alone, and a blog whose lock is held has a live transfer.
+const resumeInterruptedTransfersOnStartup = async () => {
+  console.log(clfdate(), "Dropbox: Checking for interrupted transfers on startup");
+
+  let blogIDs = [];
+
+  try {
+    blogIDs = await getAllIDs();
+  } catch (err) {
+    console.error(clfdate(), "Dropbox: Failed to load blog IDs", err);
+    return;
+  }
+
+  for (const blogID of blogIDs) {
+    try {
+      const blog = await getBlog({ id: blogID });
+      if (!blog || blog.isDisabled || blog.client !== "dropbox") continue;
+
+      const account = await getDropboxAccount(blogID);
+      if (!account || account.transfer_pending !== true) continue;
+      if (account.error_code) continue;
+
+      console.log(clfdate(), "Dropbox: Resuming interrupted transfer", blogID);
+      await resumeTransfer(blogID);
+      console.log(clfdate(), "Dropbox: Resumed transfer complete", blogID);
+    } catch (err) {
+      if (err.message === "Failed to acquire folder lock") {
+        console.log(clfdate(), "Dropbox: Skipping busy blog", blogID);
+        continue;
+      }
+      console.error(
+        clfdate(),
+        "Dropbox: Error resuming transfer for blog",
+        blogID,
+        err
+      );
+    }
+  }
+};
+
+// Same as the setup flow's upload: under the folder lock, aborted if the
+// user disconnects meanwhile. Webhooks for the uploaded files run a normal
+// sync afterwards, so no catch-up is needed here.
+const resumeTransfer = async (blogID) => {
+  const { done } = await establishSyncLock(blogID);
+  const signal = { aborted: false };
+  const subscription = redisSubscriber({
+    channel: "sync:status:" + blogID,
+    onMessage: (message) => {
+      if (message === "Attempting to disconnect from Dropbox")
+        signal.aborted = true;
+    },
+    onError: (err) => console.error(clfdate(), "Dropbox: Subscriber error", err),
+  });
+  let error = null;
+
+  try {
+    await subscription.setupPromise;
+    await resetFromBlot(
+      blogID,
+      (...args) => console.log(clfdate(), "Dropbox:", blogID, ...args),
+      signal
+    );
+  } catch (err) {
+    // An abort is the user disconnecting, not a failure
+    if (!err || err.name !== "AbortError") {
+      error = err;
+      throw err;
+    }
+  } finally {
+    await subscription.cleanup().catch(() => {});
+    await done(error).catch((err) => {
+      if (err !== error)
+        console.error(clfdate(), "Dropbox: Error releasing lock", blogID, err);
+    });
+  }
+};
+
 module.exports = async function init() {
   console.log(clfdate(), "Dropbox: Scheduling hourly sync validation");
   // One process per hour runs the sweep, and a sweep that outlasts the hour
@@ -350,6 +437,13 @@ module.exports = async function init() {
   onceAtStartup("dropbox-resync-recent", resyncRecentSyncsOnStartup).catch(function (err) {
       console.error(clfdate(), "Dropbox: Startup resync failed", err);
     });
+
+  onceAtStartup(
+    "dropbox-resume-transfers",
+    resumeInterruptedTransfersOnStartup
+  ).catch(function (err) {
+    console.error(clfdate(), "Dropbox: Startup transfer resume failed", err);
+  });
 };
 
 // Exposed for tests: both resyncRecentSyncsOnStartup and validateAllBlogs
@@ -357,6 +451,7 @@ module.exports = async function init() {
 // resetToBlotWithLock for a blog, and resetToBlotWithLock itself rechecks it
 // again once the lock is actually held (see its comment above).
 module.exports.resyncRecentSyncsOnStartup = resyncRecentSyncsOnStartup;
+module.exports.resumeInterruptedTransfersOnStartup = resumeInterruptedTransfersOnStartup;
 module.exports.validateAllBlogs = validateAllBlogs;
 module.exports.resetToBlotWithLock = resetToBlotWithLock;
 module.exports.TRANSFER_INCOMPLETE = TRANSFER_INCOMPLETE;
