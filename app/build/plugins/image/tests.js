@@ -238,6 +238,44 @@ describe("image", function () {
     });
   });
 
+  it("names cached images after the decoded filename and escapes their URLs", function (done) {
+    var test = this;
+    var name = "/\u8bf4\u660e.png";
+    var html = '<img src="/%E8%AF%B4%E6%98%8E.png">';
+
+    fs.copySync(__dirname + "/tests-image.png", localPath(test.blog.id, name));
+
+    render(test.blog, html, function (err, result) {
+      if (err) return done.fail(err);
+
+      var src = cheerio.load(result, null, false)("img").attr("src");
+
+      expect(src).toMatch(/\/_image_cache\/[0-9a-f-]+\/%E8%AF%B4%E6%98%8E\.png$/);
+      test.result = result;
+      done();
+    });
+  });
+
+  describe("filenameFromSrc", function () {
+    var filenameFromSrc = require("./optimize").filenameFromSrc;
+
+    it("decodes percent-encoded names", function () {
+      expect(filenameFromSrc("/%E8%AF%B4%E6%98%8E.png")).toEqual("\u8bf4\u660e");
+      expect(filenameFromSrc("/a%20b.jpg")).toEqual("a-b");
+    });
+
+    it("copes with sequences cut off mid-character", function () {
+      expect(filenameFromSrc("/foo-%E2.png")).not.toContain("%E");
+      expect(filenameFromSrc("/large.jpg%e2%80%9d")).not.toContain("%");
+      expect(filenameFromSrc("/100%.png")).not.toContain("%");
+    });
+
+    it("does not leave replacement characters", function () {
+      var long = new Array(60).join("%E8%AF%B4");
+      expect(filenameFromSrc("/" + long + ".png")).not.toContain("\ufffd");
+    });
+  });
+
   // The cached images' paths in the blog's asset directory, e.g.
   // "_image_cache/{uuid}/name.jpg"
   function extractCachedImagePaths (blog, html) {
@@ -254,7 +292,7 @@ describe("image", function () {
         src = src.slice(src.indexOf("/", 1));
       }
 
-      paths.push(src.replace(/^\//, ""));
+      paths.push(decodeURIComponent(src.replace(/^\//, "")));
     });
 
     return paths;
