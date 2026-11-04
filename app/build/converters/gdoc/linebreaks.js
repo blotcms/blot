@@ -1,3 +1,16 @@
+const ELEMENT_TYPES = ["tag", "script", "style"];
+
+function nextElement(node) {
+  for (let n = node.next; n; n = n.next) {
+    if (ELEMENT_TYPES.includes(n.type)) return n;
+  }
+  return null;
+}
+
+function isParagraphOrRule(node) {
+  return node.name === "p" || node.name === "hr";
+}
+
 module.exports = function ($) {
   // Sort out line breaks
   // Google Docs uses empty <p> tags to represent line breaks
@@ -35,15 +48,23 @@ module.exports = function ($) {
     if (tag === "p") {
       if (currGroup.length > 0) {
         const lastInGroup = currGroup.at(-1);
-        const nextPOrHr = $(lastInGroup).nextAll("p, hr").first()[0];
-        const betweenNodes = $(lastInGroup).nextUntil("p, hr");
 
-        if (nextPOrHr !== node || betweenNodes.length > 0) {
+        // Flush unless the next element sibling is this p/hr, walking
+        // siblings directly: nextAll/nextUntil build the whole sibling list
+        // for every paragraph, which is quadratic in a long document
+        if (nextElement(lastInGroup) !== node) {
+          // the elements between this group and the next p/hr, found before
+          // the flush removes the group's later paragraphs
+          let between = null;
+          for (
+            let sibling = nextElement(lastInGroup);
+            sibling && !isParagraphOrRule(sibling);
+            sibling = nextElement(sibling)
+          ) {
+            between = sibling;
+          }
           const flushedFirst = flushCurrentGroup();
-          prevNode =
-            betweenNodes.length > 0
-              ? betweenNodes.last()[0] || flushedFirst
-              : flushedFirst;
+          prevNode = between || flushedFirst;
           emptyCount = 0;
         }
       }
