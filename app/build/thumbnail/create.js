@@ -1,4 +1,3 @@
-var fs = require("fs-extra");
 var { v4: uuid } = require("uuid");
 var callOnce = require("helper/callOnce");
 var Transform = require("./transform");
@@ -8,7 +7,6 @@ var assets = require("storage/assets");
 var callbackify = require("util").callbackify;
 var extname = require("path").extname;
 var TIMEOUT = 20 * 1000; // 20s
-var validate = require("./validate");
 var debug = require("debug")("blot:entry:build:thumbnail:create");
 
 function create(blogID, path, done) {
@@ -23,37 +21,27 @@ function create(blogID, path, done) {
   var fullPathToOutputDirectory = assets.path(blogID, outputDirectory);
   var extension = extname(path).toLowerCase();
 
-  validate(path, function (err) {
-    if (err) {
-      debug(blogID, "Invalid thumbnail candidate", path, err);
-      return done(err);
+  var transform = extension === ".gif" ? TransformGIF : Transform;
+
+  // The thumbnail job checks the image can be a thumbnail before it makes any
+  debug(blogID, "Transforming", path);
+  transform(path, fullPathToOutputDirectory, function (err, thumbnails) {
+    if (err && err.invalid) debug(blogID, "Invalid thumbnail candidate", path, err);
+    if (err) return done(err);
+
+    for (var i in thumbnails) {
+      thumbnails[i].path = outputDirectory + "/" + thumbnails[i].name;
+      thumbnails[i].url = assets.url(blogID, thumbnails[i].path);
     }
 
-    debug(blogID, "Ensuring output dir exists", fullPathToOutputDirectory);
-    fs.ensureDir(fullPathToOutputDirectory, function (err) {
+    // The transform wrote the files locally, now they are all in place
+    callbackify(assets.commit)(blogID, outputDirectory, function (err) {
       if (err) return done(err);
 
-      var transform = extension === ".gif" ? TransformGIF : Transform;
+      clearTimeout(timeout);
 
-      debug(blogID, "Transforming", path);
-      transform(path, fullPathToOutputDirectory, function (err, thumbnails) {
-        if (err) return done(err);
-
-        for (var i in thumbnails) {
-          thumbnails[i].path = outputDirectory + "/" + thumbnails[i].name;
-          thumbnails[i].url = assets.url(blogID, thumbnails[i].path);
-        }
-
-        // The transform wrote the files locally, now they are all in place
-        callbackify(assets.commit)(blogID, outputDirectory, function (err) {
-          if (err) return done(err);
-
-          clearTimeout(timeout);
-
-          debug(blogID, "Done", thumbnails);
-          done(null, thumbnails);
-        });
-      });
+      debug(blogID, "Done", thumbnails);
+      done(null, thumbnails);
     });
   });
 }

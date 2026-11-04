@@ -2,12 +2,16 @@ var callOnce = require("helper/callOnce");
 var extname = require("path").extname;
 var fs = require("fs-extra");
 var sandbox = require("sandbox");
+var validate = require("./validate");
 
 var thumbnails = require("./config").THUMBNAILS;
 
-// Makes every size in the config from one image. The sharp work happens in the
-// sandbox's thumbnail job (app/sandbox/jobs/thumbnail.js); the files are written
-// here, since the sandbox can't reach the blog's folder.
+// Makes every size in the config from one image, once the job has checked it
+// can be a thumbnail (./validate). The sharp work happens in the sandbox's
+// thumbnail job (app/sandbox/jobs/thumbnail.js); the files are written here,
+// since the sandbox can't reach the blog's folder. The output directory is
+// made only for an image that passes, and an image that doesn't fails with
+// the reason, with err.invalid set.
 function make(animated) {
   return function main(path, outputDirectory, callback) {
     callback = callOnce(callback);
@@ -30,17 +34,29 @@ function make(animated) {
     async function work() {
       var reply = await sandbox.run(
         "thumbnail",
-        { extension: extension, animated: animated, sizes: sizes },
+        { extension: extension, animated: animated, sizes: sizes, accept: validate.ACCEPT },
         { path: path }
       );
 
+      var meta = reply.meta;
+      if (!meta || typeof meta !== "object") throw new Error("Unexpected thumbnail result");
+
+      var invalid = validate.check(meta.source);
+      if (invalid || meta.thumbnails === null) {
+        invalid = invalid || new Error("Image is not a valid thumbnail");
+        invalid.invalid = true;
+        throw invalid;
+      }
+
       if (
-        !Array.isArray(reply.meta) ||
-        reply.meta.length !== names.length ||
+        !Array.isArray(meta.thumbnails) ||
+        meta.thumbnails.length !== names.length ||
         reply.outputs.length !== names.length
       ) {
         throw new Error("Unexpected thumbnail result");
       }
+
+      await fs.ensureDir(outputDirectory);
 
       var result = {};
 
@@ -51,8 +67,8 @@ function make(animated) {
           await fs.writeFile(outputDirectory + "/" + fileName, reply.outputs[i]);
 
           result[name] = {
-            width: reply.meta[i].width,
-            height: reply.meta[i].height,
+            width: meta.thumbnails[i].width,
+            height: meta.thumbnails[i].height,
             name: fileName,
           };
         })
