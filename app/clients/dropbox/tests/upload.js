@@ -120,5 +120,136 @@ describe("dropbox upload", function () {
       });
       expect("client_modified" in calls[2].args.commit).toBe(false);
     });
+
+    it("treats incorrect_offset after a lost append response as accepted", async function () {
+      const calls = [];
+      let appends = 0;
+      const fakeClient = {
+        filesUploadSessionStart: async () => ({ result: { session_id: "abc" } }),
+        filesUploadSessionAppendV2: async (args) => {
+          appends++;
+          calls.push({ name: "append", offset: args.cursor.offset });
+          if (appends === 1) {
+            // Server stored the chunk, but the response was lost.
+            const err = new Error("connection reset");
+            err.name = "FetchError";
+            err.type = "system";
+            throw err;
+          }
+          const err = new Error("incorrect_offset");
+          err.status = 409;
+          err.error = {
+            error: {
+              ".tag": "incorrect_offset",
+              correct_offset: args.cursor.offset + args.contents.length,
+            },
+          };
+          throw err;
+        },
+        filesUploadSessionFinish: async (args) => {
+          calls.push({ name: "finish", offset: args.cursor.offset });
+          return { result: {} };
+        },
+      };
+      const delays = require("../util/retryRequest").delays;
+      const saved = delays.slice();
+      delays.splice(0, delays.length, 1, 1, 1);
+
+      try {
+        await new Promise((resolve, reject) =>
+          upload(fakeClient, source, "/big.txt", (e) =>
+            e ? reject(e) : resolve()
+          )
+        );
+      } finally {
+        delays.splice(0, delays.length, ...saved);
+      }
+
+      expect(calls).toEqual([
+        { name: "append", offset: 4 },
+        { name: "append", offset: 4 },
+        { name: "finish", offset: 8 },
+      ]);
+    });
+
+    it("re-reads from the offset Dropbox reports when it differs", async function () {
+      const appendOffsets = [];
+      const finishes = [];
+      const fakeClient = {
+        filesUploadSessionStart: async () => ({ result: { session_id: "abc" } }),
+        filesUploadSessionAppendV2: async (args) => {
+          appendOffsets.push(args.cursor.offset);
+          if (appendOffsets.length === 1) {
+            const err = new Error("incorrect_offset");
+            err.status = 409;
+            err.error = {
+              error: { ".tag": "incorrect_offset", correct_offset: 2 },
+            };
+            throw err;
+          }
+        },
+        filesUploadSessionFinish: async (args) => {
+          finishes.push({
+            offset: args.cursor.offset,
+            contents: args.contents.toString(),
+          });
+          return { result: {} };
+        },
+      };
+
+      await new Promise((resolve, reject) =>
+        upload(fakeClient, source, "/big.txt", (e) => (e ? reject(e) : resolve()))
+      );
+
+      // hell|o wo|rld, but Dropbox only holds "he": resume from offset 2.
+      expect(appendOffsets).toEqual([4, 2, 6]);
+      expect(finishes).toEqual([{ offset: 10, contents: "d" }]);
+    });
+
+    it("rethrows other 409 errors", async function () {
+      const fakeClient = {
+        filesUploadSessionStart: async () => ({ result: { session_id: "abc" } }),
+        filesUploadSessionAppendV2: async () => {
+          const err = new Error("not_found");
+          err.status = 409;
+          err.error = { error: { ".tag": "not_found" } };
+          throw err;
+        },
+        filesUploadSessionFinish: async () => ({ result: {} }),
+      };
+      const error = await new Promise((resolve) =>
+        upload(fakeClient, source, "/big.txt", (e) => resolve(e))
+      );
+      expect(error).toBeTruthy();
+    });
+
+    it("stops issuing requests once the upload timeout has fired", async function () {
+      upload.options.timeout = 30;
+      const calls = [];
+      const fakeClient = {
+        filesUploadSessionStart: async () => {
+          calls.push("start");
+          if (calls.length > 1) {
+            // The retry wrapper re-runs the timed out upload: fail it fast.
+            const err = new Error("unauthorized");
+            err.status = 401;
+            throw err;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          return { result: { session_id: "abc" } };
+        },
+        filesUploadSessionAppendV2: async () => calls.push("append"),
+        filesUploadSessionFinish: async () => (calls.push("finish"), { result: {} }),
+      };
+
+      const error = await new Promise((resolve) =>
+        upload(fakeClient, source, "/big.txt", (e) => resolve(e))
+      );
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      expect(error).toBeTruthy();
+      expect(calls).not.toContain("append");
+      expect(calls).not.toContain("finish");
+    });
   });
 });

@@ -15,9 +15,38 @@ const retryRequest = require("./retryRequest");
 const options = {
   threshold: 140 * 1024 * 1024,
   chunkSize: 8 * 1024 * 1024,
+  timeout: 4 * 60 * 1000,
 };
 
-async function uploadInChunks(client, source, destination, size, touch) {
+// A lost append response that is retried makes Dropbox answer 409 with the
+// offset it already holds. The SDK error carries either the append error
+// (".tag": "incorrect_offset") or a wrapped lookup error.
+function incorrectOffset(err) {
+  let body = err && err.error;
+  if (body && body.error) body = body.error;
+  if (body && body.lookup_failed) body = body.lookup_failed;
+  if (body && body.upload_session_lookup_error)
+    body = body.upload_session_lookup_error;
+  if (
+    body &&
+    body[".tag"] === "incorrect_offset" &&
+    typeof body.correct_offset === "number"
+  )
+    return body.correct_offset;
+  return null;
+}
+
+async function uploadInChunks(
+  client,
+  source,
+  destination,
+  size,
+  touch,
+  isCancelled
+) {
+  const check = () => {
+    if (isCancelled()) throw new Error("Upload cancelled after timeout");
+  };
   const handle = await fs.open(source, "r");
 
   try {
@@ -40,8 +69,9 @@ async function uploadInChunks(client, source, destination, size, touch) {
 
     const first = Math.min(options.chunkSize, size);
     let contents = await read(0, first);
+    check();
     const start = await retryRequest(
-      () => client.filesUploadSessionStart({ close: false, contents }),
+      () => (check(), client.filesUploadSessionStart({ close: false, contents })),
       "uploadSessionStart"
     );
     const session_id = start.result.session_id;
@@ -51,19 +81,41 @@ async function uploadInChunks(client, source, destination, size, touch) {
     while (size - offset > options.chunkSize) {
       contents = await read(offset, options.chunkSize);
       const cursor = { session_id, offset };
-      await retryRequest(
-        () =>
-          client.filesUploadSessionAppendV2({ cursor, close: false, contents }),
-        "uploadSessionAppend"
-      );
-      offset += contents.length;
+      try {
+        await retryRequest(
+          () => (
+            check(),
+            client.filesUploadSessionAppendV2({ cursor, close: false, contents })
+          ),
+          "uploadSessionAppend"
+        );
+        offset += contents.length;
+      } catch (err) {
+        const correct = incorrectOffset(err);
+        if (correct === offset + contents.length) {
+          // The first attempt reached Dropbox and only its response was lost.
+          offset = correct;
+        } else if (
+          correct !== null &&
+          correct !== offset &&
+          correct > 0 &&
+          correct < size
+        ) {
+          // Dropbox holds a different known offset: re-read from there.
+          offset = correct;
+        } else {
+          throw err;
+        }
+      }
       touch();
     }
 
     contents = await read(offset, size - offset);
     const cursor = { session_id, offset };
+    check();
     await retryRequest(
-      () =>
+      () => (
+        check(),
         client.filesUploadSessionFinish({
           cursor,
           commit: {
@@ -72,7 +124,8 @@ async function uploadInChunks(client, source, destination, size, touch) {
             autorename: false,
           },
           contents,
-        }),
+        })
+      ),
       "uploadSessionFinish"
     );
   } finally {
@@ -89,12 +142,15 @@ async function upload(client, source, destination, callback) {
   // Restarted after each chunk of a large upload, so it limits a stall,
   // not the whole transfer.
   let timeout;
+  let cancelled = false;
   const touch = function () {
+    if (cancelled) return;
     clearTimeout(timeout);
     timeout = setTimeout(function () {
       console.log(prefix(), "reached timeout for upload");
+      cancelled = true;
       cleanup(new Error("Timeout reached for upload"));
-    }, 4 * 60 * 1000); // 4 minutes
+    }, options.timeout); // 4 minutes by default
   };
   touch();
 
@@ -108,7 +164,7 @@ async function upload(client, source, destination, callback) {
     const { size } = await fs.stat(source);
 
     if (size > options.threshold) {
-      await uploadInChunks(client, source, destination, size, touch);
+      await uploadInChunks(client, source, destination, size, touch, () => cancelled);
       return cleanup();
     }
 
