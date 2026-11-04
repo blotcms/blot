@@ -11,6 +11,11 @@ function main(blog, callback) {
   // detect a label/metadata/url correction (only removals, which change the
   // array itself). Track explicitly whether anything changed instead.
   let changed = false;
+  // What to do to each menu item id, recorded as we go so it can be applied to
+  // a freshly read menu (see below) rather than to the one we started with.
+  const removeIDs = new Set();
+  const liveIDs = new Set();
+  const fixes = {};
 
   async.map(
     blog.menu,
@@ -18,6 +23,7 @@ function main(blog, callback) {
       Entry.get(blog.id, item.id, function (entry) {
         if (entry && entry.deleted) {
           report.push(["Delete", item]);
+          removeIDs.add(item.id);
           changed = true;
           next(null, null);
         } else if (entry && existing[entry.id] === true) {
@@ -44,28 +50,55 @@ function main(blog, callback) {
           }
 
           existing[entry.id] = true;
+          liveIDs.add(item.id);
+          fixes[item.id] = {
+            label: item.label,
+            metadata: item.metadata,
+            url: item.url,
+          };
           next(null, item);
         } else {
           next(null, item);
         }
       });
     },
-    function (err, results) {
+    function (err) {
       if (err) return callback(err);
 
-      results = results.filter(function (item) {
-        return item !== null;
-      });
+      if (!changed) return callback(null, report);
 
-      if (!changed) {
-        callback(null, report);
-      } else {
-        Blog.set(blog.id, { menu: results }, function (err) {
+      // Fix() runs outside the folder lock, so a sync may have changed the
+      // menu since blog.menu was read. Writing our whole array back would
+      // undo that change. Re-read the menu now and apply only our own
+      // corrections, by item id, to what is there, which narrows the window
+      // to the gap between this read and Blog.set.
+      Blog.get({ id: blog.id }, function (err, latest) {
+        if (err) return callback(err);
+        if (!latest) return callback(null, report);
+
+        const seen = {};
+        const menu = [];
+
+        (latest.menu || []).forEach(function (item) {
+          if (removeIDs.has(item.id)) return;
+
+          if (liveIDs.has(item.id)) {
+            if (seen[item.id]) return;
+            seen[item.id] = true;
+            item = Object.assign({}, item, fixes[item.id]);
+          }
+
+          menu.push(item);
+        });
+
+        if (_.isEqual(menu, latest.menu || [])) return callback(null, report);
+
+        Blog.set(blog.id, { menu: menu }, function (err) {
           if (err) return callback(err);
           callback(null, report);
         });
-      }
-    }
+      });
+    },
   );
 }
 
