@@ -288,6 +288,7 @@ jobs:
             done
             docker pull -q "$0" &
             docker pull -q "redis:$REDIS_VERSION" &
+            docker pull -q "postgres:$POSTGRES_VERSION-alpine" &
             docker pull -q "$MINIO_IMAGE" &
             wait
             echo $? > "$1/pull.done"

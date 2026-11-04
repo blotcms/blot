@@ -314,6 +314,13 @@ if (process.env.BLOT_TEST_TIMINGS) {
     // after a slow boot fails it with ClientOfflineError
     await require("./util/bucket")();
 
+    // Every Entry.set also writes to Postgres when BLOT_POSTGRES_URL is set
+    // (models/postgres), which CI does: the runner applies the schema to the
+    // empty database it is given
+    if (require("models/postgres").enabled()) {
+      await require("models/postgres/migrate")();
+    }
+
     // if there are no keys, we need to run the tests
     jasmine.execute();
   } else {

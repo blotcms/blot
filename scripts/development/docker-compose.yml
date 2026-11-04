@@ -31,6 +31,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
       toxiproxy:
         condition: service_started
       minio-init:
@@ -40,6 +42,9 @@ services:
     environment:
       - BLOT_HOST=${BLOT_HOST}
       - BLOT_REDIS_HOST=${BLOT_REDIS_HOST:-redis}
+      # Entries are written here too (app/models/postgres); setup.js applies
+      # the schema on boot in development
+      - BLOT_POSTGRES_URL=postgres://blot:blot@postgres:5432/blot
       - BLOT_UNIT=blue
       # A unit's node-a serves on its socket only; this keeps :8080 for
       # toxiproxy (below) and for scripts that call Node directly
@@ -103,6 +108,23 @@ services:
       - "../../data/redis:/data"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+      start_period: 15s
+
+  postgres:
+    image: "postgres:${POSTGRES_VERSION:?}-alpine"
+    environment:
+      - POSTGRES_USER=blot
+      - POSTGRES_PASSWORD=blot
+      - POSTGRES_DB=blot
+    ports:
+      - "5432:5432" # So scripts on the host can reach it
+    volumes:
+      - "../../data/postgres:/var/lib/postgresql/data"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "blot"]
       interval: 1s
       timeout: 3s
       retries: 30

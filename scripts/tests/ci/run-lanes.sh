@@ -5,11 +5,11 @@
 # A lane is a sequence of test runner processes, each running some of one
 # suite's spec files, and gets everything a process expects to have to
 # itself: its own Docker network, Redis (the runner refuses to start against
-# a non-empty database) and MinIO, its own copy of the working tree (some
+# a non-empty database), Postgres and MinIO, its own copy of the working tree (some
 # specs write into app/; an overlay of the checkout), and its own
 # network namespace (the test servers listen on fixed ports). A lane's
 # processes run one after another, each in a fresh container against a
-# flushed Redis.
+# flushed Redis and an empty Postgres database (the runner applies the schema).
 #
 # Env: LANES (JSON from plan.js --runner: [[{suite, part, files}, ...], ...]),
 # IMAGE_TAG, and the BLOT_STRIPE_* secrets. With COVERAGE=1 the processes run
@@ -18,9 +18,10 @@
 # table to $GITHUB_STEP_SUMMARY. Exits non-zero if any process failed.
 set -uo pipefail
 
-# REDIS_VERSION and MINIO_IMAGE come from config/versions.env
+# REDIS_VERSION, POSTGRES_VERSION and MINIO_IMAGE come from config/versions.env
 set -a; . "$(dirname "$0")/../../../config/versions.env"; set +a
 REDIS_IMAGE="redis:${REDIS_VERSION}"
+POSTGRES_IMAGE="postgres:${POSTGRES_VERSION}-alpine"
 # A spec that starves the event loop stops Jasmine's own timeout firing, so
 # cap each process rather than hold the runner.
 PROCESS_TIMEOUT="${PROCESS_TIMEOUT:-12m}"
@@ -62,15 +63,24 @@ start_lane() {
   fi
   docker network create "lane-$lane" > /dev/null
   docker run -d --name "lane-$lane-redis" --network "lane-$lane" "$REDIS_IMAGE" > /dev/null
+  # fsync off: a test database needn't survive a crash
+  docker run -d --name "lane-$lane-postgres" --network "lane-$lane" \
+    -e POSTGRES_HOST_AUTH_METHOD=trust \
+    "$POSTGRES_IMAGE" -c fsync=off -c synchronous_commit=off -c full_page_writes=off > /dev/null
   # The runner creates the bucket and waits for MinIO (scripts/tests/util/bucket.js)
   docker run -d --name "lane-$lane-minio" --network "lane-$lane" --user root \
     -e MINIO_ROOT_USER=blot-test -e MINIO_ROOT_PASSWORD=blot-test-secret \
     "$MINIO_IMAGE" server /data --address :9000 > /dev/null
-  for i in $(seq 1 30); do
-    docker exec "lane-$lane-redis" redis-cli ping > /dev/null 2>&1 && return 0
+  local redis_ready="" postgres_ready=""
+  for i in $(seq 1 60); do
+    [ -z "$redis_ready" ] && docker exec "lane-$lane-redis" redis-cli ping > /dev/null 2>&1 && redis_ready=1
+    # -h: the image's init runs a temporary server on the socket only
+    [ -z "$postgres_ready" ] && docker exec "lane-$lane-postgres" pg_isready -h 127.0.0.1 -U postgres > /dev/null 2>&1 && postgres_ready=1
+    [ -n "$redis_ready" ] && [ -n "$postgres_ready" ] && return 0
     sleep 1
   done
-  echo "lane $lane: Redis did not start"
+  [ -z "$redis_ready" ] && echo "lane $lane: Redis did not start"
+  [ -z "$postgres_ready" ] && echo "lane $lane: Postgres did not start"
 }
 
 run_process() {
@@ -80,11 +90,14 @@ run_process() {
 
   # Some suites leave keys behind; the next process needs an empty database
   docker exec "lane-$lane-redis" redis-cli flushall > /dev/null
+  docker exec "lane-$lane-postgres" psql -q -h 127.0.0.1 -U postgres -c "SET client_min_messages = warning" \
+    -c "DROP DATABASE IF EXISTS blot_test WITH (FORCE)" -c "CREATE DATABASE blot_test" > /dev/null
 
   start=$(date +%s)
   timeout "$PROCESS_TIMEOUT" docker run --rm --name "$name" \
     --network "lane-$lane" \
     -e BLOT_REDIS_HOST="lane-$lane-redis" \
+    -e BLOT_POSTGRES_URL="postgres://postgres@lane-$lane-postgres:5432/blot_test" \
     -e BLOT_STORAGE_BUCKET=blot-test-storage \
     -e BLOT_STORAGE_ENDPOINT="http://lane-$lane-minio:9000" \
     -e BLOT_STORAGE_REGION=us-east-1 \
@@ -172,7 +185,7 @@ jq -s 'add // {}' "$ROOT"/*/meta/*.json > "$WORKSPACE/.test-timings/${GITHUB_JOB
   || echo '{}' > "$WORKSPACE/.test-timings/${GITHUB_JOB:-test}-${RUNNER_INDEX:-0}.json"
 
 for lane in $(seq 0 $((LANE_COUNT - 1))); do
-  docker rm -f "lane-$lane-redis" "lane-$lane-minio" > /dev/null 2>&1
+  docker rm -f "lane-$lane-redis" "lane-$lane-postgres" "lane-$lane-minio" > /dev/null 2>&1
   docker network rm "lane-$lane" > /dev/null 2>&1
   mountpoint -q "$ROOT/$lane/tree" 2> /dev/null && sudo -n umount "$ROOT/$lane/tree"
 done

@@ -4,6 +4,8 @@ This module is the authoritative data layer for blog entries in Blot. It handles
 
 All storage is backed by Redis. Entry data is serialised as JSON strings. Relationships (URL-to-path mappings, sorted membership lists, dependency sets) are maintained as separate Redis keys updated atomically alongside each write.
 
+Each `set` also writes the entry, its tags and its dependencies to Postgres when `BLOT_POSTGRES_URL` is set (`models/postgres`). Redis stays the source of truth until reads move over; a failed Postgres write never fails the save.
+
 ---
 
 ## Files

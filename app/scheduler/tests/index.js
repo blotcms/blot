@@ -23,6 +23,7 @@ describe("scheduler", function () {
     "welcome-email-reconcile",
     "scheduled-entries-reconcile",
     "folder-mirror-repair",
+    "postgres-entries-repair",
     "folder-mirror-verify",
   ];
 

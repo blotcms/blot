@@ -10,6 +10,7 @@ var key = require("./key");
 var templateKey = require("models/template/key");
 var BackupDomain = require("./util/backupDomain");
 var flushCache = require("./flushCache");
+var postgresEntries = require("models/postgres/entries");
 
 var START_CURSOR = "0";
 var SCAN_SIZE = 1000;
@@ -127,6 +128,8 @@ function deleteKeys(blog, callback) {
       if (remove.length > 0) multi.del(remove);
       multi.sRem(key.ids, blog.id);
       await multi.exec();
+      // The blog's entry rows in Postgres. Never rejects
+      await postgresEntries.afterBlogRemoved(blog.id);
       callback();
     } catch (err) {
       callback(err);

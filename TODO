@@ -1058,9 +1058,10 @@ Add way to set the slug-part of a URL for a post and tell [George](https://mail.
 
 ---
 
-Investigate migrating from Redis to SQLite per-blog database
-- Evaluate feasibility of storing one SQLite database per blog in data/blogs/{blogID}/blog.db
-- Assess performance implications (memory usage, query speed, connection management)
+Entries in Postgres (dual write shipped, app/models/postgres): finish the move off Redis
+- Once the backfill has run and `scripts/postgres/backfill.js --verify` has reported every blog ok for a week or so: move reads to models/postgres/queries.js one index at a time (lists, tagged, dependents, getByUrl, then Entry.get), then make Postgres the source of truth: Entry.set writes one transaction (no more Redis entry keys, lists, tag sets, dependents sets or URL keys), and Fix()'s list/tag/entry-ghost checks, the Lua in models/tags and models/entries, and the client-side cache's entry keys go with them
+- Before reads move: Postgres backups (pg_dump or WAL archiving to S3, like config/redis/bin/backup.sh), a replica for failover, and Postgres in the host cycle (config/host/cycle.sh); until then a lost database is rebuilt from Redis with the backfill (config/postgres/README.md)
+- Search (models/entry/search.js) could become a Postgres full-text query in the same move
 
 Can Blot blogs be federated? Respond to [Nigel](https://mail.google.com/mail/u/0/#inbox/FMfcgzGrbRWfcBdwKdRZxsBKjKDwrkTp) once I do some research on this
 

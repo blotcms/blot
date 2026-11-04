@@ -35,6 +35,17 @@ async function runPostListenTasks() {
     console.error(clfdate(), "Setup:", message, error || "");
   };
 
+  // In production the schema is migrated before a deploy
+  // (scripts/postgres/migrate.js); the dev stack's database starts empty
+  if (config.environment === "development" && require("models/postgres").enabled()) {
+    try {
+      const applied = await require("models/postgres/migrate")();
+      if (applied.length) log("Applied Postgres migrations", applied.join(", "));
+    } catch (err) {
+      logError("Failed to apply Postgres migrations", err);
+    }
+  }
+
   let templatesBuilt = false;
 
   // Every process builds templates: the build takes a Redis lock and the

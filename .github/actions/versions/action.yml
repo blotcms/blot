@@ -69,6 +69,9 @@ outputs:
   REDIS_E2E_IMAGE:
     description: REDIS_E2E_IMAGE from config/versions.env
     value: ${{ steps.load.outputs.REDIS_E2E_IMAGE }}
+  POSTGRES_VERSION:
+    description: POSTGRES_VERSION from config/versions.env
+    value: ${{ steps.load.outputs.POSTGRES_VERSION }}
   MINIO_IMAGE:
     description: MINIO_IMAGE from config/versions.env
     value: ${{ steps.load.outputs.MINIO_IMAGE }}

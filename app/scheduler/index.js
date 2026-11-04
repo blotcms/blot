@@ -24,6 +24,7 @@ const sweepGit = require("./sweep-git");
 const pruneTmp = require("./prune-tmp");
 const gitStoreMaintenance = require("./git-store-maintenance");
 const folderMirror = require("storage/folder/reconcile");
+const postgresEntries = require("models/postgres/entries");
 
 // If any other disk has less than 2GB of space, we should notify the admin.
 // The data disk is watched by percentage instead (free-disk-space.js).
@@ -446,6 +447,23 @@ module.exports = function () {
       await folderMirror.reconcile({ mode: "dirty" });
     } catch (err) {
       console.log(clfdate(), "Error: Repairing the folder mirror", err);
+    }
+  });
+
+  // Entries, tags and dependencies are written to Postgres alongside Redis
+  // (models/postgres). A blog whose Postgres write failed is in a dirty set;
+  // this re-syncs it from Redis, then drops the rows of deleted entries Redis
+  // has expired. Does nothing unless BLOT_POSTGRES_URL is set.
+  console.log(clfdate(), "Scheduled hourly repair of blogs whose Postgres write failed");
+  lock.cron("postgres-entries-repair", "35 * * * *", async function () {
+    try {
+      const { repaired, failed } = await postgresEntries.repairDirty();
+      if (repaired || failed)
+        console.log(clfdate(), "Postgres: repaired", repaired, "blogs,", failed, "failed");
+      const pruned = await postgresEntries.pruneExpired();
+      if (pruned) console.log(clfdate(), "Postgres: pruned", pruned, "expired deleted entries");
+    } catch (err) {
+      console.log(clfdate(), "Error: Repairing Postgres entries", err);
     }
   });
 

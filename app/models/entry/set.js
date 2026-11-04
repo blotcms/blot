@@ -10,6 +10,7 @@ var key = require("./key");
 var setUrl = require("./_setUrl");
 var Candidates = setUrl.Candidates;
 var Blog = require("models/blog");
+var postgresEntries = require("models/postgres/entries");
 
 // Queue items
 var rebuildDependencyGraph = require("./_rebuildDependencyGraph");
@@ -202,7 +203,19 @@ module.exports = function set (blogID, path, updates, callback) {
             if (entry.draft) queue.push(notifyDrafts.bind(this, blogID, entry));
 
             async.parallel(queue, function (err) {
-              if (err) return callback(err);
+              // Dual write: the entry's rows in Postgres, read back from
+              // Redis, after the lists so its "deleted" score is the new one.
+              // Never rejects (models/postgres/entries). The nextTick keeps a
+              // throw from the callbacks below from becoming a rejection.
+              postgresEntries.afterSet(blogID, path).then(function () {
+                process.nextTick(function () {
+                  if (err) return callback(err);
+                  updateBacklinks();
+                });
+              });
+            });
+
+            function updateBacklinks() {
               backlinksToUpdate(
                 blogID,
                 entry,
@@ -253,7 +266,7 @@ module.exports = function set (blogID, path, updates, callback) {
                   );
                 }
               );
-            });
+            }
           })
           .catch(function (err) {
             return callback(err);

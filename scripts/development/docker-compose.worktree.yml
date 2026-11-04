@@ -15,6 +15,8 @@ services:
       - BLOT_HOST=${SLOT}-local.blot
       # Talk to Redis directly (no toxiproxy latency)
       - BLOT_REDIS_HOST=redis
+      # The main stack's Postgres, like its Redis
+      - BLOT_POSTGRES_URL=postgres://blot:blot@postgres:5432/blot
       # Only tags log lines
       - CONTAINER_NAME=blot-container-${SLOT}
       # Survives nodemon restarts, so each one recompiles only what changed

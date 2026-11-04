@@ -5,6 +5,12 @@ services:
     image: "redis:alpine"
     command: sh -c "rm -f /data/dump.rdb && redis-server"
       
+  test-postgres:
+    image: "postgres:${POSTGRES_VERSION:?export config/versions.env first}-alpine"
+    environment:
+      - POSTGRES_HOST_AUTH_METHOD=trust
+      - POSTGRES_DB=blot_test
+
   tests:
     build:
       context: ../../
@@ -15,12 +21,14 @@ services:
         PANDOC_VERSION: ${PANDOC_VERSION:?}
     depends_on:
       - test-redis
+      - test-postgres
     env_file:
       - test.env
     environment:
       - TEST_PATH=${TEST_PATH}
       - TEST_SEED=${TEST_SEED}
       - BLOT_REDIS_HOST=test-redis
+      - BLOT_POSTGRES_URL=postgres://postgres@test-postgres:5432/blot_test
       - BLOT_HOST=localhost
     volumes:
       - ../../app:/usr/src/app/app

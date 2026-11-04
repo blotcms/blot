@@ -131,6 +131,14 @@ module.exports = {
     socket: process.env.BLOT_REDIS_SOCKET || undefined,
   },
 
+  // Postgres, written alongside Redis for entries, tags and dependencies
+  // (app/models/postgres). Unset, nothing is written to it.
+  postgres: {
+    url: process.env.BLOT_POSTGRES_URL || undefined,
+    // Connections per process. Every container runs several processes
+    poolSize: parseInt(process.env.BLOT_POSTGRES_POOL_SIZE, 10) || 4,
+  },
+
   admin: {
     uid: process.env.BLOT_ADMIN_UID,
     email: process.env.BLOT_ADMIN_EMAIL,

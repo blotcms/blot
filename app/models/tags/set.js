@@ -2,7 +2,7 @@ var client = require("models/client");
 var key = require("./key");
 var _ = require("lodash");
 var ensure = require("helper/ensure");
-var normalize = require("./normalize");
+var forEntry = require("./forEntry");
 var model = require("../entry/model");
 
 // a normalized tag is lowercased, and can be part of a url
@@ -26,42 +26,9 @@ var model = require("../entry/model");
 module.exports = function (blogID, entry, callback) {
   ensure(blogID, "string").and(entry, model).and(callback, "function");
 
-  // Clone the list of tags
-  var prettyTags = entry.tags.slice();
-
-  prettyTags = prettyTags.filter(function (tag) {
-    return tag && tag.trim && tag.trim().length;
-  });
-
-  // Remove the tags from a hiddden entry before saving, so it doesn't
-  // show up in the tag search results page. Entry has already been set
-  var hide = shouldHide(entry);
-
-  if (hide) {
-    prettyTags = [];
-  }
-
-  var normalizedMap = Object.create(null);
-  var uniquePrettyTags = [];
-  var tags = [];
-
-  // First we make a slug from each tag name so that duplicates collapse and can
-  // be part of a url
-  prettyTags.forEach(function (tag) {
-    var normalized = normalize(tag);
-
-    if (normalizedMap[normalized]) return;
-
-    normalizedMap[normalized] = tag;
-    uniquePrettyTags.push(tag);
-    tags.push(normalized);
-  });
-
-  if (!hide) {
-    prettyTags = uniquePrettyTags;
-  } else {
-    tags = [];
-  }
+  var listed = forEntry(entry);
+  var tags = listed.tags;
+  var prettyTags = listed.names;
 
   var existingKey = key.entry(blogID, entry.id);
 
@@ -124,18 +91,3 @@ module.exports = function (blogID, entry, callback) {
     }
   })();
 };
-
-// we need a better way to determine if we should ignore the entry (i.e. if has an underscore in its path)
-
-function shouldHide(entry) {
-  return (
-    entry.deleted ||
-    entry.draft ||
-    entry.scheduled ||
-    entry.page ||
-    entry.menu ||
-    entry.path.split("/").filter(function (i) {
-      return i[0] === "_";
-    }).length
-  );
-}
