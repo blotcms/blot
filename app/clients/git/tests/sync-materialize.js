@@ -10,6 +10,7 @@ describe("git client sync: materializing the blog folder", function () {
   var write = util.promisify(require("clients/git/write"));
   var remove = util.promisify(require("clients/git/remove"));
   var helpers = require("./setup/helpers");
+  var folder = require("./setup/folder");
 
   var getApplied = util.promisify(database.getApplied);
   var setApplied = util.promisify(database.setApplied);
@@ -63,8 +64,8 @@ describe("git client sync: materializing the blog folder", function () {
       await this.local.commitFiles({ "/drifted.txt": "Pushed", "/other.txt": "Other" });
       await this.local.push();
 
-      await fs.writeFile(this.blogDirectory + "/drifted.txt", "Changed in the folder");
-      await fs.writeFile(this.blogDirectory + "/untracked.txt", "Not in the repository");
+      await folder.write(this.blog.id, "/drifted.txt", "Changed in the folder");
+      await folder.write(this.blog.id, "/untracked.txt", "Not in the repository");
 
       await this.local.writeAndPush("/later.txt", "Later");
 
@@ -85,7 +86,7 @@ describe("git client sync: materializing the blog folder", function () {
 
     it("is repaired for a path when a push changes that path", async function () {
       await this.local.writeAndPush("/drifted.txt", "Pushed");
-      await fs.writeFile(this.blogDirectory + "/drifted.txt", "Changed in the folder");
+      await folder.write(this.blog.id, "/drifted.txt", "Changed in the folder");
 
       await this.local.writeAndPush("/drifted.txt", "Pushed again");
 

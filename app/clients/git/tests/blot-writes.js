@@ -159,7 +159,7 @@ describe("git client: Blot's own writes", function () {
     });
 
     it("removes a file from the blog folder even if the repository doesn't have it", async function () {
-      await require("fs-extra").outputFile(this.blogDirectory + "/only-in-the-folder.txt", "Only here");
+      await require("./setup/folder").write(this.blog.id, "/only-in-the-folder.txt", "Only here");
 
       await remove(this.blog.id, "/only-in-the-folder.txt");
 

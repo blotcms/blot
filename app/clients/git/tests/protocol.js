@@ -32,7 +32,7 @@ describe("git client protocol", function () {
     var clone = await this.local.cloneAgain();
 
     expect(await clone.head()).toBe(await this.local.remoteHead());
-    await Client.compareDirectories(clone.directory, this.blogDirectory);
+    await Client.compareWithBlog(clone.directory, this.blog.id);
   });
 
   // The git store serves no shallow clones: git reports the store's ERR as
@@ -49,7 +49,7 @@ describe("git client protocol", function () {
     var clone = await this.local.cloneAgain({ args: ["--filter=blob:none"] });
 
     expect(await clone.head()).toBe(await this.local.remoteHead());
-    await Client.compareDirectories(clone.directory, this.blogDirectory);
+    await Client.compareWithBlog(clone.directory, this.blog.id);
   });
 
   it("fetches only what is new", async function () {
@@ -65,7 +65,7 @@ describe("git client protocol", function () {
     );
 
     await clone.git(["merge", "--ff-only", "origin/master"]);
-    await Client.compareDirectories(clone.directory, this.blogDirectory);
+    await Client.compareWithBlog(clone.directory, this.blog.id);
   });
 
   it("lists refs with ls-remote", async function () {

@@ -1,10 +1,11 @@
 describe("git store: the blog folder from the store", function () {
-  // A blog on the git client with a clone (whose blogDirectory is the blog
-  // folder), and a memory store per blog
+  // A blog on the git client with a clone, and a memory store per blog; the
+  // blog folder is looked at through storage/folder
   require("clients/git/tests/setup")({ clone: false, client: true });
 
   var fs = require("fs-extra");
   var storage = require("storage/folder");
+  var folder = require("clients/git/tests/setup/folder");
   var database = require("clients/git/database");
   var gitSync = require("clients/git/sync");
   var { EMPTY_TREE } = require("clients/git/served/materialize");
@@ -42,7 +43,7 @@ describe("git store: the blog folder from the store", function () {
 
     await this.local.expectSynced();
     expect(await applied(this.blog.id)).toBe(await this.local.head());
-    expect(await fs.pathExists(this.blogDirectory + "/gone.txt")).toBe(false);
+    expect(await folder.has(this.blog.id, "/gone.txt")).toBe(false);
   });
 
   it("moves a renamed file rather than writing it again, and removes the folder it leaves empty", async function () {
@@ -59,7 +60,7 @@ describe("git store: the blog folder from the store", function () {
     expect(storage.move).toHaveBeenCalledTimes(1);
     expect(storage.move.calls.argsFor(0).slice(1)).toEqual(["/old/place.txt", "/new-place.txt"]);
     expect(writesTo("/new-place.txt")).toBe(0);
-    expect(await fs.pathExists(this.blogDirectory + "/old")).toBe(false);
+    expect(await folder.has(this.blog.id, "/old")).toBe(false);
   });
 
   it("renames a file to the folder it was in, and a file into a folder of its own name", async function () {
@@ -79,8 +80,8 @@ describe("git store: the blog folder from the store", function () {
 
     await this.local.expectSynced();
     expect(storage.move).not.toHaveBeenCalled();
-    expect(await fs.readFile(this.blogDirectory + "/a", "utf8")).toBe("Same bytes");
-    expect(await fs.readFile(this.blogDirectory + "/c/d.txt", "utf8")).toBe("Other bytes");
+    expect((await folder.read(this.blog.id, "/a")).toString()).toBe("Same bytes");
+    expect((await folder.read(this.blog.id, "/c/d.txt")).toString()).toBe("Other bytes");
   });
 
   it("writes a renamed file from the store when the folder's copy is not the old blob", async function () {
@@ -88,7 +89,7 @@ describe("git store: the blog folder from the store", function () {
 
     // A sync which wrote other bytes there and failed before moving the
     // applied commit on
-    await fs.outputFile(this.blogDirectory + "/old.txt", "Bytes from a sync that failed");
+    await folder.write(this.blog.id, "/old.txt", "Bytes from a sync that failed");
 
     spyOn(storage, "move").and.callThrough();
 
@@ -98,8 +99,8 @@ describe("git store: the blog folder from the store", function () {
 
     await this.local.expectSynced();
     expect(storage.move).not.toHaveBeenCalled();
-    expect(await fs.readFile(this.blogDirectory + "/new.txt", "utf8")).toBe("The committed bytes");
-    expect(await fs.pathExists(this.blogDirectory + "/old.txt")).toBe(false);
+    expect((await folder.read(this.blog.id, "/new.txt")).toString()).toBe("The committed bytes");
+    expect(await folder.has(this.blog.id, "/old.txt")).toBe(false);
   });
 
   it("keeps a file renamed from its NFD name to its NFC name", async function () {
@@ -113,7 +114,7 @@ describe("git store: the blog folder from the store", function () {
     await this.local.commit("NFD to NFC");
     await this.local.push();
 
-    expect(await fs.readFile(this.blogDirectory + nfc, "utf8")).toBe("Same bytes");
+    expect((await folder.read(this.blog.id, nfc)).toString()).toBe("Same bytes");
     await this.local.expectSynced();
   });
 

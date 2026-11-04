@@ -3,7 +3,7 @@ describe("git store: Blot's own writes", function () {
   require("clients/git/tests/setup")({ clone: false, client: true });
 
   var util = require("util");
-  var fs = require("fs-extra");
+  var folder = require("clients/git/tests/setup/folder");
   var write = util.promisify(require("clients/git/write"));
   var remove = util.promisify(require("clients/git/remove"));
   var database = require("clients/git/database");
@@ -29,7 +29,7 @@ describe("git store: Blot's own writes", function () {
 
     expect(after.seq).toBeGreaterThan(before.seq);
     expect(master).not.toBe(before.refs["refs/heads/master"]);
-    expect(await fs.readFile(this.blogDirectory + "/How/about That name.txt", "utf8")).toBe("Hello, world!");
+    expect((await folder.read(this.blog.id, "/How/about That name.txt")).toString()).toBe("Hello, world!");
     expect(await applied(this.blog.id)).toBe(master);
 
     await this.local.pull();
@@ -44,7 +44,7 @@ describe("git store: Blot's own writes", function () {
 
     await remove(this.blog.id, "/b.txt");
     var removed = await current(this);
-    expect(await fs.pathExists(this.blogDirectory + "/b.txt")).toBe(false);
+    expect(await folder.has(this.blog.id, "/b.txt")).toBe(false);
 
     await write(this.blog.id, "/a.txt", "A");
     expect((await current(this)).seq).toBe(removed.seq);
@@ -82,6 +82,6 @@ describe("git store: Blot's own writes", function () {
     );
 
     expect(failed).not.toBe(null);
-    expect(await fs.pathExists(this.blogDirectory + "/new.txt")).toBe(false);
+    expect(await folder.has(this.blog.id, "/new.txt")).toBe(false);
   });
 });

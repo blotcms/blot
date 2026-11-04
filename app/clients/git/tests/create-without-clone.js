@@ -12,6 +12,7 @@ describe("git client create without a live clone", function () {
   var create = util.promisify(require("clients/git/create"));
   var setClientToGit = util.promisify(require("./setup/setClientToGit"));
   var helpers = require("./setup/helpers");
+  var folder = require("./setup/folder");
 
   var inStore = util.promisify(repo.exists);
 
@@ -39,12 +40,12 @@ describe("git client create without a live clone", function () {
   }
 
   it("imports the folder, then takes a push and syncs it", async function () {
-    await fs.outputFile(this.blogDirectory + "/first.txt", "Hello");
-    await fs.outputFile(this.blogDirectory + "/Sub Folder/ünï côdé.txt", "World");
+    await folder.write(this.blog.id, "/first.txt", "Hello");
+    await folder.write(this.blog.id, "/Sub Folder/ünï côdé.txt", "World");
 
     var local = await connect(this);
 
-    expect(await fs.pathExists(this.blogDirectory + "/.git")).toBe(false);
+    expect(await folder.has(this.blog.id, "/.git")).toBe(false);
     expect((await local.read("/first.txt")).toString()).toBe("Hello");
     expect((await local.read("/Sub Folder/ünï côdé.txt")).toString()).toBe("World");
 
@@ -52,7 +53,7 @@ describe("git client create without a live clone", function () {
     await local.writeAndPush("/pushed.txt", "Pushed");
     await local.writeAndPush("/first.txt", "Changed");
 
-    expect(await fs.pathExists(this.blogDirectory + "/.git")).toBe(false);
+    expect(await folder.has(this.blog.id, "/.git")).toBe(false);
     expect(await helpers.blogFile(this, "/pushed.txt")).toEqual(Buffer.from("Pushed"));
     expect(await helpers.blogFile(this, "/first.txt")).toEqual(Buffer.from("Changed"));
 
@@ -70,7 +71,7 @@ describe("git client create without a live clone", function () {
   });
 
   it("records the import as the commit Blot has applied", async function () {
-    await fs.outputFile(this.blogDirectory + "/first.txt", "Hello");
+    await folder.write(this.blog.id, "/first.txt", "Hello");
     var local = await connect(this);
 
     expect(await util.promisify(database.getApplied)(this.blog.id)).toBe(await local.remoteHead());
@@ -78,7 +79,7 @@ describe("git client create without a live clone", function () {
 
   it("commits a big folder in one commit", async function () {
     for (var i = 0; i < 60; i++) {
-      await fs.outputFile(this.blogDirectory + "/file-" + i + ".txt", "File " + i);
+      await folder.write(this.blog.id, "/file-" + i + ".txt", "File " + i);
     }
 
     var local = await connect(this);
@@ -96,9 +97,9 @@ describe("git client create without a live clone", function () {
   });
 
   it("skips files a .gitignore in the folder ignores", async function () {
-    await fs.outputFile(this.blogDirectory + "/.gitignore", "*.private\n");
-    await fs.outputFile(this.blogDirectory + "/post.txt", "Post");
-    await fs.outputFile(this.blogDirectory + "/notes.private", "Notes");
+    await folder.write(this.blog.id, "/.gitignore", "*.private\n");
+    await folder.write(this.blog.id, "/post.txt", "Post");
+    await folder.write(this.blog.id, "/notes.private", "Notes");
 
     var local = await connect(this);
 
@@ -107,7 +108,7 @@ describe("git client create without a live clone", function () {
   });
 
   it("waits for the ref lock a push holds before it saves the repository", async function () {
-    await fs.outputFile(this.blogDirectory + "/first.txt", "Hello");
+    await folder.write(this.blog.id, "/first.txt", "Hello");
     await util.promisify(require("models/blog").set)(this.blog.id, { client: "git" });
 
     var release = await repo.holdRefLock(this.blog.id);
@@ -128,7 +129,7 @@ describe("git client create without a live clone", function () {
   });
 
   it("removes what it made if it fails, and leaves a .git directory in the folder alone", async function () {
-    await fs.outputFile(this.blogDirectory + "/.git/HEAD", "ref: refs/heads/master\n");
+    await folder.write(this.blog.id, "/.git/HEAD", "ref: refs/heads/master\n");
 
     var error = null;
 
@@ -140,6 +141,6 @@ describe("git client create without a live clone", function () {
 
     expect(error).toEqual(jasmine.any(Error));
     expect(await inStore(this.blog.id)).toBe(false);
-    expect(await fs.pathExists(this.blogDirectory + "/.git/HEAD")).toBe(true);
+    expect(await folder.has(this.blog.id, "/.git/HEAD")).toBe(true);
   });
 });

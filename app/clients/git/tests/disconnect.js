@@ -11,6 +11,7 @@ describe("git client disconnect", function () {
   var Blog = require("models/blog");
   var database = require("clients/git/database");
   var repo = require("clients/git/repo");
+  var folder = require("./setup/folder");
   var disconnect = require("clients/git/disconnect");
   var promisify = require("util").promisify;
   var randomString = require("../../../../scripts/tests/util/randomString");
@@ -42,19 +43,19 @@ describe("git client disconnect", function () {
 
   it("removes the repository, and a live clone in the blog folder", async function () {
     // What blogs from before Blot stopped committing in the blog folder have
-    await fs.outputFile(this.blogDirectory + "/.git/HEAD", "ref: refs/heads/master\n");
+    await folder.write(this.blog.id, "/.git/HEAD", "ref: refs/heads/master\n");
 
     expect(await inStore(this.blog.id)).toBe(true);
 
     await disconnectBlog(this.blog.id);
 
     expect(await inStore(this.blog.id)).toBe(false);
-    expect(await fs.pathExists(this.blogDirectory + "/.git")).toBe(false);
+    expect(await folder.has(this.blog.id, "/.git")).toBe(false);
     expect((await promisify(Blog.get)({ id: this.blog.id })).client).toBe("");
   });
 
   it("removes the repository even if the blog folder is already gone", async function () {
-    await fs.remove(this.blogDirectory);
+    await require("storage/folder").removeAll(this.blog.id);
 
     await disconnectBlog(this.blog.id);
 
@@ -124,7 +125,7 @@ describe("git client disconnect", function () {
     it("removes its repository even if its folder is already gone", async function () {
       var blog = await connectedBlog(this);
 
-      await fs.remove(require("path").join(require("config").blog_folder_dir, blog.id));
+      await require("storage/folder").removeAll(blog.id);
 
       otherBlog = null;
       await removeBlog(blog.id);

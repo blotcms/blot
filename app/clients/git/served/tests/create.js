@@ -8,6 +8,7 @@ describe("git store: new-folder setup", function () {
   var util = require("util");
   var childProcess = require("child_process");
   var storage = require("storage/folder");
+  var folder = require("clients/git/tests/setup/folder");
   var Client = require("clients/git/tests/setup/client");
   var database = require("clients/git/database");
   var context = require("clients/git/served/context");
@@ -25,19 +26,19 @@ describe("git store: new-folder setup", function () {
   }
 
   it("makes the first commit in the store from the folder, without the folder as a work tree", async function () {
-    await fs.outputFile(this.blogDirectory + "/first.txt", "Hello");
-    await fs.outputFile(this.blogDirectory + "/Sub Folder/ünï côdé.txt", "World");
-    await fs.outputFile(this.blogDirectory + "/.gitignore", "drafts/\n*.tmp\n");
-    await fs.outputFile(this.blogDirectory + "/drafts/secret.txt", "Not this");
-    await fs.outputFile(this.blogDirectory + "/scratch.tmp", "Nor this");
-    await fs.outputFile(this.blogDirectory + "/big.bin", Buffer.alloc(3 * 1024 * 1024, 1));
+    await folder.write(this.blog.id, "/first.txt", "Hello");
+    await folder.write(this.blog.id, "/Sub Folder/ünï côdé.txt", "World");
+    await folder.write(this.blog.id, "/.gitignore", "drafts/\n*.tmp\n");
+    await folder.write(this.blog.id, "/drafts/secret.txt", "Not this");
+    await folder.write(this.blog.id, "/scratch.tmp", "Nor this");
+    await folder.write(this.blog.id, "/big.bin", Buffer.alloc(3 * 1024 * 1024, 1));
 
     spyOn(storage, "ensureLocal").and.callThrough();
 
     var local = await connect(this);
 
     expect(storage.ensureLocal).not.toHaveBeenCalled();
-    expect(await fs.pathExists(this.blogDirectory + "/.git")).toBe(false);
+    expect(await folder.has(this.blog.id, "/.git")).toBe(false);
 
     var current = await manifest.read(this.stores[this.blog.id]);
     var master = await local.remoteHead();
@@ -56,7 +57,7 @@ describe("git store: new-folder setup", function () {
 
     // The first push is synced from the store
     await local.writeAndPush("/pushed.txt", "Pushed");
-    expect(await fs.readFile(this.blogDirectory + "/pushed.txt", "utf8")).toBe("Pushed");
+    expect((await folder.read(this.blog.id, "/pushed.txt")).toString()).toBe("Pushed");
   });
 
   it("makes an initial commit for an empty folder", async function () {
@@ -69,7 +70,7 @@ describe("git store: new-folder setup", function () {
   });
 
   it("takes back the store's copy when recording the setup fails, so a retry works", async function () {
-    await fs.outputFile(this.blogDirectory + "/first.txt", "Hello");
+    await folder.write(this.blog.id, "/first.txt", "Hello");
 
     var setApplied = database.setApplied;
     var failed = false;
@@ -95,7 +96,7 @@ describe("git store: new-folder setup", function () {
   });
 
   it("refuses to set up over a store copy the blog already has, and leaves it alone", async function () {
-    await fs.outputFile(this.blogDirectory + "/first.txt", "Hello");
+    await folder.write(this.blog.id, "/first.txt", "Hello");
     await connect(this);
 
     var store = this.stores[this.blog.id];
@@ -116,7 +117,7 @@ describe("git store: new-folder setup", function () {
   });
 
   it("leaves the store empty when it fails before the import", async function () {
-    await fs.outputFile(this.blogDirectory + "/first.txt", "Hello");
+    await folder.write(this.blog.id, "/first.txt", "Hello");
 
     var spawn = childProcess.spawn;
     spyOn(childProcess, "spawn").and.callFake(function (command, args, options) {

@@ -50,8 +50,7 @@ describe("git client branches", function () {
             if (err) return done.fail(err);
 
             waitForSync(ctx, function () {
-              fs.pathExists(ctx.blogDirectory + path, function (err, exists) {
-                if (err) return done.fail(err);
+              folder.has(ctx.blog.id, path).then(function (exists) {
                 expect(exists).toEqual(true);
                 done();
               });
@@ -84,8 +83,7 @@ describe("git client branches", function () {
               expect(err).not.toBeNull();
               expect(String(err)).toContain("only the master branch is allowed");
 
-              fs.pathExists(ctx.blogDirectory + path, function (err, exists) {
-                if (err) return done.fail(err);
+              folder.has(ctx.blog.id, path).then(function (exists) {
                 expect(exists).toEqual(false);
                 done();
               });
