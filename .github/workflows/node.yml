@@ -146,7 +146,7 @@ jobs:
       - name: Find unused dependencies
         if: always()
         # node-addon-api,node-gyp are required to build sharp
-        run: npx depcheck --ignores=node-addon-api,node-gyp,depcheck,nyc,nodemon,blessed-contrib,fontkit,text-to-svg --skip-missing
+        run: npx depcheck --ignores=node-addon-api,node-gyp,depcheck,eslint,nyc,nodemon,blessed-contrib,fontkit,text-to-svg --skip-missing
 
       - name: Find unused files
         if: always()
