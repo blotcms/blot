@@ -1,3 +1,0 @@
-User in overdue disabled grace period
-
-{{email}} is overdue since {{subscriptionOverdueOn}} and has entered month 1-2, so the account is disabled.
