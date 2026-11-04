@@ -1,3 +1,12 @@
+Route image URLs through the CDN even when the images have not synced yet
+- Reason: a post can reach Blot before its images. The build currently leaves missing images as /public/... URLs on the blog's domain. Loading an image-heavy page or an early cached RSS copy can then produce bursts of origin requests, 404s and 429s, triggering temporary fail2ban bans for legitimate visitors. The 3–4 Nov 2026 incident showed matching image-request bursts and visitor bans; local tests reproduced the original-URL fallback with missing files, though the historical rendered HTML was not retained.
+- Plan: in app/build/plugins/folderAssets, rewrite eligible missing image paths to provisional versioned CDN URLs instead of leaving them on the blog's domain. Keep the dependency edges so each arriving image triggers a rebuild and replaces its provisional URL with the normal content-versioned CDN URL (and dimensions/optimized asset where available). Preserve the existing path validation and handle case resolution when the file arrives.
+- The CDN may serve 404s while a file is absent. Give the available file a different URL/version so cached 404s cannot hide it after sync. Verify CDN negative-cache behavior; cache misses still reach Blot, but via the CDN's exempt route rather than accumulating rate-limit violations against the visitor's IP. Test missing → available images, partial syncs, RSS and lazy-loading attributes. This should work automatically without authors hardcoding CDN URLs.
+- Separate performance follow-up: batch dependent-entry rebuilds across a sync so a large image batch does not rebuild the same post hundreds of times while holding the folder lock (see Improve Dropbox sync below).
+- Tell [Christopher](https://mail.google.com/mail/u/0/#inbox/FMfcgzQjggrQPpqTwcCrLtZGBDDgRCJK)
+
+---
+
 Render and client-side cache follow-ups (#2390, #2401, #2420, #2426, #2434)
 - Post-deploy check of #2434 (deployed 3 Nov 2026, 11:21 UTC): node-a's [STATS] show `redis_cache_maxEntries=10000` and `redis_cache_<class>_evictions` for the capped classes, and node-a's render p95 (`metrics:render-time:p95:<unit>/node-a`, read as scripts/render-time-chart does) matches the previous 24 hours, about 13 ms
 - From 4 Nov 2026, a day after #2434's deploy (3 Nov, 11:21 UTC): in node-a's [STATS] in both units, check the client-side cache's `redis_cache_evictionCount` against the sum of the `redis_cache_<class>_evictions`. A cache-wide count above that sum means blog keys no longer fit: raise `maxEntries` in app/models/redis.js. Also check `redis_cache_entryCount` against the 10000 cap, and each capped class's evictions against its `CLASS_CAPS` share (app/models/redis-cache.js)
@@ -326,6 +335,8 @@ Improve Google Drive sync
   - Start with recently changed files and dirs first
 
 Improve Dropbox sync
+- Batch dependent-entry rebuilds across a sync: a large asset delta batch rebuilt the same referring entry after each image (~13s per update), holding the folder lock for over three hours (2026-11-04). The stuck-lock alert should distinguish ongoing progress from a hung sync.
+- Review public asset rate limits and nginx-429 bans: loading an image-heavy page triggered repeated 429s and temporary visitor bans (2026-11-03/04); avoid banning normal page loads while retaining abuse protection.
 - When you re-connect to Dropbox, you have to re-create a folder and perform a full transfer. It would be great if we could re-use the existing folder... Maybe an option during the connect flow? Would be nice to avoid requiring a full transfer
 - Bug: removing a directory in Dropbox resync only updates the directory path; child entries wait for Fix
 - Bug: Dropbox validation's catch-up sync restores last_sync from outside sync() after releasing the lock, so it can clobber a webhook sync's stamp; teach sync() not to stamp last_sync for catch-up instead
