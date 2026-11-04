@@ -313,7 +313,6 @@ Improve Google Drive sync
   - Make it possible to short-circuit the full folder traversal and immediately begin at a specific file/subfolder
 - Improve html output for google docs and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBQFmTvLKzPkJrgsBTWZmQJWS)
   Issue: <p><img><br><img></p> should be <p><img></p><p><img></p>
-- Fix bug with new folder setup (e.g. waiting for user to share folder on drive) which does not survive a server restart (See init.js TODO)
 - Fix possible bug where it seems like sometimes the first sentence of Google Docs become titles unexpectedly – possibly a mis-identified title tag?
 - How do we handle two files with same name and same parent? How does our fileId:path hash handle this? Make sure we delete the right file. Will file.title as opposed to file.name give us the deduped version?
   - Bug: move file with deduplicated name from sub folder to other folder
