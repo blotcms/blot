@@ -74,7 +74,7 @@ module.exports = async (blogID, publish, options = {}) => {
 
     // Since we reset the database of file ids
     // we need to restore this now
-    set(dirId, dir, { isDirectory: true });
+    await set(dirId, dir, { isDirectory: true });
 
     for (const { name, id } of remoteContents) {
       if (!localContents.find((item) => item.name === name)) {
@@ -137,7 +137,7 @@ module.exports = async (blogID, publish, options = {}) => {
         if (existsOnRemote && !identicalOnRemote) {
           await checkWeCanContinue();
           publishTransferStatus(progress, publish, "Updating", path);
-          set(existsOnRemote.id, path, {
+          await set(existsOnRemote.id, path, {
             modifiedTime,
             isDirectory: false,
           });
@@ -162,7 +162,7 @@ module.exports = async (blogID, publish, options = {}) => {
             },
             fields: "id",
           });
-          set(data.id, path, { modifiedTime, isDirectory: false });
+          await set(data.id, path, { modifiedTime, isDirectory: false });
         }
       }
     }
