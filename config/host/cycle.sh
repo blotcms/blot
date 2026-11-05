@@ -509,14 +509,17 @@ copy_env() {
 }
 
 # copy_backup_config: backup.sh on the new host uses ~ec2-user/.aws (it has no
-# instance profile, see #2261) and the offsite bucket file. A drill gets neither,
-# so it can never upload to the real buckets.
-# copy_aws_section <file in ~/.aws> <section>: adds just that section to the new
-# host's file, on a line of its own, unless it is there already.
+# instance profile, see #2261) and the offsite bucket file, and the storage
+# bucket's offsite sync (config/storage-bucket/bin/offsite-sync.sh) uses the
+# blot-b2-storage profile and /etc/blot/storage-offsite-bucket. A drill gets
+# none of them, so it can never upload to the real buckets.
+# copy_aws_section <file in ~/.aws> <section> [<from>]: adds just that section
+# to the new host's file, on a line of its own, unless it is there already.
+# <from> is the old Redis host unless given.
 copy_aws_section() {
   on "$NEW" "grep -qsxF '$2' \"\$HOME/.aws/$1\"" && return 0
-  on "$OLD_REDIS" "awk -v s='$2' '/^\\[/ {p = (\$0 == s)} p' \"\$HOME/.aws/$1\"" |
-    pipe_to "$NEW" "umask 077; { echo; cat; } >> \"\$HOME/.aws/$1\""
+  on "${3:-$OLD_REDIS}" "awk -v s='$2' '/^\\[/ {p = (\$0 == s)} p' \"\$HOME/.aws/$1\"" |
+    pipe_to "$NEW" "umask 077; mkdir -p \"\$HOME/.aws\"; { echo; cat; } >> \"\$HOME/.aws/$1\""
 }
 
 copy_backup_config() {
@@ -536,6 +539,14 @@ copy_backup_config() {
   fi
   bucket=$(on "$OLD_REDIS" "sudo cat /etc/blot-redis/offsite-bucket 2> /dev/null" || true)
   [ -z "$bucket" ] || echo "$bucket" | pipe_to "$NEW" "sudo tee /etc/blot-redis/offsite-bucket > /dev/null"
+  # The storage offsite sync runs on the app host, so these come from the old
+  # app host. Without them it is off, and the daily email calls it overdue.
+  if on "$OLD_NOW" 'grep -qs "^\[blot-b2-storage\]" "$HOME/.aws/credentials"'; then
+    copy_aws_section credentials "[blot-b2-storage]" "$OLD_NOW"
+    copy_aws_section config "[profile blot-b2-storage]" "$OLD_NOW"
+  fi
+  bucket=$(on "$OLD_NOW" "sudo cat /etc/blot/storage-offsite-bucket 2> /dev/null" || true)
+  [ -z "$bucket" ] || echo "$bucket" | pipe_to "$NEW" "sudo mkdir -p /etc/blot && sudo tee /etc/blot/storage-offsite-bucket > /dev/null"
   on "$NEW" "aws sts get-caller-identity > /dev/null" ||
     die "ec2-user on $NEW has no working AWS credentials, so it could not back up after the switch: put the blot key in ~/.aws there (an instance profile on $OLD_REDIS does not copy), then run app again"
 }
@@ -1251,7 +1262,8 @@ resyncs the sync-client blogs and lists the git blogs whose owners push again:
 $SNAP_VOLUME was not touched. Anything newer than the snapshot is on it, so keep it until the
 reconcile is done. It still has the name the snapshot policy targets: retag it once the new
 volume has its first snapshot.
-Not restored: the offsite backup settings (/etc/blot-redis/offsite-bucket and its profile). Set them up by hand.
+Not restored: the offsite backup settings (/etc/blot-redis/offsite-bucket and the blot-b2 profile, and
+/etc/blot/storage-offsite-bucket and the blot-b2-storage profile). Set them up by hand.
 EOF
 }
 

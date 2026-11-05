@@ -107,6 +107,9 @@ case "$cmd" in
   *"sed -n 's/^BLOT_HOST"*) echo blot.test ;;
   *"mountpoint -q"*) [ ! -e "$W/nomount.$m" ] ;;
   *'grep -qs "^\[blot-b2\]"'*) true ;;
+  *'grep -qs "^\[blot-b2-storage\]"'*) [ -z "${STUB_NO_B2_STORAGE:-}" ] ;;
+  *"cat /etc/blot/storage-offsite-bucket"*) [ -n "${STUB_NO_B2_STORAGE:-}" ] || echo test-storage-offsite ;;
+  *"tee /etc/blot/storage-offsite-bucket"*) cat > "$W/storage-offsite.$m" ;;
   *"grep -qsxF"*) [ -n "${STUB_NEW_HAS_B2:-}" ] || { [ -n "${STUB_NEW_HAS_B2_CREDS:-}" ] && [[ "$cmd" == *credentials* ]]; } ;;
   *".aws/credentials"*) cat > /dev/null; touch "$W/creds.$m" ;;
   *"mkdir /tmp/blot-data-volume"*) cat > /dev/null ;;
@@ -474,6 +477,8 @@ mode() { ls -l "$1" | cut -c1-10; }
 has "the site is checked through the private IP" "$CALLS" "--resolve blot.test:443:10.0.0.2 https://blot.test/health"
 has "and --verify-host" "$CALLS" "--resolve blog.blot.test:443:10.0.0.2 https://blog.blot.test/"
 lacks "a drill copies no backup key" "$CALLS" 'tar -C "$HOME" -cf - .aws'
+lacks "nor the storage offsite profile or bucket file" "$CALLS" "blot-b2-storage"
+[ ! -e "$W/storage-offsite.new" ] && ok "a drill gets no storage offsite bucket file" || fail "a drill got /etc/blot/storage-offsite-bucket"
 run --drill app old new
 status_is "app runs again" 0
 has "with nothing to change it forces nothing" "$CALLS" "force= skip_write=1"
@@ -513,6 +518,17 @@ run --production app old new
 status_is "a production app with working credentials works" 0
 lacks "it leaves them alone, as an old host on an instance profile has no key to copy" "$CALLS" 'tar -C "$HOME" -cf - .aws'
 has "and adds the offsite profile, which backup.sh needs" "$CALLS" '[blot-b2]'
+has "and the storage offsite profile's credentials, from the old app host" "$CALLS" "ssh old [old]: awk -v s='[blot-b2-storage]'"
+has "and its config section" "$CALLS" "awk -v s='[profile blot-b2-storage]'"
+[ "$(cat "$W/storage-offsite.new" 2> /dev/null)" = test-storage-offsite ] &&
+  ok "and the storage offsite bucket file" || fail "the storage offsite bucket file was not copied"
+rm -f "$W/storage-offsite.new"
+ready_for_switch
+echo None > "$W/tag"; rm "$W/units.new"
+STUB_NO_B2_STORAGE=1 run --production app old new
+status_is "a production app works without the storage offsite settings on the old host" 0
+lacks "and copies no storage offsite profile" "$CALLS" "awk -v s='[blot-b2-storage]'"
+[ ! -e "$W/storage-offsite.new" ] && ok "nor a bucket file" || fail "an empty storage offsite bucket file was written"
 ready_for_switch
 echo None > "$W/tag"; rm "$W/units.new"
 STUB_NEW_HAS_B2=1 run --production app old new

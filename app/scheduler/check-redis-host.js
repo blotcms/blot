@@ -15,6 +15,9 @@
 //   BACKUP_STALE_MS (two missed hourly runs) or OFFSITE_STALE_MS (two missed
 //   daily runs) since the recorded time is alerted. A missing key is not
 //   (hosts without backups or offsite stay quiet); one that can't be read is.
+//   The same goes for the storage bucket's daily copy to B2
+//   (config/storage-bucket/bin/offsite-sync.sh), recorded at
+//   STORAGE_OFFSITE_KEY, past STORAGE_OFFSITE_STALE_MS.
 // - Redis's memory nearing maxmemory. With noeviction, writes fail at the
 //   limit. maxmemory being unset is alerted too, but only on a host that
 //   promote.sh has marked active (/etc/blot-redis/active): a host still
@@ -64,6 +67,11 @@ const BACKUP_KEY = "blot:redis-host:backup";
 // Same format, written after a daily upload to B2. Absent where offsite isn't
 // configured (tests, development).
 const OFFSITE_KEY = "blot:redis-host:offsite";
+// "<iso time> <objects> <bytes>", written after each successful daily copy of
+// the storage bucket to B2 (config/storage-bucket/bin/offsite-sync.sh). Absent
+// where it isn't configured.
+const STORAGE_OFFSITE_KEY = "blot:storage:offsite";
+const STORAGE_README_URL = "https://github.com/blotcms/blot/blob/master/config/storage-bucket/README.md";
 const STATE_KEY = "blot:redis-host:alerts";
 const README_URL = "https://github.com/blotcms/blot/blob/master/config/redis/README.md";
 
@@ -75,6 +83,8 @@ const HOUR = 60 * MINUTE;
 // not alert).
 const BACKUP_STALE_MS = 3 * HOUR;
 const OFFSITE_STALE_MS = 50 * HOUR;
+// The storage bucket's copy is daily too. One failed night does not alert.
+const STORAGE_OFFSITE_STALE_MS = 50 * HOUR;
 
 // Rate limits. A condition (a state: memory high, save failing, sample stale)
 // is emailed when it starts and when it clears, but not twice within this long
@@ -137,6 +147,7 @@ const TITLES = {
   "sample-stale": "TCP memory sample stale",
   "backup-stale": "Redis backup stale",
   "offsite-stale": "Offsite Redis backup stale",
+  "storage-offsite-stale": "Offsite copy of the storage bucket stale",
   maxmemory: "Redis memory nearing maxmemory",
   "maxmemory-unset": "maxmemory not set",
   "bgsave-failed": "Redis background save failing",
@@ -222,6 +233,19 @@ function parseBackup(value) {
   };
 }
 
+// "2026-11-05T02:41:07Z 1234567 987654321" (offsite-sync.sh): when the copy
+// finished, and the objects and bytes B2 holds. Null if it can't be read.
+function parseStorageOffsite(value) {
+  if (!value) return null;
+
+  const [stamp, objects, bytes] = String(value).trim().split(/\s+/);
+  const time = Date.parse(stamp);
+
+  if (!time || !/^\d+$/.test(objects || "") || !/^\d+$/.test(bytes || "")) return null;
+
+  return { time, objects: Number(objects), bytes: Number(bytes) };
+}
+
 // The INFO memory fields we need. maxmemory is compared with used_memory less
 // what Redis leaves out of it (replica output buffers, the AOF buffer), as
 // Redis does, so a replica's full sync doesn't look like the dataset growing.
@@ -290,10 +314,11 @@ async function check(deps = {}) {
   // every 5 minutes, written by another client. One INFO (the default
   // sections hold memory, persistence, stats, errorstats and keyspace) and one
   // SLOWLOG GET: both are cheap.
-  const [sampleValue, backupValue, offsiteValue, stateValue, infoText, slowlogReply, machine] = await Promise.all([
+  const [sampleValue, backupValue, offsiteValue, storageOffsiteValue, stateValue, infoText, slowlogReply, machine] = await Promise.all([
     client.sendCommand(["GET", SAMPLE_KEY]),
     client.sendCommand(["GET", BACKUP_KEY]),
     client.sendCommand(["GET", OFFSITE_KEY]),
+    client.sendCommand(["GET", STORAGE_OFFSITE_KEY]),
     client.sendCommand(["GET", STATE_KEY]),
     client.sendCommand(["INFO"]),
     client.sendCommand(["SLOWLOG", "GET", String(SLOWLOG_ENTRIES)]),
@@ -352,12 +377,13 @@ async function check(deps = {}) {
   // read counts as stale, since nothing can vouch for the backup.
   const staleBackups = {};
   [
-    ["backup-stale", backupValue, BACKUP_STALE_MS],
-    ["offsite-stale", offsiteValue, OFFSITE_STALE_MS],
-  ].forEach(([name, value, limit]) => {
+    ["backup-stale", backupValue, BACKUP_STALE_MS, parseBackup],
+    ["offsite-stale", offsiteValue, OFFSITE_STALE_MS, parseBackup],
+    ["storage-offsite-stale", storageOffsiteValue, STORAGE_OFFSITE_STALE_MS, parseStorageOffsite],
+  ].forEach(([name, value, limit, parse]) => {
     if (value === null || value === undefined) return;
 
-    const backup = parseBackup(value);
+    const backup = parse(value);
     staleBackups[name] = { age: backup ? now - backup.time : null };
     conditions[name] = !backup || now - backup.time > limit;
   });
@@ -542,6 +568,18 @@ function message(name, report) {
         `see [config/redis/README.md](${README_URL})`
       );
     }
+    case "storage-offsite-stale": {
+      const { age: copyAge } = report.staleBackups[name];
+      return (
+        (copyAge === null
+          ? `the last offsite copy of the storage bucket recorded in \`${STORAGE_OFFSITE_KEY}\` can't be read`
+          : `the last offsite copy of the storage bucket (to Backblaze B2) finished ${duration(copyAge)} ago`) +
+        " (it runs daily at 02:10 UTC, blot-storage-offsite.timer). Look at `~/storage-offsite.log` on the host, " +
+        "`systemctl status blot-storage-offsite`, the `blot-b2-storage` profile in `~ec2-user/.aws`, B2 and " +
+        "`/etc/blot/storage-offsite-bucket`. The bucket itself is not affected, but it has no recent backup; " +
+        `see [config/storage-bucket/README.md](${STORAGE_README_URL})`
+      );
+    }
     case "host-memory":
       return (
         `${gb(report.machine.available)} of ${gb(report.machine.total)} available (${percent(report.machine.fraction)}) ` +
@@ -636,6 +674,7 @@ function view(report) {
       stale: minutes(STALE_MS),
       backup: duration(BACKUP_STALE_MS),
       offsite: duration(OFFSITE_STALE_MS),
+      storageOffsite: duration(STORAGE_OFFSITE_STALE_MS),
       errors: ERROR_ALERT_COUNT,
       slowlog: ms(SLOWLOG_ALERT_US),
       fork: ms(FORK_ALERT_US),
@@ -680,10 +719,12 @@ module.exports.view = view;
 module.exports.parseSample = parseSample;
 module.exports.parseMemory = parseMemory;
 module.exports.parseBackup = parseBackup;
+module.exports.parseStorageOffsite = parseStorageOffsite;
 module.exports.parseInfo = parseInfo;
 module.exports.SAMPLE_KEY = SAMPLE_KEY;
 module.exports.BACKUP_KEY = BACKUP_KEY;
 module.exports.OFFSITE_KEY = OFFSITE_KEY;
+module.exports.STORAGE_OFFSITE_KEY = STORAGE_OFFSITE_KEY;
 module.exports.STATE_KEY = STATE_KEY;
 module.exports.HOST_MEMORY_ALERT = HOST_MEMORY_ALERT;
 module.exports.HOST_MEMORY_CLEAR = HOST_MEMORY_CLEAR;

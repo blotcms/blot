@@ -298,11 +298,16 @@ module.exports = {
   git_store: {
     // The store's local cache and scratch space. In production tmp is on the
     // host's instance store (/var/instance-ssd/tmp), which is where this
-    // belongs: nothing in it needs to survive. Each process takes a
-    // directory of its own inside it.
+    // belongs: nothing in it needs to survive. Every process on the host
+    // shares one cache in it (<cache_directory>/host).
     cache_directory: BLOT_TMP_DIRECTORY + "/git-store",
-    // The budget of each process's cache, scratch space included
-    cache_bytes: 1024 * 1024 * 1024,
+    // The budget of the host's cache, scratch space for pushes included,
+    // across every process
+    cache_bytes: 50 * 1024 * 1024 * 1024,
+    // Besides its budget, the cache gives space back, and refuses new
+    // entries and scratch, while the disk it is on has less free than this
+    // (as folder_cache does)
+    min_free_percent: 10,
   },
 
   // The content cache of the S3 backend of storage/folder
