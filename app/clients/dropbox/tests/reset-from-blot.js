@@ -216,6 +216,41 @@ describe("dropbox resetFromBlot", function () {
     ).toEqual(true);
   });
 
+  it("does not upload empty files, which may be placeholders, or overwrite a remote file with one", async function () {
+    await fs.outputFile(join(blogDirectory, "placeholder.pdf"), "");
+    await fs.outputFile(join(blogDirectory, "new-empty.txt"), "");
+    await fs.outputFile(join(blogDirectory, "a.txt"), "hello");
+
+    const messages = [];
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 0,
+        allocation: { ".tag": "individual", allocated: 1000000 },
+      },
+      remote: {
+        "/": [
+          {
+            ".tag": "file",
+            name: "placeholder.pdf",
+            path_display: "/placeholder.pdf",
+            content_hash: "real-content-hash",
+            size: 5000,
+            server_modified: "2026-01-01T00:00:00Z",
+          },
+        ],
+      },
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    await resetFromBlot(blogID, (...args) => messages.push(args.join(" ")), {
+      aborted: false,
+    });
+
+    expect(uploadCalls).toEqual(["/a.txt"]);
+    expect(messages.some((m) => /Skipped 2 empty files/.test(m))).toEqual(true);
+    expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(true);
+  });
+
   it("does not count bytes already sitting in the target Dropbox folder against the quota check", async function () {
     // 1000 bytes on disk, but only 5 bytes free - a naive check comparing
     // the full local size against free space would abort here. Since 999 of

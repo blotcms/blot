@@ -167,6 +167,32 @@ describe("git client create", function () {
     });
   });
 
+  // Blot cannot tell a placeholder (an empty file standing in for a file it
+  // could not download) from a file that really is empty, so neither is added.
+  it("does not add empty files to the repository", function (done) {
+    var blogDir = localPath(this.blog.id, "/");
+    var fs = require("fs-extra");
+    var blog = this.blog;
+    var tmp = this.tmp;
+    var clonedDir = this.tmp + "/" + this.blog.handle;
+
+    fs.outputFileSync(blogDir + "/post.txt", "Hello");
+    fs.outputFileSync(blogDir + "/placeholder.pdf", "");
+
+    setClientToGit(this.user, blog, this.server.port, function (err, repoUrl) {
+      if (err) return done.fail(err);
+
+      Git(tmp)
+        .silent(true)
+        .clone(repoUrl, function (err) {
+          if (err) return done.fail(err);
+
+          expect(fs.readdirSync(clonedDir).sort()).toEqual([".git", "post.txt"]);
+          done();
+        });
+    });
+  });
+
   it("skips files ignored by an existing .gitignore", function (done) {
     var blogDir = localPath(this.blog.id, "/");
     var fs = require("fs-extra");

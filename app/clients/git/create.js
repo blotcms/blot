@@ -286,7 +286,23 @@ function isGitIgnoreAddError(err) {
 // are not files.
 async function* filesToAdd(blogID) {
   for await (const file of storage.walk(blogID, "/")) {
-    if (!shouldIgnoreFile(file)) yield file.slice(1);
+    if (shouldIgnoreFile(file)) continue;
+
+    // Blot writes an empty file where it could not download a file
+    // (oversized or unsupported ones), so a placeholder is indistinguishable
+    // from a file that really is empty. Committing it would make the empty
+    // file the repository's copy, so we never add empty files. The cost is
+    // that genuinely empty files do not carry over to the new repository.
+    if ((await storage.stat(blogID, file)).size === 0) {
+      console.log(
+        clfdate() + " Git: create: skipping empty file (possible placeholder)",
+        blogID,
+        file
+      );
+      continue;
+    }
+
+    yield file.slice(1);
   }
 }
 

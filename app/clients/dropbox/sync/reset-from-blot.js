@@ -387,6 +387,8 @@ async function resetFromBlotWithClient(
     failures.push(path);
   };
 
+  let skippedEmpty = 0;
+
   const walk = async (dir) => {
     abortIfRequested(signal);
 
@@ -465,6 +467,18 @@ async function resetFromBlotWithClient(
         // Counted in the pre-walk — bump even when the file is already identical.
         publishTransferStatus(progress, publish, path);
 
+        // Blot writes an empty file where it could not download a file
+        // (oversized or unsupported ones), so a placeholder is
+        // indistinguishable from a file that really is empty. Uploading it
+        // would put an empty file in Dropbox, or overwrite the real file
+        // already there, so we never upload empty files. The cost is that
+        // genuinely empty files do not carry over to Dropbox.
+        if (localSizes.get(path.toLowerCase()) === 0) {
+          log("Skipping empty file (possible placeholder)", blogID, path);
+          skippedEmpty += 1;
+          continue;
+        }
+
         if (remoteCounterpart && !identicalOnRemote) {
           try {
             abortIfRequested(signal);
@@ -493,6 +507,16 @@ async function resetFromBlotWithClient(
   await walk("/");
 
   abortIfRequested(signal);
+
+  if (skippedEmpty > 0) {
+    publish(
+      "Skipped " +
+        skippedEmpty +
+        " empty file" +
+        (skippedEmpty === 1 ? "" : "s") +
+        " (possible placeholders for files Blot could not download)"
+    );
+  }
 
   // Don't report success (and don't advance the cursor) if any file failed
   // to transfer. Reporting success here is what makes resetToBlot/hourly
