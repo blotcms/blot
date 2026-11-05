@@ -6,8 +6,7 @@
 // A spec using this helper should only look at what a user can observe: the
 // output of git commands run in a clone, the files in the blog folder (not
 // its .git directory), Blot's models, and the client's public functions. It
-// should not open the bare repository, the blog folder's .git directory or
-// anything under data/git: those go away or move.
+// should not open the store's objects or the blog folder's .git directory.
 //
 //   require("./setup")({ clone: false, client: true });
 //
@@ -181,21 +180,19 @@ async function readDirectories(directory) {
 //   url            the remote's URL, credentials included
 //   port           the port of the test server, for syncs-finished
 //   blogID         the blog
-//   blogDirectory  the blog's folder, where Blot syncs the repository to
 //   config         `-c key=value` pairs added to every git command
 function Client(options) {
   this.directory = options.directory;
   this.url = options.url;
   this.port = options.port;
   this.blogID = options.blogID;
-  this.blogDirectory = options.blogDirectory;
   this.config = options.config || {};
 }
 
 // Makes a clone of the remote in a new directory and resolves with its Client.
 //
 //   options.directory  where to clone to (required)
-//   options.url, options.port, options.blogID, options.blogDirectory
+//   options.url, options.port, options.blogID
 //   options.args       extra arguments for `git clone`, e.g. ["--depth", "1"]
 //   options.config     `-c key=value` pairs for the clone and later commands
 Client.clone = async function (options) {
@@ -224,7 +221,6 @@ Client.forContext = function (ctx, overrides) {
         url: ctx.repoUrl,
         port: ctx.server.port,
         blogID: ctx.blog.id,
-        blogDirectory: ctx.blogDirectory,
       },
       overrides
     )
@@ -243,7 +239,6 @@ Client.prototype.cloneAgain = function (overrides) {
         url: this.url,
         port: this.port,
         blogID: this.blogID,
-        blogDirectory: this.blogDirectory,
         config: this.config,
       },
       overrides
@@ -399,16 +394,17 @@ Client.prototype.expectSynced = async function () {
     );
   }
 
-  await compareDirectories(this.directory, this.blogDirectory);
+  await compareWithBlog(this.directory, this.blogID);
 };
 
-// Compares the files of two directories, not their .git directories and not
-// their empty directories: git does not track those, and what Blot leaves
-// behind when it removes the last file in a folder is checked by the specs
-// which care. Rejects with a description of the differences.
-async function compareDirectories(expected, actual) {
+// Compares the files of a directory on disk (a clone) with the blog's folder,
+// read through storage/folder, not their .git directories and not their empty
+// directories: git does not track those, and what Blot leaves behind when it
+// removes the last file in a folder is checked by the specs which care.
+// Rejects with a description of the differences.
+async function compareWithBlog(expected, blogID) {
   var left = await readTree(expected);
-  var right = await readTree(actual);
+  var right = await require("./folder").tree(blogID);
   var message = [];
 
   Object.keys(left).forEach(function (file) {
@@ -508,5 +504,5 @@ module.exports.attempt = attempt;
 module.exports.run = run;
 module.exports.readTree = readTree;
 module.exports.readDirectories = readDirectories;
-module.exports.compareDirectories = compareDirectories;
+module.exports.compareWithBlog = compareWithBlog;
 module.exports.startRecordingProxy = startRecordingProxy;

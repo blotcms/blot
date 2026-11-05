@@ -33,7 +33,7 @@
 // so .gitattributes rules such as eol and ident do not apply. Symbolic links
 // are not written, because pushes no longer allow them, but one that was in the
 // way or has been deleted is removed. Submodules are skipped. This is what the
-// materializer on EBS (app/clients/git/materialize.js) does, so that the
+// host's materializer (app/clients/git/served/materialize.js) does, so that the
 // same commits give the same folder.
 //
 // Paths come from history which may predate the checks a push goes through now,

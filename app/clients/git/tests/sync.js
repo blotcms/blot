@@ -12,6 +12,7 @@ describe("git client sync", function () {
 
   var fs = require("fs-extra");
   var helpers = require("./setup/helpers");
+  var folder = require("./setup/folder");
 
   // After every spec: the clone, the server's master and the blog folder
   // agree (the blog folder is compared with the clone's working tree, without
@@ -40,9 +41,10 @@ describe("git client sync", function () {
     var text = content(this);
 
     // What a client which hangs up on reading the push's result looks like.
-    // Only repo.js misses the event: node needs it to finish the request.
+    // Only the git client misses the event: node needs it to finish the
+    // request.
     spyOn(http.ServerResponse.prototype, "on").and.callFake(function (event) {
-      if (event === "finish" && /clients\/git\/repo\.js/.test(new Error().stack))
+      if (event === "finish" && /clients\/git\/(repo\.js|served\/)/.test(new Error().stack))
         return this;
       return on.apply(this, arguments);
     });
@@ -127,13 +129,12 @@ describe("git client sync", function () {
 
   it("resets any uncommitted changes in the server's blog folder", async function () {
     var path = "/Hello world.txt";
-    var blogDirectory = this.blogDirectory;
 
     await this.local.writeAndPush(path, "Hello, World!");
 
     // This simulates an incorrect change to the blog's source folder made by
     // potentially buggy Blot code. This was NOT done by the client.
-    fs.outputFileSync(blogDirectory + path, "Bad, World!");
+    await folder.write(this.blog.id, path, "Bad, World!");
 
     await this.local.writeAndPush(path, "Good, World!");
 
@@ -143,7 +144,6 @@ describe("git client sync", function () {
   it("handles a force push", async function () {
     var path = "/Hello world.txt";
     var local = this.local;
-    var blogDirectory = this.blogDirectory;
 
     await local.writeAndPush(path, "Hello, World!");
 
@@ -166,7 +166,7 @@ describe("git client sync", function () {
     // pages for rebase: "It is possible that a merge failure will prevent
     // this process from being completely automatic." So throw in a bad
     // change to the blog folder to see if Blot copes.
-    fs.outputFileSync(blogDirectory + path, "Bad, World!");
+    await folder.write(this.blog.id, path, "Bad, World!");
 
     // ...until it is forced
     await local.push(["--force", "--set-upstream", "origin", "master"]);

@@ -23,9 +23,10 @@ var mirror = require("./mirror");
 //   moves over by itself once a clean backfill or daily check puts it back.
 //   A complete blog whose folder is empty (no index at all) stays on S3.
 // - Its mirror is not dirty (mirror.DIRTY_KEY): S3 may be behind the disk.
-// - Its client works on a folder in S3. The Git client keeps a live clone in
-//   it, so its blogs stay on disk (DISK_CLIENTS). The Local client watches a
-//   directory of its own, and Google Drive lists through storage/folder.
+// - Its client works on a folder in S3 (DISK_CLIENTS, which no client needs
+//   now). The Git client reads and writes the folder through storage/folder
+//   alone (#2259), the Local client watches a directory of its own, and
+//   Google Drive lists through storage/folder.
 //
 // The disk copy: for a blog on S3, every change is made in S3 first, which is
 // what the caller waits for and what counts, then copied to disk (copy(), the
@@ -40,17 +41,14 @@ var LOG_PREFIX = "[storage/folder primary]";
 // Blogs on S3 whose copy on disk may be behind S3
 var DIRTY_KEY = "storage:folder:primary:dirty";
 
-// The clients which need the blog's folder on disk:
-//
-// - git: live-clone detection and the setup import run git with the folder
-//   as its work tree (ensureLocal of "/"), until live clones go and a push is
-//   materialized through storage/folder (#2259).
-//
-// Google Drive works on either: it lists the folder through storage/folder
-// and keeps its own records of each file's size, modified time and SHA-1
-// (clients/google-drive/util/localState.js). The Local client watches a
-// source directory of its own (clients/local/source.js).
-var DISK_CLIENTS = ["git"];
+// The clients which need the blog's folder on disk: none now. The Git client
+// reads and writes the folder through storage/folder alone, and is served
+// from the git store (#2259). Google Drive works on either: it lists the
+// folder through storage/folder and keeps its own records of each file's
+// size, modified time and SHA-1 (clients/google-drive/util/localState.js).
+// The Local client watches a source directory of its own
+// (clients/local/source.js).
+var DISK_CLIENTS = [];
 
 var LOGGED_MAX = 10000;
 

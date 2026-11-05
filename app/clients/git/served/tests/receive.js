@@ -1,41 +1,16 @@
-describe("git store served: pushes on the normal route", function () {
-  // Shadow mode's set-up: a blog on the git client with a clone, and a memory
-  // store per blog, shared with the served path through served/context.js
-  var setup = require("clients/git/shadow/tests/setup");
+describe("git store: pushes", function () {
+  // A blog on the git client with a clone, a memory store per blog, and the
+  // store's log lines kept
+  require("clients/git/tests/setup")({ clone: false, client: true, lines: true });
+
   var Client = require("clients/git/tests/setup/client");
   var config = require("config");
   var crypto = require("crypto");
   var http = require("http");
   var path = require("path");
   var context = require("clients/git/served/context");
-  var upkeep = require("clients/git/served/upkeep");
-  var fallback = require("clients/git/served/fallback");
   var { PUSH_CACHE_SHARE } = require("clients/git/served/receive");
   var { manifest } = require("clients/git/store");
-
-  setup();
-
-  beforeEach(function () {
-    var ctx = this;
-    ctx.servedLines = [];
-    console.log.and.callFake(function () {
-      var line = Array.prototype.join.call(arguments, " ");
-      if (line.indexOf("[git-store-shadow]") !== -1) ctx.lines.push(line);
-      if (line.indexOf("[git-store-served]") !== -1) ctx.servedLines.push(line);
-    });
-  });
-
-  afterEach(async function () {
-    await fallback.idle(this.blog.id);
-    await upkeep.idle(this.blog.id);
-  });
-
-  // Fills the store from EBS (serve off), then switches the blog on
-  async function mirrorAndSwitch(ctx) {
-    config.git_store.serve = "";
-    await setup.expectMirrored(ctx);
-    config.git_store.serve = String(ctx.blog.id);
-  }
 
   function store(ctx) {
     return ctx.stores[ctx.blog.id];
@@ -43,7 +18,7 @@ describe("git store served: pushes on the normal route", function () {
 
   async function lineMatching(ctx, pattern) {
     for (var i = 0; i < 100; i++) {
-      var found = ctx.servedLines.filter(function (line) {
+      var found = ctx.storeLines().filter(function (line) {
         return pattern.test(line);
       });
       if (found.length) return found;
@@ -52,7 +27,7 @@ describe("git store served: pushes on the normal route", function () {
       });
     }
 
-    throw new Error("No log line matched " + pattern + "\n" + ctx.servedLines.join("\n"));
+    throw new Error("No log line matched " + pattern + "\n" + ctx.storeLines().join("\n"));
   }
 
   function request(ctx, method, suffix, options) {
@@ -86,9 +61,8 @@ describe("git store served: pushes on the normal route", function () {
     });
   }
 
-  it("takes a push into the store and leaves EBS alone", async function () {
+  it("takes a push into the store", async function () {
     await this.local.writeAndPush("/a.txt", "A");
-    await mirrorAndSwitch(this);
 
     var before = await manifest.read(store(this));
 
@@ -108,11 +82,7 @@ describe("git store served: pushes on the normal route", function () {
     expect(current.refs["refs/tags/v1"]).toBeDefined();
     expect(current.peeled[current.refs["refs/tags/v1"]]).toBe(head);
 
-    // EBS catches up in the background (the fallback), not during the push
-    await fallback.idle(this.blog.id);
-    expect(setup.ebsRefs(this.gitDir)).toEqual(current.refs);
-
-    // What the normal route now serves is the push
+    // What is served now is the push
     expect(await this.local.remoteHead("master")).toBe(head);
     var clone = await Client.clone({ url: this.repoUrl, directory: path.join(this.tmp, "after-push") });
     expect(await clone.head()).toBe(head);
@@ -120,13 +90,10 @@ describe("git store served: pushes on the normal route", function () {
 
     expect((await lineMatching(this, / op=push outcome=ok /))[0]).toMatch(new RegExp("blog=" + this.blog.id + " op=push outcome=ok ms=\\d+ bytesUp=\\d+ "));
 
-    // Never shadowed
-    expect(this.shadowLines("push").length).toBe(0);
   });
 
   it("refuses a symbolic link on master with Blot's message, and moves nothing", async function () {
     await this.local.writeAndPush("/a.txt", "A");
-    await mirrorAndSwitch(this);
 
     var before = await manifest.read(store(this));
 
@@ -144,9 +111,8 @@ describe("git store served: pushes on the normal route", function () {
     await lineMatching(this, / op=push outcome=refused /);
   });
 
-  it("refuses what EBS refuses: another branch, deleting master", async function () {
+  it("refuses another branch, and deleting master", async function () {
     await this.local.writeAndPush("/a.txt", "A");
-    await mirrorAndSwitch(this);
 
     var before = await manifest.read(store(this));
 
@@ -166,10 +132,9 @@ describe("git store served: pushes on the normal route", function () {
 
   it("refuses a push over the limit, with the size, and gives the cache its room back", async function () {
     await this.local.writeAndPush("/a.txt", "A");
-    await mirrorAndSwitch(this);
 
-    // A small cache, once the store is filled (an import into a cache this
-    // small would not fit): the limit is the share of it
+    // A small cache, once the repository is set up (an import into a cache
+    // this small would not fit): the limit is the share of it
     config.git_store.cache_bytes = 4 * 1024 * 1024;
     context._reset();
 
@@ -188,7 +153,6 @@ describe("git store served: pushes on the normal route", function () {
   it("takes a push whose changed tree names a .gitattributes the push does not carry", async function () {
     await this.local.commitFiles({ "/.gitattributes": "*.md text\n", "/.gitmodules": "", "/a.txt": "A" });
     await this.local.push();
-    await mirrorAndSwitch(this);
 
     // The root tree changes, so it is in the pack; the .gitattributes and
     // .gitmodules blobs it names are not, being in the store already
@@ -201,7 +165,6 @@ describe("git store served: pushes on the normal route", function () {
 
   it("says another change is being applied when the ref lock stays taken", async function () {
     await this.local.writeAndPush("/a.txt", "A");
-    await mirrorAndSwitch(this);
 
     var before = await manifest.read(store(this));
     var release = await require("clients/git/repo").holdRefLock(this.blog.id);
@@ -223,9 +186,9 @@ describe("git store served: pushes on the normal route", function () {
 
   it("ends a gzipped push whose client goes away part way through", async function () {
     await this.local.writeAndPush("/a.txt", "A");
-    await mirrorAndSwitch(this);
 
     var ctx = this;
+    var pushesBefore = this.storeLines("push").length;
     var zlib = require("zlib");
     var old = (await manifest.read(store(this))).refs["refs/heads/master"];
     var line = old + " " + "1".repeat(40) + " refs/heads/master\0report-status\n";
@@ -264,13 +227,17 @@ describe("git store served: pushes on the normal route", function () {
     });
 
     // The receive ends (and logs) rather than waiting on the decoder for ever
-    var lines = await lineMatching(this, / op=push /);
+    for (var i = 0; i < 100 && this.storeLines("push").length <= pushesBefore; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+
+    var lines = this.storeLines("push");
+    expect(lines.length).toBeGreaterThan(pushesBefore);
     expect(lines[lines.length - 1]).not.toContain("outcome=ok");
   });
 
   it("answers git's 0000 probe and a body which is not git", async function () {
     await this.local.writeAndPush("/a.txt", "A");
-    await mirrorAndSwitch(this);
 
     var probe = await request(this, "POST", "/git-receive-pack", {
       body: "0000",
@@ -288,7 +255,6 @@ describe("git store served: pushes on the normal route", function () {
 
   it("takes a push from a second clone after the first, and refuses a stale one", async function () {
     await this.local.writeAndPush("/a.txt", "A");
-    await mirrorAndSwitch(this);
 
     var other = await this.local.cloneAgain();
 
@@ -302,5 +268,39 @@ describe("git store served: pushes on the normal route", function () {
     await other.git(["pull", "--no-rebase", "--no-edit", "origin", "master"]);
     await other.push();
     expect((await manifest.read(store(this))).refs["refs/heads/master"]).toBe(await other.head());
+  });
+
+  it("accepts a force push to master", async function () {
+    await this.local.writeAndPush("/a.txt", "A");
+
+    await this.local.git(["checkout", "--quiet", "--orphan", "rewritten"]);
+    await this.local.git(["rm", "-r", "--force", "--quiet", "."]);
+    await this.local.commitFiles({ "/new.txt": "New history" });
+    await this.local.push(["--force", "origin", "rewritten:master"]);
+
+    expect((await manifest.read(store(this))).refs["refs/heads/master"]).toBe(await this.local.head());
+  });
+
+  it("creates and deletes tags", async function () {
+    await this.local.writeAndPush("/a.txt", "A");
+
+    await this.local.git(["tag", "light"]);
+    await this.local.push(["origin", "light"]);
+    expect((await manifest.read(store(this))).refs["refs/tags/light"]).toBe(await this.local.head());
+
+    await this.local.push(["origin", ":refs/tags/light"]);
+    expect((await manifest.read(store(this))).refs["refs/tags/light"]).toBeUndefined();
+  });
+
+  ["refs/notes/commits", "refs/remotes/origin/master", "refs/heads/master.lock"].forEach(function (ref) {
+    it("refuses the ref " + ref, async function () {
+      await this.local.writeAndPush("/a.txt", "A");
+
+      var before = await manifest.read(store(this));
+      var pushed = await this.local.tryPush(["origin", "master:" + ref]);
+
+      expect(pushed.code).not.toBe(0);
+      expect((await manifest.read(store(this))).seq).toBe(before.seq);
+    });
   });
 });

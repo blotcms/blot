@@ -1,19 +1,16 @@
-describe("git store shadow mode: daily maintenance", function () {
-  var setup = require("./setup");
-  var config = require("config");
-  var maintenance = require("clients/git/shadow/maintenance");
+describe("git store: daily maintenance", function () {
+  // A blog on the git client with a clone, a memory store per blog, and the
+  // store's log lines kept
+  require("clients/git/tests/setup")({ clone: false, client: true, lines: true });
+
+  var maintenance = require("clients/git/served/maintenance");
   var gitStoreMaintenance = require("scheduler/git-store-maintenance");
   var { manifest, layout, createMemoryStore } = require("clients/git/store");
 
   var DAY = 24 * 60 * 60 * 1000;
 
-  setup();
-
   beforeEach(function () {
     var ctx = this;
-
-    // Only this blog: other specs' blogs may be in the database
-    config.git_store.shadow = ctx.blog.id;
 
     // The bucket's git/ prefixes are the memory stores with anything in them
     maintenance._setPrefixLister(async function* () {
@@ -30,21 +27,16 @@ describe("git store shadow mode: daily maintenance", function () {
     this.check = function (extra) {
       return maintenance.verify(ctx.blog.id, Object.assign({ recheckDelayMs: 10, scratchDir: ctx.tmp + "/verify-scratch" }, extra));
     };
+
+    // Only this blog: other specs' blogs may be in the database
+    this.daily = function (options) {
+      return Object.assign({ ids: [ctx.blog.id], recheckDelayMs: 10, scratchDir: ctx.tmp + "/daily-scratch" }, options);
+    };
   });
 
   afterEach(function () {
     maintenance._setPrefixLister(null);
   });
-
-  async function behind(ctx) {
-    await ctx.local.writeAndPush("/a.txt", "A");
-    await setup.expectMirrored(ctx);
-
-    // A push the store never heard of
-    config.git_store.shadow = "";
-    await ctx.local.writeAndPush("/b.txt", "B");
-    config.git_store.shadow = ctx.blog.id;
-  }
 
   async function keys(store) {
     var found = [];
@@ -52,80 +44,83 @@ describe("git store shadow mode: daily maintenance", function () {
     return found;
   }
 
+  function current(ctx) {
+    return manifest.read(ctx.stores[ctx.blog.id]);
+  }
+
   describe("the verifier", function () {
-    it("is ok when the store is in sync", async function () {
+    it("is ok when the store is whole", async function () {
       await this.local.writeAndPush("/a.txt", "A");
       await this.local.git(["tag", "-a", "annotated", "-m", "An annotated tag"]);
       await this.local.push(["origin", "--tags"]);
-      await setup.expectMirrored(this);
 
       var result = await this.check();
 
       expect(result.findings).toEqual([]);
-      var line = this.shadowLines("verify")[0];
+      var line = this.storeLines("verify")[0];
       expect(line).toContain("outcome=ok");
       expect(line).toContain("check=cheap");
       expect(line).not.toContain(this.blog.handle);
     });
 
-    it("finds a mismatch when the store is behind, after checking again", async function () {
-      await behind(this);
-
-      var result = await this.check();
-
-      expect(result.findings.length).toBe(1);
-      expect(result.findings[0].kind).toBe("mismatch");
-      expect(result.findings[0].detail).toContain("refs/heads/master");
-      expect(this.shadowLines("verify")[0]).toContain("outcome=mismatch");
-      expect(this.shadowLines("verify")[0]).toContain("attempts=2");
-    });
-
-    it("does not count a push which lands before the check runs again", async function () {
-      await behind(this);
-
-      var ctx = this;
-      var result = await maintenance.verify(this.blog.id, { recheckDelayMs: 300 });
-      expect(result.findings.length).toBe(1);
-
-      // The mirror catches up while the check waits
-      setTimeout(function () {
-        require("clients/git/shadow").mirror(ctx.blog.id);
-      }, 0);
-      result = await maintenance.verify(this.blog.id, { recheckDelayMs: 1500 });
-      expect(result.findings).toEqual([]);
-    });
-
-    it("finds a pack the manifest names missing", async function () {
+    it("finds a pack the manifest names missing, after checking again", async function () {
       await this.local.writeAndPush("/a.txt", "A");
-      var current = await setup.expectMirrored(this);
-      var store = this.stores[this.blog.id];
+      var named = await current(this);
 
-      await store.delete(layout.packKey(current.packs[0].name));
+      await this.stores[this.blog.id].delete(layout.packKey(named.packs[0].name));
 
       var result = await this.check();
 
       expect(result.findings.length).toBe(1);
       expect(result.findings[0].kind).toBe("missing");
-      expect(result.findings[0].detail).toContain(current.packs[0].name + ".pack");
-      expect(this.shadowLines("verify")[0]).toContain("outcome=missing");
+      expect(result.findings[0].detail).toContain(named.packs[0].name + ".pack");
+      expect(this.storeLines("verify")[0]).toContain("outcome=missing");
+      expect(this.storeLines("verify")[0]).toContain("attempts=2");
+    });
+
+    it("finds a file of the wrong size", async function () {
+      await this.local.writeAndPush("/a.txt", "A");
+      var named = await current(this);
+      var store = this.stores[this.blog.id];
+      var key = layout.idxKey(named.packs[0].name);
+
+      await store.put(key, Buffer.from("too short"));
+
+      var result = await this.check();
+
+      expect(result.findings.length).toBe(1);
+      expect(result.findings[0].kind).toBe("mismatch");
+      expect(result.findings[0].detail).toContain(key);
+    });
+
+    it("finds a blog on git with no copy in the store", async function () {
+      this.stores[this.blog.id] = createMemoryStore();
+      require("clients/git/served/context")._reset();
+
+      var result = await this.check();
+
+      expect(result.findings.length).toBe(1);
+      expect(result.findings[0].kind).toBe("missing");
+      expect(result.findings[0].detail).toContain("no copy");
     });
 
     it("passes the deep check on a good repository and fails it on a corrupted pack", async function () {
       await this.local.writeAndPush("/a.txt", "A".repeat(2000));
       await this.local.writeAndPush("/b.txt", "B".repeat(2000));
-      var current = await setup.expectMirrored(this);
+      var named = await current(this);
 
       var result = await this.check({ deep: true });
       expect(result.deep).toBe(true);
       expect(result.findings).toEqual([]);
-      expect(this.shadowLines("verify").filter((line) => /check=deep/.test(line))[0]).toContain("outcome=ok");
+      expect(this.storeLines("verify").filter((line) => /check=deep/.test(line))[0]).toContain("outcome=ok");
 
       // The same size, so only a clone notices
       var store = this.stores[this.blog.id];
-      var key = layout.packKey(current.packs[current.packs.length - 1].name);
+      var key = layout.packKey(named.packs[named.packs.length - 1].name);
       var bytes = Buffer.from(await store.get(key, { maxBytes: 1e8 }));
       for (var i = 20; i < bytes.length - 20; i++) bytes[i] ^= 0xff;
       await store.put(key, bytes);
+      await require("clients/git/served/context").cache().clear();
 
       result = await this.check({ deep: true });
       expect(result.findings.length).toBe(1);
@@ -135,7 +130,6 @@ describe("git store shadow mode: daily maintenance", function () {
 
     it("counts a deep check that fails for want of scratch space as an error, not a mismatch", async function () {
       await this.local.writeAndPush("/a.txt", "A");
-      await setup.expectMirrored(this);
 
       // Scratch is a file, so the clone has nowhere to go
       var file = this.tmp + "/not-a-directory";
@@ -146,7 +140,16 @@ describe("git store shadow mode: daily maintenance", function () {
       expect(result.findings.length).toBe(1);
       expect(result.findings[0].check).toBe("deep");
       expect(result.findings[0].kind).toBe("error");
-      expect(this.shadowLines("verify").filter((line) => /check=deep/.test(line))[0]).toContain("outcome=error");
+      expect(this.storeLines("verify").filter((line) => /check=deep/.test(line))[0]).toContain("outcome=error");
+    });
+
+    it("skips a blog which is off git", async function () {
+      await require("util").promisify(require("models/blog").set)(this.blog.id, { client: "" });
+
+      var result = await this.check();
+
+      expect(result.skipped).toBe(true);
+      expect(result.findings).toEqual([]);
     });
 
     it("tells a verdict on the store from trouble on this machine", function () {
@@ -159,6 +162,7 @@ describe("git store shadow mode: daily maintenance", function () {
       expect(maintenance._verdict(new NotFoundError("No such key: packs/pack-x.pack"))).toBe("missing");
       expect(maintenance._verdict(new Error("git index-pack --strict --fsck-objects x.pack failed: fatal: pack has bad object at offset 12"))).toBe("mismatch");
       expect(maintenance._verdict(new Error("git fsck --strict --no-dangling failed: missing blob 1234"))).toBe("mismatch");
+      expect(maintenance._verdict(new Error("git update-ref refs/heads/master 1234 failed: fatal: trying to write ref with nonexistent object"))).toBe("mismatch");
 
       expect(maintenance._verdict(coded("ENOSPC: no space left on device, write", "ENOSPC"))).toBe(null);
       expect(maintenance._verdict(coded("EACCES: permission denied, mkdtemp", "EACCES"))).toBe(null);
@@ -174,7 +178,6 @@ describe("git store shadow mode: daily maintenance", function () {
     it("runs the store's sweep and logs it", async function () {
       await this.local.writeAndPush("/a.txt", "A");
       await this.local.writeAndPush("/b.txt", "B");
-      await setup.expectMirrored(this);
 
       var lists = this.stores[this.blog.id].stats.lists;
       var stats = await maintenance.sweepBlog(this.blog.id);
@@ -182,7 +185,7 @@ describe("git store shadow mode: daily maintenance", function () {
       expect(stats.manifestsDeleted).toBe(0);
       expect(stats.packsDeleted).toBe(0);
       expect(this.stores[this.blog.id].stats.lists).toBeGreaterThan(lists);
-      expect(this.shadowLines("sweep")[0]).toMatch(/ op=sweep outcome=ok storeMs=\d+ requests=\d+ /);
+      expect(this.storeLines("sweep")[0]).toMatch(/ op=sweep outcome=ok ms=\d+ requests=\d+ /);
     });
   });
 
@@ -201,14 +204,12 @@ describe("git store shadow mode: daily maintenance", function () {
 
     it("deletes a deleted blog's prefix, spares a recent one, and never touches a live git blog's", async function () {
       await this.local.writeAndPush("/a.txt", "A");
-      await setup.expectMirrored(this);
 
       var gone = await old(this, "blog_gone", 3 * DAY);
       var recent = await old(this, "blog_recent", 60 * 1000);
       var live = this.stores[this.blog.id];
       var liveKeys = await keys(live);
 
-      // Even a week on, the live blog's prefix stays
       var counts = await maintenance.orphans({ now: Date.now() });
 
       expect(await keys(gone)).toEqual([]);
@@ -219,17 +220,17 @@ describe("git store shadow mode: daily maintenance", function () {
       expect(counts.live).toBe(1);
       expect(counts.findings).toEqual([{ blog: "blog_gone", check: "orphan", kind: "orphan", detail: "deleted 2 objects left behind" }]);
 
+      // Even a week on, the live blog's prefix stays
       counts = await maintenance.orphans({ now: Date.now() + 7 * DAY });
       expect(await keys(recent)).toEqual([]);
       expect(await keys(live)).toEqual(liveKeys);
       expect(counts.live).toBe(1);
 
-      expect(this.shadowLines("remove").filter((line) => / outcome=ok /.test(line)).length).toBe(2);
+      expect(this.storeLines("remove").filter((line) => / outcome=ok /.test(line)).length).toBe(2);
     });
 
     it("deletes the manifests a disconnect's removal keeps without reporting them", async function () {
       await this.local.writeAndPush("/a.txt", "A");
-      await setup.expectMirrored(this);
 
       var gone = await old(this, "blog_gone", 3 * DAY);
       await gone.delete("packs/pack-" + "a".repeat(40) + ".pack");
@@ -239,12 +240,11 @@ describe("git store shadow mode: daily maintenance", function () {
       expect(await keys(gone)).toEqual([]);
       expect(counts.removed).toBe(1);
       expect(counts.findings).toEqual([]);
-      expect(this.shadowLines("remove").filter((line) => /reason=tombstone/.test(line)).length).toBe(1);
+      expect(this.storeLines("remove").filter((line) => /reason=tombstone/.test(line)).length).toBe(1);
     });
 
     it("reports a prefix it could not clean up, and goes on to the rest", async function () {
       await this.local.writeAndPush("/a.txt", "A");
-      await setup.expectMirrored(this);
 
       var ctx = this;
       var gone = await old(this, "blog_gone", 3 * DAY);
@@ -272,14 +272,15 @@ describe("git store shadow mode: daily maintenance", function () {
 
       // The daily run emails it
       var sent = [];
-      var result = await gitStoreMaintenance.run({
-        recheckDelayMs: 10,
-        deepCount: 0,
-        orphanSweep: true,
-        sendEmail: async function (view) {
-          sent.push(view);
-        },
-      });
+      var result = await gitStoreMaintenance.run(
+        this.daily({
+          deepCount: 0,
+          orphanSweep: true,
+          sendEmail: async function (view) {
+            sent.push(view);
+          },
+        })
+      );
 
       expect(result.sent).toBe(true);
       expect(sent.length).toBe(1);
@@ -289,10 +290,9 @@ describe("git store shadow mode: daily maintenance", function () {
 
     it("looks for prefixes left behind only on the first of the month", async function () {
       await this.local.writeAndPush("/a.txt", "A");
-      await setup.expectMirrored(this);
 
       var gone = await old(this, "blog_gone", 3 * DAY);
-      var options = { deepCount: 0, recheckDelayMs: 10, scratchDir: this.tmp + "/daily-scratch" };
+      var options = this.daily({ deepCount: 0 });
 
       var second = await maintenance.daily(Object.assign({ now: Date.UTC(2099, 0, 2) }, options));
       expect(second.orphans).toBe(null);
@@ -318,19 +318,18 @@ describe("git store shadow mode: daily maintenance", function () {
 
   describe("the daily job", function () {
     function run(ctx, sent) {
-      return gitStoreMaintenance.run({
-        recheckDelayMs: 10,
-        orphanSweep: false,
-        scratchDir: ctx.tmp + "/daily-scratch",
-        sendEmail: async function (view) {
-          sent.push(view);
-        },
-      });
+      return gitStoreMaintenance.run(
+        ctx.daily({
+          orphanSweep: false,
+          sendEmail: async function (view) {
+            sent.push(view);
+          },
+        })
+      );
     }
 
     it("sends no email when all is well, and deep checks the blog", async function () {
       await this.local.writeAndPush("/a.txt", "A");
-      await setup.expectMirrored(this);
 
       var sent = [];
       var result = await run(this, sent);
@@ -341,16 +340,18 @@ describe("git store shadow mode: daily maintenance", function () {
       expect(result.report.sweeps.ok).toBe(1);
       expect(result.report.deepChecked).toBe(1);
       // The blog's sweep, and the scratch directory's (source=scratch)
-      var sweeps = this.shadowLines("sweep");
+      var sweeps = this.storeLines("sweep");
       expect(sweeps.filter((line) => / source=scratch /.test(line)).length).toBe(1);
       expect(sweeps.filter((line) => !/ source=scratch /.test(line)).length).toBe(1);
     });
 
     it("sends one email for several findings", async function () {
-      await behind(this);
+      await this.local.writeAndPush("/a.txt", "A");
 
-      var current = await manifest.read(this.stores[this.blog.id]);
-      await this.stores[this.blog.id].delete(layout.idxKey(current.packs[0].name));
+      var named = await current(this);
+      var store = this.stores[this.blog.id];
+      await store.delete(layout.idxKey(named.packs[0].name));
+      await store.put(layout.packKey(named.packs[0].name), Buffer.from("too short"));
 
       var sent = [];
       var result = await run(this, sent);
@@ -365,16 +366,6 @@ describe("git store shadow mode: daily maintenance", function () {
 
       // A blog which failed the cheap check is not cloned
       expect(result.report.deepChecked).toBe(0);
-    });
-
-    it("does nothing with shadow mode off", async function () {
-      config.git_store.shadow = "";
-
-      var sent = [];
-      var result = await run(this, sent);
-
-      expect(result.skipped).toBe(true);
-      expect(sent).toEqual([]);
     });
   });
 });

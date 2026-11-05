@@ -8,6 +8,7 @@ describe("git client sync: entries", function () {
 
   var fs = require("fs-extra");
   var helpers = require("./setup/helpers");
+  var folder = require("./setup/folder");
 
   afterEach(async function () {
     await this.local.expectSynced();
@@ -112,7 +113,7 @@ describe("git client sync: entries", function () {
 
     await this.local.writeAndPush(nfd, "# Café\n\nThe first version of the body");
 
-    var names = await fs.readdir(this.blogDirectory + "/entries");
+    var names = await folder.names(this.blog.id, "/entries");
 
     expect(names).toContain("nfd-caf\u00e9.txt");
     expect(names).not.toContain("nfd-cafe\u0301.txt");
@@ -136,7 +137,7 @@ describe("git client sync: entries", function () {
 
     expect(await helpers.blogHas(this, nfc)).toBe(false);
     // /entries goes too when this was the only file left in it
-    expect(await fs.pathExists(this.blogDirectory + "/entries/nfd-caf\u00e9.txt")).toBe(false);
+    expect(await folder.has(this.blog.id, "/entries/nfd-caf\u00e9.txt")).toBe(false);
     expect((await helpers.entry(this.blog.id, nfc)).deleted).toBe(true);
   });
 });

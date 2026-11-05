@@ -1,7 +1,7 @@
 // What a push does to the rest of Blot, through the whole git client: the sync
 // it starts (or doesn't), the follow-up written before the client is told
 // "ok", and the lock on the refs it shares with Blot's own writes. The
-// protocol itself is in receive-pack.js.
+// protocol itself is in served/tests/receive.js and store/tests/receive.js.
 describe("git client push and the sync", function () {
   require("./setup")({ clone: false, client: true });
 
