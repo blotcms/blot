@@ -1,7 +1,9 @@
 // Checks git blogs' repositories in the git store (<blogID>/git/ in the
 // storage bucket), with the checks the daily maintenance runs
 // (app/clients/git/served/maintenance.js), and prints the result as JSON. It
-// reads, and writes nothing to the store.
+// reads, and writes nothing to the store. For a repository at an explicit
+// target, with no config, Redis or blog record (a copy restored from the
+// offsite backup), use scripts/git/check-store.js, which runs the same checks.
 //
 //   cheap (always)  the store has a copy, and every file the newest manifest
 //                   names is in the bucket at its size
