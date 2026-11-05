@@ -425,8 +425,9 @@ should consolidate into one storage-layer method, exposed explicitly
     blogs first, then cohorts, then everyone, watching the performance gates
     at each step. Rolling back a blog is a reconcile from S3 to disk and a
     flag flip. The flag (`BLOT_FOLDER_PRIMARY`), its guard, the disk copy and
-    the reverse reconcile are built (§ "S3 as a blog's primary store" below);
-    no production blog is on S3 yet.
+    the reverse reconcile are built, and reverse shadow reads check a blog on
+    S3 against its disk copy (§ "S3 as a blog's primary store" below). The
+    ramp is config only, in the production environment.
   - **E, remove the disk.** Stop writing blog folders to EBS, delete
     `data/blogs`, and remove the data volume.
 - **Phase 3 — git client repos.** Done in
@@ -681,8 +682,24 @@ outcomes up. For `createReadStream` and `serve` (which re-read the file from
 both sides) the time to first byte of each side is recorded as well as the
 whole transfer, since the first byte is what a visitor waits for. Hours
 recorded before this have only the blended S3 latency.
-Reads which go to S3 in the first place (a blog on S3, below) are not
-shadowed.
+
+**Reverse shadow reads (#2258 Phase D).** For a blog on S3 (below) the same
+thing runs the other way round: `config.folder_shadow.reverse_rate`
+(`BLOT_FOLDER_SHADOW_REVERSE_RATE`; unset, the same as `rate`) of the reads
+S3 answered are repeated against the blog's disk copy, with the same
+comparisons, the same recheck and the same limits, off the request path. A
+mismatch there means S3 served something the disk would not have, which is
+what the ramp watches for. The counters are the forward ones with `reverse:`
+in front (`reverse:read:sampled`), in the same hourly hash, so
+`shadow-report.js` and `folder-soak-report.js` print a second table,
+"S3-primary vs disk copy"; its S3 latencies are those of the caller's own
+reads, with their content cache outcome. Mismatch lines carry
+`direction=reverse`. A disk copy lags S3 by the copy after each write, so a
+read which raced one is caught by the recheck and counts as transient; a
+mismatch on a blog whose disk copy is already known to be behind
+(`storage:folder:primary:dirty`, which the reconcile repairs) counts as
+`behind`, not as a mismatch. When a spec chooses the backend
+(`useBackend`), there is no disk copy and nothing is shadowed.
 
 ### S3 as a blog's primary store (#2258 Phase D)
 
@@ -748,8 +765,21 @@ backend instead of the disk, and the disk keeps a copy to roll back to.
   (kept on disk above); switching a blog on S3 to it moves the blog to
   disk, so its disk copy must be clean; `stat` with `{ hash: true }`
   downloads the file (Dropbox, until it keeps its own `{ sha1, content_hash }`
-  pairs), so a Dropbox reset reads every file from S3; the shadow reads do not run
-  in reverse, so nothing samples a blog on S3 against its disk between daily
-  checks; `rebuild-file-index.js --apply` empties a blog's index before
-  refilling it, so a blog on S3 reads a partial (or empty) folder
-  while it runs.
+  pairs), so a Dropbox reset reads every file from S3.
+- **Rebuilding the index of a blog on S3**: `rebuild-file-index.js --apply`
+  empties a blog's index before refilling it, so it refuses a blog on S3,
+  whose reads go by the index. With `--via-disk` it first marks the blog's
+  mirror behind (`mirror.markBehind`), which sends the blog's reads to its
+  disk copy (it must not be behind S3), rebuilds under the sync lock, and
+  leaves the blog in the mirror's dirty set: the next hourly reconcile
+  checks S3 against the disk, repairs anything, and puts the blog back on
+  S3.
+- **The ramp** (the cutover PR): the code's default stays `off`; the move is
+  ramped in the production environment, a deploy of a new commit each step:
+  the test blogs (not the Git one), a few real blogs, then `all`. Each step
+  is watched in `shadow-report.js`, both directions, and in the reconcile
+  emails. Narrowing the flag, or `off`, is the rollback: the disk copy is
+  kept in step, and the reconcile repairs it from S3 for every named blog.
+  Git blogs could move only once #2259's cutover had reached all of them
+  and its cleanup took `git` out of `DISK_CLIENTS`, which it now has. Serving `/folder/v-*` from the
+  bucket at the CDN edge is a separate manual step after `all`.

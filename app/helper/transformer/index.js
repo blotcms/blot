@@ -57,6 +57,15 @@ function resolveFolderCDNPath(src, blogID) {
   return decodeFolderPath(cutIndex === -1 ? unwrapped : unwrapped.slice(0, cutIndex));
 }
 
+// Decodes percent-escapes, or returns the string as it is if malformed
+function safeDecodeComponent(string) {
+  try {
+    return decodeURIComponent(string);
+  } catch (e) {
+    return string;
+  }
+}
+
 function Transformer(blogID, name) {
   ensure(blogID, "string").and(name, "string");
 
@@ -166,15 +175,18 @@ function Transformer(blogID, name) {
     // and yields an absolute path, which join() then re-roots under the
     // blog's folder - the same containment trick storage/folder uses.
     tasks.push(function (next) {
-      callbackify(assets.ensureLocal)(
-        blogID,
-        resolve("/", src),
-        function (err, fullLocalPath) {
-          if (err) return next(err);
-          fromPath(fullLocalPath, transform, next);
-        }
-      );
+      fromAssets(src, transform, next);
     });
+
+    // Generated assets with non-ASCII names (e.g. the image cache's
+    // "_image_cache/{uuid}/说明.png") are linked with their names escaped,
+    // so try the decoded path too.
+    var decodedAssetPath = safeDecodeComponent(src);
+
+    if (decodedAssetPath !== src)
+      tasks.push(function (next) {
+        fromAssets(decodedAssetPath, transform, next);
+      });
 
     // If we make it here, the file doesn't match anything in the static
     // folder. We don't need to look further inside the static folder since
@@ -239,6 +251,18 @@ function Transformer(blogID, name) {
       debug(results);
       callback(null, results[0], results[1]);
     });
+  }
+
+  // A file in the blog's generated assets
+  function fromAssets(path, transform, callback) {
+    callbackify(assets.ensureLocal)(
+      blogID,
+      resolve("/", path),
+      function (err, fullLocalPath) {
+        if (err) return callback(err);
+        fromPath(fullLocalPath, transform, callback);
+      }
+    );
   }
 
   // A file in the blog's folder, at exactly this path

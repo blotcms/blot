@@ -1,4 +1,5 @@
-var typeset = require("typeset");
+// typeset(html, options), parsing the document once: see ./walk
+var typeset = require("./walk");
 
 function normalizeBooleanOption(value) {
   if (value === null || value === undefined || value === false || value === 0)

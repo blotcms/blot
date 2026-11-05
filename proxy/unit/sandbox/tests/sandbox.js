@@ -36,6 +36,20 @@ test("jail: binds pandoc's binary, not /usr/local/bin", () => {
   assert(!binds.includes("/usr/local/bin") && !binds.includes("/usr/local"));
 });
 
+test("jail: the pandoc job is a worker, pandoc lua running its script, with a heap cap", () => {
+  const j = jail.JOBS.pandoc;
+  assert.deepStrictEqual(j.command, [
+    "/usr/local/bin/pandoc", "+RTS", "-M400M", "-RTS",
+    "lua", "/usr/src/app/app/sandbox/jobs/pandoc-worker.lua",
+  ]);
+  assert(fs.existsSync(path.join(__dirname, "../../../../app/sandbox/jobs/pandoc-worker.lua")));
+  assert.strictEqual(j.memoryBytes, 512 * 1024 * 1024);
+  // a worker is retired before nsjail's time limit (its whole life) ends it
+  assert(j.worker.maxAgeSeconds + j.worker.requestSeconds < j.timeSeconds);
+  assert(j.worker.requestSeconds >= 10);
+  assert(j.worker.maxIdle >= 1 && j.worker.maxIdle <= 2);
+});
+
 test("jail: passes exactly one environment variable", () => {
   const argv = jail.args("metadata");
   assert.deepStrictEqual(
@@ -53,8 +67,9 @@ test("jail: an unknown job throws", () => {
 test("jail: every job runs its own file in main.js, within its limits", () => {
   assert.deepStrictEqual(Object.keys(jail.JOBS).sort(), ["exif", "favicon", "fetch", "fetch-image", "metadata", "pandoc", "parse-html", "resize", "screenshot", "template-image", "thumbnail", "to-png", "unzip"]);
   for (const [name, j] of Object.entries(jail.JOBS)) {
-    assert.deepStrictEqual(j.command.slice(-2), ["/usr/src/app/app/sandbox/jobs/main.js", name]);
     assert(fs.existsSync(path.join(__dirname, "../../../../app/sandbox/jobs", name + ".js")));
+    if (name === "pandoc") continue;
+    assert.deepStrictEqual(j.command.slice(-2), ["/usr/src/app/app/sandbox/jobs/main.js", name]);
     if (j.network) continue;
     if (name === "parse-html") continue;
     assert.strictEqual(j.memoryBytes, 512 * 1024 * 1024);
@@ -68,7 +83,6 @@ test("jail: every job runs its own file in main.js, within its limits", () => {
     assert.strictEqual(jail.JOBS[name].maxOutputBytes, 64 * 1024 * 1024);
   }
   assert.strictEqual(jail.JOBS.exif.timeSeconds, 30);
-  assert.strictEqual(jail.JOBS.pandoc.timeSeconds, 30);
   assert.strictEqual(jail.JOBS.exif.maxOutputBytes, 1024 * 1024);
 });
 
@@ -726,6 +740,174 @@ test("broker: a request that queued too long is busy, not given a jail", async (
     held.release();
     assert.deepStrictEqual((await first).header, { ok: true, length: 1 });
     assert.deepStrictEqual((await second).header, { ok: false, error: "busy" });
+  });
+});
+
+// ---- a job with workers -------------------------------------------------------
+
+const WORKER = (worker) => ({
+  echo: {
+    command: [],
+    memoryBytes: 0,
+    timeSeconds: 60,
+    maxInputBytes: 1000,
+    maxOutputBytes: 1000,
+    worker: {
+      requestSeconds: 5,
+      requests: 100,
+      maxAgeSeconds: 60,
+      idleSeconds: 60,
+      maxIdle: 2,
+      heavyInputBytes: 500,
+      heavyMs: 5000,
+      ...worker,
+    },
+  },
+});
+// A stand-in for app/sandbox/jobs/pandoc-worker.lua, written out (a file under
+// tests/ would be loaded as a spec): it reads requests in frames and answers
+// its pid and the request upper-cased, or does what the request says.
+const FAKE_WORKER = `
+let buffer = Buffer.alloc(0);
+let request = [];
+process.stdin.on("data", (chunk) => {
+  buffer = Buffer.concat([buffer, chunk]);
+  for (;;) {
+    const end = buffer.indexOf(10);
+    if (end === -1) return;
+    const length = Number(buffer.subarray(0, end).toString());
+    if (buffer.length - end - 1 < length) return;
+    const bytes = buffer.subarray(end + 1, end + 1 + length);
+    buffer = buffer.subarray(end + 1 + length);
+    if (length) { request.push(bytes); continue; }
+    answer(Buffer.concat(request).toString());
+    request = [];
+  }
+});
+function answer(text) {
+  if (text === "refuse") return process.stdout.write("E\\n");
+  if (text === "die") process.exit(3);
+  if (text === "hang") return;
+  if (text === "garbage") return process.stdout.write("nonsense\\n");
+  if (text.startsWith("big:")) {
+    const size = Number(text.slice(4));
+    return process.stdout.write(size + "\\n" + "x".repeat(size));
+  }
+  const body = process.pid + " " + text.toUpperCase();
+  process.stdout.write(Buffer.byteLength(body) + "\\n" + body);
+}
+`;
+const fakeWorkerFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-worker-")), "worker.js");
+fs.writeFileSync(fakeWorkerFile, FAKE_WORKER);
+const fakeWorker = "exec node " + fakeWorkerFile;
+
+// The worker's pid and its answer
+async function ask(socket, input) {
+  const reply = await request(socket, job, input);
+  if (!reply.header.ok) return reply.header;
+  const [pid, text] = reply.body.toString().split(" ");
+  return { pid, text };
+}
+
+test("broker: a job with workers answers one request after another from the same jail", async () => {
+  const started = [];
+  await withBroker({ jobs: WORKER(), script: fakeWorker, started }, async (socket, broker) => {
+    const first = await ask(socket, "hello");
+    const second = await ask(socket, "world");
+    assert.strictEqual(first.text, "HELLO");
+    assert.strictEqual(second.text, "WORLD");
+    assert.strictEqual(first.pid, second.pid);
+    assert.strictEqual(started.length, 1);
+    assert.strictEqual(broker.running.size, 0);
+  });
+});
+
+test("broker: a worker's input arrives whole however the client sends it", async () => {
+  await withBroker({ jobs: WORKER({ heavyInputBytes: 1e6 }), script: fakeWorker }, async (socket) => {
+    const reply = await new Promise((resolve) => {
+      const conn = net.connect(socket);
+      const chunks = [];
+      conn.on("data", (c) => chunks.push(c));
+      conn.on("close", () => resolve(Buffer.concat(chunks).toString()));
+      conn.write('{"job":"echo"}\nab');
+      setTimeout(() => conn.write("cd"), 20);
+      setTimeout(() => conn.end("ef"), 40);
+    });
+    assert.match(reply, /^\{"ok":true,"length":\d+\}\n\d+ ABCDEF$/);
+  });
+});
+
+test("broker: workers run requests side by side, and keep at most maxIdle", async () => {
+  const started = [];
+  await withBroker({ jobs: WORKER({ maxIdle: 1 }), script: fakeWorker, started }, async (socket) => {
+    const answers = await Promise.all(["a", "b", "c"].map((text) => ask(socket, text)));
+    assert.deepStrictEqual(answers.map((a) => a.text), ["A", "B", "C"]);
+    assert.strictEqual(new Set(answers.map((a) => a.pid)).size, 3);
+    const after = await ask(socket, "d");
+    assert(answers.some((a) => a.pid === after.pid), "one worker was kept");
+    assert.strictEqual(started.length, 3);
+  });
+});
+
+test("broker: a worker's big reply comes back whole, and quickly", async () => {
+  const jobs = WORKER();
+  jobs.echo.maxOutputBytes = 64 * 1024 * 1024;
+  await withBroker({ jobs, script: fakeWorker }, async (socket) => {
+    const started = Date.now();
+    const reply = await request(socket, job, "big:" + 32 * 1024 * 1024);
+    assert.deepStrictEqual(reply.header, { ok: true, length: 32 * 1024 * 1024 });
+    assert(reply.body.every((byte) => byte === 120));
+    // joining every chunk as it came took ~10s for 16 MiB
+    assert(Date.now() - started < 3000, "took " + (Date.now() - started) + "ms");
+  });
+});
+
+test("broker: arguments a worker refuses are failed, and the worker carries on", async () => {
+  await withBroker({ jobs: WORKER(), script: fakeWorker }, async (socket) => {
+    const before = await ask(socket, "x");
+    assert.deepStrictEqual(await ask(socket, "refuse"), { ok: false, error: "failed" });
+    assert.strictEqual((await ask(socket, "y")).pid, before.pid);
+  });
+});
+
+test("broker: a worker that dies, answers nonsense or is too slow is replaced", async () => {
+  await withBroker({ jobs: WORKER({ requestSeconds: 0.3 }), script: fakeWorker }, async (socket) => {
+    for (const [input, error] of [["die", "failed"], ["garbage", "failed"], ["hang", "timeout"]]) {
+      const before = await ask(socket, "x");
+      assert.deepStrictEqual(await ask(socket, input), { ok: false, error }, input);
+      const after = await ask(socket, "y");
+      assert.strictEqual(after.text, "Y");
+      assert.notStrictEqual(after.pid, before.pid, input);
+    }
+  });
+});
+
+test("broker: a worker is retired after its requests, its age, a heavy request or time idle", async () => {
+  await withBroker({ jobs: WORKER({ requests: 2 }), script: fakeWorker }, async (socket) => {
+    const a = await ask(socket, "a");
+    assert.strictEqual((await ask(socket, "b")).pid, a.pid);
+    assert.notStrictEqual((await ask(socket, "c")).pid, a.pid);
+  });
+  await withBroker({ jobs: WORKER(), script: fakeWorker }, async (socket) => {
+    const a = await ask(socket, "x".repeat(600));
+    assert.notStrictEqual((await ask(socket, "b")).pid, a.pid);
+  });
+  await withBroker({ jobs: WORKER({ idleSeconds: 0.05 }), script: fakeWorker }, async (socket) => {
+    const a = await ask(socket, "a");
+    await sleep(200);
+    assert.notStrictEqual((await ask(socket, "b")).pid, a.pid);
+  });
+  await withBroker({ jobs: WORKER({ maxAgeSeconds: 0 }), script: fakeWorker }, async (socket) => {
+    const a = await ask(socket, "a");
+    assert.notStrictEqual((await ask(socket, "b")).pid, a.pid);
+  });
+});
+
+test("broker: a worker's input over the limit is input-too-large, and the worker is replaced", async () => {
+  await withBroker({ jobs: WORKER({ heavyInputBytes: 1e6 }), script: fakeWorker }, async (socket) => {
+    const before = await ask(socket, "x");
+    assert.deepStrictEqual(await ask(socket, "x".repeat(2000)), { ok: false, error: "input-too-large" });
+    assert.notStrictEqual((await ask(socket, "y")).pid, before.pid);
   });
 });
 

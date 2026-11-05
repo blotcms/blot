@@ -41,7 +41,10 @@ On a new host run `deploy.sh` directly (see [Moving to a new host](#moving-to-a-
 The `nginx-*` fail2ban jails ban `http,https` over TCP and, with a second
 `iptables-multiport` action named `<jail>-udp`, over UDP too (HTTP/3 is UDP 443).
 They deliberately do not use `iptables-allports`, which would also lock a
-banned IP out of ssh.
+banned IP out of ssh. Neither does `recidive`, the week-long ban for repeat
+offenders: it bans the same web ports. It used `iptables-allports` until 5 Nov
+2026, when GitHub Actions runners that had been given an address a scraper once
+used could not reach ssh, and deploys hung on their first `ssh`.
 
 ## Unit memory log
 

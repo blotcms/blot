@@ -31,8 +31,10 @@ var primary = require("./primary");
 // Shadow reads (./shadow.js, #2258 Phase C): for mirrored blogs, a sample
 // of reads (config.folder_shadow.rate) is repeated against S3 once the disk
 // has answered, to compare the results and time both. The caller gets the
-// disk's answer, unchanged and undelayed, whatever S3 does. Reads which went
-// to S3 in the first place are not shadowed.
+// disk's answer, unchanged and undelayed, whatever S3 does. For a blog on S3
+// it is the other way round (reverse shadow reads, #2258 Phase D): a sample
+// of the reads S3 answered is repeated against the disk copy, so the ramp
+// catches S3 serving something the disk would not have.
 //
 // Missing files reject with NotFoundError (code "ENOENT"). A symlink in a
 // blog folder rejects with code "ELOOP" (see local.js: the no-symlink policy
@@ -87,11 +89,16 @@ function blogOf(name, args) {
   return args[name === "serve" ? 2 : 0];
 }
 
-// Reads from disk are shadowed (./shadow.js decides which)
+// Reads are shadowed (./shadow.js decides which): from disk against S3, and
+// for a blog on S3 from S3 against its disk copy. Not when a spec chose the
+// backend, which leaves a blog on S3 with no disk copy.
 function invoke(name, which, args) {
   var call = backends[which]()[name];
 
-  if (which === "local" && shadow.OPS.indexOf(name) !== -1) return shadow(name, call, args);
+  if (shadow.OPS.indexOf(name) !== -1) {
+    if (which === "local") return shadow(name, call, args);
+    if (!chosen) return shadow.reverse(name, call, args);
+  }
 
   return call.apply(null, args);
 }

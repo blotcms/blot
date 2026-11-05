@@ -187,8 +187,6 @@ Create skills which delegate cheap subagents to scan logs for issues:
 
 Upgrade the Stripe integration (low priority): the stripe npm package is 6.36.0 (2019) and the account's default API version is 2011-11-17, except app/models/user/syncPaymentMethods.js, which pins 2020-08-27. Move to a current stripe-node and pin one explicit API version on every client, after checking the webhook handler (app/dashboard/webhooks/stripe_webhook.js), subscription create/cancel/pay and card update against the API changelog. Upgrade the account default in the Dashboard only once the code no longer relies on it.
 
-Image cache and thumbnails name some files after a slug that is still percent-encoded (literal %E8..., sometimes cut mid-sequence: ...-%E2.png, large.jpg%e2%80%9d) and build URLs without escaping, so those images 404/400 today: slug from the decoded name, then rebuild affected blogs (backfill --dry-run lists them)
-
 Do we eventually prune and rotate the data gathered in the various statistics cron jobs? Eventually we need to purge these we don’t want the database growing infinitely
 
 archives and all_entries in the template engine should be bounded to a maximum of 10,000 posts 
@@ -323,7 +321,6 @@ Improve Dropbox sync
 - Bug: ensure that when a process dies, any blogs setting up dropbox client will be re-attempted
 - Adding an additional blog to an existing app folder under constant webhooks fails: moveExistingFiles (routes/setup/createFolder.js) gives up on the root blog's lock after ~5s and setup fails loudly. Retry or wait longer for the other blog's lock (or take all account-linked blogs' locks in a fixed order)
 - Bug: re-use iCloud resolve case-conflicts function (maybe move into sync?) to ensure blogs with case-sensitive file conflicts are properly initialized on Dropbox
-- Fix bug with Client.write which does not propogate sync errors... to demonstrate this, revoke dropbox token then try to enable local editing.
 - Bug: Switch uploads >150 MB to the Dropbox upload session API with chunked transfer and resumable checkpoints
 - Bug: run reset-to-blot when sync fails / errors
 - Bug: ensure you can move the folder in full-folder permission mode
@@ -414,8 +411,6 @@ Improve iCloud sync
 - Investigate setting up paralell server with 'Advanced Data Protection' enabled so users with this setting can sync to Blot as well
 
 ---
-
-Fix bug with placeholder files when switching clients which will lead to data loss because Blot will not transfer the contents of placeholder files across
 
 Fix bug with the paypal next bill dates are not syncing correctly for some users (e.g.slopserve)
 

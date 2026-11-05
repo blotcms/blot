@@ -36,6 +36,7 @@ const path = require("path");
 // Called through the module, so a spec can make one command fail
 const childProcess = require("child_process");
 const config = require("config");
+const clfdate = require("helper/clfdate");
 const storage = require("storage/folder");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const limiter = require("../limiter");
@@ -132,10 +133,23 @@ function quote(file) {
 }
 
 // The files of the folder to add, as relative paths ("a/b.txt")
+//
+// Empty files are left out. Blot writes an empty file where it could not
+// download one (an oversized or unsupported file), so a placeholder can't be
+// told from a file that really is empty; committing it would make the empty
+// file the repository's copy. The cost is that genuinely empty files do not
+// carry over to the new repository.
 async function candidates(blogID) {
   const files = [];
   for await (const file of storage.walk(blogID, "/")) {
-    if (!shouldIgnoreFile(file)) files.push(file.slice(1));
+    if (shouldIgnoreFile(file)) continue;
+
+    if ((await storage.stat(blogID, file)).size === 0) {
+      console.log(clfdate() + " Git: create: skipping empty file (possible placeholder)", blogID, file);
+      continue;
+    }
+
+    files.push(file.slice(1));
   }
   return files;
 }

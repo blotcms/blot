@@ -135,6 +135,23 @@ describe("git client create", function () {
     expect(fs.readdirSync(clonedDir + "/Sub Folder")).toEqual(["second.txt"]);
   });
 
+  // Blot cannot tell a placeholder (an empty file standing in for a file it
+  // could not download) from a file that really is empty, so neither is added.
+  it("does not add empty files to the repository", async function () {
+    var blog = this.blog;
+    var clonedDir = this.tmp + "/" + this.blog.handle;
+
+    await folder.write(blog.id, "/post.txt", "Hello");
+    await folder.write(blog.id, "/placeholder.pdf", "");
+
+    var repoUrl = await promisify(setClientToGit)(this.user, blog, this.server.port);
+    await Git(this.tmp).silent(true).clone(repoUrl);
+
+    expect(fs.readdirSync(clonedDir).sort()).toEqual([".git", "post.txt"]);
+    // The placeholder stays in the blog folder
+    expect(await folder.has(blog.id, "/placeholder.pdf")).toBe(true);
+  });
+
   it("skips files ignored by an existing .gitignore", async function () {
     var blog = this.blog;
     var clonedDir = this.tmp + "/" + this.blog.handle;

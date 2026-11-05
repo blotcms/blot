@@ -96,10 +96,15 @@ function read (blog, path, callback) {
       // find titles
       // this is possibly? span id="h.ulrsxjddh07w" class="anchor">
       $("p").each(function () {
+        var children = $(this).children();
+
+        // only a paragraph with exactly one child can be a bold title, so
+        // skip the text, find and document-wide h1 query for every other one
+        if (children.length !== 1) return;
+
         var text = $(this).text();
         var strong = $(this).find("strong");
         var strongText = strong.text();
-        var children = $(this).children();
         var hasH1 = $("body h1").length;
 
         if (
@@ -119,20 +124,24 @@ function read (blog, path, callback) {
       });
 
       $("a").each(function () {
+        var children = $(this).children();
+        if (children.length !== 1) return;
+
         var text = $(this).text();
         var em = $(this).find("em");
         var emText = em.text();
-        var children = $(this).children();
 
         if (children.length === 1 && text && emText && text === emText)
           $(this).html(em.html());
       });
 
       $("li").each(function () {
+        var children = $(this).children();
+        if (children.length !== 1) return;
+
         var text = $(this).text();
         var blockquote = $(this).find("blockquote");
         var blockquoteText = blockquote.text();
-        var children = $(this).children();
 
         if (
           children.length === 1 &&

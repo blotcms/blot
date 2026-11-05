@@ -13,8 +13,10 @@ describe("tags.set", function () {
       tags: ["tag1"],
     };
 
-    set(this.blog.id, entry, function (err) {
-      expect(err).toBeUndefined();
+    set(this.blog.id, entry, function (err, result) {
+      expect(err).toBeFalsy();
+      // The entry is now on tag1, which other entries' pages render
+      expect(result).toEqual({ changed: true });
       done();
     });
   });

@@ -208,9 +208,8 @@ jobs:
           echo "BLOT_PANDOC_PATH=$PANDOC_DIR/bin/pandoc" >> $GITHUB_ENV
           "$PANDOC_DIR/bin/pandoc" --version
 
-      # node_modules rather than just the npm download cache: there is no
-      # package-lock.json (see the Dockerfile) so `npm install` re-resolves and
-      # rebuilds sharp every run, and puppeteer re-downloads Chrome.
+      # node_modules rather than just the npm download cache: `npm ci` rebuilds
+      # sharp every run, and puppeteer re-downloads Chrome.
       - name: Cache Node modules and the Puppeteer browser
         id: cache-node-modules
         uses: actions/cache@v4
@@ -218,11 +217,11 @@ jobs:
           path: |
             node_modules
             ~/.cache/puppeteer
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ steps.versions.outputs.NODE_VERSION }}-${{ hashFiles('package.json') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ steps.versions.outputs.NODE_VERSION }}-${{ hashFiles('package-lock.json') }}
 
       - name: Install dependencies
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        run: npm install
+        run: npm ci
 
       - name: Cache Homebrew packages
         uses: actions/cache@v4
