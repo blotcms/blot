@@ -28,6 +28,8 @@ starts `SANDBOX_`, and it never falls back to in-process.
 
 - `metadata` format, size and orientation of an image.
 - `thumbnail` the thumbnail sizes of one image, static or animated; one output per size.
+  With `accept` (formats and minimum sizes) it first checks the image can be a
+  thumbnail and makes none if not, so a candidate costs one jail, not two.
 - `resize` shrinks an image to fit inside a square, in its own format.
 - `to-png` converts an image (HEIC, AVIF, TIFF...) to PNG.
 - `exif` exiftool on stdin, reduced to the fields asked for. It spawns

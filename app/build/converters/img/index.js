@@ -46,49 +46,59 @@ async function read(blog, path, callback) {
     let extras;
 
     const { stat } = await withLocalHeld(blog.id, path, async (localPath) => {
-      const parsedExif = await exif.parseExif(localPath, blog.imageExif);
+      // exiftool and the conversion are separate jails reading the same
+      // file, so they run side by side (parseExif never rejects)
+      const exifPromise = exif.parseExif(localPath, blog.imageExif);
 
-      extras = Object.keys(parsedExif).length
-        ? { exif: parsedExif }
-        : undefined;
+      const convert = async () => {
+        if (EXTENSIONS_TO_CONVERT.includes(extname(path).toLowerCase())) {
+          const transformer = new Transformer(blog.id, "img-converter");
+          const hashPath = hash(path);
+          const convertedFilename = `${name}.png`;
+          const convertedRelativePath = `/_assets/${hashPath}/${convertedFilename}`;
 
-      if (EXTENSIONS_TO_CONVERT.includes(extname(path).toLowerCase())) {
-        const transformer = new Transformer(blog.id, "img-converter");
-        const hashPath = hash(path);
-        const convertedFilename = `${name}.png`;
-        const convertedRelativePath = `/_assets/${hashPath}/${convertedFilename}`;
+          const writeConversion = async (sourcePath, relativePath) => {
+            // the sandbox converts the image and we write it to a local path,
+            // which we then commit to the blog's assets
+            const absolutePath = assets.path(blog.id, relativePath);
 
-        const writeConversion = async (sourcePath, relativePath) => {
-          // the sandbox converts the image and we write it to a local path,
-          // which we then commit to the blog's assets
-          const absolutePath = assets.path(blog.id, relativePath);
+            await fs.ensureDir(dirname(absolutePath));
+            await assets.remove(blog.id, relativePath);
+            const { outputs } = await sandbox.run("to-png", {}, { path: sourcePath });
+            await fs.writeFile(absolutePath, outputs[0]);
+            await assets.commit(blog.id, relativePath);
 
-          await fs.ensureDir(dirname(absolutePath));
-          await assets.remove(blog.id, relativePath);
-          const { outputs } = await sandbox.run("to-png", {}, { path: sourcePath });
-          await fs.writeFile(absolutePath, outputs[0]);
-          await assets.commit(blog.id, relativePath);
+            return { relativePath };
+          };
 
-          return { relativePath };
-        };
+          const convertImage = async (sourcePath) =>
+            writeConversion(sourcePath, convertedRelativePath);
 
-        const convertImage = async (sourcePath) =>
-          writeConversion(sourcePath, convertedRelativePath);
+          const conversion = await lookupWithTransformer(
+            transformer,
+            path,
+            convertImage
+          );
 
-        const conversion = await lookupWithTransformer(
-          transformer,
-          path,
-          convertImage
-        );
+          const conversionRelativePath =
+            conversion?.relativePath || convertedRelativePath;
 
-        const conversionRelativePath =
-          conversion?.relativePath || convertedRelativePath;
+          if (!(await assets.exists(blog.id, conversionRelativePath))) {
+            await writeConversion(localPath, conversionRelativePath);
+          }
 
-        if (!(await assets.exists(blog.id, conversionRelativePath))) {
-          await writeConversion(localPath, conversionRelativePath);
+          outputPath = conversionRelativePath;
         }
+      };
 
-        outputPath = conversionRelativePath;
+      try {
+        await convert();
+      } finally {
+        const parsedExif = await exifPromise;
+
+        extras = Object.keys(parsedExif).length
+          ? { exif: parsedExif }
+          : undefined;
       }
     });
 
