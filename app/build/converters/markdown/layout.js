@@ -42,29 +42,34 @@ function layout(text) {
 
   var lines = text.split("\n");
   var totalLines = lines.length;
+  var out = [];
 
+  // Indented lines are merged into the tag line above them as we pass, rather
+  // than spliced out of the array, which is quadratic in the number of merges.
   for (var i = 0; i < totalLines; i++) {
     var line = lines[i];
     var tag = hasTag(line);
 
-    if (!tag) continue;
+    if (!tag) {
+      out.push(line);
+      continue;
+    }
 
     // If the next line is indented by a tab, or four or five
     // spaces then merge it into this tag
-    for (var y = i + 1; y < totalLines; y++) {
+    var y = i + 1;
+    for (; y < totalLines; y++) {
       var nextLine = lines[y];
 
       if (!hasIndent(nextLine)) break;
 
       line += "\n" + trimLeading(nextLine);
-      lines.splice(y, 1);
-      y--;
-      totalLines--;
     }
+
+    i = y - 1;
 
     line = trimLeading(line.slice(tag.length));
     line = start(tag) + line + END;
-    lines[i] = line;
 
     if (isColumn(tag)) {
       // CLEAR if the next non-blank line is NOT a column
@@ -73,12 +78,15 @@ function layout(text) {
 
         if (isColumn(hasTag(lines[x]))) break;
 
-        lines[i] += CLEAR;
+        line += CLEAR;
         break;
       }
     }
+
+    out.push(line);
   }
 
+  lines = out;
   text = lines.join("\n");
 
   return text;
