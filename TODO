@@ -5,6 +5,44 @@ Route image URLs through the CDN even when the images have not synced yet
 - Separate performance follow-up: batch dependent-entry rebuilds across a sync so a large image batch does not rebuild the same post hundreds of times while holding the folder lock (see Improve Dropbox sync below).
 - Tell [Christopher](https://mail.google.com/mail/u/0/#inbox/FMfcgzQjggrQPpqTwcCrLtZGBDDgRCJK)
 
+Why does helper/ have four ID generators? can we consolidate under one, using a backfill?
+
+Fix this: Callbacks and promises mixed: about 199 files mix them, and async@2 is required in 72. This causes double callbacks and dropped errors.
+
+Update these: Stale dependencies:
+- stripe@6.36.0, a 2019 client, on your payments path.
+- highlight.js@10 (end-of-life) and jasmine@3.3.1.
+- faker@4.1.0 and colors@1.3.2. Their author sabotaged both projects in 2022, and you still carry them.
+- moment, debug@3, async@2, node-fetch@2.
+- You have a skill that checks Node, nginx and the OS for advisories, but nothing checks npm packages. The checking points at the wrong place.
+
+Set up prettier to lint format code
+
+Fix this: 879 console.log calls in non-test app code, and no structured logging. Several of your skills exist mainly to grep and rebuild meaning from free-text logs ([STATS], [SLOW-FILL], [folder-asset]). Structured logs plus a metrics backend would make most of them unnecessary.
+
+Fix this: Weak input validation. The blog schema only type-checks client as string. In app/dashboard/site/client.js, POST /switch disconnects the current client, then saves req.body.client without checking it names a real client. Later, clients[req.blog.client].disconnect hits undefined. It’s minor, but it’s the kind of thing a reviewer finds in five minutes and generalises from.
+
+Unify this: Duplicated libraries: node-fetch alongside native fetch, moment throughout, and some scripts require request, which isn’t in package.json.
+
+Unify this: Scattered config: about 101 environment variables, and 14 files read process.env directly.
+
+Fix this: Dev differs from prod: the test Redis is redis:alpine, unpinned (scripts/tests/invoke.sh:30), while CI and production run 6.2. Markdown goes through pandoc in production and through marked in development. The sandbox runs jailed in production and in-process in development.
+
+Remove customer info from TODO (and gmail links)
+
+Fix this: The agent instructions aren’t maintained. CLAUDE.md has two near-identical sections, “Pull request review” and “Pull request reviews”. One calls you “operator”, the other “maintainer”. A careful reviewer reads this as rules piled up and never edited.
+
+Research then implement this if sound: Make the version the only invalidation. Put cacheID in the proxy cache key, and drop the purge RPCs, the pending-purge queue, the per-file purges during sync, and most of the LRUs. Old entries age out by eviction. This is cheap and removes a whole failure class. Full pre-rendering is the logical end point, but don’t go all the way: search, arbitrary query strings and very large catalogs make it a lazy-render-into-versioned-store design, not an SSG.
+- I wonder if we could store the cacheID against the host and then as the ssl cert was read, we could seed this info automatically?
+
+Switch from redis to relational db?
+- Per-blog SQLite on object storage
+
+Implement: 5. Builds in isolated workers off a job queue.
+- multiple builds in parallel
+
+We should follow sane soc 2 practices
+
 ---
 
 Render and client-side cache follow-ups (#2390, #2401, #2420, #2426, #2434)
@@ -74,7 +112,8 @@ Analyze the new log line paramater for accept encoding to determine if we should
 - Check the access log for the Accept-Encoding of feed requests (/feed.rss etc.): if most are gzip-only, store gzip -9 copies too (gzip_static), since those hits still compress on the fly, 
 
 Redis host follow-ups (from #2041, new host since 8 Oct):
-- Remaining dropped write errors: write order in Blog.create; error paths for background resave and rebuild; make Entry.set atomic
+- Lock heartbeat: no overlapping EXTENDs
+- Remaining dropped write errors: await set() in resetToDrive; Dropbox disconnect.js and _assign.js dropFromMenu check the wrong error; write order in Blog.create; the list-ghosts restore path; error paths for background resave and rebuild; a callback for the messenger's setStatus; make Entry.set atomic
 - Proxy: auto-ssl's lock and hook calls can reuse a timed-out Redis connection
 - Deploy log archive (scripts/deploy/units.sh, proxy/deploy/blue-green.sh): before a unit is replaced, archive its container logs with docker logs -t, outside /tmp, more than 3 files, size-capped
 - TLS handshakes were about a quarter of billed egress on 21 Oct (#2107): ECDSA certificates shrink each by about a third, and few TLS connections resume today, so look at session reuse and keep-alive (about 1.7 requests per connection). No `ssl_session_tickets` without a shared key (#2271)
@@ -189,6 +228,8 @@ Create skills which delegate cheap subagents to scan logs for issues:
 
 Upgrade the Stripe integration (low priority): the stripe npm package is 6.36.0 (2019) and the account's default API version is 2011-11-17, except app/models/user/syncPaymentMethods.js, which pins 2020-08-27. Move to a current stripe-node and pin one explicit API version on every client, after checking the webhook handler (app/dashboard/webhooks/stripe_webhook.js), subscription create/cancel/pay and card update against the API changelog. Upgrade the account default in the Dashboard only once the code no longer relies on it.
 
+Image cache and thumbnails name some files after a slug that is still percent-encoded (literal %E8..., sometimes cut mid-sequence: ...-%E2.png, large.jpg%e2%80%9d) and build URLs without escaping, so those images 404/400 today: slug from the decoded name, then rebuild affected blogs (backfill --dry-run lists them)
+
 Do we eventually prune and rotate the data gathered in the various statistics cron jobs? Eventually we need to purge these we don’t want the database growing infinitely
 
 archives and all_entries in the template engine should be bounded to a maximum of 10,000 posts 
@@ -241,7 +282,10 @@ Under templates index
 Clarify on cancel / delete / overdue pages for accounts with grandfathered subscription prices that if they re-join Blot they will lose their grandfathered rate.
 
 Sync sweep digest (app/clients/util/syncReport.js) follow-ups
+- Hourly Fix() (Dropbox, iCloud, Google Drive) runs outside the folder lock, so menu-ghosts' whole-array menu write can clobber a concurrent sync's menu change - fix in app/sync/fix/menu-ghosts for all clients (raised on PR #2001)
 - iCloud initial transfer: the verify pass still aborts on the first listing that fails after remoteReaddir's retries; rerun it a couple of times with a pause and make initialTransfer resumable (a stalled `ls` during the upload burst caused TRANSFER_INCOMPLETE). Check the macserver's new `ls took`/`Diagnostic snapshot`/`still running after kill` log lines for the root cause of the stalls
+- Don't report a stuck lock for a blog still in its initial setup/transfer (Dropbox transfer_pending, Drive preparing, iCloud transferringToiCloud) - a big first transfer can legitimately hold the lock >1h
+- Once-per-occurrence suppression treats "not seen this run" as cleared, including blogs that just weren't eligible that hour, so an ongoing error can be re-emailed after a quiet hour - remember issues until a successful walk/Fix actually clears them
 
 Surface template choices on the templates subpages: switch from png to iframe after hovering a selection
 
@@ -321,6 +365,7 @@ Improve Dropbox sync
 - Bug: ensure that when a process dies, any blogs setting up dropbox client will be re-attempted
 - Adding an additional blog to an existing app folder under constant webhooks fails: moveExistingFiles (routes/setup/createFolder.js) gives up on the root blog's lock after ~5s and setup fails loudly. Retry or wait longer for the other blog's lock (or take all account-linked blogs' locks in a fixed order)
 - Bug: re-use iCloud resolve case-conflicts function (maybe move into sync?) to ensure blogs with case-sensitive file conflicts are properly initialized on Dropbox
+- Fix bug with Client.write which does not propogate sync errors... to demonstrate this, revoke dropbox token then try to enable local editing.
 - Bug: Switch uploads >150 MB to the Dropbox upload session API with chunked transfer and resumable checkpoints
 - Bug: run reset-to-blot when sync fails / errors
 - Bug: ensure you can move the folder in full-folder permission mode
@@ -412,6 +457,8 @@ Improve iCloud sync
 - Investigate setting up paralell server with 'Advanced Data Protection' enabled so users with this setting can sync to Blot as well
 
 ---
+
+Fix bug with placeholder files when switching clients which will lead to data loss because Blot will not transfer the contents of placeholder files across
 
 Fix bug with the paypal next bill dates are not syncing correctly for some users (e.g.slopserve)
 
