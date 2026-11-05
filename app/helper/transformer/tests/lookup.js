@@ -134,6 +134,27 @@ describe("transformer", function () {
     });
   });
 
+  it("transforms a file in the blog's static directory linked with an escaped name", async function () {
+    var fullPath = this.blogDirectory + "/" + this.path;
+    var path = "/_image_cache/" + Date.now() + "/说明.png";
+
+    await assets.write(this.blog.id, path, await fs.readFile(fullPath));
+
+    await new Promise((resolve, reject) => {
+      this.transformer.lookup(
+        "/_image_cache/" + path.split("/")[2] + "/" + encodeURIComponent("说明.png"),
+        this.transform,
+        function (err, result) {
+          if (err) return reject(err);
+
+          expect(result).toEqual(jasmine.any(Object));
+          expect(result.size).toEqual(jasmine.any(Number));
+          resolve();
+        }
+      );
+    });
+  });
+
   it("transforms the same file once", function (done) {
     var test = this;
     var firstTransform = jasmine.createSpy().and.callFake(test.transform);
