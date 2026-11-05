@@ -263,4 +263,4 @@ async function run(args, input) {
   }
 }
 
-module.exports = { run };
+module.exports = { run, pandocPath };

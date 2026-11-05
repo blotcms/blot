@@ -179,7 +179,9 @@ function createBroker(options = {}) {
     }
   }
 
-  function start({ socket, name, job, rest }) {
+  function start(request) {
+    if (request.job.worker) return startOnWorker(request);
+    const { socket, name, job, rest } = request;
     const started = Date.now();
     let failure = null;
     let finished = false;
@@ -292,6 +294,186 @@ function createBroker(options = {}) {
     if (!failure) socket.resume();
   }
 
+  // A job with `worker` keeps its jails for many requests instead of starting
+  // one each (the pandoc job: app/sandbox/jobs/pandoc-worker.lua). A worker
+  // takes one request at a time: the client's bytes go to it in frames,
+  // "<length>\n<bytes>" and then "0\n", and it answers "<length>\n" and that many
+  // bytes, which the client gets as a jail's stdout, or "E\n" for arguments it
+  // refuses. A worker that fails, is too slow, or loses its client mid-request
+  // is killed. One that has served its requests or its time, or waits idle too
+  // long, is retired.
+  const idle = new Map();
+
+  function spawnWorker(name) {
+    const child = spawnJail(name, null);
+    const worker = { child, name, started: Date.now(), requests: 0, buffer: Buffer.alloc(0), onData: null, onExit: null };
+    child.stdout.on("data", (chunk) => {
+      worker.buffer = worker.buffer.length ? Buffer.concat([worker.buffer, chunk]) : chunk;
+      if (worker.onData) worker.onData();
+      else retire(worker); // bytes it was never asked for
+    });
+    child.stdout.on("error", () => {});
+    child.stdin.on("error", () => {});
+    const exited = (code, signal) => {
+      if (worker.exited) return;
+      worker.exited = true;
+      unidle(worker);
+      if (worker.onExit) worker.onExit(code, signal);
+    };
+    child.on("error", () => exited(null, null));
+    child.on("exit", exited);
+    return worker;
+  }
+
+  function unidle(worker) {
+    const list = idle.get(worker.name);
+    const i = list ? list.indexOf(worker) : -1;
+    if (i !== -1) list.splice(i, 1);
+    clearTimeout(worker.idleTimer);
+  }
+
+  function retire(worker) {
+    unidle(worker);
+    worker.onData = null;
+    worker.onExit = null;
+    if (worker.exited) return;
+    worker.child.stdin.end();
+    // SIGTERM lets nsjail kill the jail and remove its cgroup
+    setTimeout(() => worker.child.kill("SIGTERM"), KILL_GRACE_MS).unref();
+  }
+
+  function kill(worker) {
+    worker.onData = null;
+    worker.onExit = null;
+    unidle(worker);
+    if (worker.exited) return;
+    worker.child.kill("SIGTERM");
+    setTimeout(() => worker.child.kill("SIGKILL"), KILL_GRACE_MS).unref();
+  }
+
+  function takeWorker(name, job) {
+    const list = idle.get(name) || [];
+    while (list.length) {
+      const worker = list.pop();
+      clearTimeout(worker.idleTimer);
+      if (!worker.exited) return worker;
+    }
+    return spawnWorker(name);
+  }
+
+  // A worker goes back to wait for the next request, unless it has done its
+  // share, or the request was a big one: pandoc's heap may have grown with it,
+  // and an idle worker would keep that memory in the unit's sandbox subtree
+  function release(worker, job, heavy) {
+    worker.onData = null;
+    worker.onExit = null;
+    const { requests, maxAgeSeconds, idleSeconds, maxIdle } = job.worker;
+    const list = idle.get(worker.name) || [];
+    idle.set(worker.name, list);
+    const old = Date.now() - worker.started > maxAgeSeconds * 1000;
+    if (worker.exited || heavy || worker.requests >= requests || old || list.length >= maxIdle) return retire(worker);
+    list.push(worker);
+    worker.idleTimer = setTimeout(() => retire(worker), idleSeconds * 1000);
+    worker.idleTimer.unref();
+  }
+
+  function startOnWorker({ socket, name, job, rest }) {
+    const started = Date.now();
+    let worker;
+    try {
+      worker = takeWorker(name, job);
+    } catch (e) {
+      return fail(socket, "failed");
+    }
+    worker.requests++;
+    const entry = { child: worker.child, name, cgroup: null };
+    running.add(entry);
+    let done = false;
+    let inputBytes = 0;
+
+    const finish = (error, body) => {
+      if (done) return;
+      done = true;
+      clearTimeout(limit);
+      running.delete(entry);
+      socket.removeListener("data", feed);
+      if (error) {
+        log(`broker: job=${name} error=${error} ms=${Date.now() - started}`);
+        fail(socket, error);
+      } else {
+        reply(socket, JSON.stringify({ ok: true, length: body.length }), body);
+      }
+      next();
+    };
+
+    // The worker mid-request is no use to anyone else
+    const abandon = (error) => {
+      kill(worker);
+      finish(error);
+    };
+
+    const limit = setTimeout(() => abandon("timeout"), job.worker.requestSeconds * 1000);
+
+    worker.onExit = (code, signal) => {
+      // nsjail exits 128 + the signal when the job inside it was killed, as the
+      // kernel does at the jail's memory limit
+      finish(signal || code > 128 ? "killed" : "failed");
+    };
+
+    worker.onData = () => {
+      const buffer = worker.buffer;
+      const end = buffer.indexOf(10);
+      if (end === -1) {
+        if (buffer.length > 32) abandon("failed");
+        return;
+      }
+      const head = buffer.subarray(0, end).toString();
+      if (head === "E") {
+        worker.buffer = buffer.subarray(end + 1);
+        release(worker, job);
+        return finish("failed");
+      }
+      const length = /^\d{1,10}$/.test(head) ? Number(head) : -1;
+      if (length < 0) return abandon("failed");
+      if (length > job.maxOutputBytes) return abandon("output-too-large");
+      if (buffer.length - end - 1 < length) return;
+      const body = Buffer.from(buffer.subarray(end + 1, end + 1 + length));
+      worker.buffer = buffer.subarray(end + 1 + length);
+      const heavy = inputBytes > job.worker.heavyInputBytes || Date.now() - started > job.worker.heavyMs;
+      release(worker, job, heavy);
+      finish(null, body);
+    };
+
+    const stdin = worker.child.stdin;
+    const feed = (chunk) => {
+      if (done) return;
+      inputBytes += chunk.length;
+      if (inputBytes > job.maxInputBytes) {
+        socket.pause();
+        return abandon("input-too-large");
+      }
+      stdin.write(chunk.length + "\n");
+      if (!stdin.write(chunk)) {
+        socket.pause();
+        stdin.once("drain", () => socket.resume());
+      }
+    };
+    const end = () => {
+      if (!done) stdin.write("0\n");
+    };
+
+    // The client went away before the worker answered
+    socket.on("close", () => {
+      if (!done) abandon("disconnected");
+    });
+
+    if (rest.length) feed(rest);
+    socket.on("data", feed);
+    if (socket.readableEnded) end();
+    else socket.on("end", end);
+    if (!done) socket.resume();
+  }
+
   // A cgroup that can't be made fails that job's jails, not the broker
   function prepareCgroups() {
     for (const [name, job] of Object.entries(jobs)) {
@@ -335,6 +517,7 @@ function createBroker(options = {}) {
     server.close();
     queue.length = 0;
     for (const { child } of running) child.kill("SIGTERM");
+    for (const list of idle.values()) for (const worker of list.slice()) kill(worker);
     for (const socket of sockets) socket.destroy();
     fs.rmSync(socketPath, { force: true });
   }

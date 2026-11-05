@@ -45,6 +45,11 @@ const FAILS_ONLY_WHEN_BROKEN = new Set(["fetch-image", "fetch"]);
 // The screenshot batches queue behind each other in the one browser cgroup;
 // helper/screenshot sends a busy batch again.
 const BUSY_IS_BACKPRESSURE = new Set(["fetch-image", "fetch", "screenshot"]);
+
+// Jobs whose timeout is the input's: a pandoc worker killed for taking too long
+// on one document (build/converters/pandoc.js fails that document), as pandoc's
+// own timeout was when each document had a jail
+const TIMEOUT_IS_THE_INPUT = new Set(["pandoc"]);
 const busyCounts = new Map();
 
 const counts = new Map();
@@ -80,6 +85,10 @@ function jobFailed(job, err) {
   if (err.code === "SANDBOX_BUSY" && BUSY_IS_BACKPRESSURE.has(job)) {
     busyCounts.set(job, (busyCounts.get(job) || 0) + 1);
     console.log(clfdate(), `sandbox: job ${job} busy (${busyCounts.get(job)} since start)`);
+    return;
+  }
+  if (err.code === "SANDBOX_TIMEOUT" && TIMEOUT_IS_THE_INPUT.has(job)) {
+    console.log(clfdate(), `sandbox: job ${job} timed out`);
     return;
   }
   const broken = err.code === "SANDBOX_FAILED" && FAILS_ONLY_WHEN_BROKEN.has(job);
