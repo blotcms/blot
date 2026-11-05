@@ -98,7 +98,7 @@ const { noteSize } = require("./pack");
 const { rememberWhole } = require("./idx");
 const { readHistory } = require("./history");
 const { ancestors } = require("./fetch");
-const { indexArgs } = require("./compact");
+const { indexArgs, commandOf } = require("./compact");
 
 const ZERO = "0".repeat(40);
 const MASTER = "refs/heads/master";
@@ -269,7 +269,7 @@ function createScratch(reservation, children) {
         clearTimeout(timer);
         children.delete(child);
         if (code === 0) return resolve(Buffer.concat(stdout));
-        const err = new Error("git " + args.join(" ") + " failed: " + oneLine(Buffer.concat(stderr).toString()));
+        const err = new Error("git " + commandOf(args) + " failed: " + oneLine(Buffer.concat(stderr).toString()));
         err.stderr = Buffer.concat(stderr).toString();
         reject(err);
       });
