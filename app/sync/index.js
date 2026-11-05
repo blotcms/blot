@@ -90,10 +90,20 @@ function start(blogID, callback) {
     };
     // There is no path to the blog's folder here: clients read and write it
     // through storage/folder, by blogID
+    // An update which calls back { changed: false } built exactly the entry
+    // already stored (see update/index.js), so it needs no cacheID bump. Any
+    // other outcome, or an update without a callback, counts as a change.
     const folder = {
-      update: function () {
-        changes = true;
-        _update.apply(_update, arguments);
+      update: function (path, callback) {
+        if (typeof callback !== "function") {
+          changes = true;
+          return _update.apply(_update, arguments);
+        }
+
+        _update(path, function (err, result) {
+          if (err || !result || result.changed !== false) changes = true;
+          return callback.apply(this, arguments);
+        });
       },
       status,
       log,

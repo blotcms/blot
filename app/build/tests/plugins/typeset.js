@@ -100,4 +100,57 @@ describe("typeset plugin", function () {
       expect(elapsed).toBeLessThan(1000);
     });
   });
+
+  // The plugin runs typeset's modules through its own walk (./walk), which
+  // parses the document once rather than once per module.
+  describe("walk", function () {
+    const typeset = require("typeset");
+    const walk = require("build/plugins/typeset/walk");
+
+    const DOCUMENTS = [
+      '<p>He said "Hello" -- and NASA\'s \'big\' rocket... It\'s \'93, 5\'10" tall.</p>',
+      '<p>"<em>quoted</em>" and \'single <a href="x">link</a>\' -- “already” — USA, UK. (FBI)</p><p>A</p>',
+      'text outside <p>"inside"</p> more "outside"',
+      '<!-- "comment" --><pre>"code" -- NASA</pre><code>\'x\'</code><p>&quot;ent&quot; &#39;s &amp; R&amp;D &lt;tag&gt;</p>',
+      '<p><span class="math">"$x$"</span> "a" <span class="small-caps">NASA</span> CIA</p>',
+      '<h1>"Title" -- NASA</h1><ul><li>\'one\'</li><li>"two" ... </li></ul><blockquote>"Cat" said Ox.</blockquote>',
+      '<p>“Curly” ‘quotes’ Wow. Oh "yes" Yo, Total. VW, AVIS</p><script>var a="b"; // --</script>',
+      '<table><tr><td>"cell" -- NB</td></tr></table><div class="pull-x">"no"</div>',
+      "",
+      '<p></p><p> </p><p>"</p><p>\'</p>',
+    ];
+
+    // Every combination of the plugin's options, as prerender passes them
+    const COMBINATIONS = [];
+    [true, false].forEach((punctuation) =>
+      [true, false].forEach((smallCaps) =>
+        [true, false].forEach((hangingPunctuation) => {
+          const disable = ["ligatures", "hyphenate"];
+          if (!punctuation) disable.push("spaces", "quotes", "punctuation");
+          if (!smallCaps) disable.push("smallCaps");
+          if (!hangingPunctuation) disable.push("hangingPunctuation");
+          COMBINATIONS.push({ disable, ignore: ["span.math"] });
+        })
+      )
+    );
+
+    it("gives the same HTML as typeset", function () {
+      DOCUMENTS.forEach((html) =>
+        COMBINATIONS.forEach((options) =>
+          expect(walk(html, options)).toEqual(typeset(html, options))
+        )
+      );
+    });
+
+    // typeset serialized and re-parsed the document between modules, which
+    // mangled a single-quoted attribute holding a double quote a little more
+    // each time
+    it("serializes the document once", function () {
+      const html = '<p>"x"</p><img alt=\'"x"\' src="a.jpg">';
+      const options = { disable: ["ligatures", "hyphenate"] };
+
+      expect(typeset(html, options)).toContain('<img alt x"" src="a.jpg">');
+      expect(walk(html, options)).toContain('<img alt=""x"" src="a.jpg">');
+    });
+  });
 });
