@@ -18,15 +18,15 @@ const JOBS = [
   "screenshot",
   "template-image",
   "favicon",
-  "pandoc",
   "unzip",
   "fetch-image",
   "fetch",
   "parse-html",
 ];
 
-// The jobs that don't use sharp
-const WITHOUT_SHARP = ["exif", "pandoc", "unzip", "parse-html"];
+// The jobs that don't use sharp. pandoc isn't here: its jail runs
+// pandoc-worker.lua, not this file (proxy/unit/sandbox/jail.js).
+const WITHOUT_SHARP = ["exif", "unzip", "parse-html"];
 
 function readStdin() {
   return new Promise((resolve, reject) => {
