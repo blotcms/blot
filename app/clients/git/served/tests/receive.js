@@ -161,6 +161,10 @@ describe("git store: pushes", function () {
 
     expect(pushed.code).toBe(0);
     expect((await manifest.read(store(this))).refs["refs/heads/master"]).toBe(await this.local.head());
+
+    // The push's sync must not outlive the spec, whose teardown removes the
+    // blog under it
+    await this.local.waitForSync();
   });
 
   it("says another change is being applied when the ref lock stays taken", async function () {
@@ -182,6 +186,7 @@ describe("git store: pushes", function () {
 
     // And with the lock free again, the same push lands
     expect((await this.local.tryPush()).code).toBe(0);
+    await this.local.waitForSync();
   });
 
   it("ends a gzipped push whose client goes away part way through", async function () {

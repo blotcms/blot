@@ -95,6 +95,7 @@ const { parseCommit, parseTree, parseTag, isDirectory, isGitlink } = require("./
 const { scanPack } = require("./packscan");
 const { buildRev } = require("./rev");
 const { noteSize } = require("./pack");
+const { keepPack } = require("./packcache");
 const { rememberWhole } = require("./idx");
 const { readHistory } = require("./history");
 const { ancestors } = require("./fetch");
@@ -703,12 +704,17 @@ async function irregularFiles({ repo, local, base, commands }) {
 // only ever read whole, so nothing wants its reverse index), its reverse
 // index, all at once. Every upload has ended, one way or the other, before this
 // settles, so none is still reading a file from scratch when it is deleted.
-async function uploadPack(store, piece, { rev = true } = {}) {
+// The pack's bytes go in the cache at the same time (packcache.js), which
+// never fails the upload, so the next clone, fetch or reader of the push
+// reads them from there.
+async function uploadPack(store, piece, { rev = true, cache = null } = {}) {
   const stream = fs.createReadStream(piece.packFile);
   stream.on("error", () => {}); // the upload sees it too, by reading the stream
   const puts = [store.put(packKey(piece.name), stream).finally(() => stream.destroy()), store.put(idxKey(piece.name), piece.idx)];
   if (rev) puts.push(store.put(revKey(piece.name), piece.rev));
+  const kept = keepPack({ cache, store, name: piece.name, size: piece.size, file: piece.packFile });
   const failed = (await Promise.allSettled(puts)).find((put) => put.status === "rejected");
+  await kept;
   if (failed) throw failed.reason;
 }
 
@@ -975,7 +981,7 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, read
 
   // Every upload ends before this returns, so none is still reading a file
   // from scratch when scratch is deleted
-  const uploads = await Promise.allSettled([...added.packs, ...added.pieces].map((piece) => uploadPack(store, piece, { rev: added.packs.includes(piece) })));
+  const uploads = await Promise.allSettled([...added.packs, ...added.pieces].map((piece) => uploadPack(store, piece, { rev: added.packs.includes(piece), cache })));
   const failed = uploads.find((upload) => upload.status === "rejected");
   if (failed) throw failed.reason;
 

@@ -7,6 +7,7 @@
 // is wherever its zlib stream ends (see inflate.js).
 const { CorruptError, NotFoundError, TooLargeError } = require("./errors");
 const inflateStream = require("./inflate");
+const { packSource } = require("./packcache");
 
 const HEADER = 12;
 const TRAILER = 20;
@@ -99,8 +100,13 @@ function noteSize(store, key, size) {
 // `recent` (optional) is a small shared LRU of the first reads of entries
 // (see recentReads), so an entry opened again soon (its type, then its data; a
 // delta's size, then the delta) is not fetched again.
-function openPack({ store, key, size, name, recent = null }) {
+//
+// `cache` (optional) is the cache a copy of the pack may be in (packcache.js,
+// for a pack named in a manifest): reads are made from it while it has the
+// whole pack, and the size check below is not needed for it.
+function openPack({ store, key, size, name, recent = null, cache = null }) {
   const end = size - TRAILER;
+  const source = cache ? packSource({ cache, store, name, size }) : null;
 
   function firstRead(offset) {
     if (!recent) return readRange(offset, FIRST_READ);
@@ -112,13 +118,15 @@ function openPack({ store, key, size, name, recent = null }) {
 
   // The pack in the store must be the length the manifest says. Checked once
   // per pack in this process, alongside the first read: a pack never changes,
-  // so one found the right size stays so.
+  // so one found the right size stays so. A whole copy in the cache is the
+  // right size already: it was written from the bytes uploaded or read.
   let sized = checkedSizes(store).get(key) === size ? Promise.resolve() : null;
   function checkSize() {
     if (!sized) {
-      sized = store
-        .head(key)
-        .then((found) => {
+      sized = Promise.resolve(source && source.local())
+        .then(async (local) => {
+          if (local) return;
+          const found = await store.head(key);
           if (!found) throw new NotFoundError(name + " is not in the store");
           if (found.size !== size) throw new CorruptError(name + " is " + found.size + " bytes; the manifest says " + size);
           noteSize(store, key, size);
@@ -134,7 +142,8 @@ function openPack({ store, key, size, name, recent = null }) {
   // Reads may run into the trailer, which is not an entry's but is always
   // there to tell the end of the last entry's stream from the end of the data
   async function readRange(offset, length) {
-    return store.read(key, offset, Math.min(length, size - offset));
+    const clipped = Math.min(length, size - offset);
+    return source ? source.read(offset, clipped) : store.read(key, offset, clipped);
   }
 
   // The compressed bytes from `start`, `first` already read, in growing reads.

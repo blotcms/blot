@@ -30,9 +30,10 @@ When a user pushes changes from their local repository, Blot automatically detec
 - **`receivePack.js`**: The parts of git's receive-pack protocol that are about the request: reading a push's commands up to the flush packet, the capabilities Blot advertises (`report-status`, `delete-refs`, `side-band-64k`, `quiet`, `ofs-delta`, `agent`), and small helpers for smart HTTP responses. The pack, the checks and the report are the store's (`store/receive.js`).
 
 - **`served/`**: The host side of the git store, everything that needs the rest of Blot (the store itself, `store/`, requires nothing outside itself):
-  - `context.js`: one object store per blog (S3, under `<blogID>/git/`, each request counted by `counting.js`) and one cache per process; the store's writes take the blog's ref lock.
+  - `context.js`: one object store per blog (S3, under `<blogID>/git/`, each request counted by `counting.js`) and one cache for the host, which every process shares (`<cache directory>/host`, one budget and a free-space floor across them; see the store README, *The cache across processes*); the store's writes take the blog's ref lock.
+  - `warm.js`: a couple of minutes after a process starts, one process on the host (a lock file in the cache) warms the cache for every blog on git: the whole indexes and the history its newest manifest names, in the background lane, skipped if a warm finished in the last 12 hours, and stopping at a quarter of the budget. One `op=warm` line. It also deletes the per-process cache directories from before, once idle for an hour.
   - `reads.js`: the ref advertisements, clones, fetches and the dumb HTTP `HEAD` probe, from the manifest and packs. Protocol v0 only, with no shallow clones or filters (git shows the store's `ERR` as "remote error"). A clone or fetch takes a place in the interactive lane of `limiter.js`. A store with no copy answers 503, never an empty repository; a blog off git gets a 404. Wrong methods and unknown paths keep the statuses Blot's git server has always given.
-  - `receive.js`: a push. The commands are read by `receivePack.js`, the store's receive takes the pack with side-band progress (`Saving to Blot...`), Blot's tree rule (regular files only on master: no symbolic links or submodules) and a size limit (the smaller of `receive.maxInputSize` and half the cache's budget, 512 MiB by default). Only `master` and tags may be pushed, master may not be deleted, and a push is applied whole or not at all. The follow-up sync is armed under the ref lock before the swap (see below). Each push logs a `Git: push-client` line with the client's agent.
+  - `receive.js`: a push. The commands are read by `receivePack.js`, the store's receive takes the pack with side-band progress (`Saving to Blot...`), Blot's tree rule (regular files only on master: no symbolic links or submodules) and a size limit (the smallest of `receive.maxInputSize`, half the cache's budget and 512 MiB). Only `master` and tags may be pushed, master may not be deleted, and a push is applied whole or not at all. The follow-up sync is armed under the ref lock before the swap (see below). Each push logs a `Git: push-client` line with the client's agent.
   - `commit.js`: Blot's own writes (`repo.commit`), with the store's `commit()`, holding the ref lock for the whole call. The author and committer are `Your Name <you@example.com>`, and the message is `Updated <path>` or `Removed <path>`. A change that leaves the tree as it was makes no commit.
   - `sync.js` and `materialize.js`: the sync, see *Sync Flow*.
   - `create.js`: new-folder setup, see `create.js` below.
@@ -224,7 +225,7 @@ Symbolic links (including links within the blog) and submodules are not supporte
 ### Environment
 
 - `config.git` (`BLOT_GIT_INTERACTIVE_PROCESSES`, `BLOT_GIT_BACKGROUND_PROCESSES`): the limiter's caps.
-- `config.git_store`: the store's cache directory (`git-store` in tmp) and budget (1 GiB a process), plain defaults with no environment override.
+- `config.git_store`: the store's cache directory (`git-store` in tmp), budget (50 GiB for the host, every process together) and free-space floor (`min_free_percent`, 10), plain defaults with no environment override.
 - `config.storage.bucket` (`BLOT_STORAGE_BUCKET`): the bucket the store is in.
 
 ### File Filtering

@@ -75,6 +75,8 @@ module.exports = function setup(options) {
     saved = Object.assign({}, config.git_store);
     config.git_store.cache_directory = ctx.storeScratch + "/cache";
     config.git_store.cache_bytes = 256 * 1024 * 1024;
+    // A runner's disk may well be fuller than production's floor
+    config.git_store.min_free_percent = 0;
 
     ctx.stores = {};
     context._setObjectStore(
@@ -109,6 +111,7 @@ module.exports = function setup(options) {
     await upkeep.idle(this.blog.id);
     removal._reset();
     context._setObjectStore(null);
+    await context._close();
     Object.assign(config.git_store, saved);
     await fs.remove(this.storeScratch);
   });

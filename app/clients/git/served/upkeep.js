@@ -19,6 +19,12 @@ const { measure } = require("./counting");
 const context = require("./context");
 const log = require("./log");
 
+// The most of .pack and .idx one compaction merges. The store's default is a
+// quarter of the cache's budget, which with the host's one shared cache would
+// be gigabytes of scratch and merging in the background; this keeps it where
+// it was with each process's 1 GB cache.
+const COMPACT_MAX_BYTES = 256 * 1024 * 1024;
+
 // blogID -> { running, again, waiters }
 const blogs = new Map();
 
@@ -27,7 +33,7 @@ const stats = { compactions: 0, skipped: 0 };
 function compactAfter(blogID, current) {
   try {
     const cache = context.cache();
-    const options = compact.planOptions(cache);
+    const options = compact.planOptions(cache, { maxBytes: Math.min(COMPACT_MAX_BYTES, compact.planOptions(cache).maxBytes) });
 
     if (require("./remove").isRemoved(blogID)) return;
 

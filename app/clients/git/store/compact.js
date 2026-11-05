@@ -87,6 +87,8 @@ const { pipeline } = require("stream/promises");
 const { spawn } = require("child_process");
 const { StaleManifestError, OutcomeUnknownError, CorruptError, NoRoomError } = require("./errors");
 const { packKey, idxKey, revKey } = require("./layout");
+const { keepPack } = require("./packcache");
+const { rememberWhole } = require("./idx");
 const { mapLimit, createChildren } = require("./limit");
 const manifest = require("./manifest");
 const { scanPack } = require("./packscan");
@@ -406,13 +408,20 @@ async function merge({ children, gitDir, outDir, inputs, packConfig, label }) {
 // Uploads a pack, its index and (unless it is the history pack, which is read
 // whole) its reverse index, all at once. Every upload has ended before this
 // settles, so none is still reading from scratch when scratch is deleted.
-async function upload(store, pack, { rev = true } = {}) {
+// The pack's bytes go in the cache at the same time, and the index of a pack
+// (not the history pack, which is read whole) as a whole index once they are
+// up, so the first clone or read after the swap asks the store for neither;
+// neither ever fails the upload.
+async function upload(store, pack, { rev = true, cache = null } = {}) {
   const stream = fs.createReadStream(pack.packFile);
   stream.on("error", () => {}); // the upload sees it too
   const puts = [store.put(packKey(pack.name), stream).finally(() => stream.destroy()), store.put(idxKey(pack.name), pack.idx)];
   if (rev) puts.push(store.put(revKey(pack.name), pack.rev));
+  const kept = keepPack({ cache, store, name: pack.name, size: pack.size, file: pack.packFile });
   const failed = (await Promise.allSettled(puts)).find((put) => put.status === "rejected");
+  await kept;
   if (failed) throw failed.reason;
+  if (rev) await rememberWhole({ cache, namespace: store.id, key: idxKey(pack.name), idx: pack.idx });
 }
 
 const entryOf = ({ name, size, idxSize, objects }) => ({ name, size, idxSize, objects });
@@ -576,7 +585,7 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, clo
       stats.commits = history.objects;
     }
 
-    const uploads = await Promise.allSettled([...(merged ? [upload(store, merged)] : []), ...(history ? [upload(store, history, { rev: false })] : [])]);
+    const uploads = await Promise.allSettled([...(merged ? [upload(store, merged, { cache })] : []), ...(history ? [upload(store, history, { rev: false, cache })] : [])]);
     const failed = uploads.find((upload) => upload.status === "rejected");
     if (failed) throw failed.reason;
 
