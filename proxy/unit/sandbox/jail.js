@@ -88,18 +88,37 @@ const JOBS = {
     maxInputBytes: 256 * MiB,
     maxOutputBytes: 8 * MiB,
   },
-  // Spawns pandoc on one document (docx, odt, rtf, org or markdown, with a
-  // bibliography and CSL) and returns the HTML and any media it extracted.
-  // pandoc caps its own heap at 400M, so most documents too large for the
-  // jail fail as pandoc errors, and is killed after 10s by the job. A very
-  // large docx or odt (tens of MB of images: the document and its media sit
-  // in /tmp and in Node too) can still exceed the jail and fail the job.
+  // pandoc as a worker that converts one document after another (docx, odt,
+  // rtf, org or markdown, with a bibliography and CSL): `pandoc lua` running
+  // app/sandbox/jobs/pandoc-worker.lua, which answers as the in-process job
+  // (app/sandbox/jobs/pandoc.js) does. The broker keeps a few of these jails
+  // instead of starting one per document, which cost a jail, Node and
+  // pandoc's start-up (~30 ms of it reading our markdown extensions) each
+  // time. timeSeconds is a worker's whole life, which the broker ends sooner
+  // (worker.maxAgeSeconds); one document has worker.requestSeconds, after which
+  // the broker kills the worker. pandoc caps its own heap at 400M, so most
+  // documents too large for the jail exit pandoc rather than the jail.
   pandoc: {
-    command: node("pandoc"),
+    command: [
+      "/usr/local/bin/pandoc",
+      "+RTS", "-M400M", "-RTS",
+      "lua", "/usr/src/app/app/sandbox/jobs/pandoc-worker.lua",
+    ],
     memoryBytes: 512 * MiB,
-    timeSeconds: 30,
+    timeSeconds: 600,
     maxInputBytes: 256 * MiB,
     maxOutputBytes: 64 * MiB,
+    worker: {
+      requestSeconds: 15,
+      requests: 500,
+      maxAgeSeconds: 300,
+      idleSeconds: 60,
+      maxIdle: 2,
+      // A worker that took more than this (a big document) is retired rather
+      // than kept, so an idle worker's heap stays small (~20-40 MiB)
+      heavyInputBytes: 1 * MiB,
+      heavyMs: 2000,
+    },
   },
   // A zip archive, read into its files (app/sandbox/jobs/unzip.js): the
   // archive in memory, then every file. The output stops under the 64 MiB a

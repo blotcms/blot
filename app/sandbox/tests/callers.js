@@ -146,7 +146,9 @@ describe("callers of the sandbox when it fails", function () {
     fs.copySync(source, test.blogDirectory + "/image.docx");
 
     docx.read(test.blog, "/image.docx", function (err, html) {
-      expect(err.code).toEqual("SANDBOX_TIMEOUT");
+      // a pandoc worker that times out is the document's failure, as
+      // pandoc's own timeout is (build/converters/pandoc.js)
+      expect(err.message).toMatch(/^Pandoc exited .*\(timed out\)/);
       expect(html).toBeUndefined();
       expect(sandbox.run.calls.argsFor(0)[0]).toEqual("pandoc");
       done();
@@ -159,7 +161,7 @@ describe("callers of the sandbox when it fails", function () {
     fs.outputFileSync(test.blogDirectory + "/post.md", "# Hello");
 
     markdown.read(test.blog, "/post.md", function (err, html) {
-      expect(err.code).toEqual("SANDBOX_TIMEOUT");
+      expect(err.message).toMatch(/^Pandoc exited .*\(timed out\)/);
       expect(html).toBeUndefined();
       expect(sandbox.run.calls.argsFor(0)[1].from).toEqual("markdown");
       done();

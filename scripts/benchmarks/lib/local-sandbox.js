@@ -24,6 +24,7 @@ const ROOT = path.resolve(__dirname, "../../..");
 function command(job) {
   return job.command.map((part) => {
     if (part === "/usr/local/bin/node") return process.execPath;
+    if (part === "/usr/local/bin/pandoc") return process.env.BLOT_PANDOC_PATH || "pandoc";
     return part.replace(/^\/usr\/src\/app\//, ROOT + "/");
   });
 }
