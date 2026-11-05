@@ -159,4 +159,15 @@ module.exports = function setup(options) {
           done(null);
         });
     });
+
+  // Declared last, so it runs first, while the server is still up: a spec
+  // that ends on tryPush, or on a push it doesn't wait for, leaves the sync
+  // that push started running. Teardown would then disconnect and remove the
+  // blog under it, and the sync would fail part way through, in a later spec.
+  after(async function () {
+    await require("./client").prototype.waitForSync.call({
+      port: this.server.port,
+      blogID: this.blog.id,
+    });
+  });
 };

@@ -10,6 +10,7 @@ var key = require("./key");
 var templateKey = require("models/template/key");
 var BackupDomain = require("./util/backupDomain");
 var flushCache = require("./flushCache");
+var folderLock = require("sync/lock");
 
 var START_CURSOR = "0";
 var SCAN_SIZE = 1000;
@@ -123,6 +124,15 @@ function deleteKeys(blog, callback) {
         } while (cursor !== START_CURSOR);
       }
 
+
+      // A sync (or a script under sync/hold) may still hold the folder
+      // lock. Deleting it under them makes their release find it gone, and
+      // a holder whose lock is lost crashes the process. The holder
+      // releases it, or it expires on its own within the lock's TTL.
+      var folderLockKey = folderLock.key(blog.id);
+      remove = remove.filter(function (name) {
+        return name !== folderLockKey;
+      });
 
       if (remove.length > 0) multi.del(remove);
       multi.sRem(key.ids, blog.id);
