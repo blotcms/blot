@@ -49,12 +49,9 @@ when we next cycle hosts, should we cycle the ssh key pair too?
 - From 5 Nov 2026: delete what the 2 Nov host cycle kept (#2261): the old data volume and the snapshots tagged `BlotCycle=prod-2026-11-02`. List them with `aws ec2 describe-volumes` and `aws ec2 describe-snapshots --owner-ids self` filtered on that tag, and check each before deleting. The snapshot policy's own snapshots carry the tag too; it ages them out by itself.
 - iCloud sync is flaky: on 2 Nov, after the host move, a new folder in icloudtest never reached the macserver within the test's wait, though the macserver's calls to the new host succeeded. Find out where iCloud changes stall (iCloud itself, the macserver's watcher, or the resync path) and make sync dependable
 - Mid-Nov 2026 (#2261, #2107): buy the m6gd.xlarge reservation, since the host runs on-demand until then. First run `unit-mem-summary.sh` on the host over a stretch that includes a deploy, to confirm the 3300m unit limits and 6gb Redis maxmemory fit the size
-Git sync (#2259 PR 7): when the last applied commit is gone from the bare repo (a force push, then gc) and so is the live clone's HEAD (or the blog has no live clone, as new blogs don't since PR 8), a sync compares from the empty tree: it writes every file but removes none, so files the rewrite deleted stay in the blog folder until a resync
-Git handle collisions: a repo left at data/git/<handle>.git now makes that handle unavailable until someone removes it, so clear the leftovers from the 1 Nov comparison. A blog already on a leftover repo isn't caught: dashboard/site/client.js's switch to git lands on it, and authenticate.js doesn't check blog.client. A crash between the move and the save in Blog.set leaves the repo at the new handle, fixed by hand. Deleting a blog removes its repo only while the blog is on git (its disconnect does, at its current handle), so a blog on another client keeps one left at its handle, and a repo at a former handle is never removed. All of this goes with repos keyed by blog ID (#2259 Phase 2)
-Git (#2259 PR 6 follow-ups): a branch other than master that an earlier push got in (the bypass) can't be deleted by its owner, since every non-master branch ref is refused, deletions included; receivePack keeps each push as a pack where git's receive-pack unpacked small ones loose, so check `ls objects/pack | wc -l` on a busy repo a while after deploy
+Git sync (#2259 PR 7): when the last applied commit is gone from the git store (a force push, then a rewrite), a sync compares from the empty tree: it writes every file but removes none, so files the rewrite deleted stay in the blog folder until a resync
+Git (#2259 PR 6 follow-ups): a branch other than master that an earlier push got in (the bypass) can't be deleted by its owner, since every non-master branch ref is refused, deletions included
 Git sync (#2259 PR 4): a sync interrupted part way leaves already-applied paths ahead of the recorded commit, so a later push that restores such a file to the recorded commit's contents shows no diff and the entry stays stale until a resync. Since the materializer (PR 7) the file in the folder stays stale too, because nothing resets the folder. Needs a crash or Redis outage, no retry, and that exact revert
-
-scripts/git/repair.js swaps the blog folder for a fresh clone of the bare repo, so files in the folder that aren't in the repo are lost, and since #2259 PR 8 a blog without a live clone is normal, so running it puts back a clone nothing needs: don't run it, and retire the script once live clones go (PR 9)
 
 Speed up ci / simplify proxy and e2e testing slightly
 
@@ -255,7 +252,6 @@ Explain on the about page the websites started out as files in a folder. But the
 
 Get node container horizontally scalable and multi-region (#1932)
 - blog folders to S3 (#2258)
-- git repos to S3 (#2259)
 
 Add clear bill change info to new blog flow
 
@@ -349,7 +345,6 @@ Improve git sync
 - Make git client setup resumable / handle server restart
 - Fix bug with git client which let large pushes overwhelm the main server, leading to downtime
 - Handle error out of space on blot server during git client setup
-- Surface errors with permissions on Git repo directory when setting up Git client
 - Add sync check
 - Add support for LFS and tell [Jamie](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVMcpnxGHqnxJHNdbMBSrglzg)
 - Backdate existing commits (perhaps set file ctime using info from git log?) This would sidestep the frustration experienced by [Gavin](https://mail.google.com/mail/u/0/#inbox/1669a8e621f9ef37) when he imported an existing repository.

@@ -1,15 +1,14 @@
-// The read side of the git client's HTTP endpoint, which smartHttp.js serves
-// by running git upload-pack, checked with raw requests (headers, git's 0000
-// probe, gzipped and corrupt bodies, a client going away) and with a real git
-// client (shallow clones and fetches, protocol version 2 requested).
+// The read side of the git client's HTTP endpoint, served from the git store
+// (served/reads.js), checked with raw requests (headers, git's 0000 probe,
+// gzipped and corrupt bodies, a client going away) and with a real git client
+// (protocol version 2 requested, shallow clones).
 describe("git client smart HTTP reads", function () {
   require("./setup")({ clone: false, client: true, once: true });
 
   var crypto = require("crypto");
   var http = require("http");
   var zlib = require("zlib");
-  var execFile = require("child_process").execFile;
-  var repo = require("clients/git/repo");
+  var limiter = require("clients/git/limiter");
 
   beforeAll(async function () {
     await this.local.commitFiles({ "/smart-http/one.txt": "One" });
@@ -91,7 +90,7 @@ describe("git client smart HTTP reads", function () {
   }
 
   describe("ref advertisement", function () {
-    it("has the headers and body pushover gave", async function () {
+    it("has the headers and body Blot's git server has always given", async function () {
       var response = await request(this, "GET", "/info/refs?service=git-upload-pack");
       var body = response.body.toString("latin1");
 
@@ -133,7 +132,7 @@ describe("git client smart HTTP reads", function () {
       expect(response.headers["content-type"]).toBe("application/x-git-upload-pack-advertisement");
     });
 
-    it("leaves a missing service to pushover", async function () {
+    it("answers a missing service with a 400", async function () {
       var response = await request(this, "GET", "/info/refs");
 
       expect(response.status).toBe(400);
@@ -214,7 +213,7 @@ describe("git client smart HTTP reads", function () {
       }
     });
 
-    it("leaves other methods and services to pushover", async function () {
+    it("answers other methods and services with a 405", async function () {
       var put = await request(this, "PUT", "/git-upload-pack");
       var unknown = await request(this, "POST", "/git-upload-pack?x=1", { body: "0000" });
 
@@ -224,57 +223,34 @@ describe("git client smart HTTP reads", function () {
   });
 
   describe("a real client", function () {
-    it("makes a shallow clone, with protocol version 2 requested", async function () {
-      var clone = await this.local.cloneAgain({
-        args: ["--depth", "1"],
-        config: { "protocol.version": "2" },
-      });
+    it("clones and fetches with protocol version 2 requested, which is answered with version 0", async function () {
+      var clone = await this.local.cloneAgain({ config: { "protocol.version": "2" } });
 
-      expect((await clone.git(["rev-parse", "--is-shallow-repository"])).stdout.trim()).toBe("true");
-      expect((await clone.git(["rev-list", "--count", "HEAD"])).stdout.trim()).toBe("1");
       expect(await clone.head()).toBe(await this.local.remoteHead());
-    });
-
-    it("deepens a shallow clone and fetches, with protocol version 2 requested", async function () {
-      var clone = await this.local.cloneAgain({
-        args: ["--depth", "1"],
-        config: { "protocol.version": "2" },
-      });
 
       await this.local.writeAndPush("/smart-http/after-clone.txt", "Pushed after the clone");
       await this.local.expectSynced();
 
-      expect((await clone.git(["fetch", "--depth", "1", "origin"])).code).toBe(0);
-      expect((await clone.git(["rev-parse", "origin/master"])).stdout.trim()).toBe(
-        await this.local.remoteHead()
+      expect((await clone.git(["fetch", "origin"])).code).toBe(0);
+      expect((await clone.git(["rev-parse", "origin/master"])).stdout.trim()).toBe(await this.local.remoteHead());
+    });
+
+    // The store serves no shallow clones (served/reads.js)
+    it("refuses a shallow clone", async function () {
+      var result = await this.local.cloneAgain({ args: ["--depth", "1"] }).then(
+        () => null,
+        (err) => err
       );
 
-      expect((await clone.git(["fetch", "--unshallow", "origin"])).code).toBe(0);
-      expect(Number((await clone.git(["rev-list", "--count", "origin/master"])).stdout.trim())).toBeGreaterThan(2);
+      expect(result).not.toBe(null);
     });
   });
 
   describe("a client which goes away", function () {
-    function uploadProcesses(directory) {
-      return new Promise(function (resolve) {
-        execFile("ps", ["-eo", "pid=,args="], function (err, stdout) {
-          resolve(
-            String(stdout || "")
-              .split("\n")
-              .filter(function (line) {
-                // With or without the limiter's settings in front (git -c a=b ...)
-                return /git(-|(\s+-c\s+\S+)*\s+)upload-pack/.test(line) && line.indexOf(directory) !== -1;
-              })
-          );
-        });
-      });
-    }
-
-    it("does not leave upload-pack running", async function () {
+    it("gives its place in the interactive lane back", async function () {
       var ctx = this;
-      var directory = repo.directory(ctx.blog.handle);
 
-      // A pack big enough that git is still writing when we leave
+      // A pack big enough that the store is still sending when we leave
       await ctx.local.write("/smart-http/big.bin", crypto.randomBytes(16 * 1024 * 1024));
       await ctx.local.commit("Add a big file");
       await ctx.local.push();
@@ -312,19 +288,14 @@ describe("git client smart HTTP reads", function () {
       });
 
       var deadline = Date.now() + 10 * 1000;
-      var processes;
 
-      do {
-        processes = await uploadProcesses(directory);
-
-        if (!processes.length) break;
-
+      while (limiter.stats().interactive.running && Date.now() < deadline) {
         await new Promise(function (resolve) {
           setTimeout(resolve, 250);
         });
-      } while (Date.now() < deadline);
+      }
 
-      expect(processes).toEqual([]);
+      expect(limiter.stats().interactive.running).toBe(0);
     });
   });
 });

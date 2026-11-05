@@ -8,17 +8,17 @@ describe("git client remove", function () {
   var remove = require("clients/git/remove");
   var write = require("clients/git/write");
   var repo = require("clients/git/repo");
+  var context = require("clients/git/served/context");
+  var removeRepo = require("clients/git/store/remove");
   var Git = require("./setup/git");
   var fs = require("fs-extra");
 
-  it("should return an error if there is no bare repo", function (done) {
-    fs.removeSync(repo.directory(this.blog.handle));
+  it("should return an error if the store has no repository", async function () {
+    await removeRepo({ store: context.objectStoreFor(this.blog.id) });
 
-    remove(this.blog.id, "/path", function (err) {
-      expect(err.message).toContain("not");
+    var err = await new Promise((resolve) => remove(this.blog.id, "/path", resolve));
 
-      done();
-    });
+    expect(err.message).toContain("no copy");
   });
 
   it("does not error when removing a file that does not exist", function (done) {

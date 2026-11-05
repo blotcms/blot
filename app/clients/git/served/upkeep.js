@@ -1,10 +1,11 @@
-// Compaction for a blog served from the git store (#2259), after a write to
-// the store (a push, Blot's commit) has swapped in a manifest. As in shadow
-// mode: compact.plan decides locally, from the manifest the write already
-// holds, whether there is anything worth doing, so a write in the steady
-// state costs no request; and a blog's compactions run one at a time in this
-// process, once more if one was asked for while one ran. In the background
-// lane of the git limiter, under the blog's ref lock (./context.js).
+// Compaction of a blog's repository in the git store (#2259), after a write
+// to the store (a push, Blot's commit) has swapped in a manifest.
+// compact.plan decides locally, from the manifest the write already holds,
+// whether there is anything worth doing, so a write in the steady state costs
+// no request; and a blog's compactions run one at a time in this process,
+// once more if one was asked for while one ran. In the background lane of the
+// git limiter, under the blog's ref lock (./context.js). None starts for a
+// blog whose copy is being removed (./remove.js).
 //
 //   compactAfter(blogID, manifest)   asks for one; returns at once
 //   idle(blogID)                     resolves once none runs for the blog
@@ -14,7 +15,7 @@
 //   [git-store-served] blog=<id> op=compact outcome=... ms=... requests=...
 const compact = require("../store/compact");
 const limiter = require("../limiter");
-const { measure } = require("../shadow/counting");
+const { measure } = require("./counting");
 const context = require("./context");
 const log = require("./log");
 
@@ -27,6 +28,8 @@ function compactAfter(blogID, current) {
   try {
     const cache = context.cache();
     const options = compact.planOptions(cache);
+
+    if (require("./remove").isRemoved(blogID)) return;
 
     if (!current || !compact.plan(current, options)) {
       stats.skipped++;
@@ -48,7 +51,7 @@ function compactAfter(blogID, current) {
         state.again = false;
         stats.compactions++;
         await run(blogID, options);
-      } while (state.again);
+      } while (state.again && !require("./remove").isRemoved(blogID));
 
       blogs.delete(blogID);
       state.waiters.splice(0).forEach((resolve) => resolve());
