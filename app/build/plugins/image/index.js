@@ -50,7 +50,8 @@ function render($, callback, options) {
     if (srcs.indexOf(src) === -1) srcs.push(src);
   });
 
-  var infos = {};
+  // Keyed by src, which is any string, so no inherited keys (e.g. "constructor")
+  var infos = Object.create(null);
 
   async.eachLimit(
     srcs,
