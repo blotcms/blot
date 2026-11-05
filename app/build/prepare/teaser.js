@@ -75,61 +75,68 @@ function makeTeaser (html) {
   var foundABreakPoint;
 
   debug("looking for breakpoints...");
-  root.contents().each(function doLook (i, node) {
-    // WE NEED TO IGNORE CERTAIN NODES NOW
-    // E.G. CODE, PRE, STYLE
-    if ($(this).parents().filter("code, head, pre, script, style").length) {
-      debug("should skip this tag");
-      return;
+
+  // Every breakpoint contains "more" (see breakPoints), so without it there
+  // is nothing to find and the teaser is made automatically
+  if (/more/i.test(html)) look(root[0].children, false);
+
+  // Walks down the tree in document order to the first breakpoint, skipping
+  // whatever is inside code, head, pre, script and style. ignored says
+  // whether nodes (siblings, so they share their ancestors) are inside one.
+  // Stops once a breakpoint is found: nothing after it can change the teaser.
+  function look (nodes, ignored) {
+    if (ignored) return;
+
+    // A copy: finding the breakpoint removes the nodes after it
+    nodes = nodes.slice();
+
+    for (var i = 0; i < nodes.length && !foundABreakPoint; i++) {
+      var node = nodes[i];
+
+      // This node is itself the breakpoint
+      // or contains a breakPoint in its text content
+      if (isBreakPoint(node) || containsBreakPoint(node)) {
+        debug("found a breakpoint!");
+
+        foundABreakPoint = true;
+
+        // We cache the next node
+        // and the parent node of the breakpoint
+        // so we can use them after removing
+        // the breakpoint node itself
+        var next = node.next;
+        var parent = node.parent;
+
+        // We remove the breakpoint, calculate
+        // the new HTML then proceed to strip the rest
+        // of the HTML after the breakpoint
+        if (containsBreakPoint(node)) {
+          node.data = stripOtherText(node)[0];
+        }
+
+        if (isBreakPoint(node)) {
+          $(node).remove();
+        }
+
+        // Now we remove the breakpoint node's next siblings
+        removeNextSiblings(next, $);
+        $(next).remove();
+
+        // Finally we remove the next siblings of each of the
+        // breakpoint node's parents. This ensures that all
+        // content 'after' the breakpoint is stripped.
+        while (parent) {
+          removeNextSiblings(parent, $);
+          parent = parent.parent;
+        }
+
+        // We didn't find a breakpoint yet so recurse down each child...
+      } else if (node.children && node.children.length) {
+        debug("going deeper");
+        look(node.children, isInvisibleToMarker(node));
+      }
     }
-
-    // This node is itself the breakpoint
-    // or contains a breakPoint in its text content
-    if (isBreakPoint(node) || containsBreakPoint(node)) {
-      debug("found a breakpoint!");
-
-      // We care about the earliest breakpoint we find
-      // and no more
-      if (foundABreakPoint) return false;
-
-      foundABreakPoint = true;
-
-      // We cache the next node
-      // and the parent node of the breakpoint
-      // so we can use them after removing
-      // the breakpoint node itself
-      var next = node.next;
-      var parent = node.parent;
-
-      // We remove the breakpoint, calculate
-      // the new HTML then proceed to strip the rest
-      // of the HTML after the breakpoint
-      if (containsBreakPoint(node)) {
-        node.data = stripOtherText(node)[0];
-      }
-
-      if (isBreakPoint(node)) {
-        $(node).remove();
-      }
-
-      // Now we remove the breakpoint node's next siblings
-      removeNextSiblings(next, $);
-      $(next).remove();
-
-      // Finally we remove the next siblings of each of the
-      // breakpoint node's parents. This ensures that all
-      // content 'after' the breakpoint is stripped.
-      while (parent) {
-        removeNextSiblings(parent, $);
-        parent = parent.parent;
-      }
-
-      // We didn't find a breakpoint yet so recurse down each child...
-    } else if ($(this).contents() && $(this).contents().length) {
-      debug("going deeper");
-      $(this).contents().each(doLook);
-    }
-  });
+  }
 
   // Since we didn't find a manual breakpoint
   // we need to do things automatically
@@ -220,6 +227,14 @@ var markerPatterns = breakPoints.map(function (marker) {
 });
 
 var invisibleToMarker = ["code", "head", "pre", "script", "style"];
+
+// The content of these elements never holds a breakpoint
+function isInvisibleToMarker (node) {
+  return (
+    (node.type === "tag" || node.type === "script" || node.type === "style") &&
+    invisibleToMarker.indexOf(node.name) > -1
+  );
+}
 
 function stripBreakPoint (html) {
   // Cheap precheck: every marker contains "more"
