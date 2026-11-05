@@ -8,6 +8,7 @@
 #   BASE_REF=v1.2 bash proxy/bench/run.sh   # baseline from another ref
 #   ONLY='identity' bash proxy/bench/run.sh # only the cases whose name matches
 #   DURATION=30s CONNS=64 THREADS=4 bash proxy/bench/run.sh
+#   UA='' bash proxy/bench/run.sh            # send no User-Agent
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."   # repo root, so the build paths below work from anywhere
@@ -21,6 +22,10 @@ THREADS=${THREADS:-4}
 SKIP_BUILD=${SKIP_BUILD:-0}
 BASE_REF=${BASE_REF:-origin/master}
 ONLY=${ONLY:-.}   # run only the cases whose name matches this regex
+# A current desktop browser's, so requests pay for the User-Agent regexes a
+# real visitor does: nginx skips a map's regexes for an empty value, so with
+# no User-Agent the $bad_bot map is never evaluated. UA='' sends none.
+UA=${UA-Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36}
 WRK_IMAGE=blot-bench-wrk:alpine3.20
 
 # The proxy gets 2 CPUs, or all of them if Docker has fewer (it refuses more)
@@ -125,6 +130,7 @@ cpu_usec() { docker exec "$1" cat /sys/fs/cgroup/cpu.stat | awk '$1=="usage_usec
 probe() { # path accept-encoding
   local args=(-s -o /dev/null -D - -H "Host: blog.test")
   [ -n "$2" ] && args+=(-H "Accept-Encoding: $2")
+  [ -n "$UA" ] && args+=(-H "User-Agent: $UA")
   docker exec "$WRK" curl "${args[@]}" "http://$PROXY$1" | tr -d '\r' | awk '
     tolower($1)=="blot-cache:"{c=$2} tolower($1)=="content-encoding:"{e=$2}
     END{print (c==""?"-":c), (e==""?"identity":e)}'
@@ -182,6 +188,7 @@ measure() { # impl name path accept-encoding expected-probe script
   [ -n "$script" ] && probe_path="$path?probe=$RANDOM$RANDOM"
   local check; check=$(probe "$probe_path" "$ae")
   local args=(--latency -H "Host: blog.test"); [ -n "$ae" ] && args+=(-H "Accept-Encoding: $ae")
+  [ -n "$UA" ] && args+=(-H "User-Agent: $UA")
   [ -n "$script" ] && args+=(-s "$script")
 
   local p0 w0 s0 p1 w1 s1
