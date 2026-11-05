@@ -166,7 +166,10 @@ async function read(req, res, { kind, store, cache, limiter: clones = interactiv
 
   try {
     measured = await measure(async function () {
-      const current = await manifest.read(store);
+      // Served, never built on, so an unchanged hint is enough for a few
+      // seconds (manifest.read's `serving`). The receive-pack advertisement
+      // begins a push, so it asks as a writer does.
+      const current = await manifest.read(store, { serving: kind !== "receive-advertise" });
 
       // Nothing there: a clone of nothing would look like an empty repository
       if (manifest.isEmpty(current)) {

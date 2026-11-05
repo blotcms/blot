@@ -397,10 +397,11 @@ describe("git store manifest", function () {
         now += manifest.MAX_BASE_AGE - 11 * 60 * 60 * 1000 + 1;
         expect(await fails(manifest.swap({ store, lock, base: warm, next: await push(warm, 2), clock }))).toEqual(jasmine.any(StaleManifestError));
 
-        // Past 12 hours it is checked with a HEAD, and counts from then
+        // Past 12 hours it is checked with a HEAD, and counts from then (the
+        // hint is unchanged now, so it is a 304)
         before = stats();
         const checked = await manifest.read(store, { clock });
-        expect(diff(before)).toEqual({ gets: 1, bytesRead: jasmine.any(Number), heads: 2 });
+        expect(diff(before)).toEqual({ gets: 1, notModified: 1, heads: 2 });
         now += manifest.MAX_BASE_AGE - 1;
         await manifest.swap({ store, lock, base: checked, next: await push(checked, 2), clock });
         expect((await manifest.read(store)).seq).toBe(2);
@@ -635,6 +636,142 @@ describe("git store manifest", function () {
     it("does not read the hint as a manifest when it is the only thing there", async function () {
       await hint(1);
       expect(await manifest.read(store)).toEqual(manifest.empty());
+    });
+
+    describe("an unchanged hint, for a read that only serves", function () {
+      const W = manifest.TRUST_UNCHANGED_HINT;
+      let now;
+      const clock = () => now;
+      // Another process on the same bucket: it shares the objects, not this
+      // process's memory of them, which is kept by store object
+      let other;
+
+      const counts = () => Object.fromEntries(Object.entries(store.stats).filter(([, v]) => v));
+      const serve = () => manifest.read(store, { clock, serving: true });
+
+      beforeEach(async function () {
+        now = 1e12;
+        other = { ...store };
+        chain = await build(5);
+        for (let i = 1; i <= 3; i++) await store.putIfAbsent(manifestKey(i), manifest.serialize(chain[i]));
+        await hint(3);
+        // The first read fetches the hint and the manifest, with the HEAD
+        expect(await manifest.read(store, { clock })).toEqual(chain[3]);
+        reset();
+      });
+
+      it("is one conditional GET, answered 304, with no HEAD, for a few seconds", async function () {
+        now += W;
+        expect(await serve()).toEqual(chain[3]);
+        expect(counts()).toEqual({ gets: 1, notModified: 1 });
+      });
+
+      it("is trusted for a few seconds from the store's own word, not from the last 304", async function () {
+        now += W / 2;
+        await serve();
+        now += W / 2 + 1;
+        reset();
+        // Past the window: the HEAD again, beside the GET, as before
+        expect(await serve()).toEqual(chain[3]);
+        expect(counts()).toEqual({ gets: 1, notModified: 1, heads: 1 });
+
+        // And that HEAD starts another window
+        now += W;
+        reset();
+        await serve();
+        expect(counts()).toEqual({ gets: 1, notModified: 1 });
+      });
+
+      it("is never trusted by a writer, which keeps the HEAD and so catches a hint that lags", async function () {
+        // A swap whose hint was lost
+        await other.putIfAbsent(manifestKey(4), manifest.serialize(chain[4]));
+        now += 1;
+
+        expect(await manifest.read(store, { clock })).toEqual(chain[4]);
+        expect(store.stats.heads).toBeGreaterThan(0);
+      });
+
+      it("lags a swap whose hint was lost by at most a few seconds", async function () {
+        await other.putIfAbsent(manifestKey(4), manifest.serialize(chain[4]));
+        now += W;
+        expect(await serve()).toEqual(chain[3]);
+        now += 1;
+        expect(await serve()).toEqual(chain[4]);
+      });
+
+      it("sees a swap whose hint landed at once", async function () {
+        await manifest.swap({ store: other, lock, base: chain[3], next: chain[4] });
+        now += 1;
+        reset();
+        expect(await serve()).toEqual(chain[4]);
+        // The changed hint, then the new manifest and the HEAD after it
+        expect(counts()).toEqual({ gets: 2, heads: 1, bytesRead: jasmine.any(Number) });
+
+        // Which is then trusted in turn
+        reset();
+        expect(await serve()).toEqual(chain[4]);
+        expect(counts()).toEqual({ gets: 1, notModified: 1 });
+      });
+
+      it("sees a hint overtaken by an older one (concurrent swaps) by looking forward", async function () {
+        await other.putIfAbsent(manifestKey(4), manifest.serialize(chain[4]));
+        await other.putIfAbsent(manifestKey(5), manifest.serialize(chain[5]));
+        await hint(4);
+        now += 1;
+        expect(await serve()).toEqual(chain[5]);
+      });
+
+      it("sees a removal's tombstone at once, and within a few seconds when its hint was lost", async function () {
+        const tombstone = manifest.removed(chain[3]);
+        await manifest.swap({ store: other, lock, base: chain[3], next: tombstone });
+        now += 1;
+        const seen = await serve();
+        expect(seen).toEqual(tombstone);
+        expect(manifest.isEmpty(seen)).toBe(true);
+
+        const lost = manifest.removed(tombstone);
+        await other.putIfAbsent(manifestKey(5), manifest.serialize(lost));
+        // A writer sees it at once
+        expect(await manifest.read(other, { clock })).toEqual(lost);
+        now += W + 1;
+        expect(await serve()).toEqual(lost);
+      });
+
+      it("is not trusted after this process swaps until it has read its own hint back", async function () {
+        const mine = await manifest.read(store, { clock });
+        await manifest.swap({ store, lock, base: mine, next: chain[4], clock });
+        reset();
+        expect(await serve()).toEqual(chain[4]);
+        // The hint (changed) and the HEAD beside it, as before
+        expect(counts()).toEqual({ gets: 1, heads: 1, bytesRead: jasmine.any(Number) });
+        reset();
+        expect(await serve()).toEqual(chain[4]);
+        expect(counts()).toEqual({ gets: 1, notModified: 1 });
+      });
+
+      it("lists when the hint is deleted", async function () {
+        await store.delete(LATEST_KEY);
+        await other.putIfAbsent(manifestKey(4), manifest.serialize(chain[4]));
+        reset();
+        expect(await serve()).toEqual(chain[4]);
+        expect(store.stats.lists).toBe(1);
+      });
+
+      it("times a manifest it trusted from the store's word, so a writer handed one is still refused in time", async function () {
+        now += W;
+        const served = await serve();
+        now += manifest.MAX_BASE_AGE - W + 1;
+        expect(await fails(manifest.swap({ store, lock, base: served, next: chain[4], clock }))).toEqual(jasmine.any(StaleManifestError));
+      });
+
+      it("works with a store which ignores the condition", async function () {
+        const real = store.get;
+        const plain = { ...store, get: (key, options) => real(key, { maxBytes: options && options.maxBytes }) };
+        expect(await manifest.read(plain, { clock, serving: true })).toEqual(chain[3]);
+        expect(await manifest.read(plain, { clock, serving: true })).toEqual(chain[3]);
+        await other.putIfAbsent(manifestKey(4), manifest.serialize(chain[4]));
+        expect(await manifest.read(plain, { clock, serving: true })).toEqual(chain[4]);
+      });
     });
   });
 

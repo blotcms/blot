@@ -8,7 +8,8 @@
 // `root/.tmp` and renamed into place, so a reader never sees half of one and a
 // stream which fails leaves nothing. putIfAbsent links the finished temporary
 // file to the key, which fails if the key exists. lastModified is the file's
-// modification time.
+// modification time, and an object's ETag the MD5 of its bytes, quoted, as S3
+// gives for an object written in one PUT.
 const crypto = require("crypto");
 const fsp = require("fs/promises");
 const path = require("path");
@@ -72,12 +73,34 @@ function createFsStore({ root }) {
     }
   }
 
-  async function get(key, { maxBytes = Infinity } = {}) {
+  // The ETag of the object open in `handle`: the MD5 of its bytes, quoted,
+  // read a chunk at a time
+  async function etagOf(handle) {
+    const hash = crypto.createHash("md5");
+    const buffer = Buffer.alloc(CHUNK);
+    for (let at = 0; ; ) {
+      const { bytesRead } = await handle.read(buffer, 0, CHUNK, at);
+      if (!bytesRead) break;
+      hash.update(buffer.subarray(0, bytesRead));
+      at += bytesRead;
+    }
+    return '"' + hash.digest("hex") + '"';
+  }
+
+  async function get(key, { maxBytes = Infinity, ifNoneMatch } = {}) {
     const handle = await open(key);
     try {
       const { size } = await handle.stat();
+      if (ifNoneMatch === undefined) {
+        if (size > maxBytes) throw new TooLargeError(key + " is larger than " + maxBytes);
+        return await handle.readFile();
+      }
+
+      // As on S3, the condition is answered before the size is looked at
+      const etag = await etagOf(handle);
+      if (ifNoneMatch && ifNoneMatch === etag) return { notModified: true, etag };
       if (size > maxBytes) throw new TooLargeError(key + " is larger than " + maxBytes);
-      return await handle.readFile();
+      return { bytes: await handle.readFile(), etag };
     } finally {
       await handle.close();
     }

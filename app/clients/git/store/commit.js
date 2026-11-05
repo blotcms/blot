@@ -584,7 +584,7 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
       });
 
       try {
-        await manifest.swap({ store, lock, base, next, uploaded: [uploaded.pack.name, uploaded.piece.name], waitForHint: false });
+        await manifest.swap({ store, lock, base, next, uploaded: [uploaded.pack.name, uploaded.piece.name] });
       } catch (err) {
         if (err instanceof OutcomeUnknownError) return { outcome: "unknown", commit: built.commit, parent, changed: null, seq: next.seq, error: err };
         if (!(err instanceof StaleManifestError)) throw err;
