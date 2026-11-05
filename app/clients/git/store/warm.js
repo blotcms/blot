@@ -12,10 +12,17 @@
 //     fetch) ran out
 //
 // It never throws for a file it could not fetch or keep; it moves on.
+//
+// The packs themselves are a second, lower-priority phase (served/warm.js),
+// one pack at a time: packList(manifest) lists them newest first and
+// warmPack({ store, cache, pack }) streams one into the cache through
+// keepPack, as the writers do, so the copy is exactly what clone and pack.js
+// read; its memory does not depend on the pack's size.
+const { Readable } = require("stream");
 const manifest = require("./manifest");
 const { chooseWhole, loadWhole, wholeKey } = require("./idx");
-const { idxKey, packKey } = require("./layout");
-const { cacheKeyOf } = require("./packcache");
+const { idxKey, packKey, manifestKey } = require("./layout");
+const { cacheKeyOf, keepPack, CACHE_SHARE } = require("./packcache");
 const { mapLimit } = require("./limit");
 
 const CONCURRENCY = 4;
@@ -69,4 +76,74 @@ async function warmRepo({ store, cache, manifest: current = null, maxBytes = Inf
   return result;
 }
 
-module.exports = { warmRepo };
+// Every pack the manifest names (live packs, the history pack and its
+// pieces), newest first by the swap which added it, as { name, size, seq }
+function packList(m) {
+  const all = [
+    ...m.packs.map((pack) => ({ name: pack.name, size: pack.size, seq: pack.seq || 0 })),
+    ...(m.historyPieces || []).map((pack) => ({ name: pack.name, size: pack.size, seq: pack.seq || 0 })),
+    ...(m.history ? [{ name: m.history.name, size: m.history.size, seq: m.history.through || 0 }] : []),
+  ];
+  const seen = new Set();
+  return all.filter((pack) => !seen.has(pack.name) && seen.add(pack.name)).sort((a, b) => b.seq - a.seq);
+}
+
+// When the repository's newest manifest was written, by the store's clock
+// (0 if it cannot be said): how recently it was pushed to or written by Blot
+async function lastWritten(store, m) {
+  try {
+    const head = await store.head(manifestKey(m.seq));
+    return (head && head.lastModified) || 0;
+  } catch (err) {
+    return 0;
+  }
+}
+
+// Streams one pack into the cache. Resolves "cached" (already there at the
+// right size), "fetched", "skipped" (too big for the cache to keep a copy of),
+// "declined" (the cache would not take it) or "failed" (the download did).
+//
+// `bytesPerSecond` caps the download's rate, and `between()` (awaited between
+// chunks) lets the caller hold it back while the host is busy.
+async function* paced(source, { bytesPerSecond = Infinity, between = null }) {
+  const started = Date.now();
+  let sent = 0;
+  for await (const chunk of source) {
+    if (between) await between();
+    yield chunk;
+    sent += chunk.length;
+    if (bytesPerSecond < Infinity) {
+      const wait = (sent / bytesPerSecond) * 1000 - (Date.now() - started);
+      if (wait > 1) await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+  }
+}
+
+async function warmPack({ store, cache, pack, bytesPerSecond = Infinity, between = null }) {
+  const key = cacheKeyOf(store, pack.name);
+  if ((await cache.size(key)) === pack.size) return "cached";
+  if (pack.size > Math.floor(cache.maxBytes / CACHE_SHARE)) return "skipped";
+
+  const declined = cache.stats().declined;
+  let source;
+  let stream;
+  try {
+    source = store.stream(packKey(pack.name));
+    stream = source;
+    if (bytesPerSecond < Infinity || between) stream = Readable.from(paced(source, { bytesPerSecond, between }), { objectMode: false });
+  } catch (err) {
+    if (source && typeof source.destroy === "function") source.destroy();
+    return "failed";
+  }
+  try {
+    const kept = await keepPack({ cache, store, name: pack.name, size: pack.size, stream });
+    if (kept) return "fetched";
+    return cache.stats().declined > declined ? "declined" : "failed";
+  } finally {
+    // The wrapper may have been abandoned before it read anything, which
+    // leaves the download open: close it whatever happened
+    if (typeof source.destroy === "function") source.destroy();
+  }
+}
+
+module.exports = { warmRepo, packList, lastWritten, warmPack };
