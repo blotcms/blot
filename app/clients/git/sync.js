@@ -8,6 +8,7 @@ var Blog = require("models/blog");
 var validateTree = require("./validateTree");
 var database = require("./database");
 var materialize = require("./materialize");
+var servedSwitch = require("./served/switch");
 var isRedisUnavailableError = require("helper/redisUnavailable").isRedisUnavailableError;
 
 var EMPTY_TREE = materialize.EMPTY_TREE;
@@ -136,6 +137,19 @@ module.exports = function sync (blogID, gitHandle, callback) {
     // Typically, this error means were unable to acquire a lock
     // on the folder, perhaps another process is syncing it...
     if (err) return callback(err);
+
+    // A blog served from the git store is synced from it (served/sync.js)
+    if (servedSwitch.enabled(blogID)) {
+      return require("./served/sync")(blogID, folder).then(
+        function () {
+          done(null, callback);
+        },
+        function (err) {
+          folder.log("Error updating blog folder from the store: " + err.message);
+          done(err, callback);
+        }
+      );
+    }
 
     debug("beginning sync");
     folder.log("Checking for a live clone");

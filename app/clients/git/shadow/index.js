@@ -83,14 +83,12 @@
 // the gate it is given), waits for a place in the background lane. inLane()
 // puts each wait on the operation's lane clock (counting.js): waitMs on the
 // line, and left out of the other figures.
-const path = require("path");
 const { PassThrough } = require("stream");
 const { spawn } = require("child_process");
-const { LRUCache } = require("lru-cache");
 const config = require("config");
 const clfdate = require("helper/clfdate");
 const holdLock = require("helper/lock");
-const { createCache, createS3Store, manifest } = require("../store");
+const { manifest } = require("../store");
 const receive = require("../store/receive");
 const storeCommit = require("../store/commit");
 const compact = require("../store/compact");
@@ -98,16 +96,13 @@ const importRepo = require("../store/import");
 const removeRepo = require("../store/remove");
 const limiter = require("../limiter");
 const counting = require("./counting");
+const context = require("../served/context");
+const servedSwitch = require("../served/switch");
 const appendToFile = require("./file-log");
 const { measure } = counting;
 
 const ZERO = "0".repeat(40);
 const MASTER = "refs/heads/master";
-
-// How many blogs' stores are kept for reuse. A store is a small object, but
-// its memos (the manifest it last read, the sizes of its packs) only help if
-// the same object is used for the next operation.
-const STORES = 1000;
 
 // Blot's writes wait in memory for their turn. Past this many, or this many
 // bytes of contents, the queued writes are dropped and one mirror takes their
@@ -171,48 +166,9 @@ function countsOf(measured) {
 
 // ---- The store and its cache --------------------------------------------
 
-// The object store for a blog: the storage bucket, under <blogID>/git/. The
-// S3 client is asked for on each request, because storage/s3 replaces it if
-// its configuration changes. Each request it sends is counted (counting.js):
-// a large pack's put is several, and a long list several pages. Specs replace
-// this with _setObjectStore.
-function s3ObjectStore(blogID) {
-  const s3 = require("storage/s3");
-
-  s3.assertConfigured();
-
-  const store = createS3Store({
-    client: {
-      send: (command) => {
-        counting.sent();
-        return s3.client().send(command);
-      },
-    },
-    bucket: config.storage.bucket,
-    prefix: blogID + "/git/",
-  });
-
-  return Object.assign(store, { countsOwnRequests: true });
-}
-
-let makeObjectStore = s3ObjectStore;
-let stores = new LRUCache({ max: STORES });
-let cache = null;
-
-// One cache per process, in a directory of its own, since a cache must own its
-// directory (the units' two processes share tmp)
-function sharedCache() {
-  if (!cache) {
-    const label = String(config.container || "").replace(/[^A-Za-z0-9_]+/g, "-").replace(/^-+|-+$/g, "") || "main";
-
-    cache = createCache({
-      dir: path.join(config.git_store.cache_directory, label),
-      maxBytes: config.git_store.cache_bytes,
-    });
-  }
-
-  return cache;
-}
+// The blogs' stores and the process's cache are shared with the served path
+// (../served/context.js), so a process has one cache budget and one set of
+// memos.
 
 // The store's lock: held only around a manifest swap, as the store expects.
 // Its own key, so it never waits on, or holds up, the EBS ref lock.
@@ -236,21 +192,10 @@ function storeLock(blogID) {
   };
 }
 
-function storeFor(blogID) {
-  let entry = stores.get(blogID);
-
-  if (!entry) {
-    entry = { store: counting(makeObjectStore(blogID)), lock: storeLock(blogID) };
-    stores.set(blogID, entry);
-  }
-
-  return entry;
-}
-
 // The blog's store and the shared cache, for the test-only read route
 // (./reads.js). The same store object the writes use, so it shares its memos.
 function readContext(blogID) {
-  return { store: storeFor(blogID).store, cache: sharedCache() };
+  return { store: context.storeFor(blogID), cache: context.cache() };
 }
 
 // Everything an operation needs: the blog's EBS repository, its store, the
@@ -273,9 +218,7 @@ async function contextFor(blogID) {
 
   if (!exists) return null;
 
-  const { store, lock } = storeFor(blogID);
-
-  return { blogID, handle, gitDir, store, lock, cache: sharedCache() };
+  return { blogID, handle, gitDir, store: context.storeFor(blogID), lock: storeLock(blogID), cache: context.cache() };
 }
 
 // ---- Git in the EBS repository -----------------------------------------
@@ -789,9 +732,15 @@ async function drain(blogID, state) {
     outcomes.delete(blogID);
 
     try {
-      ctx = await contextFor(blogID);
+      // A blog served from the store is never shadowed: a mirror would copy
+      // EBS over a newer store, and the store makes Blot's writes itself.
+      // Checked as each task starts, so work queued before the switch, and
+      // the backfill and daily verifier's mirrors, are dropped too.
+      ctx = servedSwitch.enabled(blogID) ? null : await contextFor(blogID);
 
-      if (!ctx) {
+      if (!ctx && servedSwitch.enabled(blogID)) {
+        log({ blog: blogID, op: task.type === "write" ? "write" : task.op, outcome: "skipped", detail: "served from the store" });
+      } else if (!ctx) {
         log({ blog: blogID, op: task.type === "write" ? "write" : "push", outcome: "skipped", detail: "the blog is gone, off git or has no repository" });
       } else if (task.type === "write") {
         stats.writes++;
@@ -942,9 +891,9 @@ const removeAgainTimers = new Set();
 // tombstone manifest; the manifests stay, so the numbering never starts again
 // at 1 under another process). Resolves with the number of keys deleted.
 async function deleteCopy(blogID) {
-  if (makeObjectStore === s3ObjectStore && !(config.storage && config.storage.bucket)) return null;
+  if (!context.hasStore()) return null;
 
-  const { deleted } = await removeRepo({ store: makeObjectStore(blogID) });
+  const { deleted } = await removeRepo({ store: context.objectStoreFor(blogID) });
 
   return deleted;
 }
@@ -976,7 +925,7 @@ async function removeBlog(blogID) {
       await Promise.all([state.draining, state.compacting].map((running) => running && running.catch(() => {})));
     }
 
-    stores.delete(blogID);
+    context.forget(blogID);
   } catch (err) {
     log({ blog: blogID, op: "remove", outcome: "error", detail: scrub(err) });
   }
@@ -1009,13 +958,13 @@ function mirror(blogID, { reason = "asked", scratchDir } = {}) {
 
 // Whether there is a bucket to shadow into (or a spec's stores)
 function hasStore() {
-  return makeObjectStore !== s3ObjectStore || !!(config.storage && config.storage.bucket);
+  return context.hasStore();
 }
 
 // A blog's object store, uncounted and not kept, for the daily maintenance
 // (./maintenance.js), which lists and deletes what is left of blogs off git
 function objectStoreFor(blogID) {
-  return makeObjectStore(blogID);
+  return context.objectStoreFor(blogID);
 }
 
 // Resolves once nothing is queued or running for the blog, compaction included
@@ -1028,7 +977,7 @@ function idle(blogID) {
 // For specs: the object store a blog's store is made on (null for S3), and
 // forgetting the stores and the cache made so far
 function _setObjectStore(factory) {
-  makeObjectStore = factory || s3ObjectStore;
+  context._setObjectStore(factory);
   _reset();
 }
 
@@ -1037,8 +986,7 @@ function _setRemoveAgainMs(ms) {
 }
 
 function _reset() {
-  stores = new LRUCache({ max: STORES });
-  cache = null;
+  context._reset();
   removed.clear();
   outcomes.clear();
   removeAgainTimers.forEach((timer) => clearTimeout(timer));

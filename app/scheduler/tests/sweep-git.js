@@ -42,6 +42,21 @@ describe("scheduler sweep-git", function () {
     expect(stuck[0].args).toBe("git index-pack --stdin");
   });
 
+  it("finds the git store's pack-objects, index-pack and fast-import, with their settings in front", async function () {
+    const stuck = await stuckProcesses({
+      ps: async () =>
+        [
+          "   51  2h05   40m git -c pack.threads=1 -c pack.window=10 pack-objects --stdout -q",
+          "   52  2h05   40m git -c core.bigFileThreshold=16m index-pack --stdin --fix-thin --fsck-objects",
+          "   53  2h05   40m git -c pack.threads=1 fast-import --quiet --done",
+          "   54  2h05   40m git --git-dir=/tmp/x/repo.git --work-tree=/tmp/x/ignore check-ignore --no-index --stdin",
+          "   55  2h05   40m git -c pack.window=10 cat-file --batch",
+        ].join("\n"),
+    });
+
+    expect(stuck.map((p) => p.pid)).toEqual([51, 52, 53]);
+  });
+
   // What the production container's busybox ps actually prints once a
   // process is over 100 minutes old, or uses a lot of memory
   it("reads busybox's hours, days and RSS suffixes", async function () {
