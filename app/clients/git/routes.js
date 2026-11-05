@@ -30,13 +30,16 @@ var followUps = followUpSync("git", function (blogID) {
   });
 });
 
-// Whether the blog has a repository, or one is being made for it
+// Whether the blog has a repository in the store, or one is being set up for
+// it: the blog's own mark, set by create.js, which expires by itself, so a
+// setup cut off by a crash or a deploy doesn't leave the blog, or the owner's
+// other blogs, stuck "in progress"
 function hasRepository(blog, callback) {
-  database.getStatus(blog.owner, function (err, status) {
+  repo.exists(blog.id, function (err, exists) {
     if (err) return callback(err);
-    if (status === "createInProgress") return callback(null, true);
+    if (exists) return callback(null, true);
 
-    repo.exists(blog.id, callback);
+    database.isCreating(blog.id, callback);
   });
 }
 
@@ -103,12 +106,16 @@ dashboard.post("/create", function (req, res, next) {
     Blog.set(req.blog.id, { client: "git" }, function (err) {
       if (err) return next(err);
 
-      res.redirect(req.baseUrl);
+      // Marked before the redirect, so the page it lands on shows the setup
+      // (create.js marks it too, and clears it when the setup ends)
+      database.setCreating(req.blog.id, function () {
+        res.redirect(req.baseUrl);
 
-      create(req.blog, function (err) {
-        if (err) {
-          console.log(clfdate() + " Git: Error creating repo", err);
-        }
+        create(req.blog, function (err) {
+          if (err) {
+            console.log(clfdate() + " Git: Error creating repo", err);
+          }
+        });
       });
     });
   });

@@ -6,6 +6,8 @@ const sync = require("sync");
 
 const setStatus = promisify(database.setStatus.bind(database));
 const createToken = promisify(database.createToken.bind(database));
+const setCreating = promisify(database.setCreating.bind(database));
+const clearCreating = promisify(database.clearCreating.bind(database));
 
 function delay(ms) {
   return new Promise(function (resolve) {
@@ -14,27 +16,45 @@ function delay(ms) {
 }
 
 // Sets up a blog's repository from its folder, in the git store
-// (served/create.js), inside the sync's folder lock
+// (served/create.js), inside the sync's folder lock. While it runs the blog
+// is marked as being set up (database.setCreating, which expires by itself),
+// for the dashboard; the mark goes when the setup ends, however it ends.
 module.exports = function create(blog, callback) {
-  sync(blog.id, async function (err, folder, done) {
-    if (err) return callback(err);
+  // A setup that cannot run (the folder is locked) leaves no mark behind
+  function finish(err) {
+    clearCreating(blog.id)
+      .catch(function () {})
+      .then(function () {
+        callback(err || null);
+      });
+  }
 
-    // Outside the try below, whose cleanup marks the setup failed: a
-    // repository the blog already has is not this setup's
-    try {
-      await require("./served/create").assertEmpty(blog.id);
-    } catch (err) {
-      return done(err, callback);
-    }
+  setCreating(blog.id)
+    .catch(function (err) {
+      // The dashboard shows the create page meanwhile: no reason to stop
+      console.log(clfdate() + " Git: create: could not mark the setup as in progress: " + err.message);
+    })
+    .then(function () {
+      sync(blog.id, async function (err, folder, done) {
+        if (err) return finish(err);
 
-    try {
-      await createRepository(blog, folder);
-      done(null, callback);
-    } catch (err) {
-      await setStatus(blog.owner, "createFailed").catch(function () {});
-      done(err, callback);
-    }
-  });
+        // Outside the try below, whose cleanup marks the setup failed: a
+        // repository the blog already has is not this setup's
+        try {
+          await require("./served/create").assertEmpty(blog.id);
+        } catch (err) {
+          return done(err, finish);
+        }
+
+        try {
+          await createRepository(blog, folder);
+          done(null, finish);
+        } catch (err) {
+          await setStatus(blog.owner, "createFailed").catch(function () {});
+          done(err, finish);
+        }
+      });
+    });
 };
 
 async function createRepository(blog, folder) {

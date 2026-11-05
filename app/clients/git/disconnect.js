@@ -55,22 +55,32 @@ module.exports = function disconnect(blogID, callback) {
 };
 
 function removeRepository(blog, callback) {
-  database.removeStatus(blog.id, function (err) {
+  // The setup status is the owner's (create.js writes it under blog.owner),
+  // and the mark of a setup in progress the blog's
+  database.removeStatus(blog.owner, function (err) {
     if (err) return callback(err);
 
-    // Remove the live clone, the .git directory in the blog folder,
-    // which blogs made before Blot stopped committing in it have.
-    // Remove this with the live clones.
-    callbackify(folder.remove)(blog.id, "/.git", function (err) {
+    database.clearCreating(blog.id, function (err) {
       if (err) return callback(err);
 
-      // A later connection starts its own history
-      database.removeApplied(blog.id, function (err) {
-        if (err) return callback(err);
+      removeLiveClone(blog, callback);
+    });
+  });
+}
 
-        // Last, so a failed lookup leaves an unused token, not a repo
-        flushTokenIfUnused(blog, callback);
-      });
+// Removes the live clone, the .git directory in the blog folder, which blogs
+// made before Blot stopped committing in it have, then the applied commit and,
+// with the owner's last git site, the token
+function removeLiveClone(blog, callback) {
+  callbackify(folder.remove)(blog.id, "/.git", function (err) {
+    if (err) return callback(err);
+
+    // A later connection starts its own history
+    database.removeApplied(blog.id, function (err) {
+      if (err) return callback(err);
+
+      // Last, so a failed lookup leaves an unused token, not a repo
+      flushTokenIfUnused(blog, callback);
     });
   });
 }

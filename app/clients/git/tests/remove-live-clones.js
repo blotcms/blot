@@ -52,6 +52,23 @@ describe("git client: removing leftover live clones", function () {
     expect(await folder.has(this.blog.id, "/.git/config")).toBe(true);
   });
 
+  it("keeps a clone at a commit the store names but cannot read", async function () {
+    await this.local.writeAndPush("/a.txt", "A");
+    await plantClone(this, await this.local.head());
+
+    // Master names the commit, but its pack is gone from the store
+    var store = this.stores[this.blog.id];
+    for await (var entry of store.list("packs/")) await store.delete(entry.key);
+    await require("clients/git/served/context").cache().clear();
+    require("clients/git/served/context")._reset();
+
+    var result = await check(this, { apply: true });
+
+    expect(result.outcome).toBe("kept");
+    expect(result.reason).toBe("unreadable");
+    expect(await folder.has(this.blog.id, "/.git/config")).toBe(true);
+  });
+
   it("keeps a user's own checkout, whose origin is somewhere else", async function () {
     await this.local.writeAndPush("/a.txt", "A");
 

@@ -23,7 +23,8 @@
 //   ahead          its HEAD is not in the store, or not reachable from master
 //   no-store       the store has no copy of the blog's repository
 //   unreadable     the .git's config, HEAD or ref, or the store, could not be
-//                  read
+//                  read: the clone's HEAD commit too, when the store names it
+//                  but cannot read it
 //
 // The .git is read through storage/folder alone: config, HEAD, the ref HEAD
 // names (loose, or in packed-refs).
@@ -107,7 +108,9 @@ async function headOf(blogID) {
   return null;
 }
 
-// Whether the commit is master in the store or one of its ancestors
+// Whether the commit is master in the store or one of its ancestors: true
+// only once the commit itself has been read from the store, "unreadable" if
+// master or a parent names it but it can't be read, false if it isn't there
 async function reachable(blogID, oid) {
   const store = context.storeFor(blogID);
   const cache = context.cache();
@@ -126,15 +129,19 @@ async function reachable(blogID, oid) {
     const next = queue.shift();
     if (seen.has(next)) continue;
     seen.add(next);
-    if (next === oid) return true;
 
     let object;
     try {
       object = await reader.read(next);
     } catch (err) {
+      // The clone's own commit must be readable from the store, or the clone
+      // may hold what the store has lost
+      if (next === oid) return "unreadable";
       if (err.code === "NOT_FOUND") continue;
       throw err;
     }
+
+    if (next === oid) return !!object && object.type === "commit" ? true : "unreadable";
     if (!object || object.type !== "commit") continue;
 
     queue.push(...parseCommit(object.data).parents);
@@ -174,6 +181,7 @@ async function check(blogID, { apply = false } = {}) {
 
     const onMaster = await reachable(blogID, head);
     if (onMaster === "no-store") return { blog: blogID, outcome: "kept", reason: "no-store" };
+    if (onMaster === "unreadable") return { blog: blogID, outcome: "kept", reason: "unreadable", detail: "the store cannot read the clone's HEAD commit" };
     if (!onMaster) return { blog: blogID, outcome: "kept", reason: "ahead" };
   } catch (err) {
     return { blog: blogID, outcome: "kept", reason: "unreadable", detail: err.message };
