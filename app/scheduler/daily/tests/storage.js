@@ -87,7 +87,7 @@ describe("daily update storage", function () {
 
       client.store.set(STORAGE_OFFSITE_KEY, copyLine({ bytes: 93 * GB }));
       expect((await run({ client, now: NOW })).storage).toBe(
-        "Storage: 93 GB in 1,234,567 objects (+3 GB in 1d), offsite copied 9h ago"
+        "Storage: 93 GB in 1,234,567 objects (+3 GB in 24h), offsite copied 9h ago"
       );
       expect(JSON.parse(client.store.get(storage.HISTORY_KEY)).length).toBe(2);
 
