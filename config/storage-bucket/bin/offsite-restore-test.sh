@@ -20,8 +20,9 @@
 # With --git it checks git repositories instead: it restores <blogID>/git/ of
 # the blogs named, of the gittest blog (handle:gittest in Redis) and of
 # --sample <n> (default 5) git blogs picked at random from B2, into
-# <scratch>/<blogID>/git/, and runs the store checker in the blot-blue unit on
-# them: `node scripts/git/check-store.js --dir <scratch> --all-blogs --deep`,
+# <scratch>/repos/<blogID>/git/, and runs the store checker in the blot-blue unit on
+# them: `node scripts/git/check-store.js --dir <scratch>/repos --all-blogs
+# --deep --scratch <scratch>/scratch` (blotcms/blot#2544),
 # as uid 1000. Exit 0 is a pass, 1 means findings. The scratch directory is
 # made under /var/instance-ssd/tmp unless --dir says otherwise, since the unit
 # must see it at the same path (the app's tmp directory is bound in). Without
@@ -79,6 +80,9 @@ if [ -n "$GIT" ]; then
   WORK=$(mktemp -d "$PARENT/blot-offsite-restore.XXXXXX")
   if [ -n "$KEEP" ]; then trap 'echo "kept $WORK"' EXIT; else trap 'rm -rf "$WORK"' EXIT; fi
   chmod 755 "$WORK"
+  # The checker walks <root>/blog_*/git/, and clones into --scratch for --deep:
+  # both on the instance store, where the unit sees them at the same paths.
+  mkdir -p "$WORK/repos" "$WORK/scratch"
   setup_remotes > "$WORK/.setup" || { cat "$WORK/.setup" >&2; exit 1; }
   rm -f "$WORK/.setup"
 
@@ -108,18 +112,19 @@ if [ -n "$GIT" ]; then
   while IFS= read -r blog; do
     echo "Restoring $blog/git from B2"
     # shellcheck disable=SC2086
-    rclone copy $FLAGS "$OFFSITE_ROOT/$blog/git" "$WORK/$blog/git" ||
+    rclone copy $FLAGS "$OFFSITE_ROOT/$blog/git" "$WORK/repos/$blog/git" ||
       { echo "the restore of $blog/git from B2 failed" >&2; exit 1; }
   done < "$WORK/.list"
   rm -f "$WORK/.blogs" "$WORK/.list" "$WORK/.candidates"
   chmod -R a+rX "$WORK"
 
-  echo "Checking $(ls "$WORK" | wc -l | tr -d ' ') repositories with $CHECKER in $UNIT"
+  echo "Checking $(ls "$WORK/repos" | wc -l | tr -d ' ') repositories with $CHECKER in $UNIT"
   status=0
-  docker exec -u 1000 "$UNIT" node "$CHECKER" --dir "$WORK" --all-blogs --deep || status=$?
+  docker exec -u 1000 "$UNIT" node "$CHECKER" --dir "$WORK/repos" --all-blogs --deep --scratch "$WORK/scratch" || status=$?
   case "$status" in
     0) echo "OK: the restored repositories pass the store check" ;;
     1) echo "FAILED: the store check has findings (above). One on a blog pushed to since the last sync started may only be that push: rerun after the next sync" ;;
+    2) echo "FAILED: the store check refused its arguments (exit 2): has its usage changed?" ;;
     *) echo "FAILED: the store check exited $status" ;;
   esac
   exit "$status"

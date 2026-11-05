@@ -198,14 +198,18 @@ ec2-user on the host:
 comparing bytes. It restores `{blogID}/git/` for each blog you name, for the
 gittest blog (`handle:gittest` in Redis) and for `--sample <n>` (default 5)
 git blogs picked at random from B2. Each goes into
-`<scratch>/{blogID}/git/`, under `/var/instance-ssd/tmp`, the app's tmp
+`<scratch>/repos/{blogID}/git/`, under `/var/instance-ssd/tmp`, the app's tmp
 directory, which the units see at the same path. It then runs the store
-checker in `blot-blue` as uid 1000:
-`node scripts/git/check-store.js --dir <scratch> --all-blogs --deep`. Exit 0
-is a pass, 1 means findings. If the unit's image has no checker yet, the step
-is skipped with a message. A cheap-check failure on a blog pushed in the last
-day can be a push that landed while the last sync ran: rerun after the next
-sync before it counts as a failure.
+checker ([#2544](https://github.com/blotcms/blot/pull/2544)) in `blot-blue` as
+uid 1000:
+`node scripts/git/check-store.js --dir <scratch>/repos --all-blogs --deep --scratch <scratch>/scratch`.
+The `--scratch` directory is also on the instance store, so deep clones don't
+fill `/tmp`. The checker prints one JSON line per blog, then a summary line.
+Exit 0 is a pass, 1 means findings and 2 means bad arguments. If the unit's
+image has no checker yet, the step is skipped with a message. A cheap-check
+failure on a blog pushed in the last day can be a push that landed while the
+last sync ran, which usually shows as `missing ... latest.json names N`. Rerun
+after the next sync before it counts as a failure.
 
 ```
 /usr/local/lib/blot-storage/offsite-restore-test.sh --git [--sample <n>] [<blogID>...]

@@ -330,7 +330,7 @@ esac
 echo "$*" >> "${root}/docker-calls"
 case "$*" in
   "exec -u 1000 blot-blue test -f scripts/git/check-store.js") [ -z "$NO_CHECKER" ] ;;
-  "exec -u 1000 blot-blue node scripts/git/check-store.js --dir "*" --all-blogs --deep")
+  "exec -u 1000 blot-blue node scripts/git/check-store.js --dir "*" --all-blogs --deep --scratch "*)
     dir=$8; ls "$dir" > "${root}/checked"
     for repo in "$dir"/*; do [ -f "$repo/git/a.txt" ] || exit 3; done
     exit \${CHECK_STATUS:-0} ;;
@@ -353,6 +353,10 @@ esac
         );
         const dir = read("docker-calls").match(/--dir (\S+)/)[1];
         expect(dir.startsWith(file("var/instance-ssd/tmp/blot-offsite-restore."))).toBe(true);
+        expect(dir).toMatch(/\/repos$/);
+        // Deep clones go to scratch space beside it, on the instance store
+        const scratch = read("docker-calls").match(/--scratch (\S+)/)[1];
+        expect(scratch).toBe(dir.replace(/\/repos$/, "/scratch"));
         expect(fs.existsSync(dir)).toBe(false);
       });
 
