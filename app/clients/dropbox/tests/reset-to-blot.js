@@ -106,6 +106,69 @@ describe("dropbox resetToBlot", function () {
     expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(true);
   });
 
+  describe("comparing a file with Dropbox's", function () {
+    // Dropbox's content_hash of a file under 4MB: sha256 of its sha256
+    const sha256 = (input) =>
+      require("crypto").createHash("sha256").update(input).digest();
+    const helloHash = sha256(sha256("hello")).toString("hex");
+
+    const hashedStats = () =>
+      storage.stat.calls
+        .allArgs()
+        .filter(([, , options]) => options && options.hash);
+
+    beforeEach(function () {
+      spyOn(storage, "stat").and.callThrough();
+    });
+
+    it("downloads a file of another size without hashing it", async function () {
+      await fs.outputFile(join(blogDirectory, "a.txt"), "hello world");
+      const resetToBlot = load({
+        "/": [{ ...file("a.txt"), content_hash: helloHash, size: 5 }],
+      });
+
+      const summary = await resetToBlot(blogID, () => {}, async () => {});
+
+      expect(summary.downloaded).toEqual(1);
+      expect(hashedStats()).toEqual([]);
+    });
+
+    it("hashes a file of the same size, and skips it when the hashes match", async function () {
+      await fs.outputFile(join(blogDirectory, "a.txt"), "hello");
+      const resetToBlot = load({
+        "/": [{ ...file("a.txt"), content_hash: helloHash, size: 5 }],
+      });
+
+      const summary = await resetToBlot(blogID, () => {}, async () => {});
+
+      expect(summary.downloaded).toEqual(0);
+      expect(hashedStats().length).toEqual(1);
+    });
+
+    it("downloads a file of the same size when the hashes differ", async function () {
+      await fs.outputFile(join(blogDirectory, "a.txt"), "world");
+      const resetToBlot = load({
+        "/": [{ ...file("a.txt"), content_hash: helloHash, size: 5 }],
+      });
+
+      const summary = await resetToBlot(blogID, () => {}, async () => {});
+
+      expect(summary.downloaded).toEqual(1);
+      expect(hashedStats().length).toEqual(1);
+    });
+
+    it("downloads a file that is not in the folder", async function () {
+      const resetToBlot = load({
+        "/": [{ ...file("a.txt"), content_hash: helloHash, size: 5 }],
+      });
+
+      const summary = await resetToBlot(blogID, () => {}, async () => {});
+
+      expect(summary.downloaded).toEqual(1);
+      expect(hashedStats()).toEqual([]);
+    });
+  });
+
   it("counts a file it could not download, and carries on with the rest", async function () {
     load({ "/": [file("a.txt"), file("b.txt")] });
     require.cache[downloadPath].exports = function (_client, source, id, destination, callback) {

@@ -394,9 +394,10 @@ async function resetFromBlotWithClient(
 
     log("Checking", dir);
 
+    const remoteReading = remoteReaddir(client, join(dropboxRoot, dir), signal);
     const [remoteContents, localContents] = await Promise.all([
-      remoteReaddir(client, join(dropboxRoot, dir), signal),
-      localReaddir(blogID, dir, signal),
+      remoteReading,
+      localReaddir(blogID, dir, signal, remoteReading),
     ]);
 
     abortIfRequested(signal);
@@ -593,19 +594,30 @@ async function resetFromBlotWithClient(
 //   }
 // }
 
-// A file's hash is undefined if it can't be read, which never matches Dropbox's
-const contentHash = async (blogID, path) => {
+// A file's hash is undefined if it can't be read, which never matches Dropbox's.
+// Hashing can mean reading the whole file, so when Dropbox's size for the file
+// is known it is compared first, from the index: files of different sizes
+// can't have the same bytes.
+const contentHash = async (blogID, path, size) => {
   try {
+    if (typeof size === "number") {
+      const stat = await storage.stat(blogID, path);
+      if (stat.isDirectory || stat.size !== size) return undefined;
+    }
     return (await storage.stat(blogID, path, { hash: true })).hash;
   } catch (e) {
     return undefined;
   }
 };
 
-const localReaddir = async (blogID, dir, signal) => {
+// remoteContentsPromise is the same folder's listing in Dropbox, for the sizes
+const localReaddir = async (blogID, dir, signal, remoteContentsPromise) => {
   abortIfRequested(signal);
 
-  const contents = await storage.listNames(blogID, dir);
+  const [contents, remoteContents] = await Promise.all([
+    storage.listNames(blogID, dir),
+    remoteContentsPromise,
+  ]);
 
   abortIfRequested(signal);
 
@@ -614,9 +626,14 @@ const localReaddir = async (blogID, dir, signal) => {
       abortIfRequested(signal);
 
       const path_display = join(dir, name);
+      const remoteItem = remoteContents.find((item) => item.name === name);
       const content_hash = isDirectory
         ? undefined
-        : await contentHash(blogID, path_display);
+        : await contentHash(
+            blogID,
+            path_display,
+            remoteItem && !remoteItem.is_directory ? remoteItem.size : undefined
+          );
 
       abortIfRequested(signal);
 
