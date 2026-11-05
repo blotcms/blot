@@ -297,11 +297,10 @@ function elementsNamed(root, name, firstOnly) {
 function normalizeLiteralDollarMath($) {
   elementsNamed($.root()[0], "p").forEach(function (node) {
     const $p = $(node);
-    const that = node;
     if ($p.html().indexOf("$$") === -1 || $p.find("br").length === 0) return;
-    if (!canFlattenLinebreakParagraph(that)) return;
+    if (!canFlattenLinebreakParagraph(node)) return;
 
-    displayMathRanges(that)
+    displayMathRanges(node)
       .reverse()
       .forEach((range) => replaceDisplayRange($, range));
   });
