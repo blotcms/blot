@@ -70,16 +70,23 @@ module.exports = (function () {
         rank + 1
       );
 
-      Entry.get(blogID, entryIDs, function (entries) {
+      // The caller already has the entry itself, so read only its
+      // neighbours: entries are read in full (html and body included), and
+      // re-reading this one doubled the bytes an entry page parses.
+      var previousID = entryIDs[0] !== entryID ? entryIDs[0] : undefined;
+      var nextID =
+        entryIDs.length && entryIDs[entryIDs.length - 1] !== entryID
+          ? entryIDs[entryIDs.length - 1]
+          : undefined;
+      var neighbourIDs = [previousID, nextID].filter(Boolean);
+
+      Entry.get(blogID, neighbourIDs, function (entries) {
         var next, previous;
 
-        if (entries.length) {
-          previous = entries[0].id != entryID ? entries[0] : undefined;
-          next =
-            entries[entries.length - 1].id != entryID
-              ? entries[entries.length - 1]
-              : undefined;
-        }
+        entries.forEach(function (entry) {
+          if (entry.id === previousID) previous = entry;
+          else if (entry.id === nextID) next = entry;
+        });
 
         return callback(next, previous, ++rank);
       });

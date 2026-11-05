@@ -39,15 +39,12 @@ Diagnostics
 
 ---
 
-remove emojis from deploy summary and benchmarks and ban emojis from the project
-
 when we next cycle hosts, should we cycle the ssh key pair too?
 
 - 3 Nov 2026, after 03:05 UTC (#2261): the first daily Redis backup from the new host is in S3 and B2, and no stale-offsite email was sent
 - 8 Nov 2026, after 03:35 UTC (#2261): the first `weekly/` Redis dump from the new host is in S3 (`aws s3 ls s3://blot-redis-backups/weekly/`). On 3 Nov there was no `weekly/` prefix at all: no weekly dump had reached S3 since #2055 set them up on 7 Oct (the lifecycle rules only expire weeklies after 30 days, so they weren't swept), leaving only 7 days of dailies to restore a deleted blog from. If it is missing, read `~/backup.log` on the host and fix it before the next Sunday
 - Next wildcard certificate renewal (#2261): it works with the new `blot` key; its Route 53 access wasn't tested
 - For a week or two after the 2 Nov move (#2261): watch `[LOCK] slow heartbeat` lines and the Redis slowlog. If they appear, pin Redis to one core and limit the units to the rest
-- Host cycle standby side effects (#2261): a "server started" email per boot and a Bunny purge of the dashboard CSS and JS. Harmless so far; fix before a second host (#2271) makes them frequent
 - Once #2258 and #2259 have moved blog folders and git repos to S3, cycle the production host to drop the data volume and shrink the root to 40 GB (#2377; a volume can't shrink in place). Review `config/host/cycle.sh` first: without the data volume, the `data` phase, the snapshot and delta copies, the read-only freeze and `move retag` may go, so a cycle could be mostly Redis replication and the switch
 - From 5 Nov 2026: delete what the 2 Nov host cycle kept (#2261): the old data volume and the snapshots tagged `BlotCycle=prod-2026-11-02`. List them with `aws ec2 describe-volumes` and `aws ec2 describe-snapshots --owner-ids self` filtered on that tag, and check each before deleting. The snapshot policy's own snapshots carry the tag too; it ages them out by itself.
 - iCloud sync is flaky: on 2 Nov, after the host move, a new folder in icloudtest never reached the macserver within the test's wait, though the macserver's calls to the new host succeeded. Find out where iCloud changes stall (iCloud itself, the macserver's watcher, or the resync path) and make sync dependable
@@ -82,7 +79,7 @@ Redis host follow-ups (from #2041, new host since 8 Oct):
 - Proxy: auto-ssl's lock and hook calls can reuse a timed-out Redis connection
 - Deploy log archive (scripts/deploy/units.sh, proxy/deploy/blue-green.sh): before a unit is replaced, archive its container logs with docker logs -t, outside /tmp, more than 3 files, size-capped
 - TLS handshakes were about a quarter of billed egress on 21 Oct (#2107): ECDSA certificates shrink each by about a third, and few TLS connections resume today, so look at session reuse and keep-alive (about 1.7 requests per connection). No `ssl_session_tickets` without a shared key (#2271)
-- reconcile.js can select every sync-client blog after a restore: a unit that boots with a global template changed since Redis last stored it rebuilds it and bumps every blog's cacheID (app/templates/index.js bumpCacheIDForEveryBlog), and cycle.sh restore starts the units first. The 1 Nov rehearsal selected every blog, most likely this way. Capture the cacheIDs with redis6-cli before the units start, or use a signal a boot doesn't touch (#2261). Only slower recovery, never a missed blog
+- reconcile.js selected every sync-client blog in the 1 Nov restore rehearsal. The suspected cause (a boot rebuilding a changed global template and bumping every blog's cacheID) is gone: since #2432 bumpCacheIDForEveryBlog only runs in development and Template.drop skips SITE templates. At the next rehearsal, check whether the plan still selects every blog; if it does, inspect cacheIDs with redis6-cli before the units start (#2261). Only slower recovery, never a missed blog
 - restore.sh --offsite: have the host download from B2 with a short-lived presigned URL (aws s3 presign on the operator's machine, passed over stdin), so a restore doesn't depend on the operator's upload speed and the read key still stays off servers. Not tested yet
 - cycle.sh --drill hosts have no AWS credentials (no instance profile), so restoring an S3 backup onto one means copying keys onto it or using --offsite, which streams the dump through the operator's machine: on 3 Nov a 2 GB dump took about 30 minutes at 1.2 MB/s. Give drill hosts a read-only instance profile scoped to s3://blot-redis-backups (or reuse the presigned-URL idea above for S3 too), so the host fetches it directly in about a minute
 - Upgrade the Redis server from 6.2 to 8.4+ for native compare-and-set (SET ... IFEQ, DELEX), then drop Lua: helper/lock extend/release become plain commands; helper/alarm claim/renew/complete need per-id claim keys to go native; also the legacy scripts in sync/lock.js, models/user/set.js, helper/flushCachePending.js, clients/icloud/database.js
@@ -93,7 +90,6 @@ Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 - After the next 03:46 logrotate: access.log/error.log still written after copytruncate, fail2ban counts still moving
 - After the first wildcard renewal by the app (scheduler log "Wildcard SSL"): the proxy serves the new cert fingerprint from Redis within ~10 seconds, with no reload ("wildcard cert:" lines in the proxy error log mean it fell back to the file)
 - Custom-domain certs renew inside the container: none within ~20 days of expiry apart from domains that no longer point at Blot; after a daily renewal run, error.log should show no "certificate for ... expired at" warnings for domains still pointing at Blot (the proxy now refuses to serve an expired stored cert; no host cron)
-- auto-ssl's daily renewal timer first fires 24h after a container starts, so a proxy restarted more often than daily never runs it: confirm proxy deploys are far enough apart, or kick the first run from init_worker
 - Reboot the host once in a maintenance window: mount-instance-store mounts without reformatting, docker starts after it, the proxy comes back with cache/log mounts, :80/:443 answer
 - http://www.blot.im/ returns 404: confirm intended
 - app/blog/static has no copy on the host, so those cdn. files fall through to Node: export them from the Node image on deploy, or accept
@@ -185,10 +181,6 @@ benchmarks-render.yml is manual only because benchmarks-corpus.yml fails, leavin
 Back up blot-storage-prod off AWS (Backblaze B2, hourly, no --delete): _avatars and _template_assets can't be regenerated
 
 Bunny: decide Volume vs Standard tier (more PoPs, faster first byte far from Volume PoPs) once we've run the numbers on cost and latency; also why cache HIT is low (Statistics: status codes, top uncached URLs)
-
-We get two emails one after the other and we should only get one
-- User in overdue disabled grace period
-- User account has been closed after for late payments
 
 Add a list of billing history / invoices to subscription page
 
@@ -312,17 +304,9 @@ Improve Google Drive sync
   - Make it possible to short-circuit the full folder traversal and immediately begin at a specific file/subfolder
 - Improve html output for google docs and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBQFmTvLKzPkJrgsBTWZmQJWS)
   Issue: <p><img><br><img></p> should be <p><img></p><p><img></p>
-- Fix bug with new folder setup (e.g. waiting for user to share folder on drive) which does not survive a server restart (See init.js TODO)
 - Fix possible bug where it seems like sometimes the first sentence of Google Docs become titles unexpectedly – possibly a mis-identified title tag?
-- How do we handle two files with same name and same parent? How does our fileId:path hash handle this? Make sure we delete the right file. Will file.title as opposed to file.name give us the deduped version?
-  - Bug: move file with deduplicated name from sub folder to other folder
-  - download should check for an existing file with same name but different fileId and dedupe before storing the path?
-- Handle revoked credentials without tanking server
-- Handle removed blog folder without error
-- Handle renamed blog folder
-- Handle google drive's This service is not available error
-- Handle storage quota errors
-- Handle 429 errors with exponential backoff retry
+- Surface storage quota errors as QUOTA_EXCEEDED health for Google Drive (isQuotaError exists, nothing sets the code)
+- Retry 429s on Google Drive writes (files.create/update): reads already retry with backoff (serviceAccount/retryConfig.js), but write bodies are streams gaxios can't replay
 - Add a way for sync/build to accept a ctime as an option. We can't set this at the operating system level but google drive's API does return a createdTime value and we could use this as the true file's created date, rather than the date the file is made on the server
 - Google Drive `write` should use the best method for large file uploading
 - Add proper testing for this
@@ -336,13 +320,10 @@ Improve Dropbox sync
 - Batch dependent-entry rebuilds across a sync: a large asset delta batch rebuilt the same referring entry after each image (~13s per update), holding the folder lock for over three hours (2026-11-04). The stuck-lock alert should distinguish ongoing progress from a hung sync.
 - Review public asset rate limits and nginx-429 bans: loading an image-heavy page triggered repeated 429s and temporary visitor bans (2026-11-03/04); avoid banning normal page loads while retaining abuse protection.
 - When you re-connect to Dropbox, you have to re-create a folder and perform a full transfer. It would be great if we could re-use the existing folder... Maybe an option during the connect flow? Would be nice to avoid requiring a full transfer
-- Bug: removing a directory in Dropbox resync only updates the directory path; child entries wait for Fix
 - Bug: Dropbox validation's catch-up sync restores last_sync from outside sync() after releasing the lock, so it can clobber a webhook sync's stamp; teach sync() not to stamp last_sync for catch-up instead
 - Sync verification should instrument the sync/fix function to also report errors where the folder doesn't match the database.
 - Bug: ensure that when a process dies, any blogs setting up dropbox client will be re-attempted
-- Bug: Adding an additional blog to existing app folder under constant webhooks failed. New blog had correct folder but old blog still used root. To fix we need to acquire a lock on ALL blogs interacting with that dropbox account to proceed with setup process of second site.
-  - Bug: handle a sync lock failure on second blog when migrating an app folder
-- Bug: retry transient Dropbox API errors with exponential backoff while surfacing hard failures for manual intervention.
+- Adding an additional blog to an existing app folder under constant webhooks fails: moveExistingFiles (routes/setup/createFolder.js) gives up on the root blog's lock after ~5s and setup fails loudly. Retry or wait longer for the other blog's lock (or take all account-linked blogs' locks in a fixed order)
 - Bug: re-use iCloud resolve case-conflicts function (maybe move into sync?) to ensure blogs with case-sensitive file conflicts are properly initialized on Dropbox
 - Fix bug with Client.write which does not propogate sync errors... to demonstrate this, revoke dropbox token then try to enable local editing.
 - Bug: Switch uploads >150 MB to the Dropbox upload session API with chunked transfer and resumable checkpoints
@@ -351,7 +332,6 @@ Improve Dropbox sync
 - Bug: reconnecting with the same account and same permissions should not create a new folder for `full_access=true`
 - Bug: add a check for folder storage before doing mass upload
 - Bug: handle folder full error appropriately
-- Bug: add sync lock process to dropbox connection when writing folder contents
 - Bug: ensure the app permission access_token is destroyed when switching to full-folder and vice versa
 - Add testing for dropbox:
 - Modify setup flow:
@@ -441,10 +421,6 @@ Improve iCloud sync
 Fix bug with placeholder files when switching clients which will lead to data loss because Blot will not transfer the contents of placeholder files across
 
 Fix bug with the paypal next bill dates are not syncing correctly for some users (e.g.slopserve)
-
-Fix bug with huge draft crashing the sync server
-- /a327ex/drafts/it_follows.txt
-- Chunk large drafts into multiple messages to avoid memory issues? 
 
 Fix bug with overdue subscription payment form not working
 - Possible bug introduced by recent stripe upgrade?

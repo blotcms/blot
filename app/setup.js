@@ -14,7 +14,7 @@ const logRenderCacheStats = require("./scheduler/render-cache-stats");
 const renderTimeMetric = require("./blog/render/renderTimeMetric");
 const flush = require("documentation/tools/flush-cache");
 const configureLocalBlogs = require("./configure-local-blogs");
-const purgeCdnUrls = require("helper/purgeCdnUrls");
+const purgeCdnUrlsOnce = require("helper/purgeCdnUrlsOnce");
 const { assertConfigured: assertStorageBucket } = require("storage/s3");
 
 // The offline queue is still on while we boot, so a command sent while Redis
@@ -214,7 +214,7 @@ async function runPostListenTasks() {
       "/documentation.min.js",
     ].map((path) => cdnURL(path, (p) => p));
 
-    await purgeCdnUrls(urls);
+    await purgeCdnUrlsOnce(urls);
   } catch (err) {
     logError("Failed to run function to purge Bunny CDN cache", err);
   }
