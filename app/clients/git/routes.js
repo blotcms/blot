@@ -274,7 +274,7 @@ site.use(parseGitRequest, redirectRenamedGitHandle, authenticate, function (req,
 
   if (req.gitRoute === "store-end") return require("./shadow/reads").handle(req, res, req.blog);
 
-  repo.handleSmartHttp(req, res, req.blog.id);
+  repo.handleSmartHttp(req, res, req.blog.id, req.blog);
 });
 
 module.exports = { dashboard: dashboard, site: site };

@@ -38,13 +38,27 @@ const BLOCK_ELEMENTS = [
 module.exports = ($) => {
   const blockSelector = BLOCK_ELEMENTS.join(", ");
 
+  // Unwrapping a span moves its contents up, so whether a span contains a
+  // block element never changes while we work: find every span that does with
+  // one selector and a walk up from each block, rather than running a
+  // selector over each span's subtree.
+  const containsBlock = new Set();
+  $(blockSelector).each((i, block) => {
+    for (let node = block.parent; node; node = node.parent) {
+      if (node.name === "span") {
+        if (containsBlock.has(node)) break;
+        containsBlock.add(node);
+      }
+    }
+  });
+
   const spans = $("span").get().reverse();
 
   spans.forEach((span) => {
     const $span = $(span);
 
     // Skip spans that contain block elements
-    if ($span.find(blockSelector).length > 0) {
+    if (containsBlock.has(span)) {
       return;
     }
 

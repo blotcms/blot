@@ -59,19 +59,28 @@ describe("callers of the sandbox when it fails", function () {
     expect(thrown.code).toEqual("SANDBOX_BUSY");
   });
 
-  it("thumbnail validate passes the error to its callback", function (done) {
-    require("build/thumbnail/validate")(image, function (err) {
-      expect(err.code).toEqual("SANDBOX_TIMEOUT");
-      expect(sandbox.run.calls.argsFor(0)[0]).toEqual("metadata");
-      done();
-    });
-  });
-
   it("thumbnail transform passes the error to its callback and writes nothing", function (done) {
     require("build/thumbnail/transform")(image, directory, function (err, result) {
       expect(err.code).toEqual("SANDBOX_TIMEOUT");
       expect(result).toBeUndefined();
       expect(fs.readdirSync(directory)).toEqual([]);
+      done();
+    });
+  });
+
+  it("thumbnail transform checks the candidate in the same job and writes nothing for one it refuses", function (done) {
+    const output = path.join(directory, "thumbnails");
+    sandbox.run.and.callFake(function () {
+      return Promise.resolve({ meta: { source: { format: "png", width: 10, height: 300 }, thumbnails: null }, outputs: [] });
+    });
+    require("build/thumbnail/transform")(image, output, function (err, result) {
+      expect(err.message).toEqual("Image (10px wide) is too small");
+      expect(err.invalid).toBe(true);
+      expect(result).toBeUndefined();
+      expect(fs.existsSync(output)).toBe(false);
+      expect(sandbox.run.calls.count()).toEqual(1);
+      expect(sandbox.run.calls.argsFor(0)[0]).toEqual("thumbnail");
+      expect(sandbox.run.calls.argsFor(0)[1].accept).toEqual({ formats: ["png", "jpeg", "jpg", "svg", "gif", "webp"], minWidth: 64, minHeight: 64 });
       done();
     });
   });
@@ -140,7 +149,9 @@ describe("callers of the sandbox when it fails", function () {
 
     folder.writeFrom(test.blog.id, "/image.docx", source).then(function () {
       docx.read(test.blog, "/image.docx", function (err, html) {
-        expect(err.code).toEqual("SANDBOX_TIMEOUT");
+        // a pandoc worker that times out is the document's failure, as
+        // pandoc's own timeout is (build/converters/pandoc.js)
+        expect(err.message).toMatch(/^Pandoc exited .*\(timed out\)/);
         expect(html).toBeUndefined();
         expect(sandbox.run.calls.argsFor(0)[0]).toEqual("pandoc");
         done();
@@ -154,7 +165,7 @@ describe("callers of the sandbox when it fails", function () {
 
     folder.write(test.blog.id, "/post.md", "# Hello").then(function () {
       markdown.read(test.blog, "/post.md", function (err, html) {
-        expect(err.code).toEqual("SANDBOX_TIMEOUT");
+        expect(err.message).toMatch(/^Pandoc exited .*\(timed out\)/);
         expect(html).toBeUndefined();
         expect(sandbox.run.calls.argsFor(0)[1].from).toEqual("markdown");
         done();

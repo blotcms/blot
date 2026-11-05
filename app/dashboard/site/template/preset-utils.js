@@ -1,4 +1,4 @@
-const tinyColor = require("../../../helper/tinyColor");
+const tinyColor = require("tinycolor2");
 
 function isPlainObject(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);

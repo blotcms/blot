@@ -6,8 +6,12 @@
 // directories a killed import or verify left (older than 12 hours). See
 // app/clients/git/shadow/maintenance.js.
 //
-// It does nothing unless shadow mode is set (BLOT_GIT_STORE_SHADOW) and there
-// is a storage bucket. The scheduler runs it in one process (lock.cron).
+// Blogs served from the store (BLOT_GIT_STORE_SERVE) are looked after too:
+// for them a difference is caught up by the EBS fallback before the check
+// runs again, and only what is left is reported.
+//
+// It does nothing unless shadow mode or the served path is set
+// (BLOT_GIT_STORE_SHADOW, BLOT_GIT_STORE_SERVE) and there is a storage bucket. The scheduler runs it in one process (lock.cron).
 // Emails the admin once, with every finding, only if something was found.
 const config = require("config");
 const clfdate = require("helper/clfdate");
@@ -17,8 +21,9 @@ const NAME = "git-store-maintenance";
 // options: sendEmail(view), and what maintenance.daily takes
 async function run(options = {}) {
   const shadowSetting = String((config.git_store && config.git_store.shadow) || "").trim();
+  const serveSetting = String((config.git_store && config.git_store.serve) || "").trim();
 
-  if (!shadowSetting || !(config.storage && config.storage.bucket)) {
+  if ((!shadowSetting && !serveSetting) || !(config.storage && config.storage.bucket)) {
     return { skipped: true, sent: false };
   }
 

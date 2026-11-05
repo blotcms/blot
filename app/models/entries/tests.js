@@ -911,6 +911,35 @@ describe("entries", function () {
         done();
       });
     });
+
+    it("reads only the neighbours, never the entry itself", async function (done) {
+      const key = `blog:${this.blog.id}:entries`;
+
+      await redis.zAdd(key, [
+        { score: 1, value: "id1" },
+        { score: 2, value: "id2" },
+        { score: 3, value: "id3" },
+      ]);
+
+      Entries.adjacentTo(this.blog.id, "id2", function () {
+        expect(Entry.get.calls.mostRecent().args[1]).toEqual(["id1", "id3"]);
+        done();
+      });
+    });
+
+    it("reads nothing for the only entry", async function (done) {
+      const key = `blog:${this.blog.id}:entries`;
+
+      await redis.zAdd(key, [{ score: 1, value: "id1" }]);
+
+      Entries.adjacentTo(this.blog.id, "id1", function (next, previous, rank) {
+        expect(next).toBeUndefined();
+        expect(previous).toBeUndefined();
+        expect(rank).toBe(1);
+        expect(Entry.get.calls.mostRecent().args[1]).toEqual([]);
+        done();
+      });
+    });
   });
 
   describe("random", function () {

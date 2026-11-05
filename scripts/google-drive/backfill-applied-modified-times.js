@@ -182,11 +182,11 @@ const processBlog = async (blog) => {
     try {
       await resync(blog);
       successfulResyncs++;
-      console.log(`✅ Completed Google Drive resync for ${label(blog)}`);
+      console.log(`[ok] Completed Google Drive resync for ${label(blog)}`);
     } catch (err) {
       failedResyncs++;
       console.error(
-        `❌ Google Drive resync failed for ${label(blog)}:`,
+        `[FAIL] Google Drive resync failed for ${label(blog)}:`,
         formatError(err)
       );
       errors.push({ blogID: blog.id, handle: blog.handle, error: formatError(err) });
@@ -205,7 +205,7 @@ const processBlog = async (blog) => {
     );
   } catch (err) {
     failedResyncs++;
-    console.error(`❌ Failed to process ${label(blog)}:`, formatError(err));
+    console.error(`[FAIL] Failed to process ${label(blog)}:`, formatError(err));
     errors.push({ blogID: blog.id, handle: blog.handle, error: formatError(err) });
   }
 };

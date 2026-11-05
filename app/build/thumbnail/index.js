@@ -23,10 +23,27 @@ module.exports = function (blog, path, metadata, html, callback) {
   store = new Transformer(blog.id, STORE_PREFIX);
   create = Create.bind(this, blog.id);
 
+  // An image that can't be a thumbnail (too small, unsupported format) is
+  // stored as a result like any other, keyed by the file's content, so the
+  // next build of the post skips its sandbox job. Only an image the job read
+  // and refused is stored (err.invalid); a failure to read it or to run the
+  // job is not, so it is tried again.
+  function createOrReject(path, done) {
+    create(path, function (err, thumbnails) {
+      if (err && err.invalid) return done(null, { rejected: err.message });
+      done(err, thumbnails);
+    });
+  }
+
   async.eachSeries(
     candidates,
     function (candidate, next) {
-      store.lookup(candidate, create, function (err, thumbnails) {
+      store.lookup(candidate, createOrReject, function (err, thumbnails) {
+        if (thumbnails && thumbnails.rejected !== undefined) {
+          debug(blog.id, candidate, "rejected:", thumbnails.rejected);
+          thumbnails = undefined;
+        }
+
         // We don't care if a candidate produces an error
         // we just keep going on down the list...
         if (err) {

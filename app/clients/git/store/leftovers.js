@@ -20,7 +20,8 @@
 const fsp = require("fs/promises");
 const path = require("path");
 
-const PREFIXES = ["import-", "verify-", "rewrite-"];
+// setup- is the served path's new-folder setup (app/clients/git/served/create.js)
+const PREFIXES = ["import-", "verify-", "rewrite-", "setup-"];
 
 // An import of a 5 GB repository takes about 20 minutes; this is many times
 // that, so only a directory whose owner is certainly gone is removed. A

@@ -90,11 +90,11 @@ RUN apk add --no-cache --upgrade $ALPINE_EDGE \
     exiftool \
  && exiftool -ver
 
-# Copy package file and any install hooks required during npm install
-# We don't create a package-lock.json because we ran into issues
-# with sharp on different architectures. If we can solve this, then
-# we can commit the package-lock.json and edit this step.
-COPY package.json ./
+# The lockfile records sharp's optional @img/* binaries for every platform, so
+# the same one installs here (linux-musl arm64) and on macOS. sharp's prebuilt
+# binary for this platform goes unused: `deps` rebuilds sharp against the
+# system libvips.
+COPY package.json package-lock.json ./
 
 ## Stage 2 (deps) - THROWAWAY
 # Compiles the native npm modules (sharp, re2) with a full C/C++ toolchain and
@@ -116,8 +116,8 @@ RUN apk add --no-cache --upgrade $ALPINE_EDGE build-base python3 pkgconfig vips-
 ENV SHARP_FORCE_GLOBAL_LIBVIPS=1
 
 # NODE_ENV=production (inherited) keeps this to runtime dependencies only.
-RUN npm install --no-package-lock --omit=dev \
- && npm install --no-save --no-package-lock node-addon-api node-gyp \
+RUN npm ci --omit=dev \
+ && npm install --no-save node-addon-api node-gyp \
  && (cd node_modules/sharp && npm run build) \
  && node -e "const s=require('sharp'); const v=s.versions.vips; if ('aom' in s.versions || v!==require('child_process').execSync('pkg-config --modversion vips-cpp').toString().trim()) { console.error('sharp not linked against system libvips, got '+v); process.exit(1) }" \
  && npm cache clean --force
@@ -152,10 +152,11 @@ RUN echo "node_modules before prune: $(find node_modules -type f | wc -l) files,
 FROM deps AS dev-deps
 
 ENV NODE_ENV=development
-# The re-resolve can swap sharp back to its prebuilt libvips; force it back onto
-# the system libvips and confirm before this stage is copied forward.
-RUN npm install --no-package-lock \
- && npm install --no-save --no-package-lock node-addon-api node-gyp \
+# Adding the devDependencies can reinstall sharp with its prebuilt libvips;
+# force it back onto the system libvips and confirm before this stage is copied
+# forward.
+RUN npm install --include=dev \
+ && npm install --no-save node-addon-api node-gyp \
  && (cd node_modules/sharp && npm run build) \
  && node -e "const s=require('sharp'); const v=s.versions.vips; if ('aom' in s.versions || v!==require('child_process').execSync('pkg-config --modversion vips-cpp').toString().trim()) { console.error('sharp not linked against system libvips, got '+v); process.exit(1) }" \
  && npm cache clean --force
