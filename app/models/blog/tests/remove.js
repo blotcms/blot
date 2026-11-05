@@ -82,4 +82,25 @@ describe("Blog.remove", function () {
       });
     });
   });
+
+  it("leaves the folder lock to a sync which still holds it", async function () {
+    var folderLock = require("sync/lock");
+    var blogID = this.blog.id;
+    var lost = jasmine.createSpy("onCompromised");
+    var held = await folderLock.lock(blogID, { onCompromised: lost });
+
+    await new Promise(function (resolve, reject) {
+      remove(blogID, function (err) {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+
+    expect((await folderLock.inspect(blogID)).held).toBe(true);
+
+    await held.release();
+
+    expect(lost).not.toHaveBeenCalled();
+    expect((await folderLock.inspect(blogID)).held).toBe(false);
+  });
 });
