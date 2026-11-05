@@ -88,6 +88,8 @@ const fsp = require("fs/promises");
 const path = require("path");
 const { StaleManifestError, OutcomeUnknownError, CorruptError, NoRoomError } = require("./errors");
 const { packKey, idxKey, revKey } = require("./layout");
+const { keepPack } = require("./packcache");
+const { rememberWhole } = require("./idx");
 const manifest = require("./manifest");
 const { scanPack } = require("./packscan");
 const { buildRev } = require("./rev");
@@ -398,13 +400,19 @@ async function proveClosed({ children, dir, main, tips }) {
 // Uploads a pack, its index and (for the main pack) its reverse index at once.
 // Every upload has ended before this settles, so none is still reading from
 // scratch when scratch is deleted.
-async function upload(store, pack, { rev }) {
+// The pack's bytes go in the cache at the same time, and the main pack's index
+// as a whole index once they are up (packcache.js, idx.js); neither ever fails
+// the upload.
+async function upload(store, pack, { rev, cache = null }) {
   const stream = fs.createReadStream(pack.packFile);
   stream.on("error", () => {}); // the upload sees it too
   const puts = [store.put(packKey(pack.name), stream).finally(() => stream.destroy()), store.put(idxKey(pack.name), pack.idx)];
   if (rev) puts.push(store.put(revKey(pack.name), pack.rev));
+  const kept = keepPack({ cache, store, name: pack.name, size: pack.size, file: pack.packFile });
   const failed = (await Promise.allSettled(puts)).find((put) => put.status === "rejected");
+  await kept;
   if (failed) throw failed.reason;
+  if (rev) await rememberWhole({ cache, namespace: store.id, key: idxKey(pack.name), idx: pack.idx });
 }
 
 const entryOf = ({ name, size, idxSize, objects }) => ({ name, size, idxSize, objects });
@@ -516,7 +524,7 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
     mark = Date.now();
     // Both groups settle before either failure is thrown, so no upload is
     // still reading scratch when scratch is deleted
-    const uploads = await Promise.allSettled([upload(store, main, { rev: true }), commits ? upload(store, commits, { rev: false }) : null]);
+    const uploads = await Promise.allSettled([upload(store, main, { rev: true, cache }), commits ? upload(store, commits, { rev: false, cache }) : null]);
     const failedUpload = uploads.find((settled) => settled.status === "rejected");
     if (failedUpload) throw failedUpload.reason;
     stats.uploadMs = Date.now() - mark;

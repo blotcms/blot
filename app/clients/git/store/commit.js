@@ -89,6 +89,7 @@ const createReader = require("./reader");
 const { parseCommit } = require("./objects");
 const { buildRev } = require("./rev");
 const { noteSize } = require("./pack");
+const { keepPack } = require("./packcache");
 const { rememberWhole } = require("./idx");
 
 const MASTER = "refs/heads/master";
@@ -513,11 +514,17 @@ async function build({ objects, parent, parts, blob, message, identity, when }) 
 // Uploads a pack with its index and, unless it is a history piece (read whole,
 // so nothing wants its reverse index), its reverse index, all at once. Every
 // upload has ended, one way or the other, before this settles.
-async function uploadPack(store, pack, { rev = true } = {}) {
+// The pack's bytes go in the cache at the same time (packcache.js), which never
+// fails the upload.
+async function uploadPack(store, pack, { rev = true, cache = null } = {}) {
   const body = pack.body();
   const puts = [store.put(packKey(pack.name), body), store.put(idxKey(pack.name), pack.idx)];
   if (rev) puts.push(store.put(revKey(pack.name), pack.rev));
+  const kept = Buffer.isBuffer(body)
+    ? keepPack({ cache, store, name: pack.name, size: pack.size, buffer: body })
+    : keepPack({ cache, store, name: pack.name, size: pack.size, stream: pack.body() });
   const results = await Promise.allSettled(puts);
+  await kept;
   if (body.destroy) body.destroy();
   const failed = results.find((result) => result.status === "rejected");
   if (failed) throw failed.reason;
@@ -565,7 +572,7 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
 
         // Every upload ends before this goes on, so none is still reading a
         // file from scratch when scratch is deleted
-        const results = await Promise.allSettled([uploadPack(store, pack), uploadPack(store, piece, { rev: false })]);
+        const results = await Promise.allSettled([uploadPack(store, pack, { cache }), uploadPack(store, piece, { rev: false, cache })]);
         const failed = results.find((result) => result.status === "rejected");
         if (failed) throw failed.reason;
         uploaded = { pack, piece, epoch: manifest.epochOf(base) };
