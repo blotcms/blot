@@ -64,7 +64,6 @@ env:
     - config/storage-bucket
     - proxy
     - scripts/deploy
-    - scripts/host-cycle
     - scripts/storage
 
   # The nightly run, and a manual one. It slows the specs down too much for
