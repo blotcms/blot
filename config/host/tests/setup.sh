@@ -92,7 +92,7 @@ check "the storage offsite scripts are installed, and the unit runs the sync as 
   [ -x $d/offsite-sync.sh ] && [ -x $d/offsite-restore-test.sh ] && [ -f $d/offsite-lib.sh ] &&
   bash -n $d/offsite-sync.sh && bash -n $d/offsite-restore-test.sh &&
   u=/etc/systemd/system/blot-storage-offsite.service
-  grep -qx "ExecStart=$d/offsite-sync.sh" $u && grep -qx "User=ec2-user" $u && grep -qx "MemoryMax=1G" $u &&
+  grep -qx "ExecStart=$d/offsite-sync.sh" $u && grep -qx "User=ec2-user" $u && grep -qx "MemoryMax=2G" $u && grep -qx "OOMPolicy=continue" $u &&
   grep -qx "StandardOutput=append:/home/ec2-user/storage-offsite.log" $u &&
   grep -qx "OnCalendar=\*-\*-\* 02:10:00 UTC" /etc/systemd/system/blot-storage-offsite.timer'
 check "with no bucket file the sync is off and exits 0" in_ct '

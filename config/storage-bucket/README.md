@@ -141,7 +141,9 @@ of another key to look after. No rclone.conf is written: the remotes are set
 up in the environment (`bin/offsite-lib.sh`), and no key is printed.
 
 **The sync.** `blot-storage-offsite.timer` runs it daily at 02:10 UTC, as
-`ec2-user`, with low CPU and IO priority and `MemoryMax=1G`. The log is
+`ec2-user`, with low CPU and IO priority and `MemoryMax=2G` (each rclone
+with `GOMEMLIMIT=400MiB`; with `OOMPolicy=continue` a blog whose listing still
+runs out of memory fails on its own, and the next run retries it). The log is
 `~ec2-user/storage-offsite.log` (rotated monthly). Each blog's top-level
 directory is synced on its own, four at a time, each with `--fast-list`: a
 listing per blog on each side instead of one per directory, with only one
