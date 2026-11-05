@@ -858,11 +858,17 @@ async function swap({ store, lock, base, next, uploaded = [], clock = Date.now, 
     readAt.set(next, landedAt);
 
     // The swap has happened. The hint only saves the next reader some looking,
-    // so a failure to write it is not a failure to swap. A caller which passes
-    // `waitForHint: false` (a push, Blot's commit) is answered without waiting
-    // for it: until it lands, a reader starting from the old hint looks one
-    // manifest further forward.
-    const hint = store.put(LATEST_KEY, Buffer.from(JSON.stringify({ seq: next.seq }) + "\n")).catch(() => {});
+    // so a failure to write it is not a failure to swap: it is logged and the
+    // swap resolves. It is waited for by default, so a client told its push
+    // landed finds the new hint on its next request, and a serving read in
+    // another process, which trusts an unchanged hint for a few seconds (see
+    // read()), sees the push. A caller which passes `waitForHint: false` is
+    // answered without waiting: until it lands, a writer starting from the
+    // old hint looks one manifest further forward, and a serving read may give
+    // the manifest before.
+    const hint = store
+      .put(LATEST_KEY, Buffer.from(JSON.stringify({ seq: next.seq }) + "\n"))
+      .catch((err) => console.error("Git store: could not write the hint for seq " + next.seq, err));
     if (waitForHint) await hint;
 
     return next;
