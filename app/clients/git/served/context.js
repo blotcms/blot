@@ -1,12 +1,14 @@
 // What every user of the git store in this process shares (#2259): one object
 // store per blog, kept for reuse so its memos (the manifest it last read, the
-// sizes of its packs) help the next operation, and one cache, so a process has
-// one cache budget.
+// sizes of its packs) help the next operation, and one cache, which every
+// process on the host shares, so the host has one cache budget.
 //
 //   storeFor(blogID)        the blog's store, counted (./counting.js) and kept
 //   objectStoreFor(blogID)  a fresh, uncounted store, for the daily upkeep and
 //                           removal, which list and delete
-//   cache()                 the process's cache (../store/cache.js)
+//   cache()                 the host's cache (../store/cache.js), shared by
+//                           every process
+//   cacheDirectory()        where it is
 //   refLock(blogID)         the lock(fn) the store's writes take for a blog:
 //                           its ref lock
 //   hasStore()              whether there is a bucket (or a spec's stores)
@@ -49,15 +51,20 @@ let makeObjectStore = s3ObjectStore;
 let stores = new LRUCache({ max: STORES });
 let sharedCache = null;
 
-// One cache per process, in a directory of its own, since a cache must own its
-// directory (the units' two processes share tmp)
+// One cache for the host, in one directory every process opens (both units
+// and both processes in each share tmp, on the instance store). The cache
+// keeps one budget across them (../store/cache.js), and keeps
+// min_free_percent of the disk free.
+function cacheDirectory() {
+  return path.join(config.git_store.cache_directory, "host");
+}
+
 function cache() {
   if (!sharedCache) {
-    const label = String(config.container || "").replace(/[^A-Za-z0-9_]+/g, "-").replace(/^-+|-+$/g, "") || "main";
-
     sharedCache = createCache({
-      dir: path.join(config.git_store.cache_directory, label),
+      dir: cacheDirectory(),
       maxBytes: config.git_store.cache_bytes,
+      minFreePercent: config.git_store.min_free_percent,
     });
   }
 
@@ -117,6 +124,7 @@ function _setObjectStore(factory) {
 
 function _reset() {
   stores = new LRUCache({ max: STORES });
+  if (sharedCache) sharedCache.close().catch(() => {});
   sharedCache = null;
 }
 
@@ -124,6 +132,7 @@ module.exports = {
   storeFor,
   objectStoreFor,
   cache,
+  cacheDirectory,
   forget,
   hasStore,
   refLock,

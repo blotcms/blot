@@ -176,6 +176,10 @@ setup(async (err) => {
       drain.onStart(() => worker.stop());
     }
 
+    // Warms the host's git store cache a little after startup, in the
+    // background; one process on the host does it (clients/git/served/warm.js)
+    if (!config.preview) require("clients/git/served/warm").start();
+
     // Emails if the unit's fetch proxy stops answering or filtering
     // (app/sandbox/alerts.js). The worker child shares the proxy, so one check.
     if (!config.preview && !config.worker_child) require("sandbox/alerts").watchProxy();

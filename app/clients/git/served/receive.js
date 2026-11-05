@@ -48,10 +48,12 @@ const MASTER = "refs/heads/master";
 // streamed into scratch space reserved from the cache, and is completed and
 // indexed there, so a push needs about its own size again on top; half the
 // budget leaves room for the clones and fetches the cache serves meanwhile.
-// With the default 1 GiB cache that is 512 MiB. The limit is the smaller of
-// this and receive.maxInputSize, git's limit in the Docker image (agreed with
-// the operator, 3 Nov 2026: no larger cache for this).
+// The limit is the smaller of this, MAX_PUSH and receive.maxInputSize, git's
+// limit in the Docker image (agreed with the operator, 3 Nov 2026: 512 MiB,
+// and no larger cache for this). The host's one cache is far larger than the
+// 1 GiB each process had then, so MAX_PUSH keeps the limit where it was.
 const PUSH_CACHE_SHARE = 0.5;
+const MAX_PUSH = 512 * 1024 * 1024;
 
 // receive.maxInputSize, from git's config (the Docker image sets it for every
 // git process), read once per process. 0 when it is not set.
@@ -73,7 +75,7 @@ function readMaxInputSize() {
 
 // The most bytes of pack a push to the store may carry
 async function pushLimit(cache) {
-  const share = Math.floor(cache.maxBytes * PUSH_CACHE_SHARE);
+  const share = Math.min(MAX_PUSH, Math.floor(cache.maxBytes * PUSH_CACHE_SHARE));
   const configured = await readMaxInputSize();
 
   return configured > 0 ? Math.min(configured, share) : share;

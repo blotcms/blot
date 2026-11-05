@@ -68,7 +68,9 @@ describe("git store fetch", function () {
   let server;
   let counter;
 
-  async function setup({ commits = 5, cacheDir = "cache", ...options } = {}) {
+  // With `shared`, the pushes and the fetches go through two cache instances
+  // on one directory, as two processes on a host do
+  async function setup({ commits = 5, cacheDir = "cache", shared = false, ...options } = {}) {
     dir = fx.tempDir();
     work = path.join(dir, "work");
     counter = 0;
@@ -76,8 +78,9 @@ describe("git store fetch", function () {
 
     store = createMemoryStore();
     cache = createCache({ dir: path.join(dir, cacheDir), maxBytes: 64 * MiB });
+    const serving = shared ? createCache({ dir: path.join(dir, cacheDir), maxBytes: 64 * MiB }) : cache;
     received = await createReceiveServer({ store, cache, lock: createLock() });
-    server = await startServer({ store, cache, manifest: () => latest, ...options });
+    server = await startServer({ store, cache: serving, manifest: () => latest, ...options });
   }
 
   async function teardown() {
@@ -171,6 +174,34 @@ describe("git store fetch", function () {
   const posts = () => server.requests.filter((r) => r.startsWith("POST")).length;
   const used = (before) => Object.fromEntries(Object.keys(before).map((key) => [key, store.stats[key] - before[key]]));
   const reading = (u) => u.heads + u.reads + u.gets;
+
+  describe("with the cache another process pushed through", function () {
+    beforeEach(async function () {
+      await setup({ shared: true });
+      await pushWork("master", "refs/tags/v1");
+    });
+    afterEach(teardown);
+
+    // The push kept its pack's bytes and index in the cache as it uploaded
+    // them, so neither a fetch of it nor a clone asks the store for any byte
+    // of a pack or an index
+    it("fetches a push, and clones, reading no pack from the store", async function () {
+      const client = await clone("client");
+      addCommit();
+      await pushWork("master");
+
+      const before = { ...store.stats };
+      ok(await gitIn(client, "fetch", "origin"));
+      expect(lastResult().packs).toBe(1);
+      expect(used(before)).toEqual(jasmine.objectContaining({ heads: 0, reads: 0, gets: 0 }));
+      expectMirror(client);
+
+      const cloning = { ...store.stats };
+      const second = await clone("second");
+      expect(used(cloning)).toEqual(jasmine.objectContaining({ heads: 0, reads: 0, gets: 0 }));
+      expectMirror(second);
+    });
+  });
 
   describe("a client fetching with real git", function () {
     beforeEach(async function () {

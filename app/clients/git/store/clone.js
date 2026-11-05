@@ -43,6 +43,7 @@ const { readRanges } = require("./ranges");
 const { chooseWhole, loadWhole } = require("./idx");
 const { mapLimit } = require("./limit");
 const { parseHeader } = require("./pack");
+const { packSource } = require("./packcache");
 const inflateStream = require("./inflate");
 const pktline = require("./pktline");
 const { negotiate, choosePacks } = require("./fetch");
@@ -89,7 +90,9 @@ function stopped(run) {
 // a long latency doesn't leave the connection idle. The first reads start when
 // this is called, not when the result is first iterated. A short read is an
 // error. Nothing new is started once the transfer has been abandoned.
-function chunks(run, key, from, to) {
+// `source` reads the bytes (a packSource: the cache's copy of the pack when
+// there is one, and the store otherwise).
+function chunks(run, key, from, to, source = run.store) {
   const inflight = [];
   let next = from;
 
@@ -98,7 +101,7 @@ function chunks(run, key, from, to) {
     const offset = next;
     const length = Math.min(run.chunkSize, to - offset);
     next += length;
-    const promise = run.store.read(key, offset, length).then((buffer) => {
+    const promise = (source === run.store ? run.store.read(key, offset, length) : source.read(offset, length)).then((buffer) => {
       if (buffer.length !== length) throw new CorruptError(key + " is shorter than the manifest says (read " + buffer.length + " of " + length + " at " + offset + ")");
       return buffer;
     });
@@ -531,7 +534,8 @@ async function* packStream(run, thePlan, stats) {
       const pack = thePlan.packs[p];
       // The trailer is read too: an entry's zlib stream can only be seen to end
       // by what follows it, and for the last entry that is the trailer
-      sources.set(p, chunks(run, packKey(pack.name), 0, pack.size));
+      const source = run.cache ? packSource({ cache: run.cache, store: run.store, name: pack.name, size: pack.size }) : run.store;
+      sources.set(p, chunks(run, packKey(pack.name), 0, pack.size, source));
     }
     return sources.get(p);
   };

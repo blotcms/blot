@@ -21,6 +21,7 @@
 const crypto = require("crypto");
 const zlib = require("zlib");
 const { packKey } = require("./layout");
+const { cacheKeyOf } = require("./packcache");
 const { parseHeader } = require("./pack");
 const { applyDelta, resultSize } = require("./delta");
 const { parseCommit } = require("./objects");
@@ -95,9 +96,11 @@ function readCommits(buffer, name, into, budget) {
 // A pack's bytes, from the cache if it is there
 async function bytesOf({ store, cache, pack }) {
   const key = packKey(pack.name);
-  const cacheKey = store.id + "/" + key;
+  // The key packcache.js keeps packs under, so a history pack or piece a
+  // writer kept as it uploaded it is found here
+  const cacheKey = cacheKeyOf(store, pack.name);
 
-  const cached = cache ? await cache.get(cacheKey) : null;
+  const cached = cache ? await cache.get(cacheKey, { maxBytes: pack.size }) : null;
   if (cached && cached.length === pack.size) return cached;
 
   const bytes = await store.get(key, { maxBytes: pack.size });
