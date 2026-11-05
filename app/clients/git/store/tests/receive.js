@@ -90,6 +90,27 @@ describe("git store receive", function () {
     expect(cache.stats().reservedBytes).toBe(0);
   }
 
+  // The keys under packs/ now
+  async function packKeys() {
+    const keys = [];
+    for await (const { key } of store.list("packs/")) keys.push(key);
+    return keys;
+  }
+
+  // A refused push changed nothing a reader sees: the manifest is `before`,
+  // and nothing it wrote (a refused push's uploads start before its checks
+  // end) is named by any manifest. What it wrote is an orphan for the sweep.
+  async function expectNothingNamed(before, keysBefore) {
+    const current = await manifest.read(store);
+    expect(current).toEqual(before);
+    const named = new Set(
+      [...current.packs, ...(current.historyPieces || []), ...(current.history ? [current.history] : [])].flatMap((pack) => [packKey(pack.name), idxKey(pack.name), revKey(pack.name)])
+    );
+    const written = (await packKeys()).filter((key) => !keysBefore.includes(key));
+    expect(written.filter((key) => named.has(key))).toEqual([]);
+    return written;
+  }
+
   // Commits a change on the client, on a branch of its own off master, and
   // returns the commit. Without a file, edits one line of a tracked file.
   function commit(branch, change = () => fs.writeFileSync(path.join(src, "docs", "big.txt"), fs.readFileSync(path.join(src, "docs", "big.txt"), "utf8").replace("line 3 ", "line 3 edited by " + branch + " "))) {
@@ -339,14 +360,13 @@ describe("git store receive", function () {
 
     async function expectWrongType(tip, pack) {
       const before = await manifest.read(store);
-      const puts = store.stats.puts;
+      const keys = await packKeys();
       const result = await direct([update(tip)], pack);
 
       expect(result.outcome).toBe("refused");
       // git's own object check may stop it first; either way it is refused
       expect(result.results[0].error).toMatch(/wrong type|unpacker error/);
-      expect(await manifest.read(store)).toEqual(before);
-      expect(store.stats.puts).toBe(puts);
+      await expectNothingNamed(before, keys);
       expectNoScratch();
     }
 
@@ -692,13 +712,12 @@ describe("git store receive", function () {
       const pack = fx.git(src, ["pack-objects", "--stdout", "-q"], tip + "\n" + lie + "\n");
 
       const before = await manifest.read(store);
-      const puts = store.stats.puts;
+      const keys = await packKeys();
 
       const result = await direct([update(tip)], pack);
       expect(result.outcome).toBe("refused");
       expect(result.results[0].error).toBe("missing necessary objects");
-      expect(await manifest.read(store)).toEqual(before);
-      expect(store.stats.puts).toBe(puts);
+      await expectNothingNamed(before, keys);
       expectNoScratch();
     });
 
@@ -1002,5 +1021,117 @@ describe("git store receive", function () {
       expect(result.outcome).toBe("ok");
       expect((await manifest.read(store)).refs[MASTER]).toBe(tip);
     });
+
+    // The pack's upload starts once index-pack has written it, before the
+    // check of the new commits, so a check that fails finds it running
+    it("aborts an upload still running when a check refuses the push, and names nothing", async function () {
+      const lie = fx.git(src, ["mktree", "--missing"], "100644 blob " + "ab".repeat(20) + "\tghost.txt\n").toString().trim();
+      const tip = fx.text(src, ["commit-tree", lie, "-p", fixture.head, "-m", "Points at a ghost"]);
+      const pack = fx.git(src, ["pack-objects", "--stdout", "-q"], tip + "\n" + lie + "\n");
+
+      const before = await manifest.read(store);
+      const keys = await packKeys();
+      const calls = faulty.calls.length;
+      // Every .pack upload (the push's, and its history piece's) is slow
+      // enough that the check is done before either has sent its bytes
+      faulty.inject("put", { key: /\.pack$/, delay: 300, times: 2 });
+
+      const result = await direct([update(tip)], pack);
+      expect(result.outcome).toBe("refused");
+      expect(result.results[0].error).toBe("missing necessary objects");
+      expect(faulty.calls.slice(calls).filter((call) => /^put .*\.pack$/.test(call)).length).toBe(2);
+      // Both slow uploads had ended, refused, before receive answered: the
+      // history piece's body is a Buffer and lands, the pushed pack's is a
+      // stream from scratch and was destroyed
+      expect(faulty.pending()).toBe(0);
+
+      const written = await expectNothingNamed(before, keys);
+      // The pushed pack never landed; the one .pack that did is the piece
+      const landed = written.filter((key) => key.endsWith(".pack"));
+      expect(landed.length).toBe(1);
+      const piece = fx.listEntries({ pack: await store.get(landed[0]), idx: await store.get(landed[0].replace(/\.pack$/, ".idx")) });
+      expect(piece.map((entry) => [entry.oid, entry.type])).toEqual([[tip, "commit"]]);
+      expectNoScratch();
+    });
+
+    it("leaves the manifest alone when an early upload fails while the checks pass", async function () {
+      const tip = commit("work");
+      const before = await manifest.read(store);
+      faulty.inject("put", { key: /\.rev$/, delay: 50, before: dropped() });
+
+      const result = await direct([update(tip)], thin(tip));
+      expect(result.outcome).toBe("failed");
+      expect(result.error.code).toBe("ECONNRESET");
+      expect(await manifest.read(store)).toEqual(before);
+      expect(await store.head(manifestKey(before.seq + 1))).toBeNull();
+      expectNoScratch();
+    });
+  });
+
+  // What a one-file push waits on, with 25 ms added to every request
+  describe("the round trips of a push", function () {
+    const LATENCY = 25;
+    let timeline;
+
+    function slow(inner) {
+      const wrapped = { ...inner };
+      const t = () => performance.now();
+      for (const op of ["head", "read", "get", "put", "putIfAbsent", "delete"]) {
+        wrapped[op] = async (key, ...args) => {
+          const entry = { op, key, start: t() };
+          timeline.push(entry);
+          try {
+            await new Promise((resolve) => setTimeout(resolve, LATENCY));
+            return await inner[op](key, ...args);
+          } finally {
+            entry.end = t();
+          }
+        };
+      }
+      return wrapped;
+    }
+
+    beforeEach(async function () {
+      timeline = [];
+      await setup({ wrap: slow });
+    });
+    afterEach(teardown);
+
+    const said = (message) => (entry) => entry.op === "say" && entry.key === message;
+    const push = (tip) => receive({ store, cache, lock, commands: [update(tip)], pack: bodyOf(thin(tip)), progress: (message) => timeline.push({ op: "say", key: message, start: performance.now() }) });
+
+    for (const warm of [false, true]) {
+      it("uploads the pack beside the checks, and creates the manifest only once every upload has landed (" + (warm ? "warm" : "cold") + ")", async function () {
+        if (warm) {
+          const first = commit("first");
+          expect((await push(first)).outcome).toBe("ok");
+          fixture.head = first;
+        }
+        timeline.length = 0;
+
+        const tip = commit("work");
+        const result = await push(tip);
+        expect(result.outcome).toBe("ok");
+
+        const pushed = result.stats.packs[0];
+        const upload = timeline.find((entry) => entry.op === "put" && entry.key === packKey(pushed));
+        const checking = timeline.find(said("Checking the new commits..."));
+        const saving = timeline.find(said("Saving to Blot..."));
+        const create = timeline.find((entry) => entry.op === "putIfAbsent");
+
+        // Started before the commits were checked, not after
+        expect(upload.start).toBeLessThan(checking.start);
+        expect(upload.start).toBeLessThan(saving.start);
+
+        // Every upload had landed before the create was sent
+        const uploads = timeline.filter((entry) => entry.op === "put" && entry.key.startsWith("packs/"));
+        expect(uploads.length).toBe(5);
+        for (const entry of uploads) expect(entry.end).toBeLessThanOrEqual(create.start);
+
+        // A warm push makes the same requests as before: the hint and a HEAD,
+        // the five uploads, the create and the hint
+        if (warm) expect(timeline.filter((entry) => entry.op !== "say").length).toBe(9);
+      });
+    }
   });
 });
