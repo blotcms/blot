@@ -27,7 +27,7 @@ const fs = require("fs/promises");
 const path = require("path");
 const config = require("config");
 const { warmRepo, packList, lastWritten, warmPack } = require("../store/warm");
-const { cacheKeyOf } = require("../store/packcache");
+const { cacheKeyOf, CACHE_SHARE } = require("../store/packcache");
 const limiter = require("../limiter");
 const counting = require("./counting");
 const context = require("./context");
@@ -216,6 +216,12 @@ async function runPacks({
       const worker = async () => {
         while (at < queue.length && totals.stopped === "done") {
           const { repo, pack } = queue[at++];
+
+          // A pack the cache would never keep is skipped, not a reason to stop
+          if (pack.size > Math.floor(cache.maxBytes / CACHE_SHARE)) {
+            totals.skipped++;
+            continue;
+          }
 
           if (cache.stats().entryBytes + pack.size > ceiling && (await cache.size(cacheKeyOf(repo.store, pack.name))) !== pack.size) {
             totals.stopped = "threshold";

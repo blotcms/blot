@@ -143,6 +143,62 @@ describe("git store: warming the cache on start", function () {
       expect(line).toContain("stopped=done");
     });
 
+    it("skips a pack too big to cache without stopping the warm", async function () {
+      var cache = context.cache();
+      await cache.clear();
+      var log = [];
+      var huge = pack(9, 8 * 1024 * 1024 * 1024, 3);
+      var repos = {
+        a: repo("a", 2000, [huge, pack(1, 100, 2)], log),
+        b: repo("b", 1000, [pack(2, 100, 1)], log),
+      };
+
+      var result = await warm.runPacks({
+        ...options,
+        ids: ["a", "b"],
+        limit: cache.stats().entryBytes + 1500,
+        load: async function (id) {
+          return repos[id];
+        },
+      });
+
+      expect(result.stopped).toBe("done");
+      expect(result.skipped).toBe(1);
+      expect(result.packs).toBe(2);
+      expect(log.join(" ")).not.toContain(huge.name);
+    });
+
+    it("destroys the download when the cache declines the pack", async function () {
+      var cache = context.cache();
+      await cache.clear();
+      var source;
+      var store = {
+        id: "declined",
+        stream: function () {
+          source = new Readable({ read: function () {} });
+          return source;
+        },
+      };
+      var put = cache.putStream;
+      cache.putStream = async function (key, wrapper) {
+        wrapper.destroy();
+        return false;
+      };
+
+      try {
+        var outcome = await require("clients/git/store/warm").warmPack({
+          store: store,
+          cache: cache,
+          pack: pack(1, 100, 1),
+          bytesPerSecond: 1000000,
+        });
+        expect(outcome).not.toBe("fetched");
+        expect(source.destroyed).toBe(true);
+      } finally {
+        cache.putStream = put;
+      }
+    });
+
     it("takes no place in the git limiter, so a Blot commit is not delayed by it", async function () {
       await context.cache().clear();
       var limiter = require("clients/git/limiter");

@@ -125,16 +125,25 @@ async function warmPack({ store, cache, pack, bytesPerSecond = Infinity, between
   if (pack.size > Math.floor(cache.maxBytes / CACHE_SHARE)) return "skipped";
 
   const declined = cache.stats().declined;
+  let source;
   let stream;
   try {
-    stream = store.stream(packKey(pack.name));
-    if (bytesPerSecond < Infinity || between) stream = Readable.from(paced(stream, { bytesPerSecond, between }), { objectMode: false });
+    source = store.stream(packKey(pack.name));
+    stream = source;
+    if (bytesPerSecond < Infinity || between) stream = Readable.from(paced(source, { bytesPerSecond, between }), { objectMode: false });
   } catch (err) {
+    if (source && typeof source.destroy === "function") source.destroy();
     return "failed";
   }
-  const kept = await keepPack({ cache, store, name: pack.name, size: pack.size, stream });
-  if (kept) return "fetched";
-  return cache.stats().declined > declined ? "declined" : "failed";
+  try {
+    const kept = await keepPack({ cache, store, name: pack.name, size: pack.size, stream });
+    if (kept) return "fetched";
+    return cache.stats().declined > declined ? "declined" : "failed";
+  } finally {
+    // The wrapper may have been abandoned before it read anything, which
+    // leaves the download open: close it whatever happened
+    if (typeof source.destroy === "function") source.destroy();
+  }
 }
 
 module.exports = { warmRepo, packList, lastWritten, warmPack };
