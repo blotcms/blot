@@ -61,6 +61,7 @@ env:
     - app/sync
     - app/templates
     - config/redis
+    - config/storage-bucket
     - proxy
     - scripts/deploy
     - scripts/host-cycle

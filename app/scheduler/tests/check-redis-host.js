@@ -8,6 +8,8 @@ describe("scheduler check-redis-host", function () {
     SAMPLE_KEY,
     BACKUP_KEY,
     OFFSITE_KEY,
+    STORAGE_OFFSITE_KEY,
+    parseStorageOffsite,
     STATE_KEY,
     CONDITION_MIN_INTERVAL,
     EVENT_COOLDOWN,
@@ -399,6 +401,68 @@ describe("scheduler check-redis-host", function () {
     });
   });
 
+  describe("stale offsite copy of the storage bucket", function () {
+    const TITLE = "Offsite copy of the storage bucket stale";
+    // A value as config/storage-bucket/bin/offsite-sync.sh stores it
+    const copyLine = (time) => `${stamp(time)} 1234567 987654321`;
+    const withCopy = (h, value) => h.client.store.set(STORAGE_OFFSITE_KEY, value);
+
+    it("reads what offsite-sync.sh stores", function () {
+      expect(parseStorageOffsite(copyLine(NOW))).toEqual({ time: NOW, objects: 1234567, bytes: 987654321 });
+      expect(parseStorageOffsite("2026-11-05T02:41:07Z daily daily/x.rdb 12")).toBe(null);
+      expect(parseStorageOffsite("garbage")).toBe(null);
+      expect(parseStorageOffsite(null)).toBe(null);
+    });
+
+    it("stays quiet with no key, or a copy under 50 hours old", async function () {
+      const h = harness();
+      await h.tick();
+      withCopy(h, copyLine(NOW - 49 * HOUR));
+      await h.tick();
+
+      expect(h.sent).toEqual([]);
+      expect(h.state.alerts).toEqual({});
+    });
+
+    it("alerts past 50 hours, says what to look at, and clears on a fresh copy", async function () {
+      const h = harness();
+      withCopy(h, copyLine(NOW - 51 * HOUR));
+      await h.tick();
+
+      expect(h.sent.map(titles)).toEqual([[TITLE]]);
+      const message = h.sent[0].alerts[0].message;
+      expect(message).toContain("the last offsite copy of the storage bucket (to Backblaze B2) finished 51 hours ago");
+      expect(message).toContain("~/storage-offsite.log");
+      expect(message).toContain("blot-b2-storage");
+      expect(message).toContain("/etc/blot/storage-offsite-bucket");
+      expect(message).toContain("(https://github.com/blotcms/blot/blob/master/config/storage-bucket/README.md)");
+
+      h.advance(CONDITION_MIN_INTERVAL);
+      h.sample = sampleLine({ time: h.now - MINUTE });
+      withCopy(h, copyLine(h.now - 2 * HOUR));
+      await h.tick();
+      expect(h.sent[1].recovered.map((r) => r.title)).toEqual([TITLE]);
+      expect(h.state.alerts).toEqual({});
+    });
+
+    it("is judged apart from the Redis offsite backup", async function () {
+      const h = harness();
+      withBackups(h, { backup: backupLine(NOW - 5 * MINUTE), offsite: backupLine(NOW - 51 * HOUR, "daily") });
+      withCopy(h, copyLine(NOW - HOUR));
+      await h.tick();
+      expect(Object.keys(h.state.alerts)).toEqual(["offsite-stale"]);
+    });
+
+    it("alerts on a value that cannot be read", async function () {
+      const h = harness();
+      withCopy(h, "garbage");
+      await h.tick();
+
+      expect(h.sent.map(titles)).toEqual([[TITLE]]);
+      expect(h.sent[0].alerts[0].message).toContain("can't be read");
+    });
+  });
+
   describe("maxmemory", function () {
     it("alerts once at 90%, then once below 85%", async function () {
       const h = harness({ memory: { used: 9 * GB, maxmemory: 10 * GB } });
@@ -549,6 +613,7 @@ describe("scheduler check-redis-host", function () {
         stale: "20 minutes",
         backup: "3 hours",
         offsite: "50 hours",
+        storageOffsite: "50 hours",
         errors: 100,
         slowlog: "50ms",
         fork: "500ms",

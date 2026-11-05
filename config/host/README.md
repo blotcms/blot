@@ -342,7 +342,11 @@ looking at the hosts, so after a failure fix the cause and run it again. Check
   units use host networking and could read the instance metadata service), so
   backups to S3 and offsite to B2 (the `blot-b2` profile) use the keys in
   `~ec2-user/.aws`. If the old host has none, put the `blot` key there as
-  `[default]` on the new host first.
+  `[default]` on the new host first. `app` also copies the storage bucket's
+  offsite settings from the old host: the `blot-b2-storage` profile (its
+  credentials and config sections) and `/etc/blot/storage-offsite-bucket`.
+  Without them the new host's daily sync is off, and the daily email calls
+  it overdue after 2 days. A drill gets neither.
 - **`settle`** forces a rolling deploy of the same image, because a plain one
   skips units already on it, and that restart is what runs the steps that failed
   on the replica. It then retags the volumes: a rollback is simplest before that.
@@ -524,8 +528,9 @@ It prints IDs and counts only.
 
 ### What `restore` does not do
 
-It does not set up the offsite backup (the `offsite-bucket` file and its B2
-profile), and the permabans only come back with `--bans-file`. It does not move
+It does not set up the offsite backups (the Redis `offsite-bucket` file and its
+`blot-b2` profile, and `/etc/blot/storage-offsite-bucket` and the
+`blot-b2-storage` profile for the storage bucket's copy), and the permabans only come back with `--bans-file`. It does not move
 anything off the old volume: recover newer files from it by hand, with it
 attached read-only to a scratch host.
 
@@ -555,6 +560,19 @@ attached read-only to a scratch host.
   missing, since a stop/start of the instance wipes the disk.
 - `mount-data-volume.sh` mounts the EBS data volume at `/var/www/blot/data` at
   boot (see above).
+- The storage bucket's daily offsite copy to Backblaze B2
+  ([`config/storage-bucket/README.md`](../storage-bucket/README.md), "Offsite
+  backup and restore"). `host/setup.sh` installs `rclone` (from the Amazon
+  Linux 2023 repository), the scripts in `config/storage-bucket/bin` at
+  `/usr/local/lib/blot-storage/`, `blot-storage-offsite.service` (as
+  `ec2-user`, `MemoryMax=1G`, low CPU and IO priority, logging to
+  `~ec2-user/storage-offsite.log`, rotated monthly by
+  `/etc/logrotate.d/blot-storage-offsite`) and `blot-storage-offsite.timer`
+  (daily at 02:10 UTC, enabled on every host). It does nothing until the host
+  has `/etc/blot/storage-offsite-bucket` (one line, the B2 bucket's name) and
+  the `blot-b2-storage` profile in `~ec2-user/.aws`, and is marked active
+  (`/etc/blot-redis/active`). To put it on a running host, rerun
+  `bootstrap.sh` (safe on a live host) or install the same files by hand.
 
 ## What the old bare-metal setup script did
 
