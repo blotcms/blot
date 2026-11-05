@@ -131,8 +131,16 @@ worker() {
       fi
       continue
     fi
+    # Two passes, manifests last. The git store (app/clients/git/store,
+    # layout.js) uploads a push's packs before the manifest that names them,
+    # {blogID}/git/manifests/<seq>.json (and latest.json), but rclone copies
+    # keys in no particular order, so one pass could copy a new manifest
+    # while its packs are still missing from B2. Everything else first, then
+    # the manifests, so every manifest in B2 names packs already there. Each
+    # pass syncs, and hides deletions, only within its own filter.
     # shellcheck disable=SC2086
-    if rclone sync $SYNC_FLAGS "storage:$STORAGE_BUCKET/$d" "$OFFSITE_ROOT/$d" 2>&1 | awk -v p="$d: " '{ print p $0 }' &&
+    if rclone sync $SYNC_FLAGS --exclude "/git/manifests/**" "storage:$STORAGE_BUCKET/$d" "$OFFSITE_ROOT/$d" 2>&1 | awk -v p="$d: " '{ print p $0 }' &&
+      rclone sync $SYNC_FLAGS --include "/git/manifests/**" "storage:$STORAGE_BUCKET/$d" "$OFFSITE_ROOT/$d" 2>&1 | awk -v p="$d: " '{ print p $0 }' &&
       size=$(rclone size --fast-list --json "$OFFSITE_ROOT/$d" 2> /dev/null); then
       count=$(echo "$size" | sed -n 's/.*"count": *\([0-9]*\).*/\1/p')
       bytes=$(echo "$size" | sed -n 's/.*"bytes": *\([0-9]*\).*/\1/p')

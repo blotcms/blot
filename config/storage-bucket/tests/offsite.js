@@ -61,7 +61,8 @@ esac
       `
 case "$1" in
   SET) echo "$*" >> "${root}/redis-calls"; eval "\${SET_COMMAND:-:}" ;;
-  GET) echo "$*" >> "${root}/redis-calls"; echo "2026-11-05T02:40:00Z 10 1000" ;;
+  GET) echo "$*" >> "${root}/redis-calls"
+    case "$2" in handle:gittest) echo "\${GITTEST-blog_gt}" ;; *) echo "2026-11-05T02:40:00Z 10 1000" ;; esac ;;
   *) exit 1 ;;
 esac
 `
@@ -77,6 +78,8 @@ case "$1" in
     case "$*" in
       *--files-from-raw*) printf '2026-11-05 09:00:00  b.txt\\n' ;;
       *storage:*) [ -z "$LIST_FAILS" ] || { echo "AccessDenied" >&2; exit 1; }; cat "$f/source" ;;
+      *storage/blog_a) printf 'folder/\\ngit/\\n' ;;
+      *storage/blog_*) printf 'folder/\\n' ;;
       *) [ -e "$f/offsite" ] || exit 3; cat "$f/offsite" ;;
     esac ;;
   sync) case " $FAIL " in *" \${last##*/} "*) echo "ERROR : x.jpg: Failed to copy: 500" >&2; exit 1 ;; esac ;;
@@ -119,10 +122,15 @@ esac
       expect(result.stdout).toContain("hid blog_gone, gone from the bucket");
 
       const syncs = calls().filter((c) => c.startsWith("sync "));
-      expect(syncs.length).toBe(2);
-      ["blog_a", "blog_b"].forEach((blog) =>
-        expect(syncs.some((c) => c.includes(` storage:test-storage/${blog} offsite:test-offsite/storage/${blog} |`))).toBe(true)
-      );
+      expect(syncs.length).toBe(4);
+      ["blog_a", "blog_b"].forEach((blog) => {
+        // Everything but the git manifests first, then the manifests, so no
+        // manifest reaches B2 before the packs it names
+        const mine = syncs.filter((c) => c.includes(` storage:test-storage/${blog} offsite:test-offsite/storage/${blog} |`));
+        expect(mine.length).toBe(2);
+        expect(mine[0]).toContain('--exclude /git/manifests/** ');
+        expect(mine[1]).toContain('--include /git/manifests/** ');
+      });
       expect(calls().filter((c) => c.startsWith("delete "))).toEqual([
         jasmine.stringMatching(/ offsite:test-offsite\/storage\/blog_gone \|/),
       ]);
@@ -214,7 +222,7 @@ esac
       expect(result.status).toBe(1);
       expect(result.stdout).toContain("1 blogs are in B2 but not in the bucket, more than 0: hiding none of them");
       expect(calls().filter((c) => c.startsWith("delete "))).toEqual([]);
-      expect(calls().filter((c) => c.startsWith("sync ")).length).toBe(2);
+      expect(calls().filter((c) => c.startsWith("sync ")).length).toBe(4);
       expect(read("redis-calls")).toBe("");
     });
 
@@ -234,7 +242,7 @@ esac
       fs.rmSync(file("fake/offsite"));
       const result = sync();
       expect(result.status).toBe(0);
-      expect(calls().filter((c) => c.startsWith("sync ")).length).toBe(2);
+      expect(calls().filter((c) => c.startsWith("sync ")).length).toBe(4);
     });
 
     it("fails without the B2 profile, saying so", function () {
@@ -305,7 +313,74 @@ esac
       expect(restore(["blog_a/folder"]).status).toBe(2);
       expect(restore(["blog_a", "../blog_b"]).status).toBe(2);
       expect(restore([]).status).toBe(2);
+      expect(restore(["--git", "../etc"]).status).toBe(2);
+      expect(restore(["--git", "--sample", "x"]).status).toBe(2);
       expect(calls()).toEqual([]);
+    });
+
+    describe("--git", function () {
+      // A fake docker: the unit has the checker unless NO_CHECKER is set,
+      // and the checker exits CHECK_STATUS after recording what it was given
+      // and which repositories it found.
+      beforeEach(function () {
+        write("var/instance-ssd/tmp/.keep", "");
+        stub(
+          "docker",
+          `
+echo "$*" >> "${root}/docker-calls"
+case "$*" in
+  "exec -u 1000 blot-blue test -f scripts/git/check-store.js") [ -z "$NO_CHECKER" ] ;;
+  "exec -u 1000 blot-blue node scripts/git/check-store.js --dir "*" --all-blogs --deep")
+    dir=$8; ls "$dir" > "${root}/checked"
+    for repo in "$dir"/*; do [ -f "$repo/git/a.txt" ] || exit 3; done
+    exit \${CHECK_STATUS:-0} ;;
+  *) exit 99 ;;
+esac
+`
+        );
+      });
+
+      it("restores the named, gittest and sampled git blogs' repositories and runs the store check on them", function () {
+        const result = restore(["--git", "blog_named"]);
+
+        expect(result.status).toBe(0);
+        expect(result.stdout).toContain("Sampled 1 git blogs from B2");
+        expect(result.stdout).toContain("OK: the restored repositories pass the store check");
+        // blog_a is the only blog in B2 with a git/ directory
+        expect(read("checked").trim().split("\n")).toEqual(["blog_a", "blog_gt", "blog_named"]);
+        ["blog_a", "blog_gt", "blog_named"].forEach((blog) =>
+          expect(calls().some((c) => c.startsWith(`copy `) && c.includes(` offsite:test-offsite/storage/${blog}/git `))).toBe(true)
+        );
+        const dir = read("docker-calls").match(/--dir (\S+)/)[1];
+        expect(dir.startsWith(file("var/instance-ssd/tmp/blot-offsite-restore."))).toBe(true);
+        expect(fs.existsSync(dir)).toBe(false);
+      });
+
+      it("is read-only", function () {
+        restore(["--git"]);
+        calls().forEach((c) => expect(c).toMatch(/^(copy|lsf) /));
+        expect(read("redis-calls").trim().split("\n")).toEqual(["GET handle:gittest", "GET blot:storage:offsite"]);
+      });
+
+      it("fails with the checker's findings, saying to rerun after the next sync", function () {
+        const result = restore(["--git"], { CHECK_STATUS: "1" });
+        expect(result.status).toBe(1);
+        expect(result.stdout).toContain("rerun after the next sync");
+      });
+
+      it("is skipped, with a message, when the unit has no checker", function () {
+        const result = restore(["--git"], { NO_CHECKER: "1" });
+        expect(result.status).toBe(0);
+        expect(result.stdout).toContain("Skipped: blot-blue has no scripts/git/check-store.js");
+        expect(calls()).toEqual([]);
+      });
+
+      it("works without a gittest blog or a sample", function () {
+        const result = restore(["--git", "--sample", "0", "blog_named"], { GITTEST: "" });
+        expect(result.status).toBe(0);
+        expect(result.stdout).toContain("No gittest blog in Redis");
+        expect(read("checked").trim()).toBe("blog_named");
+      });
     });
   });
 });

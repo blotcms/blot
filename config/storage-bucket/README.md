@@ -152,6 +152,13 @@ uploads; B2 keeps SHA-1s). Daily it trusts the times S3 lists (`--update
 reads each object's time, which catches an object rewritten while the
 previous run was copying it. `offsite-sync.sh --full` does that by hand.
 
+Each blog is synced in two passes: everything except `git/manifests/**`, then
+`git/manifests/**`. The git store uploads a push's packs before the manifest
+that names them, but rclone copies keys in no particular order, so a single
+pass could copy a new manifest to B2 before its packs. With the manifests last,
+every manifest in B2 names packs that are already there. The second pass lists
+the blog again, which doubles the listings.
+
 A file deleted in S3 is hidden in B2 (`b2_hide_file`, which needs only
 `writeFiles`); `--b2-hard-delete` is never used, and the key would be refused
 anyway. A blog whose directory is gone from S3 is hidden the same way, unless
@@ -185,6 +192,23 @@ ec2-user on the host:
 ```
 /usr/local/lib/blot-storage/offsite-restore-test.sh --dir /var/instance-ssd <blogID>
 /usr/local/lib/blot-storage/offsite-restore-test.sh --dir /var/instance-ssd <blogID> git   # or _thumbnails, ...
+```
+
+**Git restore test.** `--git` checks restored repositories rather than
+comparing bytes. It restores `{blogID}/git/` for each blog you name, for the
+gittest blog (`handle:gittest` in Redis) and for `--sample <n>` (default 5)
+git blogs picked at random from B2. Each goes into
+`<scratch>/{blogID}/git/`, under `/var/instance-ssd/tmp`, the app's tmp
+directory, which the units see at the same path. It then runs the store
+checker in `blot-blue` as uid 1000:
+`node scripts/git/check-store.js --dir <scratch> --all-blogs --deep`. Exit 0
+is a pass, 1 means findings. If the unit's image has no checker yet, the step
+is skipped with a message. A cheap-check failure on a blog pushed in the last
+day can be a push that landed while the last sync ran: rerun after the next
+sync before it counts as a failure.
+
+```
+/usr/local/lib/blot-storage/offsite-restore-test.sh --git [--sample <n>] [<blogID>...]
 ```
 
 ### Restoring

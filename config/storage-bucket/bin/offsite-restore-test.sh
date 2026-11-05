@@ -1,5 +1,6 @@
 #!/bin/bash
 # Usage: offsite-restore-test.sh [--keep] [--dir <parent>] <blogID> [<path>]
+#        offsite-restore-test.sh --git [--sample <n>] [--keep] [--dir <parent>] [<blogID>...]
 # Restores one blog's folder (or <path> under the blog: git, _thumbnails, ...)
 # from the B2 copy that offsite-sync.sh keeps into a scratch directory, then
 # compares it file by file with the storage bucket, reading both in full
@@ -16,6 +17,19 @@
 #                   /tmp; the instance store, /var/instance-ssd, has more room)
 #   --keep          leave the restored files there instead of deleting them
 #
+# With --git it checks git repositories instead: it restores <blogID>/git/ of
+# the blogs named, of the gittest blog (handle:gittest in Redis) and of
+# --sample <n> (default 5) git blogs picked at random from B2, into
+# <scratch>/<blogID>/git/, and runs the store checker in the blot-blue unit on
+# them: `node scripts/git/check-store.js --dir <scratch> --all-blogs --deep`,
+# as uid 1000. Exit 0 is a pass, 1 means findings. The scratch directory is
+# made under /var/instance-ssd/tmp unless --dir says otherwise, since the unit
+# must see it at the same path (the app's tmp directory is bound in). Without
+# the checker in the unit's image, the step is skipped with a message (exit 0).
+# A manifest is only ever copied after its packs (offsite-sync.sh), so a
+# finding is real, except possibly on a blog pushed to since the last sync
+# started: run it again after the next sync before counting it.
+#
 # BLOT_ROOT prefixes paths, for the tests. Written to run under sh as well as
 # bash, for the tests.
 set -euo pipefail
@@ -24,22 +38,99 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 # shellcheck source=offsite-lib.sh
 . "$HERE/offsite-lib.sh"
 
-usage() { echo "usage: offsite-restore-test.sh [--keep] [--dir <parent>] <blogID> [<path>]" >&2; exit 2; }
+usage() {
+  echo "usage: offsite-restore-test.sh [--keep] [--dir <parent>] <blogID> [<path>]" >&2
+  echo "       offsite-restore-test.sh --git [--sample <n>] [--keep] [--dir <parent>] [<blogID>...]" >&2
+  exit 2
+}
+blog_id() { # blog_id <arg>: refuses anything but a blog ID
+  case "$1" in blog_*/* | blog_*..*) ;; blog_?*) return 0 ;; esac
+  echo "not a blog ID: $1" >&2; exit 2
+}
 
 KEEP=
-PARENT=${TMPDIR:-/tmp}
+GIT=
+SAMPLE=5
+PARENT=
 while [ $# -gt 0 ]; do
   case "$1" in
     --keep) KEEP=1; shift ;;
+    --git) GIT=1; shift ;;
+    --sample) [ $# -ge 2 ] || usage; case "$2" in '' | *[!0-9]*) usage ;; esac; SAMPLE=$2; shift 2 ;;
     --dir) [ $# -ge 2 ] || usage; PARENT=$2; shift 2 ;;
     -*) usage ;;
     *) break ;;
   esac
 done
+
+FLAGS="--fast-list --transfers 4 --checkers 8 --stats 0 --log-level NOTICE"
+UNIT=${BLOT_UNIT:-blot-blue}
+CHECKER=scripts/git/check-store.js
+
+# ---- --git ----------------------------------------------------------------
+if [ -n "$GIT" ]; then
+  for blog; do blog_id "$blog"; done
+  [ -n "$(offsite_bucket)" ] || { echo "no bucket in $OFFSITE_BUCKET_FILE: offsite is off on this host" >&2; exit 1; }
+  if ! docker exec -u 1000 "$UNIT" test -f "$CHECKER" 2> /dev/null; then
+    echo "Skipped: $UNIT has no $CHECKER (not in this image yet), so the git restore cannot be checked"
+    exit 0
+  fi
+  [ -n "$PARENT" ] || PARENT=$ROOT/var/instance-ssd/tmp
+  WORK=$(mktemp -d "$PARENT/blot-offsite-restore.XXXXXX")
+  if [ -n "$KEEP" ]; then trap 'echo "kept $WORK"' EXIT; else trap 'rm -rf "$WORK"' EXIT; fi
+  chmod 755 "$WORK"
+  setup_remotes > "$WORK/.setup" || { cat "$WORK/.setup" >&2; exit 1; }
+  rm -f "$WORK/.setup"
+
+  for blog; do echo "$blog"; done > "$WORK/.blogs"
+  gittest=$(redis6-cli GET handle:gittest 2> /dev/null | tr -d '\r') || gittest=
+  case "$gittest" in blog_?*) echo "$gittest" >> "$WORK/.blogs" ;; *) echo "No gittest blog in Redis (handle:gittest)" ;; esac
+  if [ "$SAMPLE" -gt 0 ]; then
+    # Random blogs from B2's top level, keeping those with a git/ directory:
+    # a listing each, so at most 20 per blog wanted.
+    # shellcheck disable=SC2086
+    rclone lsf --dirs-only --max-depth 1 "$OFFSITE_ROOT" 2> /dev/null |
+      awk 'BEGIN { srand() } { print rand() "\t" $0 }' | sort | cut -f2- | sed 's|/$||' |
+      head -n $((SAMPLE * 20)) > "$WORK/.candidates" || true
+    found=0
+    while IFS= read -r blog && [ "$found" -lt "$SAMPLE" ]; do
+      if rclone lsf --dirs-only --max-depth 1 "$OFFSITE_ROOT/$blog" 2> /dev/null | grep -qx "git/"; then
+        echo "$blog" >> "$WORK/.blogs"
+        found=$((found + 1))
+      fi
+    done < "$WORK/.candidates"
+    echo "Sampled $found git blogs from B2"
+  fi
+  sort -u "$WORK/.blogs" > "$WORK/.list"
+  [ -s "$WORK/.list" ] || { echo "No git blogs to check" >&2; exit 1; }
+
+  echo "Last recorded sync: $(redis6-cli GET "$OFFSITE_REDIS_KEY" 2> /dev/null | tr -d '\r' || true)"
+  while IFS= read -r blog; do
+    echo "Restoring $blog/git from B2"
+    # shellcheck disable=SC2086
+    rclone copy $FLAGS "$OFFSITE_ROOT/$blog/git" "$WORK/$blog/git" ||
+      { echo "the restore of $blog/git from B2 failed" >&2; exit 1; }
+  done < "$WORK/.list"
+  rm -f "$WORK/.blogs" "$WORK/.list" "$WORK/.candidates"
+  chmod -R a+rX "$WORK"
+
+  echo "Checking $(ls "$WORK" | wc -l | tr -d ' ') repositories with $CHECKER in $UNIT"
+  status=0
+  docker exec -u 1000 "$UNIT" node "$CHECKER" --dir "$WORK" --all-blogs --deep || status=$?
+  case "$status" in
+    0) echo "OK: the restored repositories pass the store check" ;;
+    1) echo "FAILED: the store check has findings (above). One on a blog pushed to since the last sync started may only be that push: rerun after the next sync" ;;
+    *) echo "FAILED: the store check exited $status" ;;
+  esac
+  exit "$status"
+fi
+
+# ---- one blog's folder (or another path) ------------------------------------
+[ -n "$PARENT" ] || PARENT=${TMPDIR:-/tmp}
 [ $# -ge 1 ] && [ $# -le 2 ] || usage
 BLOG=$1
 SUBPATH=${2:-folder}
-case "$BLOG" in blog_*/* | blog_*..*) echo "not a blog ID: $BLOG" >&2; exit 2 ;; blog_?*) ;; *) echo "not a blog ID: $BLOG" >&2; exit 2 ;; esac
+blog_id "$BLOG"
 case "$SUBPATH" in /* | *..*) echo "the path must be relative, without ..: $SUBPATH" >&2; exit 2 ;; esac
 SUBPATH=${SUBPATH%/}
 
@@ -50,7 +141,6 @@ setup_remotes > "$WORK/setup" || { cat "$WORK/setup" >&2; exit 1; }
 
 SOURCE="storage:$STORAGE_BUCKET/$BLOG/$SUBPATH"
 COPY="$OFFSITE_ROOT/$BLOG/$SUBPATH"
-FLAGS="--fast-list --transfers 4 --checkers 8 --stats 0 --log-level NOTICE"
 
 last=$(redis6-cli GET "$OFFSITE_REDIS_KEY" 2> /dev/null | tr -d '\r') || last=
 echo "Last recorded sync: ${last:-none} (time, objects, bytes)"
