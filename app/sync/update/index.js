@@ -81,7 +81,20 @@ module.exports = function (blog, log, status) {
 
           if (before !== after) {
             status("Re-syncing " + path);
-            return update(path, callback);
+
+            // This pass may already have stored the file's new entry, which
+            // the next one then finds unchanged: the change still needs its
+            // purge, and the sync its cacheID bump
+            var changedHere = !(result && result.changed === false);
+
+            return update(path, function (err, retried) {
+              if (!err && changedHere && retried && retried.changed === false)
+                return flushCache(blog.id, function () {
+                  callback(null, { error: retried.error || null });
+                });
+
+              callback.apply(this, arguments);
+            });
           }
 
           // The file built the entry already stored: nothing to purge.

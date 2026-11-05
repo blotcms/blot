@@ -37,6 +37,20 @@ describe("entry.set changed", function () {
     });
   });
 
+  // "Cats" and "cats" share one tag, whose display name the last entry saved
+  // sets, so re-saving an unchanged entry can rename it on the other
+  it("reports renaming a shared tag as changed", async function () {
+    await this.buildAndSet("/a.txt", "Tags: Cats\n\nHello");
+    await this.buildAndSet("/b.txt", "Tags: cats\n\nHello");
+
+    expect(await this.buildAndSet("/a.txt", "Tags: Cats\n\nHello")).toEqual({
+      changed: true,
+    });
+    expect(await this.buildAndSet("/a.txt", "Tags: Cats\n\nHello")).toEqual({
+      changed: false,
+    });
+  });
+
   // The linked entry's backlinks change, though this entry's JSON may not
   it("reports a change to another entry's backlinks as changed", async function () {
     await this.buildAndSet("/linked.txt", "Link: linked\nLinked");

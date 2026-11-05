@@ -209,8 +209,11 @@ module.exports = function set (blogID, path, updates, callback) {
 
             if (entry.draft) queue.push(notifyDrafts.bind(this, blogID, entry));
 
-            async.parallel(queue, function (err) {
+            async.parallel(queue, function (err, results) {
               if (err) return callback(err);
+
+              // updateTagList is first in the queue
+              var tagsChanged = !!(results[0] && results[0].changed);
               backlinksToUpdate(
                 blogID,
                 entry,
@@ -260,11 +263,13 @@ module.exports = function set (blogID, path, updates, callback) {
                         console.log(clfdate(), blogID.slice(0, 12), "update", path);
                       }
                       // changed: false when the stored entry is exactly as
-                      // it was and no other entry's backlinks moved, so
-                      // nothing a render reads from this entry differs
+                      // it was, no other entry's backlinks moved and no tag
+                      // data changed, so nothing a render reads differs
                       callback(null, {
                         changed:
-                          backlinksMoved || !isEqual(stored, JSON.parse(json)),
+                          backlinksMoved ||
+                          tagsChanged ||
+                          !isEqual(stored, JSON.parse(json)),
                       });
                     }
                   );

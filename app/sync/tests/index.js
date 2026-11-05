@@ -376,6 +376,39 @@ describe("sync cacheID", function () {
     });
   });
 
+  // A file which changes while it builds is synced again. The first pass has
+  // already stored the new entry, so the second finds it unchanged: the sync
+  // must still purge and bump for the change the first pass stored.
+  it("bumps the cacheID when a file changed while it built", function (testDone) {
+    const blogID = this.blog.id;
+    const storage = require("storage/folder");
+
+    syncContents(blogID, "Hello", function (err) {
+      if (err) return testDone.fail(err);
+
+      spyOn(Blog, "bumpCacheID").and.callThrough();
+
+      // The second stat of the path (after the first pass built it) sees a
+      // different size, as if the file was written again meanwhile
+      const stat = storage.stat;
+      let calls = 0;
+      spyOn(storage, "stat").and.callFake(async function (id, path) {
+        const result = await stat.apply(storage, arguments);
+        if (path === "/a.txt" && ++calls === 2)
+          return Object.assign({}, result, { size: result.size + 1 });
+        return result;
+      });
+
+      syncContents(blogID, "Hello, world", function (err, result) {
+        if (err) return testDone.fail(err);
+        expect(calls).toBeGreaterThan(2);
+        expect(result.changed).not.toBe(false);
+        expect(Blog.bumpCacheID).toHaveBeenCalled();
+        testDone();
+      });
+    });
+  });
+
   // Not every file is an entry: a public file is served from the folder as
   // it is, so it must still purge the pages that cached it
   it("bumps the cacheID when a sync updates a file which is not an entry", function (testDone) {
