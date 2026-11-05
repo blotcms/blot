@@ -272,18 +272,41 @@ function eachTextNode(node, cb) {
   });
 }
 
-function normalizeLiteralDollarMath($) {
-  $("p").each(function () {
-    const $p = $(this);
-    if ($p.html().indexOf("$$") === -1 || $p.find("br").length === 0) return;
-    if (!canFlattenLinebreakParagraph(this)) return;
+// Elements named name, in document order. Cheerio's own $("p") and $("body")
+// are quadratic in the number of siblings when the document is a fragment (a
+// flat run of top-level blocks): about 14 ms for 2000 paragraphs, 400 ms for
+// 10000. Walking the tree is linear and finds the same nodes.
+function elementsNamed(root, name, firstOnly) {
+  const found = [];
+  const stack = [root];
 
-    displayMathRanges(this)
+  while (stack.length) {
+    const node = stack.pop();
+    if (node.type === "tag" && node.name === name) {
+      found.push(node);
+      if (firstOnly) return found;
+    }
+    const children = node.children;
+    if (!children) continue;
+    for (let i = children.length - 1; i >= 0; i -= 1) stack.push(children[i]);
+  }
+
+  return found;
+}
+
+function normalizeLiteralDollarMath($) {
+  elementsNamed($.root()[0], "p").forEach(function (node) {
+    const $p = $(node);
+    const that = node;
+    if ($p.html().indexOf("$$") === -1 || $p.find("br").length === 0) return;
+    if (!canFlattenLinebreakParagraph(that)) return;
+
+    displayMathRanges(that)
       .reverse()
       .forEach((range) => replaceDisplayRange($, range));
   });
 
-  const rootNode = $("body")[0] || $.root()[0];
+  const rootNode = elementsNamed($.root()[0], "body", true)[0] || $.root()[0];
 
   eachTextNode(rootNode, (textNode) => {
     const converted = normalizeMathInText(textNode.data);
