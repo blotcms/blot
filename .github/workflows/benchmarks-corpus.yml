@@ -61,10 +61,9 @@ jobs:
       # build-corpus.js is the host-side orchestrator (it shells out to
       # `docker run` itself for the actual corpus build) and `require`s
       # fs-extra directly, so the bare runner needs the repo's deps
-      # installed too. No committed package-lock.json, so `npm ci` isn't an
-      # option here - see benchmarks-converters.yml's identical step.
+      # installed too.
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

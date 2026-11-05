@@ -699,6 +699,64 @@ describe("git store receive", function () {
       expectNoScratch();
     });
 
+    describe("with regularFilesOnly", function () {
+      const symlink = (name) => () => fs.symlinkSync("docs/big.txt", path.join(src, name));
+
+      it("refuses a master which adds a symbolic link, with Blot's message, and changes nothing", async function () {
+        const tip = commit("link", symlink("link"));
+        const before = await manifest.read(store);
+
+        const result = await direct([update(tip)], thin(tip), { regularFilesOnly: true });
+        expect(result.outcome).toBe("refused");
+        expect(result.results).toEqual([{ ref: MASTER, error: "Git blogs support regular files only (no symbolic links or submodules)" }]);
+        expect((await manifest.read(store)).seq).toBe(before.seq);
+        expectNoScratch();
+      });
+
+      it("looks into the directories a push changes", async function () {
+        const tip = commit("nested", () => {
+          fs.mkdirSync(path.join(src, "deep", "er"), { recursive: true });
+          fs.symlinkSync("../../docs/big.txt", path.join(src, "deep", "er", "link"));
+        });
+
+        const result = await direct([update(tip)], thin(tip), { regularFilesOnly: true });
+        expect(result.outcome).toBe("refused");
+        expect(result.results[0].error).toMatch(/regular files only/);
+      });
+
+      it("refuses a submodule", async function () {
+        // By plumbing: `git add -A` would drop a gitlink with no repository there
+        fx.git(src, ["checkout", "-q", "-B", "submodule", fixture.head]);
+        fx.git(src, ["update-index", "--add", "--cacheinfo", "160000," + fixture.commits[0] + ",vendor"]);
+        fx.git(src, ["commit", "-q", "-m", "A submodule"]);
+        const tip = fx.text(src, ["rev-parse", "HEAD"]);
+
+        const result = await direct([update(tip)], thin(tip), { regularFilesOnly: true });
+        expect(result.outcome).toBe("refused");
+        expect(result.results[0].error).toMatch(/regular files only/);
+      });
+
+      it("takes regular files, an executable and a tag pointing anywhere", async function () {
+        const tip = commit("plain", () => {
+          fs.writeFileSync(path.join(src, "run.sh"), "#!/bin/sh\n");
+          fs.chmodSync(path.join(src, "run.sh"), 0o755);
+        });
+
+        const result = await direct([update(tip)], thin(tip), { regularFilesOnly: true });
+        expect(result.outcome).toBe("ok");
+
+        // A tag is not master: what it points at is not checked
+        const linked = commit("tagged-link", symlink("link"));
+        const tagged = await direct([{ old: ZERO, new: linked, ref: "refs/tags/linked" }], fx.packRevs(src, [linked], [tip], { thin: true }), { regularFilesOnly: true });
+        expect(tagged.outcome).toBe("ok");
+      });
+
+      it("is off unless asked for", async function () {
+        const tip = commit("link", symlink("link"));
+        expect((await direct([update(tip)], thin(tip))).outcome).toBe("ok");
+      });
+    });
+
     it("refuses a push over the limit, after reading it all", async function () {
       const tip = commit("big", () => fs.writeFileSync(path.join(src, "big.bin"), fx.bytes(9, 2 * MiB)));
       const pack = thin(tip);
@@ -706,7 +764,7 @@ describe("git store receive", function () {
 
       const result = await direct([update(tip)], pack, { limit: MiB });
       expect(result.outcome).toBe("refused");
-      expect(result.status).toBe("the push is larger than the 1 MB Blot accepts");
+      expect(result.status).toBe("this push is larger than Blot accepts (1 MiB); push fewer or smaller files at a time");
 
       const early = await direct([update(tip)], pack, { limit: MiB, sizeHint: pack.length });
       expect(early.status).toBe(result.status);
@@ -850,7 +908,7 @@ describe("git store receive", function () {
       const refused = await direct([update(tip)], pack, { smallBase: SMALL });
 
       expect(refused.outcome).toBe("refused");
-      expect(refused.status).toMatch(/builds on a file of 3 MB which is larger than Blot can currently handle. Please contact support/);
+      expect(refused.status).toMatch(/builds on a file of 3 MiB which is larger than Blot can currently handle. Please contact support/);
       expect((await manifest.read(store)).refs[MASTER]).toBe(fixture.head);
       expectNoScratch();
     });

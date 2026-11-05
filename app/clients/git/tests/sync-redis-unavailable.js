@@ -111,6 +111,8 @@ describe("Git sync when Redis is unavailable", function () {
         },
         "models/blog": {},
         "./validateTree": validateTree,
+        // The EBS sync, not the git store's (#2259)
+        "./served/switch": { enabled: () => false },
       };
       const module = { exports: {} };
       vm.runInNewContext(fs.readFileSync(require.resolve("../sync"), "utf8"), {
