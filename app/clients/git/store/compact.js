@@ -133,6 +133,24 @@ const PACK_CONFIG = {
   "pack.writeBitmaps": "false",
 };
 
+// What the store's index-pack and fsck run with, so their memory does not
+// depend on the repository (passed with -c, as PACK_CONFIG is). With git's
+// defaults, index-pack and fsck use a thread a core, each with a 96 MB cache
+// of delta bases, and inflate every object up to 512 MB whole in memory: a
+// deep check of a repository of large media files peaked at about 1 GB in
+// production (#2259, 5 Nov). Here it is one thread, and a blob over 32 MB is
+// streamed, not held.
+const INDEX_CONFIG = {
+  "pack.threads": "1",
+  "core.bigFileThreshold": "32m",
+  "core.deltaBaseCacheLimit": "16m",
+  "core.packedGitLimit": "64m",
+  "core.packedGitWindowSize": "16m",
+};
+
+// INDEX_CONFIG as git's leading -c arguments
+const indexArgs = () => Object.entries(INDEX_CONFIG).flatMap(([key, value]) => ["-c", key + "=" + value]);
+
 // ---- The plan ---------------------------------------------------------
 
 // What to do with manifest `m`, without reading anything: resolves
@@ -566,5 +584,7 @@ module.exports.planOptions = planOptions;
 module.exports.DEFAULTS = DEFAULTS;
 module.exports.snapshotLimits = snapshotLimits;
 module.exports.PACK_CONFIG = PACK_CONFIG;
+module.exports.INDEX_CONFIG = INDEX_CONFIG;
+module.exports.indexArgs = indexArgs;
 // For import.js and rewrite.js, which run git and prove their packs in the same way
 module.exports.git = { runGit, idsOf, assertContains, fetchInput, CONCURRENCY };

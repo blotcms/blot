@@ -98,6 +98,7 @@ const { noteSize } = require("./pack");
 const { rememberWhole } = require("./idx");
 const { readHistory } = require("./history");
 const { ancestors } = require("./fetch");
+const { indexArgs } = require("./compact");
 
 const ZERO = "0".repeat(40);
 const MASTER = "refs/heads/master";
@@ -858,7 +859,7 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, read
       await reservation.extend(stats.bytes + scanned.count * 32 + 4096);
       await scratch.git(["init", "-q", "--bare", gitDir]);
       try {
-        await scratch.git(["index-pack", "--stdin", "--fix-thin", "--fsck-objects"], {
+        await scratch.git([...indexArgs(), "index-pack", "--stdin", "--fix-thin", "--fsck-objects"], {
           gitDir,
           inputFile: incomingFile,
           env: { GIT_ALTERNATE_OBJECT_DIRECTORIES: basesDir },
@@ -950,7 +951,7 @@ async function historyPiece(scratch, reservation, gitDir, commits) {
 
   const packFile = path.join(reservation.dir, "history.pack");
   await scratch.git(["pack-objects", "--stdout", "-q"], { gitDir, input: commits.map(([oid]) => oid).join("\n") + "\n", outputFile: packFile });
-  await scratch.git(["index-pack", packFile], { gitDir });
+  await scratch.git([...indexArgs(), "index-pack", packFile], { gitDir });
 
   return describePack(packFile, path.join(reservation.dir, "history.idx"));
 }
