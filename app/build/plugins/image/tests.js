@@ -243,17 +243,17 @@ describe("image", function () {
     var name = "/\u8bf4\u660e.png";
     var html = '<img src="/%E8%AF%B4%E6%98%8E.png">';
 
-    fs.copySync(__dirname + "/tests-image.png", localPath(test.blog.id, name));
+    folder.writeFrom(test.blog.id, name, __dirname + "/tests-image.png").then(() => {
+      render(test.blog, html, function (err, result) {
+        if (err) return done.fail(err);
 
-    render(test.blog, html, function (err, result) {
-      if (err) return done.fail(err);
+        var src = cheerio.load(result, null, false)("img").attr("src");
 
-      var src = cheerio.load(result, null, false)("img").attr("src");
-
-      expect(src).toMatch(/\/_image_cache\/[0-9a-f-]+\/%E8%AF%B4%E6%98%8E\.png$/);
-      test.result = result;
-      done();
-    });
+        expect(src).toMatch(/\/_image_cache\/[0-9a-f-]+\/%E8%AF%B4%E6%98%8E\.png$/);
+        test.result = result;
+        done();
+      });
+    }, done.fail);
   });
 
   it("makes thumbnails from cached images with long escaped URLs", function (done) {
@@ -262,20 +262,20 @@ describe("image", function () {
     var name = new Array(31).join("说") + ".png";
     var html = '<img src="/' + encodeURIComponent(name) + '">';
 
-    fs.copySync(__dirname + "/tests-image.png", localPath(test.blog.id, "/" + name));
-
-    render(test.blog, html, function (err, result) {
-      if (err) return done.fail(err);
-
-      thumbnail(test.blog, "/post.txt", {}, result, function (err, thumbnails) {
+    folder.writeFrom(test.blog.id, "/" + name, __dirname + "/tests-image.png").then(() => {
+      render(test.blog, html, function (err, result) {
         if (err) return done.fail(err);
 
-        expect(thumbnails).toEqual(jasmine.any(Object));
-        expect(thumbnails.small).toEqual(jasmine.any(Object));
-        test.result = result;
-        done();
+        thumbnail(test.blog, "/post.txt", {}, result, function (err, thumbnails) {
+          if (err) return done.fail(err);
+
+          expect(thumbnails).toEqual(jasmine.any(Object));
+          expect(thumbnails.small).toEqual(jasmine.any(Object));
+          test.result = result;
+          done();
+        });
       });
-    });
+    }, done.fail);
   });
 
   describe("filenameFromSrc", function () {

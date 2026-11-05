@@ -1,5 +1,6 @@
 describe("sync", function () {
   var sync = require("../index");
+  var blotFolder = require("storage/folder");
 
   // A lock held by a dead process is freed by TTL expiry (10s) rather than
   // by the OS, so poll until the next sync can acquire it.
@@ -323,13 +324,14 @@ describe("sync cacheID", function () {
   function syncContents(blogID, contents, callback) {
     sync(blogID, function (err, folder, done) {
       if (err) return callback(err);
-      fs.outputFileSync(blogDirectory + "/a.txt", contents);
-      folder.update("/a.txt", function (err, result) {
-        if (err) return callback(err);
-        done(null, function (err) {
-          callback(err, result);
+      blotFolder.write(blogID, "/a.txt", Buffer.from(contents)).then(function () {
+        folder.update("/a.txt", function (err, result) {
+          if (err) return callback(err);
+          done(null, function (err) {
+            callback(err, result);
+          });
         });
-      });
+      }, callback);
     });
   }
 
@@ -412,15 +414,16 @@ describe("sync cacheID", function () {
 
     sync(blogID, function (err, folder, done) {
       if (err) return testDone.fail(err);
-      fs.outputFileSync(blogDirectory + "/_public/style.css", "a{}");
-      folder.update("/_public/style.css", function (err) {
-        if (err) return testDone.fail(err);
-        done(null, function (err) {
+      blotFolder.write(blogID, "/_public/style.css", Buffer.from("a{}")).then(function () {
+        folder.update("/_public/style.css", function (err) {
           if (err) return testDone.fail(err);
-          expect(Blog.bumpCacheID).toHaveBeenCalled();
-          testDone();
+          done(null, function (err) {
+            if (err) return testDone.fail(err);
+            expect(Blog.bumpCacheID).toHaveBeenCalled();
+            testDone();
+          });
         });
-      });
+      }, testDone.fail);
     });
   });
 });

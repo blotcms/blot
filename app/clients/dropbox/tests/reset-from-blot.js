@@ -213,9 +213,9 @@ describe("dropbox resetFromBlot", function () {
   });
 
   it("does not upload empty files, which may be placeholders, or overwrite a remote file with one", async function () {
-    await fs.outputFile(join(blogDirectory, "placeholder.pdf"), "");
-    await fs.outputFile(join(blogDirectory, "new-empty.txt"), "");
-    await fs.outputFile(join(blogDirectory, "a.txt"), "hello");
+    await storage.write(blogID, "/placeholder.pdf", Buffer.from(""));
+    await storage.write(blogID, "/new-empty.txt", Buffer.from(""));
+    await storage.write(blogID, "/a.txt", Buffer.from("hello"));
 
     const messages = [];
     const resetFromBlot = load({

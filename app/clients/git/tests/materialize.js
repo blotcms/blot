@@ -191,7 +191,11 @@ describe("git client: materialize", function () {
 
       return require(materialize)({ blogID: blogID, reader: reader, from: from, to: to }).then(function () {
         clearInterval(timer);
-        console.log(peak - before);
+        // Writing the folder opens connections to S3 and Redis, which would keep
+        // this process (and the spec waiting on it) alive: exit once printed
+        process.stdout.write(String(peak - before), function () {
+          process.exit(0);
+        });
       });
     }).catch(function (err) {
       console.error(err);
