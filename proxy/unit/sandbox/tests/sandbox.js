@@ -789,6 +789,10 @@ function answer(text) {
   if (text === "die") process.exit(3);
   if (text === "hang") return;
   if (text === "garbage") return process.stdout.write("nonsense\\n");
+  if (text.startsWith("big:")) {
+    const size = Number(text.slice(4));
+    return process.stdout.write(size + "\\n" + "x".repeat(size));
+  }
   const body = process.pid + " " + text.toUpperCase();
   process.stdout.write(Buffer.byteLength(body) + "\\n" + body);
 }
@@ -842,6 +846,19 @@ test("broker: workers run requests side by side, and keep at most maxIdle", asyn
     const after = await ask(socket, "d");
     assert(answers.some((a) => a.pid === after.pid), "one worker was kept");
     assert.strictEqual(started.length, 3);
+  });
+});
+
+test("broker: a worker's big reply comes back whole, and quickly", async () => {
+  const jobs = WORKER();
+  jobs.echo.maxOutputBytes = 64 * 1024 * 1024;
+  await withBroker({ jobs, script: fakeWorker }, async (socket) => {
+    const started = Date.now();
+    const reply = await request(socket, job, "big:" + 32 * 1024 * 1024);
+    assert.deepStrictEqual(reply.header, { ok: true, length: 32 * 1024 * 1024 });
+    assert(reply.body.every((byte) => byte === 120));
+    // joining every chunk as it came took ~10s for 16 MiB
+    assert(Date.now() - started < 3000, "took " + (Date.now() - started) + "ms");
   });
 });
 

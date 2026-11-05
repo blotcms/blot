@@ -306,9 +306,12 @@ function createBroker(options = {}) {
 
   function spawnWorker(name) {
     const child = spawnJail(name, null);
-    const worker = { child, name, started: Date.now(), requests: 0, buffer: Buffer.alloc(0), onData: null, onExit: null };
+    // Its output is kept as chunks and joined once a reply is whole: joining
+    // as each arrives would copy a big reply over and over
+    const worker = { child, name, started: Date.now(), requests: 0, chunks: [], bytes: 0, onData: null, onExit: null };
     child.stdout.on("data", (chunk) => {
-      worker.buffer = worker.buffer.length ? Buffer.concat([worker.buffer, chunk]) : chunk;
+      worker.chunks.push(chunk);
+      worker.bytes += chunk.length;
       if (worker.onData) worker.onData();
       else retire(worker); // bytes it was never asked for
     });
@@ -420,25 +423,36 @@ function createBroker(options = {}) {
       finish(signal || code > 128 ? "killed" : "failed");
     };
 
+    // The reply's length, once its line has come
+    let length = null;
+    const keep = (rest) => {
+      worker.chunks = rest.length ? [rest] : [];
+      worker.bytes = rest.length;
+    };
+
     worker.onData = () => {
-      const buffer = worker.buffer;
-      const end = buffer.indexOf(10);
-      if (end === -1) {
-        if (buffer.length > 32) abandon("failed");
-        return;
+      if (length === null) {
+        // Until the length line has come there are only a few bytes to join
+        const buffer = worker.chunks.length === 1 ? worker.chunks[0] : Buffer.concat(worker.chunks);
+        const end = buffer.indexOf(10);
+        if (end === -1) {
+          if (buffer.length > 32) return abandon("failed");
+          return keep(buffer);
+        }
+        const head = buffer.subarray(0, end).toString();
+        keep(buffer.subarray(end + 1));
+        if (head === "E") {
+          release(worker, job);
+          return finish("failed");
+        }
+        length = /^\d{1,10}$/.test(head) ? Number(head) : -1;
+        if (length < 0) return abandon("failed");
+        if (length > job.maxOutputBytes) return abandon("output-too-large");
       }
-      const head = buffer.subarray(0, end).toString();
-      if (head === "E") {
-        worker.buffer = buffer.subarray(end + 1);
-        release(worker, job);
-        return finish("failed");
-      }
-      const length = /^\d{1,10}$/.test(head) ? Number(head) : -1;
-      if (length < 0) return abandon("failed");
-      if (length > job.maxOutputBytes) return abandon("output-too-large");
-      if (buffer.length - end - 1 < length) return;
-      const body = Buffer.from(buffer.subarray(end + 1, end + 1 + length));
-      worker.buffer = buffer.subarray(end + 1 + length);
+      if (worker.bytes < length) return;
+      const all = worker.chunks.length === 1 ? worker.chunks[0] : Buffer.concat(worker.chunks, worker.bytes);
+      const body = Buffer.from(all.subarray(0, length));
+      keep(all.subarray(length));
       const heavy = inputBytes > job.worker.heavyInputBytes || Date.now() - started > job.worker.heavyMs;
       release(worker, job, heavy);
       finish(null, body);
