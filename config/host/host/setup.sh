@@ -268,7 +268,13 @@ StandardError=append:/home/$APP_USER/storage-offsite.log
 Nice=19
 IOSchedulingClass=idle
 CPUWeight=20
-MemoryMax=1G
+# rclone holds a blog's whole listing (--fast-list), so the largest blogs need
+# a few hundred MB each. GOMEMLIMIT makes each rclone collect garbage before
+# it grows past that, and OOMPolicy=continue means a kill fails only that
+# blog (retried by the next run) rather than the whole run.
+MemoryMax=2G
+Environment=GOMEMLIMIT=400MiB
+OOMPolicy=continue
 # Stopped before the next day's run. The next run carries on from where it got.
 TimeoutStartSec=20h
 EOF2
