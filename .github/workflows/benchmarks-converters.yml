@@ -142,11 +142,18 @@ jobs:
 
       # docx/odt/rtf/org/markdown all shell out to pandoc; odt/docx-adjacent
       # paths may also touch soffice. Installing both keeps this workflow
-      # self-contained (no Docker image needed - converters run in-process).
+      # self-contained (no Docker image needed). pandoc is the release
+      # production runs (PANDOC_VERSION in config/versions.env), not the
+      # distribution's older one, whose speed differs.
       - name: Install pandoc + libreoffice
+        env:
+          PANDOC_VERSION: ${{ steps.versions.outputs.PANDOC_VERSION }}
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends pandoc libreoffice
+          sudo apt-get install -y --no-install-recommends libreoffice
+          curl -fsSL "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-linux-amd64.tar.gz" | tar xz -C "$RUNNER_TEMP"
+          echo "BLOT_PANDOC_PATH=$RUNNER_TEMP/pandoc-${PANDOC_VERSION}/bin/pandoc" >> "$GITHUB_ENV"
+          "$RUNNER_TEMP/pandoc-${PANDOC_VERSION}/bin/pandoc" --version
 
       # The docx/odt/img converters upload what they extract to the assets
       # bucket; the benchmark creates it.
@@ -171,6 +178,19 @@ jobs:
             $CONVERTER_ARGS \
             --n "${{ github.event.inputs.n || '300' }}" \
             --output "$RESULT_FILE"
+          # The realistic documents, with each sandbox job in its own
+          # process as in production (minus nsjail), as extra rows
+          node scripts/benchmarks/converter-bench.js \
+            $CONVERTER_ARGS \
+            --corpus typical --sandbox \
+            --n "${{ github.event.inputs.n || '300' }}" \
+            --output "$RESULT_FILE.typical"
+          node -e '
+            const fs = require("fs");
+            const [a, b] = process.argv.slice(1).map((f) => JSON.parse(fs.readFileSync(f)));
+            a.converters = a.converters.concat(b.converters);
+            fs.writeFileSync(process.argv[1], JSON.stringify(a, null, 2));
+          ' "$RESULT_FILE" "$RESULT_FILE.typical"
 
       - name: Post PR comment
         if: github.event_name == 'pull_request'
