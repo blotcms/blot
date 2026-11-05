@@ -137,11 +137,8 @@ jobs:
         with:
           node-version: ${{ steps.versions.outputs.NODE_VERSION }}
 
-      # The repo has no committed package-lock.json/npm-shrinkwrap.json, so
-      # `npm ci` fails immediately - match the rest of the repo's CI (e.g.
-      # deploy.yml, screenshots.yml) and use `npm install`.
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       # docx/odt/rtf/org/markdown all shell out to pandoc; odt/docx-adjacent
       # paths may also touch soffice. Installing both keeps this workflow
