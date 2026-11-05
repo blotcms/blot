@@ -611,3 +611,6 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
 
 module.exports = commit;
 module.exports.treePath = treePath;
+// receive.js builds its history pieces the same way
+module.exports.wholeEntry = wholeEntry;
+module.exports.assemblePack = assemblePack;
