@@ -23,9 +23,9 @@
 // Target (one of):
 //   --dir <folder>     a local directory used as the object store
 //   --bucket <name>    an S3 bucket (with --prefix, the keys' prefix), with
-//                      BLOT_AWS_KEY and BLOT_AWS_SECRET (or AWS_ACCESS_KEY_ID
-//                      and AWS_SECRET_ACCESS_KEY) when set, as in a unit, and
-//                      otherwise the AWS SDK's usual credentials; for MinIO
+//                      BLOT_AWS_KEY and BLOT_AWS_SECRET when set, as in a
+//                      unit, and otherwise the AWS SDK's usual credentials
+//                      (AWS_ACCESS_KEY_ID and the rest, a profile); for MinIO
 //                      add --endpoint
 //   --prefix <prefix>  the prefix inside the bucket (default none)
 //   --endpoint <url>   an S3-compatible endpoint (MinIO); uses path-style URLs
