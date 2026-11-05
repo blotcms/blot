@@ -9,10 +9,8 @@ const { container } = require("../build/locals");
 // Push progress (the "remote:" lines of a long push) and the packs of long
 // clones must reach the client as they are written, not when the response is
 // done. That needs the proxy to leave git's smart HTTP responses unbuffered and
-// uncompressed, both on the route pushes and clones use
-// (/clients/git/end/<handle>.git) and on the test-only read route served from
-// the git store (/clients/git/store-end/<handle>.git, which falls under
-// /clients).
+// uncompressed on the route pushes and clones use
+// (/clients/git/end/<handle>.git).
 describe("proxy git streaming", function () {
   const directory = path.join(__dirname, "../config");
 
@@ -48,8 +46,6 @@ describe("proxy git streaming", function () {
       "/clients/git/end/example.git/git-receive-pack",
       "/clients/git/end/example.git/git-upload-pack",
       "/clients/git/end/example.git/info/refs?service=git-upload-pack",
-      "/clients/git/store-end/example.git/git-upload-pack",
-      "/clients/git/store-end/example.git/info/refs?service=git-upload-pack",
     ].forEach((url) => {
       it("does not buffer " + url, function () {
         const block = locationFor(url);
@@ -143,10 +139,7 @@ describe("proxy git streaming", function () {
       });
     }
 
-    [
-      ["/clients/git/end/example.git", "the route for pushes and clones"],
-      ["/clients/git/store-end/example.git", "the read route served from the store"],
-    ].forEach(([repository, name]) => {
+    [["/clients/git/end/example.git", "the route for pushes and clones"]].forEach(([repository, name]) => {
       [
         ["POST", "/git-receive-pack", "application/x-git-receive-pack-request"],
         ["POST", "/git-upload-pack", "application/x-git-upload-pack-request"],

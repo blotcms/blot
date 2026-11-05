@@ -174,6 +174,7 @@ module.exports = async function validateBlog(blog, report, options) {
       if (fixed.error) {
         syncReport.recordError(report, blog, "fix", fixed.error);
       }
+      syncReport.recordChecked(report, blog);
     } finally {
       logLag(blogID, "fix", entryCount, stopFixMeasure());
     }

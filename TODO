@@ -5,6 +5,44 @@ Route image URLs through the CDN even when the images have not synced yet
 - Separate performance follow-up: batch dependent-entry rebuilds across a sync so a large image batch does not rebuild the same post hundreds of times while holding the folder lock (see Improve Dropbox sync below).
 - Tell [Christopher](https://mail.google.com/mail/u/0/#inbox/FMfcgzQjggrQPpqTwcCrLtZGBDDgRCJK)
 
+Why does helper/ have four ID generators? can we consolidate under one, using a backfill?
+
+Fix this: Callbacks and promises mixed: about 199 files mix them, and async@2 is required in 72. This causes double callbacks and dropped errors.
+
+Update these: Stale dependencies:
+- stripe@6.36.0, a 2019 client, on your payments path.
+- highlight.js@10 (end-of-life) and jasmine@3.3.1.
+- faker@4.1.0 and colors@1.3.2. Their author sabotaged both projects in 2022, and you still carry them.
+- moment, debug@3, async@2, node-fetch@2.
+- You have a skill that checks Node, nginx and the OS for advisories, but nothing checks npm packages. The checking points at the wrong place.
+
+Set up prettier to lint format code
+
+Fix this: 879 console.log calls in non-test app code, and no structured logging. Several of your skills exist mainly to grep and rebuild meaning from free-text logs ([STATS], [SLOW-FILL], [folder-asset]). Structured logs plus a metrics backend would make most of them unnecessary.
+
+Fix this: Weak input validation. The blog schema only type-checks client as string. In app/dashboard/site/client.js, POST /switch disconnects the current client, then saves req.body.client without checking it names a real client. Later, clients[req.blog.client].disconnect hits undefined. It’s minor, but it’s the kind of thing a reviewer finds in five minutes and generalises from.
+
+Unify this: Duplicated libraries: node-fetch alongside native fetch, moment throughout, and some scripts require request, which isn’t in package.json.
+
+Unify this: Scattered config: about 101 environment variables, and 14 files read process.env directly.
+
+Fix this: Dev differs from prod: the test Redis is redis:alpine, unpinned (scripts/tests/invoke.sh:30), while CI and production run 6.2. Markdown goes through pandoc in production and through marked in development. The sandbox runs jailed in production and in-process in development.
+
+Remove customer info from TODO (and gmail links)
+
+Fix this: The agent instructions aren’t maintained. CLAUDE.md has two near-identical sections, “Pull request review” and “Pull request reviews”. One calls you “operator”, the other “maintainer”. A careful reviewer reads this as rules piled up and never edited.
+
+Research then implement this if sound: Make the version the only invalidation. Put cacheID in the proxy cache key, and drop the purge RPCs, the pending-purge queue, the per-file purges during sync, and most of the LRUs. Old entries age out by eviction. This is cheap and removes a whole failure class. Full pre-rendering is the logical end point, but don’t go all the way: search, arbitrary query strings and very large catalogs make it a lazy-render-into-versioned-store design, not an SSG.
+- I wonder if we could store the cacheID against the host and then as the ssl cert was read, we could seed this info automatically?
+
+Switch from redis to relational db?
+- Per-blog SQLite on object storage
+
+Implement: 5. Builds in isolated workers off a job queue.
+- multiple builds in parallel
+
+We should follow sane soc 2 practices
+
 ---
 
 Render and client-side cache follow-ups (#2390, #2401, #2420, #2426, #2434)
@@ -49,12 +87,9 @@ when we next cycle hosts, should we cycle the ssh key pair too?
 - From 5 Nov 2026: delete what the 2 Nov host cycle kept (#2261): the old data volume and the snapshots tagged `BlotCycle=prod-2026-11-02`. List them with `aws ec2 describe-volumes` and `aws ec2 describe-snapshots --owner-ids self` filtered on that tag, and check each before deleting. The snapshot policy's own snapshots carry the tag too; it ages them out by itself.
 - iCloud sync is flaky: on 2 Nov, after the host move, a new folder in icloudtest never reached the macserver within the test's wait, though the macserver's calls to the new host succeeded. Find out where iCloud changes stall (iCloud itself, the macserver's watcher, or the resync path) and make sync dependable
 - Mid-Nov 2026 (#2261, #2107): buy the m6gd.xlarge reservation, since the host runs on-demand until then. First run `unit-mem-summary.sh` on the host over a stretch that includes a deploy, to confirm the 3300m unit limits and 6gb Redis maxmemory fit the size
-Git sync (#2259 PR 7): when the last applied commit is gone from the bare repo (a force push, then gc) and so is the live clone's HEAD (or the blog has no live clone, as new blogs don't since PR 8), a sync compares from the empty tree: it writes every file but removes none, so files the rewrite deleted stay in the blog folder until a resync
-Git handle collisions: a repo left at data/git/<handle>.git now makes that handle unavailable until someone removes it, so clear the leftovers from the 1 Nov comparison. A blog already on a leftover repo isn't caught: dashboard/site/client.js's switch to git lands on it, and authenticate.js doesn't check blog.client. A crash between the move and the save in Blog.set leaves the repo at the new handle, fixed by hand. Deleting a blog removes its repo only while the blog is on git (its disconnect does, at its current handle), so a blog on another client keeps one left at its handle, and a repo at a former handle is never removed. All of this goes with repos keyed by blog ID (#2259 Phase 2)
-Git (#2259 PR 6 follow-ups): a branch other than master that an earlier push got in (the bypass) can't be deleted by its owner, since every non-master branch ref is refused, deletions included; receivePack keeps each push as a pack where git's receive-pack unpacked small ones loose, so check `ls objects/pack | wc -l` on a busy repo a while after deploy
+Git sync (#2259 PR 7): when the last applied commit is gone from the git store (a force push, then a rewrite), a sync compares from the empty tree: it writes every file but removes none, so files the rewrite deleted stay in the blog folder until a resync
+Git (#2259 PR 6 follow-ups): a branch other than master that an earlier push got in (the bypass) can't be deleted by its owner, since every non-master branch ref is refused, deletions included
 Git sync (#2259 PR 4): a sync interrupted part way leaves already-applied paths ahead of the recorded commit, so a later push that restores such a file to the recorded commit's contents shows no diff and the entry stays stale until a resync. Since the materializer (PR 7) the file in the folder stays stale too, because nothing resets the folder. Needs a crash or Redis outage, no retry, and that exact revert
-
-scripts/git/repair.js swaps the blog folder for a fresh clone of the bare repo, so files in the folder that aren't in the repo are lost, and since #2259 PR 8 a blog without a live clone is normal, so running it puts back a clone nothing needs: don't run it, and retire the script once live clones go (PR 9)
 
 Speed up ci / simplify proxy and e2e testing slightly
 
@@ -259,7 +294,6 @@ Make sure next bill amount is in all billing emails to customers
 Explain on the about page the websites started out as files in a folder. But they had to be HTML. Blot makes other file types possible too.
 
 Get node container horizontally scalable and multi-region (#1932)
-- git repos to S3 (#2259)
 
 Add clear bill change info to new blog flow
 
@@ -354,7 +388,6 @@ Improve git sync
 - Make git client setup resumable / handle server restart
 - Fix bug with git client which let large pushes overwhelm the main server, leading to downtime
 - Handle error out of space on blot server during git client setup
-- Surface errors with permissions on Git repo directory when setting up Git client
 - Add sync check
 - Add support for LFS and tell [Jamie](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVMcpnxGHqnxJHNdbMBSrglzg)
 - Backdate existing commits (perhaps set file ctime using info from git log?) This would sidestep the frustration experienced by [Gavin](https://mail.google.com/mail/u/0/#inbox/1669a8e621f9ef37) when he imported an existing repository.

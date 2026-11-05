@@ -344,15 +344,12 @@ module.exports = function () {
     }
   });
 
-  // A push cut off by a crash or a deploy leaves its quarantine directory in
-  // the bare repository, and git never removes it. It runs once a day across
-  // all containers (lock.cron) and works from any of them because they share
-  // the host's git data directory. Should become scope "host" once BLOT_HOST_ID
-  // is set and there is more than one host.
-  console.log(clfdate(), "Scheduled daily sweep of stale git push quarantine directories");
+  // Git processes running far longer than a push or clone can take belong to
+  // a request that is gone. Once a day across all containers (lock.cron).
+  console.log(clfdate(), "Scheduled daily check for stuck git processes");
   lock.cron("sweep-git", { hour: 5, minute: 0 }, async function () {
     try {
-      const { report, sent } = await sweepGit({
+      const { stuck, sent } = await sweepGit({
         sendEmail: (view) =>
           new Promise((resolve, reject) =>
             email.GIT_SWEEP_ALERT(null, view, (err) =>
@@ -361,17 +358,10 @@ module.exports = function () {
           ),
       });
 
-      console.log(
-        clfdate(),
-        "Git: swept " + report.repositories + " repositories, removed",
-        report.removed,
-        "stale push quarantine directories, freed",
-        report.bytes,
-        "bytes" + (report.errors ? ", " + report.errors + " errors" : "")
-      );
+      console.log(clfdate(), "Git: found " + stuck.length + " stuck git processes");
       if (sent) console.log(clfdate(), "Sent git sweep alert email");
     } catch (err) {
-      console.log(clfdate(), "Error: Sweeping git push quarantine directories", err);
+      console.log(clfdate(), "Error: Checking for stuck git processes", err);
     }
   });
 
@@ -397,11 +387,9 @@ module.exports = function () {
     }
   });
 
-  // The git store's sweep, the check of each shadowed blog's copy against its
-  // repository on disk, and prefixes left by blogs off git. Once a day across
-  // all containers (lock.cron); it only touches the bucket and reads the
-  // repositories, so any container can run it. Nothing unless shadow mode
-  // (BLOT_GIT_STORE_SHADOW) is on.
+  // The git store's sweep, the check of each git blog's copy, and prefixes
+  // left by blogs off git. Once a day across all containers (lock.cron); it
+  // only touches the bucket and scratch space, so any container can run it.
   console.log(clfdate(), "Scheduled daily git store maintenance");
   lock.cron(gitStoreMaintenance.NAME, { hour: 6, minute: 0 }, async function () {
     try {

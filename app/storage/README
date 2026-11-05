@@ -37,13 +37,14 @@ at sync/build time instead.
   `{blogID}/{path}`, no scope prefix — relevant to the object-key plan in §3.
 - Mostly plain `fs-extra` (`readFile`, `outputFile`, `remove`, `ensureDir`,
   `copy`) plus `express.static()` for serving, with a few exceptions that
-  assume a real filesystem: pandoc, sharp and exiftool take file paths; the
-  git client keeps a live `.git` clone inside the blog folder and runs
-  `reset --hard` there; iCloud renames whole directory trees to resolve case
+  assume a real filesystem: pandoc, sharp and exiftool take file paths;
+  iCloud renames whole directory trees to resolve case
   conflicts; the local client (development only, never for users) used to
   watch the folder with chokidar and now watches a source directory of its
   own. (Google Drive's fingerprint read `dev`, `ino`, `ctimeNs` and `mtimeNs`
-  until its records moved to storage/folder's size, modified time and SHA-1.)
+  until its records moved to storage/folder's size, modified time and SHA-1.
+  The git client kept a live `.git` clone in the blog folder and ran `reset
+  --hard` there until it moved to the git store, #2259.)
 - Rendered template views are cached in-process
   (`app/models/template/fullViewCache.js`, an LRU bounded by count and bytes,
   not Redis), and rendered template CSS/JS in Redis (`app/cdn/index.js`
@@ -412,17 +413,18 @@ should consolidate into one storage-layer method, exposed explicitly
     reads, the reconcile and the flags went in the cleanup PR, and
     `data/blogs` was deleted after it. The B2 offsite sync of the whole
     bucket replaced the data volume's EBS snapshots as the backup.
-- **Phase 3 — git client repos.** Planned in
-  [#2259](https://github.com/blotcms/blot/issues/2259). Bare repos live in
-  `{data_directory}/git/{handle}.git` (`app/clients/git/dataDir.js`)
-  today. They move to a walgit-style store: immutable packs plus a small
-  manifest under `{blogID}/git/`, kept private by the bucket policy, with
-  the SSD caching refs, pack indexes and commits/trees, and blobs fetched on
-  demand, so a
-  repo can be larger than the SSD. No whole-repo archive and no S3
-  filesystem mount. A push is acknowledged once its pack is in S3, under the
-  per-blog lock, and the blog folder is materialized from the repo with no
-  live `.git` in it.
+- **Phase 3 — git client repos.** Done in
+  [#2259](https://github.com/blotcms/blot/issues/2259). Every git blog's
+  repository is in a walgit-style store (`app/clients/git/store`):
+  immutable packs plus a small manifest under `{blogID}/git/`, kept private
+  by the bucket policy, with the SSD caching refs, pack indexes and
+  commits/trees, and blobs fetched on demand, so a repo can be larger than
+  the SSD. No whole-repo archive and no S3 filesystem mount. A push is
+  acknowledged once its pack is in S3, under the per-blog lock, and the blog
+  folder is materialized from the repo through `storage/folder`, with no
+  live `.git` in it. The bare repositories that were in
+  `{data_directory}/git/` are deleted from the host once the daily verifier
+  has run clean.
 - **Quotas** — the Phase 2 index keeps per-blog byte and file totals, which
   enforcement can read. Until then, `scripts/user/identify-overdue-users.js`
   is the manual audit.
@@ -550,5 +552,3 @@ Limits:
 - `listAll` buffers a whole directory.
 - Missing files reject with `NotFoundError` (`code: "ENOENT"`), including
   streams, which emit it as `error`.
-- The Git client and its specs still assume a folder on disk until #2259's
-  cleanup (#2458) lands; this branch is rebased onto it before it merges.

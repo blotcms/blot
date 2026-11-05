@@ -33,6 +33,12 @@ function indentation (text) {
   var lines = text.split("\n");
   var totalLines = lines.length;
 
+  // Tag names already known to have no closing tag from some line onwards.
+  // The closing-tag search below always runs to the end of the text, so
+  // once it fails for a name it fails for every later line too. Without
+  // this, many unclosed tags (<img>, <br>, <p>...) make the pass quadratic.
+  var unclosed = {};
+
   for (var i = 0; i < totalLines; i++) {
     var line = lines[i];
     var closingIndex = null;
@@ -51,7 +57,7 @@ function indentation (text) {
       continue;
     }
 
-    if (!name) continue;
+    if (!name || unclosed[name] === true) continue;
 
     for (var x = i; x < totalLines; x++) {
       if (hasClosingTag(lines[x], name)) {
@@ -60,7 +66,10 @@ function indentation (text) {
       }
     }
 
-    if (closingIndex === null) continue;
+    if (closingIndex === null) {
+      unclosed[name] = true;
+      continue;
+    }
 
     for (var y = i; y <= closingIndex; y++) lines[y] = trimLeading(lines[y]);
 
@@ -95,9 +104,29 @@ function hasClosingTag (line, name) {
   return line.indexOf("</" + name + ">") > -1;
 }
 
+// Tag names for which cheerio's fragment parser is known to return an
+// element of exactly that (lowercase) name for a string starting with the
+// tag. Anything else (html/head/body/td/tr/image/custom elements...) is
+// handled by the parser, since it can drop or rename those.
+var SIMPLE = new Set(
+  ("div p span a img br hr ul ol li pre blockquote section article " +
+    "aside nav header footer figure figcaption em strong b i u code h1 h2 " +
+    "h3 h4 h5 h6 form iframe video audio button label small sup sub").split(" ")
+);
+var SIMPLE_TAG = /^<([a-zA-Z][a-zA-Z0-9]*)[\s/>]/;
+
 function firstTag (str) {
   str = str.trim();
-  return str[0] === "<" && str.indexOf(">") > 0 && $(str)[0].name;
+  if (str[0] !== "<" || !(str.indexOf(">") > 0)) return false;
+
+  // Parsing every tag line with cheerio is the dominant cost of this pass
+  var m = SIMPLE_TAG.exec(str);
+  if (m) {
+    var simple = m[1].toLowerCase();
+    if (SIMPLE.has(simple)) return simple;
+  }
+
+  return $(str)[0].name;
 }
 
 function leadingWhitespace (str) {

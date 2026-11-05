@@ -38,10 +38,6 @@ const ALLOWED_PREFIXES = [
   // Defines this.blogDirectory as a getter which throws, for specs which
   // still reach for it
   "scripts/tests/util/createBlog.js",
-  // The Git client and its specs still name the disk folder until #2259's
-  // cleanup (#2458) lands. Remove this entry when this branch is rebased
-  // onto it, and port the Git specs off this.blogDirectory.
-  "app/clients/git/",
 ];
 
 function allowed(file) {

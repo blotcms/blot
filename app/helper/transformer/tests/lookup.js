@@ -1,5 +1,4 @@
 describe("transformer", function () {
-  var fs = require("fs-extra");
   var folder = require("storage/folder");
   var Keys = require("../keys");
   var client = require("models/client");
@@ -144,6 +143,26 @@ describe("transformer", function () {
         expect(result.size).toEqual(jasmine.any(Number));
         resolve();
       });
+    });
+  });
+
+  it("transforms a file in the blog's static directory linked with an escaped name", async function () {
+    var path = "/_image_cache/" + Date.now() + "/说明.png";
+
+    await assets.write(this.blog.id, path, await folder.read(this.blog.id, "/" + this.path));
+
+    await new Promise((resolve, reject) => {
+      this.transformer.lookup(
+        "/_image_cache/" + path.split("/")[2] + "/" + encodeURIComponent("说明.png"),
+        this.transform,
+        function (err, result) {
+          if (err) return reject(err);
+
+          expect(result).toEqual(jasmine.any(Object));
+          expect(result.size).toEqual(jasmine.any(Number));
+          resolve();
+        }
+      );
     });
   });
 

@@ -527,6 +527,20 @@ describe("icloud init validateAllBlogs", function () {
       expect(byID(sentEmails[0])[id("quiet")].hasStuckLock).toEqual(true);
     });
 
+    it("does not report one while the initial transfer is running", async function () {
+      const { init, sentEmails, calls } = setup({
+        [id("transferring")]: {
+          account: { transferringToiCloud: true },
+          heldSince: Date.now() - 3 * HOUR,
+        },
+      });
+
+      await init.validateAllBlogs();
+
+      expect(calls.walked).toEqual([]);
+      expect(sentEmails).toEqual([]);
+    });
+
     it("finds one on a blog with a stored error that isn't the user's doing", async function () {
       const { init, sentEmails, calls } = setup({
         [id("broken")]: {
