@@ -1,33 +1,22 @@
-const fingerprint = require("../../util/contentFingerprint");
 const folder = require("storage/folder");
-const fs = require("fs-extra");
-const { join } = require("path");
 
+// The entries of a directory in the blog's folder, from storage/folder's
+// metadata alone, so it reads nothing and works the same on either backend.
+// modified is in milliseconds, as storage/folder gives it (with a fraction
+// on disk); modifiedTime is the same as an ISO string, rounded to the
+// millisecond as fs.Stats' mtime and util/localState.js round it, for the
+// comparisons with Drive's modifiedTime.
+// Rejects with ENOENT for a missing directory.
 const localreaddir = async (blogID, dir) => {
-  // The directory's real place: the fingerprint has a nanosecond mtime, which
-  // storage/folder's stat (milliseconds) could not give
-  const base = await folder.ensureLocal(blogID, dir);
-  const contents = await folder.listNames(blogID, dir);
+  const contents = await folder.listAll(blogID, dir);
 
-  return Promise.all(
-    contents.map(async ({ name }) => {
-      const path = join(base, name);
-      const stat = await fs.stat(path, { bigint: true });
-
-      // Convert the modification time to an ISO string
-      const modifiedTime = stat.mtime.toISOString();
-      const isDirectory = stat.isDirectory();
-      const size = Number(stat.size);
-
-      return {
-        name,
-        isDirectory,
-        size,
-        fingerprint: fingerprint(stat),
-        modifiedTime: isDirectory ? undefined : modifiedTime,
-      };
-    })
-  );
+  return contents.map(({ name, isDirectory, size, modified }) => ({
+    name,
+    isDirectory,
+    size,
+    modified,
+    modifiedTime: isDirectory ? undefined : new Date(Math.round(modified)).toISOString(),
+  }));
 };
 
 module.exports = localreaddir;

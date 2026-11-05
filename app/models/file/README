@@ -18,12 +18,13 @@ Paths are normalised with `helper/pathNormalizer`, exactly as entry keys are (`m
 
 ## Redis keys
 
-No key per file. There is a hash and a lookup per directory, and two keys per blog. Every key starts `blog:{blogID}:file`, so blog deletion's `blog:{blogID}:*` sweep takes it with the rest.
+No key per file. There is a hash, a lookup and a names set per directory, and two keys per blog. Every key starts `blog:{blogID}:file`, so blog deletion's `blog:{blogID}:*` sweep takes it with the rest.
 
 | Key | Type | Contents |
 |-----|------|----------|
 | `blog:{blogID}:file:dir:{dirPath}` | hash | child name → packed record `type\|size\|modified\|sha1` |
 | `blog:{blogID}:file:lower:{dirPath}` | hash | lowercased child name → the child names that fold to it, joined by `/` and sorted |
+| `blog:{blogID}:file:names:{dirPath}` | sorted set | every child name (as `key.member` spells it), all at score 0, so a page of the directory in name order is one `ZRANGEBYLEX` |
 | `blog:{blogID}:file:paths` | sorted set | every path below the root, all at score 0, for `ZRANGEBYLEX` subtree queries |
 | `blog:{blogID}:file:totals` | hash | `bytes`, `files`: the folder's totals, for the storage quota |
 
@@ -35,10 +36,13 @@ blog:X:file:dir:/          Posts  -> d|0|1700000000000|
                            drafts -> d|0|1700000000000|
 blog:X:file:lower:/        posts  -> Posts/posts
                            drafts -> drafts
+blog:X:file:names:/        Posts drafts posts
 blog:X:file:dir:/Posts     a.txt  -> f|5|1700000000000|aaf4c61d...
 blog:X:file:lower:/Posts   a.txt  -> a.txt
+blog:X:file:names:/Posts   a.txt
 blog:X:file:dir:/posts     b.txt  -> f|3|1700000000000|e9d71f5e...
 blog:X:file:lower:/posts   b.txt  -> b.txt
+blog:X:file:names:/posts   b.txt
 blog:X:file:paths          /Posts /Posts/a.txt /drafts /posts /posts/b.txt
 blog:X:file:totals         bytes -> 8, files -> 2
 ```
@@ -49,6 +53,18 @@ Case-insensitive resolution looks each segment up in its directory's lowercased 
 
 Subtree queries use the bounds `[/dir/` and `(/dir0` (`0` is the character after `/`), so `/dir b` and `/dir0` stay out.
 
+### Paging a directory
+
+Listings sort by name in UTF-16 code-unit order, as JavaScript compares strings and the local backend sorts, so `storage/folder`'s cursor is just the last name of a page. `list` reads a page with `ZRANGEBYLEX` on the names set, from just after that name, one more than the limit to tell whether another page follows, then `HMGET`s the page's records from the hash: a page costs the same however large the directory. A cursor need not name an entry still there.
+
+`ZRANGEBYLEX` compares UTF-8 bytes, which is code point order. That differs from code-unit order only for characters from U+E000 to U+FFFF against characters beyond U+FFFF, so a member spells those with U+10FFFF in front (and U+10FFFF itself as U+10FFFF, NUL), which puts them in code-unit order (`key.member`, `key.nameOf`). Every other name is its own member.
+
+Paging through the path set instead needs no new key, but a directory's children are interleaved there with all their descendants, so skipping each subdirectory's subtree costs a round trip per subdirectory on the page.
+
+Names sets came after the rest of the index, so a directory may lack one. `list` then reads its hash whole and sorts it, as every listing did before. Only a writer, under the sync lock, makes a names set: when `setMany` adds a name to a directory without one, it builds the whole set from the hash in the same exec, so a names set that exists is always complete. A remove never creates one (`ZREM` of a missing key does nothing). `addMissingNames(blogID, { apply })` builds the rest, from `scripts/storage/add-file-index-names.js`, which holds each blog's sync lock while it does.
+
+Memory: a names set holds each name once more, beside its field in the hash and its full path in the path set. A small directory's set is a ziplist, a few bytes per name over the names themselves, plus the key; above `zset-max-ziplist-entries` (128 by default, Redis 6.2) or with a name over 64 bytes it is a skiplist, roughly 90 to 100 bytes per name on top of the name. Against an index of about 250 bytes per path, that is roughly a tenth to a fifth more for most folders.
+
 ---
 
 ## Functions
@@ -58,14 +74,15 @@ All return promises.
 | Function | |
 |----------|---|
 | `get(blogID, path)` | The record, or null |
-| `list(blogID, dir, { cursor, limit })` | One `HSCAN` page of a directory, unsorted: `{ entries: [{ name, ...record }], cursor }`, cursor null after the last. Null if dir is not a directory |
-| `listAll(blogID, dir)` | Every entry of a directory, sorted by name (code-unit order), or null |
+| `list(blogID, dir, { after, limit })` | One page of a directory sorted by name (code-unit order), starting after the name `after`: `{ entries: [{ name, ...record }], next }`, next the `after` of the following page, or null after the last. `limit` defaults to 1000. Null if dir is not a directory |
+| `listAll(blogID, dir)` | Every entry of a directory, sorted by name, or null. Pages through `list`, but holds the whole directory |
 | `subtree(blogID, dir, { pageSize })` | Async iterator over every path below dir, in byte order of the whole path |
 | `resolveCaseInsensitive(blogID, path)` | The stored spelling of path, or null |
 | `totals(blogID)` | `{ bytes, files }` |
 | `set(blogID, path, record)`, `setMany(blogID, [{ path, ...record }])` | Record paths, giving every ancestor without a record a directory record (S3 has implicit directories). Refuses a path below a file (ENOTDIR), a file over a directory (EISDIR) and a directory over a file (EEXIST) |
 | `remove(blogID, path)` | Forget a file, or a directory and its whole subtree. Resolves to the removed record, or null |
 | `removeAll(blogID)` | Forget the whole folder |
+| `addMissingNames(blogID, { apply })` | Build the names set of every directory which lacks one (see above). Resolves to `{ dirs, missing, names }`; writes only with `apply`, and must run under the sync lock |
 | `rebuild(blogID, records)` | Replace the index with records from a full listing (an iterable or async iterable). Resolves to `{ files, dirs, bytes, skipped }`. A record which conflicts with one before it (below a file, or a file and a directory at one path, which S3 can hold and a disk cannot) is skipped and listed in `skipped` as `{ path, type, code }` |
 
 Removing a directory goes through its subtree deepest first, a page at a time, so each file's size is still in its parent's hash when the totals are corrected. If it stops part way, what is left is consistent apart from a lowercased lookup which may still name a child already gone, until its directory goes too.
@@ -77,6 +94,6 @@ Removing a directory goes through its subtree deepest first, a page at a time, s
 | File | Purpose |
 |------|---------|
 | `index.js` | The functions above |
-| `key.js` | Key names, and the path normalisation |
+| `key.js` | Key names, the path normalisation, and how a name is spelled in a names set |
 | `record.js` | Packs and parses records |
 | `tests/` | Specs, against real Redis |

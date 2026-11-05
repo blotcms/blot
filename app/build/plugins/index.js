@@ -275,7 +275,12 @@ function loadPlugins (plugins) {
     // CSS to be appended to every user blog
     // HTML to be appended to every full entry
     plugin.formHTML = read(name, "form.html");
-    plugin.publicJS = read(name, "public.js");
+    // A plugin can supply publicJS itself (e.g. from an npm package) instead
+    // of a public.js file.
+    plugin.publicJS =
+      typeof plugin.publicJS === "string"
+        ? plugin.publicJS
+        : read(name, "public.js");
     plugin.publicCSS = cdnGlobalStaticUrls(read(name, "public.css"));
     plugin.entryHTML = read(name, "entry.html");
 

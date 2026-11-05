@@ -75,19 +75,29 @@ function create(base, settings, callback) {
 }
 
 function finish(blogID, slug, callback) {
-  rebuild(blogID, {}, function (err) {
-    if (err) return callback(err);
+  // The folder was copied into the Local client's source directory; copy it
+  // from there into the blog's folder, then rebuild
+  require("clients/local/setup")
+    .reconcileSource(blogID)
+    .then(function () {
+      rebuildAndWatch();
+    }, callback);
 
-    // rebuild skips /Templates, so build the folder's templates explicitly
-    Template.buildFromFolder(blogID, function (err) {
+  function rebuildAndWatch() {
+    rebuild(blogID, {}, function (err) {
       if (err) return callback(err);
-      if (!slug) return watch(blogID, callback);
-      activate(blogID, slug, function (err) {
+
+      // rebuild skips /Templates, so build the folder's templates explicitly
+      Template.buildFromFolder(blogID, function (err) {
         if (err) return callback(err);
-        watch(blogID, callback);
+        if (!slug) return watch(blogID, callback);
+        activate(blogID, slug, function (err) {
+          if (err) return callback(err);
+          watch(blogID, callback);
+        });
       });
     });
-  });
+  }
 }
 
 // Only after the folder is fully copied and built: the watcher ignores

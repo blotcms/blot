@@ -1,27 +1,43 @@
+Route image URLs through the CDN even when the images have not synced yet
+- Reason: a post can reach Blot before its images. The build currently leaves missing images as /public/... URLs on the blog's domain. Loading an image-heavy page or an early cached RSS copy can then produce bursts of origin requests, 404s and 429s, triggering temporary fail2ban bans for legitimate visitors. The 3–4 Nov 2026 incident showed matching image-request bursts and visitor bans; local tests reproduced the original-URL fallback with missing files, though the historical rendered HTML was not retained.
+- Plan: in app/build/plugins/folderAssets, rewrite eligible missing image paths to provisional versioned CDN URLs instead of leaving them on the blog's domain. Keep the dependency edges so each arriving image triggers a rebuild and replaces its provisional URL with the normal content-versioned CDN URL (and dimensions/optimized asset where available). Preserve the existing path validation and handle case resolution when the file arrives.
+- The CDN may serve 404s while a file is absent. Give the available file a different URL/version so cached 404s cannot hide it after sync. Verify CDN negative-cache behavior; cache misses still reach Blot, but via the CDN's exempt route rather than accumulating rate-limit violations against the visitor's IP. Test missing → available images, partial syncs, RSS and lazy-loading attributes. This should work automatically without authors hardcoding CDN URLs.
+- Separate performance follow-up: batch dependent-entry rebuilds across a sync so a large image batch does not rebuild the same post hundreds of times while holding the folder lock (see Improve Dropbox sync below).
+- Tell [Christopher](https://mail.google.com/mail/u/0/#inbox/FMfcgzQjggrQPpqTwcCrLtZGBDDgRCJK)
+
+---
+
 Render and client-side cache follow-ups (#2390, #2401, #2420, #2426, #2434)
 - Post-deploy check of #2434 (deployed 3 Nov 2026, 11:21 UTC): node-a's [STATS] show `redis_cache_maxEntries=10000` and `redis_cache_<class>_evictions` for the capped classes, and node-a's render p95 (`metrics:render-time:p95:<unit>/node-a`, read as scripts/render-time-chart does) matches the previous 24 hours, about 13 ms
 - From 4 Nov 2026, a day after #2434's deploy (3 Nov, 11:21 UTC): in node-a's [STATS] in both units, check the client-side cache's `redis_cache_evictionCount` against the sum of the `redis_cache_<class>_evictions`. A cache-wide count above that sum means blog keys no longer fit: raise `maxEntries` in app/models/redis.js. Also check `redis_cache_entryCount` against the 10000 cap, and each capped class's evictions against its `CLASS_CAPS` share (app/models/redis-cache.js)
 - In the same lines, check the `redis_cache_session_*` and `redis_cache_user_*` hit rates. Every process starts with 63 `user` misses, one read of a batch of users at boot: find what reads them, and whether it needs to
 - From 10 Nov 2026, a week after #2426: no reports of early logouts, and `sess:*` TTLs stay at or under 30 days (disableTouch plus a fixed ttl, app/dashboard/util/session.js)
-- Then tune the render cache caps (the "Tune the render LRU caches" entry below), now that the render caches live in app/models (#2401, #2420). node-a's heap must fit the unit-memory cut's ~1100 MiB, and the client-side cache takes up to ~25 MB of it (80 MB ceiling, see app/models/redis.js)
+- Then tune the render cache caps (under Memory below)
 - Run the mega benchmark (scripts/benchmarks/mega) twice before merging any render or client-side cache change
 
 ---
 
-Unit memory: cut each unit's total ceiling (the unit container plus its sandbox cgroups, about 4.8 GiB today now the airlock is gone: 3300m unit, 512M image jobs and proxy jail, 1G browser) to about 3 GiB, then aim for about 2 GiB of real use by shrinking Node itself.
+Memory: cut each unit's total ceiling (the unit container plus its sandbox cgroups, about 4.8 GiB today now the airlock is gone: 3300m unit, 512M image jobs and proxy jail, 1G browser) to about 3 GiB, then aim for about 2 GiB of real use by shrinking Node itself.
 - Done: the airlock is gone (#2257), the sampler splits node-a, node-b, other node and git (#2413), and git commands are bounded per process (#2415).
+
+Unit and sandbox limits
 - After #2415 is deployed, collect a few days of unit-mem.log including a deploy and a busy period, then read unit-mem-summary.sh: node-a, node-b, other node and git maxima, the sandbox cgroups' peaks and oom_kill, and the host's lowest mem_available.
 - Then lower UNIT memory and the node-a/node-b heaps in scripts/deploy/constants.js to about 2000 MiB, with the node-a and node-b heaps around 1100-1200 MiB (keep V8's heap limit below the cgroup's, so a runaway heap dies with a report, not to the OOM killer), and the sandbox cgroups in config/host/host/setup.sh to about 384 MiB (image jobs and proxy jail) and 700 MiB (browser; real pages peaked at 417 MiB, the heaviest measured needed up to 880 MiB). Accept a few heavy pages failing in the browser jail; sandbox failures email the admin.
 - One-off scripts run with docker exec count against the unit: run anything heavy through scripts/probe (its own container and limit) instead.
 - Is 512 MiB enough for the image jobs, given four share it? The proxy jail (128 MiB) and the fetch-image job (256 MiB, one at a time, #2424) are in the same subtree, so the image jobs take the rest. cgroup peak against limit and oom_kill above 0 in blot-sandbox-blue/green say; `grep "broker: job="` in the unit logs for what failed.
+- The mid-Nov reservation check (host items below) reads the same unit-mem-summary.sh output: do the two together.
+- Does the deploy (scripts/deploy/units.sh) check the host has enough free memory and disk before it starts a new unit?
+
+Node heap and caches
+- Tune the render LRU caches, which now live in app/models (#2401, #2420), from the `render_cache_*` counters and `[SLOW-FILL]` lines in the [STATS] logs (#2233). Include the mustache template cache. Keep the config identical on node-a in blot-blue and blot-green, sized so it fits node-a's heap after the cut (~1100-1200 MiB, of which the client-side cache takes up to ~25 MB, 80 MB ceiling, see app/models/redis.js; before the units the worst case was ~620MB on 27 Oct). node-b in each unit runs with small caches via `BLOT_CACHE_SCALE`, so it is out of this tuning. Pull the counters from node-a in both units (ask before each prod command) and per cache check hit rate, evictions, fill ms (`fillMs`/`fills`, `fillMaxMs`), `uncachedFills` and which blogs the `[SLOW-FILL]` lines name. Then investigate an admission rule: only store a fill in the cache if it took longer than a threshold (~5ms, probably per cache; `fullView` and `getAllCached` are far slower than the rest, which were mostly ~0ms). Cheap fills would stop evicting the expensive ones. Things to settle: the threshold must beat the cost of a hit (every hit does a `cloneDeep`); cost times frequency may matter more than cost alone; fill time includes event-loop delay, so smooth it or add hysteresis; keep coalescing concurrent fills (store then delete, or an own in-flight map as `getAllCached` has); a nashp-sized catalog is slow but huge and may not fit `maxSize`. A two-tier cache or GDSF-style cost-aware eviction are heavier alternatives. Once the capacity counters (missGhost/missCold, evictIdle, hitAge, uncachedBy, cloneMs) have run a day or two on prod, size each cache from them: a high missGhost share means more room would help, a mostly-cold one means it would not.
+- Heap creep: before the units, green's baseline heap crept up ~40-80MB/day (lowest heapUsed in [STATS]) and never reset until a V8 OOM crash (13+14 Oct 2026). Check whether node-a's and node-b's lowest heapUsed still climbs between deploys; if it does, find whether it's a leak or an unbounded cache by comparing heap snapshots taken hours apart. Spikes from heavy post builds (e.g. blog_825ed2a 'All paths', ~250MB) only crash it once the baseline has crept up
 - Later: shrink Node's own memory (the render LRU caches, the heap) toward about 2 GiB per unit in real use; on 2 Nov the unit's own unreclaimable peak was about 1.4-1.6 GiB, with the biggest Node process about 1.15 GiB.
 
+Diagnostics
+- Per-request resource monitoring, e.g. heap size before/after, to find which requests and builds cause the spikes
+- CloudWatch memory metrics on the instance and from the app, or are unit-mem-log.sh and the existing alerts enough?
+
 ---
-
-clean up launch templates on ec2 console (should be 1 or none?)
-clean up security groups on ec2 console (should be 1?)
-
-remove emojis from deploy summary and benchmarks and ban emojis from the project
 
 when we next cycle hosts, should we cycle the ssh key pair too?
 
@@ -29,7 +45,6 @@ when we next cycle hosts, should we cycle the ssh key pair too?
 - 8 Nov 2026, after 03:35 UTC (#2261): the first `weekly/` Redis dump from the new host is in S3 (`aws s3 ls s3://blot-redis-backups/weekly/`). On 3 Nov there was no `weekly/` prefix at all: no weekly dump had reached S3 since #2055 set them up on 7 Oct (the lifecycle rules only expire weeklies after 30 days, so they weren't swept), leaving only 7 days of dailies to restore a deleted blog from. If it is missing, read `~/backup.log` on the host and fix it before the next Sunday
 - Next wildcard certificate renewal (#2261): it works with the new `blot` key; its Route 53 access wasn't tested
 - For a week or two after the 2 Nov move (#2261): watch `[LOCK] slow heartbeat` lines and the Redis slowlog. If they appear, pin Redis to one core and limit the units to the rest
-- Host cycle standby side effects (#2261): a "server started" email per boot and a Bunny purge of the dashboard CSS and JS. Harmless so far; fix before a second host (#2271) makes them frequent
 - Once #2258 and #2259 have moved blog folders and git repos to S3, cycle the production host to drop the data volume and shrink the root to 40 GB (#2377; a volume can't shrink in place). Review `config/host/cycle.sh` first: without the data volume, the `data` phase, the snapshot and delta copies, the read-only freeze and `move retag` may go, so a cycle could be mostly Redis replication and the switch
 - From 5 Nov 2026: delete what the 2 Nov host cycle kept (#2261): the old data volume and the snapshots tagged `BlotCycle=prod-2026-11-02`. List them with `aws ec2 describe-volumes` and `aws ec2 describe-snapshots --owner-ids self` filtered on that tag, and check each before deleting. The snapshot policy's own snapshots carry the tag too; it ages them out by itself.
 - iCloud sync is flaky: on 2 Nov, after the host move, a new folder in icloudtest never reached the macserver within the test's wait, though the macserver's calls to the new host succeeded. Find out where iCloud changes stall (iCloud itself, the macserver's watcher, or the resync path) and make sync dependable
@@ -43,10 +58,7 @@ scripts/git/repair.js swaps the blog folder for a fresh clone of the bare repo, 
 
 Speed up ci / simplify proxy and e2e testing slightly
 
-- Watch unit memory (`stats`) for the first days after the #2119 cutover: each unit's limit assumes one unit can carry all traffic
 Deploy macserver
-
-Tune the render LRU caches once #2233 has run on prod for a day (it adds `render_cache_*` counters and `[SLOW-FILL]` lines to the [STATS] logs). Keep the config identical on node-a in blot-blue and blot-green, sized so its heap is safe (worst case was ~620MB on 27 Oct, when the old blue container had a 750MB heap; aim for 300-400MB shared). node-b in each unit runs with small caches via `BLOT_CACHE_SCALE`, so it is out of this tuning. Pull the counters from node-a in both units (ask before each prod command) and per cache check hit rate, evictions, fill ms (`fillMs`/`fills`, `fillMaxMs`), `uncachedFills` and which blogs the `[SLOW-FILL]` lines name. Then investigate an admission rule: only store a fill in the cache if it took longer than a threshold (~5ms, probably per cache; `fullView` and `getAllCached` are far slower than the rest, which were mostly ~0ms). Cheap fills would stop evicting the expensive ones. Things to settle: the threshold must beat the cost of a hit (every hit does a `cloneDeep`); cost times frequency may matter more than cost alone; fill time includes event-loop delay, so smooth it or add hysteresis; keep coalescing concurrent fills (store then delete, or an own in-flight map as `getAllCached` has); a nashp-sized catalog is slow but huge and may not fit `maxSize`. A two-tier cache or GDSF-style cost-aware eviction are heavier alternatives. Once the capacity counters (missGhost/missCold, evictIdle, hitAge, uncachedBy, cloneMs) have run a day or two on prod, size each cache from them: a high missGhost share means more room would help, a mostly-cold one means it would not.
 
 ---
 
@@ -62,17 +74,14 @@ Analyze the new log line paramater for accept encoding to determine if we should
 - Check the access log for the Accept-Encoding of feed requests (/feed.rss etc.): if most are gzip-only, store gzip -9 copies too (gzip_static), since those hits still compress on the fly, 
 
 Redis host follow-ups (from #2041, new host since 8 Oct):
-- From 15 Oct 2026: run config/redis/perf/fetch.sh redis blot and compare.js (a full day on the new host against the 8 Oct baseline), then uninstall the perf collectors: config/redis/perf/install.sh --uninstall redis blot
-- Lock heartbeat on its own RESP2 connection, no overlapping EXTENDs, per-call timeout; give the shared client a command timeout or TCP user timeout
-- Decide which app/sync/lock.js diagnostics to retire
+- Lock heartbeat: no overlapping EXTENDs
 - Remaining dropped write errors: await set() in resetToDrive; Dropbox disconnect.js and _assign.js dropFromMenu check the wrong error; write order in Blog.create; the list-ghosts restore path; error paths for background resave and rebuild; a callback for the messenger's setStatus; make Entry.set atomic
 - Proxy: auto-ssl's lock and hook calls can reuse a timed-out Redis connection
-- Deploy log archive (scripts/deploy/units.sh, proxy/deploy/blue-green.sh): before a unit is replaced, archive its container logs with docker logs -t, outside /tmp, more than 3 files, size-capped; let config/redis/perf/fetch.sh read it
-- Dashboard writes may queue behind builds and syncs on the same event loop (from #2107, written before units; recheck against node-a/node-b). Fixes then: a dedicated build/sync process, which first needs scheduled-entry timers indexed in Redis, or builds in a child started with `nice -n 19` (`os.setPriority` inside the child misses V8's threads)
+- Deploy log archive (scripts/deploy/units.sh, proxy/deploy/blue-green.sh): before a unit is replaced, archive its container logs with docker logs -t, outside /tmp, more than 3 files, size-capped
 - TLS handshakes were about a quarter of billed egress on 21 Oct (#2107): ECDSA certificates shrink each by about a third, and few TLS connections resume today, so look at session reuse and keep-alive (about 1.7 requests per connection). No `ssl_session_tickets` without a shared key (#2271)
-- reconcile.js can select every sync-client blog after a restore: a unit that boots with a global template changed since Redis last stored it rebuilds it and bumps every blog's cacheID (app/templates/index.js bumpCacheIDForEveryBlog), and cycle.sh restore starts the units first. The 1 Nov rehearsal selected every blog, most likely this way. Capture the cacheIDs with redis6-cli before the units start, or use a signal a boot doesn't touch (#2261). Only slower recovery, never a missed blog
+- reconcile.js selected every sync-client blog in the 1 Nov restore rehearsal. The suspected cause (a boot rebuilding a changed global template and bumping every blog's cacheID) is gone: since #2432 bumpCacheIDForEveryBlog only runs in development and Template.drop skips SITE templates. At the next rehearsal, check whether the plan still selects every blog; if it does, inspect cacheIDs with redis6-cli before the units start (#2261). Only slower recovery, never a missed blog
 - restore.sh --offsite: have the host download from B2 with a short-lived presigned URL (aws s3 presign on the operator's machine, passed over stdin), so a restore doesn't depend on the operator's upload speed and the read key still stays off servers. Not tested yet
-- launch.sh --drill hosts have no AWS credentials (the launch template has no instance profile), so restoring an S3 backup onto one means copying keys onto it or using --offsite, which streams the dump through the operator's machine: on 3 Nov a 2 GB dump took about 30 minutes at 1.2 MB/s. Give drill hosts a read-only instance profile scoped to s3://blot-redis-backups (or reuse the presigned-URL idea above for S3 too), so the host fetches it directly in about a minute
+- cycle.sh --drill hosts have no AWS credentials (no instance profile), so restoring an S3 backup onto one means copying keys onto it or using --offsite, which streams the dump through the operator's machine: on 3 Nov a 2 GB dump took about 30 minutes at 1.2 MB/s. Give drill hosts a read-only instance profile scoped to s3://blot-redis-backups (or reuse the presigned-URL idea above for S3 too), so the host fetches it directly in about a minute
 - Upgrade the Redis server from 6.2 to 8.4+ for native compare-and-set (SET ... IFEQ, DELEX), then drop Lua: helper/lock extend/release become plain commands; helper/alarm claim/renew/complete need per-id claim keys to go native; also the legacy scripts in sync/lock.js, models/user/set.js, helper/flushCachePending.js, clients/icloud/database.js
 
 Proxy container follow-ups (cut over 8 Oct 2026, #1941)
@@ -81,12 +90,10 @@ Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 - After the next 03:46 logrotate: access.log/error.log still written after copytruncate, fail2ban counts still moving
 - After the first wildcard renewal by the app (scheduler log "Wildcard SSL"): the proxy serves the new cert fingerprint from Redis within ~10 seconds, with no reload ("wildcard cert:" lines in the proxy error log mean it fell back to the file)
 - Custom-domain certs renew inside the container: none within ~20 days of expiry apart from domains that no longer point at Blot; after a daily renewal run, error.log should show no "certificate for ... expired at" warnings for domains still pointing at Blot (the proxy now refuses to serve an expired stored cert; no host cron)
-- auto-ssl's daily renewal timer first fires 24h after a container starts, so a proxy restarted more often than daily never runs it: confirm proxy deploys are far enough apart, or kick the first run from init_worker
 - Reboot the host once in a maintenance window: mount-instance-store mounts without reformatting, docker starts after it, the proxy comes back with cache/log mounts, :80/:443 answer
 - http://www.blot.im/ returns 404: confirm intended
 - app/blog/static has no copy on the host, so those cdn. files fall through to Node: export them from the Node image on deploy, or accept
 - cdn. responses carry Cache-Control twice (expires 1y + add_header), as on bare metal
-- Does proxy container deploy check for enough free memory and disk on host before proceeding?
 - Get proxy horizontally scalable and multi-region
 - Can we add modern compression to proxy? (brotli is in; zstd is not)
 - Can the proxy remember bad urls and avoid repeatedly sending them to upstream?
@@ -98,12 +105,6 @@ Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 - Get blot proxy communicating with node process via unix socket
 
 ---
-
-Finish the container consolidation:
-- Audit consolidated containers spawned subprocesses for memory max oom usage
-- Move the app/proxy host off Amazon Linux 2, which stopped getting security updates on 2026-06-30 (scripts/security/check-advisories.js flags it). Plan a replacement AL2023 host the way the Redis host was replaced (config/redis/launch.sh), port config/host setup (yum -> dnf), drill it, then cut over.
-- Set up cloud, watch memory agent on instance and in code
-- purchase reserved instance for consolidated host
 
 Finish the host consolidation
 - should we use unix sockets for communication with redis?
@@ -132,12 +133,6 @@ Sandbox follow-ups (#2257):
 - Before dashboard screenshots of customer sites and template previews: size the browser cgroup and queue for that load (one Chromium per unit at a time today; heavy pages need up to about twice the median), from the sampler's blot-sandbox-<unit>-browser lines.
 - CJK fonts for the browser jail, so sites in those languages don't render as boxes. They are large, so weigh them against the unit image's size.
 ---
-
-Investigate slow creep of green's baseline heap (~40-80MB/day lowest heapUsed in [STATS], never resets until a V8 OOM crash; crashed 13+14 Oct 2026). Leak or unbounded cache? Compare heap snapshots taken hours apart
-- Spikes from heavy post builds (e.g. blog_825ed2a 'All paths', ~250MB) only crash it once the baseline has crept up
-
-Now we have many LRU caches in app/blog we need to gather data in production to rigorously determine the most effective relative sizes for the caches (include the mustache template cache in this)
-- Is the status page just measuring the lru caches? how do we make it verify a cold request to get a real sense for system performance?
 
 Add a new template which just looks like finder on the index page
 
@@ -187,10 +182,6 @@ Back up blot-storage-prod off AWS (Backblaze B2, hourly, no --delete): _avatars 
 
 Bunny: decide Volume vs Standard tier (more PoPs, faster first byte far from Volume PoPs) once we've run the numbers on cost and latency; also why cache HIT is low (Statistics: status codes, top uncached URLs)
 
-We get two emails one after the other and we should only get one
-- User in overdue disabled grace period
-- User account has been closed after for late payments
-
 Add a list of billing history / invoices to subscription page
 
 Create skills which delegate cheap subagents to scan logs for issues:
@@ -208,7 +199,9 @@ archives and all_entries in the template engine should be bounded to a maximum o
 
 Maybe horizontal scaling involves redis replicas in other aws regions?
 
-Add client status to status page (check api)
+Status page:
+- Is it just measuring the LRU caches? Make it verify a cold request that skips the caches and goes all the way to Redis (maybe through a synthesised route), to get a real sense of system performance
+- Add client status (check api)
 
 Add email warnings if no sync from client for more than x hours
 
@@ -223,8 +216,6 @@ Add macserver deploy to github actions
   - remove ssh keys from deployment. maybe set up a minimal deployment agents on the servers? maybe autodeploy images with a given tag? 
   - how do we add 2fa to deployment flow, require email confirmation somehow? onetimelink? assume github could 
   - if github is owned are we owned? ideally not
-
-Can the status page avoid the LRU caches somehow and fully work redis? Maybe we synthesise a route somehow? Thoughts?
 
 hypertext template on indexes:
 - title needs to link to permalink page 
@@ -315,17 +306,9 @@ Improve Google Drive sync
   - Make it possible to short-circuit the full folder traversal and immediately begin at a specific file/subfolder
 - Improve html output for google docs and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBQFmTvLKzPkJrgsBTWZmQJWS)
   Issue: <p><img><br><img></p> should be <p><img></p><p><img></p>
-- Fix bug with new folder setup (e.g. waiting for user to share folder on drive) which does not survive a server restart (See init.js TODO)
 - Fix possible bug where it seems like sometimes the first sentence of Google Docs become titles unexpectedly – possibly a mis-identified title tag?
-- How do we handle two files with same name and same parent? How does our fileId:path hash handle this? Make sure we delete the right file. Will file.title as opposed to file.name give us the deduped version?
-  - Bug: move file with deduplicated name from sub folder to other folder
-  - download should check for an existing file with same name but different fileId and dedupe before storing the path?
-- Handle revoked credentials without tanking server
-- Handle removed blog folder without error
-- Handle renamed blog folder
-- Handle google drive's This service is not available error
-- Handle storage quota errors
-- Handle 429 errors with exponential backoff retry
+- Surface storage quota errors as QUOTA_EXCEEDED health for Google Drive (isQuotaError exists, nothing sets the code)
+- Retry 429s on Google Drive writes (files.create/update): reads already retry with backoff (serviceAccount/retryConfig.js), but write bodies are streams gaxios can't replay
 - Add a way for sync/build to accept a ctime as an option. We can't set this at the operating system level but google drive's API does return a createdTime value and we could use this as the true file's created date, rather than the date the file is made on the server
 - Google Drive `write` should use the best method for large file uploading
 - Add proper testing for this
@@ -336,14 +319,13 @@ Improve Google Drive sync
   - Start with recently changed files and dirs first
 
 Improve Dropbox sync
+- Batch dependent-entry rebuilds across a sync: a large asset delta batch rebuilt the same referring entry after each image (~13s per update), holding the folder lock for over three hours (2026-11-04). The stuck-lock alert should distinguish ongoing progress from a hung sync.
+- Review public asset rate limits and nginx-429 bans: loading an image-heavy page triggered repeated 429s and temporary visitor bans (2026-11-03/04); avoid banning normal page loads while retaining abuse protection.
 - When you re-connect to Dropbox, you have to re-create a folder and perform a full transfer. It would be great if we could re-use the existing folder... Maybe an option during the connect flow? Would be nice to avoid requiring a full transfer
-- Bug: removing a directory in Dropbox resync only updates the directory path; child entries wait for Fix
 - Bug: Dropbox validation's catch-up sync restores last_sync from outside sync() after releasing the lock, so it can clobber a webhook sync's stamp; teach sync() not to stamp last_sync for catch-up instead
 - Sync verification should instrument the sync/fix function to also report errors where the folder doesn't match the database.
 - Bug: ensure that when a process dies, any blogs setting up dropbox client will be re-attempted
-- Bug: Adding an additional blog to existing app folder under constant webhooks failed. New blog had correct folder but old blog still used root. To fix we need to acquire a lock on ALL blogs interacting with that dropbox account to proceed with setup process of second site.
-  - Bug: handle a sync lock failure on second blog when migrating an app folder
-- Bug: retry transient Dropbox API errors with exponential backoff while surfacing hard failures for manual intervention.
+- Adding an additional blog to an existing app folder under constant webhooks fails: moveExistingFiles (routes/setup/createFolder.js) gives up on the root blog's lock after ~5s and setup fails loudly. Retry or wait longer for the other blog's lock (or take all account-linked blogs' locks in a fixed order)
 - Bug: re-use iCloud resolve case-conflicts function (maybe move into sync?) to ensure blogs with case-sensitive file conflicts are properly initialized on Dropbox
 - Fix bug with Client.write which does not propogate sync errors... to demonstrate this, revoke dropbox token then try to enable local editing.
 - Bug: Switch uploads >150 MB to the Dropbox upload session API with chunked transfer and resumable checkpoints
@@ -352,7 +334,6 @@ Improve Dropbox sync
 - Bug: reconnecting with the same account and same permissions should not create a new folder for `full_access=true`
 - Bug: add a check for folder storage before doing mass upload
 - Bug: handle folder full error appropriately
-- Bug: add sync lock process to dropbox connection when writing folder contents
 - Bug: ensure the app permission access_token is destroyed when switching to full-folder and vice versa
 - Add testing for dropbox:
 - Modify setup flow:
@@ -442,10 +423,6 @@ Improve iCloud sync
 Fix bug with placeholder files when switching clients which will lead to data loss because Blot will not transfer the contents of placeholder files across
 
 Fix bug with the paypal next bill dates are not syncing correctly for some users (e.g.slopserve)
-
-Fix bug with huge draft crashing the sync server
-- /a327ex/drafts/it_follows.txt
-- Chunk large drafts into multiple messages to avoid memory issues? 
 
 Fix bug with overdue subscription payment form not working
 - Possible bug introduced by recent stripe upgrade?
@@ -631,12 +608,6 @@ Replace existing cssURL and scriptURL and css_url and script_url properties in t
 Replace existing asset helper properties in templates with new cdn helper
 - Check it's only used for CSS/JS...
 
-Can we optimize renderView in some way?
-- use lru cache or moize libraries? back against cacheID property of blog?
-- Memoize load template / load full view / load blog... others?
-- use a proper library, cap memory, etc.
-- should majorly improve performance on popular sites
-
 ---
 
 Implement TOC Plugin
@@ -817,8 +788,6 @@ Improve folder to CDN pipeline
   - `https://yangrobotics.com/posts/peng-2.md`
   - possibly because it's a fully-qualified URL? we need to handle these I think
 - Maybe all 'asset requests' should return 302? even 301 if the url is versioned?
-
-Add per request resource monitoring, e.g. heap size before/after
 
 Move image zoom plugin to templates
   - Fix bug with image zoomer on mobile devices and tell [Alessandro](https://mail.google.com/mail/u/0/#inbox/FMfcgxwChSCwptjLtLGMjWxdkQNnNfTk)
@@ -1332,6 +1301,7 @@ Self-hosting:
 ---
 
 Flaky specs (newest first; see "Flaky specs" in CLAUDE.md). Remove an entry when its fix merges.
+- 3 Nov 2026, `app/clients/google-drive/serviceAccount/tests/hotDocPoller.js` "google drive hotDocPoller spaces docs.get slots 250ms apart for a service account": `Expected 2 to equal 3.` (line 200) on master after an unrelated merge (#2460, shadow-mode logging only, cdf74d9e7). Run: https://github.com/blotcms/blot/actions/runs/41723548264/job/126222287641. Investigate: the spec counts docs.get calls made within a wall-clock window of 250 ms slots, so a slow runner fits one slot fewer. Use a fake clock (jasmine.clock) or count slots rather than calls within a fixed time.
 - 3 Nov 2026, `.github/workflows` unit-deploy-e2e (the swap-load check after `proxy/deploy/blue-green.sh` replaces blot-blue then blot-green): `total=103 bad=2` (`1 000`, `1 curl-err`, "2 requests did not get a 200") on an unrelated PR (#2449, production-proxy-local-dev, d4235bc73, which only changes local development). Run: https://github.com/blotcms/blot/actions/runs/41641275280/job/125935119037. Investigate: the known occasional dropped request during a unit swap (#2119, the old `tcp_migrate_req` note), which 74e7df179 started reporting apart from drain-timeout cuts; find which side resets the connection.
 - 2 Nov 2026, `app/clients/git/store/tests/scratch.js` "git store reader scratch one pack with a chain of OFS_DELTA entries builds the deepest in chunks of at most 64 KB, and the files are gone by…": `Error: ENOTEMPTY, Directory not empty: '/tmp/git-store-spec-…'` in its setup or teardown, on an unrelated PR (screenshot-reencode-2257, eb479a959); passed on re-run. Run: https://github.com/blotcms/blot/actions/runs/41518327555/job/125527518301. Investigate: the spec removes its temp directory while something it started (a scratch file write or a child git process) is still creating files in it, so wait for that to finish or remove with retries (fs.rm maxRetries).
 - 2 Nov 2026, `app/models/template/tests/create.js` "template creates multiple templates in parallel": `Failed: No template: blog_…:<uuid>` on an unrelated PR (rename-egress, 13cf5b5ca). Run: https://github.com/blotcms/blot/actions/runs/41517695943/job/125525345596. Investigate: a template created in parallel isn't readable yet when the spec reads it back, so look for a create that resolves before its Redis writes (or the template index update) finish, or the spec reading through a cache.

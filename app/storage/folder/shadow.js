@@ -58,6 +58,21 @@ var { NotFoundError } = require("./errors");
 //   {op}:skipped            the disk itself failed (ELOOP, say): no verdict
 //   {op}:local:le:{ms}      latency histograms: how many calls took at most
 //   {op}:s3:le:{ms}         ms, for each bound in BUCKETS ("inf" last)
+//   {op}:s3:{outcome}:le:{ms}
+//                           for read, createReadStream, serve and
+//                           ensureLocal, the S3 side's latencies again, by
+//                           how the content cache served it: hit (had the
+//                           file), miss (fetched it from S3) or direct (not
+//                           through the cache: over max_file_bytes, or it
+//                           fell back on ECHANGED or a disk error). A hit
+//                           costs about a millisecond, a miss an S3 GET, so
+//                           the blend in {op}:s3:le says little. Hours
+//                           recorded before this have only the blend.
+//   {op}:local:ttfb:le:{ms}
+//   {op}:s3:ttfb:le:{ms}    for createReadStream and serve, how long each
+//                           side took to give its first chunk (what a
+//                           visitor waits for), where {op}:{side}:le:{ms} is
+//                           the whole transfer and hash
 //   cache:{counter}         the content cache's hits, misses, evictions,
 //                           fetchedBytes, changed and filled (entries its
 //                           write-through added) since the last flush
@@ -82,6 +97,8 @@ var HASH_CHUNK = 256 * 1024;
 
 var LOG_LIMIT = 30;
 var LOGGED_MAX = 10000;
+
+var CACHE_OUTCOMES = ["hit", "miss", "direct"];
 
 var CACHE_COUNTERS = ["hits", "misses", "evictions", "fetchedBytes", "changed", "filled"];
 
@@ -172,11 +189,22 @@ async function attempt(fn) {
   }
 }
 
+// fn is given a clock, whose firstByte() records the time to a stream's
+// first chunk (the first call counts); outcome.ttfb is that, if it was
 async function timed(fn) {
   var started = process.hrtime.bigint();
-  var outcome = await attempt(fn);
+  var clock = {
+    ttfb: undefined,
+    firstByte: function () {
+      if (clock.ttfb === undefined) clock.ttfb = since(started);
+    },
+  };
+  var outcome = await attempt(function () {
+    return fn(clock);
+  });
 
   outcome.ms = since(started);
+  if (clock.ttfb !== undefined) outcome.ttfb = clock.ttfb;
 
   return outcome;
 }
@@ -199,11 +227,12 @@ async function hashBuffer(buffer) {
   return hash.digest("hex");
 }
 
-async function hashStream(stream) {
+async function hashStream(stream, clock) {
   var hash = crypto.createHash("sha1");
   var size = 0;
 
   for await (var chunk of stream) {
+    if (clock) clock.firstByte();
     hash.update(chunk);
     size += chunk.length;
   }
@@ -236,9 +265,9 @@ async function digest(outcome, fn) {
   if (!outcome.ok) return outcome;
 
   try {
-    return { ok: true, value: await fn(outcome.value), ms: outcome.ms };
+    return { ok: true, value: await fn(outcome.value), ms: outcome.ms, ttfb: outcome.ttfb };
   } catch (err) {
-    return Object.assign(outcomeOf(err), { ms: outcome.ms });
+    return Object.assign(outcomeOf(err), { ms: outcome.ms, ttfb: outcome.ttfb });
   }
 }
 
@@ -279,12 +308,15 @@ async function rereadFile(blogID, path, range) {
     return { local: { ok: true, value: { size: stat.size, large: true } }, s3: await s3Size(blogID, path) };
   }
 
-  var localSide = await timed(function () {
-    return hashStream(local.createReadStream(blogID, path, range));
+  var trace = {};
+  var localSide = await timed(function (clock) {
+    return hashStream(local.createReadStream(blogID, path, range), clock);
   });
-  var s3Side = await timed(function () {
-    return hashStream(s3().createReadStream(blogID, path, range));
+  var s3Side = await timed(function (clock) {
+    return hashStream(s3().createReadStream(blogID, path, range, trace), clock);
   });
+
+  s3Side.cache = trace.cache;
 
   return { local: localSide, s3: s3Side };
 }
@@ -319,12 +351,15 @@ var RUN = {
 
     if (localSide.ok && localSide.value.large) return { local: localSide, s3: await s3Size(blogID, path) };
 
+    var trace = {};
     var s3Side = await digest(
       await timed(function () {
-        return s3().read(blogID, path);
+        return s3().read(blogID, path, trace);
       }),
       digestBuffer
     );
+
+    s3Side.cache = trace.cache;
 
     return { local: localSide, s3: s3Side };
   },
@@ -344,12 +379,15 @@ var RUN = {
 
     usedCache = true;
 
+    var trace = {};
     var s3Side = await digest(
       await timed(function () {
-        return s3().ensureLocal(blogID, path);
+        return s3().ensureLocal(blogID, path, trace);
       }),
       digestFile
     );
+
+    s3Side.cache = trace.cache;
 
     return { local: localSide, s3: s3Side };
   },
@@ -556,7 +594,14 @@ async function run(op, args, first) {
     bump(op + ":large");
   } else {
     observe(op, "local", pass.local.ms);
-    if (!verdict.s3Error) observe(op, "s3", pass.s3.ms);
+    observe(op, "local:ttfb", pass.local.ttfb);
+
+    if (!verdict.s3Error) {
+      observe(op, "s3", pass.s3.ms);
+      observe(op, "s3:ttfb", pass.s3.ttfb);
+      // By how the content cache served the read, where it was asked
+      if (CACHE_OUTCOMES.indexOf(pass.s3.cache) !== -1) observe(op, "s3:" + pass.s3.cache, pass.s3.ms);
+    }
   }
 
   function s3Error(err) {
@@ -740,6 +785,7 @@ function reset() {
 module.exports = shadow;
 module.exports.OPS = OPS;
 module.exports.BUCKETS = BUCKETS;
+module.exports.CACHE_OUTCOMES = CACHE_OUTCOMES;
 module.exports.KEY_PREFIX = KEY_PREFIX;
 module.exports.TTL_SECONDS = TTL_SECONDS;
 module.exports.LOG_PREFIX = LOG_PREFIX;

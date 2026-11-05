@@ -468,10 +468,8 @@ async function resetFromBlotWithClient(
         if (remoteCounterpart && !identicalOnRemote) {
           try {
             abortIfRequested(signal);
-            await upload(
-              client,
-              await storage.ensureLocal(blogID, localItem.path_display),
-              join(dropboxRoot, path)
+            await storage.withLocal(blogID, localItem.path_display, (local) =>
+              upload(client, local, join(dropboxRoot, path))
             );
             abortIfRequested(signal);
           } catch (e) {
@@ -480,10 +478,8 @@ async function resetFromBlotWithClient(
         } else if (!remoteCounterpart) {
           try {
             abortIfRequested(signal);
-            await upload(
-              client,
-              await storage.ensureLocal(blogID, localItem.path_display),
-              join(dropboxRoot, path)
+            await storage.withLocal(blogID, localItem.path_display, (local) =>
+              upload(client, local, join(dropboxRoot, path))
             );
             abortIfRequested(signal);
           } catch (e) {

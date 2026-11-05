@@ -1,13 +1,13 @@
 var fs = require("fs-extra");
 var callbackify = require("util").callbackify;
 var ensure = require("helper/ensure");
-var withLocal = callbackify(require("build/converters/folderStat").withLocal);
+var withLocalHeld = callbackify(require("build/converters/folderStat").withLocalHeld);
 var extname = require("path").extname;
 var cheerio = require("cheerio");
 var Metadata = require("build/metadata");
 var extend = require("helper/extend");
 var assets = require("storage/assets");
-var pandoc = callbackify(require("build/converters/pandoc"));
+var pandoc = require("build/converters/pandoc");
 var hash = require("helper/hash");
 
 function is (path) {
@@ -23,14 +23,19 @@ function read (blog, path, callback) {
   // for odt), so give each document its own directory and commit all of it
   var assetDir = "_assets/" + hash(path);
 
-  // The sandbox streams the file from a local path
-  withLocal(blog.id, path, function (err, file) {
-    if (err) return callback(err);
-
-    var stat = file.stat;
-
-    pandoc({ from: "odt" }, { path: file.localPath }, function (err, result) {
+  // The sandbox streams the file from a local path, and a big document may
+  // take it longer than the cache keeps a path, so the file is held
+  withLocalHeld(
+    blog.id,
+    path,
+    function (localPath) {
+      return pandoc({ from: "odt" }, { path: localPath });
+    },
+    function (err, file) {
       if (err) return callback(err);
+
+      var stat = file.stat;
+      var result = file.value;
 
       var html = result.html;
       // remove everything between '<!--[if lt IE 9]>' and '<![endif]-->' including those comments
@@ -160,8 +165,8 @@ function read (blog, path, callback) {
 
         callback(null, html, stat);
       });
-    });
-  });
+    }
+  );
 }
 
 async function writeMedia (blogID, assetDir, media) {

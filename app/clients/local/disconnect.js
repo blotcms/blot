@@ -17,20 +17,11 @@ module.exports = function disconnect(blogID, callback) {
 
     folder.status("Disconnecting from local folder");
 
-    // The watcher changed the folder on disk without going through
-    // storage/folder, so S3's copy may be behind: it must be repaired before
-    // the blog, no longer on the Local client, could be served from S3
-    require("storage/folder/mirror")
-      .markBehind(blogID)
-      .catch(function () {})
-      .then(function () {
-        setClient();
-      });
-
-    function setClient() {
-      Blog.set(blogID, { client: "" }, function (err) {
-        done(err, callback);
-      });
-    }
+    // Nothing to repair on the way out: every change the client made went
+    // through storage/folder, which the mirror follows. The source directory
+    // is left where it is.
+    Blog.set(blogID, { client: "" }, function (err) {
+      done(err, callback);
+    });
   });
 };

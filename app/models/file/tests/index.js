@@ -32,6 +32,20 @@ describe("models/file", function () {
     });
   }
 
+  // Every name of a directory, a page of limit at a time
+  async function pages(blogID, dir, limit) {
+    var seen = [];
+    var after = null;
+
+    do {
+      var page = await File.list(blogID, dir, { after: after, limit: limit });
+      seen.push(...names(page.entries));
+      after = page.next;
+    } while (after !== null);
+
+    return seen;
+  }
+
   describe("set and get", function () {
     it("records a file under the same path as its entry", async function () {
       await File.set(this.blog.id, "posts/a.txt", file(5));
@@ -106,9 +120,9 @@ describe("models/file", function () {
         keys.push(...(Array.isArray(key) ? key : [key]));
       }
 
-      // A hash and a lowercased lookup each for "/" and "/d", the path set
-      // and the totals
-      expect(keys.length).toEqual(6);
+      // A hash, a lowercased lookup and a names set each for "/" and "/d",
+      // the path set and the totals
+      expect(keys.length).toEqual(8);
     });
   });
 
@@ -134,18 +148,201 @@ describe("models/file", function () {
     it("pages a directory with a cursor and lists all of it sorted", async function () {
       for (var i = 0; i < 30; i++) await File.set(this.blog.id, "/d/" + String(i).padStart(2, "0"), file(1));
 
-      var seen = [];
-      var cursor = null;
+      var seen = await pages(this.blog.id, "/d", 7);
 
-      do {
-        var page = await File.list(this.blog.id, "/d", { cursor: cursor, limit: 7 });
-        seen.push(...names(page.entries));
-        cursor = page.cursor;
-      } while (cursor);
-
-      expect(seen.sort()).toEqual(names(await File.listAll(this.blog.id, "/d")));
+      expect(seen).toEqual(names(await File.listAll(this.blog.id, "/d")));
       expect(seen.length).toEqual(30);
-      expect(names(await File.listAll(this.blog.id, "/d")).slice(0, 3)).toEqual(["00", "01", "02"]);
+      expect(seen.slice(0, 3)).toEqual(["00", "01", "02"]);
+    });
+
+    describe("a large directory", function () {
+      // Names which sort differently by code unit and by UTF-8 byte (from
+      // U+E000 up, against characters beyond U+FFFF), and some ASCII edges
+      var AWKWARD = ["！ wide", "�", "", "\u{1F600} smile", "\u{10FFFF}", "\u{10000}", "Zed", "a b", "a|b", "[x", "(y", "-", "+"];
+
+      // A directory of a few thousand files and a hundred subdirectories,
+      // each with files of its own, so the path set interleaves them
+      beforeEach(async function () {
+        var items = [];
+
+        for (var i = 0; i < 3000; i++) items.push(Object.assign({ path: "/big/f" + String(i).padStart(4, "0") }, file(1)));
+
+        for (var j = 0; j < 100; j++) {
+          for (var k = 0; k < 3; k++) {
+            items.push(Object.assign({ path: "/big/s" + String(j).padStart(3, "0") + "/x" + k }, file(1)));
+          }
+        }
+
+        for (var name of AWKWARD) items.push(Object.assign({ path: "/big/" + name }, file(1)));
+
+        for (var n = 0; n < items.length; n += 500) await File.setMany(this.blog.id, items.slice(n, n + 500));
+
+        this.expected = items
+          .map(function (item) {
+            return item.path.split("/")[2];
+          })
+          .filter(function (name, i, all) {
+            return all.indexOf(name) === i;
+          })
+          .sort();
+      });
+
+      it("pages in code-unit order, with no duplicate and no gap across cursors", async function () {
+        expect(this.expected.length).toEqual(3000 + 100 + AWKWARD.length);
+        expect(await pages(this.blog.id, "/big", 97)).toEqual(this.expected);
+        expect(names(await File.listAll(this.blog.id, "/big"))).toEqual(this.expected);
+
+        var sizes = [];
+        var seen = [];
+
+        for await (var page of File.pages(this.blog.id, "/big", { limit: 1000 })) {
+          sizes.push(page.length);
+          seen.push(...names(page));
+        }
+
+        expect(seen).toEqual(this.expected);
+        expect(sizes).toEqual([1000, 1000, 1000, this.expected.length - 3000]);
+      });
+
+      it("reads only the page's names from the directory's hash", async function () {
+        spyOn(client, "hScan").and.callThrough();
+        spyOn(client, "hmGet").and.callThrough();
+
+        var page = await File.list(this.blog.id, "/big", { limit: 10 });
+
+        expect(names(page.entries)).toEqual(this.expected.slice(0, 10));
+        expect(page.next).toEqual(this.expected[9]);
+        expect(client.hScan).not.toHaveBeenCalled();
+        expect(client.hmGet.calls.mostRecent().args[1].length).toEqual(10);
+      });
+
+      it("sees writes and removes made between pages", async function () {
+        var blogID = this.blog.id;
+        var first = await File.list(blogID, "/big", { limit: 100 });
+        var seen = names(first.entries);
+
+        // f0050 was listed, f2000 not yet; s050 is a subdirectory to come
+        await File.remove(blogID, "/big/f0050");
+        await File.remove(blogID, "/big/f2000");
+        await File.remove(blogID, "/big/s050");
+        await File.set(blogID, "/big/a-before", file(1));
+        await File.set(blogID, "/big/f2000b", file(1));
+        await File.set(blogID, "/big/new/deep.txt", file(1));
+
+        var after = first.next;
+
+        do {
+          var page = await File.list(blogID, "/big", { after: after, limit: 100 });
+          seen.push(...names(page.entries));
+          after = page.next;
+        } while (after !== null);
+
+        var expected = this.expected
+          .filter(function (name) {
+            return name !== "f2000" && name !== "s050";
+          })
+          .concat("f2000b", "new")
+          .sort();
+
+        // f0050 was listed before it went, and a-before sorts before the
+        // cursor, so neither is seen again
+        expect(seen).toEqual(expected);
+        expect(names(await File.listAll(blogID, "/big"))).toEqual(
+          expected.filter((name) => name !== "f0050").concat("a-before").sort()
+        );
+      });
+
+      it("ends at a cursor after the last entry, and resumes after an entry removed since", async function () {
+        var last = this.expected[this.expected.length - 1];
+
+        expect(await File.list(this.blog.id, "/big", { after: last })).toEqual({ entries: [], next: null });
+
+        await File.remove(this.blog.id, "/big/f0100");
+
+        var page = await File.list(this.blog.id, "/big", { after: "f0100", limit: 2 });
+
+        expect(names(page.entries)).toEqual(["f0101", "f0102"]);
+        expect(page.next).toEqual("f0102");
+      });
+    });
+
+    it("has no cursor after a last page which is exactly full", async function () {
+      for (var i = 0; i < 4; i++) await File.set(this.blog.id, "/d/" + i, file(1));
+
+      expect((await File.list(this.blog.id, "/d", { limit: 4 })).next).toBeNull();
+      expect((await File.list(this.blog.id, "/d", { limit: 3 })).next).toEqual("2");
+      expect(await File.list(this.blog.id, "/d", { after: "2", limit: 3 })).toEqual({
+        entries: [Object.assign({ name: "3" }, file(1))],
+        next: null,
+      });
+    });
+
+    describe("a directory without a names set", function () {
+      // As a directory last changed before names sets existed is stored
+      async function forget(blogID, dir) {
+        await client.del(File.key.names(blogID, dir));
+      }
+
+      beforeEach(async function () {
+        var items = [];
+
+        for (var i = 0; i < 1200; i++) items.push(Object.assign({ path: "/old/" + String(i).padStart(4, "0") }, file(1)));
+
+        items.push(Object.assign({ path: "/old/！" }, file(1)), Object.assign({ path: "/old/\u{1F600}" }, file(1)));
+        items.push(Object.assign({ path: "/old/sub/a" }, file(1)));
+
+        for (var n = 0; n < items.length; n += 500) await File.setMany(this.blog.id, items.slice(n, n + 500));
+
+        this.expected = names(await File.listAll(this.blog.id, "/old"));
+
+        await forget(this.blog.id, "/old");
+        await forget(this.blog.id, "/old/sub");
+        await forget(this.blog.id, "/");
+      });
+
+      it("still lists in order, reading the hash whole", async function () {
+        expect(this.expected.length).toEqual(1203);
+        expect(this.expected.slice(-2)).toEqual(["\u{1F600}", "！"]);
+        expect(await pages(this.blog.id, "/old", 101)).toEqual(this.expected);
+        expect(await File.list(this.blog.id, "/old", { after: this.expected[1202] })).toEqual({ entries: [], next: null });
+        expect(names(await File.listAll(this.blog.id, "/old"))).toEqual(this.expected);
+        expect(await client.exists(File.key.names(this.blog.id, "/old"))).toEqual(0);
+      });
+
+      it("gets a complete names set from its first new name, and keeps it through removes", async function () {
+        await File.set(this.blog.id, "/old/0600x", file(1));
+        await File.remove(this.blog.id, "/old/0000");
+        await File.remove(this.blog.id, "/old/sub");
+
+        var expected = this.expected
+          .filter((name) => name !== "0000" && name !== "sub")
+          .concat("0600x")
+          .sort();
+
+        expect(await client.zCard(File.key.names(this.blog.id, "/old"))).toEqual(expected.length);
+        expect(await pages(this.blog.id, "/old", 101)).toEqual(expected);
+      });
+
+      it("changing an existing name, or removing one, builds nothing", async function () {
+        await File.set(this.blog.id, "/old/0001", file(2));
+        await File.remove(this.blog.id, "/old/0002");
+
+        expect(await client.exists(File.key.names(this.blog.id, "/old"))).toEqual(0);
+        expect(await pages(this.blog.id, "/old", 500)).toEqual(this.expected.filter((name) => name !== "0002"));
+      });
+
+      it("is given one by addMissingNames, which only counts without apply", async function () {
+        expect(await File.addMissingNames(this.blog.id)).toEqual({ dirs: 3, missing: 3, names: 1205 });
+        expect(await client.exists(File.key.names(this.blog.id, "/old"))).toEqual(0);
+
+        expect(await File.addMissingNames(this.blog.id, { apply: true })).toEqual({ dirs: 3, missing: 3, names: 1205 });
+        expect(await File.addMissingNames(this.blog.id)).toEqual({ dirs: 3, missing: 0, names: 0 });
+
+        spyOn(client, "hScan").and.callThrough();
+
+        expect(await pages(this.blog.id, "/old", 101)).toEqual(this.expected);
+        expect(client.hScan).not.toHaveBeenCalled();
+      });
     });
 
     it("gives each entry's record", async function () {

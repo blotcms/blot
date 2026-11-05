@@ -17,21 +17,27 @@ function folder(folderId, blogID) {
   this.reverseKey = `${PREFIX}${folderId}:path`; // Path ↔ ID mapping
   this.contentKey = `${PREFIX}${folderId}:verified-content${blogID ? ":" + blogID : ""}`;
   this.metadataKey = `${PREFIX}${folderId}:metadata`; // File metadata
-  // Per file ID, the Drive modifiedTime of the version last written locally
-  // plus the local fingerprint right after that write. Only written after a
-  // successful download, and kept across mapping resets like verified
-  // content, so change detection never depends on the local file's mtime.
+  // Per file ID, the Drive modifiedTime of the version last written to the
+  // blog folder plus that file's state right after the write. Only written
+  // after a successful download, and kept across mapping resets like
+  // verified content, so change detection never depends on the file's mtime.
   this.appliedKey = `${PREFIX}${folderId}:applied-modified-time${blogID ? ":" + blogID : ""}`;
 
   // Content verification is independent of mutable metadata written by set().
+  // A verified record pairs Drive's md5Checksum with the state of the file
+  // Blot holds: { path, checksum, size, modified, sha1 } (util/localState.js;
+  // sha1 may be null), or { path, checksum, fingerprint } from before.
   // Fetch a directory in one Redis request, rather than one request per file.
   this.getVerifiedContents = async (ids) => {
     if (!ids.length) return [];
     return (await client.hmGet(this.contentKey, ids)).map(value => {
       try {
         const record = value && JSON.parse(value);
-        return record && [record.path, record.checksum, record.fingerprint]
-          .every(field => typeof field === "string" && field.length) ? record : null;
+        if (!record || ![record.path, record.checksum]
+          .every(field => typeof field === "string" && field.length)) return null;
+        const described = Number.isFinite(record.size) && Number.isFinite(record.modified);
+        const legacy = typeof record.fingerprint === "string" && record.fingerprint.length;
+        return described || legacy ? record : null;
       } catch (_) { return null; }
     });
   };
@@ -52,9 +58,17 @@ function folder(folderId, blogID) {
     const all = (await client.hGetAll(this.appliedKey)) || {};
     return new Map(Object.entries(all).map(([id, value]) => [id, parseApplied(value)]));
   };
-  this.setApplied = async (id, { modifiedTime, fingerprint }) => {
+  // { modifiedTime, size, modified, sha1 }: the state is that of the file
+  // Blot wrote (util/localState.js), and may be missing if it couldn't be
+  // read, in which case the record is never trusted. Records from before
+  // have { modifiedTime, fingerprint } instead.
+  this.setApplied = async (id, { modifiedTime, size, modified, sha1 }) => {
     if (!modifiedTime) return;
-    await client.hSet(this.appliedKey, id, JSON.stringify({ modifiedTime, fingerprint: fingerprint || null }));
+    const record = { modifiedTime };
+    if (Number.isFinite(size) && Number.isFinite(modified)) {
+      Object.assign(record, { size, modified, sha1: sha1 || null });
+    }
+    await client.hSet(this.appliedKey, id, JSON.stringify(record));
   };
 
   // Only manual mapping resets need this cleanup. Scan in batches so old

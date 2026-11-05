@@ -92,7 +92,7 @@ const manifest = require("./manifest");
 const { scanPack } = require("./packscan");
 const { buildRev } = require("./rev");
 const { clone } = require("./clone");
-const { PACK_CONFIG, git: shared } = require("./compact");
+const { PACK_CONFIG, indexArgs, git: shared } = require("./compact");
 const { runGit, idsOf, assertContains } = shared;
 const { createChildren } = require("./limit");
 
@@ -613,10 +613,10 @@ async function verifyImport({ store, cache, gitDir, scratchDir = null, gate = nu
     const sent = await clone({ store, manifest: current, out });
 
     const inRepo = (args, input) => runGit(children, args, { gitDir: repo, input });
-    await inRepo(["index-pack", "--strict", "--fsck-objects", packFile]);
+    await inRepo([...indexArgs(), "index-pack", "--strict", "--fsck-objects", packFile]);
     for (const [ref, oid] of Object.entries(current.refs)) await inRepo(["update-ref", ref, oid]);
     if (current.head) await inRepo(["symbolic-ref", "HEAD", current.head]);
-    await inRepo(["fsck", "--strict", "--no-dangling"]);
+    await inRepo([...indexArgs(), "fsck", "--strict", "--no-dangling"]);
 
     const mine = Object.fromEntries(
       (await inRepo(["for-each-ref", "--format=%(refname) %(objectname)", "refs/heads", "refs/tags"]))

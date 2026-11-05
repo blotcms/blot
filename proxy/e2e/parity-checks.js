@@ -711,15 +711,29 @@ function diff(spec, ra, rb) {
 // On master this is empty: the working tree is compared with itself as it was
 // in origin/master, and must show 0 differences. A proxy PR that changes what
 // a client sees lists each change here, so the review is of the list.
+const H3 = 'h3=":443"; ma=86400';
 const INTENDED = [{
-  id: "enable-http3",
+  id: "alt-svc-on-https-proxied-responses",
   class: "intended",
-  reason: "Advertise HTTP/3 again now OpenResty 1.31.8.1 has the QUIC security fixes.",
-  match: (c, d) => d.kind === "header" && d.name === "alt-svc" &&
-    header(c.ra, "alt-svc").length > 0 &&
-    header(c.ra, "alt-svc").length === header(c.rb, "alt-svc").length &&
-    header(c.ra, "alt-svc").every((v) => v === "clear") &&
-    header(c.rb, "alt-svc").every((v) => v === 'h3=":443"; ma=86400'),
+  reason: "Alt-Svc is set once at http level with more_set_headers, so proxied HTTPS pages, whose locations' own add_header had kept them from inheriting it, advertise HTTP/3 too.",
+  match: (c, d) => d.kind === "header" && d.name === "alt-svc" && c.spec.tls && c.spec.host !== CDN &&
+    header(c.ra, "alt-svc").length === 0 &&
+    header(c.rb, "alt-svc").length === 1 && header(c.rb, "alt-svc")[0] === H3,
+}, {
+  id: "no-alt-svc-over-http-or-on-cdn",
+  class: "intended",
+  reason: "HTTP/3 is advertised over HTTPS only, and not on cdn., which only Bunny reaches.",
+  match: (c, d) => d.kind === "header" && d.name === "alt-svc" && (!c.spec.tls || c.spec.host === CDN) &&
+    header(c.ra, "alt-svc").length > 0 && header(c.ra, "alt-svc").every((v) => v === H3) &&
+    header(c.rb, "alt-svc").length === 0,
+}, {
+  id: "no-nosniff",
+  class: "intended",
+  reason: "http.conf's X-Content-Type-Options reached only the server blocks with no add_header of their own (the port 80 site redirect and internal listeners); it is removed.",
+  match: (c, d) => d.kind === "header" && d.name === "x-content-type-options" &&
+    header(c.ra, "x-content-type-options").every((v) => v === "nosniff") &&
+    header(c.ra, "x-content-type-options").length > 0 &&
+    header(c.rb, "x-content-type-options").length === 0,
 }];
 
 // ---- the run ------------------------------------------------------------

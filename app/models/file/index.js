@@ -91,6 +91,18 @@ function setNames(multi, lowerKey, folded, joined) {
   else multi.hDel(lowerKey, folded);
 }
 
+// Queues adding names to a directory's names set, a page per ZADD
+function addNames(multi, namesKey, names) {
+  for (var i = 0; i < names.length; i += PAGE) {
+    multi.zAdd(
+      namesKey,
+      names.slice(i, i + PAGE).map(function (name) {
+        return { score: 0, value: key.member(name) };
+      })
+    );
+  }
+}
+
 // The record at path, or null
 async function get(blogID, path) {
   check(blogID);
@@ -101,44 +113,122 @@ async function get(blogID, path) {
   return parse(await client.hGet(key.dir(blogID, parentOf(path)), nameOf(path)));
 }
 
-// One page of a directory, in HSCAN order (not sorted):
-// { entries: [{ name, type, size, modified, sha1 }], cursor }, where cursor
-// is null after the last page. Resolves to null if dir is not a directory.
-async function list(blogID, dir, options) {
-  options = options || {};
+// Every entry of a directory's hash, a HSCAN page at a time, unsorted
+async function scan(blogID, dir) {
+  var entries = [];
+  var cursor = "0";
 
-  var record = await get(blogID, dir);
+  do {
+    var reply = await client.hScan(key.dir(blogID, dir), cursor, { COUNT: PAGE });
+
+    for (var entry of reply.entries) entries.push(Object.assign({ name: entry.field }, parse(entry.value)));
+
+    cursor = String(reply.cursor);
+  } while (cursor !== "0");
+
+  return entries;
+}
+
+// One page of a directory, sorted by name (code-unit order):
+// { entries: [{ name, type, size, modified, sha1 }], next }, where next is
+// the name to pass as after for the page which follows, or null after the
+// last page. after need not still be in the directory. Resolves to null if
+// dir is not a directory.
+//
+// A page is one ZRANGEBYLEX of the directory's names set and one HMGET of
+// the page's names, however large the directory. A directory without a
+// names set (last changed before it existed, see README) is read whole and
+// sorted instead, as every page was before.
+async function list(blogID, dir, options) {
+  check(blogID);
+  options = options || {};
+  dir = normalize(dir);
+
+  var limit = options.limit === undefined ? PAGE : options.limit;
+  var after = options.after === undefined || options.after === null ? null : String(options.after);
+
+  if (!Number.isInteger(limit) || limit < 1) throw new Error("models/file: limit must be a positive integer");
+
+  var namesKey = key.names(blogID, dir);
+
+  // Sent together, so one round trip
+  var [record, sorted, members] = await Promise.all([
+    get(blogID, dir),
+    client.exists(namesKey),
+    client.zRangeByLex(namesKey, after === null ? "-" : "(" + key.member(after), "+", {
+      LIMIT: { offset: 0, count: limit + 1 },
+    }),
+  ]);
 
   if (!record || record.type !== "dir") return null;
 
-  var reply = await client.hScan(key.dir(blogID, normalize(dir)), String(options.cursor || "0"), {
-    COUNT: options.limit || PAGE,
-  });
-  var cursor = String(reply.cursor);
+  if (!sorted) {
+    var all = (await scan(blogID, dir)).sort(byName).filter(function (entry) {
+      return after === null || entry.name > after;
+    });
 
-  return {
-    entries: reply.entries.map(function (entry) {
-      return Object.assign({ name: entry.field }, parse(entry.value));
-    }),
-    cursor: cursor === "0" ? null : cursor,
-  };
+    return { entries: all.slice(0, limit), next: all.length > limit ? all[limit - 1].name : null };
+  }
+
+  var names = members.slice(0, limit).map(key.nameOf);
+  var packed = names.length ? await client.hmGet(key.dir(blogID, dir), names) : [];
+  var entries = [];
+
+  // A name with no record would mean the set and the hash disagree, which
+  // the writes below never leave behind; it is skipped rather than invented
+  names.forEach(function (name, i) {
+    if (packed[i] !== null && packed[i] !== undefined) entries.push(Object.assign({ name: name }, parse(packed[i])));
+  });
+
+  return { entries: entries, next: members.length > limit ? names[names.length - 1] : null };
 }
 
-// Every entry of a directory, sorted by name, or null if it is not one
-async function listAll(blogID, dir) {
-  var entries = [];
-  var cursor = null;
+// An async iterator of the pages of a directory, in order: arrays of
+// entries, as list gives them. Rejects with ENOENT if dir is not a
+// directory when it starts; a directory removed part way just ends. A
+// directory without a names set is read whole once, not once a page.
+async function* pages(blogID, dir, options) {
+  check(blogID);
+  dir = normalize(dir);
+
+  var limit = (options && options.limit) || PAGE;
+  var [record, sorted] = await Promise.all([get(blogID, dir), client.exists(key.names(blogID, dir))]);
+
+  if (!record || record.type !== "dir") throw failure("ENOENT", "Not a directory: " + dir);
+
+  if (!sorted) {
+    var all = (await scan(blogID, dir)).sort(byName);
+
+    for (var i = 0; i < all.length; i += limit) yield all.slice(i, i + limit);
+
+    return;
+  }
+
+  var after = null;
 
   do {
-    var page = await list(blogID, dir, { cursor: cursor });
+    var page = await list(blogID, dir, { after: after, limit: limit });
 
-    if (!page) return null;
+    if (!page) return;
 
-    entries.push(...page.entries);
-    cursor = page.cursor;
-  } while (cursor);
+    yield page.entries;
+    after = page.next;
+  } while (after !== null);
+}
 
-  return entries.sort(byName);
+// Every entry of a directory, sorted by name, or null if it is not one. The
+// whole directory ends up in memory: use list or pages for a large one.
+async function listAll(blogID, dir) {
+  var entries = [];
+
+  try {
+    for await (var page of pages(blogID, dir)) entries.push(...page);
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    throw err;
+  }
+
+  return entries;
 }
 
 // An async iterator of every path below dir (files and directories), in
@@ -295,7 +385,38 @@ async function setMany(blogID, items) {
     })
   );
 
+  // The names sets which gain a name. A directory which already had a hash
+  // but has no names set yet (it was last changed before they existed) gets
+  // one built from its hash in the same exec, so a names set, once there, is
+  // always complete; adding just the new name would leave it partial.
+  var named = new Map();
+
+  for (var path of writes.keys()) {
+    if (existing.get(path)) continue;
+
+    var parent = parentOf(path);
+
+    if (!named.has(parent)) named.set(parent, []);
+
+    named.get(parent).push(nameOf(path));
+  }
+
+  // A directory new in this call has no hash to build from
+  var older = [...named.keys()].filter(function (dir) {
+    return dir === "/" || !!existing.get(dir);
+  });
+
+  await Promise.all(
+    older.map(async function (dir) {
+      if (await client.exists(key.names(blogID, dir))) return;
+
+      for (var entry of await scan(blogID, dir)) named.get(dir).push(entry.name);
+    })
+  );
+
   var multi = client.multi();
+
+  for (var [dir, children] of named) addNames(multi, key.names(blogID, dir), children);
   var bytes = 0;
   var files = 0;
 
@@ -364,10 +485,13 @@ async function removeBelow(blogID, dir) {
         bytes += record.size;
         files += 1;
       } else {
-        multi.del([key.dir(blogID, path), key.lower(blogID, path)]);
+        multi.del([key.dir(blogID, path), key.lower(blogID, path), key.names(blogID, path)]);
       }
 
+      // ZREM never creates a key, so a parent without a names set stays
+      // without one
       multi.hDel(key.dir(blogID, parentOf(path)), nameOf(path));
+      multi.zRem(key.names(blogID, parentOf(path)), key.member(nameOf(path)));
     });
 
     multi.zRem(key.paths(blogID), page);
@@ -401,11 +525,12 @@ async function remove(blogID, path) {
   var multi = client.multi();
 
   multi.hDel(key.dir(blogID, parent), name);
+  multi.zRem(key.names(blogID, parent), key.member(name));
   multi.zRem(key.paths(blogID), path);
   setNames(multi, lowerKey, folded, updateNames(joined, name, false));
 
   if (record.type === "dir") {
-    multi.del([key.dir(blogID, path), key.lower(blogID, path)]);
+    multi.del([key.dir(blogID, path), key.lower(blogID, path), key.names(blogID, path)]);
   } else {
     if (record.size) multi.hIncrBy(key.totals(blogID), "bytes", -record.size);
     multi.hIncrBy(key.totals(blogID), "files", -1);
@@ -430,7 +555,7 @@ async function removeAll(blogID) {
 
     // A file has no keys of its own, and deleting a missing key costs little
     // next to looking up which paths are directories
-    for (var path of page) keys.push(key.dir(blogID, path), key.lower(blogID, path));
+    for (var path of page) keys.push(key.dir(blogID, path), key.lower(blogID, path), key.names(blogID, path));
 
     multi.del(keys);
     multi.zRem(key.paths(blogID), page);
@@ -438,7 +563,58 @@ async function removeAll(blogID) {
     await multi.exec();
   }
 
-  await client.del([key.dir(blogID, "/"), key.lower(blogID, "/"), key.paths(blogID), key.totals(blogID)]);
+  await client.del([
+    key.dir(blogID, "/"),
+    key.lower(blogID, "/"),
+    key.names(blogID, "/"),
+    key.paths(blogID),
+    key.totals(blogID),
+  ]);
+}
+
+// Gives every directory of a blog which has entries but no names set (it was
+// last changed before they existed) its names set, from its hash. Resolves
+// to { dirs, missing, names }: the directories looked at, those without a
+// names set, and the names they hold. Writes only if options.apply. Run it
+// under the blog's sync lock: a remove between reading a hash and adding
+// its names would leave a name in the set with no record.
+async function addMissingNames(blogID, options) {
+  check(blogID);
+
+  var apply = !!(options && options.apply);
+  var counts = { dirs: 0, missing: 0, names: 0 };
+  var queue = ["/"];
+
+  while (queue.length) {
+    var dir = queue.pop();
+    var entries = await scan(blogID, dir);
+    var namesKey = key.names(blogID, dir);
+
+    counts.dirs++;
+
+    for (var entry of entries) if (entry.type === "dir") queue.push(child(dir, entry.name));
+
+    if (!entries.length || (await client.exists(namesKey))) continue;
+
+    counts.missing++;
+    counts.names += entries.length;
+
+    if (!apply) continue;
+
+    var multi = client.multi();
+
+    addNames(
+      multi,
+      namesKey,
+      entries.map(function (entry) {
+        return entry.name;
+      })
+    );
+
+    await multi.exec();
+  }
+
+  return counts;
 }
 
 // The errors setMany raises for a path which cannot exist beside what is
@@ -507,6 +683,7 @@ module.exports = {
   normalize,
   get,
   list,
+  pages,
   listAll,
   subtree,
   resolveCaseInsensitive,
@@ -516,4 +693,5 @@ module.exports = {
   remove,
   removeAll,
   rebuild,
+  addMissingNames,
 };

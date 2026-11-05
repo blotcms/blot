@@ -193,6 +193,14 @@ module.exports = {
   // evicted once it is no longer recent, so use the path straight away.
   ensureLocal: delegate("ensureLocal"),
 
+  // Calls fn(localPath) with the same kind of path as ensureLocal, and
+  // resolves to what fn resolves to. For tools which may run for a long time
+  // (pandoc, sharp, a big upload): on S3 the cache entry is pinned, in every
+  // process sharing the cache, until the promise fn returns has settled, so it
+  // cannot be evicted under the tool. The path is read-only and must not be
+  // used after fn is done. On disk it is simply the file.
+  withLocal: delegate("withLocal"),
+
   mkdir: delegate("mkdir"),
 
   // Removes a directory and everything in it (a prefix delete on S3)

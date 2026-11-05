@@ -160,6 +160,120 @@ describe("dropbox resetToBlot", function () {
     expect(saved.some((values) => "cursor" in values)).toEqual(false);
   });
 
+  describe("a folder that changes in Dropbox before the walk lists it", function () {
+    const folder = (name) => ({ ".tag": "folder", name, path_display: "/" + name });
+
+    // Make filesListFolder answer `path` with a 409 tagged `summary`, as
+    // Dropbox does for a folder deleted after its parent was listed
+    function vanish(path, summary) {
+      const inner = require.cache[createClientPath].exports;
+      require.cache[createClientPath].exports = function (id, callback) {
+        inner(id, (err, client, ...rest) => {
+          const real = client.filesListFolder;
+          client.filesListFolder = async (args) => {
+            if (args.path === path)
+              throw Object.assign(new Error("Response failed with a 409 code"), {
+                status: 409,
+                error: { error_summary: summary },
+              });
+            return real(args);
+          };
+          callback(err, client, ...rest);
+        });
+      };
+      delete require.cache[resetPath];
+      return require("../sync/reset-to-blot");
+    }
+
+    const deleted = (path_lower) => ({ ".tag": "deleted", path_lower });
+
+    it("skips the folder, leaves Blot's copy alone and finishes the walk", async function () {
+      await fs.outputFile(join(blogDirectory, "sub", "old.txt"), "x");
+      load({ "/": [folder("sub"), file("a.txt")] }, { delta: [deleted("/sub")] });
+      const resetToBlot = vanish("/sub", "path/not_found/..");
+
+      const summary = await resetToBlot(blogID, () => {}, async () => {});
+
+      expect(summary.downloaded).toEqual(1);
+      expect(summary.removed).toEqual(0);
+      expect(summary.skipped).toEqual(1);
+      expect(summary.failed).toEqual(0);
+      expect(await fs.pathExists(join(blogDirectory, "sub", "old.txt"))).toEqual(true);
+      expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(true);
+    });
+
+    it("skips a folder Dropbox reports as changed under it", async function () {
+      load({ "/": [folder("sub")] }, { delta: [deleted("/sub/old.txt")] });
+      const resetToBlot = vanish("/sub", "path/not_found/..");
+
+      const summary = await resetToBlot(blogID, () => {}, async () => {});
+
+      expect(summary.skipped).toEqual(1);
+      expect(summary.failed).toEqual(0);
+    });
+
+    it("reports a 409 the cursor doesn't explain, and removes nothing", async function () {
+      await fs.outputFile(join(blogDirectory, "sub", "old.txt"), "x");
+      load({ "/": [folder("sub"), file("a.txt")] }, { delta: [deleted("/other")] });
+      const resetToBlot = vanish("/sub", "path/not_found/..");
+
+      const summary = await resetToBlot(blogID, () => {}, async () => {});
+
+      expect(summary.downloaded).toEqual(1);
+      expect(summary.skipped).toEqual(0);
+      expect(summary.failed).toEqual(1);
+      expect(summary.firstError).toEqual("/sub: 409 path/not_found/..");
+      expect(await fs.pathExists(join(blogDirectory, "sub", "old.txt"))).toEqual(true);
+    });
+
+    it("reports the 409 when Dropbox can't say what changed", async function () {
+      load({ "/": [folder("sub")] });
+      const resetToBlot = vanish("/sub", "path/not_found/..");
+
+      const summary = await resetToBlot(blogID, () => {}, async () => {});
+
+      expect(summary.failed).toEqual(1);
+    });
+
+    it("skips a folder replaced by a file", async function () {
+      load({ "/": [folder("sub")] }, { delta: [{ ".tag": "file", path_lower: "/sub" }] });
+      const resetToBlot = vanish("/sub", "path/not_folder/..");
+
+      const summary = await resetToBlot(blogID, () => {}, async () => {});
+
+      expect(summary.skipped).toEqual(1);
+    });
+
+    it("still throws when the blog folder itself is gone", async function () {
+      load({ "/": [file("a.txt")] });
+      const resetToBlot = vanish("", "path/not_found/..");
+
+      let error;
+      try {
+        await resetToBlot(blogID, () => {}, async () => {});
+      } catch (err) {
+        error = err;
+      }
+
+      expect(error && error.status).toEqual(409);
+      expect(saved.some((values) => "cursor" in values)).toEqual(false);
+    });
+
+    it("still throws on any other 409", async function () {
+      load({ "/": [folder("sub")] });
+      const resetToBlot = vanish("/sub", "path/restricted_content/..");
+
+      let error;
+      try {
+        await resetToBlot(blogID, () => {}, async () => {});
+      } catch (err) {
+        error = err;
+      }
+
+      expect(error && error.status).toEqual(409);
+    });
+  });
+
   describe("transient Dropbox errors", function () {
     const retryRequest = require("../util/retryRequest");
     const originalDelays = retryRequest.delays;

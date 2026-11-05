@@ -61,15 +61,36 @@ describe("Drive verified-content storage", function() {
     await folder.pruneVerifiedContents();
     expect(await folder.getVerifiedContents(["file", "removed"])).toEqual([record, null]);
   });
+  it("reads records which pair the checksum with the file's state, and older fingerprint ones", async function() {
+    const paired = {
+      path: "/file.txt",
+      checksum: "md5",
+      sha1: "sha",
+      size: 4,
+      modified: 1000
+    };
+    await folder.setVerifiedContent("paired", paired);
+    await folder.setVerifiedContent("legacy", record);
+    await folder.setVerifiedContent("neither", { path: "/file.txt", checksum: "md5" });
+    await folder.setVerifiedContent("unhashed", { ...paired, sha1: null });
+    expect(await folder.getVerifiedContents(["paired", "legacy", "neither", "unhashed"]))
+      .toEqual([paired, record, null, { ...paired, sha1: null }]);
+  });
+  it("stores an applied record without a state it was not given", async function() {
+    await folder.setApplied("file", { modifiedTime: "2026-01-01T00:00:00Z" });
+    expect(await folder.getApplied("file")).toEqual({ modifiedTime: "2026-01-01T00:00:00Z" });
+    await folder.setApplied("file", { modifiedTime: "2026-01-01T00:00:00Z", size: 4, modified: 1000 });
+    expect(await folder.getApplied("file")).toEqual({ modifiedTime: "2026-01-01T00:00:00Z", size: 4, modified: 1000, sha1: null });
+  });
   it("keeps applied records across mapping resync and prunes removed IDs", async function() {
     await folder.set("file", "/file.txt");
-    await folder.setApplied("file", { modifiedTime: "2026-01-01T00:00:00Z", fingerprint: "fp" });
-    await folder.setApplied("removed", { modifiedTime: "2026-01-01T00:00:00Z", fingerprint: "fp" });
+    await folder.setApplied("file", { modifiedTime: "2026-01-01T00:00:00Z", size: 4, modified: 1000, sha1: "sha" });
+    await folder.setApplied("removed", { modifiedTime: "2026-01-01T00:00:00Z", size: 4, modified: 1000, sha1: "sha" });
     await folder.reset({ preserveVerifiedContent: true });
-    expect(await folder.getApplied("file")).toEqual({ modifiedTime: "2026-01-01T00:00:00Z", fingerprint: "fp" });
+    expect(await folder.getApplied("file")).toEqual({ modifiedTime: "2026-01-01T00:00:00Z", size: 4, modified: 1000, sha1: "sha" });
     await folder.set("file", "/file.txt");
     await folder.pruneVerifiedContents();
-    expect(await folder.getApplied("file")).toEqual({ modifiedTime: "2026-01-01T00:00:00Z", fingerprint: "fp" });
+    expect(await folder.getApplied("file")).toEqual({ modifiedTime: "2026-01-01T00:00:00Z", size: 4, modified: 1000, sha1: "sha" });
     expect(await folder.getApplied("removed")).toBeNull();
     await folder.reset();
     expect(await folder.getApplied("file")).toBeNull();

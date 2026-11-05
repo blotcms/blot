@@ -93,7 +93,7 @@ function configureBlogs(user) {
           console.log();
 
           console.log(`Open your blog's folder:`);
-          console.log("./data/blogs/" + blog.id);
+          console.log("./data/local-sources/" + blog.handle);
           console.log();
 
           resolve(user);
