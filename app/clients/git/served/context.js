@@ -124,8 +124,18 @@ function _setObjectStore(factory) {
 
 function _reset() {
   stores = new LRUCache({ max: STORES });
-  if (sharedCache) sharedCache.close().catch(() => {});
+  if (sharedCache) closing.push(sharedCache.close().catch(() => {}));
   sharedCache = null;
+}
+
+// For specs: forgets the cache and waits until every cache made so far has
+// stopped writing to its directory (its timers, a walk), so it can be deleted
+let closing = [];
+async function _close() {
+  _reset();
+  const pending = closing;
+  closing = [];
+  await Promise.all(pending);
 }
 
 module.exports = {
@@ -138,4 +148,5 @@ module.exports = {
   refLock,
   _setObjectStore,
   _reset,
+  _close,
 };

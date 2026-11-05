@@ -190,6 +190,7 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
   let publishing = Promise.resolve();
   let publishTimer = null;
   function publishNow() {
+    if (closed) return publishing;
     if (publishTimer) {
       clearTimeout(publishTimer);
       publishTimer = null;

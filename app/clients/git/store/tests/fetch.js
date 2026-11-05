@@ -12,6 +12,7 @@ const { createReceiveServer, push } = require("./helpers/receiveServer");
 const { startServer, runGit, collect } = require("./helpers/upload-server");
 const manifest = require("../manifest");
 const createCache = require("../cache");
+const { cacheKeyOf } = require("../packcache");
 const createMemoryStore = require("../objectStore/memory");
 const { serve } = require("../clone");
 const receive = require("../receive");
@@ -551,11 +552,12 @@ describe("git store fetch", function () {
       expect(result.packs).toBe(latest.packs.length);
       expect(result.walked).toBeGreaterThan(0);
 
-      // It costs what a clone does, and a request for each history piece
-      // (the history is read once). Walking back from the client's commits
-      // through the big packs would cost a request or more for each commit.
-      expect(used(before).gets).toBe(latest.historyPieces.length);
-      expect(reading(used(before))).toBeLessThanOrEqual(cloneRequests + latest.historyPieces.length);
+      // It costs what a clone does, and no more: the history pieces are in the
+      // cache, where each push put its own. Walking back from the client's
+      // commits through the big packs would cost a request or more for each
+      // commit.
+      expect(used(before).gets).toBe(0);
+      expect(reading(used(before))).toBeLessThanOrEqual(cloneRequests);
       expect(latest.historyPieces.length).toBe(5);
       fx.git(client, ["fsck", "--strict", "--no-dangling"]);
       expect(fx.text(client, ["rev-parse", "refs/remotes/origin/master"])).toBe(latest.refs["refs/heads/master"]);
@@ -633,6 +635,10 @@ describe("git store fetch", function () {
       const clients = await clientsInMiddleOfPush("a", "b");
       addCommit();
       await pushWork("master");
+
+      // Each push kept its history piece in the cache: cold is a cache which
+      // has lost them
+      for (const piece of latest.historyPieces) await cache.delete(cacheKeyOf(store, piece.name));
 
       const counts = [];
       for (const client of clients) {
@@ -813,7 +819,9 @@ describe("git store fetch", function () {
       ok(await gitIn(client, "fetch", "origin"));
       expect(lastResult().floor).toBe(latest.seq - 1);
       expect(lastResult().packs).toBe(1);
-      expect(used(before).gets).toBe(latest.historyPieces.length);
+      // The history pieces it reads are in the cache, which each push put
+      // its own in
+      expect(used(before).gets).toBe(0);
       expectMirror(client);
     });
 

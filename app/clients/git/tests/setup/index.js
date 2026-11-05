@@ -111,6 +111,7 @@ module.exports = function setup(options) {
     await upkeep.idle(this.blog.id);
     removal._reset();
     context._setObjectStore(null);
+    await context._close();
     Object.assign(config.git_store, saved);
     await fs.remove(this.storeScratch);
   });
