@@ -52,9 +52,10 @@ ssh blot "docker cp /tmp/ftt.js blot-green:/usr/src/app/scripts/blog/ftt_tmp.js 
   docker exec -u root blot-green rm -f /usr/src/app/scripts/blog/ftt_tmp.js; rm -f /tmp/ftt.js"
 ```
 
-(The container is BusyBox/Alpine: no `ls --time-style`.) The blog folder is at
-`/usr/src/app/data/blogs/<blog id>/`, so `cat`/`grep` there is fine for reading
-a specific file.
+(The container is BusyBox/Alpine: no `ls --time-style`.) The blog folder is in
+the storage bucket, not on disk. To read a specific file, extract it from
+`docker exec blot-green node scripts/blog/export-folder.js <blog id>`, which
+writes the folder as a tar to stdout (`| tar -xO '<path without leading />'`).
 
 ## Classify each file
 

@@ -268,26 +268,20 @@ describe("sync cacheID", function () {
   const sync = require("../index");
   const folderLock = require("../lock");
   const Blog = require("models/blog");
-  const fs = require("fs-extra");
+  const storage = require("storage/folder");
 
   global.test.blog();
-
-  // The blog's folder on disk, which these specs change directly
-  let blogDirectory;
-
-  beforeEach(function () {
-    blogDirectory = this.blogDirectory;
-  });
 
   // Changes one file in the blog's folder, then finishes the sync
   function syncChange(blogID, callback) {
     sync(blogID, function (err, folder, done) {
       if (err) return callback(err);
-      fs.outputFileSync(blogDirectory + "/a.txt", "Hello");
-      folder.update("/a.txt", function (err) {
-        if (err) return callback(err);
-        done(null, callback);
-      });
+      storage.write(blogID, "/a.txt", "Hello").then(function () {
+        folder.update("/a.txt", function (err) {
+          if (err) return callback(err);
+          done(null, callback);
+        });
+      }, callback);
     });
   }
 
@@ -329,13 +323,14 @@ describe("sync cacheID", function () {
   function syncContents(blogID, contents, callback) {
     sync(blogID, function (err, folder, done) {
       if (err) return callback(err);
-      fs.outputFileSync(blogDirectory + "/a.txt", contents);
-      folder.update("/a.txt", function (err, result) {
-        if (err) return callback(err);
-        done(null, function (err) {
-          callback(err, result);
+      storage.write(blogID, "/a.txt", Buffer.from(contents)).then(function () {
+        folder.update("/a.txt", function (err, result) {
+          if (err) return callback(err);
+          done(null, function (err) {
+            callback(err, result);
+          });
         });
-      });
+      }, callback);
     });
   }
 
@@ -418,15 +413,16 @@ describe("sync cacheID", function () {
 
     sync(blogID, function (err, folder, done) {
       if (err) return testDone.fail(err);
-      fs.outputFileSync(blogDirectory + "/_public/style.css", "a{}");
-      folder.update("/_public/style.css", function (err) {
-        if (err) return testDone.fail(err);
-        done(null, function (err) {
+      storage.write(blogID, "/_public/style.css", Buffer.from("a{}")).then(function () {
+        folder.update("/_public/style.css", function (err) {
           if (err) return testDone.fail(err);
-          expect(Blog.bumpCacheID).toHaveBeenCalled();
-          testDone();
+          done(null, function (err) {
+            if (err) return testDone.fail(err);
+            expect(Blog.bumpCacheID).toHaveBeenCalled();
+            testDone();
+          });
         });
-      });
+      }, testDone.fail);
     });
   });
 });

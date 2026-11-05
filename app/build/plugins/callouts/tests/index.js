@@ -16,8 +16,9 @@ describe("callouts plugin integration", function () {
   function buildFixture(context, enabled, done) {
     context.blog.plugins.callouts = { enabled, options: {} };
     const contents = fs.readFileSync(fixture, "utf8");
-    fs.outputFileSync(context.blogDirectory + "/callouts.md", contents);
-    build(context.blog, "/callouts.md", done);
+    test.folder.writeFiles(context.blog.id, { "/callouts.md": contents }).then(function () {
+      build(context.blog, "/callouts.md", done);
+    }, done.fail);
   }
 
   it("converts callouts through the Markdown build path when enabled", function (done) {

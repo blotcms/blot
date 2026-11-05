@@ -3,7 +3,7 @@ describe("drafts work", function () {
   const Blog = require("models/blog");
   const sync = require("sync");
   const blogServer = require("../../blog");
-  const fs = require("fs-extra");
+  const storageFolder = require("storage/folder");
   const fetch = require("node-fetch");
   const Express = require("express");
   const config = require("config");
@@ -102,11 +102,12 @@ describe("drafts work", function () {
     this.writeDraft = (path, contents, callback) => {
       sync(this.blog.id, (err, folder, done) => {
         if (err) return callback(err);
-        fs.outputFileSync(this.blogDirectory + path, contents, "utf-8");
-        folder.update(path, function (err) {
-          if (err) return callback(err);
-          done(null, callback);
-        });
+        storageFolder.write(this.blog.id, path, contents).then(() => {
+          folder.update(path, function (err) {
+            if (err) return callback(err);
+            done(null, callback);
+          });
+        }, callback);
       });
     };
   });

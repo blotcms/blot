@@ -7,7 +7,7 @@ describe("template", function () {
   const setView =  promisify(require("../index").setView);
   const setMetadata =  promisify(require("../index").setMetadata);
 
-  const fs = require('fs-extra');
+  const folder = require('storage/folder');
 
   require("./setup")({ createTemplate: true });
 
@@ -23,8 +23,11 @@ describe("template", function () {
 
     await writeToFolder(test.blog.id, test.template.id);
         
-    const templateFolderContents = await fs.readdir(test.blogDirectory + '/Templates');
-    const templateSubFolderContents = await fs.readdir(test.blogDirectory + '/Templates/' + test.template.slug);
+    const names = async (path) =>
+      (await folder.listNames(test.blog.id, path)).map((entry) => entry.name);
+
+    const templateFolderContents = await names('/Templates');
+    const templateSubFolderContents = await names('/Templates/' + test.template.slug);
 
     expect(templateFolderContents).toContain(test.template.slug);
     expect(templateSubFolderContents).toContain(view.name);
@@ -32,7 +35,7 @@ describe("template", function () {
 
     await removeFromFolder(test.blog.id, test.template.id);
 
-    const updatedTemplateFolderContents = await fs.readdir(test.blogDirectory + '/Templates');
+    const updatedTemplateFolderContents = await names('/Templates');
 
     expect(updatedTemplateFolderContents).not.toContain(test.template.slug);    
   });

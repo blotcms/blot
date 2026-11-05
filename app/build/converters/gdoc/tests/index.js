@@ -1,6 +1,7 @@
 const templates = require("templates");
 const gdoc = require("../index");
 const fs = require("fs-extra");
+const folder = require("storage/folder");
 const express = require("express");
 const sharp = require("sharp");
 const nock = require("nock");
@@ -72,13 +73,13 @@ describe("gdoc converter", function () {
         "http://localhost:7391/image.jpg"
       );
 
-      fs.writeFileSync(test.blogDirectory + path, input, "utf8");
-
-      gdoc.read(test.blog, path, function (err, result) {
-        if (err) return done.fail(err);
-        expect(result).toEqual(expected);
-        done();
-      });
+      folder.write(test.blog.id, path, input).then(function () {
+        gdoc.read(test.blog, path, function (err, result) {
+          if (err) return done.fail(err);
+          expect(result).toEqual(expected);
+          done();
+        });
+      }, done.fail);
     });
   });
 
@@ -104,7 +105,7 @@ describe("gdoc converter", function () {
       .query(true)
       .reply(404, "gone");
 
-    await fs.writeFile(test.blogDirectory + path, input, "utf8");
+    await folder.write(test.blog.id, path, input);
 
     const readDoc = () =>
       new Promise((resolve, reject) => {
@@ -140,7 +141,7 @@ describe("gdoc converter", function () {
       "</body></html>",
     ].join("");
 
-    await fs.writeFile(test.blogDirectory + path, minimalHtml, "utf8");
+    await folder.write(test.blog.id, path, minimalHtml);
 
     const result = await new Promise((resolve, reject) => {
       gdoc.read(test.blog, path, (err, result) => {
@@ -164,7 +165,7 @@ describe("gdoc converter", function () {
       "</body></html>",
     ].join("");
 
-    await fs.writeFile(test.blogDirectory + path, minimalHtml, "utf8");
+    await folder.write(test.blog.id, path, minimalHtml);
 
     const result = await new Promise((resolve, reject) => {
       gdoc.read(test.blog, path, (err, result) => {

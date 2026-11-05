@@ -7,10 +7,10 @@ name: benchmarks-corpus
 # ONCE, then snapshots it into cache-able artifacts:
 #
 #   - a Redis dump (every entry/tag/index key)
-#   - data/blogs/ tarball (raw source + hard-linked media - small)
+#   - a tarball of the MinIO data (the blogs' folders, which live only in the
+#     storage bucket, plus the images and thumbnails the build generates)
 #
-# (the images and thumbnails the build generates go to a throwaway MinIO and
-# aren't kept: the render benchmark never requests them) and saves them to the Actions cache under a benchmark-corpus-v<version> key
+# and saves them to the Actions cache under a benchmark-corpus-v<version> key
 # (CORPUS_SCHEMA_VERSION below), plus a 90-day artifact backup. This is the
 # ONLY workflow that writes that cache - benchmarks-render.yml only reads it.
 #
@@ -35,11 +35,11 @@ permissions:
 
 env:
   # Bump whenever the *shape* of the corpus changes (site/post/tag/media
-  # distribution, symlink->hardlink layout, converter fixture set, etc) -
+  # distribution, where blog folders are kept, converter fixture set, etc) -
   # independent of historySchemaVersion, which only tracks metric
   # definitions for the render/build benchmark itself. Keep this in sync
   # with corpusSchemaVersion in scripts/benchmarks/spec/util/defaults.js.
-  CORPUS_SCHEMA_VERSION: 1
+  CORPUS_SCHEMA_VERSION: 2
 
 jobs:
   build-corpus:
@@ -102,7 +102,7 @@ jobs:
         with:
           path: |
             .benchmarks/corpus/redis-dump.rdb
-            .benchmarks/corpus/blogs.tar.gz
+            .benchmarks/corpus/minio.tar.gz
             .benchmarks/corpus/manifest.json
           key: benchmark-corpus-v${{ env.CORPUS_SCHEMA_VERSION }}-${{ github.run_id }}
 
@@ -112,7 +112,7 @@ jobs:
           name: benchmark-corpus-artifacts
           path: |
             .benchmarks/corpus/redis-dump.rdb
-            .benchmarks/corpus/blogs.tar.gz
+            .benchmarks/corpus/minio.tar.gz
             .benchmarks/corpus/manifest.json
           retention-days: 90
           if-no-files-found: error
@@ -123,11 +123,11 @@ jobs:
           {
             echo "## Corpus artifact sizes"
             echo ""
-            du -h .benchmarks/corpus/redis-dump.rdb .benchmarks/corpus/blogs.tar.gz 2>/dev/null | while read -r size file; do
+            du -h .benchmarks/corpus/redis-dump.rdb .benchmarks/corpus/minio.tar.gz 2>/dev/null | while read -r size file; do
               echo "- \`$(basename "$file")\`: $size"
             done
             echo ""
-            TOTAL=$(du -ch .benchmarks/corpus/redis-dump.rdb .benchmarks/corpus/blogs.tar.gz 2>/dev/null | tail -1 | cut -f1)
+            TOTAL=$(du -ch .benchmarks/corpus/redis-dump.rdb .benchmarks/corpus/minio.tar.gz 2>/dev/null | tail -1 | cut -f1)
             echo "- **total**: $TOTAL"
             echo ""
             echo "_Target: keep the combined total in the low single-digit GB range - the GitHub Actions cache cap is 10GB per repo, shared with every other cache._"

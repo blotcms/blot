@@ -1,5 +1,4 @@
-const fs = require("fs-extra");
-const localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
+const folder = require("storage/folder");
 
 const uploadPath = require.resolve("../upload");
 const establishSyncLockPath = require.resolve("sync/establishSyncLock");
@@ -83,7 +82,6 @@ describe("icloud upload route", function () {
     blogID = `icloud-upload-test-${Date.now()}-${Math.floor(
       Math.random() * 10000
     )}`;
-    await fs.ensureDir(localPath(blogID, "/"));
 
     let updateCalls = [];
     mockModule(establishSyncLockPath, async () => ({
@@ -100,16 +98,15 @@ describe("icloud upload route", function () {
 
   afterEach(async () => {
     restoreModules();
-    await fs.remove(localPath(blogID, "/"));
+    await folder.removeAll(blogID);
   });
 
   it("treats identical contents as already current regardless of mtime, without setting mtime", async () => {
     const filePath = "/post.txt";
     const contents = "hello world";
-    const pathOnDisk = localPath(blogID, filePath);
-    await fs.outputFile(pathOnDisk, contents);
+    await folder.write(blogID, filePath, contents);
 
-    const before = await fs.stat(pathOnDisk);
+    const before = await folder.stat(blogID, filePath);
 
     const upload = require(uploadPath);
     const req = fakeReq({
@@ -127,8 +124,8 @@ describe("icloud upload route", function () {
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain("already up to date");
 
-    const after = await fs.stat(pathOnDisk);
-    expect(after.mtime.getTime()).toBe(before.mtime.getTime());
+    const after = await folder.stat(blogID, filePath);
+    expect(after.modified).toBe(before.modified);
   });
 
   it("writes new contents without setting a specific mtime", async () => {
@@ -149,12 +146,11 @@ describe("icloud upload route", function () {
 
     expect(res.statusCode).toBe(200);
 
-    const pathOnDisk = localPath(blogID, filePath);
-    const stat = await fs.stat(pathOnDisk);
+    const stat = await folder.stat(blogID, filePath);
 
-    expect((await fs.readFile(pathOnDisk)).toString()).toBe(contents);
+    expect((await folder.read(blogID, filePath)).toString()).toBe(contents);
     // The file was written just now; it must not have been backdated to
     // the modifiedTime header.
-    expect(stat.mtime.getTime()).toBeGreaterThanOrEqual(beforeUpload - 1000);
+    expect(stat.modified).toBeGreaterThanOrEqual(beforeUpload - 1000);
   });
 });

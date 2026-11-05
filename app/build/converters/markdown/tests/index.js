@@ -8,15 +8,20 @@ describe("markdown converter", function () {
   fs.readdirSync(dir)
     .filter((file) => file.slice(-4) === ".txt")
     .forEach((file) => {
-      it("handles " + file.slice(0, -4).split("-").join(" "), function (done) {
+      it("handles " + file.slice(0, -4).split("-").join(" "), async function () {
         // Copy the .bib and csl files to the root of the blog folder
-        fs.copySync(dir + "/files", this.blogDirectory);
-        fs.copySync(dir, this.blogDirectory);
+        await test.folder.copyDirectory(this.blog.id, dir + "/files");
+        await test.folder.copyDirectory(this.blog.id, dir);
 
         const path = "/" + file;
-        markdown.read(this.blog, path, function (err, html) {
-          if (err) return done.fail(err);
+        let html = await new Promise((resolve, reject) => {
+          markdown.read(this.blog, path, function (err, html) {
+            if (err) return reject(err);
+            resolve(html);
+          });
+        });
 
+        {
           let expected;
 
           try {
@@ -44,8 +49,7 @@ describe("markdown converter", function () {
             fs.outputFileSync(dir + path + ".expected.html", html);
 
           expect(expected).toEqual(html);
-          done();
-        });
+        }
       });
     });
 });

@@ -158,30 +158,6 @@ describe("deploy verify-container", function () {
     }
   });
 
-  it("fails the blog folder check when the data mount is empty", async function () {
-    const dataCheck = checks.find((c) => c.name === "blog folders match redis");
-    const fs = require("fs");
-    const os = require("os");
-    const path = require("path");
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "verify-"));
-    const redis = { sMembers: async () => ["BLOG_1", "BLOG_2", "BLOG_3"] };
-
-    try {
-      const run = () =>
-        rejection(dataCheck.run({ config: { blog_folder_dir: dir }, redis }));
-
-      expect((await run()).message).toMatch(/no blog folders/);
-
-      fs.mkdirSync(path.join(dir, "BLOG_1"));
-      expect((await run()).message).toMatch(/wrong or stale data mount/);
-
-      fs.mkdirSync(path.join(dir, "BLOG_2"));
-      expect(await run()).toBe(null);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
   it("stops running checks once the deadline has passed", async function () {
     let ran = false;
     const result = await runChecks(

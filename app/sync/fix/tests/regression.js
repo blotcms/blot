@@ -17,7 +17,7 @@
 // whether production relies on them.
 
 const { promisify } = require("util");
-const fs = require("fs-extra");
+const folder = require("storage/folder");
 
 const fix = require("../index");
 const Entry = require("models/entry");
@@ -25,7 +25,6 @@ const Tags = require("models/tags");
 const Blog = require("models/blog");
 const client = require("models/client");
 const pathIndex = require("models/entries/pathIndex");
-const localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
 
 const getEntry = (blogID, id) =>
   promisify((next) => Entry.get(blogID, id, (entry) => next(null, entry)))();
@@ -198,10 +197,7 @@ describe("sync/fix regression (outcome-based)", function () {
       await blog.write({ path: "/Case/Foo.txt", content: "# Foo" });
       await blog.rebuild();
 
-      await fs.move(
-        localPath(blog.id, "/Case/Foo.txt"),
-        localPath(blog.id, "/case/foo.txt")
-      );
+      await folder.move(blog.id, "/Case/Foo.txt", "/case/foo.txt");
 
       const report = await fixAsync(blog);
 
@@ -236,7 +232,7 @@ describe("sync/fix regression (outcome-based)", function () {
       const folderEntry = await getEntry(blog.id, "/Album");
       expect(folderEntry).toBeTruthy();
 
-      await fs.remove(localPath(blog.id, "/Album+"));
+      await folder.remove(blog.id, "/Album+");
 
       const report = await fixAsync(blog);
 
@@ -261,8 +257,8 @@ describe("sync/fix regression (outcome-based)", function () {
 
       expect(await getEntry(blog.id, "/Trip")).toBeTruthy();
 
-      await fs.remove(localPath(blog.id, "/Trip+"));
-      await fs.outputFile(localPath(blog.id, "/Trip+"), "not a folder anymore");
+      await folder.remove(blog.id, "/Trip+");
+      await folder.write(blog.id, "/Trip+", "not a folder anymore");
 
       const report = await fixAsync(blog);
 

@@ -21,9 +21,9 @@ var { NotFoundError } = require("./errors");
 // {blogID}/folder/ in the storage bucket, under the blog's own prefix (public
 // like the rest of blog_*, except .git directories, which the bucket policy
 // denies to unsigned requests), and its metadata is models/file in Redis.
-// Built and tested against the same specs as
-// ./local.js. index.js sends a blog's calls here when config.folder_primary
-// names it (./primary.js, #2258 Phase D), and the mirror writes here.
+// index.js sends every call here. It replaced the local-disk backend, whose
+// behaviour it kept (#2258), so a comment's "as on disk" means as a
+// filesystem would do it.
 //
 // - Metadata reads (stat, exists, list, listNames, listAll, walk,
 //   resolveCaseInsensitive) come from models/file, never from ListObjectsV2.
@@ -45,11 +45,11 @@ var { NotFoundError } = require("./errors");
 //   needs none. When a remove empties a directory, it gets a marker, so the
 //   directory survives in S3 as it would on disk and a rebuild of the index
 //   from a listing keeps it.
-// - Paths are normalised as on the local backend (helper/pathNormalizer, NFC,
+// - Paths are normalised as everywhere else (helper/pathNormalizer, NFC,
 //   ".." clamped inside the folder). There are no links on S3, so nothing
 //   here can raise ELOOP.
 //
-// Like the local backend, this relies on one writer per blog at a time (the
+// This relies on one writer per blog at a time (the
 // sync lock): the checks before a write and the index update after it are
 // not atomic with the S3 call.
 
@@ -145,7 +145,7 @@ async function fromS3(fn) {
   }
 }
 
-// Directory entries sort by plain code-unit order, as on the local backend
+// Directory entries sort by plain code-unit order
 // (models/file keeps that order), so a cursor is just the last name of the
 // previous page
 function encodeCursor(name) {
@@ -243,14 +243,12 @@ function opener(blogID, path) {
 
 // The index record of a file small enough to read through the cache, or
 // null for one to read straight from S3. Rejects if there is no such file.
-async function smallFile(blogID, path, relPath, trace) {
+async function smallFile(blogID, path, relPath) {
   var found = path === "/" ? null : await File.get(blogID, path);
 
   if (!found || found.type === "dir") throw new NotFoundError("Not a file: " + relPath);
 
   if (found.size <= config.folder_cache.max_file_bytes) return found;
-
-  if (trace) trace.cache = "direct";
 
   return null;
 }
@@ -264,13 +262,7 @@ var CACHE_DISK_ERRORS = new Set(["ENOSPC", "EDQUOT", "EROFS", "EIO", "EACCES", "
 // disk failing (full, say), resolves to undefined, so the caller reads S3
 // directly instead. An error from fn itself is passed on: by then a response
 // may have started.
-//
-// trace is optional (the shadow reads pass one): an object whose cache
-// property is set to how this read was served, "hit" (the cache had the
-// file), "miss" (it fetched it from S3) or "direct" (not through the cache:
-// over max_file_bytes, or the cache fell back as above). Set per call, so
-// concurrent reads can't mix up their outcomes.
-async function throughCache(blogID, path, found, fn, trace) {
+async function throughCache(blogID, path, found, fn) {
   var failedInside = false;
 
   try {
@@ -284,24 +276,12 @@ async function throughCache(blogID, path, found, fn, trace) {
           failedInside = true;
           throw err;
         }
-      },
-      noteCache(trace)
+      }
     );
   } catch (err) {
-    if (!failedInside && (err.code === "ECHANGED" || CACHE_DISK_ERRORS.has(err.code))) {
-      if (trace) trace.cache = "direct";
-      return undefined;
-    }
+    if (!failedInside && (err.code === "ECHANGED" || CACHE_DISK_ERRORS.has(err.code))) return undefined;
     throw err;
   }
-}
-
-// What the content cache calls with "hit" or "miss", for a trace
-function noteCache(trace) {
-  if (!trace) return undefined;
-  return function (outcome) {
-    trace.cache = outcome;
-  };
 }
 
 var warnedWriteThrough = false;
@@ -331,10 +311,10 @@ async function writeThrough(blogID, path, written, open) {
   }
 }
 
-async function read(blogID, relPath, trace) {
+async function read(blogID, relPath) {
   var path = locate(blogID, relPath);
-  var found = await smallFile(blogID, path, relPath, trace);
-  var data = found && (await throughCache(blogID, path, found, (local) => fs.readFile(local), trace));
+  var found = await smallFile(blogID, path, relPath);
+  var data = found && (await throughCache(blogID, path, found, (local) => fs.readFile(local)));
 
   if (data) return data;
 
@@ -344,8 +324,8 @@ async function read(blogID, relPath, trace) {
 }
 
 // The stream is returned at once and the object opened when it starts, so
-// any failure is emitted as its "error" event, as on the local backend
-function createReadStream(blogID, relPath, options, trace) {
+// any failure is emitted as its "error" event, never thrown
+function createReadStream(blogID, relPath, options) {
   var path = locate(blogID, relPath);
   var stream = new PassThrough();
   var source;
@@ -382,10 +362,10 @@ function createReadStream(blogID, relPath, options, trace) {
         });
         file.on("error", reject);
       });
-    }, trace);
+    });
   }
 
-  smallFile(blogID, path, relPath, trace)
+  smallFile(blogID, path, relPath)
     .then(async function (found) {
       var file = found && (await fromCache(found));
 
@@ -519,7 +499,7 @@ async function write(blogID, relPath, data) {
 
 // A copy is modified now, as fs.copyFile makes it on disk. A move keeps the
 // source's modified time, as a rename does. options.modified (ms) overrides
-// both, for the mirror of a file already on disk (./mirror.js). The source
+// both. The source
 // is copied into the content cache before a move deletes it, rather than
 // moved there: it is the caller's file, maybe on another disk, and copying
 // leaves what happens to it exactly as before, whatever the cache does.
@@ -599,7 +579,7 @@ async function fileAt(blogID, path, relPath) {
 // read-only, and may be evicted once it is no longer recent, so use it
 // straight away: open it, or hand it to a tool, rather than keeping the path.
 // For a tool which runs for longer, see withLocal.
-async function ensureLocal(blogID, relPath, trace) {
+async function ensureLocal(blogID, relPath) {
   var path = locate(blogID, relPath);
 
   // A second try picks up the index catching up with a write in progress
@@ -607,7 +587,7 @@ async function ensureLocal(blogID, relPath, trace) {
     var found = await fileAt(blogID, path, relPath);
 
     try {
-      return await contentCache().get(cached(blogID, path, found), opener(blogID, path), noteCache(trace));
+      return await contentCache().get(cached(blogID, path, found), opener(blogID, path));
     } catch (err) {
       if (err.code !== "ECHANGED" || attempt) throw err;
     }
@@ -899,7 +879,7 @@ async function listAll(blogID, relDir) {
   return (await entriesOf(blogID, path, relDir)).map(toEntry);
 }
 
-// Depth first and sorted by name, as on the local backend, a page of a
+// Depth first and sorted by name, a page of a
 // directory at a time, so a large directory is not held whole (except one
 // without a names set, see models/file's README). A directory
 // which vanishes mid-walk is skipped; the one asked for must exist.

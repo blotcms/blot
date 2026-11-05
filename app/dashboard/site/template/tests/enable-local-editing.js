@@ -1,8 +1,6 @@
 describe("enable local editing", function () {
   global.test.blog();
 
-  const fs = require("fs-extra");
-  const join = require("path").join;
   const Template = require("models/template");
   const enableLocalEditing = require("../save/enable-local-editing");
 
@@ -68,8 +66,8 @@ describe("enable local editing", function () {
 
     expect(err).toBe(failure);
     expect(blogFolder.write).toHaveBeenCalled();
-    expect(fs.existsSync(join(this.blogDirectory, "Templates", template.slug))).toBe(false);
-    expect(fs.existsSync(join(this.blogDirectory, "templates", template.slug))).toBe(false);
+    expect(await require("storage/folder").exists(this.blog.id, "/Templates/" + template.slug)).toBe(false);
+    expect(await require("storage/folder").exists(this.blog.id, "/templates/" + template.slug)).toBe(false);
     expect((await getMetadata(template.id)).localEditing).toBe(false);
   });
 

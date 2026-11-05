@@ -1,5 +1,5 @@
 describe("redirects.conflicts", function () {
-  const fs = require("fs-extra");
+  const folder = require("storage/folder");
   const { promisify } = require("util");
   const build = require("build");
   const Entry = require("models/entry");
@@ -16,14 +16,14 @@ describe("redirects.conflicts", function () {
     };
 
     this.publish = async (path, content) => {
-      await fs.outputFile(this.blogDirectory + path, content);
+      await folder.write(this.blog.id, path, content);
       const entry = await promisify(build)(this.blog, path);
       await promisify(Entry.set)(this.blog.id, path, entry);
       return entry;
     };
 
     this.write = async (path, content) =>
-      await fs.outputFile(this.blogDirectory + path, content);
+      await folder.write(this.blog.id, path, content);
 
     this.useTemplate = async (views) => {
       const { id } = await promisify(Template.create)(

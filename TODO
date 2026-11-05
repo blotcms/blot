@@ -155,7 +155,7 @@ How to reduce likelihood of downtime?
 
 ---
 
-Harden app against S3 being unavailable (generated assets today, blog folders once #2258 lands)
+Harden app against S3 being unavailable (generated assets and blog folders)
 
 Implement folder storage limits (include generated files in this amount?). #2258's Redis index keeps the per-blog byte totals to enforce them from.
 
@@ -267,8 +267,7 @@ How do we think about a shared asset library across templates?
 
 Decide whether or not to revert the preset system – should it only be used for the templates index for explaining the customization features?
 
-Test script for point-in-time restoration of specific blog folders at specific time (e.g. 2 days ago)
-- test npm run restore-folder
+Test script for point-in-time restoration of specific blog folders at specific time (e.g. 2 days ago), from the B2 copy of the bucket (restore-folder.sh restored from EBS snapshots and went with the folder cleanup)
 
 Under templates index
 - Clicking on file in folder pulls up post on preview site ?
@@ -292,7 +291,6 @@ Make sure next bill amount is in all billing emails to customers
 Explain on the about page the websites started out as files in a folder. But they had to be HTML. Blot makes other file types possible too.
 
 Get node container horizontally scalable and multi-region (#1932)
-- blog folders to S3 (#2258)
 
 Add clear bill change info to new blog flow
 
@@ -1331,7 +1329,6 @@ Self-hosting:
 ---
 
 Flaky specs (newest first; see "Flaky specs" in CLAUDE.md). Remove an entry when its fix merges.
-- 5 Nov 2026, `app/clients/git` lane (test 4): three git client specs, including "git store: pushes refuses a push over the limit, with the size, and gives the cache its room back", failed with `Error: Lock was lost before release: blog:…:folder-lock` (`ECOMPROMISED`, from `app/sync/lock.js` doRelease via `app/sync/index.js:168`) on master 94c4327de (#2537); passed on re-run. Run: https://github.com/blotcms/blot/actions/runs/42026054270/job/127240433356. Investigate: whether the folder lock's TTL or heartbeat (changed in 2bdc01f8f) can lapse when a slow runner blocks the event loop during a large-push spec, and whether those specs should use a longer lock TTL. Production showed no lost locks after the same code deployed.
 - 5 Nov 2026, `app/helper/tests/drain.js` "drain lets an in-flight request finish before resolving": `Expected true to be false.` (line 48) on master 26fdffd73 (#2458) and again on 94c4327de (#2537), neither of which touches drain; passed on re-run. Runs: https://github.com/blotcms/blot/actions/runs/42022737821, https://github.com/blotcms/blot/actions/runs/42026054270/job/127240433491. Investigate: not yet read; check whether the assertion at line 48 depends on timers, so drain can resolve before the in-flight request ends on a slow runner.
 - 5 Nov 2026, `app/storage/folder/tests/cache.js` "storage/folder cache put counts towards the budget like any other entry" (line 522): it saw 2 evictions, not the count it expected, on an unrelated PR (#2540, store-perf-push, git store push pipelining only); passed on re-run. Run: https://github.com/blotcms/blot/actions/runs/42019107506. Investigate: whether eviction order or count depends on mtime/atime resolution or on a background sweep finishing, and make the spec wait for the put to settle or compare against the budget rather than an exact count.
 - 3 Nov 2026, `app/clients/google-drive/serviceAccount/tests/hotDocPoller.js` "google drive hotDocPoller spaces docs.get slots 250ms apart for a service account": `Expected 2 to equal 3.` (line 200) on master after an unrelated merge (#2460, shadow-mode logging only, cdf74d9e7). Run: https://github.com/blotcms/blot/actions/runs/41723548264/job/126222287641. Investigate: the spec counts docs.get calls made within a wall-clock window of 250 ms slots, so a slow runner fits one slot fewer. Use a fake clock (jasmine.clock) or count slots rather than calls within a fixed time.

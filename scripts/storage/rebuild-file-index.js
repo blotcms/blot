@@ -1,27 +1,24 @@
 // Rebuilds a blog's folder index (models/file) from a full listing of its
-// folder in the storage bucket, {blogID}/folder/. Only for blogs with a copy
-// in S3 (mirrored and backfilled, or on S3): for any other blog the listing
-// is empty and the index would be emptied.
+// folder in the storage bucket, {blogID}/folder/. This is the check of the
+// index against S3, and its repair: S3 is the folder, and the index is
+// derived from it (the backend writes to S3 first and to the index after, so
+// a crash leaves the index behind S3, never ahead).
 //
-// For a blog on S3 (config.folder_primary, #2258 Phase D), the index is what
-// every read goes by, and --apply empties it before refilling it: reads which
-// came in meanwhile (visitors take no lock) would see a partial or empty
-// folder. So --apply refuses a blog on S3, unless --via-disk: then, under the
-// blog's sync lock, it checks the blog's disk copy is not behind S3, marks
-// the blog's mirror behind (mirror.markBehind), which sends its reads to the
-// disk copy, waits a moment for reads already sent to S3, and rebuilds. The
-// blog is left in the mirror's dirty set, so the next hourly reconcile
-// compares S3 and the index with the disk, repairs what differs, and puts the
-// blog back on S3 by itself. Until then it is served from disk, and its
-// changes are mirrored to S3 as for any blog on disk.
-//
-//   node scripts/storage/rebuild-file-index.js <blogID> [--apply] [--no-hash] [--via-disk]
+//   node scripts/storage/rebuild-file-index.js <blogID> [--apply --live] [--no-hash]
 //
 // Without --apply it only lists the bucket and reports what the index would
-// hold, next to what it holds now. With --apply it replaces the index, under
-// the blog's sync lock so no sync writes while it runs. Files are downloaded
-// to compute their SHA-1 unless --no-hash; without hashes, ensureLocal still
-// works but anything which compares hashes sees every file as changed.
+// hold, next to what it holds now.
+//
+// With --apply it replaces the index, under the blog's sync lock so no sync
+// writes while it runs. The listing (and the hashing) is done first, so the
+// index is only empty or partial while the records are written to Redis: a
+// few seconds for a large blog. Reads take no lock, so a visitor or a build
+// in that window sees part of the folder. Hence --live as well, to say that
+// is understood; --apply alone refuses.
+//
+// Files are downloaded to compute their SHA-1 unless --no-hash; without
+// hashes, ensureLocal still works but anything which compares hashes sees
+// every file as changed.
 //
 // A file's modified time becomes the time its object was written, so a time
 // kept by a move into the folder is lost. S3 can hold a file "a" beside
@@ -33,35 +30,31 @@ const File = require("models/file");
 const Blog = require("models/blog");
 const hold = require("sync/hold");
 const backend = require("storage/folder/s3");
-const mirror = require("storage/folder/mirror");
-const primary = require("storage/folder/primary");
-const client = require("models/client");
 const { promisify } = require("util");
-
-// How long reads which chose S3 just before the blog was marked behind get
-// to finish before its index is emptied
-const SETTLE_MS = 2000;
 
 function usage(message) {
   if (message) console.error(message + "\n");
 
-  console.error("Usage: node scripts/storage/rebuild-file-index.js <blogID> [--apply] [--no-hash] [--via-disk]");
+  console.error("Usage: node scripts/storage/rebuild-file-index.js <blogID> [--apply --live] [--no-hash]");
   process.exit(2);
 }
 
 function parse(argv) {
-  const options = { apply: false, hash: true, viaDisk: false };
+  const options = { apply: false, live: false, hash: true };
 
   for (const arg of argv) {
     if (arg === "--apply") options.apply = true;
+    else if (arg === "--live") options.live = true;
     else if (arg === "--no-hash") options.hash = false;
-    else if (arg === "--via-disk") options.viaDisk = true;
     else if (arg.startsWith("--")) usage("Unknown argument " + arg);
     else if (options.blogID) usage("Only one blogID");
     else options.blogID = arg;
   }
 
   if (!options.blogID) usage();
+  if (options.apply && !options.live) {
+    usage("--apply empties the index while it is rewritten, and reads in that window see part of the folder. Pass --live too (see the header).");
+  }
 
   return options;
 }
@@ -118,50 +111,21 @@ function report(label, counts) {
   }
 }
 
-function failure(code, message) {
-  const err = new Error(message);
-  err.code = code;
-  return err;
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// Replaces a blog's index with one built from S3, under its sync lock.
-// Rejects with EONS3 for a blog on S3 unless options.viaDisk, and with
-// ECONFLICT if its disk copy is behind S3 (see the header). Resolves to what
-// models/file's rebuild counted, plus { viaDisk } when the blog was sent to
-// its disk copy for it. options: { hash, viaDisk, settleMs }
+// Replaces a blog's index with one built from S3, under its sync lock. The
+// whole listing is read (and hashed) before the index is touched, so the
+// window in which reads see a partial index is only the Redis writes.
+// Resolves to what models/file's rebuild counted. options: { hash }
 async function rebuild(blogID, options) {
   options = options || {};
 
   return hold(blogID, async function () {
-    let viaDisk = false;
+    const records = [];
 
-    if (await primary.usesS3(blogID)) {
-      if (!options.viaDisk) {
-        throw failure(
-          "EONS3",
-          "This blog is on S3, so its reads go by the index this would empty. Pass --via-disk to serve it from its disk copy while the index is rebuilt."
-        );
-      }
-
-      if (await client.sIsMember(primary.DIRTY_KEY, blogID)) {
-        throw failure(
-          "ECONFLICT",
-          "This blog's disk copy is behind S3, so it can't serve the blog meanwhile. Run scripts/storage/backfill-folder.js --blog " + blogID + " --apply first."
-        );
-      }
-
-      await mirror.markBehind(blogID);
-      await sleep(options.settleMs === undefined ? SETTLE_MS : options.settleMs);
-      viaDisk = true;
+    for await (const record of backend.indexRecords(blogID, { hash: options.hash !== false })) {
+      records.push(record);
     }
 
-    const result = await backend.rebuildIndex(blogID, { hash: options.hash !== false });
-
-    return Object.assign(result, { viaDisk: viaDisk });
+    return File.rebuild(blogID, records);
   });
 }
 
@@ -180,21 +144,11 @@ async function main() {
   if (!options.apply) {
     // No need to hash just to count
     report("From S3:", await count(blogID, { hash: false }));
-    if (await primary.usesS3(blogID)) console.log("This blog is on S3: --apply needs --via-disk (see the header)");
-    console.log("Dry run: pass --apply to rebuild the index");
+    console.log("Dry run: pass --apply --live to rebuild the index");
     return;
   }
 
-  const { viaDisk, ...result } = await rebuild(blogID, options);
-
-  report("Rebuilt:", result);
-
-  if (viaDisk) {
-    console.log(
-      "Served from its disk copy until the next hourly reconcile checks S3 against it and puts it back on S3 " +
-        "(or run scripts/storage/backfill-folder.js --blog " + blogID + " --apply now)."
-    );
-  }
+  report("Rebuilt:", await rebuild(blogID, options));
 }
 
 if (require.main === module) {
@@ -203,7 +157,7 @@ if (require.main === module) {
       process.exit(0);
     },
     function (err) {
-      console.error(err.code === "EONS3" || err.code === "ECONFLICT" ? err.message : err);
+      console.error(err);
       process.exit(1);
     }
   );

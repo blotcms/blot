@@ -34,8 +34,8 @@ var { join, dirname, basename } = require("path");
 // (a Buffer, its spool file or the source of a writeFrom) under the version
 // it has just recorded, so the read which usually follows a write is a hit.
 // They go through the same tmp file, check and rename as a download, so a
-// source which changed after its upload (a mirrored file rewritten on disk,
-// say) is refused rather than cached under the wrong version. A put is not a
+// source which changed after its upload (rewritten by its owner while it was
+// uploaded, say) is refused rather than cached under the wrong version. A put is not a
 // hit or a miss, and its bytes are not fetchedBytes; it counts in filled.
 //
 // The LRU is bounded by bytes. Recency is the entry's modification time,

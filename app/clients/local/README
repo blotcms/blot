@@ -30,7 +30,7 @@ The local folder client syncs a blog from a directory on the developer's machine
 
 ## Source directory
 
-The provider of a Local blog is a directory outside the blog folder, so the blog can sit on either backend of `storage/folder`, disk or S3 (MinIO in development). It is `data/local-sources/{handle}`, or `{BLOT_LOCAL_SOURCE_DIRECTORY}/{handle}` when that variable is set. There is no dashboard field for it. It must not be inside `data/blogs`. It is a path on the developer's machine, not a blog folder, so the client uses plain `fs` there.
+The provider of a Local blog is a directory outside the blog folder, since the blog folder is in the storage bucket (MinIO in development). It is `data/local-sources/{handle}`, or `{BLOT_LOCAL_SOURCE_DIRECTORY}/{handle}` when that variable is set. There is no dashboard field for it. It is a path on the developer's machine, not a blog folder, so the client uses plain `fs` there.
 
 - **Source to Blot** (`watch.js`, `sync.js`): chokidar events on the source become `storage/folder` writes (`writeFrom`, only when size or SHA-1 differ), `mkdir`s and removes, followed by `folder.update(path)`, all under the sync lock.
 - **Blot to source** (`write.js`, `remove.js`): Blot's own changes (template edits, previews) go to the source directory and then to `storage/folder`.
@@ -38,7 +38,7 @@ The provider of a Local blog is a directory outside the blog folder, so the blog
 
 ### Existing blogs
 
-Before this change the blog folder `data/blogs/{blogID}` was the watched directory. On first setup of a Local blog whose source directory does not exist, setup copies the blog's folder into `data/local-sources/{handle}` (the folder is not touched, and the blog's S3 mirror is marked behind so it is repaired from the disk). Nothing is lost; from then on edit the files in `data/local-sources/{handle}`. The copy is made in `{dir}.seeding` and renamed into place once complete, so a failed copy leaves no partial directory. If the handle changes, the watcher moves to the new name, which has no directory, so the folder is copied there; the old directory is left where it is and never deleted. `npm run fork` and `translate` now write into the source directory too.
+The blog folder on disk used to be the watched directory. On first setup of a Local blog whose source directory does not exist, setup copies the blog's folder into `data/local-sources/{handle}` (the folder is not touched). Nothing is lost; from then on edit the files in `data/local-sources/{handle}`. The copy is made in `{dir}.seeding` and renamed into place once complete, so a failed copy leaves no partial directory. If the handle changes, the watcher moves to the new name, which has no directory, so the folder is copied there; the old directory is left where it is and never deleted. `npm run fork` and `translate` now write into the source directory too.
  It serves as a reference implementation that demonstrates the core responsibilities and contract that all clients must fulfill.
 
 ## Architecture
@@ -243,8 +243,8 @@ Files matching these patterns cannot be written or synced:
 ### Environment
 The local client is only registered if `config.environment === "development"`. It is not available in production.
 
-### Blog Folder Directory
-The `blog_folder_dir` configuration specifies where blog folders are stored on the server. All local file paths are resolved relative to this directory.
+### Source Directory
+`BLOT_LOCAL_SOURCE_DIRECTORY` sets where the source directories are (default `data/local-sources`). The blog folders themselves are in the storage bucket (MinIO in development), reached through `storage/folder`.
 
 ## Development and Testing
 

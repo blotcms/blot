@@ -1,5 +1,5 @@
 describe("transformer", function () {
-  var fs = require("fs-extra");
+  var folder = require("storage/folder");
   var Keys = require("../keys");
   var client = require("models/client");
   var blogKey = require("models/blog/key");
@@ -32,60 +32,73 @@ describe("transformer", function () {
   });
 
   it("transforms a file with windows-style slashes and incorrect case in the blog's directory", function (done) {
+    var test = this;
+    var from = "/" + this.path;
     this.path = "/Hello/new world.txt";
-    fs.moveSync(this.localPath, this.blogDirectory + this.path);
 
-    this.transformer.lookup('Hello\\new%20World.txt', this.transform, function (err, result) {
-      if (err) return done.fail(err);
+    folder.move(this.blog.id, from, this.path).then(function () {
+      test.transformer.lookup('Hello\\new%20World.txt', test.transform, function (err, result) {
+        if (err) return done.fail(err);
 
-      expect(result).toEqual(jasmine.any(Object));
-      expect(result.size).toEqual(jasmine.any(Number));
-      done();
-    });
+        expect(result).toEqual(jasmine.any(Object));
+        expect(result.size).toEqual(jasmine.any(Number));
+        done();
+      });
+    }, done.fail);
   });
 
   it("transforms a file whose path has been URI encoded", function (done) {
+    var test = this;
+    var from = "/" + this.path;
     this.path = "/Hello world.txt";
-    fs.moveSync(this.localPath, this.blogDirectory + this.path);
-    this.path = encodeURI(this.path);
 
-    this.transformer.lookup(this.path, this.transform, function (err, result) {
-      if (err) return done.fail(err);
+    folder.move(this.blog.id, from, this.path).then(function () {
+      test.path = encodeURI(test.path);
 
-      expect(result).toEqual(jasmine.any(Object));
-      expect(result.size).toEqual(jasmine.any(Number));
-      done();
-    });
+      test.transformer.lookup(test.path, test.transform, function (err, result) {
+        if (err) return done.fail(err);
+
+        expect(result).toEqual(jasmine.any(Object));
+        expect(result.size).toEqual(jasmine.any(Number));
+        done();
+      });
+    }, done.fail);
   });
 
   it("transforms a file whose path with incorrect case contains an accent and URI encoded characters", function (done) {
+    var test = this;
+    var from = "/" + this.path;
     this.path = "/Hållœ wòrld.txt";
-    fs.moveSync(this.localPath, this.blogDirectory + this.path);
-    this.path = encodeURI(this.path);
 
-    this.transformer.lookup(this.path.toLowerCase(), this.transform, function (
-      err,
-      result
-    ) {
-      if (err) return done.fail(err);
+    folder.move(this.blog.id, from, this.path).then(function () {
+      test.path = encodeURI(test.path);
 
-      expect(result).toEqual(jasmine.any(Object));
-      expect(result.size).toEqual(jasmine.any(Number));
-      done();
-    });
+      test.transformer.lookup(test.path.toLowerCase(), test.transform, function (
+        err,
+        result
+      ) {
+        if (err) return done.fail(err);
+
+        expect(result).toEqual(jasmine.any(Object));
+        expect(result.size).toEqual(jasmine.any(Number));
+        done();
+      });
+    }, done.fail);
   });
 
-  it("will not transform a file that does not exist", function (done) {
+  it("will not transform a file that does not exist", async function () {
     var spy = jasmine.createSpy().and.callFake(this.transform);
 
-    fs.removeSync(this.blogDirectory + "/" + this.path);
+    await folder.remove(this.blog.id, "/" + this.path);
 
-    this.transformer.lookup(this.path, spy, function (err, result) {
-      expect(err instanceof Error).toBe(true);
-      expect(err.code).toEqual("ENOENT");
-      expect(spy).not.toHaveBeenCalled();
-      expect(result).not.toBeTruthy();
-      done();
+    await new Promise((resolve) => {
+      this.transformer.lookup(this.path, spy, function (err, result) {
+        expect(err instanceof Error).toBe(true);
+        expect(err.code).toEqual("ENOENT");
+        expect(spy).not.toHaveBeenCalled();
+        expect(result).not.toBeTruthy();
+        resolve();
+      });
     });
   });
   it("will not resolve a source that climbs out of the blog's static folder", async function () {
@@ -117,11 +130,10 @@ describe("transformer", function () {
   });
 
   it("transforms a file in the blog's static directory", async function () {
-    var fullPath = this.blogDirectory + "/" + this.path;
     // Generated assets live in the blog's underscore directories
     var path = "/_image_cache/" + Date.now() + "-" + this.path;
 
-    await assets.write(this.blog.id, path, await fs.readFile(fullPath));
+    await assets.write(this.blog.id, path, await folder.read(this.blog.id, "/" + this.path));
 
     await new Promise((resolve, reject) => {
       this.transformer.lookup(path, this.transform, function (err, result) {
@@ -135,10 +147,9 @@ describe("transformer", function () {
   });
 
   it("transforms a file in the blog's static directory linked with an escaped name", async function () {
-    var fullPath = this.blogDirectory + "/" + this.path;
     var path = "/_image_cache/" + Date.now() + "/说明.png";
 
-    await assets.write(this.blog.id, path, await fs.readFile(fullPath));
+    await assets.write(this.blog.id, path, await folder.read(this.blog.id, "/" + this.path));
 
     await new Promise((resolve, reject) => {
       this.transformer.lookup(
@@ -184,7 +195,6 @@ describe("transformer", function () {
   it("re-transforms the file if its contents changes", function (done) {
     var test = this;
     var spy = jasmine.createSpy().and.callFake(test.transform);
-    var path = test.blogDirectory + "/" + test.path;
 
     test.transformer.lookup(test.path, test.transform, function (
       err,
@@ -193,16 +203,16 @@ describe("transformer", function () {
       if (err) return done.fail(err);
 
       // Modify the file
-      fs.outputFileSync(path, Date.now().toString());
+      folder.write(test.blog.id, "/" + test.path, Date.now().toString()).then(function () {
+        test.transformer.lookup(test.path, spy, function (err, secondResult) {
+          if (err) return done.fail(err);
 
-      test.transformer.lookup(test.path, spy, function (err, secondResult) {
-        if (err) return done.fail(err);
+          expect(spy).toHaveBeenCalled();
+          expect(firstResult).not.toEqual(secondResult);
 
-        expect(spy).toHaveBeenCalled();
-        expect(firstResult).not.toEqual(secondResult);
-
-        done();
-      });
+          done();
+        });
+      }, done.fail);
     });
   });
 
