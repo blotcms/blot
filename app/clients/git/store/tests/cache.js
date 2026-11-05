@@ -411,6 +411,29 @@ describe("git store cache", function () {
       expect(fs.existsSync(path.join(dir, "locks", "walk.lock"))).toBe(false);
     });
 
+    it("never lets concurrent large writes in several processes take the same room", async function () {
+      for (let round = 0; round < 5; round++) {
+        const sub = path.join(dir, "round-" + round);
+        const instances = [0, 1, 2].map(() => {
+          const cache = createCache({ dir: sub, maxBytes: 1000, bucketMs: 1, touchEveryMs: 0, walkGapMs: 1e9 });
+          caches.push(cache);
+          return cache;
+        });
+        await Promise.all(instances.map((cache) => cache.settle()));
+
+        // Each is 400 bytes on disk: any two fit, three do not
+        const stored = await Promise.all(instances.map((cache, i) => cache.put("big" + i, data(380))));
+        expect(size(380)).toBe(400);
+        expect(stored.filter(Boolean).length).toBeLessThanOrEqual(2);
+        expect(entryBytes(sub)).toBeLessThanOrEqual(1000);
+
+        // and the same through streams, as packs are written through
+        const streamed = await Promise.all(instances.map((cache, i) => cache.putStream("s" + i, Readable.from([data(300)]), 300)));
+        expect(entryBytes(sub)).toBeLessThanOrEqual(1000);
+        expect(stored.filter(Boolean).length + streamed.filter(Boolean).length).toBeGreaterThan(0);
+      }
+    });
+
     it("lets one process walk at a time", async function () {
       const a = open({ maxBytes: 10000 });
       const b = open({ maxBytes: 10000 });
@@ -595,6 +618,36 @@ describe("git store cache", function () {
 
       state.other = 0;
       await (await cache.reserve(60 * 1000)).release();
+    });
+
+    it("counts every process's reservations not yet written against the floor", async function () {
+      // 150,000 free and a floor of 100,000: room for one of these, not two,
+      // though neither has written anything yet
+      const state = { other: 850 * 1000 };
+      // Writes of 32 KB and more are claimed as reservations are
+      const a = open({ maxBytes: 1e9, minFreePercent: 10, statfs: fakeDisk(state), claimWritesFrom: 32 * 1024 });
+      const b = open({ maxBytes: 1e9, minFreePercent: 10, statfs: fakeDisk(state), claimWritesFrom: 32 * 1024 });
+      const first = await a.reserve(40 * 1000);
+
+      let error;
+      await b.reserve(40 * 1000).catch((err) => (error = err));
+      expect(error).toEqual(jasmine.any(NoRoomError));
+      expect(error.message).toMatch(/keeps 10% of it free/);
+
+      await first.release();
+      await (await b.reserve(40 * 1000)).release();
+
+      // A large write in flight counts too, from the moment it is admitted
+      // (the source is first read once the write has its room)
+      let admitted;
+      const reading = new Promise((resolve) => (admitted = resolve));
+      const source = new Readable({ read: () => admitted() });
+      const write = a.putStream("big", source, 40 * 1000);
+      await reading;
+      await expectNoRoom(b.reserve(40 * 1000));
+      source.push(data(40 * 1000));
+      source.push(null);
+      expect(await write).toBe(true);
     });
   });
 

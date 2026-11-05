@@ -87,6 +87,9 @@ const DEFAULTS = {
   heartbeatMs: 30 * 1000,
   // A process whose heartbeat is older than this is gone
   staleMs: 10 * MINUTE,
+  // A write this big or bigger (or a 64th of the cap, if less) is claimed
+  // across processes before it starts, as a reservation is (see admit)
+  claimWritesFrom: 1024 * 1024,
   // A walk at least this often, and no more often than walkGapMs unless asked
   walkEveryMs: 6 * 60 * MINUTE,
   walkGapMs: 30 * 1000,
@@ -431,10 +434,30 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
   // ---- Writing ------------------------------------------------------------
 
   // Takes `bytes` for a write in flight if the cap and the disk allow it.
-  // Decides with no await after its last read, so concurrent writes in this
-  // process cannot both take the last of the room.
+  //
+  // A large write (a pack written through, say) is claimed as a reservation
+  // is (see claim): published first, then checked against every process's,
+  // and withdrawn if the total is over, so concurrent writes in several
+  // processes cannot each take the same room. A small one is checked against
+  // the others' counts as last read (at most refreshMs old, and read again
+  // when it is near the cap), and decided with no await after that read, so
+  // concurrent writes in this process cannot both take the last of the room;
+  // what small writes racing in other processes can overshoot by is a few of
+  // them, which the high water mark leaves room for.
   async function admit(bytes) {
     if (bytes > maxBytes) return false;
+
+    if (bytes >= Math.min(o.claimWritesFrom, Math.floor(maxBytes / 64))) {
+      const taken = await take(bytes, "write");
+      if (!taken.ok) {
+        counters.declined++;
+        requestWalk();
+        return false;
+      }
+      if (estimate() > o.highWater * maxBytes) requestWalk();
+      return true;
+    }
+
     if (Date.now() - refreshedAt > o.refreshMs) {
       const near = estimate() + bytes > o.highWater * maxBytes;
       const fresh = refresh().catch(() => {});
@@ -442,7 +465,7 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
     }
     const space = await readDisk();
 
-    if (estimate() + bytes > maxBytes || (space && space.free - bytes < space.floor)) {
+    if (estimate() + bytes > maxBytes || (space && space.free - heldBytes() - bytes < space.floor)) {
       counters.declined++;
       requestWalk();
       return false;
@@ -450,6 +473,14 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
     writingBytes += bytes;
     if (estimate() > o.highWater * maxBytes) requestWalk();
     return true;
+  }
+
+  // The end of a write admit() took room for: what was in flight is either a
+  // written entry now (counted by noteAdded) or nothing
+  async function finishWrite(bytes, written) {
+    writingBytes -= bytes;
+    if (written) await noteAdded(bytes);
+    else publishSoon();
   }
 
   // Stores data under key. Returns false if it was not stored (too big for
@@ -472,12 +503,11 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
       await fs.rename(tmp, entryPath(name));
     } catch (err) {
       await Promise.all([tmp, entryPath(name)].map((file) => fs.rm(file, { force: true }).catch(() => {})));
+      await finishWrite(bytes, false);
       return false;
-    } finally {
-      writingBytes -= bytes;
     }
 
-    await noteAdded(bytes);
+    await finishWrite(bytes, true);
     return true;
   }
 
@@ -538,12 +568,11 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
       give();
       if (handle) await handle.close().catch(() => {});
       await Promise.all([tmp, entryPath(name)].map((file) => fs.rm(file, { force: true }).catch(() => {})));
+      await finishWrite(bytes, false);
       return false;
-    } finally {
-      writingBytes -= bytes;
     }
 
-    await noteAdded(bytes);
+    await finishWrite(bytes, true);
     return true;
   }
 
@@ -600,8 +629,11 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
       if (reservation.released) return;
       reservation.released = true;
       reservedBytes -= reservation.bytes;
-      publishSoon();
-      await fs.rm(reservation.dir, { recursive: true, force: true });
+      try {
+        await fs.rm(reservation.dir, { recursive: true, force: true });
+      } finally {
+        await publishNow();
+      }
     };
 
     return reservation;
@@ -615,39 +647,68 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
   async function claim(bytes) {
     if (!(bytes >= 0)) throw new Error("Cannot reserve " + bytes + " bytes");
 
+    const taken = await take(bytes, "reserve");
+    if (taken.ok) {
+      if (estimate() > o.highWater * maxBytes) requestWalk();
+      return;
+    }
+    if (taken.reason === "disk") {
+      requestWalk();
+      throw new NoRoomError(
+        "Not enough room for " + bytes + " bytes of scratch space: the disk has " + Math.max(0, Math.floor(taken.space.free)) +
+          " bytes free, " + taken.outstanding + " of them promised to work in flight, and keeps " + minFreePercent + "% of it free"
+      );
+    }
+    throw new NoRoomError(
+      "Not enough room for " + bytes + " bytes of scratch space: the cache holds " + maxBytes +
+        " bytes and " + taken.outstanding + " are in use by pushes and writes in flight"
+    );
+  }
+
+  // Takes `bytes` of the budget, for a reservation (`kind` "reserve") or a
+  // write in flight ("write"), as every process on the host sees it: the
+  // claim is published first, then checked against every live process's
+  // reservations and writes in flight (and, for a write, the entries), and
+  // withdrawn if the total is over the cap. So of several processes claiming
+  // at once none can take room another has taken; all may fail, so a failure
+  // the others caused is tried again a couple of times after a short random
+  // wait.
+  //
+  // The disk must keep its floor free after every claim outstanding on the
+  // host, this one included: room promised to a reservation or a write is
+  // not on disk yet, so statfs still shows it free. A reservation whose work
+  // has already written part of its room is counted in full, which errs on
+  // the side of refusing.
+  //
+  // Resolves { ok } or { ok: false, reason: "budget" | "disk", outstanding,
+  // space }; when ok, `bytes` stays added to reservedBytes or writingBytes.
+  async function take(bytes, kind) {
+    const add = (n) => (kind === "write" ? (writingBytes += n) : (reservedBytes += n));
+
     for (let attempt = 0; ; attempt++) {
-      reservedBytes += bytes;
+      add(bytes);
       await publishNow();
       await refresh().catch(() => {});
-      const held = heldBytes();
+      const outstanding = heldBytes();
+      const total = kind === "write" ? estimate() : outstanding;
       const space = await readDisk(true);
-      const diskShort = space && space.free - bytes < space.floor;
+      const diskShort = !!space && space.free - outstanding < space.floor;
 
-      if (held <= maxBytes && !diskShort) {
-        if (estimate() > o.highWater * maxBytes) requestWalk();
-        return;
-      }
+      if (total <= maxBytes && !diskShort) return { ok: true };
 
-      reservedBytes -= bytes;
+      add(-bytes);
       publishSoon();
+      const failed = { ok: false, reason: diskShort ? "disk" : "budget", outstanding: outstanding - bytes, space };
 
-      if (diskShort) {
-        requestWalk();
-        throw new NoRoomError(
-          "Not enough room for " + bytes + " bytes of scratch space: the disk has " + Math.max(0, Math.floor(space.free)) +
-            " bytes free and keeps " + minFreePercent + "% of it free"
-        );
-      }
-      // Would fit but for the others' reservations, which may be withdrawn
-      // claims racing this one
-      if (attempt < 2 && othersReserved() > 0 && reservedBytes + writingBytes + bytes <= maxBytes) {
+      // Would fit but for the others' claims, which may be withdrawn ones
+      // racing this one
+      const others = othersReserved();
+      const fitsAlone = total - others <= maxBytes && (!space || space.free - (outstanding - others) >= space.floor);
+      if (attempt < 2 && others > 0 && fitsAlone) {
         await sleep(5 + Math.random() * 45);
         continue;
       }
-      throw new NoRoomError(
-        "Not enough room for " + bytes + " bytes of scratch space: the cache holds " + maxBytes +
-          " bytes and " + (held - bytes) + " are in use by pushes and writes in flight"
-      );
+      return failed;
     }
   }
 
