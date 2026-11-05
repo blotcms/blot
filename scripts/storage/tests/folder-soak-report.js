@@ -99,6 +99,51 @@ describe("scripts/storage/folder-soak-report", function () {
     expect(report.costMarkdown(cost).join("\n")).toContain("GETs unknown for");
   });
 
+  // The same counters for blogs on S3, the reverse direction
+  function reverseCounters() {
+    var c = {};
+    var forward = counters();
+
+    Object.keys(forward).forEach(function (field) {
+      c[field.indexOf("cache:") === 0 ? field : "reverse:" + field] = forward[field];
+    });
+
+    c["reverse:read:mismatched"] = 1;
+    c["reverse:read:transient"] = 3;
+    c["reverse:read:behind"] = 2;
+
+    return c;
+  }
+
+  it("prints blogs on S3 in a table of their own", function () {
+    var summary = summarise(reverseCounters());
+    var text = report.markdown({
+      from: "a",
+      to: "b",
+      windowHours: 10,
+      summary: summary,
+      cost: report.costEstimate(summary, 10, { rate: 0.1, writesPerDay: 0 }, null),
+    });
+
+    expect(summary.ops).toEqual({});
+    expect(text).toContain("Blogs on S3 (S3-primary vs disk copy)");
+    expect(text).toContain("| `read` | <=1 / <=1 | <=1 / <=100 | 0.50 | 200 |");
+    expect(text).toContain("Reverse mismatches: 1 of 610 sampled (3 transient");
+    expect(text).toContain("2 on a disk copy already marked behind");
+    expect(text).not.toContain("Nothing sampled");
+  });
+
+  it("counts reads of blogs on S3 at the reverse rate", function () {
+    var c = reverseCounters();
+
+    Object.assign(c, counters());
+
+    var cost = report.costEstimate(summarise(c), 10, { rate: 0.1, reverseRate: 0.5, writesPerDay: 0 }, null);
+
+    // (200 + 10) / 0.1 forward, (200 + 10) / 0.5 reverse, per 10 h * 730
+    expect(cost.readsPerMonth).toBeCloseTo((210 / 0.1 / 10) * 730 + (210 / 0.5 / 10) * 730, 3);
+  });
+
   it("includes the hour bucket --since falls in", async function () {
     var shadowReport = require("../shadow-report");
     var loaded;

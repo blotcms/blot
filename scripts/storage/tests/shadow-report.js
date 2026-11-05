@@ -66,6 +66,45 @@ describe("scripts/storage/shadow-report", function () {
     expect(text).toContain("75.00% hits");
   });
 
+  it("summarises the reverse direction apart, and prints it as its own table", function () {
+    var summary = summarise({
+      "read:sampled": 10,
+      "read:matched": 10,
+      "reverse:read:sampled": 100,
+      "reverse:read:matched": 97,
+      "reverse:read:mismatched": 1,
+      "reverse:read:mismatch:bytes": 1,
+      "reverse:read:behind": 2,
+      "reverse:read:behind:size": 2,
+      "reverse:read:s3:le:2": 100,
+      "reverse:read:s3:hit:le:2": 100,
+      "reverse:read:local:le:1": 100,
+    });
+
+    expect(summary.ops.read.sampled).toEqual(10);
+    expect(summary.ops.read.mismatched).toEqual(0);
+    expect(summary.reverse.ops.read.sampled).toEqual(100);
+    expect(summary.reverse.ops.read.mismatchRate).toEqual(0.01);
+    expect(summary.reverse.ops.read.behind).toEqual(2);
+    expect(summary.reverse.ops.read.behindKinds).toEqual({ size: 2 });
+    expect(summary.reverse.ops.read.s3ByCache.hit.count).toEqual(100);
+
+    var text = format(Object.assign({ hours: 24, from: "a", to: "b" }, summary));
+
+    expect(text).toContain("S3-primary vs disk copy");
+    expect(text).toContain("read disk copy behind: size 2");
+    expect(text).toContain("read mismatch: bytes 1");
+  });
+
+  it("prints a reverse table when only blogs on S3 were sampled", function () {
+    var summary = summarise({ "reverse:stat:sampled": 4, "reverse:stat:matched": 4 });
+    var text = format(Object.assign({ hours: 1, from: "a", to: "b" }, summary));
+
+    expect(Object.keys(summary.ops)).toEqual([]);
+    expect(text).not.toContain("Nothing sampled. Is");
+    expect(text).toContain("S3-primary vs disk copy");
+  });
+
   it("says so when nothing was sampled", function () {
     var summary = summarise({});
 

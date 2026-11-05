@@ -21,6 +21,21 @@ var { NotFoundError } = require("./errors");
 // max_compare_bytes have their sizes compared instead of their bytes, and
 // hashing is done a chunk at a time so a big file never blocks the loop.
 //
+// Reverse shadow reads (#2258 Phase D): for a blog on S3 (./primary.js) it
+// runs the other way round. S3 answered the caller, and a sample of those
+// reads (config.folder_shadow.reverse_rate, or rate when that is unset) is
+// repeated against the blog's disk copy, which ./primary.js keeps in step
+// behind S3. Everything below applies the same way, with the sides' roles
+// swapped: the caller's own outcome is S3's, the disk is read afresh, and a
+// mismatch means S3 served something the disk copy would not have. The disk
+// copy is written just after S3 by every change, so a read which raced one
+// differs for a moment; the recheck sees it agree and counts it as
+// transient. A mismatch which outlasts the recheck on a blog whose disk copy
+// is known to be behind (primary.DIRTY_KEY) counts as {op}:behind instead:
+// the reconcile is already repairing that copy, and S3 did nothing wrong.
+// Never for a blog whose backend a spec chose (index.js useBackend), which
+// has no disk copy.
+//
 // What is compared, per call:
 //
 //   read                    the SHA-1 and length of the bytes each returned
@@ -76,10 +91,21 @@ var { NotFoundError } = require("./errors");
 //   cache:{counter}         the content cache's hits, misses, evictions,
 //                           fetchedBytes, changed and filled (entries its
 //                           write-through added) since the last flush
+//   reverse:{field}         each {op} field above, for the reverse
+//                           direction: "reverse:read:sampled", and so on.
+//                           Forward fields have no prefix, as before there
+//                           were two directions. For read and ensureLocal the
+//                           S3 latency is the caller's own, with its cache
+//                           outcome; for the streamed calls both sides are
+//                           read again, as forward.
+//   reverse:{op}:behind     reverse only: mismatches on a disk copy already
+//   reverse:{op}:behind:{kind}  known to be behind S3 (not counted as
+//                           mismatched)
 //
 // No path goes to Redis: scripts/storage/shadow-report.js turns these into
 // a summary. A mismatch or S3 error is logged on the host with its path, once
-// per blog, call, kind and path, and at most LOG_LIMIT lines a minute.
+// per direction, blog, call, kind and path, and at most LOG_LIMIT lines a
+// minute; a reverse line says direction=reverse.
 
 var LOG_PREFIX = "[storage/folder shadow]";
 var KEY_PREFIX = "storage:folder:shadow:";
@@ -99,6 +125,13 @@ var LOG_LIMIT = 30;
 var LOGGED_MAX = 10000;
 
 var CACHE_OUTCOMES = ["hit", "miss", "direct"];
+
+// Which side answered the caller: the disk, for a blog on disk, or S3, for a
+// blog on S3. A reverse counter is the forward one with REVERSE + ":" in
+// front ("reverse:read:sampled"); forward counters have nothing in front, as
+// before there were two directions.
+var FORWARD = "forward";
+var REVERSE = "reverse";
 
 var CACHE_COUNTERS = ["hits", "misses", "evictions", "fetchedBytes", "changed", "filled"];
 
@@ -146,6 +179,25 @@ function pick(blogID) {
   if (rate < 1 && Math.random() >= rate) return false;
 
   return mirror.enabledFor(blogID);
+}
+
+// The fraction of reads of blogs on S3 to shadow: reverse_rate, or rate
+// when that is unset
+function reverseRate() {
+  var value = settings().reverse_rate;
+
+  if (value === undefined || value === null || value === "") return Number(settings().rate) || 0;
+
+  return Number(value) || 0;
+}
+
+// Whether to shadow this read of a blog on S3 (index.js asks only for those)
+function pickReverse(blogID) {
+  var rate = reverseRate();
+
+  if (!(rate > 0) || typeof blogID !== "string") return false;
+
+  return rate >= 1 || Math.random() < rate;
 }
 
 function bump(field, by) {
@@ -280,6 +332,42 @@ async function s3Size(blogID, path) {
   });
 }
 
+// The size the disk gives a file, for one S3 found too big to compare by
+// bytes (a blog on S3, whose S3 side came first)
+async function localSize(blogID, path) {
+  return attempt(async function () {
+    var stat = await local.stat(blogID, path);
+    if (stat.isDirectory) throw new NotFoundError();
+    return { size: stat.size, large: true };
+  });
+}
+
+// Whether the disk has a file, without reading it, for comparing with a read
+// which failed on S3
+async function diskPresence(blogID, path) {
+  return attempt(async function () {
+    var stat = await local.stat(blogID, path);
+    if (stat.isDirectory) throw new NotFoundError();
+    return { size: stat.size };
+  });
+}
+
+// For a blog on S3, given the caller's own outcome from S3 (first): that is
+// looked at before anything else, so a read the caller saw fail (a timeout, a
+// missing object) is never settled by the index's size. A failed read is
+// compared with whether the disk copy has the file, a file too big to compare
+// by bytes by its size, and anything else by the disk copy's bytes.
+async function againstDiskCopy(blogID, path, first, digestFn, readLocal) {
+  var s3Side = await digest(first, digestFn);
+
+  s3Side.cache = first.cache;
+
+  if (!s3Side.ok) return { local: await diskPresence(blogID, path), s3: s3Side };
+  if (s3Side.value.large) return { local: await localSize(blogID, path), s3: s3Side };
+
+  return { local: await digest(await timed(readLocal), digestFn), s3: s3Side };
+}
+
 // A file's bytes (or a range of them) read again from both sides, for the
 // calls whose result the caller consumes as it goes: a stream and serve
 async function rereadFile(blogID, path, range) {
@@ -336,9 +424,19 @@ function servedPath(relPath) {
 // { local, s3 }: outcomes whose values are what DIFF compares, each with the
 // ms it took where that is worth recording.
 var RUN = {
-  read: async function (args, first) {
+  read: async function (args, first, reverse) {
     var blogID = args[0];
     var path = args[1];
+    var trace = {};
+
+    usedCache = true;
+
+    if (reverse && first) {
+      return againstDiskCopy(blogID, path, first, digestBuffer, function () {
+        return local.read(blogID, path);
+      });
+    }
+
     var localSide = await digest(
       first ||
         (await timed(function () {
@@ -347,11 +445,8 @@ var RUN = {
       digestBuffer
     );
 
-    usedCache = true;
-
     if (localSide.ok && localSide.value.large) return { local: localSide, s3: await s3Size(blogID, path) };
 
-    var trace = {};
     var s3Side = await digest(
       await timed(function () {
         return s3().read(blogID, path, trace);
@@ -361,12 +456,23 @@ var RUN = {
 
     s3Side.cache = trace.cache;
 
+    if (s3Side.ok && s3Side.value.large) return { local: await localSize(blogID, path), s3: s3Side };
+
     return { local: localSide, s3: s3Side };
   },
 
-  ensureLocal: async function (args, first) {
+  ensureLocal: async function (args, first, reverse) {
     var blogID = args[0];
     var path = args[1];
+    var trace = {};
+
+    if (reverse && first) {
+      usedCache = true;
+      return againstDiskCopy(blogID, path, first, digestFile, function () {
+        return local.ensureLocal(blogID, path);
+      });
+    }
+
     var localSide = await digest(
       first ||
         (await timed(function () {
@@ -379,7 +485,6 @@ var RUN = {
 
     usedCache = true;
 
-    var trace = {};
     var s3Side = await digest(
       await timed(function () {
         return s3().ensureLocal(blogID, path, trace);
@@ -388,6 +493,8 @@ var RUN = {
     );
 
     s3Side.cache = trace.cache;
+
+    if (s3Side.ok && s3Side.value.large) return { local: await localSize(blogID, path), s3: s3Side };
 
     return { local: localSide, s3: s3Side };
   },
@@ -417,7 +524,7 @@ var RUN = {
     return rereadFile(blogID, path);
   },
 
-  stat: async function (args, first) {
+  stat: async function (args, first, reverse) {
     var blogID = args[0];
     var path = args[1];
     // The Dropbox hash costs S3 a download, and isn't stored, so only the
@@ -426,29 +533,33 @@ var RUN = {
 
     return {
       local:
-        first ||
+        (!reverse && first) ||
         (await timed(function () {
           return local.stat(blogID, path, options);
         })),
-      s3: await timed(function () {
-        return s3().stat(blogID, path, options);
-      }),
+      s3:
+        (reverse && first) ||
+        (await timed(function () {
+          return s3().stat(blogID, path, options);
+        })),
     };
   },
 };
 
 // The rest call the same function, with the same arguments, on each side
 ["exists", "list", "listNames", "listAll", "resolveCaseInsensitive"].forEach(function (op) {
-  RUN[op] = async function (args, first) {
+  RUN[op] = async function (args, first, reverse) {
     return {
       local:
-        first ||
+        (!reverse && first) ||
         (await timed(function () {
           return local[op].apply(null, args);
         })),
-      s3: await timed(function () {
-        return s3()[op].apply(null, args);
-      }),
+      s3:
+        (reverse && first) ||
+        (await timed(function () {
+          return s3()[op].apply(null, args);
+        })),
     };
   };
 });
@@ -577,87 +688,112 @@ function delay(ms) {
   });
 }
 
-async function run(op, args, first) {
+// Whether a blog's disk copy is known to be behind S3 (a copy to disk
+// failed, and the reconcile has not yet repaired it), for a blog on S3
+async function copyBehind(blogID) {
+  var reply = await redis().sIsMember(require("./primary").DIRTY_KEY, blogID);
+  return !!reply && reply !== "0";
+}
+
+// direction is FORWARD (the disk answered the caller, for a blog on disk) or
+// REVERSE (S3 answered, for a blog on S3, checked against its disk copy)
+async function run(op, args, first, direction) {
+  var reverse = direction === REVERSE;
+  var prefix = reverse ? REVERSE + ":" : "";
   var blogID = blogOf(op, args);
   var path = pathOf(op, args);
-  var pass = await RUN[op](args, first);
+  var pass = await RUN[op](args, first, reverse);
+
+  function count(field) {
+    bump(prefix + op + ":" + field);
+  }
+
+  function line(text) {
+    return text + " blog=" + blogID + (reverse ? " direction=" + REVERSE : "") + " op=" + op;
+  }
 
   if (!pass) return;
 
   var verdict = compare(op, pass);
 
-  if (verdict.skip) return bump(op + ":skipped");
+  if (verdict.skip) return count("skipped");
 
-  bump(op + ":sampled");
+  count("sampled");
 
   if ((pass.local.ok && pass.local.value && pass.local.value.large) || (pass.s3.ok && pass.s3.value && pass.s3.value.large)) {
-    bump(op + ":large");
+    count("large");
   } else {
-    observe(op, "local", pass.local.ms);
-    observe(op, "local:ttfb", pass.local.ttfb);
+    observe(prefix + op, "local", pass.local.ms);
+    observe(prefix + op, "local:ttfb", pass.local.ttfb);
 
     if (!verdict.s3Error) {
-      observe(op, "s3", pass.s3.ms);
-      observe(op, "s3:ttfb", pass.s3.ttfb);
+      observe(prefix + op, "s3", pass.s3.ms);
+      observe(prefix + op, "s3:ttfb", pass.s3.ttfb);
       // By how the content cache served the read, where it was asked
-      if (CACHE_OUTCOMES.indexOf(pass.s3.cache) !== -1) observe(op, "s3:" + pass.s3.cache, pass.s3.ms);
+      if (CACHE_OUTCOMES.indexOf(pass.s3.cache) !== -1) observe(prefix + op, "s3:" + pass.s3.cache, pass.s3.ms);
     }
   }
 
   function s3Error(err) {
     var code = String(err.code || err.name || "error").replace(/[^\w-]/g, "");
 
-    bump(op + ":s3error");
-    bump(op + ":s3error:" + code);
+    count("s3error");
+    count("s3error:" + code);
     log(
-      [blogID, op, "error", code, path].join("\0"),
-      "s3 error blog=" + blogID + " op=" + op + " path=" + JSON.stringify(path) + " error=" + code + " " + err.message
+      [direction, blogID, op, "error", code, path].join("\0"),
+      line("s3 error") + " path=" + JSON.stringify(path) + " error=" + code + " " + err.message
     );
   }
 
   if (verdict.s3Error) return s3Error(verdict.s3Error);
 
-  if (!verdict.kind) return bump(op + ":matched");
+  if (!verdict.kind) return count("matched");
 
   var kind = verdict.kind;
   var wait = Number(settings().recheck_ms) || 0;
 
   if (wait > 0) await delay(wait);
 
-  var again = compare(op, (await RUN[op](args, null)) || pass);
+  var again = compare(op, (await RUN[op](args, null, reverse)) || pass);
 
   // A recheck which could not read one side confirms nothing, so the
   // discrepancy is not counted as drift
-  if (again.skip) return bump(op + ":skipped");
+  if (again.skip) return count("skipped");
   if (again.s3Error) return s3Error(again.s3Error);
 
   if (!again.kind) {
-    bump(op + ":transient");
-    bump(op + ":transient:" + kind);
+    count("transient");
+    count("transient:" + kind);
     return;
   }
 
   kind = again.kind;
 
-  bump(op + ":mismatched");
-  bump(op + ":mismatch:" + kind);
-  log(
-    [blogID, op, kind, path].join("\0"),
-    "mismatch blog=" + blogID + " op=" + op + " kind=" + kind + " path=" + JSON.stringify(path)
-  );
+  // A disk copy known to be behind S3 is already in the reconcile's hands:
+  // it differs because a copy to disk failed, not because S3 served
+  // something wrong
+  if (reverse && (await copyBehind(blogID))) {
+    count("behind");
+    count("behind:" + kind);
+    return;
+  }
+
+  count("mismatched");
+  count("mismatch:" + kind);
+  log([direction, blogID, op, kind, path].join("\0"), line("mismatch") + " kind=" + kind + " path=" + JSON.stringify(path));
 }
 
 // Takes a slot and runs the shadow on a later turn of the event loop, so the
 // caller's own code runs first. Never throws or rejects.
-function start(op, args, first) {
+function start(op, args, first, direction) {
   try {
     var max = Number(settings().max_in_flight);
 
-    if (inFlight.size >= (max >= 0 ? max : 4)) return bump(op + ":dropped");
+    if (inFlight.size >= (max >= 0 ? max : 4)) return bump((direction === REVERSE ? REVERSE + ":" : "") + op + ":dropped");
 
     var shadow = yieldToLoop()
       .then(function () {
-        return run(op, args, first);
+        return run(op, args, first, direction);
       })
       .catch(function (err) {
         log("failed\0" + op + "\0" + (err && err.message), "failed op=" + op + " " + ((err && err.stack) || err));
@@ -672,39 +808,72 @@ function start(op, args, first) {
   }
 }
 
-// Called by index.js in place of call(...args) for each read it sends to
-// the local backend, so never for a blog on S3 (./primary.js), whose reads
-// have no disk answer to check. Returns exactly what call returned.
-function shadow(op, call, args) {
-  if (!pick(blogOf(op, args))) return call.apply(null, args);
-
+// Runs one call of a backend's read for the caller, and starts a shadow of
+// it once it has settled. Returns exactly what call returned.
+function sample(op, call, args, direction) {
   // The caller's stream is left alone; the file is read again once it is done
   if (op === "createReadStream") {
     var stream = call.apply(null, args);
 
     stream.once("close", function () {
-      start(op, args, null);
+      start(op, args, null, direction);
     });
 
     return stream;
   }
 
   var started = process.hrtime.bigint();
-  var promise = call.apply(null, args);
+  var trace = null;
+  var callArgs = args;
+
+  // For a blog on S3, the caller's own read says how the content cache
+  // served it, as the S3 side of a forward shadow does. Only with the
+  // arguments the facade documents, so the trace never takes the place of
+  // something a caller passed.
+  if (direction === REVERSE && (op === "read" || op === "ensureLocal") && args.length <= 2) {
+    trace = {};
+    callArgs = [args[0], args[1], trace];
+  }
+
+  var promise = call.apply(null, callArgs);
 
   if (!promise || typeof promise.then !== "function") return promise;
+
+  function outcome(fields) {
+    fields.ms = since(started);
+    if (trace) fields.cache = trace.cache;
+    return fields;
+  }
 
   // serve's outcome is ignored: the shadow reads the file it sent again
   promise.then(
     function (value) {
-      start(op, args, op === "serve" ? null : { ok: true, value: value, ms: since(started) });
+      start(op, args, op === "serve" ? null : outcome({ ok: true, value: value }), direction);
     },
     function (err) {
-      start(op, args, op === "serve" ? null : Object.assign(outcomeOf(err), { ms: since(started) }));
+      start(op, args, op === "serve" ? null : outcome(outcomeOf(err)), direction);
     }
   );
 
   return promise;
+}
+
+// Called by index.js in place of call(...args) for each read it sends to
+// the local backend. Returns exactly what call returned.
+function shadow(op, call, args) {
+  if (!pick(blogOf(op, args))) return call.apply(null, args);
+
+  return sample(op, call, args, FORWARD);
+}
+
+// Called by index.js in place of call(...args) for each read it sends to
+// the S3 backend for a blog on S3 (./primary.js), whose disk copy it checks
+// against. Never when a spec chose the backend: that blog has no disk copy.
+// Returns exactly what call returned.
+function reverse(op, call, args) {
+  if (!pickReverse(blogOf(op, args))) return call.apply(null, args);
+
+  return sample(op, call, args, REVERSE);
 }
 
 function hourKey(date) {
@@ -783,6 +952,8 @@ function reset() {
 }
 
 module.exports = shadow;
+module.exports.reverse = reverse;
+module.exports.REVERSE = REVERSE;
 module.exports.OPS = OPS;
 module.exports.BUCKETS = BUCKETS;
 module.exports.CACHE_OUTCOMES = CACHE_OUTCOMES;
