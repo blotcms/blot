@@ -31,8 +31,22 @@ async function main(blogID) {
       continue;
     }
 
-    // Each file is read whole, one at a time
-    archive.append(await folder.read(blogID, path), { name, date });
+    // Streamed one file at a time: the next starts only once archiver has
+    // taken this one, so stdout's backpressure bounds what is held in memory
+    const source = folder.createReadStream(blogID, path);
+    await new Promise((resolve, reject) => {
+      const fail = (err) => {
+        archive.off("entry", taken);
+        reject(err);
+      };
+      const taken = () => {
+        source.off("error", fail);
+        resolve();
+      };
+      archive.once("entry", taken);
+      source.once("error", fail);
+      archive.append(source, { name, date });
+    });
     files++;
   }
 

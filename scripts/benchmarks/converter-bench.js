@@ -35,9 +35,6 @@ const { performance } = require("perf_hooks");
 // The local broker, with --sandbox (lib/local-sandbox.js)
 let sandbox = null;
 
-// Converters that use the assets bucket (grep app/build/converters for storage/assets)
-const NEEDS_BUCKET = ["docx", "odt", "img", "gdoc"];
-
 function arg(name, fallback = null) {
   const i = process.argv.indexOf(name);
   return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
@@ -283,11 +280,10 @@ async function main() {
       `${sandbox ? "jobs through a local broker" : "jobs in-process"}, ${pandocVersion()})`
   );
 
-  // docx, odt and img upload what they extract or convert to the assets
-  // bucket (MinIO, started by the workflow)
-  if (converters.some((name) => NEEDS_BUCKET.includes(name))) {
-    await require("../tests/util/bucket")();
-  }
+  // Every converter's fixtures are uploaded to the blog folder, and docx, odt
+  // and img also upload what they extract or convert, so the bucket (MinIO,
+  // started by the workflow) is always needed
+  await require("../tests/util/bucket")();
 
   let corpusDir = null;
   let typical = {};
