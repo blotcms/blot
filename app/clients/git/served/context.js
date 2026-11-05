@@ -1,16 +1,14 @@
 // What every user of the git store in this process shares (#2259): one object
 // store per blog, kept for reuse so its memos (the manifest it last read, the
 // sizes of its packs) help the next operation, and one cache, so a process has
-// one cache budget whichever side uses it. Shadow mode (../shadow) and the
-// served path (this directory) both take their stores and cache from here.
+// one cache budget.
 //
-//   storeFor(blogID)        the blog's store, counted (../shadow/counting.js)
-//                           and kept
+//   storeFor(blogID)        the blog's store, counted (./counting.js) and kept
 //   objectStoreFor(blogID)  a fresh, uncounted store, for the daily upkeep and
 //                           removal, which list and delete
 //   cache()                 the process's cache (../store/cache.js)
-//   refLock(blogID)         the lock(fn) the store's writes take for a blog
-//                           served from the store: the EBS ref lock
+//   refLock(blogID)         the lock(fn) the store's writes take for a blog:
+//                           its ref lock
 //   hasStore()              whether there is a bucket (or a spec's stores)
 //
 // The store lives under <blogID>/git/ in the storage bucket.
@@ -18,7 +16,7 @@ const path = require("path");
 const { LRUCache } = require("lru-cache");
 const config = require("config");
 const { createCache, createS3Store } = require("../store");
-const counting = require("../shadow/counting");
+const counting = require("./counting");
 
 // How many blogs' stores are kept for reuse. A store is a small object.
 const STORES = 1000;
@@ -92,10 +90,10 @@ function hasStore() {
   return makeObjectStore !== s3ObjectStore || !!(config.storage && config.storage.bucket);
 }
 
-// For a blog served from the store, its writes (a push, Blot's commit) take
-// the EBS ref lock (repo.holdRefLock, blog:<id>:git:ref-lock): one lock per
-// blog, whichever side is written. The store holds it only around a manifest
-// swap; a caller already holding it passes a lock of its own instead.
+// A blog's writes to the store (a push, Blot's commit, a compaction, the
+// first import) take its ref lock (repo.holdRefLock,
+// blog:<id>:git:ref-lock). The store holds it only around a manifest swap; a
+// caller already holding it passes a lock of its own instead.
 function refLock(blogID) {
   return async function (fn) {
     const release = await require("../repo").holdRefLock(blogID);

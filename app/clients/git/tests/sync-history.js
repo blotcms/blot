@@ -9,7 +9,7 @@ describe("git client sync: history", function () {
   var fs = require("fs-extra");
   var Entry = require("models/entry");
   var helpers = require("./setup/helpers");
-  var readDirectories = require("./setup/client").readDirectories;
+  var folder = require("./setup/folder");
 
   afterEach(async function () {
     await this.local.expectSynced();
@@ -67,7 +67,7 @@ describe("git client sync: history", function () {
     await this.local.push();
 
     expect(await helpers.blogFiles(this)).toEqual({});
-    expect(await readDirectories(this.blogDirectory)).toEqual([]);
+    expect(await folder.directories(this.blog.id)).toEqual([]);
     expect((await helpers.entry(this.blog.id, one)).deleted).toBe(true);
   });
 

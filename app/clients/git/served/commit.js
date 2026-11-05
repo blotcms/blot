@@ -1,23 +1,26 @@
-// Blot's own write to a blog served from the git store (#2259): repo.commit's
-// path for a switched blog. As on EBS, the file is written to (or removed
-// from) the blog folder through storage/folder first, and then committed:
-// here with the store's commit() (store/commit.js), which makes the same
-// commit plumbing.js would, with the same identity, messages and refusals.
+// Blot's own write to a blog's repository in the git store (#2259):
+// repo.commit. The file is written to (or removed from) the blog folder
+// through storage/folder first, and then committed with the store's commit()
+// (store/commit.js), with Blot's identity and messages. A change that leaves
+// the tree as it is (the same contents again, or a removal of a file the
+// repository doesn't have) makes no commit.
 //
-// The commit holds the blog's ref lock for the whole call, as plumbing.js
-// does on EBS, so two of Blot's writes never lose a swap to each other; the
-// store is given a lock which is already held. A push waits for the lock as
-// it does for one of Blot's writes on EBS. One place in the background lane
-// is taken before the lock, as repo.commit does.
+// The commit holds the blog's ref lock for the whole call, so two of Blot's
+// writes never lose a swap to each other; the store is given a lock which is
+// already held. A push waits for the lock. One place in the background lane
+// is taken before the lock, so the commit never waits for room with the lock
+// held, which would hold up a push to the blog.
 //
-// Then, as on EBS, the applied commit is moved from the parent to the commit
-// (only if it is still the parent), and in the background the EBS fallback
-// (./fallback.js) and a compaction (./upkeep.js) are asked for.
+// Then the applied commit is moved from the parent to the commit (only if it
+// is still the parent: otherwise an earlier push has not been applied, and
+// the next sync applies Blot's change again, which is harmless), and a
+// compaction (./upkeep.js) is asked for in the background.
 //
 // An outcome of "unknown" fails the write: the commit may have landed, so
-// nothing that depends on it moves, and the fallback and the next sync bring
-// both sides to whatever the store holds. A store with no copy of the
-// repository fails the write too, rather than starting a new history.
+// nothing that depends on it moves, and the next sync brings the folder to
+// whatever the store holds. A store with no copy of the repository fails the
+// write too, before the folder is touched, rather than starting a new
+// history.
 //
 // One line per write:
 //
@@ -29,9 +32,8 @@ const limiter = require("../limiter");
 const database = require("../database");
 const manifest = require("../store/manifest");
 const storeCommit = require("../store/commit");
-const { measure } = require("../shadow/counting");
+const { measure } = require("./counting");
 const context = require("./context");
-const fallback = require("./fallback");
 const upkeep = require("./upkeep");
 const log = require("./log");
 
@@ -92,8 +94,6 @@ async function commit(blogID, change) {
 
   if (result.outcome === "unknown") {
     log({ ...fields, outcome: "unknown", detail: (result.error && (result.error.code || result.error.name)) || "unknown" });
-    // What the store holds, whichever it is, reaches EBS and the folder
-    fallback.request(blogID, { reason: "write" });
     throw new Error("Blot could not confirm whether the change to " + change.path + " was saved");
   }
 
@@ -113,7 +113,6 @@ async function commit(blogID, change) {
     });
   }
 
-  fallback.request(blogID, { reason: "write" });
   upkeep.compactAfter(blogID, result.manifest);
 
   return result;

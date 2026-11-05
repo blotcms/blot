@@ -16,10 +16,11 @@ describe("git client create", function () {
   var create = require("clients/git/create");
   var disconnect = require("clients/git/disconnect");
   var Git = require("./setup/git");
-  var localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
+  var folder = require("./setup/folder");
   var setClientToGit = require("./setup/setClientToGit");
+  var inStore = promisify(repo.exists);
 
-  // this prevents an existing bare repo from being clobbered
+  // this prevents an existing repository from being clobbered
   it("should fail when the client has already been initialized", function (done) {
     var blog = this.blog;
 
@@ -29,8 +30,8 @@ describe("git client create", function () {
       create(blog, async function (err) {
         try {
           expect(err.code).toEqual("EEXIST");
-          expect(await fs.pathExists(repo.directory(blog.handle) + "/HEAD")).toBe(true);
-          expect(await fs.pathExists(localPath(blog.id, "/.git"))).toBe(false);
+          expect(await inStore(blog.id)).toBe(true);
+          expect(await folder.has(blog.id, "/.git")).toBe(false);
           done();
         } catch (e) {
           done.fail(e);
@@ -39,12 +40,11 @@ describe("git client create", function () {
     });
   });
 
-  it("refuses to connect a blog to a repository left at its handle", async function () {
+  it("refuses to set up a repository over the one the blog has", async function () {
     var blog = this.blog;
-    var marker = repo.directory(blog.handle) + "/left-behind";
     var messages = [];
 
-    await fs.outputFile(marker, "someone else's history");
+    await promisify(create)(blog);
 
     var server = Express()
       .use(function (req, res, next) {
@@ -74,7 +74,7 @@ describe("git client create", function () {
 
     expect(messages.length).toBe(1);
     expect(latest.client).not.toBe("git");
-    expect(await fs.pathExists(marker)).toBe(true);
+    expect(await inStore(blog.id)).toBe(true);
   });
 
   // this prevents an existing bare repo from being clobbered
@@ -98,220 +98,75 @@ describe("git client create", function () {
     });
   });
 
-  it("should fail when there is a repo with an origin in the blog's folder", function (done) {
-    var Git = require("./setup/git");
+  it("should fail when there is a repo with an origin in the blog's folder", async function () {
     var blog = this.blog;
 
-    Git = Git(localPath(blog.id, "/")).silent(true);
+    await folder.write(blog.id, "/.git/HEAD", "ref: refs/heads/master\n");
+    await folder.write(blog.id, "/.git/config", '[remote "origin"]\n\turl = http://git.com/foo.git\n');
 
-    Git.init(function (err) {
-      if (err) return done.fail(err);
+    var err = await promisify(create)(blog).then(
+      () => null,
+      (err) => err
+    );
 
-      Git.addRemote("origin", "http://git.com/foo.git", function (err) {
-        if (err) return done.fail(err);
-        create(blog, function (err) {
-          expect(err).not.toEqual(null);
-          expect(err).toEqual(jasmine.any(Error));
-          expect(fs.pathExistsSync(repo.directory(blog.handle))).toBe(false);
-          // It isn't one this create made
-          expect(fs.pathExistsSync(localPath(blog.id, "/.git"))).toBe(true);
-
-          done();
-        });
-      });
-    });
+    expect(err).toEqual(jasmine.any(Error));
+    expect(await inStore(blog.id)).toBe(false);
+    // It isn't one this create made
+    expect(await folder.has(blog.id, "/.git/config")).toBe(true);
   });
 
-  it("preserves existing files and folders", function (done) {
-    var blogDir = localPath(this.blog.id, "/");
-    var fs = require("fs-extra");
+  it("preserves existing files and folders", async function () {
     var blog = this.blog;
-    var tmp = this.tmp;
     var clonedDir = this.tmp + "/" + this.blog.handle;
 
-    fs.outputFileSync(blogDir + "/first.txt", "Hello");
-    fs.outputFileSync(blogDir + "/Sub Folder/second.txt", "World");
-    fs.outputFileSync(blogDir + "/third", "!");
+    await folder.write(blog.id, "/first.txt", "Hello");
+    await folder.write(blog.id, "/Sub Folder/second.txt", "World");
+    await folder.write(blog.id, "/third", "!");
 
-    setClientToGit(this.user, blog, this.server.port, function (err, repoUrl) {
-      if (err) return done.fail(err);
+    var repoUrl = await promisify(setClientToGit)(this.user, blog, this.server.port);
+    await Git(this.tmp).silent(true).clone(repoUrl);
 
-      Git(tmp)
-        .silent(true)
-        .clone(repoUrl, function (err) {
-          if (err) return done.fail(err);
+    // Blot's copy of the blog folder
+    expect(await folder.names(blog.id, "/")).toEqual(["Sub Folder", "first.txt", "third"]);
+    expect(await folder.names(blog.id, "/Sub Folder")).toEqual(["second.txt"]);
 
-          // Verify files and folders are preserved in Blot's copy of blog folder
-          expect(fs.readdirSync(blogDir)).toEqual([
-            "Sub Folder",
-            "first.txt",
-            "third",
-          ]);
-          expect(fs.readdirSync(blogDir + "/Sub Folder")).toEqual([
-            "second.txt",
-          ]);
-
-          // Verify files and folders are preserved in cloneable folder
-          expect(fs.readdirSync(clonedDir)).toEqual([
-            ".git",
-            "Sub Folder",
-            "first.txt",
-            "third",
-          ]);
-          expect(fs.readdirSync(clonedDir + "/Sub Folder")).toEqual([
-            "second.txt",
-          ]);
-
-          done();
-        });
-    });
+    // The clone
+    expect(fs.readdirSync(clonedDir).sort()).toEqual([".git", "Sub Folder", "first.txt", "third"]);
+    expect(fs.readdirSync(clonedDir + "/Sub Folder")).toEqual(["second.txt"]);
   });
 
   // Blot cannot tell a placeholder (an empty file standing in for a file it
   // could not download) from a file that really is empty, so neither is added.
-  it("does not add empty files to the repository", function (done) {
-    var blogDir = localPath(this.blog.id, "/");
-    var fs = require("fs-extra");
+  it("does not add empty files to the repository", async function () {
     var blog = this.blog;
-    var tmp = this.tmp;
     var clonedDir = this.tmp + "/" + this.blog.handle;
 
-    fs.outputFileSync(blogDir + "/post.txt", "Hello");
-    fs.outputFileSync(blogDir + "/placeholder.pdf", "");
+    await folder.write(blog.id, "/post.txt", "Hello");
+    await folder.write(blog.id, "/placeholder.pdf", "");
 
-    setClientToGit(this.user, blog, this.server.port, function (err, repoUrl) {
-      if (err) return done.fail(err);
+    var repoUrl = await promisify(setClientToGit)(this.user, blog, this.server.port);
+    await Git(this.tmp).silent(true).clone(repoUrl);
 
-      Git(tmp)
-        .silent(true)
-        .clone(repoUrl, function (err) {
-          if (err) return done.fail(err);
-
-          expect(fs.readdirSync(clonedDir).sort()).toEqual([".git", "post.txt"]);
-          done();
-        });
-    });
+    expect(fs.readdirSync(clonedDir).sort()).toEqual([".git", "post.txt"]);
+    // The placeholder stays in the blog folder
+    expect(await folder.has(blog.id, "/placeholder.pdf")).toBe(true);
   });
 
-  it("skips files ignored by an existing .gitignore", function (done) {
-    var blogDir = localPath(this.blog.id, "/");
-    var fs = require("fs-extra");
+  it("skips files ignored by an existing .gitignore", async function () {
     var blog = this.blog;
-    var tmp = this.tmp;
     var clonedDir = this.tmp + "/" + this.blog.handle;
 
-    fs.outputFileSync(blogDir + "/.gitignore", ".verification/\n");
-    fs.outputFileSync(blogDir + "/post.txt", "Hello");
-    fs.outputFileSync(blogDir + "/.verification/agent.jsonl", "notes");
+    await folder.write(blog.id, "/.gitignore", ".verification/\n");
+    await folder.write(blog.id, "/post.txt", "Hello");
+    await folder.write(blog.id, "/.verification/agent.jsonl", "notes");
 
-    setClientToGit(this.user, blog, this.server.port, function (err, repoUrl) {
-      if (err) return done.fail(err);
+    var repoUrl = await promisify(setClientToGit)(this.user, blog, this.server.port);
+    await Git(this.tmp).silent(true).clone(repoUrl);
 
-      Git(tmp)
-        .silent(true)
-        .clone(repoUrl, function (err) {
-          if (err) return done.fail(err);
+    expect(await folder.names(blog.id, "/")).toEqual([".gitignore", ".verification", "post.txt"]);
+    expect(await folder.has(blog.id, "/.verification/agent.jsonl")).toBe(true);
 
-          expect(fs.readdirSync(blogDir).sort()).toEqual([
-            ".gitignore",
-            ".verification",
-            "post.txt",
-          ]);
-          expect(fs.existsSync(blogDir + "/.verification/agent.jsonl")).toBe(
-            true
-          );
-
-          expect(fs.readdirSync(clonedDir).sort()).toEqual([
-            ".git",
-            ".gitignore",
-            "post.txt",
-          ]);
-          expect(fs.existsSync(clonedDir + "/.verification")).toBe(false);
-
-          done();
-        });
-    });
-  });
-
-  // A stray repository above the blog's folder (e.g. a .git in the data
-  // directory) must never be used by create: before the folder's own repo
-  // exists, git would otherwise discover the parent and act on it.
-  describe("with a repository in the folder's parent", function () {
-    var fs = require("fs-extra");
-    var path = require("path");
-
-    beforeEach(async function () {
-      this.parentDir = path.dirname(path.resolve(localPath(this.blog.id, "/")));
-      this.parentGit = Git(this.parentDir).silent(true);
-
-      await this.parentGit.init();
-      await this.parentGit.raw(["config", "--local", "user.name", "Parent"]);
-      await this.parentGit.raw(["config", "--local", "user.email", "p@x.com"]);
-      await this.parentGit.raw(["config", "--local", "gc.auto", "123"]);
-      await this.parentGit.raw(["commit", "--allow-empty", "-m", "Parent"]);
-
-      this.parentHead = await this.parentGit.revparse(["HEAD"]);
-    });
-
-    // The parent is shared by every test blog, so never leave it behind
-    afterEach(function (done) {
-      fs.remove(path.join(this.parentDir, ".git"), done);
-    });
-
-    it("does not commit to or reconfigure the parent repository", function (done) {
-      var blog = this.blog;
-      var blogDir = localPath(blog.id, "/");
-      var parentGit = this.parentGit;
-      var parentHead = this.parentHead;
-
-      fs.outputFileSync(blogDir + "/first.txt", "Hello");
-
-      create(blog, async function (err) {
-        if (err) return done.fail(err);
-
-        try {
-          expect(await parentGit.revparse(["HEAD"])).toEqual(parentHead);
-          expect(await parentGit.raw(["config", "--local", "gc.auto"])).toEqual(
-            "123\n"
-          );
-
-          expect(fs.existsSync(blogDir + "/.git")).toBe(false);
-          expect(
-            await Git(repo.directory(blog.handle)).silent(true).raw(["rev-list", "--count", "master"])
-          ).not.toEqual("0\n");
-
-          done();
-        } catch (e) {
-          done.fail(e);
-        }
-      });
-    });
-
-    it("does not unset the parent repository's config when create fails early", function (done) {
-      var blog = this.blog;
-      var blogDir = localPath(blog.id, "/");
-      var parentGit = this.parentGit;
-
-      create(blog, function (err) {
-        if (err) return done.fail(err);
-
-        // Leave the blog folder without a .git, as a create makes none, so a
-        // failed create's cleanup finds no repo of its own
-        fs.removeSync(blogDir + "/.git");
-
-        create(blog, async function (err) {
-          try {
-            expect(err.code).toEqual("EEXIST");
-            expect(
-              await parentGit.raw(["config", "--local", "gc.auto"])
-            ).toEqual("123\n");
-
-            done();
-          } catch (e) {
-            done.fail(e);
-          }
-        });
-      });
-    });
+    expect(fs.readdirSync(clonedDir).sort()).toEqual([".git", ".gitignore", "post.txt"]);
+    expect(fs.existsSync(clonedDir + "/.verification")).toBe(false);
   });
 });

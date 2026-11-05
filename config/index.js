@@ -191,16 +191,12 @@ module.exports = {
   // because a slow client's clone or push holds its place for the whole
   // transfer, and a push should not wait behind two slow clones: 4 is about
   // 400 MB at the very worst, on node-b, which serves every push, clone and
-  // fetch. Background is 2, about 200 MB at worst, though Blot's commits, most
-  // of it, take a few MB each; gc is the large background command, and only
-  // one runs at a time. So about 600 MB a process at the very worst.
-  // gc_delay is how long after a commit or push a repository waits for its
-  // gc, so a burst of writes makes one (gc.js).
+  // fetch. Background is 2, about 200 MB at worst: Blot's commits, the git
+  // store's compaction and the import of a new repository. So about 600 MB a
+  // process at the very worst.
   git: {
     interactive_processes: parseInt(process.env.BLOT_GIT_INTERACTIVE_PROCESSES) || 4,
     background_processes: parseInt(process.env.BLOT_GIT_BACKGROUND_PROCESSES) || 2,
-    gc_processes: parseInt(process.env.BLOT_GIT_GC_PROCESSES) || 1,
-    gc_delay: parseInt(process.env.BLOT_GIT_GC_DELAY_MS) || 60 * 1000,
   },
 
   // Untrusted, user-supplied URLs (remote images in posts, imports, domain
@@ -348,35 +344,17 @@ module.exports = {
     endpoint: process.env.BLOT_STORAGE_ENDPOINT || "",
   },
 
-  // The git object store (app/clients/git/store) in shadow mode
-  // (app/clients/git/shadow): the repositories on disk stay the source of
-  // truth, and every push and every one of Blot's commits is also mirrored
-  // into the storage bucket, under {blogID}/git/, to compare on real traffic.
+  // The git object store (app/clients/git/store), where every git blog's
+  // repository is, under {blogID}/git/ in the storage bucket
+  // (app/clients/git/served).
   git_store: {
-    // Off unless set: "all", or a comma-separated list of blog IDs
-    shadow: process.env.BLOT_GIT_STORE_SHADOW || "",
-    // Which blogs' repositories are served from the store, which is then their
-    // source of truth (app/clients/git/served): off unless set, "all", or a
-    // comma-separated list of blog IDs. A blog listed here is never shadowed.
-    serve: process.env.BLOT_GIT_STORE_SERVE || "",
-    // Where shadow mode also appends its log lines, so they outlive the
-    // containers (app/clients/git/shadow/file-log.js). Empty is off (the
-    // shadow specs turn it off, or point it at their own file). app/scheduler/prune-tmp.js leaves its directory alone.
-    shadow_log:
-      process.env.BLOT_GIT_STORE_SHADOW_LOG !== undefined
-        ? process.env.BLOT_GIT_STORE_SHADOW_LOG
-        : BLOT_TMP_DIRECTORY + "/shadow-log/shadow.log",
     // The store's local cache and scratch space. In production tmp is on the
     // host's instance store (/var/instance-ssd/tmp), which is where this
     // belongs: nothing in it needs to survive. Each process takes a
     // directory of its own inside it.
-    cache_directory:
-      process.env.BLOT_GIT_STORE_CACHE_DIRECTORY ||
-      BLOT_TMP_DIRECTORY + "/git-store",
+    cache_directory: BLOT_TMP_DIRECTORY + "/git-store",
     // The budget of each process's cache, scratch space included
-    cache_bytes:
-      parseInt(process.env.BLOT_GIT_STORE_CACHE_BYTES, 10) ||
-      1024 * 1024 * 1024,
+    cache_bytes: 1024 * 1024 * 1024,
   },
 
   // The content cache of the S3 backend of storage/folder

@@ -1,5 +1,5 @@
 // How a real git client talks to the git client's HTTP endpoint: clone,
-// shallow clone, fetch, ls-remote, the protocol versions, and requests which
+// a refused shallow clone, fetch, ls-remote, the protocol versions, and requests which
 // git sends gzipped or chunked. Part of the regression suite for the git
 // client (#2259): the endpoint is rewritten there, and a stock git client is
 // the contract it has to keep.
@@ -32,23 +32,24 @@ describe("git client protocol", function () {
     var clone = await this.local.cloneAgain();
 
     expect(await clone.head()).toBe(await this.local.remoteHead());
-    await Client.compareDirectories(clone.directory, this.blogDirectory);
+    await Client.compareWithBlog(clone.directory, this.blog.id);
   });
 
-  it("clones with --depth 1", async function () {
-    var clone = await this.local.cloneAgain({ args: ["--depth", "1"] });
+  // The git store serves no shallow clones: git reports the store's ERR as
+  // a remote error (served/reads.js)
+  it("refuses a clone with --depth 1, with a remote error", async function () {
+    var directory = this.local.directory + "-shallow";
+    var result = await Client.attempt(["clone", "--depth", "1", this.local.url, directory]);
 
-    expect((await clone.git(["rev-parse", "--is-shallow-repository"])).stdout.trim()).toBe("true");
-    expect((await clone.git(["rev-list", "--count", "HEAD"])).stdout.trim()).toBe("1");
-    expect(await clone.head()).toBe(await this.local.remoteHead());
-    await Client.compareDirectories(clone.directory, this.blogDirectory);
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toMatch(/remote error|shallow/i);
   });
 
   it("clones with a blob filter, whether or not the server supports it", async function () {
     var clone = await this.local.cloneAgain({ args: ["--filter=blob:none"] });
 
     expect(await clone.head()).toBe(await this.local.remoteHead());
-    await Client.compareDirectories(clone.directory, this.blogDirectory);
+    await Client.compareWithBlog(clone.directory, this.blog.id);
   });
 
   it("fetches only what is new", async function () {
@@ -64,7 +65,7 @@ describe("git client protocol", function () {
     );
 
     await clone.git(["merge", "--ff-only", "origin/master"]);
-    await Client.compareDirectories(clone.directory, this.blogDirectory);
+    await Client.compareWithBlog(clone.directory, this.blog.id);
   });
 
   it("lists refs with ls-remote", async function () {

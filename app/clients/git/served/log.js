@@ -1,13 +1,13 @@
-// One line for each request or operation of the served path, the fields in a
-// fixed order first, like shadow mode's lines:
+// One line for each request or operation on the git store, the fields in a
+// fixed order first, to stdout like the rest of the app's logging:
 //
-//   [git-store-served] blog=<id> op=advertise|clone|fetch|... outcome=...
-//     ms=... firstByteMs=... requests=... bytesDown=... bytesSent=...
+//   [git-store-served] blog=<id> op=advertise|clone|fetch|push|write|...
+//     outcome=... ms=... firstByteMs=... requests=... bytesDown=... bytesSent=...
 //
 // Blog IDs only: never handles, which are the blog owner's to change.
 const clfdate = require("helper/clfdate");
 
-const ORDER = ["blog", "op", "outcome", "ms", "firstByteMs", "requests", "bytesUp", "bytesDown", "bytesSent", "waitMs", "detail"];
+const ORDER = ["blog", "op", "source", "outcome", "ms", "firstByteMs", "requests", "bytesUp", "bytesDown", "bytesSent", "waitMs", "reason", "detail"];
 
 function value(v) {
   const text = String(v);

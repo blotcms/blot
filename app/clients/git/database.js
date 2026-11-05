@@ -21,6 +21,16 @@ function appliedKey(blogID) {
   return "blog:" + blogID + ":git:applied";
 }
 
+// Set while a repository is being set up for the blog (create.js), so the
+// dashboard shows the setup's progress rather than the create page before the
+// store has the repository. It expires by itself, so a setup cut off by a
+// crash or a deploy never leaves the blog stuck "in progress".
+function creatingKey(blogID) {
+  return "blog:" + blogID + ":git:creating";
+}
+
+var CREATING_TTL_SECONDS = 60 * 60;
+
 function generateToken() {
   return uuid().replace(/-/g, "");
 }
@@ -134,6 +144,38 @@ function removeStatus(blogID, callback) {
   })();
 }
 
+function setCreating(blogID, callback) {
+  (async function () {
+    try {
+      await client.set(creatingKey(blogID), String(Date.now()), { EX: CREATING_TTL_SECONDS });
+      return callback(null);
+    } catch (err) {
+      return callback(err);
+    }
+  })();
+}
+
+function isCreating(blogID, callback) {
+  (async function () {
+    try {
+      return callback(null, !!(await client.get(creatingKey(blogID))));
+    } catch (err) {
+      return callback(err);
+    }
+  })();
+}
+
+function clearCreating(blogID, callback) {
+  (async function () {
+    try {
+      await client.del(creatingKey(blogID));
+      return callback(null);
+    } catch (err) {
+      return callback(err);
+    }
+  })();
+}
+
 function getApplied(blogID, callback) {
   (async function () {
     try {
@@ -207,6 +249,11 @@ database.refreshToken = refreshToken;
 database.setStatus = setStatus;
 database.getStatus = getStatus;
 database.removeStatus = removeStatus;
+database.setCreating = setCreating;
+database.isCreating = isCreating;
+database.clearCreating = clearCreating;
+database.creatingKey = creatingKey;
+database.CREATING_TTL_SECONDS = CREATING_TTL_SECONDS;
 
 database.getApplied = getApplied;
 database.setApplied = setApplied;
