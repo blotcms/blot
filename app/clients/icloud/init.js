@@ -151,6 +151,10 @@ const validateAllBlogs = async () => {
         // bug whatever state the account is in, and the macserver stamped
         // lastSync when the sync that now holds the lock began, over an
         // hour ago.
+        // A big initial transfer can legitimately hold the lock for over an
+        // hour, so a lock held during it isn't stuck.
+        if (account && account.transferringToiCloud === true) return;
+
         if (await syncReport.recordStuckLock(report, blog)) return;
 
         if (shouldSkipBackgroundSync(account)) return;

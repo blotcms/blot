@@ -410,7 +410,7 @@ describe("dropbox init", function () {
         get: (_id, callback) =>
           callback(null, {
             error_code: 0,
-            transfer_pending: false,
+            transfer_pending: Boolean(behaviors[_id].transferPending),
             last_sync: behaviors[_id].lastSync || Date.now(),
           }),
         set: (_id, _values, callback) => callback(null),
@@ -662,6 +662,25 @@ describe("dropbox init", function () {
       expect(sentEmails.length).toEqual(1);
       expect(sentEmails[0].blogs.map((blog) => blog.id)).toEqual([ids.stuck]);
       expect(sentEmails[0].blogs[0].hasStuckLock).toEqual(true);
+    });
+
+    it("does not report a stuck lock for a blog still in its initial transfer", async function () {
+      const sentEmails = [];
+      const init = load(
+        {
+          [ids.stuck]: {
+            heldSince: Date.now() - 5 * HOUR,
+            lastSync: Date.now() - 5 * HOUR,
+            transferPending: true,
+          },
+        },
+        sentEmails
+      );
+
+      await init.validateAllBlogs();
+
+      expect(walked).toEqual([]);
+      expect(sentEmails).toEqual([]);
     });
 
     it("reports a partly failed walk as a walk error, with its changes, and skips Fix()", async function () {
