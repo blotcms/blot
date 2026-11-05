@@ -10,7 +10,7 @@ that turns them into a PR comment and a master-branch regression watch.
 | [`benchmarks.yml`](../../.github/workflows/benchmarks.yml) | daily on master + PRs touching render or build code | small, built fresh every run (5 sites / 1000 files) | build + render + burst phases, smoke-scale |
 | [`benchmarks-corpus.yml`](../../.github/workflows/benchmarks-corpus.yml) | weekly + manual | large (1000 sites / ~160k posts) | nothing directly - builds and caches the corpus the next workflow reads |
 | [`benchmarks-render.yml`](../../.github/workflows/benchmarks-render.yml) | manual, until `benchmarks-corpus.yml` works again | the cached large corpus | render + burst phases only, against realistic production-shaped data |
-| [`benchmarks-converters.yml`](../../.github/workflows/benchmarks-converters.yml) | PR/push touching `app/build/converters/**` | tiny (a converter's own test fixtures) | per-converter conversion timing, in-process |
+| [`benchmarks-converters.yml`](../../.github/workflows/benchmarks-converters.yml) | PR/push touching `app/build/converters/**` | a converter's own test fixtures, then a generated typical corpus | per-converter conversion timing, in-process and with each sandbox job in its own process |
 | [`benchmarks-mega.yml`](../../.github/workflows/benchmarks-mega.yml) | manual, or the `mega-benchmark` label on a PR | two generated sites shaped like the blogs that hurt everyone else, plus four small ones | base vs head in one job: cold/warm/after-bump renders, template previews, other blogs' latency meanwhile, heap. See [`mega/README.md`](mega/README.md) |
 
 `benchmarks.yml` is unchanged in behavior from before this document's corpus
@@ -281,7 +281,8 @@ working `data/` under `--out-dir` for exactly this reason.
 NODE_PATH=app node scripts/benchmarks/converter-bench.js --converter markdown --converter img --n 50
 # docx, odt and img upload what they produce to the storage bucket: start a
 # MinIO (see scripts/tests/invoke.sh) and set BLOT_STORAGE_BUCKET,
-# BLOT_STORAGE_ENDPOINT, BLOT_STORAGE_REGION, BLOT_AWS_KEY and BLOT_AWS_SECRET
+# BLOT_STORAGE_ENDPOINT, BLOT_STORAGE_REGION, BLOT_AWS_KEY and BLOT_AWS_SECRET.
+# gdoc does too; the other converters don't need it.
 ```
 
 No Docker needed for most converters - see "Per-converter benchmarks" below.
@@ -391,6 +392,34 @@ converters like image/docx. Most converters genuinely need nothing else, but
 `app/helper/transformer` (backed by the shared Redis client), so
 `benchmarks-converters.yml` runs a `redis:6` service container for every
 converter, not just when `img` is in the changed set.
+
+Two options make it closer to what a build costs in production:
+
+- **`--corpus typical`** times realistic documents instead of the test
+  fixtures, which are mostly one-line edge cases: a short note, a typical
+  post and a long essay in Markdown, the typical post as org, rtf, html, docx
+  and odt (with and without two images), and a photo and a screenshot for
+  `img`. [`converter-corpus.js`](converter-corpus.js) generates them (with
+  pandoc and sharp) on each run, so nothing binary is committed. Results get a
+  `-typical` suffix and a p50 per file, since the overall percentiles blend a
+  1 KB note with a 40 KB essay. `--corpus tests --corpus typical` runs both.
+- **`--sandbox`** runs the sandbox jobs (pandoc, sharp, exiftool) through the
+  real broker, each job in a fresh `node app/sandbox/jobs/main.js <job>`
+  process, as production does but without nsjail
+  ([`lib/local-sandbox.js`](lib/local-sandbox.js)). In-process, which is what
+  every dev and test run uses, a job costs only its work; in production each
+  one also pays a process, Node's start and its requires (about 30 ms, 70 ms
+  with sharp), and nsjail's setup on top. Results get a `-sandbox` suffix and
+  report `sandbox_jobs_per_conversion`.
+
+```bash
+NODE_PATH=app node scripts/benchmarks/converter-bench.js --converter markdown --converter org --corpus typical --sandbox --n 30
+```
+
+The workflow runs the test fixtures in-process, as before, then the typical
+corpus with `--sandbox`, and installs the pandoc release production pins
+(`PANDOC_VERSION` in `config/versions.env`): the distribution's pandoc is
+older, and its speed differs.
 
 This intentionally has its own small metrics shape and its own simplified
 regression check (latest vs. median-of-last-20, single threshold) rather than
