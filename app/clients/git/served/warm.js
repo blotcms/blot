@@ -122,10 +122,13 @@ async function run({ ids = null, force = false, now = Date.now } = {}) {
 //            already included), or when the cache declines a pack (its budget
 //            or the free-disk floor), so once the data outgrows the cache
 //            only the hot set is warmed.
-//   Gentle   in the background lane of the git limiter, at most PACKS_AT_ONCE
-//            at a time, streamed (memory does not depend on the pack's size),
-//            with a pause after each, and a longer wait while pushes, clones
-//            or fetches hold the interactive lane.
+//   Gentle   one pack at a time, streamed (memory does not depend on the
+//            pack's size) at no more than MAX_RATE, with a pause after each.
+//            It takes no place in the git limiter (streaming from the bucket
+//            is not a git process, and a long hold would delay Blot's own
+//            commits); instead, before each pack and between chunks, it waits
+//            (at most BUSY_MAX at a time) while either lane has work running
+//            or waiting.
 //   Once     under the same lock as the first phase, and not if a pack warm
 //            finished in the last WARM_EVERY.
 //
@@ -136,7 +139,10 @@ async function run({ ids = null, force = false, now = Date.now } = {}) {
 //     stopped=done|threshold|declined|... reason=...
 const PHASE_GAP = MINUTE;
 const PACK_SHARE = 0.7;
-const PACKS_AT_ONCE = 2;
+// A stream from the bucket to the disk is not a git process, so a pack takes
+// no place in the limiter: it waits for both lanes to be idle instead. One
+// pack at a time, at most this fast, so it never saturates the network at peak.
+const MAX_RATE = 50 * 1024 * 1024;
 const PAUSE = 250;
 const BUSY_WAIT = 500;
 const BUSY_MAX = 20 * 1000;
@@ -192,7 +198,7 @@ async function runPacks({
         while (next < blogs.length) {
           const blogID = blogs[next++];
           try {
-            const repo = await limiter.run("background", () => load(blogID));
+            const repo = await load(blogID);
             if (repo) repos.push(repo);
           } catch (err) {
             totals.failed++;
@@ -216,15 +222,11 @@ async function runPacks({
             return;
           }
 
-          let waited = 0;
-          while (waited < BUSY_MAX && busy()) {
-            await sleep(busyWait);
-            waited += busyWait || BUSY_MAX;
-          }
+          await yieldToGit(busyWait);
 
           let outcome;
           try {
-            outcome = await limiter.run("background", () => warmPack({ store: repo.store, cache, pack }));
+            outcome = await warmPack({ store: repo.store, cache, pack, bytesPerSecond: MAX_RATE, between: () => yieldToGit(busyWait) });
           } catch (err) {
             outcome = "failed";
           }
@@ -242,9 +244,7 @@ async function runPacks({
           await sleep(pause);
         }
       };
-      // Never take the whole background lane: Blot's own commits wait in it
-      const atOnce = Math.max(1, Math.min(PACKS_AT_ONCE, limiter.stats().background.max - 1));
-      await Promise.all(Array.from({ length: atOnce }, worker));
+      await worker();
       totals.repos = touched.size;
     });
 
@@ -267,10 +267,21 @@ async function runPacks({
   }
 }
 
-// Pushes, clones or fetches are running or waiting for a place
+// Either lane has work running or waiting: pushes, clones and fetches, or
+// Blot's own commits
 function busy() {
-  const lane = limiter.stats().interactive;
-  return lane.running + lane.waiting > 0;
+  const lanes = limiter.stats();
+  return ["interactive", "background"].some((name) => lanes[name].running + lanes[name].waiting > 0);
+}
+
+// Waits while the host is doing git work, for at most BUSY_MAX at a time, then
+// carries on
+async function yieldToGit(step = BUSY_WAIT) {
+  let waited = 0;
+  while (waited < BUSY_MAX && busy()) {
+    await sleep(step);
+    waited += step || BUSY_MAX;
+  }
 }
 
 // Deletes the per-process caches which came before the shared one (<cache

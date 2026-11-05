@@ -143,6 +143,39 @@ describe("git store: warming the cache on start", function () {
       expect(line).toContain("stopped=done");
     });
 
+    it("takes no place in the git limiter, so a Blot commit is not delayed by it", async function () {
+      await context.cache().clear();
+      var limiter = require("clients/git/limiter");
+      var log = [];
+      var slow = repo("slow", 1, [pack(1, 100, 2), pack(2, 100, 1)], log);
+      var stream = slow.store.stream;
+      slow.store.stream = function (key) {
+        var source = stream(key);
+        return Readable.from(
+          (async function* () {
+            await new Promise(function (resolve) {
+              setTimeout(resolve, 100);
+            });
+            yield* source;
+          })()
+        );
+      };
+
+      var started = limiter.stats().background.started;
+      var seen = 0;
+      var poll = setInterval(function () {
+        var lane = limiter.stats().background;
+        seen = Math.max(seen, lane.running + lane.waiting);
+      }, 10);
+
+      var result = await warm.runPacks({ ...options, ids: ["slow"], load: async () => slow });
+      clearInterval(poll);
+
+      expect(result.packs).toBe(2);
+      expect(seen).toBe(0);
+      expect(limiter.stats().background.started).toBe(started);
+    });
+
     it("stops at the threshold, counting what is already cached", async function () {
       var cache = context.cache();
       await cache.clear();

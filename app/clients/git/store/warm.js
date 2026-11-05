@@ -18,6 +18,7 @@
 // warmPack({ store, cache, pack }) streams one into the cache through
 // keepPack, as the writers do, so the copy is exactly what clone and pack.js
 // read; its memory does not depend on the pack's size.
+const { Readable } = require("stream");
 const manifest = require("./manifest");
 const { chooseWhole, loadWhole, wholeKey } = require("./idx");
 const { idxKey, packKey, manifestKey } = require("./layout");
@@ -101,7 +102,24 @@ async function lastWritten(store, m) {
 // Streams one pack into the cache. Resolves "cached" (already there at the
 // right size), "fetched", "skipped" (too big for the cache to keep a copy of),
 // "declined" (the cache would not take it) or "failed" (the download did).
-async function warmPack({ store, cache, pack }) {
+//
+// `bytesPerSecond` caps the download's rate, and `between()` (awaited between
+// chunks) lets the caller hold it back while the host is busy.
+async function* paced(source, { bytesPerSecond = Infinity, between = null }) {
+  const started = Date.now();
+  let sent = 0;
+  for await (const chunk of source) {
+    if (between) await between();
+    yield chunk;
+    sent += chunk.length;
+    if (bytesPerSecond < Infinity) {
+      const wait = (sent / bytesPerSecond) * 1000 - (Date.now() - started);
+      if (wait > 1) await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+  }
+}
+
+async function warmPack({ store, cache, pack, bytesPerSecond = Infinity, between = null }) {
   const key = cacheKeyOf(store, pack.name);
   if ((await cache.size(key)) === pack.size) return "cached";
   if (pack.size > Math.floor(cache.maxBytes / CACHE_SHARE)) return "skipped";
@@ -110,6 +128,7 @@ async function warmPack({ store, cache, pack }) {
   let stream;
   try {
     stream = store.stream(packKey(pack.name));
+    if (bytesPerSecond < Infinity || between) stream = Readable.from(paced(stream, { bytesPerSecond, between }), { objectMode: false });
   } catch (err) {
     return "failed";
   }
