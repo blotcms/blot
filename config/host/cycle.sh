@@ -80,7 +80,7 @@ ROOT=$(dirname "$(dirname "$HERE")")
 SOCKET=/run/blot/redis/redis.sock
 PAUSE_FILE=/etc/blot/deploy-paused
 FREEZE_REASON="host cycle" # how switch tells its own freeze from someone else's
-FREEZE_GRACE=15            # seconds for requests already in flight when the freeze starts
+FREEZE_GRACE=3             # seconds for requests already in flight when the freeze starts (syncs: LOCK_WAIT)
 LOCK_WAIT=120              # then how long their folder locks may take to go
 SYNC_TRIES=720             # checks 10 seconds apart: two hours for the first sync
 FRESH_REDIS_KEYS=10        # a fresh Redis holds only its samplers' keys (tcpmem-log.sh, redis-mem-log.sh)
@@ -583,7 +583,7 @@ ro_status() { # ro_status <host>: read-only.js's JSON line: the freeze, and the 
   on "$1" "sudo docker exec blot-blue node scripts/read-only.js status" | grep '^{'
 }
 
-# freeze_old: the old units turn writes away (a 503 the clients retry; a sync
+# freeze_old [command]: the old units turn writes away (a 503 the clients retry; a sync
 # waits before it takes its folder lock), then the requests and syncs already
 # under way finish. FAILOVER loses no write by itself, but a sync cut off half
 # way, its files in S3 and its entries not yet in Redis, would stay half done,
@@ -600,11 +600,19 @@ freeze_old() {
   [ -z "$DRY_RUN" ] || { echo "would wait ${FREEZE_GRACE}s, then up to ${LOCK_WAIT}s for the folder locks to go"; return 0; }
   out=$(ro_status "$OLD_NOW") || die "read-only.js status failed on $OLD_NOW"
   ! echo "$out" | grep -q '"readOnly":null' || die "the freeze did not take effect: $out"
+  # [command] runs meanwhile: anything that needs writes stopped but not the
+  # promotion, so it costs no time inside the freeze.
+  local also=""
+  if [ -n "${1:-}" ]; then "$1" & also=$!; fi
   echo "Frozen. Waiting ${FREEZE_GRACE}s for requests already in flight"
   sleep "$FREEZE_GRACE"
   for i in $(seq 1 $((LOCK_WAIT / 2))); do
     out=$(ro_status "$OLD_NOW") || die "read-only.js status failed on $OLD_NOW"
-    if echo "$out" | grep -q '"lockedBlogs":\[\]'; then echo "No folder locks held"; return 0; fi
+    if echo "$out" | grep -q '"lockedBlogs":\[\]'; then
+      echo "No folder locks held"
+      [ -z "$also" ] || wait "$also" || die "$1 failed"
+      return 0
+    fi
     sleep 2
   done
   die "folder locks still held after about ${LOCK_WAIT}s: $out"
@@ -617,6 +625,14 @@ freeze_old() {
 stop_old_units() {
   on "$OLD_NOW" "sudo bash -c 'f=/tmp/blot-proxy-deploy.lock; [ -e \$f ] || touch \$f; exec 9< \$f; flock -w 300 9; docker stop --time 40 $UNIT_NAMES > /dev/null; docker ps --quiet --filter name=-airlock | xargs -r docker stop > /dev/null'"
   [ -z "$(on "$OLD_NOW" "sudo docker ps -q --filter name=^blot-")" ] || die "containers are still running on $OLD_NOW"
+}
+
+# The new host's cache was filled during verification and missed every purge
+# since; cached pages have no TTL. Emptied once writes have stopped, so nothing
+# can go stale again before the Elastic IP moves.
+CACHE_EMPTIED=""
+empty_new_cache() {
+  act on "$NEW" "\$HOME/proxy-deploy/reset-cache.sh ${IMAGE##*:}" && CACHE_EMPTIED=1
 }
 
 unfreeze() {
@@ -751,11 +767,11 @@ phase_switch() {
   cat << EOF
 
  1. freeze the app on $OLD_NOW, wait for syncs under way: writes stop here
+    (meanwhile, empty the proxy cache on $NEW)
  2. promote $NEW's Redis, $OLD_REDIS becomes its replica
- 3. empty the proxy cache on $NEW
- 4. $EIP ($eip_address) to $NEW_ID
+ 3. $EIP ($eip_address) to $NEW_ID
+ 4. check $host through the Elastic IP, lift the freeze: writes resume here
  5. stop the units on $OLD_NOW, import permabans on $NEW
- 6. check $host through the Elastic IP, lift the freeze
 EOF
   confirm "Switch to $NEW?"
   YES=1 # asked once, here: a prompt must not eat into the freeze
@@ -763,8 +779,8 @@ EOF
 
   # A master here was promoted by this cycle (checked above), so the freeze was done.
   if [ "$role" != master ]; then
-    say "1. Freeze"
-    freeze_old
+    say "1. Freeze, emptying the proxy cache on $NEW meanwhile"
+    if [ "$eip_on" != "$NEW_ID" ]; then freeze_old empty_new_cache; else freeze_old; fi
     rearm "$OLD_NOW" # the TTL starts again for the promotion
 
     STAGE=promotion
@@ -773,19 +789,17 @@ EOF
     else "$ROOT/config/redis/promote.sh" --yes "$OLD_REDIS" "$NEW"; fi
   fi
   STAGE="after the promotion"
-  rearm "$NEW"
-  # promote.sh can finish FAILOVER and die before it writes the markers, and
-  # backup.sh skips a host without one. Here the promotion is this cycle's
-  # (checked above or just done), so make both right, as promote.sh does.
-  act on "$NEW" "sudo touch /etc/blot-redis/active"
-  act on "$OLD_REDIS" "sudo rm -f /etc/blot-redis/active"
+  # The freeze key replicated with everything else, TTL included, so it holds
+  # on $NEW without a rearm here.
 
   if [ "$eip_on" != "$NEW_ID" ]; then
-    say "3. Emptying the proxy cache on $NEW"
-    act on "$NEW" "\$HOME/proxy-deploy/reset-cache.sh ${IMAGE##*:}"
-    rearm "$NEW"
+    # Only when a resumed switch skipped the freeze above
+    if [ -z "$CACHE_EMPTIED" ]; then
+      say "Emptying the proxy cache on $NEW"
+      empty_new_cache
+    fi
 
-    say "4. Moving $EIP to $NEW_ID"
+    say "3. Moving $EIP to $NEW_ID"
     act aws_cli ec2 associate-address --allocation-id "$EIP" --instance-id "$NEW_ID" --allow-reassociation
     if [ -z "$DRY_RUN" ]; then
       [ "$(aws_cli ec2 describe-addresses --allocation-ids "$EIP" --query 'Addresses[0].InstanceId' --output text)" = "$NEW_ID" ] ||
@@ -795,16 +809,24 @@ EOF
     fi
   fi
 
-  say "5. Stopping the units on $OLD_NOW, importing permabans"
-  rearm "$NEW"
-  act stop_old_units
-  act "$HERE/bans.sh" import "$NEW" "$BANS_FILE"
-
-  say "6. Checking and unfreezing"
+  say "4. Checking and unfreezing"
   if [ -z "$DRY_RUN" ]; then
     wait_public_health "$eip_address" "$host"
   fi
   act unfreeze
+  echo "Writes resumed $(($(date +%s) - t0))s after the freeze"
+
+  # None of this needs writes stopped. The old units get no traffic once the
+  # Elastic IP has moved, and any write they still try fails on what is now a
+  # replica.
+  say "5. Stopping the units on $OLD_NOW, importing permabans"
+  # promote.sh can finish FAILOVER and die before it writes the markers, and
+  # backup.sh skips a host without one. Here the promotion is this cycle's
+  # (checked above or just done), so make both right, as promote.sh does.
+  act on "$NEW" "sudo touch /etc/blot-redis/active"
+  act on "$OLD_REDIS" "sudo rm -f /etc/blot-redis/active"
+  act stop_old_units
+  act "$HERE/bans.sh" import "$NEW" "$BANS_FILE"
   STAGE=""
   say "Switched in $(($(date +%s) - t0))s: $NEW serves $eip_address and takes writes. Next: settle"
   echo "Before finish, change HostName for $NEW in ~/.ssh/config to $eip_address: its launch address is released."

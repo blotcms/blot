@@ -304,16 +304,19 @@ looking at the hosts, so after a failure fix the cause and run it again. Check
   deploy also fills the host's static directory from the image; `app` and the
   checks before `switch` fetch `/layout.css` from the `cdn.` host to prove it.
 - **The freeze.** `switch` first turns on the app's read-only mode
-  (`scripts/read-only.js`, reason `host cycle`) through the old units, waits 15
+  (`scripts/read-only.js`, reason `host cycle`) through the old units, waits 3
   seconds for requests in flight, then up to 2 minutes for every folder lock
-  to go, and only then promotes. Writes get a 503 the clients retry, and syncs
+  to go, and only then promotes. The new host's proxy cache is emptied during
+  that wait. Writes get a 503 the clients retry, and syncs
   wait before taking their lock. FAILOVER loses no write by itself; the freeze
   is there so that no sync is cut off half way (its files in S3, its entries
   not yet in Redis) and nothing writes to what is about to become a replica.
   The freeze is a Redis key with a TTL (`--freeze-ttl`, default 900 seconds),
-  so it follows the promotion: `switch` re-arms it between steps, through
-  whichever host has the master, and lifts it through the new host once the
-  site answers through the Elastic IP. If the lock wait fails, `switch` lifts
+  so it follows the promotion, and `switch` lifts it through the new host as
+  soon as the site answers through the Elastic IP. Only the promotion and the
+  Elastic IP move happen inside it: stopping the old units, importing the
+  permabans and the backup markers come after, since the old units get no
+  traffic once the address has moved and their Redis is then a replica. If the lock wait fails, `switch` lifts
   the freeze again before it stops; one it finds on for any other reason, it
   refuses to touch. The old units are stopped but not removed, and the old
   Redis stays a replica of the new one.
