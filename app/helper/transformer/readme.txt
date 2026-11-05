@@ -24,9 +24,11 @@ transform again.
 
 It is NOT a guarantee about lookups that are in flight at the same moment.
 Note this does not happen within a single entry render: the image plugin
-walks <img> tags with async.eachOfSeries (see build/plugins/eachEl.js), so
-the same image referenced twice in one post is looked up one call after
-the other, not concurrently. The race is between *independent* callers of
+looks each distinct <img> src up once (a repeated src is not looked up again)
+and at most two at a time (see build/plugins/image/index.js), so the same
+image referenced twice in one post is never looked up concurrently. Two
+different srcs with identical bytes in one post can be, which at worst leaves
+one extra copy under _image_cache/. The race is between *independent* callers of
 the same (blogID, name) store - e.g. two entries rebuilt in parallel that
 reference the same URL. When that happens both lookups run the transform.
 
