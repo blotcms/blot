@@ -73,9 +73,14 @@ esac
 f=${root}/fake
 echo "$* | config=$RCLONE_CONFIG s3=$RCLONE_CONFIG_STORAGE_TYPE,$RCLONE_CONFIG_STORAGE_PROVIDER,$RCLONE_CONFIG_STORAGE_REGION,$RCLONE_CONFIG_STORAGE_ACCESS_KEY_ID,$RCLONE_CONFIG_STORAGE_ENV_AUTH b2=$RCLONE_CONFIG_OFFSITE_TYPE,$RCLONE_CONFIG_OFFSITE_ACCOUNT,$RCLONE_CONFIG_OFFSITE_HARD_DELETE secrets=$([ "$RCLONE_CONFIG_STORAGE_SECRET_ACCESS_KEY" = ${S3_SECRET} ] && [ "$RCLONE_CONFIG_OFFSITE_KEY" = ${B2_SECRET} ] && echo set)" >> "${root}/rclone-calls"
 for last; do :; done
+prev=
+for a; do [ "$prev" = --files-from-raw ] && cat "$a" >> "${root}/files-from.$1"; prev=$a; done
 case "$1" in
   lsf)
     case "$*" in
+      *storage:test-storage/blog_a/git/manifests) [ -z "$MANIFEST_LIST_FAILS" ] || { echo "AccessDenied" >&2; exit 1; }; printf "\${S3_MANIFESTS-0000000002.json\\n0000000003.json\\nlatest.json\\n}" ;;
+      *offsite:test-offsite/storage/blog_a/git/manifests) printf '0000000001.json\n0000000002.json\nlatest.json\n' ;;
+      */git/manifests) exit 3 ;;
       *--files-from-raw*) printf '2026-11-05 09:00:00  b.txt\\n' ;;
       *storage:*) [ -z "$LIST_FAILS" ] || { echo "AccessDenied" >&2; exit 1; }; cat "$f/source" ;;
       *storage/blog_a) printf 'folder/\\ngit/\\n' ;;
@@ -85,11 +90,19 @@ case "$1" in
   sync) case " $FAIL " in *" \${last##*/} "*) echo "ERROR : x.jpg: Failed to copy: 500" >&2; exit 1 ;; esac ;;
   size) echo '{"count":3,"bytes":1000000000000,"sizeless":0}' ;;
   delete) ;;
-  copy) mkdir -p "$last"; echo a > "$last/a.txt"; echo b > "$last/b.txt" ;;
+  cat)
+    case "$last" in
+      storage:test-storage/blog_a/git/manifests/latest.json) echo '{"seq":3}' ;;
+      offsite:*/blog_a/git/manifests/latest.json) echo '{"seq":2}' ;;
+      *) echo "not found" >&2; exit 1 ;;
+    esac ;;
+  rcat) cat >> "${root}/rcat" ;;
+  copy) case "$last" in offsite:*) ;; *) mkdir -p "$last"; echo a > "$last/a.txt"; echo b > "$last/b.txt" ;; esac ;;
   check)
     while [ $# -gt 0 ]; do [ "$1" = --combined ] && out=$2; shift; done
     printf "\${CHECK:-= a.txt\\n= b.txt\\n}" > "$out"
-    case "$CHECK" in *"*"*) exit 1 ;; esac ;;
+    case "$CHECK" in *"*"* | *"+ "* | *"- "*) exit 1 ;; esac
+    exit "\${CHECK_STATUS:-0}" ;;
   *) echo "unexpected: $*" >&2; exit 1 ;;
 esac
 `
@@ -122,16 +135,13 @@ esac
       expect(result.stdout).toContain("hid blog_gone, gone from the bucket");
 
       const syncs = calls().filter((c) => c.startsWith("sync "));
-      expect(syncs.length).toBe(4);
+      expect(syncs.length).toBe(2);
       ["blog_a", "blog_b"].forEach((blog) => {
-        // Everything but the git manifests first, then the manifests, so no
-        // manifest reaches B2 before the packs it names
         const mine = syncs.filter((c) => c.includes(` storage:test-storage/${blog} offsite:test-offsite/storage/${blog} |`));
-        expect(mine.length).toBe(2);
-        expect(mine[0]).toContain('--exclude /git/manifests/** ');
-        expect(mine[1]).toContain('--include /git/manifests/** ');
+        expect(mine.length).toBe(1);
+        expect(mine[0]).toContain("--exclude /git/manifests/** ");
       });
-      expect(calls().filter((c) => c.startsWith("delete "))).toEqual([
+      expect(calls().filter((c) => c.startsWith("delete ") && !c.includes("--files-from-raw"))).toEqual([
         jasmine.stringMatching(/ offsite:test-offsite\/storage\/blog_gone \|/),
       ]);
 
@@ -143,6 +153,38 @@ esac
       expect(record.bytes).toBe(2000000000000);
       expect(Math.abs(Date.now() - record.time)).toBeLessThan(60 * 1000);
       expect(result.stdout).toContain("done in");
+    });
+
+    it("copies a git blog's manifests listed before its packs, last, and hides the swept ones", function () {
+      expect(sync().status).toBe(0);
+      const order = calls()
+        .filter((c) => c.includes("storage/blog_a") || c.includes("storage:test-storage/blog_a"))
+        .map((c) => c.split(" ")[0]);
+      // latest.json and the list of manifests before the packs are synced,
+      // then only the listed manifests, then latest.json as it was read
+      expect(order.indexOf("cat")).toBeLessThan(order.indexOf("lsf"));
+      expect(order.indexOf("lsf")).toBeLessThan(order.indexOf("sync"));
+      expect(order.indexOf("sync")).toBeLessThan(order.indexOf("copy"));
+      expect(order.indexOf("copy")).toBeLessThan(order.indexOf("rcat"));
+      expect(read("files-from.copy")).toBe("git/manifests/0000000002.json\ngit/manifests/0000000003.json\n");
+      expect(read("rcat")).toBe('{"seq":3}\n');
+      expect(read("files-from.delete")).toBe("git/manifests/0000000001.json\n");
+      // blog_b has no git store: no manifest copy, upload or hide
+      expect(calls().filter((c) => c.includes("blog_b") && /^(copy|rcat|delete) /.test(c))).toEqual([]);
+    });
+
+    it("leaves latest.json alone when B2's matches", function () {
+      expect(sync([], { S3_MANIFESTS: "0000000002.json\\nlatest.json\\n" }).status).toBe(0);
+      expect(read("files-from.copy")).toBe("git/manifests/0000000002.json\n");
+      expect(read("files-from.delete")).toBe("git/manifests/0000000001.json\n");
+    });
+
+    it("fails a blog, and hides none of its manifests, when its manifests cannot be listed", function () {
+      const result = sync(["--quick"], { MANIFEST_LIST_FAILS: "1" });
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain("blog_a: AccessDenied");
+      expect(read("files-from.delete")).toBe("");
+      expect(read("redis-calls")).toBe("");
     });
 
     it("builds the remotes from the environment, with the app's key and the B2 profile, and never hard deletes", function () {
@@ -221,8 +263,9 @@ esac
 
       expect(result.status).toBe(1);
       expect(result.stdout).toContain("1 blogs are in B2 but not in the bucket, more than 0: hiding none of them");
-      expect(calls().filter((c) => c.startsWith("delete "))).toEqual([]);
-      expect(calls().filter((c) => c.startsWith("sync ")).length).toBe(4);
+      // Only blog_a's swept manifest, never a whole blog
+      expect(calls().filter((c) => c.startsWith("delete ") && !c.includes("--files-from-raw"))).toEqual([]);
+      expect(calls().filter((c) => c.startsWith("sync ")).length).toBe(2);
       expect(read("redis-calls")).toBe("");
     });
 
@@ -242,7 +285,7 @@ esac
       fs.rmSync(file("fake/offsite"));
       const result = sync();
       expect(result.status).toBe(0);
-      expect(calls().filter((c) => c.startsWith("sync ")).length).toBe(4);
+      expect(calls().filter((c) => c.startsWith("sync ")).length).toBe(2);
     });
 
     it("fails without the B2 profile, saying so", function () {
@@ -291,15 +334,26 @@ esac
     });
 
     it("lists each difference with the bucket's time, and fails", function () {
-      const result = restore(["blog_a"], { CHECK: "= a.txt\\n* b.txt\\n- c.txt\\n" });
+      // rclone check: "+" is missing on the destination (the copy), "-"
+      // missing on the source (the bucket)
+      const result = restore(["blog_a"], { CHECK: "= a.txt\\n* b.txt\\n+ c.txt\\n- d.txt\\n" });
 
       expect(result.status).toBe(1);
       expect(result.stdout).toContain("1 match");
       expect(result.stdout).toContain("1 differ");
       expect(result.stdout).toContain("1 in the bucket but not in the copy");
+      expect(result.stdout).toContain("1 in the copy but no longer in the bucket");
       expect(result.stdout).toContain("* b.txt  (bucket: 2026-11-05 09:00:00)");
-      expect(result.stdout).toContain("- c.txt");
+      expect(result.stdout).toContain("+ c.txt");
+      expect(result.stdout).toContain("+ only in the bucket, - only in the copy");
       expect(result.stdout).toContain("FAILED");
+    });
+
+    it("fails when rclone check stops part way, even with a clean report", function () {
+      const result = restore(["blog_a"], { CHECK_STATUS: "143" });
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain("rclone check exited 143");
+      expect(result.stdout).not.toContain("OK:");
     });
 
     it("keeps the restored files with --keep", function () {

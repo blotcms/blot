@@ -160,9 +160,12 @@ echo "Restored $(echo "$size" | sed -n 's/.*"count": *\([0-9]*\).*/\1/p') files,
   "$(echo "$size" | sed -n 's/.*"bytes": *\([0-9]*\).*/\1/p') bytes, in $(( $(date +%s) - start ))s"
 
 # Byte for byte: the bucket's MD5 ETags and B2's SHA-1s have nothing in
-# common, so both sides are read. rclone check exits 1 on any difference.
+# common, so both sides are read. rclone check exits non-zero on any
+# difference, and also when it stops part way (a listing error, a signal), so
+# OK needs its exit status to be 0 as well as a clean report.
+check_status=0
 # shellcheck disable=SC2086
-rclone check $FLAGS --download --combined "$WORK/check" "$SOURCE" "$WORK/restored" 2> "$WORK/check-log" || true
+rclone check $FLAGS --download --combined "$WORK/check" "$SOURCE" "$WORK/restored" 2> "$WORK/check-log" || check_status=$?
 if [ ! -s "$WORK/check" ]; then
   echo "Nothing was compared: is $BLOG/$SUBPATH in the bucket? rclone said:" >&2
   head -n 20 "$WORK/check-log" >&2
@@ -172,8 +175,10 @@ fi
 count() { grep -c "^$1 " "$WORK/check" || true; }
 same=$(count =)
 differ=$(count '\*')
-missing=$(count -)
-extra=$(count +)
+# rclone's report: "-" is missing on the source (the bucket), so only in the
+# copy; "+" is missing on the destination (the copy), so only in the bucket.
+missing=$(count +)
+extra=$(count -)
 errors=$(count !)
 
 echo
@@ -185,8 +190,14 @@ echo "  $extra in the copy but no longer in the bucket"
 echo "  $errors could not be compared"
 
 if [ "$same" -gt 0 ] && [ $((differ + missing + extra + errors)) = 0 ]; then
-  echo "OK: the copy of $BLOG/$SUBPATH matches the bucket"
-  exit 0
+  if [ "$check_status" = 0 ]; then
+    echo "OK: the copy of $BLOG/$SUBPATH matches the bucket"
+    exit 0
+  fi
+  echo
+  echo "FAILED: rclone check exited $check_status without reporting a difference, so the comparison did not finish. rclone said:"
+  tail -n 20 "$WORK/check-log"
+  exit 1
 fi
 
 # The bucket's time for each difference (the first 20): one changed after the
@@ -197,7 +208,7 @@ cut -c3- "$WORK/differences" > "$WORK/paths"
 rclone lsf $FLAGS --use-server-modtime --files-only -R --format tp --separator '  ' \
   --files-from-raw "$WORK/paths" "$SOURCE" > "$WORK/times" 2> /dev/null || true
 echo
-echo "Differences (= match, * differ, - only in the bucket, + only in the copy, ! error), with the bucket's time:"
+echo "Differences (= match, * differ, + only in the bucket, - only in the copy, ! error), with the bucket's time:"
 # lsf prints "<time, 19 characters>  <path>".
 while IFS= read -r line; do
   time=$(awk -v p="${line#??}" 'substr($0, 22) == p { print substr($0, 1, 19); exit }' "$WORK/times")

@@ -152,12 +152,15 @@ uploads; B2 keeps SHA-1s). Daily it trusts the times S3 lists (`--update
 reads each object's time, which catches an object rewritten while the
 previous run was copying it. `offsite-sync.sh --full` does that by hand.
 
-Each blog is synced in two passes: everything except `git/manifests/**`, then
-`git/manifests/**`. The git store uploads a push's packs before the manifest
-that names them, but rclone copies keys in no particular order, so a single
-pass could copy a new manifest to B2 before its packs. With the manifests last,
-every manifest in B2 names packs that are already there. The second pass lists
-the blog again, which doubles the listings.
+Each git blog's manifests are listed first, and copied last. The git store
+uploads a push's packs before the manifest that names them, then overwrites
+the hint `git/manifests/latest.json`. The sync reads `latest.json`, lists the
+numbered manifests, syncs everything else (the packs), then copies only the
+manifests it listed and uploads `latest.json` as it read it. So every
+manifest in B2 names packs that were in S3 when the packs were listed, even
+when a push lands mid-run; a manifest made since waits for the next run.
+Manifests in B2 that the list lacks (deleted by the store's sweep) are hidden.
+That is a listing and a GET of `latest.json` more per git blog.
 
 A file deleted in S3 is hidden in B2 (`b2_hide_file`, which needs only
 `writeFiles`); `--b2-hard-delete` is never used, and the key would be refused
@@ -206,10 +209,11 @@ uid 1000:
 The `--scratch` directory is also on the instance store, so deep clones don't
 fill `/tmp`. The checker prints one JSON line per blog, then a summary line.
 Exit 0 is a pass, 1 means findings and 2 means bad arguments. If the unit's
-image has no checker yet, the step is skipped with a message. A cheap-check
-failure on a blog pushed in the last day can be a push that landed while the
-last sync ran, which usually shows as `missing ... latest.json names N`. Rerun
-after the next sync before it counts as a failure.
+image has no checker yet, the step is skipped with a message. Because the sync
+copies manifests from a list taken before the packs (above), a push landing
+mid-sync should not show up as a finding: a `missing ...` finding, or
+`latest.json names N`, is worth investigating. Before treating it as a lost
+backup, rerun the test after the next sync.
 
 ```
 /usr/local/lib/blot-storage/offsite-restore-test.sh --git [--sample <n>] [<blogID>...]

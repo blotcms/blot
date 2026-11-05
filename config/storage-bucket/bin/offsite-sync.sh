@@ -113,6 +113,64 @@ else
 fi
 log "$MODE sync of $(wc -l < "$WORK/source" | tr -d ' ') blogs to B2 ($gone gone from the bucket), $PARALLEL at a time"
 
+# sync_blog <worker> <blog>: the blog's copy in B2, in the order above.
+sync_blog() {
+  m=$WORK/manifests.$1
+  src="storage:$STORAGE_BUCKET/$2"
+  dst="$OFFSITE_ROOT/$2"
+  prefix="$2: "
+  # latest.json before the list, so the list has the manifest it names. It
+  # fails for a blog without a git store, which the list then confirms.
+  # shellcheck disable=SC2086
+  rclone cat $FLAGS "$src/git/manifests/latest.json" > "$m.latest" 2> /dev/null || rm -f "$m.latest"
+  # Exit 3 is rclone's "directory not found": no manifests. Anything else
+  # fails the blog, rather than hiding B2's manifests on a bad listing.
+  status=0
+  # shellcheck disable=SC2086
+  rclone lsf $FLAGS --files-only "$src/git/manifests" > "$m.source" 2> "$m.error" || status=$?
+  case $status in
+    0) ;;
+    3) : > "$m.source" ;;
+    *) awk -v p="$prefix" '{ print p $0 }' "$m.error"; return 1 ;;
+  esac
+  if grep -qx latest.json "$m.source" && [ ! -e "$m.latest" ]; then
+    echo "${prefix}latest.json appeared during the run; next run"; return 1
+  fi
+  # shellcheck disable=SC2086
+  rclone sync $SYNC_FLAGS --exclude "/git/manifests/**" "$src" "$dst" 2>&1 | awk -v p="$prefix" '{ print p $0 }' || return 1
+
+  grep -vx latest.json "$m.source" | sed 's|^|git/manifests/|' > "$m.copy" || true
+  if [ -s "$m.copy" ]; then
+    # shellcheck disable=SC2086
+    rclone copy $SYNC_FLAGS --files-from-raw "$m.copy" "$src" "$dst" 2>&1 | awk -v p="$prefix" '{ print p $0 }' || return 1
+  fi
+  if [ -e "$m.latest" ]; then
+    # shellcheck disable=SC2086
+    rclone cat $FLAGS "$dst/git/manifests/latest.json" > "$m.offsite-latest" 2> /dev/null || : > "$m.offsite-latest"
+    if ! cmp -s "$m.latest" "$m.offsite-latest"; then
+      # shellcheck disable=SC2086
+      rclone rcat $FLAGS "$dst/git/manifests/latest.json" < "$m.latest" 2>&1 | awk -v p="$prefix" '{ print p $0 }' || return 1
+    fi
+  fi
+
+  # Hide the manifests B2 has but the list did not: the sweep deleted them
+  # (or the whole store was removed). Everything in B2 came from an earlier
+  # list, so nothing newer is hidden by mistake.
+  status=0
+  # shellcheck disable=SC2086
+  rclone lsf $FLAGS --files-only "$dst/git/manifests" > "$m.offsite" 2> "$m.error" || status=$?
+  case $status in
+    0) ;;
+    3) : > "$m.offsite" ;;
+    *) awk -v p="$prefix" '{ print p $0 }' "$m.error"; return 1 ;;
+  esac
+  grep -vxF -f "$m.source" "$m.offsite" | sed 's|^|git/manifests/|' > "$m.hide" || true
+  if [ -s "$m.hide" ]; then
+    # shellcheck disable=SC2086
+    rclone delete $FLAGS --files-from-raw "$m.hide" "$dst" 2>&1 | awk -v p="$prefix" '{ print p $0 }' || return 1
+  fi
+}
+
 # worker <n>: runs the jobs in $WORK/jobs.<n>. A blog that fails is listed in
 # $WORK/failed.<n>, and what B2 holds of each synced one in $WORK/sizes.<n>.
 worker() {
@@ -131,17 +189,16 @@ worker() {
       fi
       continue
     fi
-    # Two passes, manifests last. The git store (app/clients/git/store,
-    # layout.js) uploads a push's packs before the manifest that names them,
-    # {blogID}/git/manifests/<seq>.json (and latest.json), but rclone copies
-    # keys in no particular order, so one pass could copy a new manifest
-    # while its packs are still missing from B2. Everything else first, then
-    # the manifests, so every manifest in B2 names packs already there. Each
-    # pass syncs, and hides deletions, only within its own filter.
-    # shellcheck disable=SC2086
-    if rclone sync $SYNC_FLAGS --exclude "/git/manifests/**" "storage:$STORAGE_BUCKET/$d" "$OFFSITE_ROOT/$d" 2>&1 | awk -v p="$d: " '{ print p $0 }' &&
-      rclone sync $SYNC_FLAGS --include "/git/manifests/**" "storage:$STORAGE_BUCKET/$d" "$OFFSITE_ROOT/$d" 2>&1 | awk -v p="$d: " '{ print p $0 }' &&
-      size=$(rclone size --fast-list --json "$OFFSITE_ROOT/$d" 2> /dev/null); then
+    # Manifests last, from a list taken first. The git store (app/clients/
+    # git/store, layout.js) uploads a push's packs before the manifest that
+    # names them, {blogID}/git/manifests/<seq>.json, then overwrites the hint
+    # manifests/latest.json. Taking the list of manifests (and a copy of
+    # latest.json) before the packs are listed means every manifest copied
+    # names packs which were already in the bucket when they were listed. A
+    # manifest made since waits for the next run. The numbered manifests are
+    # never overwritten, so copying the listed names is enough; latest.json is
+    # uploaded as it was read, so it never names a manifest B2 lacks.
+    if sync_blog "$1" "$d" && size=$(rclone size --fast-list --json "$OFFSITE_ROOT/$d" 2> /dev/null); then
       count=$(echo "$size" | sed -n 's/.*"count": *\([0-9]*\).*/\1/p')
       bytes=$(echo "$size" | sed -n 's/.*"bytes": *\([0-9]*\).*/\1/p')
       echo "${count:-0} ${bytes:-0}" >> "$WORK/sizes.$1"
