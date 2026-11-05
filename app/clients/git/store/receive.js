@@ -1095,7 +1095,7 @@ async function swap({ store, cache, lock, commands, added, base }) {
     });
 
     try {
-      await manifest.swap({ store, lock, base: current, next, uploaded, waitForHint: false });
+      await manifest.swap({ store, lock, base: current, next, uploaded });
       return next;
     } catch (err) {
       if (!(err instanceof StaleManifestError) || attempt >= ATTEMPTS) throw err;

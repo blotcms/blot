@@ -140,12 +140,14 @@ function counting(inner) {
     return buffer;
   };
 
+  // A conditional get answers { bytes, etag } or { notModified } (a 304,
+  // which is still a request)
   wrapped.get = async (key, options) => {
     const t = tally();
     if (t) request(t);
-    const buffer = await inner.get(key, options);
-    if (t) t.bytesDown += size(buffer);
-    return buffer;
+    const answer = await inner.get(key, options);
+    if (t) t.bytesDown += size(answer && answer.bytes ? answer.bytes : answer);
+    return answer;
   };
 
   wrapped.stream = (key, offset, length) => {

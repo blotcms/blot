@@ -15,7 +15,7 @@ const blotWrite = require("../commit");
 const createCache = require("../cache");
 const createMemoryStore = require("../objectStore/memory");
 const createReader = require("../reader");
-const { manifestKey, packKey, idxKey, revKey } = require("../layout");
+const { LATEST_KEY, manifestKey, packKey, idxKey, revKey } = require("../layout");
 
 const ZERO = "0".repeat(40);
 const MASTER = "refs/heads/master";
@@ -210,6 +210,31 @@ describe("git store receive", function () {
       expect(used.heads).toBe(3);
       expect(used.reads).toBe(4);
       expect(reading).toBe(10);
+    });
+
+    it("answers only once the hint is written, so another process's serving read straight after sees the push", async function () {
+      // Another process on the same objects, warm, and within the few
+      // seconds its serving reads trust an unchanged hint
+      const other = { ...store };
+      const now = Date.now();
+      const clock = () => now;
+      const before = await manifest.read(other, { clock });
+      expect((await manifest.read(other, { clock, serving: true })).seq).toBe(before.seq);
+
+      // The hint lands slowly
+      const real = store.put;
+      spyOn(store, "put").and.callFake(async (key, body) => {
+        if (key === LATEST_KEY) await new Promise((resolve) => setTimeout(resolve, 300));
+        return real(key, body);
+      });
+
+      const tip = commit("work");
+      expect((await push(src, [server.url, "work:master"])).code).toBe(0);
+      expect(server.results[0].outcome).toBe("ok");
+
+      const seen = await manifest.read(other, { clock, serving: true });
+      expect(seen.seq).toBe(before.seq + 1);
+      expect(seen.refs[MASTER]).toBe(tip);
     });
 
     it("accepts a push which carries no objects", async function () {
