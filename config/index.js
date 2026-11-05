@@ -334,25 +334,13 @@ module.exports = {
   // repository is, under {blogID}/git/ in the storage bucket
   // (app/clients/git/served).
   git_store: {
-    // Where the store's log lines are also appended, so they outlive the
-    // containers (app/clients/git/served/file-log.js). Empty is off (the
-    // specs turn it off). app/scheduler/prune-tmp.js leaves its directory
-    // alone.
-    log:
-      process.env.BLOT_GIT_STORE_LOG !== undefined
-        ? process.env.BLOT_GIT_STORE_LOG
-        : BLOT_TMP_DIRECTORY + "/git-store-log/git-store.log",
     // The store's local cache and scratch space. In production tmp is on the
     // host's instance store (/var/instance-ssd/tmp), which is where this
     // belongs: nothing in it needs to survive. Each process takes a
     // directory of its own inside it.
-    cache_directory:
-      process.env.BLOT_GIT_STORE_CACHE_DIRECTORY ||
-      BLOT_TMP_DIRECTORY + "/git-store",
+    cache_directory: BLOT_TMP_DIRECTORY + "/git-store",
     // The budget of each process's cache, scratch space included
-    cache_bytes:
-      parseInt(process.env.BLOT_GIT_STORE_CACHE_BYTES, 10) ||
-      1024 * 1024 * 1024,
+    cache_bytes: 1024 * 1024 * 1024,
   },
 
   // The content cache of the S3 backend of storage/folder

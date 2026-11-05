@@ -75,7 +75,6 @@ module.exports = function setup(options) {
     saved = Object.assign({}, config.git_store);
     config.git_store.cache_directory = ctx.storeScratch + "/cache";
     config.git_store.cache_bytes = 256 * 1024 * 1024;
-    config.git_store.log = "";
 
     ctx.stores = {};
     context._setObjectStore(

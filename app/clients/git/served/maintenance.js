@@ -498,9 +498,13 @@ async function daily({ now = Date.now(), ids: only = null, deepCount = DEEP_SAMP
   if (test && ids.includes(test.id) && !sample.includes(test.id)) sample.push(test.id);
 
   let deepChecked = 0;
+  const deepBlogs = [];
   for (const blogID of sample.filter((id) => passed.has(id))) {
     const checked = await verify(blogID, { deep: true, cheap: false, scratchDir, recheckDelayMs });
-    if (checked.deep) deepChecked++;
+    if (checked.deep) {
+      deepChecked++;
+      deepBlogs.push(blogID);
+    }
     findings.push(...checked.findings);
   }
 
@@ -519,7 +523,7 @@ async function daily({ now = Date.now(), ids: only = null, deepCount = DEEP_SAMP
   const leftovers = await scratch({ scratchDir, now });
   if (leftovers.failed) findings.push({ blog: "-", check: "scratch", kind: "error", detail: leftovers.failed });
 
-  return { blogs: ids.length, sweeps, deepChecked, findings, orphans: orphaned, scratch: leftovers, ms: Date.now() - started };
+  return { blogs: ids.length, sweeps, deepChecked, deepBlogs, findings, orphans: orphaned, scratch: leftovers, ms: Date.now() - started };
 }
 
 function _setPrefixLister(fn) {

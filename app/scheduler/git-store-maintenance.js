@@ -54,15 +54,20 @@ async function run(options = {}) {
 
 const plural = (n, word) => n + " " + word + (n === 1 ? "" : /(s|sh|ch)$/.test(word) ? "es" : "s");
 
-// The alert email's view: what was found, by kind, blog IDs only
+// The alert email's view: the store's own findings, by kind, blog IDs only:
+// the checks of each copy (the deep sample among them), the sweep's errors
+// and the leftover copies the monthly pass deleted
 function view(report) {
   const { findings } = report;
   const count = (kind) => findings.filter((f) => f.kind === kind).length;
+  const sweepErrors = findings.filter((f) => f.check === "sweep" && f.kind === "error").length;
+  const otherErrors = count("error") - sweepErrors;
   const blogs = new Set(findings.map((f) => f.blog)).size;
   const summary = [
     count("missing") && plural(count("missing"), "missing file"),
     count("mismatch") && plural(count("mismatch"), "mismatch"),
-    count("error") && plural(count("error"), "error"),
+    sweepErrors && plural(sweepErrors, "sweep error"),
+    otherErrors && plural(otherErrors, "error"),
     count("orphan") && plural(count("orphan"), "leftover"),
   ]
     .filter(Boolean)
@@ -72,10 +77,12 @@ function view(report) {
     summary: summary + " in " + plural(blogs, "blog"),
     checked: report.blogs,
     deepChecked: report.deepChecked,
+    deepBlogs: (report.deepBlogs || []).join(", ") || "none",
     findings: findings.map((f) => ({ blog: f.blog, kind: f.kind, check: f.check, detail: f.detail })),
     hasMissing: count("missing") > 0,
     hasMismatch: count("mismatch") > 0,
-    hasErrors: count("error") > 0,
+    hasSweepErrors: sweepErrors > 0,
+    hasErrors: otherErrors > 0,
     hasOrphans: count("orphan") > 0,
   };
 }

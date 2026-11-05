@@ -97,29 +97,6 @@ describe("scheduler prune-tmp", function () {
     }
   });
 
-  it("leaves the git store's log and its .1 alone, in a directory or directly in tmp", async function () {
-    const config = require("config");
-    const saved = config.git_store.log;
-
-    try {
-      for (const relative of ["git-store-log/git-store.log", "git-store.log"]) {
-        config.git_store.log = this.tmp + "/" + relative;
-
-        await write(this.tmp, relative, 3 * DAY, relative.split("/")[0]);
-        await write(this.tmp, relative + ".1", 3 * DAY);
-        await write(this.tmp, "old-upload", 2 * DAY);
-
-        await this.run();
-
-        expect(await exists(this.tmp + "/" + relative)).toBe(true);
-        expect(await exists(this.tmp + "/" + relative + ".1")).toBe(true);
-        expect(await exists(this.tmp + "/old-upload")).toBe(false);
-      }
-    } finally {
-      config.git_store.log = saved;
-    }
-  });
-
   describe("imports", function () {
     const importPath = (root, importID) => root + "/import/blog_1/" + importID;
 

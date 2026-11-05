@@ -1,6 +1,6 @@
 Git store: {{{summary}}}
 
-Today's check of the git store (#2259) found these, each still there when checked again a minute later. The store is the only copy of each blog's repository; the blog folders are not affected. {{checked}} blogs checked, {{deepChecked}} cloned in full.
+Today's upkeep of the git store (#2259) found these in the store itself, each still there when checked again a minute later. The store is the only copy of each blog's repository; the blog folders are not affected. {{checked}} blogs had their copy checked (every file the newest manifest names is in the bucket at its size), and {{deepChecked}} were cloned in full and checked with index-pack and fsck (today's deep sample: {{deepBlogs}}).
 
 {{#findings}}
 - `{{{blog}}}` **{{kind}}** ({{check}}): {{detail}}
@@ -14,11 +14,14 @@ Today's check of the git store (#2259) found these, each still there when checke
 {{#hasMismatch}}
 - **mismatch**: a file is not the size the manifest says, or a full clone failed index-pack, fsck or making a ref. Look at the blog's last `op=push`, `op=write` and `op=compact` lines, and repair it as for a missing file.
 {{/hasMismatch}}
+{{#hasSweepErrors}}
+- **sweep error**: the store's sweep (which deletes old manifests and packs nothing names) could not run for a blog, often a failed request to the bucket. Nothing is lost; storage only grows until it runs. It runs again tomorrow; look at the blog's `op=sweep` lines if it keeps failing.
+{{/hasSweepErrors}}
 {{#hasOrphans}}
-- **orphan**: the monthly sweep found and deleted a blog's copy under `<blogID>/git/` though the blog is deleted or off git. Removing the blog from git, or deleting it, should already have deleted it, twice, so a removal path missed it: find the blog's last `op=remove` lines (`logs green | grep "git-store-served" | grep "<blogID>" | grep "op=remove"`) and fix the code path that should have run.
+- **leftover** (orphan): the monthly pass found and deleted a blog's copy under `<blogID>/git/` though the blog is deleted or off git. Removing the blog from git, or deleting it, should already have deleted it, twice, so a removal path missed it: find the blog's last `op=remove` lines (`logs green | grep "git-store-served" | grep "<blogID>" | grep "op=remove"`) and fix the code path that should have run.
 {{/hasOrphans}}
 {{#hasErrors}}
-- **error**: a check, sweep or the orphan cleanup could not run (often a failed request to the bucket). Checks and sweeps run again tomorrow, the orphan cleanup next month; check by hand with `docker exec -u 1000 blot-blue node scripts/git/verify-store.js --blog <blogID> --deep`.
+- **error**: a check, the leftover pass or the scratch cleanup could not run (often a failed request to the bucket). Checks run again tomorrow, the leftover pass next month; check a blog by hand with `docker exec -u 1000 blot-blue node scripts/git/verify-store.js --blog <blogID> --deep`.
 {{/hasErrors}}
 
-Every finding is also in the log as `op=verify` (or `op=sweep`, `op=remove`): `logs green | grep "git-store-served" | grep -E "op=(verify|sweep|remove)"` (or `logs blue`, whichever unit ran the job), and in the store's log file in tmp (`git-store-log/git-store.log`).
+Every finding is also in the log as `op=verify` (or `op=sweep`, `op=remove`): `logs green | grep "git-store-served" | grep -E "op=(verify|sweep|remove)"` (or `logs blue`, whichever unit ran the job).

@@ -69,7 +69,7 @@ phase confirmed unless `--yes`:
      the proof that nothing is writing, which the app-level freeze cannot give.
      The containers see the volume read-only too (same filesystem).
    - Final copy: the same rsync, now with a source that cannot change, split
-     into one rsync per child of `static/` and `blogs/` run eight at a
+     into one rsync per child of `static/`, `blogs/` and `git/` run eight at a
      time, plus a top-level pass and a non-recursive pass per parent so
      deletions are carried across. This is what the window pays for; the metadata
      walk of millions of files is what is slow, and it parallelises. Any rsync

@@ -158,6 +158,49 @@ describe("git store: reads", function () {
     expect(shallow.stderr).toMatch(/does not support shallow|remote error/);
   });
 
+  it("logs why it refused a clone: shallow, filter or other", async function () {
+    await this.local.writeAndPush("/a.txt", "A");
+
+    var head = await this.local.head();
+    var want = pktLine("want " + head + " ofs-delta side-band-64k\n");
+    var cases = [
+      ["shallow", want + pktLine("deepen 1\n") + "0000" + pktLine("done\n")],
+      ["shallow", want + pktLine("deepen-since 1700000000\n") + "0000" + pktLine("done\n")],
+      ["filter", want + pktLine("filter blob:none\n") + "0000" + pktLine("done\n")],
+      ["other", pktLine("want " + "1".repeat(40) + " ofs-delta\n") + "0000" + pktLine("done\n")],
+    ];
+
+    for (var [reason, body] of cases) {
+      var before = this.storeLines().length;
+      var response = await request(this, "POST", "/git-upload-pack", {
+        body: body,
+        headers: { "Content-Type": "application/x-git-upload-pack-request" },
+      });
+
+      expect(response.body).toContain("ERR ");
+
+      var line;
+      for (var i = 0; i < 100 && !line; i++) {
+        line = this.storeLines().slice(before).find((l) => / outcome=refused /.test(l));
+        if (!line) await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      expect(line).toMatch(new RegExp(" outcome=refused .*reason=" + reason + "( |$)"));
+    }
+  });
+
+  it("tells a shallow request from a filter and anything else", function () {
+    var { refusalReason } = require("clients/git/served/reads");
+    var want = pktLine("want " + "a".repeat(40) + "\n");
+
+    expect(refusalReason(Buffer.from(want + pktLine("shallow " + "b".repeat(40) + "\n") + "0000"))).toBe("shallow");
+    expect(refusalReason(Buffer.from(want + pktLine("deepen-not refs/heads/x\n") + "0000"))).toBe("shallow");
+    expect(refusalReason(Buffer.from(want + pktLine("filter tree:0\n") + pktLine("deepen 2\n") + "0000"))).toBe("shallow");
+    expect(refusalReason(Buffer.from(want + pktLine("filter tree:0\n") + "0000"))).toBe("filter");
+    expect(refusalReason(Buffer.from(want + "0000"))).toBe("other");
+    expect(refusalReason(Buffer.from("not git"))).toBe("other");
+  });
+
   it("says so when the store has no copy, and never serves an empty repository", async function () {
     emptyStore(this);
 

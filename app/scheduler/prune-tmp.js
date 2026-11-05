@@ -149,13 +149,6 @@ module.exports = async function pruneTmp(options) {
   // the entry which is it, or holds it, is left alone
   const gitStoreCache = path.resolve(config.git_store.cache_directory);
 
-  // So are the git store's log and its rotated .1 (its log lines, which are
-  // wanted for much longer than a day), and any directory holding them,
-  // wherever in tmp the log is configured
-  const storeLogs = config.git_store.log
-    ? [path.resolve(config.git_store.log), path.resolve(config.git_store.log) + ".1"]
-    : [];
-
   await prune(
     tmpDirectory,
     maxAgeMs,
@@ -164,8 +157,7 @@ module.exports = async function pruneTmp(options) {
     (entryPath) =>
       byFile.includes(entryPath) ||
       holds(path.resolve(entryPath), folderCache) ||
-      holds(path.resolve(entryPath), gitStoreCache) ||
-      storeLogs.some((file) => holds(path.resolve(entryPath), file))
+      holds(path.resolve(entryPath), gitStoreCache)
   );
 
   await pruneFiles(stagingRoot, stagingMaxAgeMs, now, report);

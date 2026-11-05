@@ -23,6 +23,7 @@
 //
 //   [git-store-served] blog=<id> op=advertise|clone|fetch|receive-advertise|head
 //     outcome=... ms=... firstByteMs=... requests=... bytesDown=... bytesSent=...
+//     [reason=shallow|filter|other, for outcome=refused]
 const zlib = require("zlib");
 const querystring = require("querystring");
 const receivePack = require("../receivePack");
@@ -31,6 +32,7 @@ const { measure } = require("./counting");
 const { advertise, CONTENT_TYPE: ADVERTISEMENT } = require("../store/advertise");
 const { serve, parseRequest, CONTENT_TYPE: RESULT } = require("../store/clone");
 const manifest = require("../store/manifest");
+const pktline = require("../store/pktline");
 const context = require("./context");
 const log = require("./log");
 
@@ -157,6 +159,7 @@ async function read(req, res, { kind, store, cache, limiter: clones = interactiv
   let op = kind === "post" ? "clone" : kind;
   let outcome;
   let detail;
+  let reason;
   let measured = { ms: 0, counts: { requests: 0, bytesDown: 0 } };
 
   res.on("error", function () {});
@@ -217,6 +220,8 @@ async function read(req, res, { kind, store, cache, limiter: clones = interactiv
 
       const result = await serve({ store, cache, manifest: current, body, out: res, limiter: clones });
 
+      if (result.refused) reason = refusalReason(body);
+
       return result.refused ? "refused" : result.negotiated ? "negotiated" : result.empty ? "empty" : "ok";
     });
 
@@ -245,8 +250,30 @@ async function read(req, res, { kind, store, cache, limiter: clones = interactiv
     requests: measured.counts ? measured.counts.requests : undefined,
     bytesDown: measured.counts ? measured.counts.bytesDown : undefined,
     bytesSent: sent.bytes,
+    reason,
     detail,
   };
+}
+
+// Why the store refused a clone or fetch, for its log line, so the demand for
+// what it does not serve stays visible: "shallow" (shallow, deepen,
+// deepen-since or deepen-not lines), "filter" (a partial clone), or "other"
+// (a want that is not a tip, a client without ofs-delta)
+function refusalReason(body) {
+  let filter = false;
+
+  try {
+    for (const packet of pktline.split(body)) {
+      if (packet.flush) continue;
+      const line = packet.data.toString("latin1");
+      if (/^(shallow|deepen(-since|-not)?)( |$)/.test(line)) return "shallow";
+      if (/^filter( |$)/.test(line)) filter = true;
+    }
+  } catch (err) {
+    // Not pkt-lines to the end: what was read decides
+  }
+
+  return filter ? "filter" : "other";
 }
 
 // ---- The route ------------------------------------------------------------
@@ -312,4 +339,4 @@ async function handle(req, res, blog, options) {
   log(Object.assign({ blog: blog.id }, fields));
 }
 
-module.exports = { handle, read, receiveAdvertisement, meter, whenDone, outcomeOf, reply, NO_COPY };
+module.exports = { handle, read, receiveAdvertisement, meter, whenDone, outcomeOf, reply, refusalReason, NO_COPY };

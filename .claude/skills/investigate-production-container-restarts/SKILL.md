@@ -306,8 +306,7 @@ For the git client, also check:
 
 - every request and operation on the store logs one line:
   `[git-store-served] blog=<id> op=advertise|clone|fetch|push|write|... outcome=... ms=...`
-  (blog IDs only; also in `git-store-log/git-store.log` in tmp, which outlives
-  the containers). Each push also logs `Git: push-client <handle> agent="…"`,
+  (blog IDs only, on stdout). Each push also logs `Git: push-client <handle> agent="…"`,
   the client's git version.
 - stuck git processes (a push's pack is read by `git index-pack`, clones and
   compaction run `git pack-objects`, new-folder setup `git fast-import`; the
