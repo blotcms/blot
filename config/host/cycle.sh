@@ -780,7 +780,14 @@ EOF
   # A master here was promoted by this cycle (checked above), so the freeze was done.
   if [ "$role" != master ]; then
     say "1. Freeze, emptying the proxy cache on $NEW meanwhile"
-    if [ "$eip_on" != "$NEW_ID" ]; then freeze_old empty_new_cache; else freeze_old; fi
+    if [ "$eip_on" != "$NEW_ID" ]; then
+      freeze_old empty_new_cache
+      # It ran in the background, so its CACHE_EMPTIED=1 was lost with the
+      # subshell; freeze_old returning means it succeeded (a dry run skips it).
+      [ -n "$DRY_RUN" ] || CACHE_EMPTIED=1
+    else
+      freeze_old
+    fi
     rearm "$OLD_NOW" # the TTL starts again for the promotion
 
     STAGE=promotion

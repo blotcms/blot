@@ -587,6 +587,8 @@ before "freeze, then promote" "read-only.js on --ttl 900" "promote.sh --yes dire
 before "the locks, then promote" "ssh direct [old]: sudo docker exec blot-blue node scripts/read-only.js status" "promote.sh --yes direct new"
 before "freeze, then the cache" "read-only.js on --ttl 900" "reset-cache.sh $OLD_SHA"
 before "the cache, then promote" "reset-cache.sh $OLD_SHA" "promote.sh --yes direct new"
+[ "$(printf '%s\n' "$CALLS" | grep -c "reset-cache.sh")" = 1 ] && ok "the cache is emptied once, not again after the promotion" ||
+  fail "the cache is emptied $(printf '%s\n' "$CALLS" | grep -c "reset-cache.sh") times"
 before "promote, then the Elastic IP" "promote.sh --yes direct new" "associate-address"
 before "the Elastic IP, then the check through it" "associate-address" "--resolve blot.test:443:203.0.113.9"
 before "the check, then unfreeze" "--resolve blot.test:443:203.0.113.9" "read-only.js off"
