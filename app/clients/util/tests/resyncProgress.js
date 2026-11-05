@@ -1,13 +1,13 @@
-const fs = require("fs-extra");
-const { join } = require("path");
 const { countLocalFiles, createProgress } = require("../resyncProgress");
 
 describe("resync progress", function () {
   global.test.blog();
 
   it("counts files recursively without counting directories", async function () {
-    await fs.outputFile(join(this.blogDirectory, "one.txt"), "one");
-    await fs.outputFile(join(this.blogDirectory, "nested", "two.txt"), "two");
+    await test.folder.writeFiles(this.blog.id, {
+      "/one.txt": "one",
+      "/nested/two.txt": "two",
+    });
 
     expect(await countLocalFiles(this.blog.id, "/")).toBe(2);
   });

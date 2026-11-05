@@ -1,5 +1,5 @@
 describe("Blot dashboard settings", function () {
-  const fs = require("fs-extra");
+  const folder = require("storage/folder");
   const browser = require("./util/browser");
 
   // Removing a local-client blog waits for the watcher sync's folder lock.
@@ -53,7 +53,7 @@ describe("Blot dashboard settings", function () {
     expect(client.text().replace(/\s+/g, " ").trim()).toMatch(/^Local folder/);
 
     // add some files to the blog's folder
-    await fs.outputFile(this.blogDirectory + "/test.txt", "test");
+    await folder.write(this.blog.id, "/test.txt", "test");
 
     // refresh the site overview page
     await page.goto("/sites/" + handle);

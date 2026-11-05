@@ -1,4 +1,3 @@
-const fs = require("fs-extra");
 const build = require("build");
 const set = require("../set");
 
@@ -9,8 +8,7 @@ describe("entry.set changed", function () {
 
   beforeEach(function () {
     this.buildAndSet = (path, contents) =>
-      new Promise((resolve, reject) => {
-        fs.outputFileSync(this.blogDirectory + path, contents);
+      require("storage/folder").write(this.blog.id, path, contents).then(() => new Promise((resolve, reject) => {
         build(this.blog, path, (err, entry) => {
           if (err) return reject(err);
           set(this.blog.id, path, entry, (err, result) => {
@@ -18,7 +16,7 @@ describe("entry.set changed", function () {
             resolve(result);
           });
         });
-      });
+      }));
   });
 
   it("reports a new entry as changed", async function () {

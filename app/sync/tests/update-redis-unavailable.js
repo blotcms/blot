@@ -1,6 +1,6 @@
 describe("update when Redis is unavailable", function () {
   var sync = require("../index");
-  var fs = require("fs-extra");
+  var folder = require("storage/folder");
   var Entry = require("models/entry");
   var redis = require("models/client");
   var { SimpleError } = require("redis");
@@ -9,13 +9,6 @@ describe("update when Redis is unavailable", function () {
   global.test.timeout(15 * 1000);
 
   global.test.blog();
-
-  // The blog's folder on disk, which these specs change directly
-  let blogDirectory;
-
-  beforeEach(function () {
-    blogDirectory = this.blogDirectory;
-  });
 
   beforeEach(function () {
     this.fake = global.test.fake;
@@ -27,127 +20,136 @@ describe("update when Redis is unavailable", function () {
     return new SimpleError("NOREPLICAS Not enough good replicas to write.");
   }
 
-  it("passes the error on, and the next update applies the change", function (testDone) {
+  // Runs fn(syncFolder) while holding the blog's sync lock, then releases it
+  function withSync(blogID, fn) {
+    return new Promise(function (resolve, reject) {
+      sync(blogID, function (err, syncFolder, done) {
+        if (err) return reject(err);
+
+        Promise.resolve()
+          .then(function () {
+            return fn(syncFolder);
+          })
+          .then(
+            function (value) {
+              done(null, function () {
+                resolve(value);
+              });
+            },
+            function (error) {
+              done(null, function () {
+                reject(error);
+              });
+            }
+          );
+      });
+    });
+  }
+
+  // Resolves to the error update passed to its callback, or undefined
+  function update(syncFolder, path) {
+    return new Promise(function (resolve) {
+      syncFolder.update(path, function (err) {
+        resolve(err);
+      });
+    });
+  }
+
+  function checkEntry(check, spec) {
+    return new Promise(function (resolve, reject) {
+      check(spec, function (err) {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+  }
+
+  function getEntry(blogID, path) {
+    return new Promise(function (resolve) {
+      Entry.get(blogID, path, resolve);
+    });
+  }
+
+  it("passes the error on, and the next update applies the change", async function () {
     var path = this.fake.path(".txt");
     var content = this.fake.file();
-    var checkEntry = this.checkEntry;
+    var check = this.checkEntry;
     var blogID = this.blog.id;
 
     spyOn(Entry, "set").and.callFake(function (blogID, path, entry, callback) {
       callback(writeFreeze());
     });
 
-    sync(blogID, function (err, folder, done) {
-      if (err) return testDone.fail(err);
+    await withSync(blogID, async function (syncFolder) {
+      await folder.write(blogID, path, content);
 
-      fs.outputFileSync(blogDirectory + path, content, "utf-8");
+      expect(isRedisUnavailableError(await update(syncFolder, path))).toBe(true);
+      expect(await getEntry(blogID, path)).toBeFalsy();
 
-      folder.update(path, function (err) {
-        expect(isRedisUnavailableError(err)).toBe(true);
+      // The freeze is over
+      Entry.set.and.callThrough();
 
-        Entry.get(blogID, path, function (entry) {
-          expect(entry).toBeFalsy();
-
-          // The freeze is over
-          Entry.set.and.callThrough();
-
-          folder.update(path, function (err) {
-            if (err) return testDone.fail(err);
-
-            checkEntry({ path: path, deleted: false }, function (err) {
-              if (err) return testDone.fail(err);
-              done(null, testDone);
-            });
-          });
-        });
-      });
+      expect(await update(syncFolder, path)).toBeFalsy();
+      await checkEntry(check, { path: path, deleted: false });
     });
   });
 
-  it("passes on a failed drop, and the next update removes the entry", function (testDone) {
+  it("passes on a failed drop, and the next update removes the entry", async function () {
     var path = this.fake.path(".txt");
     var content = this.fake.file();
-    var checkEntry = this.checkEntry;
+    var check = this.checkEntry;
     var blogID = this.blog.id;
 
-    sync(blogID, function (err, folder, done) {
-      if (err) return testDone.fail(err);
+    await withSync(blogID, async function (syncFolder) {
+      await folder.write(blogID, path, content);
+      expect(await update(syncFolder, path)).toBeFalsy();
 
-      fs.outputFileSync(blogDirectory + path, content, "utf-8");
-
-      folder.update(path, function (err) {
-        if (err) return testDone.fail(err);
-
-        fs.removeSync(blogDirectory + path);
-        spyOn(Entry, "drop").and.callFake(function (blogID, path, callback) {
-          callback(writeFreeze());
-        });
-
-        folder.update(path, function (err) {
-          expect(isRedisUnavailableError(err)).toBe(true);
-
-          checkEntry({ path: path, deleted: false }, function (err) {
-            if (err) return testDone.fail(err);
-
-            Entry.drop.and.callThrough();
-
-            folder.update(path, function (err) {
-              if (err) return testDone.fail(err);
-
-              checkEntry({ path: path, deleted: true }, function (err) {
-                if (err) return testDone.fail(err);
-                done(null, testDone);
-              });
-            });
-          });
-        });
+      await folder.remove(blogID, path);
+      spyOn(Entry, "drop").and.callFake(function (blogID, path, callback) {
+        callback(writeFreeze());
       });
+
+      expect(isRedisUnavailableError(await update(syncFolder, path))).toBe(true);
+      await checkEntry(check, { path: path, deleted: false });
+
+      Entry.drop.and.callThrough();
+
+      expect(await update(syncFolder, path)).toBeFalsy();
+      await checkEntry(check, { path: path, deleted: true });
     });
   });
 
-  it("does not treat a failed read as a missing entry when dropping", function (testDone) {
+  it("does not treat a failed read as a missing entry when dropping", async function () {
     var path = this.fake.path(".txt");
     var content = this.fake.file();
-    var checkEntry = this.checkEntry;
+    var check = this.checkEntry;
     var blogID = this.blog.id;
 
-    sync(blogID, function (err, folder, done) {
-      if (err) return testDone.fail(err);
+    await withSync(blogID, async function (syncFolder) {
+      await folder.write(blogID, path, content);
+      expect(await update(syncFolder, path)).toBeFalsy();
 
-      fs.outputFileSync(blogDirectory + path, content, "utf-8");
-
-      folder.update(path, function (err) {
-        if (err) return testDone.fail(err);
-
-        fs.removeSync(blogDirectory + path);
-        spyOn(redis, "mGet").and.callFake(function () {
-          return Promise.reject(writeFreeze());
-        });
-
-        folder.update(path, function (err) {
-          expect(isRedisUnavailableError(err)).toBe(true);
-
-          redis.mGet.and.callThrough();
-
-          folder.update(path, function (err) {
-            if (err) return testDone.fail(err);
-
-            checkEntry({ path: path, deleted: true }, function (err) {
-              if (err) return testDone.fail(err);
-              done(null, testDone);
-            });
-          });
-        });
+      await folder.remove(blogID, path);
+      spyOn(redis, "mGet").and.callFake(function () {
+        return Promise.reject(writeFreeze());
       });
+
+      expect(isRedisUnavailableError(await update(syncFolder, path))).toBe(true);
+
+      redis.mGet.and.callThrough();
+
+      expect(await update(syncFolder, path)).toBeFalsy();
+      await checkEntry(check, { path: path, deleted: true });
     });
   });
 
-  it("still swallows other errors so one bad file does not stop the sync", function (testDone) {
+  it("still swallows other errors so one bad file does not stop the sync", async function () {
     var badPath = this.fake.path(".txt");
     var goodPath = this.fake.path(".txt");
-    var checkEntry = this.checkEntry;
+    var check = this.checkEntry;
     var blogID = this.blog.id;
     var realSet = Entry.set;
+    var fake = this.fake;
 
     spyOn(console, "error");
 
@@ -156,28 +158,14 @@ describe("update when Redis is unavailable", function () {
       realSet.apply(Entry, arguments);
     });
 
-    sync(blogID, function (err, folder, done) {
-      if (err) return testDone.fail(err);
+    await withSync(blogID, async function (syncFolder) {
+      await folder.write(blogID, badPath, fake.file());
+      await folder.write(blogID, goodPath, fake.file());
 
-      fs.outputFileSync(blogDirectory + badPath, this.fake.file(), "utf-8");
-      fs.outputFileSync(blogDirectory + goodPath, this.fake.file(), "utf-8");
-
-      folder.update(badPath, function (err) {
-        expect(err).toBeFalsy();
-
-        folder.update(goodPath, function (err) {
-          expect(err).toBeFalsy();
-
-          Entry.get(blogID, badPath, function (entry) {
-            expect(entry).toBeFalsy();
-
-            checkEntry({ path: goodPath, deleted: false }, function (err) {
-              if (err) return testDone.fail(err);
-              done(null, testDone);
-            });
-          });
-        });
-      });
-    }.bind(this));
+      expect(await update(syncFolder, badPath)).toBeFalsy();
+      expect(await update(syncFolder, goodPath)).toBeFalsy();
+      expect(await getEntry(blogID, badPath)).toBeFalsy();
+      await checkEntry(check, { path: goodPath, deleted: false });
+    });
   });
 });

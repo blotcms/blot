@@ -1,7 +1,4 @@
 describe("dropbox resetToBlot", function () {
-  const fs = require("fs-extra");
-  const { join } = require("path");
-  const { blog_folder_dir } = require("config");
   const storage = require("storage/folder");
 
   const resetPath = require.resolve("../sync/reset-to-blot");
@@ -10,7 +7,6 @@ describe("dropbox resetToBlot", function () {
   const downloadPath = require.resolve("../util/download");
 
   const blogID = "blog_resettoblottest" + Date.now();
-  const blogDirectory = join(blog_folder_dir, blogID);
   const originals = {};
   let saved;
   let revisionCalls;
@@ -20,8 +16,7 @@ describe("dropbox resetToBlot", function () {
     [resetPath, createClientPath, databasePath, downloadPath].forEach(
       (path) => (originals[path] = require.cache[path])
     );
-    await fs.ensureDir(blogDirectory);
-  });
+      });
 
   afterEach(async function () {
     delete require.cache[resetPath];
@@ -30,7 +25,7 @@ describe("dropbox resetToBlot", function () {
       else delete require.cache[path];
     });
     if (originals[resetPath]) require.cache[resetPath] = originals[resetPath];
-    await fs.remove(blogDirectory);
+    await storage.removeAll(blogID);
   });
 
   // delta: entries Dropbox reports since the pre-walk cursor, i.e. edits
@@ -127,7 +122,7 @@ describe("dropbox resetToBlot", function () {
     });
 
     it("downloads a file of another size without hashing it", async function () {
-      await fs.outputFile(join(blogDirectory, "a.txt"), "hello world");
+      await storage.write(blogID, "/a.txt", "hello world");
       const resetToBlot = load({
         "/": [{ ...file("a.txt"), content_hash: helloHash, size: 5 }],
       });
@@ -139,7 +134,7 @@ describe("dropbox resetToBlot", function () {
     });
 
     it("hashes a file of the same size, and skips it when the hashes match", async function () {
-      await fs.outputFile(join(blogDirectory, "a.txt"), "hello");
+      await storage.write(blogID, "/a.txt", "hello");
       const resetToBlot = load({
         "/": [{ ...file("a.txt"), content_hash: helloHash, size: 5 }],
       });
@@ -151,7 +146,7 @@ describe("dropbox resetToBlot", function () {
     });
 
     it("downloads a file of the same size when the hashes differ", async function () {
-      await fs.outputFile(join(blogDirectory, "a.txt"), "world");
+      await storage.write(blogID, "/a.txt", "world");
       const resetToBlot = load({
         "/": [{ ...file("a.txt"), content_hash: helloHash, size: 5 }],
       });
@@ -192,8 +187,8 @@ describe("dropbox resetToBlot", function () {
   });
 
   it("updates every path inside a folder it removes", async function () {
-    await fs.outputFile(join(blogDirectory, "Sub", "a.txt"), "x");
-    await fs.outputFile(join(blogDirectory, "Sub", "Inner", "b.txt"), "x");
+    await storage.write(blogID, "/Sub/a.txt", "x");
+    await storage.write(blogID, "/Sub/Inner/b.txt", "x");
     const resetToBlot = load({ "/": [] }, { delta: [] });
     const update = jasmine.createSpy("update").and.returnValue(Promise.resolve());
 
@@ -251,7 +246,7 @@ describe("dropbox resetToBlot", function () {
     const deleted = (path_lower) => ({ ".tag": "deleted", path_lower });
 
     it("skips the folder, leaves Blot's copy alone and finishes the walk", async function () {
-      await fs.outputFile(join(blogDirectory, "sub", "old.txt"), "x");
+      await storage.write(blogID, "/sub/old.txt", "x");
       load({ "/": [folder("sub"), file("a.txt")] }, { delta: [deleted("/sub")] });
       const resetToBlot = vanish("/sub", "path/not_found/..");
 
@@ -261,7 +256,7 @@ describe("dropbox resetToBlot", function () {
       expect(summary.removed).toEqual(0);
       expect(summary.skipped).toEqual(1);
       expect(summary.failed).toEqual(0);
-      expect(await fs.pathExists(join(blogDirectory, "sub", "old.txt"))).toEqual(true);
+      expect(await storage.exists(blogID, "/sub/old.txt")).toEqual(true);
       expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(true);
     });
 
@@ -276,7 +271,7 @@ describe("dropbox resetToBlot", function () {
     });
 
     it("reports a 409 the cursor doesn't explain, and removes nothing", async function () {
-      await fs.outputFile(join(blogDirectory, "sub", "old.txt"), "x");
+      await storage.write(blogID, "/sub/old.txt", "x");
       load({ "/": [folder("sub"), file("a.txt")] }, { delta: [deleted("/other")] });
       const resetToBlot = vanish("/sub", "path/not_found/..");
 
@@ -286,7 +281,7 @@ describe("dropbox resetToBlot", function () {
       expect(summary.skipped).toEqual(0);
       expect(summary.failed).toEqual(1);
       expect(summary.firstError).toEqual("/sub: 409 path/not_found/..");
-      expect(await fs.pathExists(join(blogDirectory, "sub", "old.txt"))).toEqual(true);
+      expect(await storage.exists(blogID, "/sub/old.txt")).toEqual(true);
     });
 
     it("reports the 409 when Dropbox can't say what changed", async function () {
@@ -404,7 +399,7 @@ describe("dropbox resetToBlot", function () {
     const deleted = (path_lower) => ({ ".tag": "deleted", path_lower });
 
     it("excuses a removal Dropbox reports since the pre-walk cursor", async function () {
-      await fs.outputFile(join(blogDirectory, "gone.txt"), "x");
+      await storage.write(blogID, "/gone.txt", "x");
       const resetToBlot = load({ "/": [] }, { delta: [deleted("/gone.txt")] });
 
       const summary = await resetToBlot(blogID, () => {});
@@ -415,8 +410,8 @@ describe("dropbox resetToBlot", function () {
     });
 
     it("excuses files removed along with a folder deleted mid-walk", async function () {
-      await fs.outputFile(join(blogDirectory, "Sub", "a.log"), "x");
-      await fs.outputFile(join(blogDirectory, "Sub", "b.log"), "x");
+      await storage.write(blogID, "/Sub/a.log", "x");
+      await storage.write(blogID, "/Sub/b.log", "x");
       const resetToBlot = load(
         {
           "/Blog Folder": [
@@ -440,8 +435,8 @@ describe("dropbox resetToBlot", function () {
     });
 
     it("still counts removals Dropbox doesn't report as recent", async function () {
-      await fs.outputFile(join(blogDirectory, "gone.txt"), "x");
-      await fs.outputFile(join(blogDirectory, "missed.txt"), "x");
+      await storage.write(blogID, "/gone.txt", "x");
+      await storage.write(blogID, "/missed.txt", "x");
       const resetToBlot = load({ "/": [] }, { delta: [deleted("/gone.txt")] });
 
       const summary = await resetToBlot(blogID, () => {});
@@ -456,7 +451,7 @@ describe("dropbox resetToBlot", function () {
       const longAgo = "2026-01-01T00:00:00Z";
 
       it("excuses a file removed just before the walk, by its deletion time", async function () {
-        await fs.outputFile(join(blogDirectory, "gone.txt"), "x");
+        await storage.write(blogID, "/gone.txt", "x");
         const resetToBlot = load(
           { "/": [] },
           { revisions: { "/gone.txt": deletedAt(now()) } }
@@ -473,7 +468,7 @@ describe("dropbox resetToBlot", function () {
       });
 
       it("looks the file up under the blog folder in Dropbox", async function () {
-        await fs.outputFile(join(blogDirectory, "gone.txt"), "x");
+        await storage.write(blogID, "/gone.txt", "x");
         const resetToBlot = load(
           { "/Blog Folder": [] },
           {
@@ -488,7 +483,7 @@ describe("dropbox resetToBlot", function () {
       });
 
       it("counts a file deleted long ago", async function () {
-        await fs.outputFile(join(blogDirectory, "gone.txt"), "x");
+        await storage.write(blogID, "/gone.txt", "x");
         const resetToBlot = load(
           { "/": [] },
           { revisions: { "/gone.txt": deletedAt(longAgo) } }
@@ -501,8 +496,8 @@ describe("dropbox resetToBlot", function () {
       });
 
       it("counts a file Dropbox doesn't say was deleted, or doesn't date", async function () {
-        await fs.outputFile(join(blogDirectory, "a.txt"), "x");
-        await fs.outputFile(join(blogDirectory, "b.txt"), "x");
+        await storage.write(blogID, "/a.txt", "x");
+        await storage.write(blogID, "/b.txt", "x");
         const resetToBlot = load(
           { "/": [] },
           {
@@ -520,8 +515,8 @@ describe("dropbox resetToBlot", function () {
       });
 
       it("excuses a removed folder by when a file in it was deleted", async function () {
-        await fs.outputFile(join(blogDirectory, "Sub", "Inner", "b.txt"), "x");
-        await fs.outputFile(join(blogDirectory, "Sub", "a.txt"), "x");
+        await storage.write(blogID, "/Sub/Inner/b.txt", "x");
+        await storage.write(blogID, "/Sub/a.txt", "x");
         const resetToBlot = load(
           { "/": [] },
           { revisions: { "/Sub/a.txt": deletedAt(now()) } }
@@ -540,7 +535,7 @@ describe("dropbox resetToBlot", function () {
 
       it("asks about only a few files of a removed folder", async function () {
         for (const name of ["a", "b", "c", "d", "e"])
-          await fs.outputFile(join(blogDirectory, "Sub", name + ".txt"), "x");
+          await storage.write(blogID, "/Sub/" + name + ".txt", "x");
         const resetToBlot = load({ "/": [] }, { revisions: {} });
 
         const summary = await resetToBlot(blogID, () => {});
@@ -550,7 +545,7 @@ describe("dropbox resetToBlot", function () {
       });
 
       it("counts a removed empty folder, which has nothing to date it", async function () {
-        await fs.ensureDir(join(blogDirectory, "Empty"));
+        await storage.mkdir(blogID, "/Empty");
         const resetToBlot = load({ "/": [] }, { revisions: {} });
 
         const summary = await resetToBlot(blogID, () => {});
@@ -595,7 +590,7 @@ describe("dropbox resetToBlot", function () {
       });
 
       it("counts the change if list_revisions fails, and persists no error", async function () {
-        await fs.outputFile(join(blogDirectory, "gone.txt"), "x");
+        await storage.write(blogID, "/gone.txt", "x");
         const resetToBlot = load(
           { "/": [] },
           { revisions: { "/gone.txt": new Error("too_many_requests") } }
@@ -609,7 +604,7 @@ describe("dropbox resetToBlot", function () {
       });
 
       it("doesn't count a change twice if the cursor already excused it", async function () {
-        await fs.outputFile(join(blogDirectory, "gone.txt"), "x");
+        await storage.write(blogID, "/gone.txt", "x");
         const resetToBlot = load(
           { "/": [] },
           {
@@ -626,7 +621,7 @@ describe("dropbox resetToBlot", function () {
     });
 
     it("counts every change if Dropbox can't list what changed", async function () {
-      await fs.outputFile(join(blogDirectory, "gone.txt"), "x");
+      await storage.write(blogID, "/gone.txt", "x");
       const resetToBlot = load({ "/": [] });
 
       const summary = await resetToBlot(blogID, () => {});

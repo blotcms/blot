@@ -236,7 +236,7 @@ Blog-specific static paths served from the storage bucket (`storage/assets`, key
 - `/_image_cache` — Cached image variants.
 - `/_thumbnails` — Entry thumbnails.
 
-For all other paths, the router attempts to serve files from `config.blog_folder_dir/{blogID}` using a sequence of fallback strategies: exact path, lowercase path, case-insensitive path resolution, `path/index.html`, `path/_index.html`, `path.html`, and `_path.html`. `Cache-Control` is suppressed unless `?cache` and `?extension` query parameters are both present.
+For all other paths, the router attempts to serve files from the blog's folder (`storage/folder`) using a sequence of fallback strategies: exact path, lowercase path, case-insensitive path resolution, `path/index.html`, `path/_index.html`, `path.html`, and `_path.html`. `Cache-Control` is suppressed unless `?cache` and `?extension` query parameters are both present.
 
 ### `routes/robots.js`
 
@@ -310,7 +310,6 @@ The blog module reads the following values from `config`:
 - `config.protocol` — Used to construct absolute redirect URLs.
 - `config.cache` — When truthy, enables one-year `Cache-Control` headers for JS and CSS view responses.
 - `config.cdn.origin` — CDN base URL used by `cdn.js`.
-- `config.blog_folder_dir` — Base path for blog file folders on disk.
 - `config.storage` — The storage bucket (`storage/assets`) that holds processed blog static assets.
 - `config.blot_directory` — Absolute path to the Blot application root, used to locate `app/blog/static`.
 

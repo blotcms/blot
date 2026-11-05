@@ -2,8 +2,8 @@
 #
 # Nearly all of the wall-clock time used to go on rebuilding the demo blogs the
 # previews are rendered from, so this workflow:
-#   - caches the built demo blogs (data/blogs, data/minio, data/redis) and
-#     re-uses them, leaving the folder build to sync only what changed
+#   - caches the built demo blogs (data/minio, which holds their folders,
+#     and data/redis) and re-uses them, leaving the folder build to sync only what changed
 #   - builds only the demo folders needed by the templates being screenshotted
 #   - takes screenshots several at a time instead of one every two seconds
 #
@@ -176,7 +176,7 @@ jobs:
       # drifting apart.
       - name: Compute demo blogs cache key
         run: |
-          echo "DEMO_BLOGS_CACHE_KEY=demo-blogs-v1-pandoc${{ steps.versions.outputs.PANDOC_VERSION }}-${{ hashFiles('app/templates/folders/**', 'app/build/**', 'app/sync/**', 'app/models/**', 'package.json') }}" >> "$GITHUB_ENV"
+          echo "DEMO_BLOGS_CACHE_KEY=demo-blogs-v2-pandoc${{ steps.versions.outputs.PANDOC_VERSION }}-${{ hashFiles('app/templates/folders/**', 'app/build/**', 'app/sync/**', 'app/models/**', 'package.json') }}" >> "$GITHUB_ENV"
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -282,7 +282,6 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: |
-            data/blogs
             data/minio
             data/cdn
             data/redis
@@ -373,7 +372,6 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: |
-            data/blogs
             data/minio
             data/cdn
             data/redis

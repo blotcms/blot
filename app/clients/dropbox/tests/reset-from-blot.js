@@ -1,7 +1,5 @@
 describe("dropbox resetFromBlot", function () {
-  const fs = require("fs-extra");
-  const { join } = require("path");
-  const { blog_folder_dir } = require("config");
+  const storage = require("storage/folder");
 
   const resetPath = require.resolve("../sync/reset-from-blot");
   const createClientPath = require.resolve("../util/createClient");
@@ -15,7 +13,6 @@ describe("dropbox resetFromBlot", function () {
   const persistErrorPath = require.resolve("../util/persistError");
 
   const blogID = "blog_resetfromblottest" + Date.now();
-  const blogDirectory = join(blog_folder_dir, blogID);
   const originals = {};
   let saved;
   let uploadCalls;
@@ -26,8 +23,7 @@ describe("dropbox resetFromBlot", function () {
     [resetPath, createClientPath, databasePath, uploadPath, persistErrorPath].forEach(
       (path) => (originals[path] = require.cache[path])
     );
-    await fs.ensureDir(blogDirectory);
-  });
+      });
 
   afterEach(async function () {
     delete require.cache[resetPath];
@@ -40,7 +36,7 @@ describe("dropbox resetFromBlot", function () {
       require.cache[persistErrorPath] = originals[persistErrorPath];
     }
     if (originals[resetPath]) require.cache[resetPath] = originals[resetPath];
-    await fs.remove(blogDirectory);
+    await storage.removeAll(blogID);
   });
 
   // Mirrors the shape of an error the Dropbox SDK throws for a filesUpload
@@ -109,7 +105,7 @@ describe("dropbox resetFromBlot", function () {
 
   it("aborts before uploading anything when the pre-flight quota check fails", async function () {
     // 1000 bytes on disk, but only 1 byte free in Dropbox.
-    await fs.outputFile(join(blogDirectory, "a.txt"), Buffer.alloc(1000));
+    await storage.write(blogID, "/a.txt", Buffer.alloc(1000));
 
     const resetFromBlot = load({
       spaceUsage: {
@@ -137,7 +133,7 @@ describe("dropbox resetFromBlot", function () {
   });
 
   it("stops the transfer and does not report success when an upload hits insufficient_space mid-transfer", async function () {
-    await fs.outputFile(join(blogDirectory, "a.txt"), "hello");
+    await storage.write(blogID, "/a.txt", "hello");
 
     const resetFromBlot = load({
       // Plenty of free space reported up front, so the pre-flight check
@@ -168,7 +164,7 @@ describe("dropbox resetFromBlot", function () {
   });
 
   it("does not report success when a non-quota upload failure occurs", async function () {
-    await fs.outputFile(join(blogDirectory, "a.txt"), "hello");
+    await storage.write(blogID, "/a.txt", "hello");
 
     const resetFromBlot = load({
       spaceUsage: {
@@ -192,7 +188,7 @@ describe("dropbox resetFromBlot", function () {
   });
 
   it("succeeds, sets the cursor and clears transfer_pending when every file transfers", async function () {
-    await fs.outputFile(join(blogDirectory, "a.txt"), "hello");
+    await storage.write(blogID, "/a.txt", "hello");
 
     const resetFromBlot = load({
       spaceUsage: {
@@ -217,9 +213,9 @@ describe("dropbox resetFromBlot", function () {
   });
 
   it("does not upload empty files, which may be placeholders, or overwrite a remote file with one", async function () {
-    await fs.outputFile(join(blogDirectory, "placeholder.pdf"), "");
-    await fs.outputFile(join(blogDirectory, "new-empty.txt"), "");
-    await fs.outputFile(join(blogDirectory, "a.txt"), "hello");
+    await storage.write(blogID, "/placeholder.pdf", Buffer.from(""));
+    await storage.write(blogID, "/new-empty.txt", Buffer.from(""));
+    await storage.write(blogID, "/a.txt", Buffer.from("hello"));
 
     const messages = [];
     const resetFromBlot = load({
@@ -258,7 +254,7 @@ describe("dropbox resetFromBlot", function () {
     // a retry of a previously-interrupted transfer), the actual net bytes
     // needed (1) fits in the 5 free bytes reported, so the transfer should
     // proceed instead of being blocked.
-    await fs.outputFile(join(blogDirectory, "a.txt"), Buffer.alloc(1000));
+    await storage.write(blogID, "/a.txt", Buffer.alloc(1000));
 
     const resetFromBlot = load({
       spaceUsage: {
@@ -296,7 +292,7 @@ describe("dropbox resetFromBlot", function () {
     // a 1000-byte transfer if treated as a hard cap - but alert_only is a
     // notification-only limit (Dropbox's own docs: sync isn't stopped by
     // it), so the real constraint is the shared team pool, which has room.
-    await fs.outputFile(join(blogDirectory, "a.txt"), Buffer.alloc(1000));
+    await storage.write(blogID, "/a.txt", Buffer.alloc(1000));
 
     const resetFromBlot = load({
       spaceUsage: {
@@ -325,7 +321,7 @@ describe("dropbox resetFromBlot", function () {
   });
 
   it("treats the per-user limit as a hard cap when it is stop_sync", async function () {
-    await fs.outputFile(join(blogDirectory, "a.txt"), Buffer.alloc(1000));
+    await storage.write(blogID, "/a.txt", Buffer.alloc(1000));
 
     const resetFromBlot = load({
       spaceUsage: {
@@ -359,7 +355,7 @@ describe("dropbox resetFromBlot", function () {
     // Naively comparing netBytesToUpload > freeSpaceBytes would reject this
     // forever (0 > -1000), even though this transfer needs zero additional
     // bytes: a 500-byte copy of a.txt is already on Dropbox.
-    await fs.outputFile(join(blogDirectory, "a.txt"), Buffer.alloc(500));
+    await storage.write(blogID, "/a.txt", Buffer.alloc(500));
 
     const resetFromBlot = load({
       spaceUsage: {
@@ -395,7 +391,7 @@ describe("dropbox resetFromBlot", function () {
   it("does not credit stale remote files at other paths against the quota check", async function () {
     // walk() may upload a.txt before it deletes other.txt, so the 500 bytes
     // other.txt occupies can't be counted as free during the transfer.
-    await fs.outputFile(join(blogDirectory, "a.txt"), Buffer.alloc(500));
+    await storage.write(blogID, "/a.txt", Buffer.alloc(500));
 
     const resetFromBlot = load({
       spaceUsage: {
@@ -430,7 +426,7 @@ describe("dropbox resetFromBlot", function () {
 
   it("applies the shared team pool as well as a stop_sync member cap", async function () {
     // Plenty of room under the member's own cap, but the team pool is full.
-    await fs.outputFile(join(blogDirectory, "a.txt"), Buffer.alloc(100));
+    await storage.write(blogID, "/a.txt", Buffer.alloc(100));
 
     const resetFromBlot = load({
       spaceUsage: {

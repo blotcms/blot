@@ -1,8 +1,9 @@
-var fs = require("fs-extra");
-var join = require("path").join;
+var folder = require("storage/folder");
+var join = require("path").posix.join;
 var clients = require("clients");
 
 describe("template", function () {
+var { promisify } = require("util");
 var writeToFolder = require("../index").writeToFolder;
 var setView = require("../index").setView;
 var dropView = require("../index").dropView;
@@ -13,82 +14,53 @@ var writeChangeToFolder = require("../../../dashboard/site/template/save/writeCh
 
   require("./setup")({ createTemplate: true });
 
-  afterEach(function () {
-    fs.removeSync(this.blogDirectory + "/Templates");
-    fs.removeSync(this.blogDirectory + "/templates");
-    fs.removeSync(this.blogDirectory + "/posts");
-    fs.removeSync(this.blogDirectory + "/drafts");
+  afterEach(async function () {
+    await folder.remove(this.blog.id, "/Templates");
+    await folder.remove(this.blog.id, "/templates");
+    await folder.remove(this.blog.id, "/posts");
+    await folder.remove(this.blog.id, "/drafts");
   });
 
-  it("writes a template to a folder", function (done) {
+  it("writes a template to a folder", async function () {
     var test = this;
     var view = {
       name: "post.html",
       content: "<h1>Post content</h1>",
     };
 
-    setView(this.template.id, view, function (err) {
-      if (err) return done.fail(err);
+    await promisify(setView)(this.template.id, view);
+    await promisify(writeToFolder)(test.blog.id, test.template.id);
 
-      writeToFolder(test.blog.id, test.template.id, function (err) {
-        if (err) return done.fail(err);
-        var upperPath =
-          test.blogDirectory +
-          "/Templates/" +
-          test.template.slug +
-          "/" +
-          view.name;
-        var lowerPath =
-          test.blogDirectory +
-          "/templates/" +
-          test.template.slug +
-          "/" +
-          view.name;
-        var targetPath = fs.existsSync(upperPath) ? upperPath : lowerPath;
-        expect(fs.readFileSync(targetPath, "utf-8")).toEqual(view.content);
-        if (targetPath === upperPath) {
-          expect(fs.existsSync(test.blogDirectory + "/templates")).toEqual(
-            false
-          );
-        } else {
-          expect(fs.existsSync(test.blogDirectory + "/Templates")).toEqual(
-            false
-          );
-        }
-        done();
-      });
-    });
+    var upperPath = "/Templates/" + test.template.slug + "/" + view.name;
+    var lowerPath = "/templates/" + test.template.slug + "/" + view.name;
+    var targetPath = (await exists(test, upperPath)) ? upperPath : lowerPath;
+
+    expect(await readText(test, targetPath)).toEqual(view.content);
+
+    if (targetPath === upperPath) {
+      expect(await exists(test, "/templates")).toEqual(false);
+    } else {
+      expect(await exists(test, "/Templates")).toEqual(false);
+    }
   });
 
-  it("writes template metadata to package.json in a folder", function (done) {
+  it("writes template metadata to package.json in a folder", async function () {
     var test = this;
     var metadata = { locals: { foo: "bar" } };
 
-    setMetadata(this.template.id, metadata, function (err) {
-      if (err) return done.fail(err);
+    await promisify(setMetadata)(this.template.id, metadata);
+    await promisify(writeToFolder)(test.blog.id, test.template.id);
 
-      writeToFolder(test.blog.id, test.template.id, function (err) {
-        if (err) return done.fail(err);
-        var upperPath =
-          test.blogDirectory +
-          "/Templates/" +
-          test.template.slug +
-          "/package.json";
-        var lowerPath =
-          test.blogDirectory +
-          "/templates/" +
-          test.template.slug +
-          "/package.json";
-        var targetPath = fs.existsSync(upperPath) ? upperPath : lowerPath;
-        expect(fs.readJsonSync(targetPath).locals).toEqual(metadata.locals);
-        done();
-      });
-    });
+    var targetPath = await getTemplatePath(test, "package.json");
+
+    expect(JSON.parse(await readText(test, targetPath)).locals).toEqual(
+      metadata.locals
+    );
   });
 
-  it("removeEnabledFromAllTemplates disables all templates with enabled: true", function (done) {
+  it("removeEnabledFromAllTemplates disables all templates with enabled: true", async function () {
     var test = this;
-    var templatesRoot = join(test.blogDirectory, "Templates");
+    var templatesRoot = "/Templates";
     var template1Dir = join(templatesRoot, "template-1");
     var template2Dir = join(templatesRoot, "template-2");
     var template3Dir = join(templatesRoot, "template-3");
@@ -96,63 +68,51 @@ var writeChangeToFolder = require("../../../dashboard/site/template/save/writeCh
     var package2 = JSON.stringify({ name: "Template 2", enabled: true }, null, 2);
     var package3 = JSON.stringify({ name: "Template 3", enabled: false }, null, 2);
 
-    fs.ensureDirSync(template1Dir);
-    fs.ensureDirSync(template2Dir);
-    fs.ensureDirSync(template3Dir);
-    fs.outputFileSync(join(template1Dir, "package.json"), package1);
-    fs.outputFileSync(join(template2Dir, "package.json"), package2);
-    fs.outputFileSync(join(template3Dir, "package.json"), package3);
+    await folder.write(test.blog.id, join(template1Dir, "package.json"), package1);
+    await folder.write(test.blog.id, join(template2Dir, "package.json"), package2);
+    await folder.write(test.blog.id, join(template3Dir, "package.json"), package3);
 
-    removeEnabledFromAllTemplates(test.blog.id, function (err, modifiedSlugs) {
-      if (err) return done.fail(err);
-      
-      // Templates with enabled: true should be disabled
-      expect(
-        fs.readJsonSync(join(template1Dir, "package.json")).enabled
-      ).toEqual(false);
-      expect(
-        fs.readJsonSync(join(template2Dir, "package.json")).enabled
-      ).toEqual(false);
-      
-      // Templates with enabled: false should remain unchanged
-      expect(
-        fs.readJsonSync(join(template3Dir, "package.json")).enabled
-      ).toEqual(false);
-      
-      // Should return the slugs of modified templates
-      expect(Array.isArray(modifiedSlugs)).toBe(true);
-      expect(modifiedSlugs.length).toBe(2);
-      expect(modifiedSlugs).toContain("template-1");
-      expect(modifiedSlugs).toContain("template-2");
-      
-      done();
-    });
+    var modifiedSlugs = await promisify(removeEnabledFromAllTemplates)(test.blog.id);
+
+    // Templates with enabled: true should be disabled
+    expect(
+      JSON.parse(await readText(test, join(template1Dir, "package.json"))).enabled
+    ).toEqual(false);
+    expect(
+      JSON.parse(await readText(test, join(template2Dir, "package.json"))).enabled
+    ).toEqual(false);
+
+    // Templates with enabled: false should remain unchanged
+    expect(
+      JSON.parse(await readText(test, join(template3Dir, "package.json"))).enabled
+    ).toEqual(false);
+
+    // Should return the slugs of modified templates
+    expect(Array.isArray(modifiedSlugs)).toBe(true);
+    expect(modifiedSlugs.length).toBe(2);
+    expect(modifiedSlugs).toContain("template-1");
+    expect(modifiedSlugs).toContain("template-2");
   });
 
-  it("regenerates package.json in the local folder when local editing is enabled via package save", function (done) {
+  it("regenerates package.json in the local folder when local editing is enabled via package save", async function () {
     var test = this;
     var packageMetadata = { localEditing: true, name: "Local Package" };
     var staleTemplate = Object.assign({}, this.template, { localEditing: false });
 
-    packageAPI.save(this.template.id, packageMetadata, function (err) {
-      if (err) return done.fail(err);
+    await promisify(packageAPI.save)(this.template.id, packageMetadata);
+    await promisify(writeChangeToFolder)(
+      test.blog,
+      staleTemplate,
+      { name: "package.json" }
+    );
 
-      writeChangeToFolder(
-        test.blog,
-        staleTemplate,
-        { name: "package.json" },
-        function (err) {
-          if (err) return done.fail(err);
-
-          var packagePath = getTemplatePath(test, "package.json");
-          expect(fs.readJsonSync(packagePath).name).toEqual(packageMetadata.name);
-          done();
-        }
-      );
-    });
+    var packagePath = await getTemplatePath(test, "package.json");
+    expect(JSON.parse(await readText(test, packagePath)).name).toEqual(
+      packageMetadata.name
+    );
   });
 
-  it("writes view metadata to package.json to a folder", function (done) {
+  it("writes view metadata to package.json to a folder", async function () {
     var test = this;
     var view = {
       name: "about.html",
@@ -160,265 +120,132 @@ var writeChangeToFolder = require("../../../dashboard/site/template/save/writeCh
       locals: { foo: "bar" },
     };
 
-    setView(this.template.id, view, function (err) {
-      if (err) return done.fail(err);
+    await promisify(setView)(this.template.id, view);
+    await promisify(writeToFolder)(test.blog.id, test.template.id);
 
-      writeToFolder(test.blog.id, test.template.id, function (err) {
-        if (err) return done.fail(err);
-        var upperPath =
-          test.blogDirectory +
-          "/Templates/" +
-          test.template.slug +
-          "/package.json";
-        var lowerPath =
-          test.blogDirectory +
-          "/templates/" +
-          test.template.slug +
-          "/package.json";
-        var targetPath = fs.existsSync(upperPath) ? upperPath : lowerPath;
-        expect(fs.readJsonSync(targetPath).views[view.name].locals).toEqual(
-          view.locals
-        );
-        done();
-      });
-    });
+    var targetPath = await getTemplatePath(test, "package.json");
+
+    expect(
+      JSON.parse(await readText(test, targetPath)).views[view.name].locals
+    ).toEqual(view.locals);
   });
 
-  it("reuses an existing lowercase templates directory", function (done) {
+  it("reuses an existing lowercase templates directory", async function () {
     var test = this;
     var view = {
       name: "welcome.html",
       content: "<h1>Welcome</h1>",
     };
-    var lowercaseBase = test.blogDirectory + "/templates";
+    var lowercaseBase = "/templates";
     var expectedPath =
       lowercaseBase + "/" + test.template.slug + "/" + view.name;
 
-    fs.ensureDirSync(lowercaseBase);
+    await folder.mkdir(test.blog.id, lowercaseBase);
 
-    setView(this.template.id, view, function (err) {
-      if (err) return done.fail(err);
+    await promisify(setView)(this.template.id, view);
+    await promisify(writeToFolder)(test.blog.id, test.template.id);
 
-      writeToFolder(test.blog.id, test.template.id, function (err) {
-        if (err) return done.fail(err);
-
-        expect(fs.readFileSync(expectedPath, "utf-8")).toEqual(view.content);
-        expect(fs.existsSync(test.blogDirectory + "/Templates")).toEqual(false);
-        done();
-      });
-    });
+    expect(await readText(test, expectedPath)).toEqual(view.content);
+    expect(await exists(test, "/Templates")).toEqual(false);
   });
 
-  it("creates lowercase templates when root entries are lowercase", function (done) {
+  it("creates lowercase templates when root entries are lowercase", async function () {
     var test = this;
     var view = {
       name: "lowercase.html",
       content: "<h1>Lowercase template</h1>",
     };
-    var posts = test.blogDirectory + "/posts";
-    var drafts = test.blogDirectory + "/drafts";
-    var lowercasePath =
-      test.blogDirectory + "/templates/" + test.template.slug + "/" + view.name;
+    var lowercasePath = "/templates/" + test.template.slug + "/" + view.name;
 
-    fs.ensureDirSync(posts);
-    fs.ensureDirSync(drafts);
+    await folder.mkdir(test.blog.id, "/posts");
+    await folder.mkdir(test.blog.id, "/drafts");
 
-    setView(this.template.id, view, function (err) {
-      if (err) return done.fail(err);
+    await promisify(setView)(this.template.id, view);
+    await promisify(writeToFolder)(test.blog.id, test.template.id);
 
-      writeToFolder(test.blog.id, test.template.id, function (err) {
-        if (err) {
-          fs.removeSync(posts);
-          fs.removeSync(drafts);
-          return done.fail(err);
-        }
-
-        try {
-          expect(fs.readFileSync(lowercasePath, "utf-8")).toEqual(view.content);
-          expect(fs.existsSync(test.blogDirectory + "/Templates")).toEqual(
-            false
-          );
-        } catch (assertErr) {
-          fs.removeSync(posts);
-          fs.removeSync(drafts);
-          return done.fail(assertErr);
-        }
-
-        fs.removeSync(posts);
-        fs.removeSync(drafts);
-        done();
-      });
-    });
+    expect(await readText(test, lowercasePath)).toEqual(view.content);
+    expect(await exists(test, "/Templates")).toEqual(false);
   });
 
-  it("skips rewriting files when contents have not changed", function (done) {
+  it("skips rewriting files when contents have not changed", async function () {
     var test = this;
     var view = {
       name: "static.html",
       content: "<h1>Static content</h1>",
     };
 
-    setView(this.template.id, view, function (err) {
-      if (err) return done.fail(err);
+    await promisify(setView)(this.template.id, view);
+    await promisify(writeToFolder)(test.blog.id, test.template.id);
 
-      writeToFolder(test.blog.id, test.template.id, function (err) {
-        if (err) return done.fail(err);
+    var targetPath = await getTemplatePath(test, view.name);
+    var originalStat = await folder.stat(test.blog.id, targetPath);
 
-        var targetPath = getTemplatePath(test, view.name);
-        var originalStat = fs.statSync(targetPath);
+    await promisify(writeToFolder)(test.blog.id, test.template.id);
 
-        writeToFolder(test.blog.id, test.template.id, function (err) {
-          if (err) return done.fail(err);
-
-          var updatedStat = fs.statSync(targetPath);
-          expect(updatedStat.mtimeMs).toEqual(originalStat.mtimeMs);
-          done();
-        });
-      });
-    });
+    var updatedStat = await folder.stat(test.blog.id, targetPath);
+    expect(updatedStat.modified).toEqual(originalStat.modified);
   });
 
-  it("removes orphaned files left in the template directory", function (done) {
+  it("removes orphaned files left in the template directory", async function () {
     var test = this;
     var view = {
       name: "clean.html",
       content: "<h1>Clean template</h1>",
     };
 
-    setView(this.template.id, view, function (err) {
-      if (err) return done.fail(err);
+    await promisify(setView)(this.template.id, view);
+    await promisify(writeToFolder)(test.blog.id, test.template.id);
 
-      writeToFolder(test.blog.id, test.template.id, function (err) {
-        if (err) return done.fail(err);
+    var templateDir = await getTemplateDir(test);
+    var orphanPath = join(templateDir, "orphan.html");
+    await folder.write(test.blog.id, orphanPath, "orphan");
 
-        var templateDir = getTemplateDir(test);
-        var orphanPath = join(templateDir, "orphan.html");
-        fs.outputFileSync(orphanPath, "orphan");
+    await promisify(writeToFolder)(test.blog.id, test.template.id);
 
-        writeToFolder(test.blog.id, test.template.id, function (err) {
-          if (err) return done.fail(err);
-
-          expect(fs.existsSync(orphanPath)).toEqual(false);
-          expect(
-            fs.readFileSync(join(templateDir, view.name), "utf-8")
-          ).toEqual(view.content);
-          done();
-        });
-      });
-    });
+    expect(await exists(test, orphanPath)).toEqual(false);
+    expect(await readText(test, join(templateDir, view.name))).toEqual(
+      view.content
+    );
   });
 
-  it("leaves a file with a backslash in its name, which can't be a view", function (done) {
+  it("leaves a file with a backslash in its name, which can't be a view", async function () {
     var test = this;
 
-    writeToFolder(test.blog.id, test.template.id, function (err) {
-      if (err) return done.fail(err);
+    await promisify(writeToFolder)(test.blog.id, test.template.id);
 
-      var filePath = join(getTemplateDir(test), "notes\\backup.txt");
-      fs.outputFileSync(filePath, "keep");
+    var filePath = join(await getTemplateDir(test), "notes\\backup.txt");
+    await folder.write(test.blog.id, filePath, "keep");
 
-      writeToFolder(test.blog.id, test.template.id, function (err) {
-        if (err) return done.fail(err);
+    await promisify(writeToFolder)(test.blog.id, test.template.id);
 
-        expect(fs.existsSync(filePath)).toEqual(true);
-        done();
-      });
-    });
+    expect(await exists(test, filePath)).toEqual(true);
   });
 
-  it("removes orphans while preserving existing files with the local client", function (done) {
+  it("removes orphans while preserving existing files with the local client", async function () {
     var test = this;
     var view = {
       name: "local.html",
       content: "<h1>Local template</h1>",
     };
 
-    this.blog
-      .update({ client: "local" })
-      .then(function () {
-        setView(test.template.id, view, function (err) {
-          if (err) return done.fail(err);
+    await this.blog.update({ client: "local" });
+    await promisify(setView)(test.template.id, view);
+    await promisify(writeToFolder)(test.blog.id, test.template.id);
 
-          writeToFolder(test.blog.id, test.template.id, function (err) {
-            if (err) return done.fail(err);
+    var templateDir = await getTemplateDir(test);
+    var viewPath = join(templateDir, view.name);
+    var originalStat = await folder.stat(test.blog.id, viewPath);
+    var orphanPath = join(templateDir, "orphan.html");
 
-            var templateDir = getTemplateDir(test);
-            var viewPath = join(templateDir, view.name);
-            var originalStat = fs.statSync(viewPath);
-            var orphanPath = join(templateDir, "orphan.html");
+    await folder.write(test.blog.id, orphanPath, "orphan");
 
-            fs.outputFileSync(orphanPath, "orphan");
+    await promisify(writeToFolder)(test.blog.id, test.template.id);
 
-            writeToFolder(test.blog.id, test.template.id, function (err) {
-              if (err) return done.fail(err);
+    var rewrittenStat = await folder.stat(test.blog.id, viewPath);
 
-              var rewrittenStat = fs.statSync(viewPath);
-
-              expect(fs.existsSync(orphanPath)).toEqual(false);
-              expect(rewrittenStat.mtimeMs).toEqual(originalStat.mtimeMs);
-              expect(fs.readFileSync(viewPath, "utf-8")).toEqual(view.content);
-              done();
-            });
-          });
-        });
-      })
-      .catch(function (err) {
-        done.fail(err);
-      });
-  });
-
-  it("ignores symbolic links when scanning template files", function (done) {
-    var test = this;
-    var view = {
-      name: "linked.html",
-      content: "<h1>Linked template</h1>",
-    };
-
-    setView(this.template.id, view, function (err) {
-      if (err) return done.fail(err);
-
-      writeToFolder(test.blog.id, test.template.id, function (err) {
-        if (err) return done.fail(err);
-
-        var templateDir = getTemplateDir(test);
-        var loopPath = join(templateDir, "loop");
-        var orphanPath = join(templateDir, "orphan.html");
-
-        try {
-          fs.removeSync(loopPath);
-        } catch (cleanupErr) {
-          if (cleanupErr && cleanupErr.code !== "ENOENT") {
-            return done.fail(cleanupErr);
-          }
-        }
-
-        try {
-          fs.ensureSymlinkSync(templateDir, loopPath, "dir");
-        } catch (symlinkErr) {
-          return done.fail(symlinkErr);
-        }
-
-        fs.outputFileSync(orphanPath, "orphan");
-
-        writeToFolder(test.blog.id, test.template.id, function (err) {
-          if (err) return done.fail(err);
-
-          try {
-            expect(fs.existsSync(orphanPath)).toEqual(false);
-            expect(
-              fs.readFileSync(join(templateDir, view.name), "utf-8")
-            ).toEqual(view.content);
-
-            var linkStat = fs.lstatSync(loopPath);
-            expect(linkStat.isSymbolicLink()).toEqual(true);
-          } catch (assertErr) {
-            return done.fail(assertErr);
-          }
-
-          done();
-        });
-      });
-    });
+    expect(await exists(test, orphanPath)).toEqual(false);
+    expect(rewrittenStat.modified).toEqual(originalStat.modified);
+    expect(await readText(test, viewPath)).toEqual(view.content);
   });
 
   it("waits for the folder lock to be released before writing", async function () {
@@ -442,7 +269,7 @@ var writeChangeToFolder = require("../../../dashboard/site/template/save/writeCh
 
     // The write only ran once the lock was free, and gave the lock back
     expect(released).toEqual(true);
-    expect(fs.readFileSync(getTemplatePath(this, "post.html"), "utf-8")).toEqual(
+    expect(await readText(this, await getTemplatePath(this, "post.html"))).toEqual(
       "<h1>Locked</h1>"
     );
     expect((await folderLock.inspect(this.blog.id)).held).toBeFalsy();
@@ -503,21 +330,31 @@ var writeChangeToFolder = require("../../../dashboard/site/template/save/writeCh
     });
 
     await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(fs.readFileSync(getTemplatePath(this, "post.html"), "utf-8")).toEqual(
+    expect(await readText(this, await getTemplatePath(this, "post.html"))).toEqual(
       "<h1>Held</h1>"
     );
     expect((await folderLock.inspect(blogID)).held).toBeFalsy();
   });
 });
 
-function getTemplateDir(test) {
-  var upperPath = test.blogDirectory + "/Templates/" + test.template.slug;
-  var lowerPath = test.blogDirectory + "/templates/" + test.template.slug;
+// Blog paths, in the blog's folder: the templates directory is "Templates"
+// unless the folder already has a lowercase "templates"
+async function getTemplateDir(test) {
+  var upperPath = "/Templates/" + test.template.slug;
+  var lowerPath = "/templates/" + test.template.slug;
 
-  return fs.existsSync(upperPath) ? upperPath : lowerPath;
+  return (await exists(test, upperPath)) ? upperPath : lowerPath;
 }
 
-function getTemplatePath(test, fileName) {
-  var templateDir = getTemplateDir(test);
+async function getTemplatePath(test, fileName) {
+  var templateDir = await getTemplateDir(test);
   return join(templateDir, fileName);
+}
+
+function exists(test, path) {
+  return folder.exists(test.blog.id, path);
+}
+
+async function readText(test, path) {
+  return (await folder.read(test.blog.id, path)).toString();
 }

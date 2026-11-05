@@ -3,7 +3,7 @@ describe("dropbox sync when Redis is unavailable", function () {
   // API and the Dropbox account row are faked, so the spec can show what
   // happens to a change when the database refuses the write: the cursor stays
   // where it was, and the next sync fetches and applies the same change.
-  const fs = require("fs-extra");
+  const folder = require("storage/folder");
   const Entry = require("models/entry");
   const { SimpleError } = require("redis");
   const { isRedisUnavailableError } = require("helper/redisUnavailable");
@@ -104,7 +104,6 @@ describe("dropbox sync when Redis is unavailable", function () {
 
   it("leaves the cursor in place, then applies the change on the next sync", function (done) {
     const blog = this.blog;
-    const blogDirectory = this.blogDirectory;
     const checkEntry = global.test.CheckEntry(blog.id);
 
     spyOn(Entry, "set").and.callFake(function (blogID, entryPath, entry, callback) {
@@ -114,29 +113,31 @@ describe("dropbox sync when Redis is unavailable", function () {
     sync(blog, function (err) {
       expect(isRedisUnavailableError(err)).toBe(true);
 
-      // The file made it to disk but not into the database, and the cursor
-      // was not moved past the change
-      expect(fs.readFileSync(blogDirectory + path, "utf-8")).toEqual(contents);
-      expect(store.account.cursor).toEqual("cursor-0");
-      expect(saved.some((values) => "cursor" in values)).toBe(false);
+      // The file made it to the folder but not into the database, and the
+      // cursor was not moved past the change
+      folder.read(blog.id, path).then(function (buffer) {
+        expect(buffer.toString("utf-8")).toEqual(contents);
+        expect(store.account.cursor).toEqual("cursor-0");
+        expect(saved.some((values) => "cursor" in values)).toBe(false);
 
-      Entry.get(blog.id, path, function (entry) {
-        expect(entry).toBeFalsy();
+        Entry.get(blog.id, path, function (entry) {
+          expect(entry).toBeFalsy();
 
-        // The freeze is over
-        Entry.set.and.callThrough();
+          // The freeze is over
+          Entry.set.and.callThrough();
 
-        sync(blog, function (err) {
-          if (err) return done.fail(err);
-
-          expect(store.account.cursor).toEqual("cursor-1");
-
-          checkEntry({ path: path, deleted: false }, function (err) {
+          sync(blog, function (err) {
             if (err) return done.fail(err);
-            done();
+
+            expect(store.account.cursor).toEqual("cursor-1");
+
+            checkEntry({ path: path, deleted: false }, function (err) {
+              if (err) return done.fail(err);
+              done();
+            });
           });
         });
-      });
+      }, done.fail);
     });
   });
 

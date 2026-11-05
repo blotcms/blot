@@ -118,8 +118,7 @@ function allocateByWeight(total, weights, min = 0) {
 // `mediaFiles` is the (already-generated, see lib/generate-media.js)
 // absolute-path list of the shared media pool - passed in rather than
 // resolved here since generating it is async and this function is not, and
-// because its location depends on config.blog_folder_dir which is only
-// known to the caller (build-render.spec.js).
+// because its location is only known to the caller (build-render.spec.js).
 function buildWorkload(config, blogs, rng, mediaFiles = []) {
   const distribution = config.distribution === "skewed" ? "skewed" : "flat";
   const mediaFraction = Math.min(1, Math.max(0, config.mediaFraction || 0));
@@ -240,11 +239,10 @@ function buildWorkload(config, blogs, rng, mediaFiles = []) {
 
     const linksToHub = !isHub && rng() < HUB_LINK_PROBABILITY;
 
-    // A configurable fraction of (non-hub) posts get a hard link to a file
+    // A configurable fraction of (non-hub) posts get a copy of a file
     // from the shared media pool instead of plain text, so a big corpus
-    // still exercises the image pipeline without unique media bytes per
-    // post (see build-render.spec.js's write step for why this is a hard
-    // link and not a symlink). Picked pseudo-randomly per post from the
+    // still exercises the image pipeline without generating unique media
+    // bytes per post. Picked pseudo-randomly per post from the
     // same seeded rng, so it's reproducible.
     const wantsMedia =
       !isHub && mediaFiles.length > 0 && rng() < mediaFraction;
@@ -279,7 +277,7 @@ function buildWorkload(config, blogs, rng, mediaFiles = []) {
           tags,
           keyword,
           hubPath: linksToHub ? `/${hubSlugBySite[blogIndex]}` : null,
-          // The body must reference the *hard-linked destination's* name
+          // The body must reference the *copy's destination* name
           // (`${slug}${mediaExt}`, written to `filePath` above), not the
           // pool source file's own basename - those differ (the pool file
           // is one of ~24 shared fixtures reused across many posts, while

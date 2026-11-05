@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-// Fails if code outside app/storage reaches a blog's folder on disk directly.
+// Checks that blog folders are reached only through app/storage/folder.
 //
-// Why: the files a blog owner syncs live in config.blog_folder_dir/<blogID>
-// today, but they are moving to S3 (#2258). Everything must read and write
-// them through app/storage/folder (read, write, stat, walk, ...), which is the
-// only place that knows where they live. A caller which builds its own path
-// from blog_folder_dir, or from the deleted helper/localPath, would keep
-// working on the local disk and silently break once the folder is in S3.
-// Code which needs a real path calls folder.ensureLocal (or folder.path).
+// First rule: nothing names the blog folders on disk. They were in
+// config.blog_folder_dir (data/blogs) until #2258 moved every one to the
+// storage bucket, and that setting, helper/localPath and the directory are
+// gone. A path built from any of them points at nothing, so none of
+// blog_folder_dir, helper/localPath, data/blogs or a spec's
+// this.blogDirectory may appear, in specs either. Code which needs a real
+// path calls folder.ensureLocal or folder.withLocal (or folder.path to write).
 //
 // Second rule: Blot's own changes to a blog's folder go through the blog's sync
 // client, so the provider (Dropbox, Google Drive, iCloud, Git) and the client's
@@ -25,38 +25,27 @@ const { join, basename } = require("path");
 
 const root = join(__dirname, "..", "..", "..");
 
-// helper/localPath is gone, so it may not be mentioned at all. blog_folder_dir
-// may only be used by the places below.
-const FORBIDDEN = [/helper\/localPath/, /blog_folder_dir/];
+const FORBIDDEN = [/helper\/localPath/, /blog_folder_dir/, /data\/blogs/, /\.blogDirectory\b/];
 
-// Spec files build and inspect real blog folders on disk.
+// In specs, any blogDirectory at all: a spec can take it off this without the
+// dot (const { blogDirectory } = this) and then join paths onto it
+const FORBIDDEN_IN_TESTS = [/\bblogDirectory\b/];
+
+// Spec files may change a folder directly (the second rule)
 function isTest(file) {
   return file.split("/").includes("tests") || basename(file) === "tests.js";
 }
 
-// Everything which legitimately names blog_folder_dir. Keep this short: a new
-// entry should be work on the disk itself, not on a blog's files.
+// The only places the first rule doesn't apply to
 const ALLOWED_PREFIXES = [
-  "app/storage/", // the local-disk backend of storage/folder
-  "config/index.js", // defines blog_folder_dir
-  "app/setup.js", // creates the directory at startup
-  // Benchmarks build throwaway blog folders on disk to time converters.
-  "scripts/benchmarks/",
-  // Finds and deletes directories on disk which belong to no blog.
-  "scripts/blog/remove-stray-blog-folders.js",
-  // Deploy check that the blog folders' directory is mounted and populated.
-  "scripts/deploy/verify-container/checks.js",
-  // Read-only scan of file names on disk ahead of the move to S3.
-  "scripts/storage/scan-folder-filenames.js",
-  // Measures each blog folder's size on disk with du.
-  "scripts/user/identify-overdue-users.js",
+  "scripts/tests/ci/check-folder-access.js", // names them, to forbid them
+  // Defines this.blogDirectory as a getter which throws, for specs which
+  // still reach for it
+  "scripts/tests/util/createBlog.js",
 ];
 
 function allowed(file) {
-  return (
-    isTest(file) ||
-    ALLOWED_PREFIXES.some((prefix) => file === prefix || file.startsWith(prefix))
-  );
+  return ALLOWED_PREFIXES.some((prefix) => file === prefix || file.startsWith(prefix));
 }
 
 // Mutating methods of storage/folder. Only these places may call them.
@@ -82,6 +71,8 @@ const MUTATION_ALLOWED_PREFIXES = [
   "scripts/host-cycle/reconcile.js",
   // proxy/e2e seed scripts build fixture blogs before any client exists.
   "proxy/e2e/",
+  // Benchmarks build throwaway blogs with no client to time builds.
+  "scripts/benchmarks/",
 ];
 
 function mutationAllowed(file) {
@@ -180,8 +171,10 @@ for (const file of files) {
     throw err;
   }
 
+  const patterns = isTest(file) ? FORBIDDEN.concat(FORBIDDEN_IN_TESTS) : FORBIDDEN;
+
   lines.forEach((line, i) => {
-    if (FORBIDDEN.some((pattern) => pattern.test(line))) {
+    if (patterns.some((pattern) => pattern.test(line))) {
       violations.push(`${file}:${i + 1}: ${line.trim()}`);
     }
   });
@@ -210,8 +203,7 @@ if (violations.length) {
   for (const violation of violations) console.error("  " + violation);
   console.error(
     "\nUse storage/folder (read, write, stat, walk, ...), or folder.ensureLocal " +
-      "if you really need a file on disk. Only add to ALLOWED_PREFIXES for " +
-      "work on the disk itself."
+      "if you really need a file on disk. There is no blog folder on disk any more."
   );
   process.exit(1);
 }

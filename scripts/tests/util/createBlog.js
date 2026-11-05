@@ -1,7 +1,5 @@
 var Blog = require("models/blog");
 var randomString = require("./randomString");
-var config = require("config");
-var { join } = require("path");
 const folder = require("storage/folder");
 const { promisify } = require("util");
 const rebuild = promisify(require("sync/rebuild"));
@@ -46,10 +44,15 @@ function attempt(context, attemptIndex, done) {
       return done(err instanceof Error ? err : new Error(err.handle));
     }
 
-    context.blogDirectory = join(config.blog_folder_dir, blog.id, "/");
-
-    if (context.blogDirectory.slice(-1) === "/")
-      context.blogDirectory = context.blogDirectory.slice(0, -1);
+    // The blog's folder is in the storage bucket, with no directory on disk.
+    // A spec which still reaches for one fails here, rather than writing to
+    // a path nothing reads.
+    Object.defineProperty(context, "blogDirectory", {
+      configurable: true,
+      get: function () {
+        throw new Error("Blog folders are in the storage bucket: use storage/folder or global.test.folder, not this.blogDirectory");
+      },
+    });
 
     context.blog = blog;
 

@@ -39,35 +39,40 @@ describe("Blog.remove", function () {
 
   it("removes the blog's folder and nothing beside it", function (done) {
     var test = this;
-    var fs = require("fs-extra");
-    var localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
-    var folder = localPath(test.blog.id, "/");
-    var other = localPath(test.blog.id + "0", "/");
+    var folder = require("storage/folder");
+    var otherID = test.blog.id + "0";
 
-    fs.outputFileSync(folder + "/posts/a.txt", "Hello");
-    fs.outputFileSync(other + "/b.txt", "Other");
+    Promise.all([
+      folder.write(test.blog.id, "/posts/a.txt", "Hello"),
+      folder.write(otherID, "/b.txt", "Other"),
+    ]).then(function () {
+      remove(test.blog.id, function (err) {
+        if (err) return done.fail(err);
 
-    remove(test.blog.id, function (err) {
-      var otherExists = fs.existsSync(other + "/b.txt");
-
-      fs.removeSync(other);
-
-      if (err) return done.fail(err);
-
-      expect(fs.existsSync(folder)).toBe(false);
-      expect(otherExists).toBe(true);
-      done();
-    });
+        Promise.all([
+          folder.exists(test.blog.id, "/posts/a.txt"),
+          folder.listNames(test.blog.id, "/").catch(function () {
+            return [];
+          }),
+          folder.exists(otherID, "/b.txt"),
+        ]).then(function (found) {
+          return folder.removeAll(otherID).then(function () {
+            expect(found[0]).toBe(false);
+            expect(found[1]).toEqual([]);
+            expect(found[2]).toBe(true);
+            done();
+          });
+        }).catch(done.fail);
+      });
+    }, done.fail);
   });
 
   it("removes a blog which has no folder", function (done) {
     var test = this;
 
-    require("fs-extra").removeSync(
-      require("path").join(require("config").blog_folder_dir, test.blog.id)
-    );
-
-    remove(test.blog.id, done);
+    require("storage/folder").removeAll(test.blog.id).then(function () {
+      remove(test.blog.id, done);
+    }, done.fail);
   });
 
   it("removes a blog from list of all blogs", function (done) {

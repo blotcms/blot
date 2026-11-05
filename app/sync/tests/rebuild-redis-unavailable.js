@@ -102,46 +102,4 @@ describe("rebuild when Redis is unavailable", function () {
 
     expect(summaries.length).toBe(1);
   });
-
-  it("does not walk into a symlink or list it", async function () {
-    var fs = require("fs-extra");
-    var os = require("os");
-    var path = require("path");
-    var fine = "/Fine.txt";
-    var log = jasmine.createSpy("log");
-    var outside = fs.mkdtempSync(path.join(os.tmpdir(), "rebuild-link-"));
-
-    fs.outputFileSync(path.join(outside, "target.txt"), "Title: Linked");
-    fs.symlinkSync(
-      path.join(outside, "target.txt"),
-      path.join(this.blogDirectory, "Link.txt")
-    );
-    fs.symlinkSync(outside, path.join(this.blogDirectory, "LinkedFolder"));
-    await this.blog.write({ path: fine, content: "Title: Fine" });
-
-    try {
-      await this.blog.rebuild({ log: log, status: function () {} });
-    } finally {
-      fs.removeSync(outside);
-    }
-
-    await this.blog.check({ path: fine, title: "Fine" });
-
-    var Entry = require("models/entry");
-    var blogID = this.blog.id;
-
-    for (var linked of ["/Link.txt", "/LinkedFolder/target.txt"]) {
-      var entry = await new Promise(function (resolve) {
-        Entry.get(blogID, linked, resolve);
-      });
-
-      expect(entry).toBeFalsy();
-    }
-
-    expect(
-      log.calls.allArgs().filter(function (args) {
-        return /failed to build/.test(args.join(" "));
-      }).length
-    ).toBe(0);
-  });
 });

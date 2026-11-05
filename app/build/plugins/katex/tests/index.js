@@ -29,19 +29,19 @@ describe("katex plugin integration", function () {
           expected = fs.readFileSync(expectedPath, "utf8");
         } catch (e) {}
 
-        fs.outputFileSync(this.blogDirectory + path, contents);
+        test.folder.writeFiles(this.blog.id, { [path]: contents }).then(() => {
+          build(this.blog, path, (err, entry) => {
+            if (err) return done.fail(err);
+            const html = entry.html;
 
-        build(this.blog, path, (err, entry) => {
-          if (err) return done.fail(err);
-          const html = entry.html;
+            if (html !== expected) {
+              fs.outputFileSync(expectedPath + ".expected.html", html);
+            }
 
-          if (html !== expected) {
-            fs.outputFileSync(expectedPath + ".expected.html", html);
-          }
-
-          expect(expected).toEqual(html);
-          done();
-        });
+            expect(expected).toEqual(html);
+            done();
+          });
+        }, done.fail);
       });
     });
 });

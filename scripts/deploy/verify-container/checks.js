@@ -13,18 +13,12 @@ const { promisify } = require("util");
 
 const execFileAsync = promisify(execFile);
 
-// A blog folder on disk is data/blogs/{blogID}. Deleted blogs and blogs that
-// never synced mean the two won't match exactly, so this is a loose floor:
-// a wrong, stale or empty mount misses most blogs, not a few. The real ratio
-// is always in the report - tighten this once we've seen it in prod.
-const MIN_BLOGS_WITH_FOLDER = 0.5;
-
 // An absolute floor only: the data disk is meant to fill up with blogs, so
 // how full it is belongs in monitoring, not a deploy gate.
 const MIN_FREE_BYTES = 2 * 1024 ** 3; // 2GiB
 
 // The status page (https://status.blot.im) checks this same blog. Rendering
-// it exercises redis, the blogs mount, the templates and the blog server in
+// it exercises redis, the storage bucket, the templates and the blog server in
 // one request. Preview subdomains are exempt from the HTTPS redirect, so
 // plain HTTP to the container works.
 //
@@ -101,32 +95,6 @@ async function dataVolumeMarker({ config }) {
   }
   return volumeID ? `data volume ${volumeID}` : `${file} is present`;
 }
-
-async function dataDirectory({ config, redis }) {
-  const blogsDir = config.blog_folder_dir;
-  let entries;
-  try {
-    entries = await fs.readdir(blogsDir, { withFileTypes: true });
-  } catch (err) {
-    throw new Error(`cannot read ${blogsDir}: ${err.message}`);
-  }
-
-  const folders = new Set(entries.filter((e) => e.isDirectory()).map((e) => e.name));
-  const blogIDs = await redis.sMembers("blogs");
-
-  if (!blogIDs.length) throw new Error("redis has no blogs");
-  if (!folders.size) throw new Error(`${blogsDir} has no blog folders`);
-
-  const withFolder = blogIDs.filter((id) => folders.has(id)).length;
-  const ratio = withFolder / blogIDs.length;
-  const summary = `${withFolder}/${blogIDs.length} blogs in redis have a folder, ${folders.size} folders on disk`;
-
-  if (ratio < MIN_BLOGS_WITH_FOLDER) {
-    throw new Error(`${summary} (need ${MIN_BLOGS_WITH_FOLDER * 100}%) - wrong or stale data mount?`);
-  }
-  return summary;
-}
-
 async function writable(directory) {
   const file = path.join(directory, `deploy-verify-${process.pid}`);
   await fs.writeFile(file, "ok");
@@ -425,7 +393,6 @@ module.exports = [
   { name: "release ID", run: releaseID },
   { name: "redis read/write", run: redisRoundTrip },
   { name: "data volume marker", run: dataVolumeMarker },
-  { name: "blog folders match redis", run: dataDirectory },
   { name: "data directory writable", run: dataDirectoryWritable },
   { name: "tmp directory writable", run: tmpDirectoryWritable },
   { name: "storage bucket reachable", run: storageBucket },
