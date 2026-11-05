@@ -76,6 +76,16 @@ setup "$TMP/run3"
 sums > "$TMP/sums2"
 check "a third run leaves the managed files as they were" cmp -s "$TMP/sums1" "$TMP/sums2"
 
+# A host set up before the data volume went away: the unit and the drop-in that
+# gated docker on it. Skip mode has no systemctl, so only the files are checked.
+in_ct 'touch /etc/systemd/system/mount-data-volume.service /etc/systemd/system/docker.service.d/20-data-volume.conf'
+setup "$TMP/run4" || exit 1
+check "the data volume unit and its docker drop-in are removed" in_ct '
+  [ ! -e /etc/systemd/system/mount-data-volume.service ] && [ ! -e /etc/systemd/system/docker.service.d/20-data-volume.conf ]'
+check "and nothing else about docker changed" in_ct '[ -f /etc/systemd/system/docker.service.d/30-redis.conf ]'
+setup "$TMP/run5" || exit 1
+check "removing them again is a no-op" bash -c "! grep -q 'removed mount-data-volume' '$TMP/run5'"
+
 check "journald is capped and fail2ban has a memory limit" in_ct '
   grep -qx "SystemMaxUse=500M" /etc/systemd/journald.conf.d/zz-blot-host.conf &&
   grep -qx "MemoryMax=256M" /etc/systemd/system/fail2ban.service.d/20-memory.conf'
