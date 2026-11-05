@@ -27,6 +27,10 @@ const root = join(__dirname, "..", "..", "..");
 
 const FORBIDDEN = [/helper\/localPath/, /blog_folder_dir/, /data\/blogs/, /\.blogDirectory\b/];
 
+// In specs, any blogDirectory at all: a spec can take it off this without the
+// dot (const { blogDirectory } = this) and then join paths onto it
+const FORBIDDEN_IN_TESTS = [/\bblogDirectory\b/];
+
 // Spec files may change a folder directly (the second rule)
 function isTest(file) {
   return file.split("/").includes("tests") || basename(file) === "tests.js";
@@ -167,8 +171,10 @@ for (const file of files) {
     throw err;
   }
 
+  const patterns = isTest(file) ? FORBIDDEN.concat(FORBIDDEN_IN_TESTS) : FORBIDDEN;
+
   lines.forEach((line, i) => {
-    if (FORBIDDEN.some((pattern) => pattern.test(line))) {
+    if (patterns.some((pattern) => pattern.test(line))) {
       violations.push(`${file}:${i + 1}: ${line.trim()}`);
     }
   });
