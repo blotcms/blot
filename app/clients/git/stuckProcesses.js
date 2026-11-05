@@ -11,7 +11,10 @@ var MAX_AGE_SECONDS = 2 * 60 * 60;
 // pack) and rev-list (checking it); receive-pack is only what a container
 // from before that was deployed would still be running. The git client starts
 // each with limiter.js's settings in front of the command (git -c a=b ...).
-var GIT_PROCESS = /^(\S*\/)?git(-|(\s+-c\s+\S+)*\s+)(receive-pack|upload-pack|index-pack|rev-list)(\s|$)/;
+// The git store (#2259) runs index-pack and pack-objects for pushes, imports
+// and compaction, with its own -c settings, and the served path's new-folder
+// setup runs fast-import (--git-dir= and --work-tree= may come first).
+var GIT_PROCESS = /^(\S*\/)?git(-|(\s+(-c\s+\S+|--git-dir=\S+|--work-tree=\S+))*\s+)(receive-pack|upload-pack|index-pack|rev-list|pack-objects|fast-import)(\s|$)/;
 
 // The container's busybox ps has no `etimes`, only `etime`, which it prints
 // as mm:ss, then 2h15 (hours, minutes), then 3d04 (days, hours). procps
