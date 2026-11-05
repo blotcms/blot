@@ -180,6 +180,9 @@ describe("git client: materialize", function () {
     var { createCache, createReader, createFsStore, manifest } = require(store);
     var objects = createFsStore({ root: directory });
     var cache = createCache({ dir: cacheDirectory, maxBytes: 256 * 1024 * 1024 });
+    // Load what writing the folder needs (config, S3, Redis) before measuring,
+    // so the growth is the file passing through and not the modules
+    var run = require(materialize);
 
     manifest.read(objects).then(function (current) {
       var reader = createReader({ store: objects, cache: cache, manifest: current, scratch: cache });
@@ -189,7 +192,7 @@ describe("git client: materialize", function () {
         peak = Math.max(peak, process.memoryUsage().rss);
       }, 5);
 
-      return require(materialize)({ blogID: blogID, reader: reader, from: from, to: to }).then(function () {
+      return run({ blogID: blogID, reader: reader, from: from, to: to }).then(function () {
         clearInterval(timer);
         // Writing the folder opens connections to S3 and Redis, which would keep
         // this process (and the spec waiting on it) alive: exit once printed

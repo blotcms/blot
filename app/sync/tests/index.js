@@ -1,6 +1,5 @@
 describe("sync", function () {
   var sync = require("../index");
-  var blotFolder = require("storage/folder");
 
   // A lock held by a dead process is freed by TTL expiry (10s) rather than
   // by the OS, so poll until the next sync can acquire it.
@@ -324,7 +323,7 @@ describe("sync cacheID", function () {
   function syncContents(blogID, contents, callback) {
     sync(blogID, function (err, folder, done) {
       if (err) return callback(err);
-      blotFolder.write(blogID, "/a.txt", Buffer.from(contents)).then(function () {
+      storage.write(blogID, "/a.txt", Buffer.from(contents)).then(function () {
         folder.update("/a.txt", function (err, result) {
           if (err) return callback(err);
           done(null, function (err) {
@@ -414,7 +413,7 @@ describe("sync cacheID", function () {
 
     sync(blogID, function (err, folder, done) {
       if (err) return testDone.fail(err);
-      blotFolder.write(blogID, "/_public/style.css", Buffer.from("a{}")).then(function () {
+      storage.write(blogID, "/_public/style.css", Buffer.from("a{}")).then(function () {
         folder.update("/_public/style.css", function (err) {
           if (err) return testDone.fail(err);
           done(null, function (err) {
