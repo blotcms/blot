@@ -9,7 +9,6 @@
 *.rdb
 npm-debug.log*
 node_modules/
-package-lock.json
 app/views-built/
 data/
 proxy/tests/data/

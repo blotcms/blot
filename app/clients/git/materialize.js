@@ -402,3 +402,11 @@ module.exports = function (directory, folder, from, to, callback) {
 };
 
 module.exports.EMPTY_TREE = EMPTY_TREE;
+
+// For the materializer from the git store (served/materialize.js), which
+// treats the blog folder the same way
+module.exports.safeParts = safeParts;
+module.exports.kind = kind;
+module.exports.join = join;
+module.exports.ensureDirectory = ensureDirectory;
+module.exports.removeFile = removeFile;

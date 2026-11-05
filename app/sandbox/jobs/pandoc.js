@@ -142,7 +142,10 @@ function pandocArgs(options, dir, files) {
       "--extract-media=" + path.join(dir, "media"),
       "-f", from,
       "-t", "html5",
-      "-s",
+      // Standalone, for the title block the docx and odt converters read
+      // ("header h1"), with a template of only that and the body: pandoc's
+      // default one adds 10-25ms of head and CSS that the converters throw away
+      "--template=" + path.join(__dirname, "title-only.html"),
     ];
   }
 

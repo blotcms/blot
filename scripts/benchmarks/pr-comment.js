@@ -29,7 +29,7 @@ const { BENCHMARK_DEFAULTS } = require("./spec/util/defaults");
 const RESULTS_START = "<!-- bench:results:start -->";
 const RESULTS_END = "<!-- bench:results:end -->";
 const SHA_RE = /<!--\s*bench:sha:([0-9a-f]{7,40})\s*-->/i;
-const LOADING = "⏳"; // hourglass
+const LOADING = "(running)";
 
 function arg(name, fallback = null) {
   const i = process.argv.indexOf(name);
@@ -165,7 +165,7 @@ function runningBody({ arch, sha, prevBlock, prevSha, marker, title }) {
 
   if (prevBlock) {
     lines.push(
-      `> ${LOADING} Running on ${commitRef(sha) || "the latest commit"}. ` +
+      `> Running on ${commitRef(sha) || "the latest commit"}. ` +
         `Numbers below are from ${commitRef(prevSha) || "the previous run"}.`,
       "",
       prevBlock,
@@ -174,7 +174,7 @@ function runningBody({ arch, sha, prevBlock, prevSha, marker, title }) {
     );
   } else {
     lines.push(
-      `> ${LOADING} Running on ${commitRef(sha) || "the latest commit"}. ` +
+      `> Running on ${commitRef(sha) || "the latest commit"}. ` +
         "Results will appear when the run finishes.",
       ""
     );

@@ -88,8 +88,8 @@ function row(label, base, head) {
 
     const apart = Math.min(...head) > Math.max(...base);
     const better = Math.max(...head) < Math.min(...base);
-    if (apart && b > 0 && ((h - b) / b) * 100 >= FLAG_PERCENT) flag = " 🔺";
-    if (better && b > 0 && ((b - h) / b) * 100 >= FLAG_PERCENT) flag = " 🟢";
+    if (apart && b > 0 && ((h - b) / b) * 100 >= FLAG_PERCENT) flag = " (worse)";
+    if (better && b > 0 && ((b - h) / b) * 100 >= FLAG_PERCENT) flag = " (better)";
   }
 
   const range = (values) =>
@@ -140,7 +140,7 @@ function doneBody({ baseRuns, headRuns, baseSha, headSha, runUrl }) {
     `\`${short(headSha)}\` (head) against \`${short(baseSha)}\` (base), ` +
       `${headRuns.length} runs each, alternating in one job. ` +
       "Milliseconds unless noted, lower is better; medians, with the range underneath.",
-    `🔺 / 🟢: at least ${FLAG_PERCENT}% worse / better with no overlap between the runs.`,
+    `"worse" / "better": at least ${FLAG_PERCENT}% worse / better with no overlap between the runs.`,
     "",
     table(baseRuns, headRuns),
     "",
@@ -154,7 +154,7 @@ function doneBody({ baseRuns, headRuns, baseSha, headSha, runUrl }) {
 function statusBody(status, { headSha, runUrl }) {
   const text =
     status === "running"
-      ? `⏳ Running against \`${short(headSha)}\`…`
+      ? `Running against \`${short(headSha)}\`…`
       : `The run against \`${short(headSha)}\` failed.`;
   return [MARKER, "### Mega-site benchmark", "", text + (runUrl ? ` [Run](${runUrl}).` : "")].join(
     "\n"
