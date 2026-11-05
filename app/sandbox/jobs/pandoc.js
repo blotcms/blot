@@ -233,9 +233,28 @@ async function walk(dir, prefix = "") {
   return found;
 }
 
+// callouts.lua only rewrites a blockquote whose text starts "[!name]", which
+// needs a literal "[!" in the source, or an entity standing for "[" or "!"
+// (&#91; &#x5b; &lbrack; &lsqb; &#33; &#x21; &excl;). Without one, running the
+// filter (~10 ms of Lua start-up and traversal) cannot change the output.
+const CALLOUT_HINT = /\[!|&(?:#|lbrack|lsqb|excl)/i;
+function mayHaveCallout(document) {
+  return CALLOUT_HINT.test(document.toString("latin1"));
+}
+
 async function run(args, input) {
   const options = check(args);
   const { document, files } = split(input, options);
+
+  // Markdown with no bibliography or CSL writes nothing and extracts no media,
+  // so it needs no scratch directory, and no media directory to walk.
+  if (options.from === "markdown" && !files.bibliography && !files.csl) {
+    if (options.callouts && !mayHaveCallout(document)) options.callouts = false;
+    const result = await pandoc(pandocArgs(options, null, files), document);
+    if (result.error) return { meta: { error: result.error }, outputs: [] };
+    return { meta: { dir: path.join(os.tmpdir(), "pandoc-none", "media"), media: [] }, outputs: [result.html] };
+  }
+
   const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "pandoc-"));
 
   try {
