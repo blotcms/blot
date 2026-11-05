@@ -13,8 +13,6 @@ set -euo pipefail
 
 REPO=$(cd "$(dirname "$0")/../../.." && pwd)
 NAME=blot-host-deploy-test
-VOLUME=vol-0123456789abcdef0
-OTHER_VOLUME=vol-0fedcba987654321f
 FAILED=0
 
 TMP=$(mktemp -d)
@@ -68,14 +66,11 @@ printf "#!/bin/bash\necho \"/dev/nvme1n1 SN Amazon EC2 NVMe Instance Storage 1\"
 printf "#!/bin/bash\nexit 0\n" > blkid
 chmod +x sudo systemctl mountpoint mount nvme blkid'
 
-echo "# A new host: no instance store mounted, no data volume file"
+echo "# A new host: no instance store mounted"
 # Skip mode writes no units; the real one exists on a host set up with systemd.
 in_ct 'touch /etc/systemd/system/blot-instance-store.service'
-check "deploy.sh runs to the end" deploy "$TMP/run1" DATA_VOLUME_ID=$VOLUME
+check "deploy.sh runs to the end" deploy "$TMP/run1"
 check "deploy.sh says so" grep -q '^Host setup complete' "$TMP/run1"
-check "DATA_VOLUME_ID is written" in_ct "[ \"\$(cat /etc/blot/data-volume)\" = $VOLUME ]"
-check "no marker is written for a volume that is not mounted" in_ct '[ ! -e /var/www/blot/data/.blot-data-volume ]'
-check "mount-data-volume is enabled and started" in_ct 'grep -qx "enable --now mount-data-volume.service" /tmp/systemctl.log'
 check "the instance store unit is enabled" in_ct 'grep -qx "enable mount-instance-store.service" /tmp/systemctl.log'
 check "the instance store unit is started when not mounted" in_ct '[ "$(grep -cx "start mount-instance-store.service" /tmp/systemctl.log)" = 1 ]'
 check "the Redis backup unit is started after the instance store, when /backups is not mounted" in_ct '
@@ -143,8 +138,7 @@ in_ct 'fail2ban-client stop > /dev/null 2>&1; rm -f /var/lib/fail2ban/fail2ban.s
 
 echo "# Re-running on a live host: instance store mounted, files in place"
 in_ct 'rm /tmp/systemctl.log; chown 1234:1234 /var/instance-ssd/logs /var/instance-ssd/logs/access.log'
-check "deploy.sh runs again, with another DATA_VOLUME_ID" deploy "$TMP/run2" DATA_VOLUME_ID=$OTHER_VOLUME
-check "the existing data volume file is not overwritten" in_ct "[ \"\$(cat /etc/blot/data-volume)\" = $VOLUME ]"
+check "deploy.sh runs again" deploy "$TMP/run2"
 check "the instance store unit is not started when mounted" in_ct '! grep -q "start mount-instance-store" /tmp/systemctl.log'
 check "the Redis backup unit is not started when /backups is mounted" in_ct '! grep -q "start blot-instance-store" /tmp/systemctl.log'
 check "docker is never started, restarted or stopped" in_ct '! grep -E "(start|stop|restart).* docker" /tmp/systemctl.log'
@@ -162,26 +156,13 @@ check "sshd -T still reports x11forwarding no" in_ct 'sshd -T | grep -qx "x11for
 
 echo "# A host without blot-instance-store.service (the Amazon Linux 2 app host)"
 in_ct 'rm /etc/systemd/system/blot-instance-store.service /tmp/systemctl.log; sed -i "/^\/backups\$/d" /tmp/mounted'
-check "deploy.sh runs, and starts nothing for Redis" deploy "$TMP/run2b" DATA_VOLUME_ID=$VOLUME
+check "deploy.sh runs, and starts nothing for Redis" deploy "$TMP/run2b"
 check "the Redis backup unit is not started" in_ct '! grep -q "blot-instance-store" /tmp/systemctl.log'
 
-echo "# DATA_VOLUME_ID and a data volume that is already mounted"
-# A fake mounted volume: findmnt names a device, and the by-id link for $VOLUME
-# points at it (or at nothing, for the volume that is not mounted).
-in_ct 'rm /etc/blot/data-volume; echo /var/www/blot/data >> /tmp/mounted
-mkdir -p /dev/disk/by-id; touch /tmp/fakedev
-ln -s /tmp/fakedev /dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_vol0123456789abcdef0
-printf "#!/bin/bash\necho /tmp/fakedev\n" > /usr/local/bin/findmnt; chmod +x /usr/local/bin/findmnt'
-check "a different DATA_VOLUME_ID than the mounted volume is refused" bash -c "! env PATH='$TMP/bin:$PATH' SSH_KEY=unused PUBLIC_IP=host SSH_PORT=2222 DATA_VOLUME_ID=$OTHER_VOLUME bash '$REPO/config/host/deploy.sh' > '$TMP/run3' 2>&1"
-check "and nothing was written" in_ct '[ ! -e /etc/blot/data-volume ] && [ ! -e /var/www/blot/data/.blot-data-volume ]'
-check "the mounted volume's own ID is accepted" deploy "$TMP/run4" DATA_VOLUME_ID=$VOLUME
-check "and written with its marker" in_ct "[ \"\$(cat /etc/blot/data-volume)\" = $VOLUME ] && [ \"\$(cat /var/www/blot/data/.blot-data-volume)\" = $VOLUME ]"
-in_ct 'rm /etc/blot/data-volume /var/www/blot/data/.blot-data-volume'
-check "without DATA_VOLUME_ID the mounted volume is still adopted" deploy "$TMP/run5"
-check "and written with its marker" in_ct "[ \"\$(cat /etc/blot/data-volume)\" = $VOLUME ] && [ \"\$(cat /var/www/blot/data/.blot-data-volume)\" = $VOLUME ]"
-
-echo "# Bad input"
-check "a malformed DATA_VOLUME_ID is refused before anything runs" bash -c "! env PATH='$TMP/bin:$PATH' SSH_KEY=unused PUBLIC_IP=host DATA_VOLUME_ID='vol-xyz; rm' bash '$REPO/config/host/deploy.sh' > '$TMP/run6' 2>&1 && grep -q 'DATA_VOLUME_ID must look like' '$TMP/run6'"
+echo "# The data volume is gone"
+check "deploy.sh installs no data volume unit or docker drop-in" in_ct '
+  [ ! -e /etc/systemd/system/mount-data-volume.service ] && [ ! -e /etc/systemd/system/docker.service.d/20-data-volume.conf ] &&
+  [ ! -e /etc/blot/data-volume ] && ! grep -q mount-data-volume /tmp/systemctl.log'
 
 [ "$FAILED" = 0 ] || { echo "Some checks failed"; exit 1; }
 echo "All checks passed"

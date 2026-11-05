@@ -29,8 +29,6 @@ On a new host run `deploy.sh` directly (see [Moving to a new host](#moving-to-a-
 | (written by `deploy.sh`) | `/etc/cron.d/blot-unit-mem` (runs `unit-mem-log.sh` every minute as root) |
 | `scripts/mount-instance-store.service` | `/etc/systemd/system/mount-instance-store.service` (enabled; started only if `/var/instance-ssd` is not mounted yet) |
 | `scripts/docker.service.d/10-instance-store.conf` | `/etc/systemd/system/docker.service.d/10-instance-store.conf` |
-| `scripts/mount-data-volume.service` | `/etc/systemd/system/mount-data-volume.service` |
-| `scripts/docker.service.d/20-data-volume.conf` | `/etc/systemd/system/docker.service.d/20-data-volume.conf` |
 | `fail2ban/filter.d/*.conf`, `fail2ban/jail.local`, `fail2ban/fail2ban.local` | `/etc/fail2ban/` (then creates any `logpath` in `jail.local` that is missing and restarts fail2ban) |
 | `scripts/fail2ban.service.d/10-instance-store.conf` | `/etc/systemd/system/fail2ban.service.d/10-instance-store.conf` |
 | (written by `deploy.sh`) | `X11Forwarding no` in `/etc/ssh/sshd_config`, and on Amazon Linux 2023 in `/etc/ssh/sshd_config.d/12-blot-x11.conf` |
@@ -222,17 +220,11 @@ runs `deploy.sh` on top of it. Still by hand:
   `export` also reads bans a restart dropped from fail2ban's database (needs
   `sqlite3` on the host). `import` refuses the whole file if a line is not an
   address or CIDR, skips what is banned, and fails if any is not listed after.
-- **The data volume.** Attach it, then run `deploy.sh` again with
-  `DATA_VOLUME_ID=vol-...`, which writes `/etc/blot/data-volume`. Don't set it
-  before the volume is attached: the unit waits for the device, then fails the
-  run. A volume restored from a snapshot still
-  carries the old volume's ID in `.blot-data-volume`; mount it once by hand and
-  write the new ID there before the unit mounts it (see below).
 - **Wildcard certificate** files in `/etc/ssl/private/` (`letsencrypt-domain.pem`
   and `.key`), written from Redis; `blue-green.sh` won't start a proxy
   container without them.
 - Then `deploy.sh` and the Deploy workflow. docker is enabled but
-  stays stopped until the instance store and the data volume are mounted.
+  stays stopped until the instance store is mounted.
 
 Nothing in `proxy/` or the units needs copying: custom-domain
 certificates are in Redis and the proxy cache refills itself.
@@ -250,39 +242,15 @@ store unit is also enabled, and started if `/var/instance-ssd` is not a
 mountpoint, so on a new host the log directory exists before fail2ban starts; on
 a running host it is mounted and nothing is started or remounted.
 
-The data volume (the EBS volume at `/var/www/blot/data`) is mounted at boot by
-`mount-data-volume.service`, and the drop-in gates docker on it the same way.
-Which volume belongs there is host state, not repo state, because the volume
-changes whenever it is swapped for a resized or restored one:
-
-- `/etc/blot/data-volume` holds the expected EBS volume ID on one line (e.g.
-  `vol-0a2e04d301e025e60`). `mount-data-volume.sh` reads it, waits for the
-  matching `/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_vol...` device,
-  mounts it, and refuses to carry on if a different device is already mounted
-  there.
-- `.blot-data-volume` at the root of the volume holds the same ID.
-  `mount-data-volume.sh` unmounts and fails if it is missing or doesn't match,
-  and the deploy's verify step fails a container that can't see it (a
-  container started against an empty directory on the root disk). Put it on a
-  replacement volume before swapping it in.
-
-On the first run against a host with the volume already mounted (and no
-`/etc/blot/data-volume`), `deploy.sh` works out the volume ID from the mounted
-device and writes both files; it never overwrites them afterwards. With
-`DATA_VOLUME_ID` set (`vol-` and 8 to 17 hex digits) and no
-`/etc/blot/data-volume`, it writes that ID instead; if a different volume is
-mounted it stops without writing anything, and it writes the marker only for the
-volume that is mounted. If there is neither the file nor a mounted volume it
-warns and leaves the unit disabled.
-`mount-data-volume.sh` also makes the mount `shared`, which the app
-containers' `bind-propagation=rslave` bind of the data directory needs, so a
-volume mounted on the host over `/var/www/blot/data` reaches running
-containers without a restart. `deploy.sh` also removes the legacy
-`mount-data-disk.service` (its script no longer exists on the host).
+`/var/www/blot/data` is a plain directory on the root disk, created by
+`host/setup.sh`. A host set up when it was a mounted EBS volume has
+`mount-data-volume.service` and a docker drop-in that ran its script before
+docker started; `host/setup.sh` disables and deletes both, and `deploy.sh`
+removes the legacy `mount-data-disk.service` (its script no longer exists on the
+host).
 
 The install paths are load-bearing: `mount-instance-store.service` hardcodes
-`/home/ec2-user/scripts/mount-instance-store.sh` (likewise
-`mount-data-volume.service` and `mount-data-volume.sh`).
+`/home/ec2-user/scripts/mount-instance-store.sh`.
 
 ## Host cycle
 
@@ -558,8 +526,6 @@ attached read-only to a scratch host.
   `/var/instance-ssd/disk-cache` for the proxy's disk cache (both uid 1000), and
   `/var/instance-ssd/logs` (uid 1000, as the proxy container writes it) if it is
   missing, since a stop/start of the instance wipes the disk.
-- `mount-data-volume.sh` mounts the EBS data volume at `/var/www/blot/data` at
-  boot (see above).
 - The storage bucket's daily offsite copy to Backblaze B2
   ([`config/storage-bucket/README.md`](../storage-bucket/README.md), "Offsite
   backup and restore"). `host/setup.sh` installs `rclone` (from the Amazon

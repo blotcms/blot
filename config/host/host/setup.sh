@@ -125,8 +125,8 @@ for pkg in $PACKAGES; do rpm -q "$pkg" > /dev/null 2>&1 || missing="$missing $pk
 ln -sfn /usr/bin/redis6-cli /usr/local/bin/redis-cli
 
 say "Docker"
-# Enabled, not started: deploy.sh's drop-ins gate docker on the instance store
-# and the data volume, and on a fresh host the data volume arrives later.
+# Enabled, not started: deploy.sh's drop-in gates docker on the instance store,
+# which on a fresh host is mounted later.
 sd enable docker
 put /etc/systemd/system/docker.service.d/30-redis.conf 0644 root:root <<'EOF2'
 [Unit]
@@ -301,9 +301,9 @@ sd daemon-reload
 sd enable --now blot-storage-offsite.timer
 
 say "Directories"
-# /var/www/blot/data is where the data volume is mounted later, and
-# /var/www/blot/app/blog/static is bind-mounted read-only into the units.
-# Existing directories are left alone.
+# /var/www/blot/data is a plain directory on the root disk (the featured
+# sites, logs and node reports), and /var/www/blot/app/blog/static is
+# bind-mounted read-only into the units. Existing directories are left alone.
 owner=root
 if id "$APP_USER" > /dev/null 2>&1; then
   owner=$APP_USER
@@ -313,6 +313,19 @@ fi
 for dir in /var/www/blot /var/www/blot/data /var/www/blot/app /var/www/blot/app/blog /var/www/blot/app/blog/static; do
   [ -d "$dir" ] || { install -d -m 0755 -o "$owner" -g "$owner" "$dir"; echo "    created $dir"; }
 done
+
+say "Retiring the data volume"
+# Hosts set up before the data volume went away have a unit that mounts it and
+# a docker.service drop-in that runs the mount script before docker starts.
+# Docker no longer waits for a volume. Disabling does not stop the unit (it
+# refuses a manual stop), so nothing is unmounted.
+if [ -e /etc/systemd/system/mount-data-volume.service ] || [ -e /etc/systemd/system/docker.service.d/20-data-volume.conf ]; then
+  sd disable mount-data-volume.service 2> /dev/null || true
+  rm -f /etc/systemd/system/mount-data-volume.service /etc/systemd/system/docker.service.d/20-data-volume.conf
+  sd daemon-reload
+  sd reset-failed mount-data-volume.service 2> /dev/null || true
+  echo "    removed mount-data-volume.service and its docker.service drop-in"
+fi
 
 say "Kernel settings"
 put /etc/sysctl.d/91-blot-host.conf 0644 root:root <<'EOF2'

@@ -5,8 +5,7 @@
 # SSH and runs bootstrap.sh on it, which also installs and configures Redis and
 # firewalls port 6379. It then checks from here that 6379 is not reachable on
 # the host's public address (nc). The last lines print the deploy.sh command
-# to run next. It attaches no data volume, moves no Elastic IP and sets up no
-# replication.
+# to run next. It moves no Elastic IP and sets up no replication.
 # Runs on a Mac, so it has to work in bash 3.2.
 #
 # Try it with --dry-run first.
@@ -201,4 +200,3 @@ fi
 echo "Done: $ID ($NAME) at $IP"
 # Not `npm run deploy-host`: it sources the production host's PUBLIC_IP over these.
 echo "Next: SSH_KEY=<your key> PUBLIC_IP=$IP SSH_PORT=${SSH_PORT:-22} config/host/deploy.sh"
-echo "Run it again with DATA_VOLUME_ID=<vol-...> once the data volume is attached."
