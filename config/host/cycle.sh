@@ -841,7 +841,7 @@ phase_settle() {
   say "Deploys can resume"
   act on "$NEW" "sudo rm -f $PAUSE_FILE"
   act on "$OLD_NOW" "sudo rm -f $PAUSE_FILE"
-  say "Settled. Keep the old host for a few days as the rollback, then: finish"
+  say "Settled. Keep the old host for about a day as the rollback, then: finish"
 }
 
 # ---- finish --------------------------------------------------------------
