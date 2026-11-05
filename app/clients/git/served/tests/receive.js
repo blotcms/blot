@@ -221,6 +221,53 @@ describe("git store served: pushes on the normal route", function () {
     expect((await this.local.tryPush()).code).toBe(0);
   });
 
+  it("ends a gzipped push whose client goes away part way through", async function () {
+    await this.local.writeAndPush("/a.txt", "A");
+    await mirrorAndSwitch(this);
+
+    var ctx = this;
+    var zlib = require("zlib");
+    var old = (await manifest.read(store(this))).refs["refs/heads/master"];
+    var line = old + " " + "1".repeat(40) + " refs/heads/master\0report-status\n";
+    var pkt = (line.length + 4).toString(16).padStart(4, "0") + line + "0000";
+
+    var parsed = new URL(ctx.repoUrl);
+    var auth = Buffer.from(decodeURIComponent(parsed.username) + ":" + decodeURIComponent(parsed.password)).toString("base64");
+
+    // The commands and the start of a pack, gzipped and flushed so the server
+    // can read them, then the connection is dropped with the body unfinished
+    await new Promise(function (resolve) {
+      var req = http.request({
+        method: "POST",
+        hostname: "127.0.0.1",
+        port: ctx.server.port,
+        path: "/clients/git/end/" + ctx.blog.handle + ".git/git-receive-pack",
+        headers: {
+          Authorization: "Basic " + auth,
+          "Content-Type": "application/x-git-receive-pack-request",
+          "Content-Encoding": "gzip",
+          "Transfer-Encoding": "chunked",
+        },
+      });
+      req.on("error", function () {});
+      var gzip = zlib.createGzip();
+      gzip.on("data", function (chunk) {
+        req.write(chunk);
+      });
+      gzip.write(Buffer.concat([Buffer.from(pkt), Buffer.from("PACK"), Buffer.from([0, 0, 0, 2, 0, 0, 0, 5])]));
+      gzip.flush(zlib.constants.Z_SYNC_FLUSH, function () {
+        setTimeout(function () {
+          req.destroy();
+          resolve();
+        }, 200);
+      });
+    });
+
+    // The receive ends (and logs) rather than waiting on the decoder for ever
+    var lines = await lineMatching(this, / op=push /);
+    expect(lines[lines.length - 1]).not.toContain("outcome=ok");
+  });
+
   it("answers git's 0000 probe and a body which is not git", async function () {
     await this.local.writeAndPush("/a.txt", "A");
     await mirrorAndSwitch(this);
