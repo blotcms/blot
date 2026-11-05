@@ -45,7 +45,9 @@ function objectStore(options) {
     // B2 and MinIO want checksums only when an operation requires one
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
-    ...(options.endpoint && key && secret ? { credentials: { accessKeyId: key, secretAccessKey: secret } } : {}),
+    // The app's own keys when set (a unit has only those), else the SDK's
+    // usual chain
+    ...(key && secret ? { credentials: { accessKeyId: key, secretAccessKey: secret } } : {}),
   });
   const prefix = options.prefix ? options.prefix.replace(/\/?$/, "/") : "";
   return { client, store: store.createS3Store({ client, bucket: options.bucket, prefix }) };
