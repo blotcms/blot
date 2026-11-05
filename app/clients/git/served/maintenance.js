@@ -14,13 +14,15 @@
 //                             orphans only on the first of the month
 //
 // The store is the only copy of each repository, so the verifier checks the
-// copy on its own:
+// copy on its own, with the store's checks (store/check.js, which
+// scripts/git/check-store.js also runs on an explicit target):
 //
 //   cheap  the newest manifest has the repository (a blog on git with an
-//          empty store has lost it), and every file it names is in the
-//          bucket, at the size it says: each pack's .pack, .idx and .rev, and
-//          the history pack's and pieces' .pack and .idx (they have no .rev).
-//          One manifest read and a HEAD a file.
+//          empty store has lost it), it is not older than the one
+//          latest.json names, and every file it names is in the bucket, at
+//          the size it says: each pack's .pack, .idx and .rev, and the
+//          history pack's and pieces' .pack and .idx (they have no .rev).
+//          The hint's GET, one manifest read and a HEAD a file.
 //   deep   a clone of the store through its own clone code, into scratch,
 //          index-pack --strict, fsck --strict, and every branch, tag, HEAD
 //          and peeled tag of the manifest made in it (the store's
@@ -39,9 +41,9 @@
 const path = require("path");
 const config = require("config");
 const Blog = require("models/blog");
-const { manifest, layout } = require("../store");
+const { layout } = require("../store");
 const sweep = require("../store/sweep");
-const { verifyImport } = require("../store/import");
+const check = require("../store/check");
 const { sweepScratch } = require("../store/leftovers");
 const limiter = require("../limiter");
 const counting = require("./counting");
@@ -72,8 +74,7 @@ const RECHECK_DELAY_MS = 60 * 1000;
 // recovery window is.
 const ORPHAN_MIN_AGE_MS = 2 * DAY;
 
-// HEADs at once for one blog, and blogs checked at once
-const HEADS_AT_ONCE = 8;
+// Blogs checked at once
 const BLOGS_AT_ONCE = 4;
 const DELETES_AT_ONCE = 16;
 
@@ -206,79 +207,18 @@ async function sweepBlog(blogID) {
 
 // ---- The verifier ---------------------------------------------------------
 
-// The files the manifest names, with the size each should be
-function expectedFiles(current) {
-  const files = [];
-
-  for (const pack of current.packs) {
-    files.push({ key: layout.packKey(pack.name), size: pack.size });
-    files.push({ key: layout.idxKey(pack.name), size: pack.idxSize });
-    files.push({ key: layout.revKey(pack.name) });
-  }
-
-  for (const pack of [current.history, ...(current.historyPieces || [])].filter(Boolean)) {
-    files.push({ key: layout.packKey(pack.name), size: pack.size });
-    files.push({ key: layout.idxKey(pack.name), size: pack.idxSize });
-  }
-
-  // A pack named twice (a history pack also live, say) is looked at once
-  const seen = new Set();
-  return files.filter((file) => !seen.has(file.key) && seen.add(file.key));
-}
-
-// The cheap check: { findings, refs, files, seq }
+// The cheap check (store/check.js). A blog on git with an empty store, or a
+// removal's tombstone, has lost its repository.
 async function cheapCheck(store) {
-  const findings = [];
-  const current = await manifest.read(store);
-
-  if (manifest.isEmpty(current)) {
-    findings.push({ kind: "missing", detail: "the store has no copy of the repository" });
-    return { findings, refs: 0, files: 0 };
-  }
-
-  const files = expectedFiles(current);
-
-  await each(files, HEADS_AT_ONCE, async (file) => {
-    const found = await store.head(file.key);
-    if (!found) findings.push({ kind: "missing", detail: file.key + " (named by manifest " + current.seq + ")" });
-    else if (file.size !== undefined && found.size !== file.size) findings.push({ kind: "mismatch", detail: file.key + " is " + found.size + " bytes; manifest " + current.seq + " says " + file.size });
-  });
-
-  return { findings, refs: Object.keys(current.refs).length, files: files.length, seq: current.seq };
+  const result = await check.cheapCheck(store);
+  if (result.state !== "ok") result.findings.unshift({ kind: "missing", detail: "the store has no copy of the repository" });
+  return result;
 }
 
-// What git says when the machine, not the cloned bytes, is the problem
-const LOCAL_TROUBLE = /No space left on device|Permission denied|Too many open files|Read-only file system|Disk quota exceeded|Cannot allocate memory/i;
-
-// The verdict a deep check's failure is about the store: "missing" for a
-// file the store does not have, "mismatch" for bytes or refs that are wrong
-// (the store's CorruptError, which verifyImport also throws when a ref, HEAD
-// or a peeled tag cannot be made, or index-pack or fsck failing on the
-// clone). Null for anything else (scratch space, the filesystem, the network,
-// the cache's room): an error in checking, which says nothing about the
-// store.
-function verdict(err) {
-  if (!err) return null;
-  if (err.code === "NOT_FOUND") return "missing";
-  if (err.code === "CORRUPT") return "mismatch";
-
-  const message = String(err.message || "");
-  if (!err.code && /^git (index-pack|fsck|update-ref|symbolic-ref)\b/.test(message) && !LOCAL_TROUBLE.test(message)) return "mismatch";
-
-  return null;
-}
-
-// The deep check. A verdict on the store is a finding; any other failure is
-// thrown, so twice() counts it as an error.
-async function deepCheck(store, scratchDir) {
-  try {
-    const result = await verifyImport({ store, cache: context.cache(), scratchDir, gate });
-    return { findings: [], refs: result.refs, objects: result.objects };
-  } catch (err) {
-    const kind = verdict(err);
-    if (!kind) throw err;
-    return { findings: [{ kind, detail: scrub(err) }] };
-  }
+// The deep check (store/check.js). A verdict on the store is a finding; any
+// other failure is thrown, so twice() counts it as an error.
+function deepCheck(store, scratchDir) {
+  return check.deepCheck({ store, cache: context.cache(), scratchDir, gate });
 }
 
 // Runs a check, and once more after a delay if it found anything; a check
@@ -542,6 +482,6 @@ module.exports = {
   deepSample,
   DEEP_SAMPLE,
   RECHECK_DELAY_MS,
-  _verdict: verdict,
+  _verdict: check.verdict,
   _setPrefixLister,
 };

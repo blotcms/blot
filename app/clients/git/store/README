@@ -49,6 +49,8 @@ sweep/pending.json       (the packs the sweep has marked, to look at again)
 
 - **`import.js`**: turning a git repository on local disk into an empty store repository, in one pack and one swap. See *Importing an existing repository* below.
 
+- **`check.js`**: checking one repository's copy on its own, read only. See *Checking a repository* below.
+
 - **`remove.js`**: removing a repository, for a blog that leaves the git client or a copy to be imported again, without its manifests ever starting again at 1. See *Removing a repository* below.
 
 - **`leftovers.js`**: removing the scratch directories (`import-*`, `verify-*`, `rewrite-*`) which a killed process left behind. See below.
@@ -232,6 +234,23 @@ A pack is deleted only after it has been unnamed and unwritten for at least two 
 - **The swap.** The pack, `.idx` and `.rev` and the history pack and `.idx` (no `.rev`) are uploaded at once, then `manifest.advance` from the empty manifest makes the next seq (1, or the one after a removal's tombstone; one pack with that seq, one snapshot) and `manifest.swap` creates it, naming the packs in `uploaded`. A swap lost to another writer fails with code `EMOVED` and is not tried again; the uploads are left for the sweep. An `OutcomeUnknownError` is returned as `outcome: "unknown"`, as `commit` does. A repository with no branch or tag resolves `{ outcome: "empty" }` and writes nothing.
 - **Requests.** Reading the empty repository is 2 (the missing hint and a LIST; a removed one is the hint, a HEAD and the tombstone's GET), the uploads 5, the conditional create and the hint 2: 9 whatever the repository's size (an upload of a pack bigger than a part is a request for each part on S3 besides). The result's `stats.requests` counts them.
 - **`verifyImport({ store, cache, gitDir, scratchDir? })`** is the check: it clones the store repository through `clone.js` into scratch, runs `git index-pack --strict` and `git fsck --strict` on it, and compares every branch, tag, `HEAD` and peeled tag with the source's. Without `gitDir` it checks the clone on its own (every ref and `HEAD` of the manifest made in it, and the peeled tags), which is the daily deep check (`served/maintenance.js`).
+
+### Checking a repository
+
+`check.js` holds the checks of one repository's copy on its own, with no source to compare it with. The host's daily verifier (`served/maintenance.js`, and `scripts/git/verify-store.js` by hand) runs them on live blogs, and `scripts/git/check-store.js` on an explicit target, with no config, Redis or blog record:
+
+- **`cheapCheck(store)`**: reads `latest.json`, then the newest manifest with `manifest.read`, and HEADs every file it names: each pack's `.pack`, `.idx` and `.rev`, and the history pack's and pieces' `.pack` and `.idx`, each at the size the manifest says (a `.rev`'s size is not recorded). A hint naming a later manifest than the one read finds is a missing manifest, since the newest is never deleted. It resolves with `state` `"ok"`, `"empty"` (no manifest) or `"removed"` (a removal's tombstone), and the counts of refs, packs, files and bytes; the host counts an empty store as a finding, a restored copy need not.
+- **`deepCheck({ store, scratchDir })`**: `verifyImport` with no source, so a clone through `clone.js` into scratch, `index-pack --strict`, `fsck --strict`, and every branch, tag, `HEAD` and peeled tag made in it. `verdict(err)` says whether a failure is about the store (`missing`, `mismatch`) or about the machine checking it (thrown).
+
+`check-store.js` is how the offsite restore test (`config/storage-bucket/bin/offsite-restore-test.sh`) proves a git blog's restored repository is complete. It reads through a store that refuses every write, and prints JSON (`outcome` `ok`, `findings`, `empty` or `removed`, `seq`, the counts and the findings); it exits 0 when the repository is ok, empty or removed, 1 on a finding and 2 for bad arguments:
+
+```
+node scripts/git/check-store.js --dir <restored>/<blogID>/git [--deep] [--scratch <dir>]
+node scripts/git/check-store.js --bucket <bucket> --prefix <blogID>/git/ [--endpoint <url>] [--region <region>] [--deep]
+node scripts/git/check-store.js --dir <restored> --all-blogs [--deep]
+```
+
+`--all-blogs` checks every `<restored>/blog_*/git/` in turn and prints one JSON line per blog and a summary line, `{ summary: true, blogs, deep, outcomes: { ok, findings, empty, removed }, withFindings }`, as `verify-store.js --all` does. `tests/check.js` runs it on an imported repository, cheap and deep, and on copies with a missing pack, a truncated `.idx`, a missing manifest and a tombstone.
 
 **Leftovers.** An import, a verify and a rewrite build in a directory of their own inside the scratch directory and remove it in a `finally`, which a killed process (a deploy replacing the container) never reaches. `leftovers.js` `sweepScratch({ dir })` removes such directories: only those directly inside `dir` whose names are one of the three prefixes and the six characters `mkdtemp` adds, not links, and only when the newest modification time of the directory and of what is directly inside it is more than 12 hours old. The scratch directory is shared by processes that cannot see each other (two containers, scripts run by hand), so there is no way to ask whether a directory is in use; age is the rule. A live operation is writing into its directory, and an import of a 5 GB repository takes about 20 minutes, so 12 hours cannot catch one. A directory which vanishes during the sweep is skipped, and the sweep does not throw on one. The host runs it daily (`served/maintenance.js` `scratch`).
 
