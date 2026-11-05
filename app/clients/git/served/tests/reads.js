@@ -131,6 +131,30 @@ describe("git store: reads", function () {
     });
   });
 
+  it("answers a warm advertisement with one request to the store", async function () {
+    await this.local.writeAndPush("/a.txt", "A");
+
+    // The first reads the hint the push wrote, with the HEAD beside it
+    // (unless the sync after the push read it first); the second, within a
+    // few seconds, is the hint's GET alone, answered 304
+    for (var i = 0; i < 2; i++) {
+      expect((await request(this, "GET", "/info/refs?service=git-upload-pack")).status).toBe(200);
+    }
+
+    var ctx = this;
+    var advertised = [];
+    for (var tries = 0; tries < 100 && advertised.length < 2; tries++) {
+      advertised = lines(ctx, / op=advertise outcome=ok /);
+      await new Promise(function (resolve) {
+        setTimeout(resolve, 20);
+      });
+    }
+
+    expect(advertised.length).toBe(2);
+    expect(advertised[0]).toMatch(/ requests=[12] /);
+    expect(advertised[1]).toMatch(/ requests=1 bytesDown=0 /);
+  });
+
   it("answers the HEAD probe from the manifest", async function () {
     await this.local.writeAndPush("/a.txt", "A");
 
