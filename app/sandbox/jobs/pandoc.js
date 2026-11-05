@@ -234,10 +234,11 @@ async function walk(dir, prefix = "") {
 }
 
 // callouts.lua only rewrites a blockquote whose text starts "[!name]", which
-// needs a literal "[!" in the source, or an entity standing for "[" or "!"
-// (&#91; &#x5b; &lbrack; &lsqb; &#33; &#x21; &excl;). Without one, running the
-// filter (~10 ms of Lua start-up and traversal) cannot change the output.
-const CALLOUT_HINT = /\[!|&(?:#|lbrack|lsqb|excl)/i;
+// needs "[!" or "[\!" (an escaped "!") in the source, or an entity standing
+// for "[" or "!" (&#91; &#x5b; &lbrack; &lsqb; &#33; &#x21; &excl;). Without
+// one, running the filter (~10 ms of Lua start-up and traversal) cannot change
+// the output.
+const CALLOUT_HINT = /\[\\?!|&(?:#|lbrack|lsqb|excl)/i;
 function mayHaveCallout(document) {
   return CALLOUT_HINT.test(document.toString("latin1"));
 }
