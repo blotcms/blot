@@ -275,7 +275,10 @@ describe("git store cache", function () {
   describe("the byte cap", function () {
     it("declines what would go past it, and a walk evicts the least recently used", async function () {
       const cap = 4 * size(24);
-      const cache = open({ maxBytes: cap, highWater: 0.9, lowWater: 0.5 });
+      // No walk but the ones the spec runs, so nothing is evicted before the
+      // entries are aged
+      const cache = open({ maxBytes: cap, highWater: 0.9, lowWater: 0.5, walkGapMs: 1e9 });
+      await cache.settle();
       for (const key of ["a", "b", "c", "d"]) expect(await cache.put(key, data(24))).toBe(true);
       const [a, b, c, d] = ["a", "b", "c", "d"].map((key) => fileOf(dir, key));
       age(a, 4000);
