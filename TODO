@@ -86,6 +86,10 @@ when we next cycle hosts, should we cycle the ssh key pair too?
 - Cycle the production host (#2377) onto the 30 GB root disk, since a root volume can't shrink in place. Rehearse `config/host/cycle.sh` with `--drill` first: it has no `data` phase now, and `switch` freezes the app itself
 - iCloud sync is flaky: on 2 Nov, after the host move, a new folder in icloudtest never reached the macserver within the test's wait, though the macserver's calls to the new host succeeded. Find out where iCloud changes stall (iCloud itself, the macserver's watcher, or the resync path) and make sync dependable
 - Mid-Nov 2026 (#2261, #2107): buy the m6gd.xlarge reservation, since the host runs on-demand until then. First run `unit-mem-summary.sh` on the host over a stretch that includes a deploy, to confirm the 3300m unit limits and 6gb Redis maxmemory fit the size
+Git store (#2259 follow-up): raise the push limit (the issue has the numbers)
+Git store (#2259 follow-up): a warm push still makes one avoidable round trip, the manifest read that the advertisement already did
+Git store (#2259 follow-up): show push progress through the proxy
+Git store (#2259 follow-up): set `socketTimeout` on the store's S3 client
 Git sync (#2259 PR 7): when the last applied commit is gone from the git store (a force push, then a rewrite), a sync compares from the empty tree: it writes every file but removes none, so files the rewrite deleted stay in the blog folder until a resync
 Git (#2259 PR 6 follow-ups): a branch other than master that an earlier push got in (the bypass) can't be deleted by its owner, since every non-master branch ref is refused, deletions included
 Git sync (#2259 PR 4): a sync interrupted part way leaves already-applied paths ahead of the recorded commit, so a later push that restores such a file to the recorded commit's contents shows no diff and the entry stays stale until a resync. Since the materializer (PR 7) the file in the folder stays stale too, because nothing resets the folder. Needs a crash or Redis outage, no retry, and that exact revert

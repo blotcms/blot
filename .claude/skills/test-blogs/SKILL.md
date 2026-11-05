@@ -184,3 +184,8 @@ Newest last. Add one dated entry per run.
 - Blogs / content: `skilltest-1793606015-multi+/a.md` and `b.md` on gittest, on `4a505d627`.
 - Result: live after ~2s with both parts; after `git rm` of the folder, 404 after ~2s. The stale `/skilltest-1793565243-multi` from the earlier run still returned 200, since the fix only applies to new removals. Git has no Resync; the dashboard's Rebuild, which runs Fix afterwards, removed it within ~6s. Public pages only: `inspect.js` was not run.
 - Odd: none.
+
+### 2026-11-05 — gittest after the data volume was retired (#2550)
+- Blogs / content: `skilltest-1793908304/post.md` on gittest, then removed.
+- Result: clone 20s, push 1s; live after ~2s, gone after ~2s. The served path works with the data volume detached.
+- Odd: none.
