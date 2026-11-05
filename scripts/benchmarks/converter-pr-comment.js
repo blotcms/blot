@@ -127,7 +127,7 @@ function buildTable(converters, historyDir, thresholdPercent) {
         ? baseline
           ? "n/a"
           : "no baseline"
-        : `${delta > 0 ? "+" : ""}${delta.toFixed(1)}%${isRegression ? " ⚠️" : ""}`;
+        : `${delta > 0 ? "+" : ""}${delta.toFixed(1)}%${isRegression ? " (regression)" : ""}`;
 
     rows.push(
       `| ${conv.name} | ${conv.fixture_count} | ${conv.timing_ms.p50.toFixed(2)}ms | ` +

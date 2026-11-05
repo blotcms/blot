@@ -12,21 +12,14 @@ var clfdate = require("helper/clfdate");
 // BLOT_GIT_STORE_SHADOW: empty for off, "all", or a comma-separated list of
 // blog IDs. Read on each call, so specs can change it.
 function enabled(blogID) {
-  var setting = String((config.git_store && config.git_store.shadow) || "").trim();
-
-  if (!setting) return false;
-  if (setting === "all") return true;
-
-  return setting
-    .split(",")
-    .map(function (id) {
-      return id.trim();
-    })
-    .indexOf(String(blogID)) !== -1;
+  return require("../served/switch").names(config.git_store && config.git_store.shadow, blogID);
 }
 
+// A blog served from the store (../served/switch.js) is never shadowed: its
+// pushes and Blot's writes go to the store first, and a mirror from EBS would
+// copy an older repository over it
 function shadow(blogID, fn) {
-  if (!enabled(blogID)) return;
+  if (!enabled(blogID) || require("../served/switch").enabled(blogID)) return;
 
   try {
     fn(require("./index"));

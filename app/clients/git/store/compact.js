@@ -133,6 +133,33 @@ const PACK_CONFIG = {
   "pack.writeBitmaps": "false",
 };
 
+// What the store's index-pack and fsck run with, so their memory does not
+// depend on the repository (passed with -c, as PACK_CONFIG is). With git's
+// defaults, index-pack and fsck use a thread a core, each with a 96 MB cache
+// of delta bases, and inflate every object up to 512 MB whole in memory: a
+// deep check of a repository of large media files peaked at about 1 GB in
+// production (#2259, 5 Nov). Here it is one thread, and a blob over 32 MB is
+// streamed, not held.
+const INDEX_CONFIG = {
+  "pack.threads": "1",
+  "core.bigFileThreshold": "32m",
+  "core.deltaBaseCacheLimit": "16m",
+  "core.packedGitLimit": "64m",
+  "core.packedGitWindowSize": "16m",
+};
+
+// INDEX_CONFIG as git's leading -c arguments
+const indexArgs = () => Object.entries(INDEX_CONFIG).flatMap(([key, value]) => ["-c", key + "=" + value]);
+
+// The command a failure is named by, without git's leading options (-c
+// settings), so an error reads "git index-pack ... failed" whatever settings
+// it ran with: the verifier tells a bad store copy from local trouble by it
+function commandOf(args) {
+  let i = 0;
+  while (i < args.length && args[i].startsWith("-")) i += args[i] === "-c" ? 2 : 1;
+  return args.slice(i).join(" ");
+}
+
 // ---- The plan ---------------------------------------------------------
 
 // What to do with manifest `m`, without reading anything: resolves
@@ -273,7 +300,7 @@ function runGit(children, args, { gitDir, input = "" }) {
       clearTimeout(timer);
       children.delete(child);
       if (code === 0) return resolve(Buffer.concat(stdout).toString());
-      reject(new Error("git " + args.join(" ") + " failed: " + Buffer.concat(stderr).toString().trim().slice(-1000)));
+      reject(new Error("git " + commandOf(args) + " failed: " + Buffer.concat(stderr).toString().trim().slice(-1000)));
     });
     child.stdin.end(input);
   }));
@@ -566,5 +593,8 @@ module.exports.planOptions = planOptions;
 module.exports.DEFAULTS = DEFAULTS;
 module.exports.snapshotLimits = snapshotLimits;
 module.exports.PACK_CONFIG = PACK_CONFIG;
+module.exports.INDEX_CONFIG = INDEX_CONFIG;
+module.exports.indexArgs = indexArgs;
+module.exports.commandOf = commandOf;
 // For import.js and rewrite.js, which run git and prove their packs in the same way
 module.exports.git = { runGit, idsOf, assertContains, fetchInput, CONCURRENCY };

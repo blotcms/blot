@@ -1,0 +1,79 @@
+/*
+Blot's overrides for CodeMirror's stylesheet. The stylesheet itself comes from
+the codemirror npm package (node_modules/codemirror/lib/codemirror.css) and is
+prepended to dashboard.min.css by app/documentation/build/css.js, so these
+rules win. Keep only Blot-specific changes here.
+*/
+
+:root {
+  --codemirror-height: 300px;
+  --codemirror-color: black;
+}
+
+.CodeMirror {
+  height: var(--codemirror-height);
+  color: var(--codemirror-color);
+}
+
+.CodeMirror-lines {
+  padding: 0.25em 0;
+}
+
+.CodeMirror pre.CodeMirror-line,
+.CodeMirror pre.CodeMirror-line-like {
+  padding: 0 0.25em;
+  -webkit-font-variant-ligatures: none;
+  font-variant-ligatures: none;
+  font-feature-settings: initial;
+}
+
+.CodeMirror-gutters {
+  border-right: 1px solid var(--border-color);
+  background-color: transparent;
+}
+
+.CodeMirror-linenumber {
+  padding: 0 0.1875em 0 0.3125em;
+  color: var(--light-text-color);
+}
+
+.CodeMirror-guttermarker-subtle { color: var(--light-text-color); }
+
+.CodeMirror-ruler {
+  border-left: 1px solid var(--border-color);
+}
+
+.cm-s-default .cm-header,
+.cm-s-default .cm-property,
+.cm-s-default .cm-def,
+.cm-s-default .cm-variable-2,
+.cm-s-default .cm-attribute,
+.cm-s-default .cm-link {color: var(--accent-color);}
+
+.cm-s-default .cm-quote,
+.cm-positive,
+.cm-s-default .cm-number,
+.cm-s-default .cm-variable-3,
+.cm-s-default .cm-type,
+.cm-s-default .cm-tag {color: var(--success-text-color);}
+
+.cm-negative,
+.cm-s-default .cm-string,
+.cm-s-default .cm-error,
+.cm-invalidchar {color: var(--error-text-color);}
+
+.cm-s-default .cm-keyword,
+.cm-s-default .cm-atom,
+.cm-s-default .cm-builtin {color: #7b49d1;}
+
+.cm-s-default .cm-comment,
+.cm-s-default .cm-string-2 {color: #a05a00;}
+
+.cm-s-default .cm-meta,
+.cm-s-default .cm-qualifier {color: var(--medium-text-color);}
+
+.cm-s-default .cm-bracket,
+.cm-s-default .cm-hr {color: var(--light-text-color);}
+
+.CodeMirror-activeline-background {background: var(--light-background-color);}
+.CodeMirror-activeline-gutter .CodeMirror-linenumber {color: var(--medium-text-color);}

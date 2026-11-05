@@ -105,7 +105,7 @@ API; it edits a directory.
 `start.sh` also runs `node scripts/development/open-folder-server.js` **on the host**
 (port 3020) so the dashboard's "open folder" button can `open -R` a real Finder path.
 
-### 1.2 Host ↔ container path mapping (critical)
+### 1.2 Host and container path mapping (critical)
 
 From the compose file, `../../data:/usr/src/app/data` — so:
 

@@ -44,7 +44,7 @@ jobs:
       - name: Check branch
         run: |
           if [ "${{ github.ref }}" != "refs/heads/master" ]; then
-            echo "❌ Error: This workflow can only be run on the master branch."
+            echo "[FAIL] Error: This workflow can only be run on the master branch."
             echo "Current branch: ${{ github.ref }}"
             exit 1
           fi
@@ -85,7 +85,7 @@ jobs:
             CUSTOM=false
           else
             SHA=$(git rev-parse --verify --quiet "${COMMIT_INPUT}^{commit}") || {
-              echo "❌ Error: could not resolve commit '$COMMIT_INPUT'"
+              echo "[FAIL] Error: could not resolve commit '$COMMIT_INPUT'"
               exit 1
             }
             CUSTOM=true
@@ -96,7 +96,7 @@ jobs:
           # honour that policy and because unit-image.yml only publishes images
           # for master commits.
           if ! git merge-base --is-ancestor "$SHA" origin/master; then
-            echo "❌ Error: commit $SHA is not on master"
+            echo "[FAIL] Error: commit $SHA is not on master"
             exit 1
           fi
 
@@ -104,7 +104,7 @@ jobs:
 
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "custom=$CUSTOM" >> "$GITHUB_OUTPUT"
-          echo "✅ Target commit: $SHA (custom=$CUSTOM)"
+          echo "[ok] Target commit: $SHA (custom=$CUSTOM)"
 
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
@@ -193,20 +193,20 @@ jobs:
               if [ "$STATUS" != "completed" ]; then
                 PENDING="$PENDING $NAME"
               elif [ "$CONCLUSION" != "success" ]; then
-                echo "❌ CI workflow '$NAME' concluded '$CONCLUSION' for $TARGET_SHA: $URL"
+                echo "[FAIL] CI workflow '$NAME' concluded '$CONCLUSION' for $TARGET_SHA: $URL"
                 echo "   Fix it and re-run, or re-dispatch with skip_checks to deploy anyway (emergencies only)."
                 exit 1
               fi
             done
 
             if [ -z "$PENDING" ]; then
-              echo "✅ CI passed for $TARGET_SHA"
+              echo "[ok] CI passed for $TARGET_SHA"
               exit 0
             fi
             echo "  waiting for CI:$PENDING ($i/$MAX_TRIES)..."; sleep 10
           done
 
-          echo "❌ CI did not finish for $TARGET_SHA in time (still waiting for:$PENDING)."
+          echo "[FAIL] CI did not finish for $TARGET_SHA in time (still waiting for:$PENDING)."
           echo "   Re-dispatch once it has passed, or use skip_checks to deploy anyway (emergencies only)."
           exit 1
 
@@ -234,11 +234,11 @@ jobs:
           echo "Waiting for app image: $IMAGE (up to $((MAX_APP_TRIES * WAIT_INTERVAL / 60)) min)"
           for i in $(seq 1 "$MAX_APP_TRIES"); do
             if docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
-              echo "✅ App image found: $IMAGE"
+              echo "[ok] App image found: $IMAGE"
               break
             fi
             if [ "$i" -eq "$MAX_APP_TRIES" ]; then
-              echo "❌ App image not found: $IMAGE"
+              echo "[FAIL] App image not found: $IMAGE"
               if [ "$CUSTOM" = "true" ]; then
                 echo "   unit-image.yml only publishes an image for the tip commit of each master push."
                 echo "   Pick a commit that was a push tip on master (not an intermediate or merge parent)."
@@ -259,7 +259,7 @@ jobs:
         run: |
           set -o pipefail
           scripts/deploy/units.sh "$TARGET_SHA" 2>&1 | tee deploy.log
-          echo "### Deployed \`${TARGET_SHA}\` 🚀" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Deployed \`${TARGET_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
 
       # A failed swap whose old container would not come back keeps the new
       # one running and says so; make that visible on the run page.
