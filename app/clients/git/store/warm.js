@@ -12,10 +12,16 @@
 //     fetch) ran out
 //
 // It never throws for a file it could not fetch or keep; it moves on.
+//
+// The packs themselves are a second, lower-priority phase (served/warm.js),
+// one pack at a time: packList(manifest) lists them newest first and
+// warmPack({ store, cache, pack }) streams one into the cache through
+// keepPack, as the writers do, so the copy is exactly what clone and pack.js
+// read; its memory does not depend on the pack's size.
 const manifest = require("./manifest");
 const { chooseWhole, loadWhole, wholeKey } = require("./idx");
-const { idxKey, packKey } = require("./layout");
-const { cacheKeyOf } = require("./packcache");
+const { idxKey, packKey, manifestKey } = require("./layout");
+const { cacheKeyOf, keepPack, CACHE_SHARE } = require("./packcache");
 const { mapLimit } = require("./limit");
 
 const CONCURRENCY = 4;
@@ -69,4 +75,47 @@ async function warmRepo({ store, cache, manifest: current = null, maxBytes = Inf
   return result;
 }
 
-module.exports = { warmRepo };
+// Every pack the manifest names (live packs, the history pack and its
+// pieces), newest first by the swap which added it, as { name, size, seq }
+function packList(m) {
+  const all = [
+    ...m.packs.map((pack) => ({ name: pack.name, size: pack.size, seq: pack.seq || 0 })),
+    ...(m.historyPieces || []).map((pack) => ({ name: pack.name, size: pack.size, seq: pack.seq || 0 })),
+    ...(m.history ? [{ name: m.history.name, size: m.history.size, seq: m.history.through || 0 }] : []),
+  ];
+  const seen = new Set();
+  return all.filter((pack) => !seen.has(pack.name) && seen.add(pack.name)).sort((a, b) => b.seq - a.seq);
+}
+
+// When the repository's newest manifest was written, by the store's clock
+// (0 if it cannot be said): how recently it was pushed to or written by Blot
+async function lastWritten(store, m) {
+  try {
+    const head = await store.head(manifestKey(m.seq));
+    return (head && head.lastModified) || 0;
+  } catch (err) {
+    return 0;
+  }
+}
+
+// Streams one pack into the cache. Resolves "cached" (already there at the
+// right size), "fetched", "skipped" (too big for the cache to keep a copy of),
+// "declined" (the cache would not take it) or "failed" (the download did).
+async function warmPack({ store, cache, pack }) {
+  const key = cacheKeyOf(store, pack.name);
+  if ((await cache.size(key)) === pack.size) return "cached";
+  if (pack.size > Math.floor(cache.maxBytes / CACHE_SHARE)) return "skipped";
+
+  const declined = cache.stats().declined;
+  let stream;
+  try {
+    stream = store.stream(packKey(pack.name));
+  } catch (err) {
+    return "failed";
+  }
+  const kept = await keepPack({ cache, store, name: pack.name, size: pack.size, stream });
+  if (kept) return "fetched";
+  return cache.stats().declined > declined ? "declined" : "failed";
+}
+
+module.exports = { warmRepo, packList, lastWritten, warmPack };
