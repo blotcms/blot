@@ -1,9 +1,6 @@
-// Brings a switched blog's folder from one commit to another, reading the
-// git store (#2259) instead of the EBS repository. It treats the folder as
-// app/clients/git/materialize.js does (the same safe paths, NFC names, raw
-// committed bytes, directories a removal empties removed, links and
-// submodules not written, anything in the way replaced and never followed),
-// so the same commits give the same folder, whichever side was read.
+// Brings a blog's folder from one commit to another, reading the git store
+// (#2259). Only the files at the changed paths are touched: the folder has no
+// checkout to maintain.
 //
 //   const paths = await materialize({ blogID, reader, from, to, log })
 //
@@ -11,6 +8,23 @@
 // be null or the empty tree). Resolves with the paths which changed, without
 // a leading slash and in NFC, for the sync to pass to Blot: both ends of a
 // move.
+//
+// Files are written as the raw committed bytes, so .gitattributes rules such
+// as eol and ident do not apply, and without the committed mode: the blog
+// folder has no executable bit (storage/folder). Links and submodules are not
+// written. Directories that a removal leaves empty are removed too, as `git
+// reset --hard` would, but empty directories nothing here emptied are left
+// alone.
+//
+// storage/folder names a file by its path in NFC. A name committed in another
+// form (NFD, say) is therefore written under its NFC name, and a later change
+// or removal of the same name in git acts on that same file.
+//
+// Paths come from history which may predate the checks a push goes through
+// now, so a path is only used if it is safe: no empty, "." or ".." component,
+// and no ".git" component, so nothing is written outside the folder and the
+// folder's own .git directory is never touched. A symbolic link or file in
+// the way of a path is replaced, never followed.
 //
 // Every change goes through storage/folder, one call at a time, straight
 // from app/clients/git (not app/clients/folder.js, which would come back
@@ -33,15 +47,87 @@ const crypto = require("crypto");
 const { Readable } = require("stream");
 const storage = require("storage/folder");
 const { parseCommit } = require("../store/objects");
-const { diffTrees } = require("../store/treediff");
+const { diffTrees, EMPTY_TREE } = require("../store/treediff");
 const { NotFoundError, CorruptError } = require("../store/errors");
-const { EMPTY_TREE, safeParts, kind, join, ensureDirectory, removeFile } = require("../materialize");
 
 const MODES = { "100644": true, "100755": true };
 const SYMLINK = "120000";
 
 // Blobs up to this size are compared with the file before being written
 const SKIP_CHECK_BYTES = 1024 * 1024;
+
+function safeParts(file) {
+  const parts = file.split("/");
+
+  for (const part of parts) {
+    if (!part || part === "." || part === "..") return null;
+    if (part.toLowerCase() === ".git") return null;
+  }
+
+  return parts;
+}
+
+// A blog-folder path from the parts of a path in the repository
+function join(parts) {
+  return "/" + parts.join("/");
+}
+
+// What is at a path: "directory", "file", "link" or null if nothing is. A
+// link is reported as such only when the directories above the path are
+// real ones, which the callers here have checked.
+async function kind(blogID, file) {
+  try {
+    return (await storage.stat(blogID, file)).isDirectory ? "directory" : "file";
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    if (err.code === "ELOOP") return "link";
+    throw err;
+  }
+}
+
+// Makes the directory for the first parts of a path, with each directory made
+// if it is missing. Something else in its place (a file, or a symbolic link,
+// which is not followed) is removed to make room.
+async function ensureDirectory(blogID, parts) {
+  for (let i = 1; i <= parts.length; i++) {
+    const directory = join(parts.slice(0, i));
+    const found = await kind(blogID, directory);
+
+    if (found === "directory") continue;
+    if (found) await storage.remove(blogID, directory);
+
+    await storage.mkdir(blogID, directory);
+  }
+}
+
+// Removes a file, then the directories that this leaves empty. A directory in
+// its place, or a symbolic link on the way to it, is not something to remove.
+async function removeFile(blogID, parts) {
+  if (parts.length > 1 && (await kind(blogID, join(parts.slice(0, -1)))) !== "directory") return;
+
+  const found = await kind(blogID, join(parts));
+
+  if (!found || found === "directory") return;
+
+  await storage.remove(blogID, join(parts));
+
+  for (let i = parts.length - 1; i > 0; i--) {
+    const directory = join(parts.slice(0, i));
+    let entries;
+
+    try {
+      entries = await storage.listNames(blogID, directory);
+    } catch (err) {
+      if (err.code === "ENOENT") return;
+      throw err;
+    }
+
+    // Not empty, so it and the directories above it stay
+    if (entries.length) return;
+
+    await storage.rmdir(blogID, directory);
+  }
+}
 
 async function treeOf(reader, commit) {
   if (!commit || commit === EMPTY_TREE) return null;
@@ -254,3 +340,4 @@ async function materialize({ blogID, reader, from = null, to, log = function () 
 
 module.exports = materialize;
 module.exports.SKIP_CHECK_BYTES = SKIP_CHECK_BYTES;
+module.exports.EMPTY_TREE = EMPTY_TREE;

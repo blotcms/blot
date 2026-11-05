@@ -15,17 +15,17 @@ describe("git client: Blot's own writes", function () {
     await this.local.expectSynced();
   });
 
-  it("keeps the repository packed after a commit, but not after no change", async function () {
-    var plumbing = require("clients/git/plumbing");
-    var repo = require("clients/git/repo");
+  it("asks for the repository to be compacted after a commit, but not after no change", async function () {
+    var upkeep = require("clients/git/served/upkeep");
 
-    spyOn(plumbing, "collect");
-
-    await write(this.blog.id, "/collected.txt", "Hello");
-    expect(plumbing.collect.calls.allArgs()).toEqual([[repo.directory(this.blog.handle)]]);
+    spyOn(upkeep, "compactAfter");
 
     await write(this.blog.id, "/collected.txt", "Hello");
-    expect(plumbing.collect.calls.count()).toBe(1);
+    expect(upkeep.compactAfter.calls.count()).toBe(1);
+    expect(upkeep.compactAfter.calls.argsFor(0)[0]).toBe(this.blog.id);
+
+    await write(this.blog.id, "/collected.txt", "Hello");
+    expect(upkeep.compactAfter.calls.count()).toBe(1);
 
     await this.local.pull();
   });
@@ -159,7 +159,7 @@ describe("git client: Blot's own writes", function () {
     });
 
     it("removes a file from the blog folder even if the repository doesn't have it", async function () {
-      await require("fs-extra").outputFile(this.blogDirectory + "/only-in-the-folder.txt", "Only here");
+      await require("./setup/folder").write(this.blog.id, "/only-in-the-folder.txt", "Only here");
 
       await remove(this.blog.id, "/only-in-the-folder.txt");
 

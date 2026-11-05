@@ -1,8 +1,6 @@
-// New-folder setup for a blog served from the git store (#2259): create.js's
-// path when a blog connects to git while it is switched (BLOT_GIT_STORE_SERVE
-// is "all", or names it). The blog folder becomes the first commit of a new
-// repository in the store, and the EBS bare repository is made from the same
-// commit, for the rollback.
+// New-folder setup in the git store (#2259), for create.js when a blog
+// connects to git: the blog folder becomes the first commit of a new
+// repository in the store.
 //
 // The folder may have no copy on local disk (#2258: S3 as a blog's primary
 // store), so it is never git's work tree and is never brought to disk whole.
@@ -22,25 +20,23 @@
 //   4. importRepo puts it in the store, with pack.window 0 (measured 3 Nov
 //      2026: 1.4 to 2.3 times faster on large folders, about 9 times on
 //      folders of many files).
-//   5. The EBS bare repository (which create.js has made the directory of)
-//      is made with `git init --bare` and a fetch of master from the scratch
-//      repository.
 //
 // Scratch is a directory of its own (setup-XXXXXX) in the store's scratch
 // directory, on the instance store in production, outside the cache's
-// budget, as a backfill's import is: a folder can be larger than the cache.
+// budget: a folder can be larger than the cache.
 // store/leftovers.js clears what a killed setup leaves.
 //
 // Resolves with { commit, rollback }. An import whose outcome is unknown goes
 // on only if a read finds the commit on master. On failure the store's copy
 // is removed if this setup may have made it (not one that was already there,
-// which importRepo refuses), and the EBS repository is left for create.js to
-// remove; create.js calls rollback() if it then fails to record the setup.
+// which importRepo refuses); create.js calls rollback() if it then fails to
+// record the setup.
 const fs = require("fs-extra");
 const path = require("path");
 // Called through the module, so a spec can make one command fail
 const childProcess = require("child_process");
 const config = require("config");
+const clfdate = require("helper/clfdate");
 const storage = require("storage/folder");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const limiter = require("../limiter");
@@ -137,10 +133,23 @@ function quote(file) {
 }
 
 // The files of the folder to add, as relative paths ("a/b.txt")
+//
+// Empty files are left out. Blot writes an empty file where it could not
+// download one (an oversized or unsupported file), so a placeholder can't be
+// told from a file that really is empty; committing it would make the empty
+// file the repository's copy. The cost is that genuinely empty files do not
+// carry over to the new repository.
 async function candidates(blogID) {
   const files = [];
   for await (const file of storage.walk(blogID, "/")) {
-    if (!shouldIgnoreFile(file)) files.push(file.slice(1));
+    if (shouldIgnoreFile(file)) continue;
+
+    if ((await storage.stat(blogID, file)).size === 0) {
+      console.log(clfdate() + " Git: create: skipping empty file (possible placeholder)", blogID, file);
+      continue;
+    }
+
+    files.push(file.slice(1));
   }
   return files;
 }
@@ -215,8 +224,7 @@ async function landed(store, commit) {
 }
 
 // Takes back the store copy this setup made: removeRepo's tombstone, so the
-// numbering of manifests never starts again. A failure is logged; the daily
-// verifier sees a store copy EBS does not have.
+// numbering of manifests never starts again. A failure is logged.
 async function removeCopy(blogID) {
   try {
     await removeRepo({ store: context.objectStoreFor(blogID) });
@@ -225,21 +233,24 @@ async function removeCopy(blogID) {
   }
 }
 
-// folder is the sync lock's ({ status, log }); ebsDirectory the empty
-// directory create.js made for the bare repository
-async function create(blog, folder, ebsDirectory) {
+// Rejects with code EEXIST if the blog already has a repository in the store
+async function assertEmpty(blogID) {
+  if (!manifest.isEmpty(await manifest.read(context.storeFor(blogID)))) {
+    log({ blog: blogID, op: "create", outcome: "error", detail: "EEXIST" });
+    throw Object.assign(new Error("The blog already has a repository in the git store"), { code: "EEXIST" });
+  }
+}
+
+// folder is the sync lock's ({ status, log })
+async function create(blog, folder) {
   const started = Date.now();
   const blogID = blog.id;
   const store = context.storeFor(blogID);
   const cache = context.cache();
   const base = scratchDirectory();
 
-  // A repository the blog already has in the store is never set up over, or
-  // taken back
-  if (!manifest.isEmpty(await manifest.read(store))) {
-    log({ blog: blogID, op: "create", outcome: "error", detail: "EEXIST" });
-    throw Object.assign(new Error("The blog already has a repository in the git store"), { code: "EEXIST" });
-  }
+  // A repository the blog already has is never set up over, or taken back
+  await assertEmpty(blogID);
 
   await fs.mkdirp(base);
   const dir = await fs.mkdtemp(path.join(base, "setup-"));
@@ -259,8 +270,9 @@ async function create(blog, folder, ebsDirectory) {
 
     folder.status("Saving your repository");
 
-    // From here on, whatever is in the store is this setup's: importRepo
-    // refuses a store which is not empty
+    // From here on, whatever is in the store is this setup's, unless
+    // importRepo refuses it as not empty (ENOTEMPTY) or moved by another
+    // writer (EMOVED): then it is someone else's, and is left alone
     imported = true;
     let result;
 
@@ -279,9 +291,6 @@ async function create(blog, folder, ebsDirectory) {
       throw Object.assign(new Error("Blot could not confirm that the repository was saved"), { code: "EUNKNOWN" });
     }
 
-    await git(["init", "-q", "--bare", "--initial-branch=master", ebsDirectory]);
-    await git(["fetch", "-q", "--no-tags", gitDir, "refs/heads/master:refs/heads/master"], { env: { GIT_DIR: ebsDirectory } });
-
     log({ blog: blogID, op: "create", outcome: "ok", ms: Date.now() - started, files: files.length, ignored: ignored.size });
 
     // The store's copy stays this setup's to take back until create.js has
@@ -299,4 +308,5 @@ async function create(blog, folder, ebsDirectory) {
 }
 
 module.exports = create;
+module.exports.assertEmpty = assertEmpty;
 module.exports._quote = quote;

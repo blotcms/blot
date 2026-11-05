@@ -28,7 +28,11 @@ daily tmp prune removes staged files a week after they were last written.
 The git client's store (`app/clients/git/store`, [#2259](https://github.com/blotcms/blot/issues/2259))
 keeps each blog's repository, its packs, `.idx` files and numbered manifests,
 under `{blogID}/git/`, so everything of a blog sits under one prefix. Decided
-on 3 Nov 2026, over a private top-level `git/{blogID}/`.
+on 3 Nov 2026, over a private top-level `git/{blogID}/`. It is the only copy
+of a git blog's repository on Blot's side (the bare repositories on the app
+host's disk are gone), and the bucket has no versioning, so a deleted pack is
+gone: the store's daily verifier (`app/clients/git/served/maintenance.js`)
+checks every git blog's copy, and repairing one takes a full clone.
 
 A repository must not be public, though `blog_*` is. A blog's folder is
 roughly what it publishes; its repository is every version of every file ever

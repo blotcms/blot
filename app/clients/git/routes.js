@@ -30,8 +30,23 @@ var followUps = followUpSync("git", function (blogID) {
   });
 });
 
+// Whether the blog has a repository in the store, or one is being set up for
+// it: the blog's own mark, set by create.js, which expires by itself, so a
+// setup cut off by a crash or a deploy doesn't leave the blog, or the owner's
+// other blogs, stuck "in progress"
+function hasRepository(blog, callback) {
+  repo.exists(blog.id, function (err, exists) {
+    if (err) return callback(err);
+    if (exists) return callback(null, true);
+
+    database.isCreating(blog.id, callback);
+  });
+}
+
 dashboard.get("/", function (req, res, next) {
-  repo.exists(req.blog.handle, function (exists) {
+  hasRepository(req.blog, function (err, exists) {
+    if (err) return next(err);
+
     if (exists) {
       res.locals.repo = true;
       return next();
@@ -74,10 +89,12 @@ dashboard.post("/create", function (req, res, next) {
     return disconnect(req.blog.id, next);
   }
 
-  // A repository here wasn't made by this blog, or is still being made. If
-  // create failed on it the owner would get a token for it, and could clone
-  // whatever it holds.
-  repo.exists(req.blog.handle, function (exists) {
+  // A repository the blog already has, or one still being made: setup would
+  // refuse a store which is not empty, and a second setup would race the
+  // first
+  hasRepository(req.blog, function (err, exists) {
+    if (err) return next(err);
+
     if (exists) {
       console.log(clfdate() + " Git: Refused to create over repo for blog", req.blog.id);
       return res.message(
@@ -89,12 +106,16 @@ dashboard.post("/create", function (req, res, next) {
     Blog.set(req.blog.id, { client: "git" }, function (err) {
       if (err) return next(err);
 
-      res.redirect(req.baseUrl);
+      // Marked before the redirect, so the page it lands on shows the setup
+      // (create.js marks it too, and clears it when the setup ends)
+      database.setCreating(req.blog.id, function () {
+        res.redirect(req.baseUrl);
 
-      create(req.blog, function (err) {
-        if (err) {
-          console.log(clfdate() + " Git: Error creating repo", err);
-        }
+        create(req.blog, function (err) {
+          if (err) {
+            console.log(clfdate() + " Git: Error creating repo", err);
+          }
+        });
       });
     });
   });
@@ -130,10 +151,7 @@ dashboard.post("/disconnect", function (req, res, next) {
 // /end//handle.git indistinguishable from /end/handle.git. Blog handles are
 // canonical lowercase alphanumerics between 2 and 70 characters (the same
 // shape stored by the blog model).
-//
-// /store-end is a test-only read route served from the git store, for blogs in
-// shadow mode (shadow/reads.js, shadow/README). It is removed at cutover.
-var GIT_REQUEST = /^(?![^#]*%(?:2[fF]|5[cC]))\/(end|store-end)(\/([a-z0-9]{2,70})\.git\/(?:info\/refs|HEAD|git-(?:upload|receive)-pack)(?:\?[^#]*)?)$/;
+var GIT_REQUEST = /^(?![^#]*%(?:2[fF]|5[cC]))\/(end)(\/([a-z0-9]{2,70})\.git\/(?:info\/refs|HEAD|git-(?:upload|receive)-pack)(?:\?[^#]*)?)$/;
 
 function parseGitRequest(req, res, next) {
   var match = GIT_REQUEST.exec(req.url);
@@ -271,8 +289,6 @@ site.use(parseGitRequest, redirectRenamedGitHandle, authenticate, function (req,
 
     debug("Git response error", err);
   });
-
-  if (req.gitRoute === "store-end") return require("./shadow/reads").handle(req, res, req.blog);
 
   repo.handleSmartHttp(req, res, req.blog.id, req.blog);
 });

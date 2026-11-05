@@ -485,13 +485,10 @@ async function main() {
   const fetchAgain = await git(["fetch", "origin"], { cwd: b });
   check("fetch with nothing new succeeds", fetchAgain.code === 0, why(fetchAgain));
 
+  // The git store serves no shallow clones (app/clients/git/served/reads.js)
   const shallow = newDir("shallow");
   const depth1 = await git(["clone", "--depth", "1", remoteURL(), shallow]);
-  check("--depth 1 clone succeeds", depth1.code === 0, why(depth1));
-  const count = (await git(["rev-list", "--count", "HEAD"], { cwd: shallow })).stdout.trim();
-  const isShallow = (await git(["rev-parse", "--is-shallow-repository"], { cwd: shallow })).stdout.trim();
-  check("--depth 1 clone has exactly one commit", count === "1" && isShallow === "true", "count " + count + ", shallow " + isShallow);
-  check("--depth 1 clone is at the server tip", (await revParse(shallow)) === wantTip);
+  check("--depth 1 clone is refused", depth1.code !== 0, why(depth1));
 
   let protoPushes = 0;
   for (const version of ["0", "2"]) {

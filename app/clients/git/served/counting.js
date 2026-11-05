@@ -1,10 +1,10 @@
 // Wraps an object store (see ../store/objectStore/memory.js for the interface)
-// to count, for each shadow operation, the requests it made and the bytes it
-// sent and received, for the timing logs.
+// to count, for each operation on the git store, the requests it made and the
+// bytes it sent and received, for the log lines (./log.js).
 //
 // The wrapper must be the same object for the life of a blog's store, because
 // the store keeps its memos (manifest bytes, pack sizes) by object identity. A
-// compaction can run while a mirror does, on the same store, so the counts go
+// compaction can run while a push does, on the same store, so the counts go
 // to whichever operation the call was made in, found with AsyncLocalStorage:
 //
 //   const store = counting(inner);
@@ -22,7 +22,7 @@
 // waiting() below. waitMs is the time during which at least one of the
 // operation's commands was waiting, so two waiting at once count once. The ms
 // measure() returns, and a stopwatch(), leave that time out, so the figures
-// compared with EBS are the work alone however busy the lane was.
+// are the work alone however busy the lane was.
 const { AsyncLocalStorage } = require("async_hooks");
 const { Transform, pipeline } = require("stream");
 

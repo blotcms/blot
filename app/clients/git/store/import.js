@@ -13,7 +13,7 @@
 //               space is reserved from, as for a push or a compaction. Not
 //               needed if scratchDir is given.
 //   lock(fn)    the host's per-repository lock, passed to manifest.swap
-//   gitDir      the git directory to read (`data/git/<handle>.git`). It is never
+//   gitDir      the git directory to read (a scratch repository, a clone). It is never
 //               written: git is only asked to read it (for-each-ref, rev-list,
 //               cat-file, pack-objects), and a spec checks that every file in
 //               it is the same afterwards.
@@ -588,6 +588,11 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
 // saying what differs. Objects the source has that no branch or tag reaches
 // are not expected to be there. `scratchDir` or `cache` as for importRepo; the
 // scratch is the size of the clone.
+//
+// Without `gitDir` there is no source to compare with: the clone is checked
+// on its own (index-pack and fsck, every ref and HEAD of the manifest made in
+// it, and the peeled tags), which is the daily deep check of a repository
+// whose only copy is the store.
 async function verifyImport({ store, cache, gitDir, scratchDir = null, gate = null }) {
   const current = await manifest.read(store);
   if (manifest.isEmpty(current)) throw new CorruptError("The store repository is empty");
@@ -624,8 +629,9 @@ async function verifyImport({ store, cache, gitDir, scratchDir = null, gate = nu
         .filter(Boolean)
         .map((line) => line.split(" "))
     );
-    // The refs the import takes (one it skipped is not expected)
-    const source = await readRefs(children, gitDir);
+    // The refs the import takes (one it skipped is not expected); with no
+    // source, the manifest's own
+    const source = gitDir ? await readRefs(children, gitDir) : { refs: current.refs, head: current.head };
     const differences = [];
     for (const ref of new Set([...Object.keys(source.refs), ...Object.keys(mine)])) {
       if (mine[ref] !== source.refs[ref]) differences.push(ref + ": store " + mine[ref] + ", source " + source.refs[ref]);

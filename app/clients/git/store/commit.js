@@ -1,7 +1,8 @@
 // Blot's own commits: one file written or removed, as one commit on master,
-// in the object store. It does what plumbing.js does on disk for Blot's writes
-// (repo.commit): the same identity and messages, the same refusals of paths,
-// the same executable-bit rule, and no commit when nothing changes.
+// in the object store. It makes the commits Blot's writes (repo.commit) have
+// always made with git's plumbing on disk: the same identity and messages, the
+// same refusals of paths, the same executable-bit rule, and no commit when
+// nothing changes.
 //
 //   const result = await commit({ store, cache, lock, path: "/a/b.txt", contents });
 //
@@ -93,7 +94,7 @@ const { rememberWhole } = require("./idx");
 const MASTER = "refs/heads/master";
 
 // What the Docker image configures as the identity of any commit made on the
-// server, and so who plumbing.js's commits are by
+// server, and so who Blot's commits have always been by
 const IDENTITY = { name: "Your Name", email: "you@example.com" };
 
 // A commit made over a master which moved is made again on the new master,
@@ -141,7 +142,8 @@ function pathError(file) {
 
 // The path of a file in the repository from the path Blot knows it by: the
 // same steps as helper/pathNormalizer (which this directory may not require),
-// then plumbing.js's rules. Resolves with the parts, never empty.
+// then the rules Blot's writes have always had. Resolves with the parts,
+// never empty.
 function treePath(file) {
   if (typeof file !== "string") throw pathError(file);
 
@@ -601,3 +603,4 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
 }
 
 module.exports = commit;
+module.exports.treePath = treePath;
