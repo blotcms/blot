@@ -112,6 +112,27 @@ const kept = new WeakMap();
 // store's last word on it (see swap()).
 const RECONFIRM_AFTER = MAX_BASE_AGE / 2;
 
+// The hint as this process last fetched it, by store: { etag, seq }, seq
+// being what it names (null if it names nothing usable). read() asks for it
+// again with If-None-Match, so while it is unchanged the store answers 304
+// and sends no body.
+const hints = new WeakMap();
+
+// By store, the newest manifest the store last showed to be the newest, and
+// when: { seq, at }, `at` being the start of the read whose HEAD found seq + 1
+// missing (or the LIST that found seq), or when a swap of seq landed.
+const newest = new WeakMap();
+
+// How long a read for serving (read(store, { serving: true }): an
+// advertisement, a clone or a fetch, never the base of a write) trusts an
+// unchanged hint without the HEAD for the next seq. The hint is written after
+// a swap, best-effort, and concurrent swaps can land their hints out of
+// order, so it can lag; within this long of the store's own word that the
+// kept manifest was the newest, a 304 naming it is taken as enough. So a
+// serving read may give refs at most this far behind a swap whose hint was
+// lost or overtaken, and a writer, which always asks, never builds on one.
+const TRUST_UNCHANGED_HINT = 5 * 1000;
+
 const OID = /^[0-9a-f]{40}$/;
 const WRITER = /^[0-9a-zA-Z_-]{1,64}$/;
 
@@ -239,6 +260,15 @@ function remember(store, seq, bytes, confirmed) {
 function forget(store, seq) {
   const bySeq = kept.get(store);
   if (bySeq) bySeq.delete(seq);
+  const last = newest.get(store);
+  if (last && last.seq === seq) newest.delete(store);
+}
+
+// The store showed `seq` to be the newest at `at` (or later)
+function markNewest(store, seq, at) {
+  const last = newest.get(store);
+  if (last && (last.seq > seq || (last.seq === seq && last.at >= at))) return;
+  newest.set(store, { seq, at });
 }
 
 // The manifest with this number, and when the store last confirmed it is
@@ -267,21 +297,40 @@ async function load(store, seq, now) {
   return { m, confirmed: entry.confirmed };
 }
 
-// The seq latest.json names, or null if it is missing or isn't a seq
-async function readHint(store) {
-  let bytes;
-  try {
-    bytes = await store.get(LATEST_KEY, { maxBytes: MAX_HINT_BYTES });
-  } catch (err) {
-    if (err instanceof NotFoundError || err instanceof TooLargeError) return null;
-    throw err;
-  }
+// The seq a hint's bytes name, or null if they aren't one
+function hintSeq(bytes) {
   try {
     const hint = JSON.parse(bytes.toString("utf8"));
     return hint && Number.isSafeInteger(hint.seq) && hint.seq >= 1 ? hint.seq : null;
   } catch (err) {
     return null;
   }
+}
+
+// The seq latest.json names (null if it is missing or isn't a seq), as
+// { seq, unchanged }: a conditional GET, so `unchanged` is true when the store
+// answered 304 for the ETag this process last fetched it with, and seq is
+// then what it named then. A store which ignores the condition answers with
+// the bytes, which is never wrong.
+async function readHint(store) {
+  const known = hints.get(store);
+  let answer;
+  try {
+    answer = await store.get(LATEST_KEY, { maxBytes: MAX_HINT_BYTES, ifNoneMatch: known ? known.etag : null });
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof TooLargeError) {
+      hints.delete(store);
+      return { seq: null, unchanged: false };
+    }
+    throw err;
+  }
+  if (answer && answer.notModified && known) return { seq: known.seq, unchanged: true };
+
+  const bytes = Buffer.isBuffer(answer) ? answer : answer && answer.bytes;
+  const seq = bytes ? hintSeq(bytes) : null;
+  if (answer && answer.etag && bytes) hints.set(store, { etag: answer.etag, seq });
+  else hints.delete(store);
+  return { seq, unchanged: false };
 }
 
 // The highest seq whose bytes this process keeps for `store`, or null
@@ -306,13 +355,45 @@ function newestKept(store) {
 //   there if the store has not confirmed it for a while.)
 // - Otherwise the GET of the manifest the hint names starts with the HEAD
 //   for the one after it, rather than after it.
-async function walkFromHint(store, now) {
+//
+// The hint's GET is conditional (see readHint). A read for serving (`serving`)
+// whose kept K the store showed to be the newest within TRUST_UNCHANGED_HINT,
+// and whose last fetch of the hint named K, sends that GET alone: a 304 means
+// K, with no HEAD (the answer then has `trustedAt`, when the store last showed
+// K to be the newest). If the hint changed, it carries on as any read does,
+// with the HEAD after the GET instead of beside it. Every other read sends
+// the HEAD beside the GET as before, a writer's included, so a hint that lags
+// is caught as before.
+async function walkFromHint(store, now, serving) {
   const keptSeq = newestKept(store);
-  const [hint, afterKept] = await Promise.all([readHint(store), keptSeq === null ? null : store.head(manifestKey(keptSeq + 1))]);
-  if (hint === null) return null;
-  if (keptSeq !== null && hint <= keptSeq && !afterKept) return { seq: keptSeq };
+  const last = newest.get(store);
+  const known = hints.get(store);
+  const trusting =
+    serving &&
+    keptSeq !== null &&
+    last &&
+    last.seq === keptSeq &&
+    now >= last.at &&
+    now - last.at <= TRUST_UNCHANGED_HINT &&
+    known &&
+    known.seq === keptSeq;
 
-  let seq = hint;
+  let hint;
+  let afterKept;
+  if (trusting) {
+    hint = await readHint(store);
+    if (hint.unchanged && hint.seq === keptSeq) return { seq: keptSeq, trustedAt: last.at };
+  } else {
+    [hint, afterKept] = await Promise.all([readHint(store), keptSeq === null ? null : store.head(manifestKey(keptSeq + 1))]);
+  }
+
+  if (hint.seq === null) return null;
+  if (keptSeq !== null && hint.seq <= keptSeq) {
+    if (afterKept === undefined) afterKept = await store.head(manifestKey(keptSeq + 1));
+    if (!afterKept) return { seq: keptSeq };
+  }
+
+  let seq = hint.seq;
   for (let steps = 0; steps < WALK_LIMIT; steps++) {
     const loading =
       steps === 0
@@ -354,23 +435,45 @@ async function listNewest(store) {
 // were kept, at most RECONFIRM_AFTER ago. Kept bytes past that are checked
 // with a HEAD, and a manifest gone since (the sweep deleted it, and the hint
 // still names it) is a miss, and the LIST finds the newest.
-async function read(store, { clock = Date.now } = {}) {
+//
+// `serving: true` is for a read whose manifest is only served (a ref
+// advertisement, a clone or a fetch) and never built on: it may skip the HEAD
+// for the next seq while the hint is unchanged, for TRUST_UNCHANGED_HINT after
+// the store last showed the kept manifest to be the newest (see walkFromHint),
+// so the usual warm read for serving is one conditional GET answered 304. Its
+// stamp is the earlier of that time and the kept bytes' confirmation, so a
+// writer handed one anyway is still timed from the store's own word.
+async function read(store, { clock = Date.now, serving = false } = {}) {
   const now = clock();
-  const stamp = ({ m, confirmed }) => (readAt.set(m, confirmed), m);
-  const hinted = await walkFromHint(store, now);
+  const stamp = ({ m, confirmed }, shown = now) => {
+    readAt.set(m, Math.min(confirmed, shown));
+    return m;
+  };
+  const shown = (seq) => markNewest(store, seq, now);
+  const hinted = await walkFromHint(store, now, serving);
   if (hinted !== null) {
     try {
-      if (!hinted.loading) return stamp(await load(store, hinted.seq, now));
-      const { found, err } = await hinted.loading;
-      if (err) throw err;
+      if (hinted.trustedAt !== undefined) return stamp(await load(store, hinted.seq, now), hinted.trustedAt);
+      let found;
+      if (hinted.loading) {
+        const settled = await hinted.loading;
+        if (settled.err) throw settled.err;
+        found = settled.found;
+      } else {
+        found = await load(store, hinted.seq, now);
+      }
+      shown(hinted.seq);
       return stamp(found);
     } catch (err) {
       if (!(err instanceof NotFoundError)) throw err;
     }
   }
 
-  const newest = await listNewest(store);
-  return stamp(newest === 0 ? { m: empty(), confirmed: now } : await load(store, newest, now));
+  const seq = await listNewest(store);
+  if (seq === 0) return stamp({ m: empty(), confirmed: now });
+  const found = await load(store, seq, now);
+  shown(seq);
+  return stamp(found);
 }
 
 // Throws StaleManifestError if the store last showed `base` to be the newest
@@ -751,14 +854,21 @@ async function swap({ store, lock, base, next, uploaded = [], clock = Date.now, 
     // base as one just read
     const landedAt = clock();
     remember(store, next.seq, landed || bytes, landedAt);
+    markNewest(store, next.seq, landedAt);
     readAt.set(next, landedAt);
 
     // The swap has happened. The hint only saves the next reader some looking,
-    // so a failure to write it is not a failure to swap. A caller which passes
-    // `waitForHint: false` (a push, Blot's commit) is answered without waiting
-    // for it: until it lands, a reader starting from the old hint looks one
-    // manifest further forward.
-    const hint = store.put(LATEST_KEY, Buffer.from(JSON.stringify({ seq: next.seq }) + "\n")).catch(() => {});
+    // so a failure to write it is not a failure to swap: it is logged and the
+    // swap resolves. It is waited for by default, so a client told its push
+    // landed finds the new hint on its next request, and a serving read in
+    // another process, which trusts an unchanged hint for a few seconds (see
+    // read()), sees the push. A caller which passes `waitForHint: false` is
+    // answered without waiting: until it lands, a writer starting from the
+    // old hint looks one manifest further forward, and a serving read may give
+    // the manifest before.
+    const hint = store
+      .put(LATEST_KEY, Buffer.from(JSON.stringify({ seq: next.seq }) + "\n"))
+      .catch((err) => console.error("Git store: could not write the hint for seq " + next.seq, err));
     if (waitForHint) await hint;
 
     return next;
@@ -769,6 +879,7 @@ module.exports = {
   VERSION,
   MAX_BYTES,
   MAX_BASE_AGE,
+  TRUST_UNCHANGED_HINT,
   SNAPSHOT_LIMITS,
   empty,
   validate,
