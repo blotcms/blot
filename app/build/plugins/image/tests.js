@@ -256,12 +256,13 @@ describe("image", function () {
     });
   });
 
-  it("makes thumbnails from cached images with escaped URLs", function (done) {
+  it("makes thumbnails from cached images with long escaped URLs", function (done) {
     var test = this;
     var thumbnail = require("build/thumbnail");
-    var html = '<img src="/%E8%AF%B4%E6%98%8E.png">';
+    var name = new Array(31).join("说") + ".png";
+    var html = '<img src="/' + encodeURIComponent(name) + '">';
 
-    fs.copySync(__dirname + "/tests-image.png", localPath(test.blog.id, "/说明.png"));
+    fs.copySync(__dirname + "/tests-image.png", localPath(test.blog.id, "/" + name));
 
     render(test.blog, html, function (err, result) {
       if (err) return done.fail(err);
@@ -289,6 +290,14 @@ describe("image", function () {
       expect(filenameFromSrc("/foo-%E2.png")).not.toContain("%E");
       expect(filenameFromSrc("/large.jpg%e2%80%9d")).not.toContain("%");
       expect(filenameFromSrc("/100%.png")).not.toContain("%");
+    });
+
+    it("keeps truncated names short once escaped", function () {
+      var truncateSlug = require("./optimize").truncateSlug;
+
+      expect(truncateSlug(new Array(61).join("a")).length).toEqual(50);
+      expect(encodeURIComponent(truncateSlug(new Array(31).join("说"))).length).not.toBeGreaterThan(150);
+      expect(truncateSlug(new Array(31).join("😀"))).not.toContain("�");
     });
 
     it("does not leave replacement characters", function () {

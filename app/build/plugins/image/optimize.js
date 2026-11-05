@@ -50,6 +50,16 @@ function filenameFromSrc(originalSrc) {
   }
 }
 
+// At most 50 characters, and at most 150 once URL-escaped (e.g. 16 Chinese
+// characters), cut between code points
+function truncateSlug(slug) {
+  var chars = Array.from(slug).slice(0, 50);
+
+  while (encodeURIComponent(chars.join("")).length > 150) chars.pop();
+
+  return chars.join("");
+}
+
 module.exports = function (blogID, originalSrc) {
   return function (path, _callback) {
     // Extnames can sometimes be uppercase, we want to ensure that
@@ -66,8 +76,10 @@ module.exports = function (blogID, originalSrc) {
     
     if (originalFilename && originalFilename.length > 0) {
       // Format: {uuid}/{slugified-original-filename}.{ext}
-      // Limit the original filename part to avoid overly long filenames
-      var slugPart = Array.from(originalFilename).slice(0, 50).join("");
+      // Limit the original filename part to avoid overly long filenames,
+      // and keep it short once escaped too: helper/transformer refuses
+      // paths over 300 characters, which would lose the post's thumbnail
+      var slugPart = truncateSlug(originalFilename);
       name = slugPart + extension;
       relativePath = uuidPart + "/" + name;
     } else {
@@ -145,3 +157,4 @@ module.exports = function (blogID, originalSrc) {
   };
 };
 module.exports.filenameFromSrc = filenameFromSrc;
+module.exports.truncateSlug = truncateSlug;
