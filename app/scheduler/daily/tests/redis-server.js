@@ -337,6 +337,47 @@ describe("scheduler/daily/redis-server", function () {
     });
   });
 
+  describe("storage offsite copy", function () {
+    const { STORAGE_OFFSITE_KEY } = redisServer;
+    // A value as config/storage-bucket/bin/offsite-sync.sh stores it
+    const copyLine = ({ age = 9 * HOUR, objects = 1234567, bytes = 2e12 } = {}) =>
+      `${stamp(NOW - age)} ${objects} ${bytes}`;
+    const storage = async (value) => {
+      const client = fakeRedis(withSnapshot);
+      if (value !== undefined) client.store.set(STORAGE_OFFSITE_KEY, value);
+      return lines(await collect({ client, now: NOW })).storage;
+    };
+
+    it("is a third line: how long ago, and what B2 holds", async function () {
+      expect(await storage(copyLine())).toBe("Storage offsite: copied 9h ago (1,234,567 objects, 1.8 TB)");
+    });
+
+    it("flags it after two days", async function () {
+      expect(await storage(copyLine({ age: 2 * DAY }))).toBe("Storage offsite: copied 2d ago (1,234,567 objects, 1.8 TB)");
+      expect(await storage(copyLine({ age: 3 * DAY }))).toBe("**Storage offsite: last copied 3d ago, overdue**");
+    });
+
+    it("flags a value that cannot be read", async function () {
+      expect(await storage("garbage")).toBe("**Storage offsite: unreadable record**");
+    });
+
+    it("is left out where the copy was never recorded", async function () {
+      expect(await storage(undefined)).toBeUndefined();
+    });
+
+    it("renders in the daily email between the server and data disk lines", function () {
+      const fs = require("fs");
+      const Mustache = require("mustache");
+      const template = fs.readFileSync(__dirname + "/../../../helper/email/admin/DAILY_UPDATE.txt", "utf8");
+      const view = { redis: "Redis: x", server: "Server: y", data_disk: "Data disk: z" };
+
+      expect(Mustache.render(template, { ...view, storage: "Storage offsite: copied 9h ago" })).toContain(
+        "Server: y\n\nStorage offsite: copied 9h ago\n\nData disk: z"
+      );
+      expect(Mustache.render(template, view)).toContain("Server: y\n\nData disk: z");
+    });
+  });
+
   describe("main", function () {
     const run = (deps) =>
       new Promise((resolve, reject) =>

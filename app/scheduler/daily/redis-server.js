@@ -2,6 +2,11 @@
 //
 //   Redis: memory 27% (resize in ~58 days, 8 GB free), saved 3m ago, backed up 30m ago, offsite 9h ago
 //   Server: disk 21% (stable, 19 GB free), RAM 75% available (12 GB)
+//   Storage offsite: copied 9h ago (1,234,567 objects, 2 TB)
+//
+// The third line, the storage bucket's daily copy to B2
+// (config/storage-bucket/bin/offsite-sync.sh records it in STORAGE_OFFSITE_KEY),
+// is left out where it was never recorded.
 //
 // The server is the host Redis runs on, which is also the app's since #2261.
 // Redis tells us its own memory and last save, but only the Redis host can
@@ -15,9 +20,11 @@ const {
   parseMemory,
   parseInfo,
   parseBackup,
+  parseStorageOffsite,
   SAMPLE_KEY,
   BACKUP_KEY,
   OFFSITE_KEY,
+  STORAGE_OFFSITE_KEY,
 } = require("../check-redis-host");
 const trend = require("./trend");
 
@@ -46,6 +53,8 @@ const SAMPLE_STALE_MS = 20 * MINUTE;
 const BACKUP_OVERDUE_MS = 2 * HOUR;
 // The offsite copy is daily; allow one missed day.
 const OFFSITE_OVERDUE_MS = 2 * DAY;
+// So is the storage bucket's.
+const STORAGE_OFFSITE_OVERDUE_MS = 2 * DAY;
 // The instance store holding local backup copies.
 const BACKUP_DISK_FULL = 0.8;
 // The root disk's trend projects to this, as memory does to MEMORY_WARNING.
@@ -64,11 +73,12 @@ function compact(ms) {
 // Everything the line needs, from Redis. client.sendCommand keeps these off
 // the client-side cache: the host writes them from another client.
 async function collect({ client = require("models/client"), now = Date.now() } = {}) {
-  const [info, sampleValue, backupValue, offsiteValue, memoryHistory, diskHistory] = await Promise.all([
+  const [info, sampleValue, backupValue, offsiteValue, storageOffsiteValue, memoryHistory, diskHistory] = await Promise.all([
     client.sendCommand(["INFO"]),
     client.sendCommand(["GET", SAMPLE_KEY]),
     client.sendCommand(["GET", BACKUP_KEY]),
     client.sendCommand(["GET", OFFSITE_KEY]),
+    client.sendCommand(["GET", STORAGE_OFFSITE_KEY]),
     client.sendCommand(["GET", MEMORY_HISTORY_KEY]),
     client.sendCommand(["GET", DISK_HISTORY_KEY]),
   ]);
@@ -81,6 +91,10 @@ async function collect({ client = require("models/client"), now = Date.now() } =
     sample: parseSample(sampleValue),
     backup: parseBackup(backupValue),
     offsite: offsiteValue === null || offsiteValue === undefined ? undefined : parseBackup(offsiteValue),
+    storageOffsite:
+      storageOffsiteValue === null || storageOffsiteValue === undefined
+        ? undefined
+        : parseStorageOffsite(storageOffsiteValue),
     memoryHistory: trend.parse(memoryHistory),
     diskHistory: trend.parse(diskHistory),
   };
@@ -190,14 +204,31 @@ function offsitePart({ now, offsite }) {
     : `offsite ${compact(age)} ago`;
 }
 
+// The storage bucket's copy to B2. Nothing if it was never recorded.
+function storageLine({ now, storageOffsite }) {
+  if (storageOffsite === undefined) return null;
+  if (!storageOffsite) return "**Storage offsite: unreadable record**";
+
+  const age = now - storageOffsite.time;
+  if (age > STORAGE_OFFSITE_OVERDUE_MS) return `**Storage offsite: last copied ${compact(age)} ago, overdue**`;
+  return (
+    `Storage offsite: copied ${compact(age)} ago ` +
+    `(${storageOffsite.objects.toLocaleString("en-US")} objects, ${size(storageOffsite.bytes)})`
+  );
+}
+
 const join = (parts) => parts.filter(Boolean).join(", ");
 
-// Turns collect()'s data into the two lines of the email.
+// Turns collect()'s data into the lines of the email: redis and server, and
+// storage where the storage offsite copy is recorded.
 function lines(data) {
-  return {
+  const result = {
     redis: "Redis: " + join([memoryPart(data), savePart(data), backupPart(data), offsitePart(data)]),
     server: "Server: " + join([diskPart(data), ramPart(data)]),
   };
+  const storage = storageLine(data);
+  if (storage) result.storage = storage;
+  return result;
 }
 
 // Tomorrow's trends start from today's readings. The disk's only count when
@@ -239,6 +270,7 @@ module.exports.lines = lines;
 module.exports.parseBackup = parseBackup; // from check-redis-host.js
 module.exports.BACKUP_KEY = BACKUP_KEY;
 module.exports.OFFSITE_KEY = OFFSITE_KEY;
+module.exports.STORAGE_OFFSITE_KEY = STORAGE_OFFSITE_KEY;
 module.exports.MEMORY_HISTORY_KEY = MEMORY_HISTORY_KEY;
 module.exports.DISK_HISTORY_KEY = DISK_HISTORY_KEY;
 module.exports.RESIZE_URL = RESIZE_URL;

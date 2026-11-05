@@ -10,6 +10,10 @@ Response time: {{render_time}}
 
 {{{server}}}
 
+{{#storage}}
+{{{storage}}}
+
+{{/storage}}
 {{{data_disk}}}
 
 Sync: {{sync_summary}}
