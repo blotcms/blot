@@ -179,7 +179,7 @@ describe("git store: reads", function () {
 
       expect(response.body).toContain("ERR ");
 
-      var line;
+      var line = undefined;
       for (var i = 0; i < 100 && !line; i++) {
         line = this.storeLines().slice(before).find((l) => / outcome=refused /.test(l));
         if (!line) await new Promise((resolve) => setTimeout(resolve, 20));
