@@ -256,6 +256,27 @@ describe("image", function () {
     });
   });
 
+  it("makes thumbnails from cached images with escaped URLs", function (done) {
+    var test = this;
+    var thumbnail = require("build/thumbnail");
+    var html = '<img src="/%E8%AF%B4%E6%98%8E.png">';
+
+    fs.copySync(__dirname + "/tests-image.png", localPath(test.blog.id, "/说明.png"));
+
+    render(test.blog, html, function (err, result) {
+      if (err) return done.fail(err);
+
+      thumbnail(test.blog, "/post.txt", {}, result, function (err, thumbnails) {
+        if (err) return done.fail(err);
+
+        expect(thumbnails).toEqual(jasmine.any(Object));
+        expect(thumbnails.small).toEqual(jasmine.any(Object));
+        test.result = result;
+        done();
+      });
+    });
+  });
+
   describe("filenameFromSrc", function () {
     var filenameFromSrc = require("./optimize").filenameFromSrc;
 
