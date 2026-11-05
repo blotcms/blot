@@ -879,7 +879,7 @@ phase_finish() {
   done
   # shellcheck disable=SC2086
   [ -n "$DRY_RUN" ] || aws_cli ec2 wait instance-terminated --instance-ids $OLD_INSTANCES
-  say "Done:$OLD_INSTANCES terminated"
+  if [ -n "$DRY_RUN" ]; then say "Dry run: nothing terminated"; else say "Done:$OLD_INSTANCES terminated"; fi
 }
 
 # ---- restore -------------------------------------------------------------
@@ -1118,7 +1118,7 @@ phase_status() {
   echo "old     $OLD_NOW: ${OLD_ID:-not reachable}"
   echo "new     $NEW: ${NEW_ID:-not reachable}"
   info=$(redis_info "$NEW"); old_info=$(redis_info "$OLD_REDIS")
-  echo "launch  redis6 $(on "$NEW" "systemctl is-active redis6" 2> /dev/null || echo down), instance store $(on "$NEW" "mountpoint -q /var/instance-ssd && echo mounted || echo missing" 2> /dev/null)"
+  echo "launch  redis6 $(on "$NEW" "systemctl is-active redis6" 2> /dev/null || echo down), instance store $(on "$NEW" "mountpoint -q /var/instance-ssd && echo mounted || echo missing" 2> /dev/null || echo unknown)"
   echo "redis   $NEW: $(info_field "$info" role) (link $(info_field "$info" master_link_status), of $(info_field "$info" master_host)); $OLD_REDIS: $(info_field "$old_info" role)"
   for u in $UNIT_NAMES; do
     echo "app     $u on $NEW: $(docker_field "$NEW" "$u" '{{.State.Status}} {{.Config.Image}}'), on $OLD_NOW: $(docker_field "$OLD_NOW" "$u" '{{.State.Status}}')"
