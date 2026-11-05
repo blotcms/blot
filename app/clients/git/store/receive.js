@@ -230,7 +230,12 @@ function describeGitError(stderr) {
 }
 
 function formatSize(bytes) {
-  return Math.max(1, Math.round(bytes / MiB)) + " MB";
+  return Math.max(1, Math.round(bytes / MiB)) + " MiB";
+}
+
+// A push over the limit: the size it is refused at, and what to do instead
+function tooLarge(limit) {
+  return new Refused("this push is larger than Blot accepts (" + formatSize(limit) + "); push fewer or smaller files at a time");
 }
 
 function createScratch(reservation, children) {
@@ -295,7 +300,7 @@ async function writeIncoming(incoming, reservation, cache, file, limit) {
       if (next.done) return;
 
       bytes += next.value.length;
-      if (bytes > limit) throw new Refused("the push is larger than the " + formatSize(limit) + " Blot accepts");
+      if (bytes > limit) throw tooLarge(limit);
       if (bytes > reservation.bytes) await reservation.extend(Math.max(bytes - reservation.bytes, Math.min(step, limit - reservation.bytes)));
       yield next.value;
     }
@@ -647,6 +652,53 @@ async function peelTags({ repo, local, types }) {
   return peeled;
 }
 
+// The refusal of a master whose tree has anything but regular files in it
+const IRREGULAR = "Git blogs support regular files only (no symbolic links or submodules)";
+
+// With `regularFilesOnly`, a push may not leave master with anything but
+// regular files and directories in its tree (no symbolic links, no
+// submodules). Only what the new master's tree adds or changes against the old
+// master's is read: the old one was checked when it was pushed. A force push
+// is compared with the old master too, whatever its history. Resolves with the
+// problem for master, or null.
+async function irregularFiles({ repo, local, base, commands }) {
+  const master = commands.find((command) => command.ref === MASTER && command.new !== ZERO && command.new !== command.old);
+  if (!master) return null;
+
+  const read = async (oid) => local.get(oid) || (await repo.read(oid));
+  const treeOf = async (oid) => {
+    const found = oid && (await read(oid));
+    return found && found.type === "commit" ? parseCommit(found.data).tree : null;
+  };
+  const entriesOf = async (oid) => {
+    const found = oid && (await read(oid));
+    return found && found.type === "tree" ? parseTree(found.data) : [];
+  };
+
+  const old = base.refs[MASTER] || null;
+  let level = [{ a: await treeOf(old), b: await treeOf(master.new) }];
+
+  while (level.length) {
+    const next = [];
+
+    for (const { a, b } of level) {
+      if (!b || a === b) continue;
+
+      const before = new Map((await entriesOf(a)).map((entry) => [entry.name, entry]));
+      for (const entry of await entriesOf(b)) {
+        const was = before.get(entry.name);
+        if (was && was.oid === entry.oid && was.mode === entry.mode) continue;
+        if (isDirectory(entry)) next.push({ a: was && isDirectory(was) ? was.oid : null, b: entry.oid });
+        else if (entry.mode !== "100644" && entry.mode !== "100755") return { [MASTER]: IRREGULAR };
+      }
+    }
+
+    level = next;
+  }
+
+  return null;
+}
+
 // Uploads a pack with its index and, unless it is a history piece (which is
 // only ever read whole, so nothing wants its reverse index), its reverse
 // index, all at once. Every upload has ended, one way or the other, before this
@@ -680,7 +732,7 @@ function answer(commands, { outcome, status = "ok", problems = {}, messages = []
   return { outcome, status, results, messages, ...extra };
 }
 
-async function receive({ store, cache, lock, commands, pack = null, limit = DEFAULT_LIMIT, sizeHint = 0, smallBase = SMALL_BASE, progress = null, gate = null }) {
+async function receive({ store, cache, lock, commands, pack = null, limit = DEFAULT_LIMIT, sizeHint = 0, smallBase = SMALL_BASE, progress = null, gate = null, regularFilesOnly = false }) {
   // A host's callback must never be able to fail a push
   const say = (message) => {
     try {
@@ -702,14 +754,14 @@ async function receive({ store, cache, lock, commands, pack = null, limit = DEFA
 
     const problems = refusals(commands);
     if (Object.keys(problems).length) throw new Refused("ok", problems);
-    if (sizeHint > limit) throw new Refused("the push is larger than the " + formatSize(limit) + " Blot accepts");
+    if (sizeHint > limit) throw tooLarge(limit);
 
     // The manifest is read while the pack arrives. Work out of date is found
     // before anything is checked; the pack is still read to the end.
     const reading = manifest.read(store);
     reading.catch(() => {});
 
-    const { base, added, repo, local } = await prepare({ store, cache, commands, incoming, limit, sizeHint, reading, children, stats, smallBase, hold: (r) => (reservation = r), say });
+    const { base, added, repo, local } = await prepare({ store, cache, commands, incoming, limit, sizeHint, reading, children, stats, smallBase, regularFilesOnly, hold: (r) => (reservation = r), say });
     const next = await swap({ store, cache, lock, commands, added, base });
     await remember({ store, cache, repo, added, local });
 
@@ -743,8 +795,11 @@ function failure(commands, err, stats) {
     });
   }
 
+  // A host's lock(fn) may say why it failed, in words for the user
   const status =
-    err instanceof NoRoomError
+    err && typeof err.pushStatus === "string"
+      ? err.pushStatus
+      : err instanceof NoRoomError
       ? "Blot has no room to receive this push right now; please try again in a moment"
       : "Blot hit an error receiving the push; please try again in a moment";
   return answer(commands, { outcome: "failed", status, extra: { stats, error: err } });
@@ -799,7 +854,7 @@ function staleRefs(current, commands) {
 // Everything up to the upload: the pack in scratch, completed and checked, its
 // history piece, and both uploaded. Resolves with { packs, pieces } to name in
 // the manifest (none, for a push of refs only).
-async function prepare({ store, cache, commands, incoming, limit, sizeHint, reading, children, stats, smallBase, hold, say }) {
+async function prepare({ store, cache, commands, incoming, limit, sizeHint, reading, children, stats, smallBase, regularFilesOnly, hold, say }) {
   const added = { packs: [], pieces: [] };
   const needsPack = commands.some((command) => command.new !== ZERO);
   const reservation = await cache.reserve(Math.min(limit, Math.max(sizeHint, FIRST_RESERVE), Math.floor(cache.maxBytes / 2)));
@@ -859,7 +914,10 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, read
       await reservation.extend(stats.bytes + scanned.count * 32 + 4096);
       await scratch.git(["init", "-q", "--bare", gitDir]);
       try {
-        await scratch.git([...indexArgs(), "index-pack", "--stdin", "--fix-thin", "--fsck-objects"], {
+        // A .gitattributes or .gitmodules blob a changed tree names but the
+        // push does not carry is in the store already (checked when it was
+        // pushed), not in scratch: fsck is told not to look for it
+        await scratch.git([...indexArgs(), "index-pack", "--stdin", "--fix-thin", "--fsck-objects=gitattributesMissing=ignore,gitmodulesMissing=ignore"], {
           gitDir,
           inputFile: incomingFile,
           env: { GIT_ALTERNATE_OBJECT_DIRECTORIES: basesDir },
@@ -904,6 +962,10 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, read
   const types = new Map();
   const tips = await checkTips({ repo, commands, listed, types });
   if (Object.keys(tips).length) throw new Refused("ok", tips);
+  if (regularFilesOnly) {
+    const irregular = await irregularFiles({ repo, local, base, commands });
+    if (irregular) throw new Refused("ok", irregular);
+  }
   added.peeled = await peelTags({ repo, local, types });
   await prefetch;
 
