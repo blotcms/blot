@@ -307,11 +307,11 @@ comes from trends, not single runs.
 - keeps **one** sticky comment ([`pr-comment.js`](pr-comment.js)) comparing the
   PR against the rolling master median. It has three states, all on the same
   comment:
-  - **running** (`⏳` in the header) — flipped on as soon as the job starts, so
+  - **running** ("running" in the header) — flipped on as soon as the job starts, so
     the PR shows a run is in flight. The previous run's table stays visible.
   - **done** — the table, plus the commit it was benchmarked from (and the one
     before it) in the footer.
-  - **run failed** — set if the job errors, so the comment never sticks on `⏳`.
+  - **run failed** — set if the job errors, so the comment never sticks on "running".
 - draft PRs are skipped entirely
 
 ### Daily on master

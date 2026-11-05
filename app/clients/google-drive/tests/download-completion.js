@@ -46,8 +46,15 @@ describe("Drive download completion", function() {
         writeFrom: async () => {
           moved = true;
         },
+        // Nothing at the path until the download is published
+        stat: async (blogID, path, options) => {
+          if (!moved) throw Object.assign(new Error("missing"), { code: "ENOENT" });
+          if (failAfterPublish) throw Error("stat failed after publication");
+          return { isDirectory: false, size: 12, modified: 1000, sha1: options && options.sha1 ? "sha" : undefined };
+        },
       },
       "./localFile": async () => "/test-blog/file.txt",
+      "./localState": require("../util/localState"),
       "colors/safe": {
         green: x => x
       },
@@ -57,13 +64,9 @@ describe("Drive download completion", function() {
       "./verifyContent": async filename => {
         if (filename.startsWith("/test-temp")) return mismatchTemp ? null : {
           checksum: "new",
-          fingerprint: "verified"
+          sha1: "sha"
         };
-        if (moved && failAfterPublish) throw Error("stat failed after publication");
-        return moved ? {
-          checksum: "new",
-          fingerprint: "verified"
-        } : null;
+        throw Error("the published file is checked by its SHA-1, not read again");
       },
       config: {},
       "helper/hash": () => {},
@@ -105,7 +108,9 @@ describe("Drive download completion", function() {
       updated: true,
       verifiedContent: {
         checksum: "new",
-        fingerprint: "verified"
+        sha1: "sha",
+        size: 12,
+        modified: 1000
       }
     });
     expect(moved).toBe(true);
@@ -156,12 +161,21 @@ describe("Drive download completion", function() {
 });
 
 describe("Drive download checksum optimization", function() {
-  it("does not request content when the local checksum matches", async function() {
-    let requested = false;
-    const download = load({
-      "fs-extra": {},
-      "storage/folder": {},
+  let stats, requested, download;
+
+  beforeEach(function() {
+    requested = false;
+    stats = [];
+    download = load({
+      "fs-extra": {
+        remove: async () => {},
+      },
+      // storage/folder's stat of the file, a different one on each call
+      "storage/folder": {
+        stat: async () => stats.shift(),
+      },
       "./localFile": async () => "/test-blog/file.txt",
+      "./localState": require("../util/localState"),
       "colors/safe": {
         green: x => x
       },
@@ -170,7 +184,7 @@ describe("Drive download checksum optimization", function() {
       "helper/guid": () => "download",
       "./verifyContent": async () => ({
         checksum: "same",
-        fingerprint: "verified"
+        sha1: "sha"
       }),
       config: {},
       "helper/hash": () => {},
@@ -179,10 +193,14 @@ describe("Drive download checksum optimization", function() {
       "../serviceAccount/hotDocPoller": {},
       "../database": {},
     });
-    const result = await download("blog", {
+  });
+
+  function start() {
+    return download("blog", {
       files: {
         get: async () => {
           requested = true;
+          throw Error("requested");
         }
       }
     }, "/file.txt", {
@@ -190,13 +208,35 @@ describe("Drive download checksum optimization", function() {
       mimeType: "text/plain",
       md5Checksum: "same",
     });
-    expect(result).toEqual({
+  }
+
+  it("does not request content when the local checksum matches", async function() {
+    const stat = { isDirectory: false, size: 4, modified: 1000.4 };
+    stats = [stat, stat];
+    expect(await start()).toEqual({
       updated: false,
       verifiedContent: {
         checksum: "same",
-        fingerprint: "verified"
+        sha1: "sha",
+        size: 4,
+        modified: 1000
       }
     });
     expect(requested).toBe(false);
+  });
+
+  it("does not vouch for a file which changed while it was hashed", async function() {
+    stats = [
+      { isDirectory: false, size: 4, modified: 1000 },
+      { isDirectory: false, size: 4, modified: 2000 },
+    ];
+    let error;
+    try {
+      await start();
+    } catch (err) {
+      error = err;
+    }
+    expect(error && error.message).toBe("requested");
+    expect(requested).toBe(true);
   });
 });

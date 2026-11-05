@@ -15,7 +15,6 @@ var assets = require("storage/assets");
 var join = require("path").join;
 var resolve = require("path").resolve;
 var callbackify = require("util").callbackify;
-var ensureLocal = callbackify(folder.ensureLocal);
 var resolveCaseInsensitive = callbackify(folder.resolveCaseInsensitive);
 var async = require("async");
 var he = require("he");
@@ -244,10 +243,25 @@ function Transformer(blogID, name) {
 
   // A file in the blog's folder, at exactly this path
   function fromFolder(path, transform, callback) {
-    ensureLocal(blogID, path, function (err, fullLocalPath) {
-      if (err) return callback(err);
-      fromPath(fullLocalPath, transform, callback);
-    });
+    // The transform (sharp, ffmpeg, exiftool) may run for longer than the
+    // cache keeps a path, so the file is held until it is done
+    folder
+      .withLocal(blogID, path, function (fullLocalPath) {
+        return new Promise(function (resolve, reject) {
+          fromPath(fullLocalPath, transform, function (err, result, hash) {
+            if (err) return reject(err);
+            resolve([result, hash]);
+          });
+        });
+      })
+      .then(
+        function (found) {
+          callback(null, found[0], found[1]);
+        },
+        function (err) {
+          callback(err);
+        }
+      );
   }
 
   // The same, matching the path without regard to case

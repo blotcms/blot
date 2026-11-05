@@ -98,6 +98,7 @@ const { noteSize } = require("./pack");
 const { rememberWhole } = require("./idx");
 const { readHistory } = require("./history");
 const { ancestors } = require("./fetch");
+const { indexArgs, commandOf } = require("./compact");
 
 const ZERO = "0".repeat(40);
 const MASTER = "refs/heads/master";
@@ -273,7 +274,7 @@ function createScratch(reservation, children) {
         clearTimeout(timer);
         children.delete(child);
         if (code === 0) return resolve(Buffer.concat(stdout));
-        const err = new Error("git " + args.join(" ") + " failed: " + oneLine(Buffer.concat(stderr).toString()));
+        const err = new Error("git " + commandOf(args) + " failed: " + oneLine(Buffer.concat(stderr).toString()));
         err.stderr = Buffer.concat(stderr).toString();
         reject(err);
       });
@@ -916,7 +917,7 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, read
         // A .gitattributes or .gitmodules blob a changed tree names but the
         // push does not carry is in the store already (checked when it was
         // pushed), not in scratch: fsck is told not to look for it
-        await scratch.git(["index-pack", "--stdin", "--fix-thin", "--fsck-objects=gitattributesMissing=ignore,gitmodulesMissing=ignore"], {
+        await scratch.git([...indexArgs(), "index-pack", "--stdin", "--fix-thin", "--fsck-objects=gitattributesMissing=ignore,gitmodulesMissing=ignore"], {
           gitDir,
           inputFile: incomingFile,
           env: { GIT_ALTERNATE_OBJECT_DIRECTORIES: basesDir },
@@ -1012,7 +1013,7 @@ async function historyPiece(scratch, reservation, gitDir, commits) {
 
   const packFile = path.join(reservation.dir, "history.pack");
   await scratch.git(["pack-objects", "--stdout", "-q"], { gitDir, input: commits.map(([oid]) => oid).join("\n") + "\n", outputFile: packFile });
-  await scratch.git(["index-pack", packFile], { gitDir });
+  await scratch.git([...indexArgs(), "index-pack", packFile], { gitDir });
 
   return describePack(packFile, path.join(reservation.dir, "history.idx"));
 }

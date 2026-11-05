@@ -18,8 +18,7 @@ Hourly, daily and weekly RDB backups go to `s3://blot-redis-backups` from
 `/etc/blot-redis/active`.
 
 The host is built and replaced with the host cycle (`config/host/cycle.sh`,
-described in `config/host/README.md`), which uses these scripts: `launch.sh`'s
-bootstrap and `promote.sh` to move Redis to the new host, and
+described in `config/host/README.md`), which uses these scripts: `bootstrap.sh` and `promote.sh` to move Redis to the new host, and
 `restore.sh` for disaster recovery. A bigger or newer host is a host cycle,
 not a Redis-only change. The old two-host setup (a separate Redis instance,
 the floating IP, `cutover.sh`) is gone.
@@ -29,7 +28,6 @@ the floating IP, `cutover.sh`) is gone.
 | File | What it does |
 | --- | --- |
 | `redis.conf` | The Redis config, every non-default setting commented. |
-| `launch.sh` | Launch an instance, bootstrap it, load data. |
 | `bootstrap.sh <ssh-host>` | Install and configure Redis on a host (runs `host/setup.sh` via sudo). |
 | `restore.sh <ssh-host> latest\|<name>\|list` | Restore an S3 backup onto a host. |
 | `promote.sh <old> <new>` | Promote a replica to master with FAILOVER and move the `active` backup marker (see "Promotion"). |
@@ -45,32 +43,24 @@ production host).
 
 ## Building a new host
 
-For production use `config/host/cycle.sh` (`launch`, `replicate`), which builds
-the combined host and makes its Redis a replica. These steps are for a
-standalone Redis, such as a drill or a recovery rehearsal.
+A new host is always a host cycle: `config/host/cycle.sh` (`launch`,
+`replicate`) builds the combined host with `config/host/launch.sh`, runs
+`bootstrap.sh` on it and makes its Redis a replica of the live one. The full
+sync costs the master one extra save: on 8 Oct a ~63ms fork and a ~33s save,
+with no visible effect on its traffic, and the replica was in sync about a
+minute after `REPLICAOF`. Before `REPLICAOF` the cycle raises the master's
+replica output buffer to `redis.conf`'s value, so a multi-GB sync under load
+does not loop (on a bootstrapped master it already is).
 
-1. `./launch.sh --type <instance-type> --from latest --key ~/key.pem`
-   (`--from <backup-name>` for a specific backup, or `--from replica:<ip>` to
-   replicate from a running Redis: give the live host's own private IP, and
-   it first raises that host's replica output buffer to
-   `redis.conf`'s value so a multi-GB sync under load does not loop; on a
-   bootstrapped master it already is). The full sync costs the master one
-   extra save: on 8 Oct a ~63ms fork and a ~33s save, with no visible effect
-   on its traffic, and the replica was in sync about a minute after
-   `REPLICAOF`. This runs the next two steps for you. Use
-   `--dry-run` first. Or launch by hand with the launch template and do 2 and 3
-   yourself.
-   `./launch.sh --list` lists the backups in S3. Add `--drill` for any
-   throwaway host (a rehearsal, a restore test): it is named `drill-redis-*`,
-   tagged `BlotDrill=true`, and gets `/etc/blot-redis/drill` before bootstrap,
-   which stops `backup.sh` from ever uploading from it, even after a rehearsal
-   promotion marks it active (otherwise it would add its own copies to the
-   production backups). `promote.sh` warns when the new host is a drill host.
-2. `./bootstrap.sh ec2-user@<ip>`
-3. `./restore.sh ec2-user@<ip> latest` (add `--reference <current-redis-host>`
-   to compare `DBSIZE` and keyspace), or on the new host
-   `redis6-cli REPLICAOF <live-host-private-ip> 6379` and wait for
-   `master_link_status:up`.
+`cycle.sh --drill` builds a throwaway host for a rehearsal or a restore test:
+it gets `/etc/blot-redis/drill`, which stops `backup.sh` from ever uploading
+from it, even after a rehearsal promotion marks it active (otherwise it would
+add its own copies to the production backups). `promote.sh` warns when the new
+host is a drill host.
+
+To load a backup by hand onto a bootstrapped host instead,
+`./restore.sh <ssh-host> latest` (`list` shows the backups, a name picks one;
+add `--reference <live-host>` to compare `DBSIZE` and keyspace).
 
 A host restored from a backup is a point-in-time copy, for a drill or for
 disaster recovery. To move live traffic, always make the new host a replica of
@@ -176,10 +166,10 @@ take over with `promote.sh`. Everything written since the newest backup's
 snapshot is lost (up to an hour), and the app's sync state can then disagree
 with the clients' folders.
 
-1. `./launch.sh --list --profile <aws-profile>` and pick the newest backup
-   (its times are in your Mac's local time; the names are UTC hours).
-2. `./launch.sh --type <instance-type> --from <backup-name> --key ~/key.pem --profile <aws-profile>`
-   (the production host's type or larger). In the 8 Oct drills this took about 2.5 minutes for the
+1. `./restore.sh <ssh-host> list` and pick the newest backup (the names
+   are UTC hours).
+2. Launch a host with `config/host/launch.sh` (the production host's type or
+   larger), then `./restore.sh <ssh-host> <backup-name>`. In the 8 Oct drills this took about 2.5 minutes for the
    full dataset: ~75s to ssh and bootstrap, ~50s download and RDB check, ~13s
    load.
 3. Check it on the host: `redis6-cli ROLE` is master, `DBSIZE` is about what
@@ -198,8 +188,8 @@ with the clients' folders.
    `[LOCK COMPROMISED]` container restarts from the outage. Then run sync
    validation for the blogs, since Redis lost what changed after the snapshot.
 
-To rehearse it, run steps 1-3 with `launch.sh --drill` (it never uploads
-backups). To also exercise `promote.sh`, make the drill host a replica of the
+To rehearse it, run steps 1-3 on a host from `cycle.sh --drill` (it never
+uploads backups). To also exercise `promote.sh`, make the drill host a replica of the
 live master (`redis6-cli REPLICAOF <master-primary-ip> 6379` on it) and run
 `promote.sh --dry-run`, then `REPLICAOF NO ONE`. Then write down the
 commands for 5 for the drill host, and terminate the host by
@@ -292,7 +282,7 @@ backup), so the host needs `s3:PutObject` only and a rerun within the same hour
 leaves the first copy. It runs `BGSAVE` first unless
 a save finished in the last minute, so a backup holds the data as of its
 upload and a restore loses at most the time since then. It exits quietly without uploading on a drill host
-(`/etc/blot-redis/drill`, from `launch.sh --drill`), or unless
+(`/etc/blot-redis/drill`, from `cycle.sh --drill`), or unless
 the host is a master that accepts writes and `/etc/blot-redis/active` exists.
 `promote.sh` writes that file, so a new or restored host never uploads
 alongside the live one. It works with an instance profile or keys in `~ec2-user/.aws`.
@@ -345,8 +335,7 @@ not in the repo (it is in `/etc/blot-redis/offsite-bucket` on the host):
 restore.sh --offsite blot-b2-read s3://<bucket> <ssh-host> latest
 ```
 
-`list` and a backup name work as for S3, and `launch.sh --from latest --offsite
-blot-b2-read s3://<bucket>` does the same on a new host. Only `daily/` backups
+`list` and a backup name work as for S3. Only `daily/` backups
 are offsite. Your machine lists and downloads the backup, then streams it to
 the host over ssh, so it needs disk space for one backup and the host needs no
 AWS or B2 key. After that it is checked and loaded as with S3. The speed is
@@ -419,19 +408,14 @@ from here; `/redis-health` covers that. Print the current report with
 
 ## AWS permissions
 
-For the operator running `launch.sh`: `ssm:GetParameter` on
-`/aws/service/ami-amazon-linux-latest/*`; `ec2:RunInstances` (on the launch
-template and the resources it uses), `ec2:CreateTags`, `ec2:DescribeInstances`,
-`ec2:ModifyInstanceAttribute`; `iam:PassRole` if the template has an instance
-profile. For the host's backups (keys in `~ec2-user/.aws`; the combined host has no instance profile on purpose, since the units use host networking and could read the instance metadata service): `s3:ListBucket` on `blot-redis-backups`, `s3:GetObject`
+For the host's backups (keys in `~ec2-user/.aws`; the combined host has no instance profile on purpose, since the units use host networking and could read the instance metadata service): `s3:ListBucket` on `blot-redis-backups`, `s3:GetObject`
 on `hourly/*`, `daily/*` and `weekly/*` (restore), and `s3:PutObject` on the same
 (backups; no delete or overwrite rights are needed).
 
 ## Still manual
 
-- Access to the host (ssh port and keys come from the launch template/AMI),
-  and S3 credentials if it has no instance profile (`aws configure` as
-  `ec2-user`; `launch.sh` pauses for this before restoring).
+- S3 credentials on the host (`aws configure` as `ec2-user`): the combined
+  host has no instance profile.
 - Redis has no auth or TLS (the security group is the protection), no AOF, and
   is still Redis 6; those are separate pieces of work.
 

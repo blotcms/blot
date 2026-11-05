@@ -12,8 +12,19 @@
 // a percentile is the bucket bound it falls under ("<=15" means at most
 // 15 ms). Local and S3 latencies are for the same sampled calls; for
 // createReadStream and serve both are a full read of the bytes again.
+//
+// For read, createReadStream, serve and ensureLocal the S3 latency is also
+// split by how the content cache served it (hit, miss, or direct: not through
+// the cache), and for the two streamed calls the time to first byte of each
+// side is given, since that is what a visitor waits for. Hours recorded
+// before the split have only the blended S3 latency, as does a read which
+// failed before reaching the cache; the report counts those as unclassified.
 
 const shadow = require("storage/folder/shadow");
+
+// The calls whose S3 side goes through the content cache: only these get a
+// cache outcome. Other calls (stat, listings) are metadata from the index.
+const CACHE_AWARE = ["read", "createReadStream", "serve", "ensureLocal"];
 
 const MAX_HOURS = shadow.TTL_SECONDS / 3600;
 
@@ -81,12 +92,25 @@ function percentile(histogram, p) {
   return "inf";
 }
 
+function count(histogram) {
+  return Object.keys(histogram).reduce((n, bound) => n + histogram[bound], 0);
+}
+
+// { count, p50, p95, p99 } of a histogram, or null if it has no observations
+function stats(histogram) {
+  const n = count(histogram);
+
+  if (!n) return null;
+
+  return { count: n, p50: percentile(histogram, 0.5), p95: percentile(histogram, 0.95), p99: percentile(histogram, 0.99) };
+}
+
 // Per call and for the cache, from the summed fields
 function summarise(total) {
   const ops = {};
 
   shadow.OPS.forEach(function (op) {
-    const histograms = { local: {}, s3: {} };
+    const histograms = { local: {}, s3: {}, byCache: {}, ttfb: { local: {}, s3: {} } };
     const kinds = { mismatch: {}, transient: {}, s3error: {} };
     const counts = {};
 
@@ -97,6 +121,10 @@ function summarise(total) {
 
       if ((parts[1] === "local" || parts[1] === "s3") && parts[2] === "le") {
         histograms[parts[1]][parts[3]] = total[field];
+      } else if (parts[1] === "s3" && shadow.CACHE_OUTCOMES.indexOf(parts[2]) !== -1 && parts[3] === "le") {
+        (histograms.byCache[parts[2]] = histograms.byCache[parts[2]] || {})[parts[4]] = total[field];
+      } else if ((parts[1] === "local" || parts[1] === "s3") && parts[2] === "ttfb" && parts[3] === "le") {
+        histograms.ttfb[parts[1]][parts[4]] = total[field];
       } else if (parts.length === 3 && kinds[parts[1]]) {
         kinds[parts[1]][parts[2]] = total[field];
       } else if (parts.length === 2) {
@@ -131,7 +159,25 @@ function summarise(total) {
         p95: percentile(histograms.s3, 0.95),
         p99: percentile(histograms.s3, 0.99),
       },
+      // S3 latency by cache outcome: only the outcomes seen
+      s3ByCache: {},
+      // Samples of a cache-aware call whose S3 latency has no outcome: from
+      // hours before the split, or a read which failed before the cache
+      // (a missing file, say)
+      s3Unclassified: 0,
+      // Time to first byte, for the streamed calls: null where not recorded
+      ttfb: { local: stats(histograms.ttfb.local), s3: stats(histograms.ttfb.s3) },
     };
+
+    let split = 0;
+
+    Object.keys(histograms.byCache).forEach(function (outcome) {
+      const stat = stats(histograms.byCache[outcome]);
+      ops[op].s3ByCache[outcome] = stat;
+      split += stat.count;
+    });
+
+    if (CACHE_AWARE.indexOf(op) !== -1) ops[op].s3Unclassified = Math.max(0, count(histograms.s3) - split);
   });
 
   const hits = total["cache:hits"] || 0;
@@ -239,6 +285,32 @@ function format(report) {
       ].join(" ")
     );
   });
+
+  const splits = ops.filter(function (op) {
+    const row = report.ops[op];
+    return Object.keys(row.s3ByCache).length || row.s3Unclassified || row.ttfb.local || row.ttfb.s3;
+  });
+
+  if (splits.length) {
+    lines.push("");
+    lines.push("S3 latency by content cache outcome, and time to first byte (ms p50 / p95 / p99):");
+
+    splits.forEach(function (op) {
+      const row = report.ops[op];
+      const outcomes = shadow.CACHE_OUTCOMES.filter((outcome) => row.s3ByCache[outcome]).map(
+        (outcome) => outcome + " " + row.s3ByCache[outcome].count + " " + latencies(row.s3ByCache[outcome])
+      );
+
+      if (row.s3Unclassified) outcomes.push(row.s3Unclassified + " unclassified");
+      if (outcomes.length) lines.push("  " + pad(op, 17, true) + " s3: " + outcomes.join("; "));
+
+      if (row.ttfb.local || row.ttfb.s3) {
+        lines.push(
+          "  " + pad("", 17, true) + " first byte: local " + (row.ttfb.local ? latencies(row.ttfb.local) : "-") + "; s3 " + (row.ttfb.s3 ? latencies(row.ttfb.s3) : "-")
+        );
+      }
+    });
+  }
 
   const details = ops.filter(function (op) {
     const row = report.ops[op];

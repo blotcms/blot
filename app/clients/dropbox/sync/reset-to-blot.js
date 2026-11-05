@@ -23,6 +23,7 @@ const persistError = promisify(require("../util/persistError"));
 const {
   SOURCES,
   classify,
+  dropboxTag,
   keepsErrorAfterDownload,
 } = require("../util/classifyError");
 const tagSource = require("../util/tagSource");
@@ -207,6 +208,8 @@ async function resetToBlotWithClient(
     removedFiles: {},
     modifiedPaths: [],
     startedAt,
+    // Subfolders Dropbox could no longer list, as { dir, tag } (see walk)
+    vanished: [],
   };
 
   const progress = createProgress(await countLocalFiles(blogID, "/"), publish);
@@ -222,8 +225,29 @@ async function resetToBlotWithClient(
     progress
   );
 
+  const changed =
+    summary.changedPaths.length || summary.vanished.length
+      ? await changedSinceCursor(client, cursor, dropboxRoot)
+      : null;
+
+  // A subfolder Dropbox listed in its parent but then said isn't one was
+  // deleted, moved or replaced by a file since. If Dropbox reports it as
+  // changed since the pre-walk cursor, that's a live edit: leave Blot's copy
+  // alone, since the catch-up sync applies it from that cursor (as a move,
+  // where the walk could only remove and download). Otherwise the 409 is
+  // unexplained, so report it as a failed path rather than hide it.
+  for (const { dir, tag } of summary.vanished) {
+    if (changed && overlapsAny(dir, changed)) {
+      publish("Skipping", dir, "which changed in Dropbox during the walk");
+      summary.skipped += 1;
+    } else {
+      publish("Failed to list", dir, tag);
+      recordFailure(summary, dir, new Error("409 " + tag));
+    }
+  }
+
   if (summary.changedPaths.length) {
-    await excuseRecentChanges(client, cursor, dropboxRoot, summary);
+    await excuseRecentChanges(client, changed, dropboxRoot, summary);
     if (summary.changedDuringWalk)
       publish(
         `${summary.changedDuringWalk} change(s) were made in Dropbox during or just before the walk`
@@ -260,9 +284,17 @@ const walk = async (
 ) => {
   publish("Checking", dir);
   const [remoteContents, localContents] = await Promise.all([
-    remoteReaddir(client, join(dropboxRoot, dir)),
+    remoteReaddir(client, join(dropboxRoot, dir)).catch((err) => {
+      if (dir === "/" || !vanishedFolder(err)) throw err;
+      summary.vanished.push({ dir, tag: dropboxTag(err) });
+      return null;
+    }),
     localReaddir(blogID, dir),
   ]);
+
+  // Dropbox no longer has this folder: remove nothing, and check once the
+  // walk is done whether the cursor explains it (see resetToBlotWithClient)
+  if (!remoteContents) return;
 
   for (const { name, path_display, is_directory } of localContents) {
     const pathOnBlot = join(dir, name);
@@ -568,8 +600,7 @@ const deletedRecently = async (client, dropboxRoot, files, startedAt) => {
 //   removed folder via the files that were in it;
 // - a created folder with a recently modified file downloaded into it.
 // A change that none of these excuses is counted by countChanges.
-const excuseRecentChanges = async (client, cursor, dropboxRoot, summary) => {
-  const changed = await changedSinceCursor(client, cursor, dropboxRoot);
+const excuseRecentChanges = async (client, changed, dropboxRoot, summary) => {
   let lookups = 0;
 
   for (const path of summary.changedPaths) {
@@ -622,6 +653,12 @@ const localReaddir = async (blogID, dir) => {
     };
   });
 };
+
+// list_folder's 409 for a path that is no longer a folder in Dropbox
+const vanishedFolder = (err) =>
+  err &&
+  err.status === 409 &&
+  /^path\/(not_found|not_folder)\b/.test(dropboxTag(err));
 
 const remoteReaddir = async (client, dir) => {
   let items = [];

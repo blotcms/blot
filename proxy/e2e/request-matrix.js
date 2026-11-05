@@ -340,7 +340,7 @@ section("1 blog pages and files on a subdomain", async () => {
   const r = await get(A, host, "/post/hello-world");
   check("a hit carries the proxy's own headers (Blot-Server, Server: openresty)", !!r.headers["blot-server"] && r.headers.server === "openresty", JSON.stringify(r.headers));
   const health = await req(A, host, "/health");
-  check("KNOWN: no response from a blog host carries X-Content-Type-Options: nosniff, though http.conf sets it (the server block's add_header Alt-Svc replaces the inherited one)", r.headers["x-content-type-options"] === undefined && health.headers["x-content-type-options"] === undefined, `${r.headers["x-content-type-options"]} / ${health.headers["x-content-type-options"]}`);
+  check("no response from a blog host carries X-Content-Type-Options (the proxy does not set it)", r.headers["x-content-type-options"] === undefined && health.headers["x-content-type-options"] === undefined, `${r.headers["x-content-type-options"]} / ${health.headers["x-content-type-options"]}`);
   const up = await get(A, host, "/post/upstream-header");
   check("Blot-Upstream names the Node that answered, on a miss", /^127\.0\.0\.1:80(88|89|90|91)$/.test(up.headers["blot-upstream"] || ""), up.headers["blot-upstream"]);
 });

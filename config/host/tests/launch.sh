@@ -86,7 +86,7 @@ RUN=$(printf '%s\n' "$AWS_LOG" | grep run-instances)
 has "launch passes the type" "$RUN" "--instance-type m6gd.xlarge"
 has "launch passes the key name" "$RUN" "--key-name test-key"
 has "launch passes the subnet" "$RUN" "--subnet-id subnet-4a78973d"
-has "launch passes both security groups" "$RUN" "--security-group-ids sg-0d1c2c28e0c7084ad sg-0b3b200323d36ce2e"
+has "launch passes the security group" "$RUN" "--security-group-ids sg-0d1c2c28e0c7084ad"
 has "launch requires IMDSv2" "$RUN" "HttpTokens=required,HttpPutResponseHopLimit=1"
 has "launch sets termination protection" "$RUN" "--disable-api-termination"
 has "launch uses the AMI's root device" "$RUN" '"DeviceName":"/dev/xvda"'

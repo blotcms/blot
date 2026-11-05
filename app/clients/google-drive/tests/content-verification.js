@@ -7,6 +7,7 @@ const verify = require("../util/verifyContent");
 const fingerprint = require("../util/contentFingerprint");
 const checksum = require("../util/md5Checksum");
 const digest = value => crypto.createHash("md5").update(value).digest("hex");
+const sha1 = value => crypto.createHash("sha1").update(value).digest("hex");
 
 describe("Drive verified content on disk", function () {
   let directory, filename;
@@ -17,19 +18,24 @@ describe("Drive verified content on disk", function () {
   });
   afterEach(async function () { await fs.remove(directory); });
 
-  it("binds a matching checksum to the actual file fingerprint", async function () {
+  it("gives a matching checksum with the file's SHA-1, from one read", async function () {
     expect(await verify(filename, digest("aaaa"))).toEqual({
       checksum: digest("aaaa"),
-      fingerprint: fingerprint(await fs.stat(filename, { bigint: true })),
+      sha1: sha1("aaaa"),
     });
   });
 
-  it("invalidates same-size edits through the changed modification time", async function () {
-    const original = await verify(filename, digest("aaaa"));
+  it("does not vouch for a same-size edit", async function () {
     await fs.writeFile(filename, "bbbb");
     expect(await verify(filename, digest("aaaa"))).toBeNull();
-    const changed = await verify(filename, digest("bbbb"));
-    expect(changed.fingerprint).not.toBe(original.fingerprint);
+    expect((await verify(filename, digest("bbbb"))).sha1).toBe(sha1("bbbb"));
+  });
+
+  it("hashes a file with both MD5 and SHA-1, or gives null for one it can't read", async function () {
+    expect(await checksum(filename)).toBe(digest("aaaa"));
+    expect(await checksum.withSha1(filename)).toEqual({ md5: digest("aaaa"), sha1: sha1("aaaa") });
+    expect(await checksum.withSha1(directory)).toBeNull();
+    expect(await checksum(join(directory, "missing"))).toBeNull();
   });
 
   it("is size and nanosecond mtime only, with no inode, device or ctime", async function () {
@@ -51,10 +57,12 @@ describe("Drive verified content on disk", function () {
 
   it("declines verification if the file changes while its checksum is being established", async function () {
     const module = { exports: {} };
-    const racingChecksum = async path => {
-      const result = await checksum(path);
-      await fs.writeFile(path, "bbbb");
-      return result;
+    const racingChecksum = {
+      withSha1: async path => {
+        const result = await checksum.withSha1(path);
+        await fs.writeFile(path, "bbbb");
+        return result;
+      },
     };
     vm.runInNewContext(fs.readFileSync(require.resolve("../util/verifyContent"), "utf8"), {
       module,

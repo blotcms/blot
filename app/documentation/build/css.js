@@ -18,6 +18,10 @@ module.exports = ({ source, destination }) => async () => {
   );
 
   const dashboardFiles = cssFilePaths.filter((i) => i.includes("/dashboard/"));
+
+  // CodeMirror's stylesheet comes from npm and goes first, so Blot's
+  // overrides in dashboard/template/css/codemirror-theme.css win.
+  const codeMirrorCSS = require.resolve("codemirror/lib/codemirror.css");
   const documentationFiles = cssFilePaths.filter(
     (i) =>
       !dashboardFiles.includes(i) && !isExcludedFromDocumentationBundle(i)
@@ -36,7 +40,7 @@ module.exports = ({ source, destination }) => async () => {
     prettySize(Buffer.byteLength(fullDocumentationCSS, "utf8") / 1024)
   );
 
-  const dashboardCSS = await mergeCSSFiles(dashboardFiles);
+  const dashboardCSS = await mergeCSSFiles([codeMirrorCSS, ...dashboardFiles]);
   await fs.writeFile(
     join(destination, "dashboard.min.css"),
     dashboardCSS.styles

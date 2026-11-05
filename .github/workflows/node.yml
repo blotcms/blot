@@ -156,6 +156,10 @@ jobs:
         if: always()
         run: node scripts/tests/ci/check-folder-access.js
 
+      - name: Check scripts and workflows have no emoji
+        if: always()
+        run: node scripts/tests/ci/check-no-emoji.js
+
       - name: List test suites
         if: always()
         run: node scripts/tests/ci/plan.js --suites | jq -r '.[]' | tee matrix_suites.txt
@@ -494,5 +498,5 @@ jobs:
         run: |
           echo "Job results: $RESULTS"
           for r in $RESULTS; do
-            [ "$r" = "success" ] || { echo "❌ A required job did not succeed"; exit 1; }
+            [ "$r" = "success" ] || { echo "[FAIL] A required job did not succeed"; exit 1; }
           done

@@ -85,6 +85,17 @@ function bodyOf(req) {
 
   const gunzip = zlib.createGunzip();
   req.pipe(gunzip);
+
+  // A client which goes away part way through ends the request with an error
+  // or an abort, which piping does not pass on: without this the receive
+  // would wait on the decoder for ever, holding its cache reservation
+  req.on("error", function (err) {
+    gunzip.destroy(err);
+  });
+  req.on("aborted", function () {
+    gunzip.destroy(new Error("aborted"));
+  });
+
   return gunzip;
 }
 

@@ -62,7 +62,7 @@ async function purgeUrlWithRetries(urlToPurge) {
         console.log(
           `Purged Bunny CDN: ${urlToPurge} (attempt ${attempt}/${totalAttempts})`
         );
-        return;
+        return true;
       }
 
       if (res.status === 429 && attempt < totalAttempts) {
@@ -77,13 +77,13 @@ async function purgeUrlWithRetries(urlToPurge) {
         `Failed to purge Bunny CDN: ${urlToPurge} (attempt ${attempt}/${totalAttempts})`,
         res.status
       );
-      return;
+      return false;
     } catch (err) {
       console.error(
         `Error purging Bunny CDN: ${urlToPurge} (attempt ${attempt}/${totalAttempts})`,
         err
       );
-      return;
+      return false;
     }
   }
 }
@@ -91,28 +91,33 @@ async function purgeUrlWithRetries(urlToPurge) {
 /**
  * Purge URLs from Bunny CDN cache
  * @param {string[]} urls - Array of URLs to purge (will be encoded internally)
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>} false if any purge failed
  */
 async function purgeCdnUrls(urls) {
   if (config.environment !== "production") {
-    return;
+    return true;
   }
 
   if (!config.bunny || !config.bunny.secret) {
-    return;
+    return true;
   }
 
   if (!Array.isArray(urls) || urls.length === 0) {
-    return;
+    return true;
   }
+
+  let ok = true;
 
   for (const urlToPurge of urls) {
     try {
-      await limiter.schedule(() => purgeUrlWithRetries(urlToPurge));
+      if (!(await limiter.schedule(() => purgeUrlWithRetries(urlToPurge)))) ok = false;
     } catch (err) {
+      ok = false;
       console.error(`Error purging Bunny CDN: ${urlToPurge}`, err);
     }
   }
+
+  return ok;
 }
 
 module.exports = purgeCdnUrls;

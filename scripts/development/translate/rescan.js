@@ -64,6 +64,9 @@ async function rescanWithRetry(blogID) {
 
   for (let attempt = 1; attempt <= LOCK_ATTEMPTS; attempt++) {
     try {
+      // Content the operator dropped into the Local client's source directory
+      // reaches the folder first (the watcher ignores what it didn't see)
+      await require("clients/local/setup").reconcileSource(blogID);
       return await rescanOnce(blogID);
     } catch (err) {
       lastError = err;
