@@ -88,11 +88,19 @@ logencoding = auto
 polling_file = true
 maxlines = 100
 
+# Repeat offenders of the nginx jails, for a week. Web ports only, like the
+# jails it watches (TCP and UDP for HTTP/3): an all-ports ban also blocked ssh,
+# and GitHub's Actions runners come from shared cloud ranges, so a runner given
+# an address a scraper once had could not reach the host and the deploy hung on
+# its first ssh (5 Nov 2026). ssh is key-only, which is its hardening.
 [recidive]
 enabled = true
 logpath = /var/log/fail2ban.log
 backend = polling
-banaction = iptables-allports
+port = http,https
+banaction = iptables-multiport
+action = %(action_)s
+         iptables-multiport[name=%(__name__)s-udp, port="http,https", protocol=udp]
 bantime = 1w
 findtime = 1d
 maxretry = 3

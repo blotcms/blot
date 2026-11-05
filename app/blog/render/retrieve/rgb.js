@@ -1,7 +1,7 @@
 // This is useful for maniplating colors for producing
 // lower-opacity versions of the color, e.g.
 // background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.1);
-const tinyColor = require("helper/tinyColor");
+const tinyColor = require("tinycolor2");
 const asRetriever = require("../../lib/asRetriever");
 
 module.exports = asRetriever(function (req, res) {

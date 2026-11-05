@@ -55,18 +55,21 @@ describe("sandbox image jobs", function () {
         input
       );
 
-      expect(meta).toEqual([
-        { width: 100, height: 50, format: "png" },
-        { width: 100, height: 100, format: "png" },
-        { width: 400, height: 200, format: "png" },
-      ]);
+      expect(meta).toEqual({
+        source: { format: "png", width: 400, height: 200 },
+        thumbnails: [
+          { width: 100, height: 50, format: "png" },
+          { width: 100, height: 100, format: "png" },
+          { width: 400, height: 200, format: "png" },
+        ],
+      });
       expect(outputs.length).toEqual(3);
       expect((await sharp(outputs[1]).metadata()).format).toEqual("png");
     });
 
     it("encodes in the format of the extension", async function () {
       const { meta, outputs } = await sandbox.run("thumbnail", valid, await image(400, 200));
-      expect(meta[0].format).toEqual("jpeg");
+      expect(meta.thumbnails[0].format).toEqual("jpeg");
       expect((await sharp(outputs[0]).metadata()).format).toEqual("jpeg");
     });
 
@@ -77,7 +80,7 @@ describe("sandbox image jobs", function () {
         .png()
         .toBuffer();
       const { meta } = await sandbox.run("thumbnail", valid, input);
-      expect(meta[0].format).toEqual("jpeg");
+      expect(meta.thumbnails[0].format).toEqual("jpeg");
     });
 
     it("keeps the input's format for an extension sharp doesn't know", async function () {
@@ -87,7 +90,7 @@ describe("sandbox image jobs", function () {
         .png()
         .toBuffer();
       const { meta } = await sandbox.run("thumbnail", { ...valid, extension: ".xyz" }, input);
-      expect(meta[0].format).toEqual("png");
+      expect(meta.thumbnails[0].format).toEqual("png");
     });
 
     it("handles animated images", async function () {
@@ -96,8 +99,44 @@ describe("sandbox image jobs", function () {
         { extension: ".gif", animated: true, sizes: [{ size: 50, crop: true }] },
         require("fs").readFileSync(__dirname + "/../../build/plugins/image/tests-image.gif")
       );
-      expect(meta[0].format).toEqual("gif");
-      expect(meta[0].width).toBeLessThanOrEqual(50);
+      expect(meta.thumbnails[0].format).toEqual("gif");
+      expect(meta.thumbnails[0].width).toBeLessThanOrEqual(50);
+    });
+
+    describe("with accept", function () {
+      const accept = { formats: ["png", "jpeg", "gif"], minWidth: 64, minHeight: 64 };
+
+      it("makes the thumbnails of an image it accepts", async function () {
+        const { meta, outputs } = await sandbox.run("thumbnail", { ...valid, accept }, await image(400, 200));
+        expect(meta.source).toEqual({ format: "png", width: 400, height: 200 });
+        expect(meta.thumbnails.length).toEqual(1);
+        expect(outputs.length).toEqual(1);
+      });
+
+      it("makes none for an image that is too small", async function () {
+        for (const [width, height] of [[63, 200], [200, 63]]) {
+          const { meta, outputs } = await sandbox.run("thumbnail", { ...valid, accept }, await image(width, height));
+          expect(meta).toEqual({ source: { format: "png", width, height }, thumbnails: null });
+          expect(outputs).toEqual([]);
+        }
+      });
+
+      it("makes none for a format it doesn't list", async function () {
+        const { meta, outputs } = await sandbox.run("thumbnail", { ...valid, accept }, await image(400, 200, "webp"));
+        expect(meta).toEqual({ source: { format: "webp", width: 400, height: 200 }, thumbnails: null });
+        expect(outputs).toEqual([]);
+      });
+
+      it("measures the first frame of an animated image", async function () {
+        const gif = require("fs").readFileSync(__dirname + "/../../build/plugins/image/tests-image.gif");
+        const { meta } = await sandbox.run(
+          "thumbnail",
+          { extension: ".gif", animated: true, sizes: [{ size: 50, crop: true }], accept },
+          gif
+        );
+        const first = await sharp(gif).metadata();
+        expect(meta.source).toEqual({ format: "gif", width: first.width, height: first.height });
+      });
     });
 
     it("rejects arguments it does not expect", async function () {
@@ -121,6 +160,13 @@ describe("sandbox image jobs", function () {
         { ...valid, sizes: [{ size: "160", crop: false }] },
         { ...valid, sizes: [{ size: 160 }] },
         { ...valid, sizes: [{ size: 160, crop: "true" }] },
+        { ...valid, accept: "png" },
+        { ...valid, accept: { formats: [], minWidth: 1, minHeight: 1 } },
+        { ...valid, accept: { formats: ["../png"], minWidth: 1, minHeight: 1 } },
+        { ...valid, accept: { formats: [1], minWidth: 1, minHeight: 1 } },
+        { ...valid, accept: { formats: ["png"], minWidth: -1, minHeight: 1 } },
+        { ...valid, accept: { formats: ["png"], minWidth: 1, minHeight: 1.5 } },
+        { ...valid, accept: { formats: ["png"], minWidth: 1 } },
       ];
       for (const args of bad) {
         expect(await rejection(sandbox.run("thumbnail", args, input))).not.toBeNull();

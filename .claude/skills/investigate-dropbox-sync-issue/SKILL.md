@@ -351,3 +351,10 @@ Entry template:
   <dir>: 409 path/…": that's not a race, so investigate. The report also
   appends a Dropbox error's `error_summary` to its message. Tip: a deploy between the run and the
   investigation wipes the logs; check `docker inspect -f '{{.State.StartedAt}}'` first.
+
+### 2026-11-04 01:00:00 UTC validation run — slow progressing sync, not hung
+
+- Alert: long-held folder lock; blue/node-a validation started 01:00:00.051 and completed 01:03:18.838.
+- Key events (UTC): green/node-b `sync_1ea1bac` acquired its lock 2026-11-03 23:38:21.307, fetched batches at 23:38:29.584, 01:21:28.616 and 02:54:05.760, and finished 02:56:12.685. Updates kept completing throughout; sampled logs show the same dependent entry rebuilt after individual asset updates, with median save duration ~13.4s.
+- Cause: repeated dependent rebuilds during a large delta batch, not a dead process or a stuck API retry. The latest network-retry and vanished-subfolder changes do not explain the observed update-stage delay; storage/build changes may affect its cost and need profiling before attributing a regression.
+- Follow-up: batch dependent rebuilds and distinguish progress from lock age (root TODO). Blue/node-b validation 03:00:00.036–03:03:08.666 completed cleanly, including this folder. Separately, HTTP image bursts produced 429s and matching temporary fail2ban bans; these are independent of the folder mutex and still need remediation.

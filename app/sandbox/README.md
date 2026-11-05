@@ -28,6 +28,8 @@ starts `SANDBOX_`, and it never falls back to in-process.
 
 - `metadata` format, size and orientation of an image.
 - `thumbnail` the thumbnail sizes of one image, static or animated; one output per size.
+  With `accept` (formats and minimum sizes) it first checks the image can be a
+  thumbnail and makes none if not, so a candidate costs one jail, not two.
 - `resize` shrinks an image to fit inside a square, in its own format.
 - `to-png` converts an image (HEIC, AVIF, TIFF...) to PNG.
 - `exif` exiftool on stdin, reduced to the fields asked for. It spawns
@@ -42,18 +44,22 @@ starts `SANDBOX_`, and it never falls back to in-process.
   document in the input, their lengths in the args. outputs[0] is the HTML and
   the rest are the media pandoc extracted from a docx or odt, named in
   `meta.media`; the converters write them to the blog's assets. A document
-  pandoc can't convert, or its 10s timeout, is `meta.error`, so it fails the
-  build like any bad file without being a sandbox failure. pandoc killed for
-  any other reason (the jail's memory limit) is `meta.error` too, since the job
-  survives it; the caller rejects with `SANDBOX_KILLED` and reports it to
-  `alerts.js`, because the broker would only see "failed". It spawns
-  `/usr/local/bin/pandoc`, bound on its own; in-process it honours
-  `BLOT_PANDOC_PATH`. The callouts Lua filter is `jobs/callouts.lua`. It has
-  the usual 512 MiB and 128 MiB `/tmp`, under the unit's sandbox subtree's cap,
-  and caps pandoc's heap at 400M so that most documents too large for it fail as
-  pandoc errors. A very large docx or odt (tens of MB of images, which sit in
-  `/tmp` and in Node as well as in pandoc) can still exceed the jail. That is
-  accepted: it emails the admin.
+  pandoc can't convert is `meta.error`, so it fails the build like any bad file
+  without being a sandbox failure. The callouts Lua filter is `jobs/callouts.lua`.
+
+  **In a jail it is a worker** (see below): `pandoc lua jobs/pandoc-worker.lua`,
+  which converts one document after another, so a document doesn't pay for a
+  jail, Node and pandoc's start-up each time (a typical post went from about
+  104 ms to 22 ms through the broker, before nsjail's own setup). The worker
+  converts exactly as `jobs/pandoc.js`, the in-process job that development and
+  the specs run, does with the CLI; `tests/pandoc-worker.js` runs every
+  converter fixture through both, so a change to the options in one must be
+  made in the other. It has the usual 512 MiB and 128 MiB `/tmp`, under the
+  unit's sandbox subtree's cap, and caps pandoc's heap at 400M. A document gets
+  15s, after which the broker kills its worker: the caller fails that document
+  with "Pandoc exited ... (timed out)", and `alerts.js` logs it instead of
+  emailing. pandoc killed by the jail's memory limit is `SANDBOX_KILLED`, which
+  emails the admin; a heap pandoc can't grow (it exits) is `SANDBOX_FAILED`.
 - `unzip` a zip archive into its files, one output each. It refuses absolute and
   upward paths, symlinks, too many records, too many bytes and too high a ratio
   (a bad archive is a `meta.error`, not a thrown error). Output stops at 60 MiB.
@@ -206,6 +212,38 @@ The broker runs at most 4 jails, fewer of a job with its own `maxRunning` or `cg
 takes no paths, and logs one line per failed job with no input data. A client
 that vanishes after ending its input is not noticed until the jail finishes,
 which is at most its time limit.
+
+## Workers
+
+A job with `worker` in `proxy/unit/sandbox/jail.js` (only `pandoc` so far)
+keeps its jails for many requests instead of starting one for each. The
+client's side is the same: one connection is one request, answered as a jail's
+stdout. The broker takes an idle worker, or starts one, and sends it the
+client's bytes in frames, `<length>\n<bytes>`, ended by `0\n`. The worker
+answers `<length>\n` and that many bytes, or `E\n` for arguments it refuses
+(`failed`, and it carries on). A busy worker counts as a running jail, as any
+job does, so the broker's limit of 4 and its queue are unchanged.
+
+- **Replaced** when it dies (`failed`, or `killed` past the jail's memory),
+  answers nonsense, takes longer than `requestSeconds` on a request
+  (`timeout`), gets more input than the job's limit, or loses its client
+  mid-request.
+- **Retired**, by closing its stdin, after `requests` requests or
+  `maxAgeSeconds` (before nsjail's own time limit, its whole life,
+  `timeSeconds`), after `idleSeconds` idle, after a heavy request (more than
+  `heavyInputBytes` in or `heavyMs` of work, since its heap may have grown), or
+  when `maxIdle` workers already wait.
+
+So a worker sees documents from many blogs, one after another. A document
+that compromised pandoc could tamper with the HTML of those converted after
+it in the same worker, for as long as it lives. That is accepted for the
+speed, as screenshot batches accept it for their pages; the jail boundary
+itself is unchanged.
+
+Memory: at most 4 busy workers (the broker's limit across all jobs) and
+`maxIdle` (2) idle ones, all in the unit's sandbox subtree. An idle pandoc
+worker holds about 20-40 MiB of its own; the ~85 MiB of pandoc's binary is page
+cache that every pandoc jail shares.
 
 ## Adding a job
 

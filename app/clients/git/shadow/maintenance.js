@@ -37,6 +37,7 @@ const path = require("path");
 const config = require("config");
 const Blog = require("models/blog");
 const hook = require("./hook");
+const servedSwitch = require("../served/switch");
 const shadow = require("./index");
 const { manifest, layout } = require("../store");
 const sweep = require("../store/sweep");
@@ -120,7 +121,16 @@ async function scratch({ scratchDir = defaultScratchDir(), minAge, now = Date.no
 
 // Whether shadow mode is set up, so there is anything to look after
 function configured() {
-  return !!String((config.git_store && config.git_store.shadow) || "").trim() && shadow.hasStore();
+  return !!(setting("shadow") || setting("serve")) && shadow.hasStore();
+}
+
+function setting(name) {
+  return String((config.git_store && config.git_store[name]) || "").trim();
+}
+
+// Whether the blog is looked after: shadowed, or served from the store
+function lookedAfter(blogID) {
+  return hook.enabled(blogID) || servedSwitch.enabled(blogID);
 }
 
 // ---- Which blogs ----------------------------------------------------------
@@ -129,18 +139,18 @@ function configured() {
 // for, or with `all` every one. `ids` limits them to those blogs. There is no
 // index of blogs by client, so a setting of "all" (or `all`) walks every blog.
 async function gitBlogs({ all = false, ids = null } = {}) {
-  const setting = String((config.git_store && config.git_store.shadow) || "").trim();
+  const listed = [setting("shadow"), setting("serve")];
   let candidates = ids;
 
   if (!candidates) {
-    if (!all && setting !== "all") candidates = setting.split(",").map((id) => id.trim()).filter(Boolean);
+    if (!all && listed.indexOf("all") === -1) candidates = listed.join(",").split(",").map((id) => id.trim()).filter(Boolean);
     else candidates = await allBlogIDs();
   }
 
   const found = [];
 
   await each([...new Set(candidates)], 16, async (blogID) => {
-    if (!all && !hook.enabled(blogID)) return;
+    if (!all && !lookedAfter(blogID)) return;
     const blog = await getBlog({ id: blogID });
     if (blog && blog.client === "git") found.push(blogID);
   });
@@ -284,11 +294,11 @@ async function deepCheck(ctx, scratchDir) {
 
 // Runs a check, and once more after a delay if it found anything; a check
 // which throws is an "error" finding
-async function twice(ctx, check, recheckDelayMs) {
+async function twice(ctx, check, recheckDelayMs, between) {
   let result;
 
   for (let attempt = 1; attempt <= 2; attempt++) {
-    if (attempt === 2) await sleep(recheckDelayMs);
+    if (attempt === 2) await (between ? between() : sleep(recheckDelayMs));
 
     try {
       result = await measure(check);
@@ -339,8 +349,13 @@ async function verify(blogID, { deep = false, cheap = true, scratchDir = default
     return { blog: blogID, skipped: true, deep: false, findings: [] };
   }
 
+  // A blog served from the store: EBS is the copy that follows. A difference
+  // is caught up by the fallback (../served/fallback.js) rather than waited
+  // out, and only what is left after it counts.
+  const between = servedSwitch.enabled(blogID) ? () => require("../served/fallback").request(blogID, { reason: "verify" }) : null;
+
   if (cheap) {
-    const found = report(blogID, "cheap", await twice(ctx, () => cheapCheck(ctx), recheckDelayMs));
+    const found = report(blogID, "cheap", await twice(ctx, () => cheapCheck(ctx), recheckDelayMs, between));
     if (found.length || !deep) return { blog: blogID, findings: found, deep: false };
   }
 

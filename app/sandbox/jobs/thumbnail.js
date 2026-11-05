@@ -2,9 +2,15 @@
 // in-process (see ../index.js). The args come from a process we treat as less
 // trusted than this one, so they are checked here, not just in the caller:
 //
-//   { extension: ".jpg", animated: false, sizes: [{ size: 160, crop: false }] }
+//   { extension: ".jpg", animated: false, sizes: [{ size: 160, crop: false }],
+//     accept: { formats: ["jpeg", "png"], minWidth: 64, minHeight: 64 } }
 //
-// meta is [{ width, height, format }] and outputs is [Buffer], one per size.
+// meta is { source, thumbnails }: source is the image's { format, width,
+// height }, as the metadata job reads them, and thumbnails is [{ width, height,
+// format }], with outputs [Buffer], one per size. With accept, an image whose
+// format isn't listed or which is smaller than the minimums gets no thumbnails
+// (thumbnails is null, outputs empty), so a thumbnail candidate is checked and
+// made in one jail, not two.
 
 const sharp = require("sharp");
 const { encode, isExtension } = require("./encode");
@@ -16,6 +22,32 @@ sharp.cache(false);
 
 const MAX_SIZES = 16;
 const MAX_SIZE = 8192;
+const MAX_FORMATS = 16;
+const FORMAT = /^[a-z0-9]{1,16}$/;
+
+function checkAccept(accept) {
+  if (accept === undefined || accept === null) return null;
+  if (typeof accept !== "object") throw new Error("invalid accept");
+  const { formats, minWidth, minHeight } = accept;
+  if (
+    !Array.isArray(formats) ||
+    !formats.length ||
+    formats.length > MAX_FORMATS ||
+    !formats.every((format) => typeof format === "string" && FORMAT.test(format))
+  ) {
+    throw new Error("invalid accept formats");
+  }
+  for (const n of [minWidth, minHeight]) {
+    if (!Number.isInteger(n) || n < 0 || n > MAX_SIZE) throw new Error("invalid accept size");
+  }
+  return { formats: formats.slice(), minWidth, minHeight };
+}
+
+function accepted(source, accept) {
+  if (!accept) return true;
+  if (!source.format || accept.formats.indexOf(source.format.toLowerCase()) === -1) return false;
+  return source.width >= accept.minWidth && source.height >= accept.minHeight;
+}
 
 function check(args) {
   if (!args || typeof args !== "object") throw new Error("invalid arguments");
@@ -36,14 +68,20 @@ function check(args) {
     return { size, crop: options.crop };
   });
 
-  return { extension: args.extension, animated: args.animated, sizes };
+  return { extension: args.extension, animated: args.animated, sizes, accept: checkAccept(args.accept) };
 }
 
 async function run(args, input) {
-  const { extension, animated, sizes } = check(args);
+  const { extension, animated, sizes, accept } = check(args);
+
+  // The first frame's size, as the metadata job reads it, animated or not
+  const { format, width, height } = await sharp(input).metadata();
+  const source = { format, width, height };
+  if (!accepted(source, accept)) return { meta: { source, thumbnails: null }, outputs: [] };
+
   const image = sharp(input, animated ? { animated: true } : undefined);
 
-  const meta = [];
+  const thumbnails = [];
   const outputs = [];
 
   // One at a time, to keep the memory of the jail down
@@ -67,11 +105,11 @@ async function run(args, input) {
     }
 
     const { data, info } = await encode(transform, extension);
-    meta.push({ width: info.width, height: info.height, format: info.format });
+    thumbnails.push({ width: info.width, height: info.height, format: info.format });
     outputs.push(data);
   }
 
-  return { meta, outputs };
+  return { meta: { source, thumbnails }, outputs };
 }
 
 module.exports = { run };
