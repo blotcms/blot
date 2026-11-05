@@ -114,15 +114,15 @@ describe("daily update storage", function () {
     });
   });
 
-  it("renders in the daily email between the server and data disk lines", function () {
+  it("renders in the daily email after the server line", function () {
     const fs = require("fs");
     const Mustache = require("mustache");
     const template = fs.readFileSync(__dirname + "/../../../helper/email/admin/DAILY_UPDATE.txt", "utf8");
-    const view = { redis: "Redis: x", server: "Server: y", data_disk: "Data disk: z" };
+    const view = { redis: "Redis: x", server: "Server: y" };
 
     expect(Mustache.render(template, { ...view, storage: "Storage: 2 TB in 5 objects" })).toContain(
-      "Server: y\n\nStorage: 2 TB in 5 objects\n\nData disk: z"
+      "Server: y\n\nStorage: 2 TB in 5 objects\n\nSync:"
     );
-    expect(Mustache.render(template, view)).toContain("Server: y\n\nData disk: z");
+    expect(Mustache.render(template, view)).toContain("Server: y\n\nSync:");
   });
 });

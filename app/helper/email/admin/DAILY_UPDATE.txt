@@ -14,8 +14,6 @@ Response time: {{render_time}}
 {{{storage}}}
 
 {{/storage}}
-{{{data_disk}}}
-
 Sync: {{sync_summary}}
 
 Newsletter subscribers: {{newsletter_subscribers}}

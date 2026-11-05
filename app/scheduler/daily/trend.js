@@ -1,5 +1,5 @@
 // The "27% (stable, 19 GB free)" format the daily email uses for Redis memory,
-// the Redis host's disk and the data disk, and the history behind the trend.
+// the Redis host's disk, and the history behind the trend.
 //
 // Each figure keeps the last few daily readings of how much it uses, as JSON
 // [{ time, used, scope? }] in Redis with no TTL. The trend is the growth from

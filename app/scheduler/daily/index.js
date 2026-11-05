@@ -34,8 +34,6 @@ function main (callback) {
       require("./redis-server"),
       log("Checking the storage bucket"),
       require("./storage"),
-      log("Checking the data disk"),
-      require("./data-disk"),
       log("Finished daily update")
     ],
     function (fn, next) {
