@@ -28,6 +28,9 @@ DEPLOY_USER_SCRIPT=$(dirname "$HERE")/setup-deploy-user.sh
 [ -f "$DEPLOY_USER_SCRIPT" ] || DEPLOY_USER_SCRIPT=$(dirname "$HERE")/../../scripts/deploy/setup-deploy-user.sh
 REDIS_SETUP=$(dirname "$HERE")/redis/host/setup.sh
 [ -f "$REDIS_SETUP" ] || REDIS_SETUP=$(dirname "$HERE")/../redis/host/setup.sh
+# The same for the storage bucket's offsite scripts (config/storage-bucket/bin).
+STORAGE_BIN=$(dirname "$HERE")/storage-bucket/bin
+[ -d "$STORAGE_BIN" ] || STORAGE_BIN=$(dirname "$HERE")/../storage-bucket/bin
 
 [ "$(id -u)" = 0 ] || { echo "run as root" >&2; exit 1; }
 
@@ -110,7 +113,8 @@ say "Packages"
 # the jails' iptables-multiport banaction. nftables is for the port 6379 rule
 # below; its nftables.service is never enabled, because the default config
 # flushes the whole ruleset, fail2ban's and docker's included.
-PACKAGES="docker fail2ban-server iptables-nft nftables rsyslog cronie chrony rsync xfsprogs nvme-cli redis6 logrotate lsof sqlite"
+# rclone is for the storage bucket's offsite sync, below.
+PACKAGES="docker fail2ban-server iptables-nft nftables rsyslog cronie chrony rsync xfsprogs nvme-cli redis6 logrotate lsof sqlite rclone"
 missing=""
 for pkg in $PACKAGES; do rpm -q "$pkg" > /dev/null 2>&1 || missing="$missing $pkg"; done
 # shellcheck disable=SC2086
@@ -234,6 +238,67 @@ say "Services"
 sd enable --now crond rsyslog chronyd
 # Not started: deploy.sh installs its config and starts it.
 sd enable fail2ban
+
+say "Storage offsite sync"
+# The daily copy of the storage bucket to B2 (config/storage-bucket/README.md,
+# "Offsite backup and restore"). Inert until /etc/blot/storage-offsite-bucket
+# names a bucket and the host is marked active, so the timer is enabled on
+# every host. A unit, not cron, for the resource limits: it runs for a while
+# beside the units and Redis. As ec2-user in system.slice, so the app firewall
+# below refuses it the metadata service and private ranges too; it needs only
+# S3, B2 and Redis on loopback.
+for f in offsite-lib.sh offsite-sync.sh offsite-restore-test.sh; do
+  mode=0755
+  [ "$f" != offsite-lib.sh ] || mode=0644
+  put "/usr/local/lib/blot-storage/$f" "$mode" root:root < "$STORAGE_BIN/$f"
+done
+put /etc/systemd/system/blot-storage-offsite.service 0644 root:root <<EOF2
+# Installed by config/host/host/setup.sh.
+[Unit]
+Description=Copy the storage bucket to Backblaze B2 (config/storage-bucket/bin/offsite-sync.sh)
+Wants=network-online.target
+After=network-online.target redis6.service
+
+[Service]
+Type=oneshot
+User=$APP_USER
+ExecStart=/usr/local/lib/blot-storage/offsite-sync.sh
+StandardOutput=append:/home/$APP_USER/storage-offsite.log
+StandardError=append:/home/$APP_USER/storage-offsite.log
+Nice=19
+IOSchedulingClass=idle
+CPUWeight=20
+MemoryMax=1G
+# Stopped before the next day's run. The next run carries on from where it got.
+TimeoutStartSec=20h
+EOF2
+put /etc/systemd/system/blot-storage-offsite.timer 0644 root:root <<'EOF2'
+# Installed by config/host/host/setup.sh.
+[Unit]
+Description=Daily copy of the storage bucket to Backblaze B2
+
+[Timer]
+# After the 01:00 hour (wildcard renewal) and before the Redis daily backup
+# (03:05), the 04:15 reconcile and the 05:00 hour (file cleanup).
+OnCalendar=*-*-* 02:10:00 UTC
+
+[Install]
+WantedBy=timers.target
+EOF2
+put /etc/logrotate.d/blot-storage-offsite 0644 root:root <<EOF2
+# Installed by config/host/host/setup.sh.
+/home/$APP_USER/storage-offsite.log {
+    monthly
+    rotate 3
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+}
+EOF2
+sd daemon-reload
+sd enable --now blot-storage-offsite.timer
 
 say "Directories"
 # /var/www/blot/data is where the data volume is mounted later, and
