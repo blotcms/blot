@@ -176,7 +176,7 @@ describe("git client: materialize", function () {
   // 1 MiB semi-space collects the chunks every few MiB, whatever the size of
   // the file. The store is a directory, which the child opens.
   var MEASURE_MEMORY = `
-    var [materialize, store, directory, cacheDirectory, blogID, from, to] = process.argv.slice(1);
+    var [materialize, store, directory, cacheDirectory, blogID, from, to, folderModule] = process.argv.slice(1);
     var { createCache, createReader, createFsStore, manifest } = require(store);
     var objects = createFsStore({ root: directory });
     var cache = createCache({ dir: cacheDirectory, maxBytes: 256 * 1024 * 1024 });
@@ -184,7 +184,14 @@ describe("git client: materialize", function () {
     // so the growth is the file passing through and not the modules
     var run = require(materialize);
 
-    manifest.read(objects).then(function (current) {
+    // One small write and removal loads the S3 client and opens its connection
+    var folder = require(folderModule);
+
+    folder.write(blogID, "/warmup.txt", "x").then(function () {
+      return folder.remove(blogID, "/warmup.txt");
+    }).then(function () {
+      return manifest.read(objects);
+    }).then(function (current) {
       var reader = createReader({ store: objects, cache: cache, manifest: current, scratch: cache });
       var before = process.memoryUsage().rss;
       var peak = before;
@@ -225,6 +232,7 @@ describe("git client: materialize", function () {
           spec.blog.id,
           from,
           to,
+          require.resolve("storage/folder"),
         ],
         function (err, stdout, stderr) {
           if (err) return reject(new Error(err.message + stderr));

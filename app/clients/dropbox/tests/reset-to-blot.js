@@ -122,7 +122,7 @@ describe("dropbox resetToBlot", function () {
     });
 
     it("downloads a file of another size without hashing it", async function () {
-      await fs.outputFile(join(blogDirectory, "a.txt"), "hello world");
+      await storage.write(blogID, "/a.txt", "hello world");
       const resetToBlot = load({
         "/": [{ ...file("a.txt"), content_hash: helloHash, size: 5 }],
       });
@@ -134,7 +134,7 @@ describe("dropbox resetToBlot", function () {
     });
 
     it("hashes a file of the same size, and skips it when the hashes match", async function () {
-      await fs.outputFile(join(blogDirectory, "a.txt"), "hello");
+      await storage.write(blogID, "/a.txt", "hello");
       const resetToBlot = load({
         "/": [{ ...file("a.txt"), content_hash: helloHash, size: 5 }],
       });
@@ -146,7 +146,7 @@ describe("dropbox resetToBlot", function () {
     });
 
     it("downloads a file of the same size when the hashes differ", async function () {
-      await fs.outputFile(join(blogDirectory, "a.txt"), "world");
+      await storage.write(blogID, "/a.txt", "world");
       const resetToBlot = load({
         "/": [{ ...file("a.txt"), content_hash: helloHash, size: 5 }],
       });
