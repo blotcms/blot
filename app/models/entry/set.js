@@ -10,6 +10,7 @@ var key = require("./key");
 var setUrl = require("./_setUrl");
 var Candidates = setUrl.Candidates;
 var Blog = require("models/blog");
+var isEqual = require("lodash").isEqual;
 
 // Queue items
 var rebuildDependencyGraph = require("./_rebuildDependencyGraph");
@@ -40,6 +41,11 @@ module.exports = function set (blogID, path, updates, callback) {
     // A failed read is not a new entry: carrying on would overwrite the stored
     // one, and the caller (e.g. a scheduled publish) needs the Redis error.
     if (err) return callback(err);
+
+    // What is stored now, to tell the caller whether this set changed it.
+    // Compared as data, not as a string: a stored entry's keys are in the
+    // order its build produced them, a re-read one's in Entry's.
+    var stored = entry ? JSON.parse(JSON.stringify(entry)) : null;
 
     // Create an empty object if new entry
     entry = entry || {};
@@ -173,9 +179,11 @@ module.exports = function set (blogID, path, updates, callback) {
         // keys it should have and no more
         ensure(entry, model, true);
 
+        var json = JSON.stringify(entry);
+
         // Store the entry
         redis
-          .set(entryKey, JSON.stringify(entry))
+          .set(entryKey, json)
           .then(function () {
             if (entry.deleted) {
               return redis.expire(entryKey, DELETED_ENTRY_TTL_SECONDS).then(function (result) {
@@ -201,8 +209,11 @@ module.exports = function set (blogID, path, updates, callback) {
 
             if (entry.draft) queue.push(notifyDrafts.bind(this, blogID, entry));
 
-            async.parallel(queue, function (err) {
+            async.parallel(queue, function (err, results) {
               if (err) return callback(err);
+
+              // updateTagList is first in the queue
+              var tagsChanged = !!(results[0] && results[0].changed);
               backlinksToUpdate(
                 blogID,
                 entry,
@@ -212,7 +223,10 @@ module.exports = function set (blogID, path, updates, callback) {
                 function (err, changes) {
                   if (err) return callback(err);
 
-                  if (changes.length)
+                  // An object of linked entry path -> backlinks
+                  var backlinksMoved = Object.keys(changes).length > 0;
+
+                  if (backlinksMoved)
                     console.log(
                       clfdate(),
                       blogID.slice(0, 12),
@@ -248,7 +262,15 @@ module.exports = function set (blogID, path, updates, callback) {
                       } else {
                         console.log(clfdate(), blogID.slice(0, 12), "update", path);
                       }
-                      callback();
+                      // changed: false when the stored entry is exactly as
+                      // it was, no other entry's backlinks moved and no tag
+                      // data changed, so nothing a render reads differs
+                      callback(null, {
+                        changed:
+                          backlinksMoved ||
+                          tagsChanged ||
+                          !isEqual(stored, JSON.parse(json)),
+                      });
                     }
                   );
                 }

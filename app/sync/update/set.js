@@ -64,7 +64,9 @@ function dropEntryAndPreview(blogID, targetPath, callback) {
   });
 }
 
-function buildAndSet(blog, path, multiInfo, callback) {
+// state.unchanged is set when the build stored exactly the entry that was
+// already there (see Entry.set's changed), so nothing derived from it differs
+function buildAndSet(blog, path, multiInfo, state, callback) {
   build(blog, path, function (err, entry) {
     // When a "+" folder can no longer build an aggregate (its files are gone,
     // it was replaced by a file, ...), the previously published entry at the
@@ -159,8 +161,16 @@ function buildAndSet(blog, path, multiInfo, callback) {
           if (entry.metadata && entry.metadata._sourcePaths)
             delete entry.metadata._sourcePaths;
 
-          Entry.set(blog.id, entry.path, entry, function (err) {
+          Entry.set(blog.id, entry.path, entry, function (err, result) {
             if (err) return next(err);
+
+            // Only a plain published entry: dropping other sources changed
+            // something, and a draft rewrites its preview file
+            state.unchanged =
+              !!result &&
+              result.changed === false &&
+              !dropTargets.length &&
+              !entry.draft;
 
             // A successful rebuild means any previous "ignored" record for
             // this path (wrong type, too large, …) is stale. Errors are
@@ -192,9 +202,13 @@ function buildAndSet(blog, path, multiInfo, callback) {
                   syntheticKeys.add(`/__wikilink_filename__/${filenameToken}`);
                 }
 
-                syntheticKeys.forEach((syntheticKey) =>
-                  rebuildDependents(blog.id, syntheticKey, noop)
-                );
+                // An unchanged entry has the same slug and file name, and
+                // the same contentHash, so the same source bytes: what
+                // depends on it would build the same
+                if (!state.unchanged)
+                  syntheticKeys.forEach((syntheticKey) =>
+                    rebuildDependents(blog.id, syntheticKey, noop)
+                  );
 
                 // A draft folder post outside /drafts/ would write "/album.html"
                 // and could clobber a real sibling source file, so skip the
@@ -238,6 +252,7 @@ module.exports = function (blog, path, callback) {
 
   var queue = {};
   var multiInfo = build.findMultiFolder(path);
+  var state = { unchanged: false };
 
   isPreview(blog.id, path, function (err, is_preview) {
     if (err) return callback(err);
@@ -252,11 +267,16 @@ module.exports = function (blog, path, callback) {
 
     // This file should become a blog post or page!
     if (!isPublic(path) && !isTemplate(path) && !is_preview) {
-      queue.buildAndSet = buildAndSet.bind(this, blog, path, multiInfo);
+      queue.buildAndSet = buildAndSet.bind(this, blog, path, multiInfo, state);
     }
 
     async.parallel(queue, function (err) {
       if (err) return callback(err);
+
+      // Calls back with { changed: false } when the file built exactly the
+      // entry already stored, so the caller need not purge the blog's pages
+      if (state.unchanged && !queue.ignore)
+        return callback(null, { changed: false });
 
       var targets = [path];
 

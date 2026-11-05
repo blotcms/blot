@@ -439,6 +439,24 @@ this benchmark's primary signal is conversion timing, not memory; treat a
 `peak_rss_mb` regression as "something in this job's process grew," not
 necessarily "this specific converter grew."
 
+## Build-path micro benchmarks
+
+- [`build-posts.js`](build-posts.js) writes `--files` generated markdown posts
+  of about `--kb` KB into a fresh blog's folder, then runs `sync/rebuild`
+  `--passes` times: the first pass is a full build, later ones rebuild the
+  same, unchanged folder, as a resync does. Reports ms per file, how many
+  blog-wide proxy purges each pass asked for, and whether it bumped the
+  cacheID. Needs Redis, the test MinIO and pandoc; `--profile out.cpuprofile`
+  writes a CPU profile of the passes.
+- [`typeset-bench.js`](typeset-bench.js) times the typeset plugin's walk
+  against typeset's own on generated post HTML, and checks the output is the
+  same. Needs nothing running.
+
+```bash
+NODE_PATH=app node scripts/benchmarks/build-posts.js --files 60 --kb 12
+NODE_PATH=app node scripts/benchmarks/typeset-bench.js --kb 10,50,200
+```
+
 ## Render-path micro benchmark (`render-pages.js`)
 
 Seeds one blog (`--shape typical`: 400 entries of about 6 KB, or
