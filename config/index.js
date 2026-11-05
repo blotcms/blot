@@ -283,10 +283,17 @@ module.exports = {
   // behind its disk, and only while the mirror above covers it (so S3 is kept
   // in step whenever the blog is on disk). So mirror a blog and backfill it
   // (scripts/storage/backfill-folder.js) before or after naming it here; in
-  // development, set BLOT_FOLDER_MIRROR too. Blogs on the Local, Git or
-  // Google Drive client stay on disk. Changes to a blog on S3
-  // are copied to disk, so unsetting this rolls it back (restore its disk
+  // development, set BLOT_FOLDER_MIRROR too. Blogs on the Git client stay on
+  // disk (primary.DISK_CLIENTS) until #2259's cutover. Changes to a blog on
+  // S3 are copied to disk, so unsetting this rolls it back (restore its disk
   // copy first if it is dirty: see app/storage/README). Read on every call.
+  //
+  // The default stays "off": the move to S3 is ramped here, in the production
+  // environment, never by changing this default. In order, each step a deploy
+  // of a new commit, watched in scripts/storage/shadow-report.js (both
+  // directions) and the reconcile emails before the next: the test blogs,
+  // then a few real blogs, then "all". Narrowing it, or "off", is the
+  // rollback. The cleanup PR which removes the disk removes this setting.
   folder_primary: process.env.BLOT_FOLDER_PRIMARY || "off",
 
   // Shadow reads (app/storage/folder/shadow.js, #2258 Phase C): for the
@@ -294,14 +301,21 @@ module.exports = {
   // the S3 backend once the disk has answered, and the two results compared
   // and timed. 0 (the default) is off, 1 is every read. Read on every call.
   // scripts/storage/shadow-report.js prints what it found.
+  //
+  // For blogs on S3 (folder_primary) it runs the other way round, the reverse
+  // shadow: reverse_rate of the reads S3 answered are repeated against the
+  // blog's disk copy. Unset, it is the same as rate; set it higher while only
+  // a few blogs are on S3, so they give enough samples.
   folder_shadow: {
     rate: Number(process.env.BLOT_FOLDER_SHADOW_RATE) || 0,
+    reverse_rate: process.env.BLOT_FOLDER_SHADOW_REVERSE_RATE,
     // Shadow reads running at once in a process; a sample over this is dropped
     max_in_flight: 4,
     // Files bigger than this have their size compared, not their bytes
     max_compare_bytes: 16 * 1024 * 1024,
     // A mismatch is checked again after this long, so a read which raced a
-    // sync (disk changed, S3 not yet) counts as transient, not as drift
+    // sync (disk changed, S3 not yet; for a blog on S3, S3 changed and its
+    // disk copy not yet) counts as transient, not as drift
     recheck_ms: 5000,
   },
 
