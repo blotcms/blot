@@ -2,7 +2,8 @@
 // it was last pushed (iCloud evicting or re-materialising a file is reported
 // as a change). Like macserverDisconnect.js, a resolve hook stubs dotenv and,
 // for httpClient/upload.js only, swaps brctl and fetch for spies held on
-// globalThis.__pushedFilesMocks.
+// globalThis.__pushedFilesMocks and config.js for a stub, so this spec never
+// caches the config.js other specs set up through process.env.
 const fs = require("fs-extra");
 const os = require("os");
 const path = require("path");
@@ -12,7 +13,10 @@ const { pathToFileURL } = require("url");
 const macserverDir = path.join(__dirname, "../macserver");
 const load = (file) => import(pathToFileURL(path.join(macserverDir, file)).href);
 
+const iCloudDriveDirectory = path.join(os.tmpdir(), `macserver-pushed-${process.pid}`);
+
 const hooks = `
+const ICLOUD_DRIVE_DIRECTORY = ${JSON.stringify(iCloudDriveDirectory)};
 export async function resolve(specifier, context, nextResolve) {
   if (specifier === "dotenv/config") {
     try {
@@ -22,6 +26,17 @@ export async function resolve(specifier, context, nextResolve) {
     }
   }
   if (context.parentURL && context.parentURL.endsWith("/httpClient/upload.js")) {
+    if (specifier === "../config.js") {
+      return {
+        url: "data:text/javascript," + encodeURIComponent(
+          "export const remoteServer = 'http://127.0.0.1:1';" +
+          "export const Authorization = 'test-secret';" +
+          "export const iCloudDriveDirectory = " + JSON.stringify(ICLOUD_DRIVE_DIRECTORY) + ";" +
+          "export const maxFileSize = 1024 * 1024;"
+        ),
+        shortCircuit: true,
+      };
+    }
     if (specifier === "../brctl/index.js") {
       return {
         url: "data:text/javascript,export const download = (...args) => globalThis.__pushedFilesMocks.download(...args)",
@@ -42,7 +57,6 @@ export async function resolve(specifier, context, nextResolve) {
 describe("icloud macserver pushed files", function () {
   let pushedFiles;
   let upload;
-  let iCloudDriveDirectory;
   let blogCounter = 0;
 
   const newBlogID = () => `blog_pushed_${process.pid}_${blogCounter++}`;
@@ -51,34 +65,14 @@ describe("icloud macserver pushed files", function () {
   beforeAll(async function () {
     register("data:text/javascript," + encodeURIComponent(hooks));
 
-    // config.js reads these when it is first imported, and may already have
-    // been imported by another spec with the same directory
-    const env = {
-      REMOTE_SERVER: "http://127.0.0.1:1",
-      ICLOUD_DRIVE_DIRECTORY: os.tmpdir(),
-      BLOT_ICLOUD_SERVER_SECRET: "test-secret",
-    };
-    const previous = {};
-    for (const key in env) {
-      previous[key] = process.env[key];
-      if (process.env[key] === undefined) process.env[key] = env[key];
-    }
-
     globalThis.__pushedFilesMocks = {};
-    try {
-      pushedFiles = await load("pushedFiles.js");
-      upload = (await load("httpClient/upload.js")).default;
-      iCloudDriveDirectory = (await load("config.js")).iCloudDriveDirectory;
-    } finally {
-      for (const key in previous) {
-        if (previous[key] === undefined) delete process.env[key];
-        else process.env[key] = previous[key];
-      }
-    }
+    pushedFiles = await load("pushedFiles.js");
+    upload = (await load("httpClient/upload.js")).default;
   });
 
-  afterAll(function () {
+  afterAll(async function () {
     delete globalThis.__pushedFilesMocks;
+    await fs.remove(iCloudDriveDirectory);
   });
 
   beforeEach(function () {
@@ -125,6 +119,25 @@ describe("icloud macserver pushed files", function () {
 
       expect(pushedFiles.isUnchanged(blogID, "a.md", stat(1, 1))).toBe(false);
       expect(pushedFiles.isUnchanged(otherBlogID, "a.md", stat(1, 1))).toBe(true);
+    });
+
+    it("starts tracking a blog once, until it is forgotten", function () {
+      const blogID = newBlogID();
+
+      expect(pushedFiles.startTracking(blogID)).toBe(true);
+      expect(pushedFiles.startTracking(blogID)).toBe(false);
+
+      pushedFiles.forgetBlog(blogID);
+      expect(pushedFiles.startTracking(blogID)).toBe(true);
+      pushedFiles.forgetBlog(blogID);
+    });
+
+    it("does not start tracking a blog it has already recorded a push for", function () {
+      const blogID = newBlogID();
+      pushedFiles.recordPushed(blogID, "a.md", stat(1, 1));
+
+      expect(pushedFiles.startTracking(blogID)).toBe(false);
+      pushedFiles.forgetBlog(blogID);
     });
 
     it("drops a blog's oldest entries past the cap", function () {

@@ -6,7 +6,7 @@ import {
   getLimiterCount,
 } from "../limiters.js";
 import clfdate from "../util/clfdate.js";
-import { forgetBlog, recordPushed } from "../pushedFiles.js";
+import { forgetBlog, recordPushed, startTracking } from "../pushedFiles.js";
 import { iCloudDriveDirectory } from "../config.js";
 import { constants } from "fs";
 import { join } from "path";
@@ -373,6 +373,7 @@ const watch = async (blogID) => {
 
   const blogPath = join(iCloudDriveDirectory, blogID);
   let initialScanComplete = false;
+  const recordInitialScan = startTracking(blogID);
 
   console.log(clfdate(), `Starting watcher for blog folder: ${blogID}`);
   // Monitor the CPU usage on the macserver before and after
@@ -417,11 +418,11 @@ const watch = async (blogID) => {
         markBlogUpdated(blogID);
       }
 
-      // Files already here when the watcher starts are taken to be in sync
-      // with Blot (their initial events are not pushed), so record them as
-      // pushed: a later eviction or re-materialisation of one, which leaves
+      // Files already here when the blog is first watched are taken to be in
+      // sync with Blot (their initial events are not pushed), so record them
+      // as pushed: a later eviction or re-materialisation of one, which leaves
       // its size and mtime alone, is then skipped without a download.
-      if (!initialScanComplete && event === "add" && stats) {
+      if (recordInitialScan && !initialScanComplete && event === "add" && stats) {
         recordPushed(blogID, pathInBlogDirectory, stats);
       }
 
