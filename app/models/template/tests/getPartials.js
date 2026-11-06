@@ -10,16 +10,12 @@ describe("template", function () {
 
     partials[test.view.name] = "";
 
-    getPartials(
-      test.blog.id,
-      test.template.id,
-      partials,
-      function (err, partials, retrieve) {
-        if (err) return done.fail(err);
+    getPartials(test.blog.id, test.template.id, partials)
+      .then(function ({ allPartials: partials, retrieve: retrieve }) {
         expect(partials[test.view.name]).toEqual(test.view.content);
         done();
-      }
-    );
+      })
+      .catch(done.fail);
   });
 
   // If you have a template view 'header.html' which embeds
@@ -44,18 +40,14 @@ describe("template", function () {
 
     setView(test.template.id, parentView, function (err) {
       if (err) return done.fail(err);
-      getPartials(
-        test.blog.id,
-        test.template.id,
-        partials,
-        function (err, partials, retrieve) {
-          if (err) return done.fail(err);
+      getPartials(test.blog.id, test.template.id, partials)
+        .then(function ({ allPartials: partials, retrieve: retrieve }) {
           expect(partials[test.view.name]).toEqual(test.view.content);
           expect(partials[parentView.name]).toEqual(parentView.content);
 
           done();
-        }
-      );
+        })
+        .catch(done.fail);
     });
   });
 
@@ -87,20 +79,15 @@ describe("template", function () {
           var partials = {};
           partials[parentView.name] = "";
 
-          getPartials(
-            test.blog.id,
-            test.template.id,
-            partials,
-            function (err, partials, retrieve) {
-              if (err) return done.fail(err);
-
+          getPartials(test.blog.id, test.template.id, partials)
+            .then(function ({ allPartials: partials, retrieve: retrieve }) {
               expect(retrieve).toEqual({
                 allEntries: { fields: { title: true, url: true } },
               });
 
               done();
-            }
-          );
+            })
+            .catch(done.fail);
         });
       });
     });
@@ -128,20 +115,15 @@ describe("template", function () {
         var partials = {};
         partials[parentView.name] = "";
 
-        getPartials(
-          test.blog.id,
-          test.template.id,
-          partials,
-          function (err, partials, retrieve) {
-            if (err) return done.fail(err);
-
+        getPartials(test.blog.id, test.template.id, partials)
+          .then(function ({ allPartials: partials, retrieve: retrieve }) {
             expect(retrieve).toEqual({
               tagged: { fields: { title: true } },
             });
 
             done();
-          }
-        );
+          })
+          .catch(done.fail);
       });
     });
   });
@@ -168,18 +150,13 @@ describe("template", function () {
         var partials = {};
         partials[parentView.name] = "";
 
-        getPartials(
-          test.blog.id,
-          test.template.id,
-          partials,
-          function (err, partials, retrieve) {
-            if (err) return done.fail(err);
-
+        getPartials(test.blog.id, test.template.id, partials)
+          .then(function ({ allPartials: partials, retrieve: retrieve }) {
             expect(retrieve.posts).toBeUndefined();
 
             done();
-          }
-        );
+          })
+          .catch(done.fail);
       });
     });
   });
@@ -209,19 +186,14 @@ describe("template", function () {
         var partials = {};
         partials[parentView.name] = "";
 
-        getPartials(
-          test.blog.id,
-          test.template.id,
-          partials,
-          function (err, resolved, retrieve) {
-            if (err) return done.fail(err);
-
+        getPartials(test.blog.id, test.template.id, partials)
+          .then(function ({ allPartials: resolved, retrieve: retrieve }) {
             expect(retrieve.latestEntry).toBe(true);
             expect(retrieve.posts).toEqual({ fields: { title: true } });
 
             done();
-          }
-        );
+          })
+          .catch(done.fail);
       });
     });
   });
@@ -229,18 +201,17 @@ describe("template", function () {
   it("resolves file-backed partial paths case-insensitively", async function () {
     await this.set("/Pages/Home.txt", "Hello from home");
 
-    await new Promise((resolve, reject) => {
-      getPartials(
-        this.blog.id,
-        this.template.id,
-        { "/pages/home.txt": null },
-        function (err, partials) {
-          if (err) return reject(err);
-          expect(partials["/pages/home.txt"]).toContain("Hello from home");
-          expect(partials["/Pages/Home.txt"]).toBeUndefined();
-          resolve();
-        }
-      );
+    const { allPartials } = await getPartials(this.blog.id, this.template.id, {
+      "/pages/home.txt": null,
     });
+
+    expect(allPartials["/pages/home.txt"]).toContain("Hello from home");
+    expect(allPartials["/Pages/Home.txt"]).toBeUndefined();
+  });
+
+  it("rejects when its arguments are invalid", async function () {
+    await expectAsync(
+      getPartials(this.blog.id, this.template.id, "nope")
+    ).toBeRejected();
   });
 });

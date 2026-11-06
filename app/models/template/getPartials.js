@@ -8,26 +8,18 @@ var {
   wrapInlinePartial,
 } = require("./util/resolveFolderLinks");
 
-module.exports = function getPartials(
+module.exports = async function getPartials(
   blogID,
   templateID,
   partials,
-  callback,
   contextMap,
   parentContextPath,
   wrapOptions
 ) {
-  try {
-    ensure(blogID, "string")
-      .and(templateID, "string")
-      .and(partials, "object")
-      .and(callback, "function");
+  ensure(blogID, "string").and(templateID, "string").and(partials, "object");
 
-    if (!contextMap) contextMap = {};
-    if (!parentContextPath) parentContextPath = "";
-  } catch (e) {
-    return callback(e);
-  }
+  if (!contextMap) contextMap = {};
+  if (!parentContextPath) parentContextPath = "";
 
   var Entry = require("../entry");
   var allPartials = {};
@@ -158,8 +150,12 @@ module.exports = function getPartials(
     return merged;
   }
 
-  fetchList(partials, function () {
-    return callback(null, allPartials, retrieve);
+  // fetchList recurses through nested partials with callbacks; only the
+  // outer call is wrapped, so the order of the lookups is unchanged.
+  return new Promise(function (resolve) {
+    fetchList(partials, function () {
+      resolve({ allPartials, retrieve });
+    });
   });
 
   function fetchList(partials, done) {
