@@ -6,6 +6,7 @@ import {
   getLimiterCount,
 } from "../limiters.js";
 import clfdate from "../util/clfdate.js";
+import { forgetBlog, recordPushed } from "../pushedFiles.js";
 import { iCloudDriveDirectory } from "../config.js";
 import { constants } from "fs";
 import { join } from "path";
@@ -176,6 +177,7 @@ const handleFileEvent = async (event, blogID, filePath) => {
       console.warn(clfdate(), `Blog directory deleted: ${blogID}`);
       const limiterCountBefore = getLimiterCount();
       removeLimiterForBlogID(blogID);
+      forgetBlog(blogID);
       const limiterCountAfter = getLimiterCount();
       console.assert(
         limiterCountAfter < limiterCountBefore,
@@ -386,8 +388,9 @@ const watch = async (blogID) => {
       interval: 250, // Poll every 0.25s for non-binary files
       binaryInterval: 1000, // Poll every 1s for binary files
       ignoreInitial: false, // Process initial events
+      alwaysStat: true, // so the initial scan can record each file's size and mtime
     })
-    .on("all", (event, filePath) => {
+    .on("all", (event, filePath, stats) => {
       const blogID = extractBlogID(filePath);
       const pathInBlogDirectory = extractPathInBlogDirectory(filePath);
       const action =
@@ -412,6 +415,14 @@ const watch = async (blogID) => {
         event === "addDir"
       ) {
         markBlogUpdated(blogID);
+      }
+
+      // Files already here when the watcher starts are taken to be in sync
+      // with Blot (their initial events are not pushed), so record them as
+      // pushed: a later eviction or re-materialisation of one, which leaves
+      // its size and mtime alone, is then skipped without a download.
+      if (!initialScanComplete && event === "add" && stats) {
+        recordPushed(blogID, pathInBlogDirectory, stats);
       }
 
       // We only handle file events after the initial scan is complete
