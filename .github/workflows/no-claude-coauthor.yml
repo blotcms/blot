@@ -25,7 +25,8 @@ jobs:
         run: |
           bad=0
           for c in $(git rev-list "$BASE..$HEAD"); do
-            if git log -1 --format='%ae%n%ce%n%B' "$c" | grep -qiE '^co-authored-by:.*(claude|anthropic)|^noreply@anthropic\.com$'; then
+            if git log -1 --format='%an%n%cn' "$c" | grep -qiE '^claude( |$)' ||
+              git log -1 --format='%ae%n%ce%n%B' "$c" | grep -qiE '^co-authored-by:.*(claude|anthropic)|@anthropic\.com$'; then
               git log -1 --format='::error::%h %s credits Claude' "$c"
               bad=1
             fi
