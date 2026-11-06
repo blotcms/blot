@@ -16,8 +16,22 @@ describe("template", function () {
     getMetadata("nonexistent:template", function (err, template) {
       expect(err instanceof Error).toBe(true);
       expect(err.code).toEqual("ENOENT");
-      expect(template).toBeNull();
+      expect(template).toBeFalsy();
       done();
     });
+  });
+
+  it("returns a promise when called without a callback", async function () {
+    var template = await getMetadata(this.template.id);
+    expect(template.id).toEqual(this.template.id);
+
+    var error;
+    try {
+      await getMetadata("nonexistent:template");
+    } catch (e) {
+      error = e;
+    }
+    expect(error instanceof Error).toBe(true);
+    expect(error.code).toEqual("ENOENT");
   });
 });

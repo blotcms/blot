@@ -64,4 +64,9 @@ describe("list", function () {
       done();
     });
   });
+
+  it("returns a promise when called without a callback", async function () {
+    var result = await getTemplateList(this.blog.id);
+    expect(result).toContain(this.template);
+  });
 });

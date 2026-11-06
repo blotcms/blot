@@ -2,34 +2,30 @@ var key = require("./key");
 var client = require("models/client");
 var deserialize = require("./util/deserialize");
 var viewModel = require("./viewModel");
+var withCallback = require("helper/withCallback");
 
-module.exports = function getView(templateID, viewID, callback) {
+module.exports = withCallback(async function getView(templateID, viewID) {
   var match;
 
-  client
-    .hGetAll(key.view(templateID, viewID))
-    .then(function (view) {
-      if (view && Object.keys(view).length) {
-        return callback(null, deserialize(view, viewModel));
-      }
+  var view = await client.hGetAll(key.view(templateID, viewID));
 
-      return client.sMembers(key.allViews(templateID)).then(function (views) {
-        views.forEach(function (viewname) {
-          var name = viewname.slice(0, viewname.lastIndexOf("."));
-          if (name === viewID) match = viewname;
-        });
+  if (view && Object.keys(view).length) {
+    return deserialize(view, viewModel);
+  }
 
-        if (!match) return callback(new Error("No view: " + viewID));
+  var views = await client.sMembers(key.allViews(templateID));
 
-        return client
-          .hGetAll(key.view(templateID, match))
-          .then(function (matchedView) {
-            if (!matchedView || !Object.keys(matchedView).length)
-              return callback(new Error("No view: " + viewID));
+  views.forEach(function (viewname) {
+    var name = viewname.slice(0, viewname.lastIndexOf("."));
+    if (name === viewID) match = viewname;
+  });
 
-            callback(null, deserialize(matchedView, viewModel));
-          });
-      });
-    })
-    .catch(callback);
-};
+  if (!match) throw new Error("No view: " + viewID);
+
+  var matchedView = await client.hGetAll(key.view(templateID, match));
+
+  if (!matchedView || !Object.keys(matchedView).length)
+    throw new Error("No view: " + viewID);
+
+  return deserialize(matchedView, viewModel);
+});
