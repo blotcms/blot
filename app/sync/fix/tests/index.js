@@ -77,8 +77,8 @@ describe("sync/fix", function () {
   });
 
   it("returns an empty report and does not touch the blog when nothing is wrong", function (done) {
-    var clean = function (blog, callback) {
-      callback(null, []);
+    var clean = async function (blog) {
+      return [];
     };
 
     var fix = loadFixWithStubs({
@@ -100,11 +100,11 @@ describe("sync/fix", function () {
   });
 
   it("bumps the blog's cacheID when a check reports a fix", function (done) {
-    var clean = function (blog, callback) {
-      callback(null, []);
+    var clean = async function (blog) {
+      return [];
     };
-    var reported = function (blog, callback) {
-      callback(null, ["fixed something"]);
+    var reported = async function (blog) {
+      return ["fixed something"];
     };
 
     var fix = loadFixWithStubs({
@@ -115,10 +115,9 @@ describe("sync/fix", function () {
       "entries-path-index": clean,
     });
 
-    spyOn(Blog, "set").and.callFake(function (blogID, updates, callback) {
+    spyOn(Blog, "set").and.callFake(async function (blogID, updates) {
       expect(blogID).toBe("blog-id");
       expect(typeof updates.cacheID).toBe("number");
-      callback(null);
     });
 
     fix({ id: "blog-id" }, function (err, report) {
@@ -131,11 +130,11 @@ describe("sync/fix", function () {
 
   it("does not email the admin about what it repaired - callers report the returned report", function (done) {
     var email = require("helper/email");
-    var reported = function (blog, callback) {
-      callback(null, ["fixed something"]);
+    var reported = async function (blog) {
+      return ["fixed something"];
     };
-    var clean = function (blog, callback) {
-      callback(null, []);
+    var clean = async function (blog) {
+      return [];
     };
 
     var fix = loadFixWithStubs({
@@ -149,9 +148,7 @@ describe("sync/fix", function () {
     Object.keys(email).forEach(function (name) {
       if (typeof email[name] === "function") spyOn(email, name);
     });
-    spyOn(Blog, "set").and.callFake(function (blogID, updates, callback) {
-      callback(null);
-    });
+    spyOn(Blog, "set").and.callFake(async function (blogID, updates) {});
 
     fix({ id: "blog-id" }, function (err, report) {
       expect(err).toBeNull();
@@ -166,8 +163,8 @@ describe("sync/fix", function () {
   });
 
   it("reports progress through the status callback in order", function (done) {
-    var clean = function (blog, callback) {
-      callback(null, []);
+    var clean = async function (blog) {
+      return [];
     };
 
     var fix = loadFixWithStubs({
@@ -206,21 +203,21 @@ describe("sync/fix", function () {
     var listGhostsCalled = false;
 
     var fix = loadFixWithStubs({
-      "entry-ghosts": function (blog, callback) {
-        callback(null, []);
+      "entry-ghosts": async function (blog) {
+        return [];
       },
-      "tag-ghosts": function (blog, callback) {
-        callback(checkError);
+      "tag-ghosts": async function (blog) {
+        throw checkError;
       },
-      "list-ghosts": function (blog, callback) {
+      "list-ghosts": async function (blog) {
         listGhostsCalled = true;
-        callback(null, []);
+        return [];
       },
-      "menu-ghosts": function (blog, callback) {
-        callback(null, []);
+      "menu-ghosts": async function (blog) {
+        return [];
       },
-      "entries-path-index": function (blog, callback) {
-        callback(null, []);
+      "entries-path-index": async function (blog) {
+        return [];
       },
     });
 
@@ -235,26 +232,24 @@ describe("sync/fix", function () {
     var checkError = new Error("tag-ghosts exploded");
 
     var fix = loadFixWithStubs({
-      "entry-ghosts": function (blog, callback) {
-        callback(null, ["fixed something"]);
+      "entry-ghosts": async function (blog) {
+        return ["fixed something"];
       },
-      "tag-ghosts": function (blog, callback) {
-        callback(checkError);
+      "tag-ghosts": async function (blog) {
+        throw checkError;
       },
-      "list-ghosts": function (blog, callback) {
-        callback(null, []);
+      "list-ghosts": async function (blog) {
+        return [];
       },
-      "menu-ghosts": function (blog, callback) {
-        callback(null, []);
+      "menu-ghosts": async function (blog) {
+        return [];
       },
-      "entries-path-index": function (blog, callback) {
-        callback(null, []);
+      "entries-path-index": async function (blog) {
+        return [];
       },
     });
 
-    spyOn(Blog, "set").and.callFake(function (blogID, updates, callback) {
-      callback(null);
-    });
+    spyOn(Blog, "set").and.callFake(async function (blogID, updates) {});
 
     fix({ id: "blog-id" }, function (err, report) {
       expect(err).toBe(checkError);

@@ -38,8 +38,8 @@ describe("sync/fix/tag-ghosts", function () {
   it("propagates an error from Tags.list instead of silently reporting nothing", function (done) {
     var listError = new Error("tags.list exploded");
 
-    spyOn(Tags, "list").and.callFake(function (_blogID, callback) {
-      callback(listError);
+    spyOn(Tags, "list").and.callFake(async function (_blogID) {
+      throw listError;
     });
     spyOn(Tags, "get");
     spyOn(client, "multi");
@@ -53,8 +53,8 @@ describe("sync/fix/tag-ghosts", function () {
   });
 
   it("does nothing when every tag has entries that all match their stored id", function (done) {
-    spyOn(Tags, "list").and.callFake(function (_blogID, callback) {
-      callback(null, [{ slug: "chairs" }]);
+    spyOn(Tags, "list").and.callFake(async function (_blogID) {
+      return [{ slug: "chairs" }];
     });
     spyOn(Tags, "get").and.callFake(async function () {
       return { entryIDs: ["/chair"], prettyTag: "x", total: 0 };
@@ -71,8 +71,8 @@ describe("sync/fix/tag-ghosts", function () {
   });
 
   it("deletes a tag with no entries", function (done) {
-    spyOn(Tags, "list").and.callFake(function (_blogID, callback) {
-      callback(null, [{ slug: "ghost-tag" }]);
+    spyOn(Tags, "list").and.callFake(async function (_blogID) {
+      return [{ slug: "ghost-tag" }];
     });
     spyOn(Tags, "get").and.callFake(async function () {
       return { entryIDs: [], prettyTag: "x", total: 0 };
@@ -98,8 +98,8 @@ describe("sync/fix/tag-ghosts", function () {
   });
 
   it("removes an entry id from a tag when the entry no longer exists", function (done) {
-    spyOn(Tags, "list").and.callFake(function (_blogID, callback) {
-      callback(null, [{ slug: "chairs" }]);
+    spyOn(Tags, "list").and.callFake(async function (_blogID) {
+      return [{ slug: "chairs" }];
     });
     spyOn(Tags, "get").and.callFake(async function () {
       return { entryIDs: ["/missing-entry"], prettyTag: "x", total: 0 };
@@ -125,8 +125,8 @@ describe("sync/fix/tag-ghosts", function () {
   it("re-reads a missing entry for each tag, so one restored mid-run is kept", function (done) {
     var stored = {};
 
-    spyOn(Tags, "list").and.callFake(function (_blogID, callback) {
-      callback(null, [{ slug: "first" }, { slug: "second" }]);
+    spyOn(Tags, "list").and.callFake(async function (_blogID) {
+      return [{ slug: "first" }, { slug: "second" }];
     });
     spyOn(Tags, "get").and.callFake(async function () {
       return { entryIDs: ["/restored"], prettyTag: "x", total: 0 };
@@ -157,8 +157,8 @@ describe("sync/fix/tag-ghosts", function () {
   it("re-keys an entry stored under a stale id within a tag", function (done) {
     var entry = { id: "/new-path", dateStamp: 1234 };
 
-    spyOn(Tags, "list").and.callFake(function (_blogID, callback) {
-      callback(null, [{ slug: "chairs" }]);
+    spyOn(Tags, "list").and.callFake(async function (_blogID) {
+      return [{ slug: "chairs" }];
     });
     spyOn(Tags, "get").and.callFake(async function () {
       return { entryIDs: ["/old-path"], prettyTag: "x", total: 0 };
@@ -171,13 +171,10 @@ describe("sync/fix/tag-ghosts", function () {
       expect(entryID).toBe("/old-path");
       return Promise.resolve(entry);
     });
-    spyOn(Entry, "set").and.callFake(
-      function (blogID, id, updatedEntry, callback) {
-        expect(id).toBe("/new-path");
-        expect(updatedEntry).toBe(entry);
-        callback(null);
-      }
-    );
+    spyOn(Entry, "set").and.callFake(async function (blogID, id, updatedEntry) {
+      expect(id).toBe("/new-path");
+      expect(updatedEntry).toBe(entry);
+    });
 
     var multi = fakeMulti();
     spyOn(client, "multi").and.returnValue(multi);
@@ -205,8 +202,8 @@ describe("sync/fix/tag-ghosts", function () {
   it("propagates transaction rejections for empty-tag cleanup", function (done) {
     var execError = new Error("exec exploded");
 
-    spyOn(Tags, "list").and.callFake(function (_blogID, callback) {
-      callback(null, [{ slug: "ghost-tag" }]);
+    spyOn(Tags, "list").and.callFake(async function (_blogID) {
+      return [{ slug: "ghost-tag" }];
     });
     spyOn(Tags, "get").and.callFake(async function () {
       return { entryIDs: [], prettyTag: "x", total: 0 };
@@ -234,12 +231,8 @@ describe("sync/fix/tag-ghosts", function () {
   });
 
   it("fetches an entry referenced by several tags from Redis only once", function (done) {
-    spyOn(Tags, "list").and.callFake(function (_blogID, callback) {
-      callback(null, [
-        { slug: "chairs" },
-        { slug: "furniture" },
-        { slug: "sale" },
-      ]);
+    spyOn(Tags, "list").and.callFake(async function (_blogID) {
+      return [{ slug: "chairs" }, { slug: "furniture" }, { slug: "sale" }];
     });
     spyOn(Tags, "get").and.callFake(async function () {
       // The same entry, "/chair", is a member of all three tags.
@@ -258,5 +251,22 @@ describe("sync/fix/tag-ghosts", function () {
       ]);
       done();
     });
+  });
+
+  it("rejects when called without a callback and Tags.list fails", async function () {
+    var listError = new Error("tags.list exploded");
+    var rejection;
+
+    spyOn(Tags, "list").and.callFake(async function () {
+      throw listError;
+    });
+
+    try {
+      await fixTagGhosts({ id: "blog-id" });
+    } catch (err) {
+      rejection = err;
+    }
+
+    expect(rejection).toBe(listError);
   });
 });

@@ -3,6 +3,7 @@ const Entries = require("models/entries");
 const client = require("models/client");
 const entryKey = require("models/entry/key").entry;
 const { promisify } = require("util");
+const withCallback = require("helper/withCallback");
 
 var lists = ["all", "created", "entries", "drafts", "scheduled", "pages"];
 
@@ -38,7 +39,7 @@ function getEntry(blogID, id) {
 }
 
 function setEntry(blogID, id, entry) {
-  return promisify(Entry.set.bind(Entry))(blogID, id, entry);
+  return Entry.set(blogID, id, entry);
 }
 
 function yieldToEventLoop() {
@@ -74,113 +75,111 @@ async function resolveIDs(blogID, ids) {
   return resolved;
 }
 
-function main(blog, callback) {
+async function main(blog) {
   const report = [];
 
-  (async function () {
-    // Deleted entries' keys expire after a day while their ids stay in
-    // "all"/"deleted" - expected, so clear those first without reporting
-    // them. Whatever pruneMissing finds after this is a key that vanished
-    // unexpectedly.
-    await sweepExpiredDeleted(blog.id);
+  // Deleted entries' keys expire after a day while their ids stay in
+  // "all"/"deleted" - expected, so clear those first without reporting
+  // them. Whatever pruneMissing finds after this is a key that vanished
+  // unexpectedly.
+  await sweepExpiredDeleted(blog.id);
 
-    const prunedByList = await pruneMissing(blog.id);
+  const prunedByList = await pruneMissing(blog.id);
 
-    // pruneMissing (models/entries) removes list members that have no
-    // backing entry key at all, before the mismatch-detection loop below
-    // ever sees them - report them here (matching the [list, reason, id]
-    // shape the mismatch loop uses) so Fix() bumps cacheID for this too.
-    for (const listName in prunedByList) {
-      for (const id of prunedByList[listName]) {
-        report.push([listName, "MISSING", id]);
-      }
+  // pruneMissing (models/entries) removes list members that have no
+  // backing entry key at all, before the mismatch-detection loop below
+  // ever sees them - report them here (matching the [list, reason, id]
+  // shape the mismatch loop uses) so Fix() bumps cacheID for this too.
+  for (const listName in prunedByList) {
+    for (const id of prunedByList[listName]) {
+      report.push([listName, "MISSING", id]);
     }
+  }
 
-    const idsByList = {};
-    const uniqueIds = new Set();
+  const idsByList = {};
+  const uniqueIds = new Set();
 
-    for (const list of lists) {
-      const key = "blog:" + blog.id + ":" + list;
-      const ids = await client.zRange(key, 0, -1, { REV: true });
-      idsByList[list] = ids;
-      for (const id of ids) uniqueIds.add(id);
-    }
+  for (const list of lists) {
+    const key = "blog:" + blog.id + ":" + list;
+    const ids = await client.zRange(key, 0, -1, { REV: true });
+    idsByList[list] = ids;
+    for (const id of ids) uniqueIds.add(id);
+  }
 
-    const allIds = [...uniqueIds];
-    const ghostIds = new Set();
+  const allIds = [...uniqueIds];
+  const ghostIds = new Set();
 
-    const resolved = await resolveIDs(blog.id, allIds);
+  const resolved = await resolveIDs(blog.id, allIds);
 
-    for (const id of allIds) {
-      const meta = resolved.get(id);
+  for (const id of allIds) {
+    const meta = resolved.get(id);
 
-      if (meta && meta.id === id) continue;
+    if (meta && meta.id === id) continue;
 
-      ghostIds.add(id);
+    ghostIds.add(id);
 
-      if (!meta) continue;
+    if (!meta) continue;
 
-      // Mismatch - re-fetch the full entry (content included) only for
-      // this id so it can be re-saved under the corrected key.
-      const entry = await getEntry(blog.id, id);
-      if (entry) {
-        // The raw key at the stale id is about to become an orphan (the
-        // entry is re-saved below under its real id, entry.id). Delete it
-        // first rather than after: models/entry/_setUrl.js's url-claim
-        // check (models/entry/key.js's url index) would otherwise still
-        // find this orphan, see it as a live entry still using the
-        // original url, and force the real entry onto a different
-        // (deduped) url - which then stops menu-ghosts/_assign.js's
-        // addToMenu from matching it to the existing menu item by url, so
-        // a second menu item gets added instead of the stale one being
-        // updated in place. Deleting it first lets the real entry reclaim
-        // its original url and the menu item update cleanly. Only the raw
-        // entry key is removed here - never Entry.drop, which would also
-        // touch lists/tags/menu for the *real* entry we're about to save.
-        //
-        // Keep the raw value around in case setEntry fails (validation,
-        // blog lookup, Redis error, etc.) after the stale key is gone -
-        // without it that failure would leave no stored copy of the entry
-        // at all. Restore it under the stale key before propagating the
-        // error.
-        const staleKey = entryKey(blog.id, id);
-        const staleRaw = await client.get(staleKey);
-        await deleteEntryKey(blog.id, id);
-        try {
-          await setEntry(blog.id, entry.id, entry);
-        } catch (err) {
-          // A failed restore must not replace the error that made us need it:
-          // report both, and propagate the original.
-          if (staleRaw) {
-            try {
-              await client.set(staleKey, staleRaw);
-            } catch (restoreErr) {
-              console.error(
-                "list-ghosts: could not restore",
-                staleKey,
-                "after failed re-save:",
-                restoreErr.message
-              );
-            }
+    // Mismatch - re-fetch the full entry (content included) only for
+    // this id so it can be re-saved under the corrected key.
+    const entry = await getEntry(blog.id, id);
+    if (entry) {
+      // The raw key at the stale id is about to become an orphan (the
+      // entry is re-saved below under its real id, entry.id). Delete it
+      // first rather than after: models/entry/_setUrl.js's url-claim
+      // check (models/entry/key.js's url index) would otherwise still
+      // find this orphan, see it as a live entry still using the
+      // original url, and force the real entry onto a different
+      // (deduped) url - which then stops menu-ghosts/_assign.js's
+      // addToMenu from matching it to the existing menu item by url, so
+      // a second menu item gets added instead of the stale one being
+      // updated in place. Deleting it first lets the real entry reclaim
+      // its original url and the menu item update cleanly. Only the raw
+      // entry key is removed here - never Entry.drop, which would also
+      // touch lists/tags/menu for the *real* entry we're about to save.
+      //
+      // Keep the raw value around in case setEntry fails (validation,
+      // blog lookup, Redis error, etc.) after the stale key is gone -
+      // without it that failure would leave no stored copy of the entry
+      // at all. Restore it under the stale key before propagating the
+      // error.
+      const staleKey = entryKey(blog.id, id);
+      const staleRaw = await client.get(staleKey);
+      await deleteEntryKey(blog.id, id);
+      try {
+        await setEntry(blog.id, entry.id, entry);
+      } catch (err) {
+        // A failed restore must not replace the error that made us need it:
+        // report both, and propagate the original.
+        if (staleRaw) {
+          try {
+            await client.set(staleKey, staleRaw);
+          } catch (restoreErr) {
+            console.error(
+              "list-ghosts: could not restore",
+              staleKey,
+              "after failed re-save:",
+              restoreErr.message
+            );
           }
-          throw err;
         }
+        throw err;
       }
     }
+  }
 
-    for (const list of lists) {
-      const key = "blog:" + blog.id + ":" + list;
+  for (const list of lists) {
+    const key = "blog:" + blog.id + ":" + list;
 
-      for (const id of idsByList[list]) {
-        if (!ghostIds.has(id)) continue;
+    for (const id of idsByList[list]) {
+      if (!ghostIds.has(id)) continue;
 
-        report.push([list, "MISMATCH", id]);
-        await client.zRem(key, id);
-      }
+      report.push([list, "MISMATCH", id]);
+      await client.zRem(key, id);
     }
+  }
 
-    callback(null, report);
-  })().catch(callback);
+  return report;
 }
 
-module.exports = main;
+module.exports = withCallback(main);
