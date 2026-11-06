@@ -5,7 +5,6 @@ var Entry = require("models/entry");
 var Preview = require("./preview");
 var isPreview = require("./drafts").isPreview;
 var isDraft = require("./drafts").isDraft;
-var async = require("async");
 var WRONG_TYPE = "WRONG_TYPE";
 var TOO_LARGE = "TOO_LARGE";
 var PUBLIC_FILE = "PUBLIC_FILE";
@@ -43,266 +42,237 @@ function isTemplate(path) {
   return pathNormalizer(path).toLowerCase().startsWith("/templates/");
 }
 
-function dropEntryAndPreview(blogID, targetPath, callback) {
+async function dropEntryAndPreview(blogID, targetPath) {
   targetPath = pathNormalizer(targetPath);
 
-  withCallback(Entry.get)(blogID, targetPath, function (err, entry) {
+  var entry;
+
+  try {
+    entry = await Entry.get(blogID, targetPath);
+  } catch (err) {
     // A failed read is not a missing entry: dropping nothing would lose the
     // deletion, so pass on a Redis outage.
-    if (!entry)
-      return callback(err && isRedisUnavailableError(err) ? err : undefined);
+    if (isRedisUnavailableError(err)) throw err;
+    return;
+  }
 
-    var skipPreview = isUnsafeFolderPostPreview(targetPath, entry.html);
+  if (!entry) return;
 
-    Entry.drop(blogID, targetPath, function (err) {
-      if (err) return callback(err);
+  var skipPreview = isUnsafeFolderPostPreview(targetPath, entry.html);
 
-      if (entry.draft && !isHidden(targetPath) && !skipPreview) {
-        Preview.remove(blogID, targetPath, callback);
-      } else {
-        callback();
-      }
-    });
-  });
+  await Entry.drop(blogID, targetPath);
+
+  if (entry.draft && !isHidden(targetPath) && !skipPreview) {
+    await Preview.remove(blogID, targetPath);
+  }
+}
+
+// When a "+" folder can no longer build an aggregate (its files are gone,
+// it was replaced by a file, ...), the previously published entry at the
+// plus-stripped path is stale and should be dropped - but only when that
+// entry really is this folder's aggregate. A plain "/post.md+" file must
+// not unpublish an unrelated "/post.md" sibling. Throws finalErr, if there
+// is one, unless it dropped the aggregate.
+async function dropStaleAggregate(blog, multiInfo, finalErr) {
+  if (multiInfo) {
+    var existing;
+    var getErr;
+
+    try {
+      existing = await Entry.get(blog.id, multiInfo.entryPath);
+    } catch (err) {
+      getErr = err;
+    }
+
+    if (!existing && getErr && isRedisUnavailableError(getErr)) throw getErr;
+
+    var sourceFolder = folderPostSourceFolder(existing);
+    if (
+      sourceFolder &&
+      pathNormalizer(sourceFolder) === pathNormalizer(multiInfo.folderPath)
+    ) {
+      return dropEntryAndPreview(blog.id, multiInfo.entryPath);
+    }
+  }
+
+  if (finalErr) throw finalErr;
 }
 
 // state.unchanged is set when the build stored exactly the entry that was
 // already there (see Entry.set's changed), so nothing derived from it differs
-function buildAndSet(blog, path, multiInfo, state, callback) {
-  build(blog, path, function (err, entry) {
-    // When a "+" folder can no longer build an aggregate (its files are gone,
-    // it was replaced by a file, ...), the previously published entry at the
-    // plus-stripped path is stale and should be dropped - but only when that
-    // entry really is this folder's aggregate. A plain "/post.md+" file must
-    // not unpublish an unrelated "/post.md" sibling.
-    function dropStaleAggregate(finalErr) {
-      if (!multiInfo) return callback(finalErr);
-      withCallback(Entry.get)(
-        blog.id,
-        multiInfo.entryPath,
-        function (getErr, existing) {
-          if (!existing && getErr && isRedisUnavailableError(getErr))
-            return callback(getErr);
+async function buildAndSet(blog, path, multiInfo, state) {
+  var entry;
 
-          var sourceFolder = folderPostSourceFolder(existing);
-          if (
-            sourceFolder &&
-            pathNormalizer(sourceFolder) ===
-              pathNormalizer(multiInfo.folderPath)
-          ) {
-            return dropEntryAndPreview(blog.id, multiInfo.entryPath, callback);
-          }
-          return callback(finalErr);
-        }
-      );
+  try {
+    entry = await build(blog, path);
+  } catch (err) {
+    if (err && err.code === "WRONGTYPE") {
+      await Ignore(blog.id, path, WRONG_TYPE);
+      return dropStaleAggregate(blog, multiInfo);
     }
-
-    if (err && err.code === "WRONGTYPE")
-      return Ignore(blog.id, path, WRONG_TYPE, function (ignoreErr) {
-        if (ignoreErr) return callback(ignoreErr);
-        dropStaleAggregate();
-      });
 
     if (err && err.code === TOO_LARGE) {
       // If this file was previously published as a draft, Preview.write
       // already dropped a companion .preview.html into the user's folder.
       // Mirror the cleanup in app/sync/update/drop.js so we don't leave an
       // orphaned preview behind now that the source can't become a post.
-      return isDraft(blog.id, path, function (draftErr, is_draft) {
-        if (!draftErr && is_draft) Preview.remove(blog.id, path);
-        Ignore(blog.id, path, TOO_LARGE, function (ignoreErr) {
-          // An oversized source inside a "+" folder aborts the whole
-          // aggregate build, so drop the now-stale synthesized entry too.
-          if (ignoreErr) return callback(ignoreErr);
-          dropStaleAggregate();
-        });
-      });
+      var is_draft;
+
+      try {
+        is_draft = await isDraft(blog.id, path);
+      } catch (draftErr) {}
+
+      // Not waited for, and a failure is ignored
+      if (is_draft) Preview.remove(blog.id, path).catch(noop);
+
+      // An oversized source inside a "+" folder aborts the whole
+      // aggregate build, so drop the now-stale synthesized entry too.
+      await Ignore(blog.id, path, TOO_LARGE);
+      return dropStaleAggregate(blog, multiInfo);
     }
 
     // A "+" folder whose plus-stripped path is a real sibling file (e.g.
     // "/article.md+" beside "/article.md") is not aggregated - the file keeps
     // its own entry.
-    if (err && err.code === "PLUS_PATH_COLLISION") return callback();
+    if (err && err.code === "PLUS_PATH_COLLISION") return;
 
     // EMPTY / TOO_MANY_FILES only fire for a genuine directory, so an empty
     // folder is just "nothing to publish" - not an error to propagate.
     if (err && ["EMPTY", "TOO_MANY_FILES"].indexOf(err.code) !== -1)
-      return dropStaleAggregate();
+      return dropStaleAggregate(blog, multiInfo);
 
     // ENOTDIR / ENOENT can also come from a plain "+"-suffixed file whose
     // stripped path is a valid sibling; keep the error unless we cleaned up a
     // real aggregate.
     if (err && ["ENOTDIR", "ENOENT"].indexOf(err.code) !== -1)
-      return dropStaleAggregate(err);
+      return dropStaleAggregate(blog, multiInfo, err);
 
-    if (err) return callback(err);
-
-    var sourcePaths = [];
-
-    if (entry.metadata && Array.isArray(entry.metadata._sourcePaths)) {
-      sourcePaths = entry.metadata._sourcePaths
-        .map(pathNormalizer)
-        .filter(Boolean);
-    }
-
-    var dropTargets = sourcePaths
-      .filter(function (sourcePath) {
-        return sourcePath !== entry.path;
-      })
-      .filter(function (value, index, array) {
-        return array.indexOf(value) === index;
-      });
-
-    async.series(
-      [
-        function (next) {
-          async.eachSeries(
-            dropTargets,
-            function (target, done) {
-              dropEntryAndPreview(blog.id, target, done);
-            },
-            next
-          );
-        },
-        function (next) {
-          if (entry.metadata && entry.metadata._sourcePaths)
-            delete entry.metadata._sourcePaths;
-
-          Entry.set(blog.id, entry.path, entry, function (err, result) {
-            if (err) return next(err);
-
-            // Only a plain published entry: dropping other sources changed
-            // something, and a draft rewrites its preview file
-            state.unchanged =
-              !!result &&
-              result.changed === false &&
-              !dropTargets.length &&
-              !entry.draft;
-
-            // A successful rebuild means any previous "ignored" record for
-            // this path (wrong type, too large, …) is stale. Errors are
-            // swallowed so a failed clear can't fail the sync, but we wait
-            // for it so callers never observe the stale record after the
-            // sync finishes. For a folder post the same applies to each
-            // source file that is now part of the aggregate again (e.g. one
-            // shrunk back under the size limit), otherwise the dashboard
-            // keeps hiding its badge.
-            async.each(
-              [entry.path].concat(sourcePaths),
-              function (ignoredPath, done) {
-                IgnoredFiles.drop(blog.id, ignoredPath, function () {
-                  done();
-                });
-              },
-              function () {
-                const syntheticKeys = new Set();
-
-                const slugToken = makeSlug(
-                  entry.slug || entry.metadata.title || entry.title || ""
-                );
-                if (slugToken) {
-                  syntheticKeys.add(`/__wikilink_slug__/${slugToken}`);
-                }
-
-                const filenameToken = entry.path ? basename(entry.path) : "";
-                if (filenameToken) {
-                  syntheticKeys.add(`/__wikilink_filename__/${filenameToken}`);
-                }
-
-                // An unchanged entry has the same slug and file name, and
-                // the same contentHash, so the same source bytes: what
-                // depends on it would build the same
-                if (!state.unchanged)
-                  syntheticKeys.forEach((syntheticKey) =>
-                    rebuildDependents(blog.id, syntheticKey, noop)
-                  );
-
-                // A draft folder post outside /drafts/ would write "/album.html"
-                // and could clobber a real sibling source file, so skip the
-                // filesystem preview there (still viewable via the draft URL).
-                if (
-                  entry.draft &&
-                  !isHidden(entry.path) &&
-                  !isUnsafeFolderPostPreview(entry.path, entry.html)
-                ) {
-                  Preview.write(blog.id, entry.path, next);
-                } else {
-                  next();
-                }
-              }
-            );
-          });
-        },
-      ],
-      callback
-    );
-  });
-}
-
-module.exports = function (blog, path, callback) {
-  // if typoeof callback is not function, throw error
-  if (typeof callback !== "function") {
-    throw new Error("sync.set: callback must be a function");
+    throw err;
   }
 
+  var sourcePaths = [];
+
+  if (entry.metadata && Array.isArray(entry.metadata._sourcePaths)) {
+    sourcePaths = entry.metadata._sourcePaths
+      .map(pathNormalizer)
+      .filter(Boolean);
+  }
+
+  var dropTargets = sourcePaths
+    .filter(function (sourcePath) {
+      return sourcePath !== entry.path;
+    })
+    .filter(function (value, index, array) {
+      return array.indexOf(value) === index;
+    });
+
+  for (const target of dropTargets) {
+    await dropEntryAndPreview(blog.id, target);
+  }
+
+  if (entry.metadata && entry.metadata._sourcePaths)
+    delete entry.metadata._sourcePaths;
+
+  var result = await Entry.set(blog.id, entry.path, entry);
+
+  // Only a plain published entry: dropping other sources changed
+  // something, and a draft rewrites its preview file
+  state.unchanged =
+    !!result && result.changed === false && !dropTargets.length && !entry.draft;
+
+  // A successful rebuild means any previous "ignored" record for
+  // this path (wrong type, too large, …) is stale. Errors are
+  // swallowed so a failed clear can't fail the sync, but we wait
+  // for it so callers never observe the stale record after the
+  // sync finishes. For a folder post the same applies to each
+  // source file that is now part of the aggregate again (e.g. one
+  // shrunk back under the size limit), otherwise the dashboard
+  // keeps hiding its badge.
+  await Promise.all(
+    [entry.path].concat(sourcePaths).map(function (ignoredPath) {
+      return IgnoredFiles.drop(blog.id, ignoredPath).catch(noop);
+    })
+  );
+
+  const syntheticKeys = new Set();
+
+  const slugToken = makeSlug(
+    entry.slug || entry.metadata.title || entry.title || ""
+  );
+  if (slugToken) {
+    syntheticKeys.add(`/__wikilink_slug__/${slugToken}`);
+  }
+
+  const filenameToken = entry.path ? basename(entry.path) : "";
+  if (filenameToken) {
+    syntheticKeys.add(`/__wikilink_filename__/${filenameToken}`);
+  }
+
+  // An unchanged entry has the same slug and file name, and
+  // the same contentHash, so the same source bytes: what
+  // depends on it would build the same
+  if (!state.unchanged)
+    syntheticKeys.forEach((syntheticKey) =>
+      rebuildDependents(blog.id, syntheticKey).catch(noop)
+    );
+
+  // A draft folder post outside /drafts/ would write "/album.html"
+  // and could clobber a real sibling source file, so skip the
+  // filesystem preview there (still viewable via the draft URL).
+  if (
+    entry.draft &&
+    !isHidden(entry.path) &&
+    !isUnsafeFolderPostPreview(entry.path, entry.html)
+  ) {
+    await Preview.write(blog.id, entry.path);
+  }
+}
+
+module.exports = withCallback(async function set(blog, path) {
   // if typeof blog is not object, return error
   if (typeof blog !== "object") {
-    return callback(new Error("sync.set: blog must be an object"));
+    throw new Error("sync.set: blog must be an object");
   }
 
   // if typeof path is not string, return error
   if (typeof path !== "string") {
-    return callback(new Error("sync.set: path must be a string"));
+    throw new Error("sync.set: path must be a string");
   }
 
   path = pathNormalizer(path);
 
-  var queue = {};
   var multiInfo = build.findMultiFolder(path);
   var state = { unchanged: false };
+  var ignoring = false;
 
-  isPreview(blog.id, path, function (err, is_preview) {
-    if (err) return callback(err);
+  var is_preview = await isPreview(blog.id, path);
 
+  if (isPublic(path)) {
     // The file is public. Its name begins
     // with an underscore, or it's inside a folder
     // whose name begins with an underscore. It should
     // therefore not be a blog post.
-    if (isPublic(path)) {
-      queue.ignore = Ignore.bind(this, blog.id, path, PUBLIC_FILE);
-    }
-
+    ignoring = true;
+    await Ignore(blog.id, path, PUBLIC_FILE);
+  } else if (!isTemplate(path) && !is_preview) {
     // This file should become a blog post or page!
-    if (!isPublic(path) && !isTemplate(path) && !is_preview) {
-      queue.buildAndSet = buildAndSet.bind(this, blog, path, multiInfo, state);
-    }
+    await buildAndSet(blog, path, multiInfo, state);
+  }
 
-    async.parallel(queue, function (err) {
-      if (err) return callback(err);
+  // Resolves to { changed: false } when the file built exactly the
+  // entry already stored, so the caller need not purge the blog's pages
+  if (state.unchanged && !ignoring) return { changed: false };
 
-      // Calls back with { changed: false } when the file built exactly the
-      // entry already stored, so the caller need not purge the blog's pages
-      if (state.unchanged && !queue.ignore)
-        return callback(null, { changed: false });
+  var targets = [path];
 
-      var targets = [path];
+  if (multiInfo && multiInfo.entryPath)
+    targets.push(pathNormalizer(multiInfo.entryPath));
 
-      if (multiInfo && multiInfo.entryPath)
-        targets.push(pathNormalizer(multiInfo.entryPath));
-
-      targets = targets
-        .map(pathNormalizer)
-        .filter(function (value, index, array) {
-          return array.indexOf(value) === index;
-        });
-
-      async.eachSeries(
-        targets,
-        function (target, next) {
-          rebuildDependents(blog.id, target, next);
-        },
-        callback
-      );
-    });
+  targets = targets.map(pathNormalizer).filter(function (value, index, array) {
+    return array.indexOf(value) === index;
   });
-};
+
+  for (const target of targets) {
+    await rebuildDependents(blog.id, target);
+  }
+});

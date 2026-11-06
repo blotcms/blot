@@ -72,9 +72,9 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
       const path = "/hello.txt";
       const blogID = this.blog.id;
 
-      spyOn(Entry, "set").and.callFake((id, p, entry, callback) =>
-        callback(freeze())
-      );
+      spyOn(Entry, "set").and.callFake(async () => {
+        throw freeze();
+      });
 
       // eslint-disable-next-line no-unused-vars
       for (const attempt of [1, 2]) {
@@ -99,9 +99,9 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
         200
       );
 
-      spyOn(Entry, "set").and.callFake((id, p, entry, callback) =>
-        callback(freeze())
-      );
+      spyOn(Entry, "set").and.callFake(async () => {
+        throw freeze();
+      });
 
       expect((await call(upload, blogID, path, Buffer.from("aaab"))).code).toBe(
         503
@@ -123,9 +123,9 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
       const path = "/broken.txt";
 
       spyOn(console, "error");
-      spyOn(Entry, "set").and.callFake((id, p, entry, callback) =>
-        callback(new Error("this file is broken"))
-      );
+      spyOn(Entry, "set").and.callFake(async () => {
+        throw new Error("this file is broken");
+      });
 
       const res = await call(upload, this.blog.id, path, Buffer.from("Hello"));
       expect(res.code).toBe(200);
@@ -142,9 +142,9 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
         200
       );
 
-      spyOn(Entry, "drop").and.callFake((id, p, callback) =>
-        callback(freeze())
-      );
+      spyOn(Entry, "drop").and.callFake(async () => {
+        throw freeze();
+      });
 
       const res = await call(remove, blogID, path);
       expect(res.code).toBe(503);
@@ -165,9 +165,9 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
       await call(upload, blogID, path, Buffer.from("Bye"));
 
       spyOn(console, "error");
-      spyOn(Entry, "drop").and.callFake((id, p, callback) =>
-        callback(new Error("this file is broken"))
-      );
+      spyOn(Entry, "drop").and.callFake(async () => {
+        throw new Error("this file is broken");
+      });
 
       expect((await call(remove, blogID, path)).code).toBe(200);
       expect(await this.inFolder(path)).toBe(false);

@@ -15,10 +15,8 @@ describe("rebuild when Redis is unavailable", function () {
     await this.blog.write({ path: first, content: "Title: First" });
     await this.blog.write({ path: second, content: "Title: Second" });
 
-    spyOn(Entry, "set").and.callFake(function (blogID, path, entry, callback) {
-      callback(
-        new SimpleError("NOREPLICAS Not enough good replicas to write.")
-      );
+    spyOn(Entry, "set").and.callFake(async function () {
+      throw new SimpleError("NOREPLICAS Not enough good replicas to write.");
     });
 
     var error;
@@ -52,9 +50,9 @@ describe("rebuild when Redis is unavailable", function () {
     await this.blog.write({ path: broken, content: "Title: Broken" });
     await this.blog.write({ path: fine, content: "Title: Fine" });
 
-    spyOn(Entry, "set").and.callFake(function (blogID, path, entry, callback) {
-      if (path === broken) return callback(new Error("this file is broken"));
-      realSet.apply(Entry, arguments);
+    spyOn(Entry, "set").and.callFake(async function (blogID, path, entry) {
+      if (path === broken) throw new Error("this file is broken");
+      return realSet.apply(Entry, arguments);
     });
 
     await this.blog.rebuild({ log: log, status: function () {} });

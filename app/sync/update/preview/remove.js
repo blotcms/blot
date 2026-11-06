@@ -2,20 +2,14 @@ var drafts = require("../drafts");
 var previewPath = drafts.previewPath;
 var Blog = require("models/blog");
 var blogFolder = require("clients/folder");
-var callbackify = require("util").callbackify;
+var withCallback = require("helper/withCallback");
 
-module.exports = function (blogID, path, callback) {
-  callback = callback || function () {};
+// Callers that do not wait for this (the old callback was optional) must
+// catch its rejection themselves.
+module.exports = withCallback(async function remove(blogID, path) {
+  var blog = await Blog.get({ id: blogID });
 
-  Blog.get({ id: blogID }, function (err, blog) {
-    if (err) return callback(err);
+  if (!blog.client) return;
 
-    if (!blog.client) return callback();
-
-    var preview_path = previewPath(path);
-
-    callbackify(blogFolder.remove)(blog, preview_path, function (err) {
-      callback(err || null);
-    });
-  });
-};
+  await blogFolder.remove(blog, previewPath(path));
+});

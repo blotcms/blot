@@ -151,15 +151,16 @@ describe("update", function () {
     let changed = Promise.resolve();
 
     await withSync(blogID, async function (syncFolder) {
-      spyOn(Entry, "set").and.callFake(function (blogID, entryPath, entry, cb) {
-        // Change the source (and its size) after the first build read it. The
-        // write is finished before the entry is saved.
-        if (++calls === 1)
-          changed = folder.write(blogID, path, "second version");
-        changed.then(function () {
-          original.call(Entry, blogID, entryPath, entry, cb);
-        }, cb);
-      });
+      spyOn(Entry, "set").and.callFake(
+        async function (blogID, entryPath, entry) {
+          // Change the source (and its size) after the first build read it. The
+          // write is finished before the entry is saved.
+          if (++calls === 1)
+            changed = folder.write(blogID, path, "second version");
+          await changed;
+          return original.call(Entry, blogID, entryPath, entry);
+        }
+      );
 
       await folder.write(blogID, path, "first");
 

@@ -1,4 +1,3 @@
-var { promisify } = require("util");
 var withCallback = require("helper/withCallback");
 var Entry = require("models/entry");
 var Ignored = require("models/ignoredFiles");
@@ -13,14 +12,15 @@ module.exports = withCallback(async function drop(blogID, path) {
   var is_draft;
 
   try {
-    is_draft = await promisify(isDraft)(blogID, path);
+    is_draft = await isDraft(blogID, path);
   } catch (err) {}
 
-  if (is_draft) Preview.remove(blogID, path);
+  // Not waited for, and a failure is ignored
+  if (is_draft) Preview.remove(blogID, path).catch(function () {});
 
   // ORDER IS IMPORTANT
   // Rebuild must happen after we remove the file from disk
-  await promisify(Ignored.drop)(blogID, path);
-  await promisify(Entry.drop)(blogID, path);
-  await promisify(rebuildDependents)(blogID, path);
+  await Ignored.drop(blogID, path);
+  await Entry.drop(blogID, path);
+  await rebuildDependents(blogID, path);
 });

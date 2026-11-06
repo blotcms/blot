@@ -5,8 +5,8 @@ describe("rebuildDependents", function () {
   var client = require("models/client");
 
   it("uses sMembers and routes redis rejections to callback", function (done) {
-    spyOn(Blog, "get").and.callFake(function (_, callback) {
-      callback(null, { id: "blog-1" });
+    spyOn(Blog, "get").and.callFake(async function () {
+      return { id: "blog-1" };
     });
 
     spyOn(client, "sMembers").and.returnValue(
@@ -23,8 +23,8 @@ describe("rebuildDependents", function () {
   it("iterates over dependent paths returned by sMembers", function (done) {
     var paths = ["/a.md", "/b.md"];
 
-    spyOn(Blog, "get").and.callFake(function (_, callback) {
-      callback(null, { id: "blog-2" });
+    spyOn(Blog, "get").and.callFake(async function () {
+      return { id: "blog-2" };
     });
 
     spyOn(client, "sMembers").and.callFake(function (key) {
