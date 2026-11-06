@@ -10,26 +10,20 @@ var Dashboard = Express.Router();
 // By the time this middleware is mounted, blot
 // has fetched the information about this user.
 Dashboard.get("/", async function (req, res, next) {
-  function render() {
+  try {
+    if (req.blog.client !== "local") {
+      await Blog.set(req.blog.id, { client: "local" });
+      req.blog.client = "local";
+    }
+
     setup(req.blog.id).catch(function (err) {
       console.log("Error setting up", err);
     });
 
     res.render(__dirname + "/views/index.html");
-  }
-
-  if (req.blog.client === "local") {
-    return render();
-  }
-
-  try {
-    await Blog.set(req.blog.id, { client: "local" });
   } catch (err) {
-    return next(err);
+    next(err);
   }
-
-  req.blog.client = "local";
-  render();
 });
 
 Dashboard.route("/disconnect")
