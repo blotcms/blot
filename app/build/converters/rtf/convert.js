@@ -1,25 +1,28 @@
 var time = require("helper/time");
-var pandoc = require("util").callbackify(require("build/converters/pandoc"));
+var pandoc = require("build/converters/pandoc");
 var debug = require("debug")("blot:converters:rtf");
 var cheerio = require("cheerio");
 var normalizeLiteralDollarMath =
   require("build/math/normalizeLiteralDollars").normalizeLiteralDollarMath;
 
-module.exports = function (blog, text, callback) {
+module.exports = async function (blog, text) {
   debug("Pre-pandoc", text);
   time("pandoc");
-  pandoc({ from: "rtf" }, Buffer.from(text, "utf8"), function (err, output) {
+
+  var output;
+
+  try {
+    output = await pandoc({ from: "rtf" }, Buffer.from(text, "utf8"));
+  } finally {
     time.end("pandoc");
+  }
 
-    if (err) return callback(err);
+  var result = output.html;
 
-    var result = output.html;
+  var $ = cheerio.load(result, { decodeEntities: false }, false);
+  normalizeLiteralDollarMath($);
+  result = $.html();
 
-    var $ = cheerio.load(result, { decodeEntities: false }, false);
-    normalizeLiteralDollarMath($);
-    result = $.html();
-
-    debug("Final:", result);
-    callback(null, result);
-  });
+  debug("Final:", result);
+  return result;
 };

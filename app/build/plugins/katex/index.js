@@ -1,6 +1,7 @@
 // Render span.math.inline and span.math.display, the normalized internal representation for TeX emitted by converters, into KaTeX HTML.
 const katex = require("katex");
 const HARD_BREAK_SENTINEL = require("../../math/hardBreakSentinel");
+const withPluginCallback = require("../withPluginCallback");
 
 const SKIP_TAGS = ["script", "style", "code", "pre"];
 const BLOCK_BOUNDARY_TAGS = [
@@ -134,18 +135,16 @@ function renderPandocMath($) {
   });
 }
 
-function render($, callback) {
-  if (!$ || typeof $ !== "function") return callback(null);
+async function render($) {
+  if (!$ || typeof $ !== "function") return;
 
   renderPandocMath($);
   stripHardBreakSentinels($);
-
-  callback(null);
 }
 
 module.exports = {
   category: "codemath",
   title: "Math",
   description: "Enable TeX equations",
-  render,
+  render: withPluginCallback(render),
 };

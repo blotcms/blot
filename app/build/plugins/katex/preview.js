@@ -250,7 +250,7 @@ function renderPage(examples) {
 </html>`;
 }
 
-function serveKatexAsset(urlPath, res) {
+async function serveKatexAsset(urlPath, res) {
   const relative = urlPath.replace(/^\/katex\/?/, "") || "katex.min.css";
   const filePath = path.normalize(path.join(KATEX_DIST, relative));
 
@@ -259,23 +259,25 @@ function serveKatexAsset(urlPath, res) {
     return res.end("Forbidden");
   }
 
-  fs.readFile(filePath, (err, data) => {
-    if (err) {
-      res.statusCode = err.code === "ENOENT" ? 404 : 500;
-      return res.end(err.code === "ENOENT" ? "Not found" : "Error");
-    }
+  let data;
 
-    const ext = path.extname(filePath);
-    const types = {
-      ".css": "text/css; charset=utf-8",
-      ".woff": "font/woff",
-      ".woff2": "font/woff2",
-      ".ttf": "font/ttf",
-    };
+  try {
+    data = await fs.promises.readFile(filePath);
+  } catch (err) {
+    res.statusCode = err.code === "ENOENT" ? 404 : 500;
+    return res.end(err.code === "ENOENT" ? "Not found" : "Error");
+  }
 
-    res.setHeader("Content-Type", types[ext] || "application/octet-stream");
-    res.end(data);
-  });
+  const ext = path.extname(filePath);
+  const types = {
+    ".css": "text/css; charset=utf-8",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+    ".ttf": "font/ttf",
+  };
+
+  res.setHeader("Content-Type", types[ext] || "application/octet-stream");
+  res.end(data);
 }
 
 function markCorrect(file) {

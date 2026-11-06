@@ -18,11 +18,7 @@ async function loadTitles(blogID) {
   const titles = [];
 
   for (const list of ["entries", "pages"]) {
-    const ids = await new Promise((resolve, reject) =>
-      getListIDs(blogID, list, {}, (err, ids) =>
-        err ? reject(err) : resolve(ids)
-      )
-    );
+    const ids = await getListIDs(blogID, list, {});
 
     for (let i = 0; i < ids.length; i += BATCH_SIZE) {
       const entries = await new Promise((resolve, reject) =>
@@ -47,39 +43,32 @@ function titleIndex(blogID) {
   return () => (titles = titles || loadTitles(blogID));
 }
 
-function byTitle(titles, href, done) {
-  titles().then(
-    function (allEntries) {
-      const perfectMatch = allEntries.find((entry) => entry.title === href);
+async function byTitle(titles, href) {
+  const allEntries = await titles();
 
-      if (perfectMatch) {
-        return done(null, {
-          url: perfectMatch.url,
-          title: perfectMatch.title,
-          path: perfectMatch.path,
-        });
-      }
+  const perfectMatch = allEntries.find((entry) => entry.title === href);
 
-      // Will trim, lowercase, remove punctuation, etc.
-      const slug = makeSlug(href);
-      const roughMatch = allEntries.find(
-        (entry) => makeSlug(entry.title) === slug
-      );
+  if (perfectMatch) {
+    return {
+      url: perfectMatch.url,
+      title: perfectMatch.title,
+      path: perfectMatch.path,
+    };
+  }
 
-      if (roughMatch) {
-        return done(null, {
-          url: roughMatch.url,
-          title: roughMatch.title,
-          path: roughMatch.path,
-        });
-      }
+  // Will trim, lowercase, remove punctuation, etc.
+  const slug = makeSlug(href);
+  const roughMatch = allEntries.find((entry) => makeSlug(entry.title) === slug);
 
-      done(new Error("No entry found by title with href: " + href));
-    },
-    function (err) {
-      done(err);
-    }
-  );
+  if (roughMatch) {
+    return {
+      url: roughMatch.url,
+      title: roughMatch.title,
+      path: roughMatch.path,
+    };
+  }
+
+  throw new Error("No entry found by title with href: " + href);
 }
 
 module.exports = byTitle;

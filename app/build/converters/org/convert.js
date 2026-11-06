@@ -1,11 +1,12 @@
 const time = require("helper/time");
-const pandoc = require("util").callbackify(require("build/converters/pandoc"));
+const pandoc = require("build/converters/pandoc");
 const debug = require("debug")("blot:converters:org");
 const cheerio = require("cheerio");
 const extractMetadata = require("build/metadata");
 const loosenDisplayMath = require("build/math/loosenDisplayMath");
 
-module.exports = function (blog, text, callback) {
+// Resolves to [html, metadata]
+module.exports = async function (blog, text) {
   // Org always emits katex spans (see --katex below), so, as with the
   // markdown converter, display math ($$...$$) that occupies a whole
   // source line by itself but is glued to surrounding prose by a single
@@ -18,43 +19,46 @@ module.exports = function (blog, text, callback) {
 
   debug("Pre-pandoc", text);
   time("pandoc");
-  pandoc({ from: "org" }, Buffer.from(text, "utf8"), function (err, output) {
+
+  let output;
+
+  try {
+    output = await pandoc({ from: "org" }, Buffer.from(text, "utf8"));
+  } finally {
     time.end("pandoc");
+  }
 
-    if (err) return callback(err);
+  var result = output.html;
 
-    var result = output.html;
+  const $ = cheerio.load(
+    result,
+    {
+      decodeEntities: false,
+      xmlMode: true,
+    },
+    false
+  );
 
-    const $ = cheerio.load(
-      result,
-      {
-        decodeEntities: false,
-        xmlMode: true,
-      },
-      false
-    );
+  // if there is a pre tag with class="yaml"
+  // at the very start of the document then extract its contents,
+  // replace the pre tag with the following:
+  // ---
+  // $YAML
+  // ---
 
-    // if there is a pre tag with class="yaml"
-    // at the very start of the document then extract its contents,
-    // replace the pre tag with the following:
-    // ---
-    // $YAML
-    // ---
+  // if the first child is a pre tag with class="yaml"
+  const firstChild = $(":root").first();
+  const yaml = firstChild && firstChild.is("pre.yaml") ? firstChild.text() : "";
 
-    // if the first child is a pre tag with class="yaml"
-    const firstChild = $(":root").first();
-    const yaml =
-      firstChild && firstChild.is("pre.yaml") ? firstChild.text() : "";
+  if (yaml) {
+    firstChild.remove();
+  }
 
-    if (yaml) {
-      firstChild.remove();
-    }
+  let combined =
+    (yaml ? ["---", yaml.trim(), "---"].join("\n") : "") + $.html();
 
-    let text = (yaml ? ["---", yaml.trim(), "---"].join("\n") : "") + $.html();
+  const parsed = extractMetadata(combined);
 
-    const parsed = extractMetadata(text);
-
-    debug("Final:", parsed.html);
-    callback(null, parsed.html, parsed.metadata);
-  });
+  debug("Final:", parsed.html);
+  return [parsed.html, parsed.metadata];
 };

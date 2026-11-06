@@ -1,6 +1,6 @@
-const { callbackify } = require("util");
-const screenshot = callbackify(require("helper/screenshot"));
+const screenshot = require("helper/screenshot");
 const assets = require("storage/assets");
+const withPluginCallback = require("../withPluginCallback");
 const clfdate = require("helper/clfdate");
 const { v4: uuid } = require("uuid");
 const { is } = require("build/converters/webloc");
@@ -8,8 +8,8 @@ const SCREENSHOT_DIR = "_bookmark_screenshots";
 const SCREENSHOT_WIDTH = 1200;
 const SCREENSHOT_HEIGHT = 1200;
 
-function render($, callback, { blogID, path }) {
-  if (!is(path)) return callback();
+async function render($, { blogID, path }) {
+  if (!is(path)) return;
 
   const link = $("p a.bookmark").first();
   const href = link.attr("href");
@@ -21,7 +21,7 @@ function render($, callback, { blogID, path }) {
   const src = assets.url(blogID, screenshotPath);
 
   if (!href) {
-    return callback();
+    return;
   }
 
   // Only ever screenshot a plain public http(s) URL. Credentials in the URL
@@ -32,7 +32,7 @@ function render($, callback, { blogID, path }) {
   try {
     parsedHref = new URL(href);
   } catch (e) {
-    return callback();
+    return;
   }
 
   if (
@@ -40,52 +40,49 @@ function render($, callback, { blogID, path }) {
     parsedHref.username ||
     parsedHref.password
   ) {
-    return callback();
+    return;
   }
 
-  screenshot(
-    href,
-    localPathToScreenshot,
-    // untrusted: href comes from a user-uploaded .webloc/.url file, so this
-    // must run in the sandbox's browser jail - see app/sandbox/README.md.
-    // In production helper/screenshot refuses to
-    // fall back to a locally-launched Chromium for this.
-    { width: SCREENSHOT_WIDTH, height: SCREENSHOT_HEIGHT, untrusted: true },
-    function (err) {
-      if (err) {
-        return callback();
-      }
+  try {
+    await screenshot(
+      href,
+      localPathToScreenshot,
+      // untrusted: href comes from a user-uploaded .webloc/.url file, so this
+      // must run in the sandbox's browser jail - see app/sandbox/README.md.
+      // In production helper/screenshot refuses to
+      // fall back to a locally-launched Chromium for this.
+      { width: SCREENSHOT_WIDTH, height: SCREENSHOT_HEIGHT, untrusted: true }
+    );
+  } catch (err) {
+    return;
+  }
 
-      // The screenshot was written locally by the browser, now it's in place
-      callbackify(assets.commit)(blogID, screenshotPath, function (err) {
-        if (err) {
-          console.log(
-            clfdate(),
-            "[linkScreenshot] commit failed",
-            "blog=" + blogID,
-            "path=" + screenshotPath,
-            err.message
-          );
-          return callback();
-        }
+  // The screenshot was written locally by the browser, now it's in place
+  try {
+    await assets.commit(blogID, screenshotPath);
+  } catch (err) {
+    console.log(
+      clfdate(),
+      "[linkScreenshot] commit failed",
+      "blog=" + blogID,
+      "path=" + screenshotPath,
+      err.message
+    );
+    return;
+  }
 
-        $.root().html(
-          `<p class="bookmark-container">
+  $.root().html(
+    `<p class="bookmark-container">
         <a class="bookmark-screenshot" href="${href}">
           <img width="${SCREENSHOT_WIDTH}" height="${SCREENSHOT_HEIGHT}" src="${src}" title="Screenshot of ${caption}" />
         </a>
         <a class="bookmark" href="${href}">${caption}</a>
        </p>`
-        );
-
-        return callback();
-      });
-    }
   );
 }
 
 module.exports = {
-  render,
+  render: withPluginCallback(render),
   isDefault: true,
   category: "images",
   description: "Add screenshots to bookmark file posts",

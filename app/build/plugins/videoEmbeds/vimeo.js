@@ -1,7 +1,8 @@
 const fetch = require("node-fetch");
 const { parse } = require("url");
+const withCallback = require("helper/withCallback");
 
-module.exports = async function (href, callback) {
+async function vimeo(href) {
   try {
     const { hostname } = parse(href);
 
@@ -43,8 +44,10 @@ module.exports = async function (href, callback) {
       thumbnail ? `data-thumbnail="${thumbnail}"` : ``
     } src="//player.vimeo.com/video/${id}?badge=0&color=ffffff&byline=0&portrait=0" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen></iframe></div>`;
 
-    return callback(null, embedHTML);
+    return embedHTML;
   } catch (e) {
-    return callback(new Error("Could not retrieve video properties"));
+    throw new Error("Could not retrieve video properties", { cause: e });
   }
-};
+}
+
+module.exports = withCallback(vimeo);

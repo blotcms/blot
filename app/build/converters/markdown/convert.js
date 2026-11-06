@@ -2,13 +2,13 @@ var indentation = require("./indentation");
 var footnotes = require("./footnotes");
 var loosenDisplayMath = require("build/math/loosenDisplayMath");
 var time = require("helper/time");
-var pandoc = require("util").callbackify(require("build/converters/pandoc"));
+var pandoc = require("build/converters/pandoc");
 var debug = require("debug")("blot:converters:markdown");
 
 // insert a <br /> for each carriage return
 // '+hard_line_breaks' +
 
-module.exports = function (blog, text, options, callback) {
+module.exports = async function (blog, text, options) {
   var katexEnabled = Boolean(
     blog.plugins && blog.plugins.katex && blog.plugins.katex.enabled
   );
@@ -46,34 +46,35 @@ module.exports = function (blog, text, options, callback) {
 
   debug("Pre-pandoc", text);
   time("pandoc");
-  pandoc(
-    {
-      from: "markdown",
-      katex: katexEnabled,
-      callouts: Boolean(
-        blog.plugins &&
-        blog.plugins.callouts &&
-        blog.plugins.callouts.enabled === true
-      ),
-    },
-    Buffer.from(text, "utf8"),
-    { bibliography: options.bib, csl: options.csl },
-    function (err, output) {
-      time.end("pandoc");
+  var output;
 
-      if (err) return callback(err);
+  try {
+    output = await pandoc(
+      {
+        from: "markdown",
+        katex: katexEnabled,
+        callouts: Boolean(
+          blog.plugins &&
+          blog.plugins.callouts &&
+          blog.plugins.callouts.enabled === true
+        ),
+      },
+      Buffer.from(text, "utf8"),
+      { bibliography: options.bib, csl: options.csl }
+    );
+  } finally {
+    time.end("pandoc");
+  }
 
-      var result = output.html;
+  var result = output.html;
 
-      debug("Pre-footnotes", result);
-      time("footnotes");
-      result = safely(footnotes, result);
-      time.end("footnotes");
+  debug("Pre-footnotes", result);
+  time("footnotes");
+  result = safely(footnotes, result);
+  time.end("footnotes");
 
-      debug("Final:", result);
-      callback(null, result);
-    }
-  );
+  debug("Final:", result);
+  return result;
 };
 
 function safely(method, input) {

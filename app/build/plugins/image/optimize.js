@@ -2,9 +2,9 @@ var assets = require("storage/assets");
 var { v4: uuid } = require("uuid");
 var join = require("path").join;
 var fs = require("fs-extra");
-var callbackify = require("util").callbackify;
 var cache_folder_name = "_image_cache";
 var resize = require("./resize");
+var withCallback = require("helper/withCallback");
 var extname = require("path").extname;
 var basename = require("path").basename;
 var debug = require("debug")("blot:entry:build:plugins:image");
@@ -62,7 +62,8 @@ function truncateSlug(slug) {
 }
 
 module.exports = function (blogID, originalSrc) {
-  return function (path, _callback) {
+  // helper/transformer calls this with (path, callback), so it is wrapped
+  return withCallback(async function (path) {
     // Extnames can sometimes be uppercase, we want to ensure that
     // this will work on case-sensitive file systems so we lowercase it...
     var extension = extname(path).toLowerCase();
@@ -103,59 +104,44 @@ module.exports = function (blogID, originalSrc) {
         : assetPath
     );
 
-    // Wrap callback to clean up file if we encounter an error in this module
-    // When transformer creates and cleans up a tmp file for us, can remove this.
-    var callback = function (err, info) {
-      if (!err) return _callback(null, info);
+    try {
+      if (EXTENSION_WHITELIST.indexOf(extension) === -1)
+        throw new Error("Image does not have an extension we can cache.");
 
-      callbackify(assets.remove)(blogID, assetPath, function () {
-        _callback(err, info);
-      });
-    };
+      // Ensure the directory exists (in case we're using UUID as a subdirectory)
+      var finalDir = assets.path(blogID, cache_folder_name);
+      if (originalFilename && originalFilename.length > 0) {
+        finalDir = join(finalDir, uuidPart);
+      }
 
-    if (EXTENSION_WHITELIST.indexOf(extension) === -1)
-      return callback(
-        new Error("Image does not have an extension we can cache.")
-      );
-
-    // Ensure the directory exists (in case we're using UUID as a subdirectory)
-    var finalDir = assets.path(blogID, cache_folder_name);
-    if (originalFilename && originalFilename.length > 0) {
-      finalDir = join(finalDir, uuidPart);
-    }
-
-    debug("Ensuring directory exists:", finalDir);
-    fs.ensureDir(finalDir, function (err) {
-      if (err) return callback(err);
+      debug("Ensuring directory exists:", finalDir);
+      await fs.ensureDir(finalDir);
 
       debug("Copying", path, "to", finalPath);
-      fs.copy(path, finalPath, function (err) {
-        if (err) return callback(err);
+      await fs.copy(path, finalPath);
 
-        debug("Resizing", finalPath);
-        resize(finalPath, function (err, info) {
-          if (err) return callback(err);
+      debug("Resizing", finalPath);
+      var info = await resize(finalPath);
 
-          if (!info.width || !info.height)
-            return callback(new Error("No width or height"));
+      if (!info.width || !info.height) throw new Error("No width or height");
 
-          debug("Minifying", finalPath);
-          // minify(finalPath, function(err){
+      debug("Minifying", finalPath);
 
-          if (err) return callback(err);
+      info.src = src;
 
-          info.src = src;
+      await assets.commit(blogID, assetPath);
 
-          callbackify(assets.commit)(blogID, assetPath, function (err) {
-            if (err) return callback(err);
+      return info;
+    } catch (err) {
+      // Wrap the work to clean up file if we encounter an error in this module
+      // When transformer creates and cleans up a tmp file for us, can remove this.
+      try {
+        await assets.remove(blogID, assetPath);
+      } catch (removeErr) {}
 
-            callback(null, info);
-          });
-          // });
-        });
-      });
-    });
-  };
+      throw err;
+    }
+  });
 };
 module.exports.filenameFromSrc = filenameFromSrc;
 module.exports.truncateSlug = truncateSlug;
