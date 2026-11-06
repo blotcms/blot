@@ -94,7 +94,7 @@ case "${1:-}" in
     [ -f "$file" ] || exit 0
     prettier --write --log-level=warn "$file" >&2 || true
     # Exit status 2 shows Claude what ESLint reported
-    if ! output=$(eslint --fix --no-warn-ignored "$file" 2>&1); then
+    if ! output=$(eslint --fix --no-color --no-warn-ignored "$file" 2>&1); then
       echo "$output" >&2
       exit 2
     fi

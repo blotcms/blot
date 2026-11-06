@@ -1,3 +1,9 @@
+Follow-ups from the ESLint and Prettier setup (#2508)
+- `app/clients/icloud/macserver/httpClient/resync.js`: the `return` inside `finally` (when the debounce entry is gone) swallows a failed resync, so the caller sees success. Move the cleanup into an `if (entry)` and let the error through; needs a macserver deploy.
+- `app/clients/google-drive/util/download.js` and `scripts/tests/util/site.js` build a `new Promise(async ...)`: an exception thrown outside their own try/catch is lost and the promise never settles. Rewrite both as plain async functions (part of the callbacks to async/await migration).
+- `app/dashboard/site/import/helper/replace_embeds.js` threw a ReferenceError (no `cheerio` or `parse` in scope) on every call until #2508, so nothing can have been using it successfully: check whether the importer calls it at all, and delete it if not.
+- `app/documentation/tools/finder/index.js` threw on a `code.file` element without a type class (missing `determine_icon` require). Now fixed, so the docs may render icons that were never exercised; check the documentation pages once.
+
 Host cycle follow-ups, from the live cycle onto a 30 GB root on 6 Nov 2026 (#2552)
 - Check the daily email of 7 Nov: the first offsite (B2) sync from the new host runs at 02:10 UTC. Overdue or failed means the `blot-b2-storage` profile or `/etc/blot/storage-offsite-bucket` did not reach it at `app`.
 - The final data-volume snapshot (tagged `purpose=final-before-removal`) is the last cost left from the volume: move it to the archive tier around 20 Nov, or delete it once S3 plus B2 have run for a while. The operator decides.
@@ -22,8 +28,6 @@ Update these: Stale dependencies:
 - faker@4.1.0 and colors@1.3.2. Their author sabotaged both projects in 2022, and you still carry them.
 - moment, debug@3, async@2, node-fetch@2.
 - You have a skill that checks Node, nginx and the OS for advisories, but nothing checks npm packages. The checking points at the wrong place.
-
-Set up prettier to lint format code
 
 Fix this: 879 console.log calls in non-test app code, and no structured logging. Several of your skills exist mainly to grep and rebuild meaning from free-text logs ([STATS], [SLOW-FILL], [folder-asset]). Structured logs plus a metrics backend would make most of them unnecessary.
 
