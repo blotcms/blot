@@ -5,7 +5,8 @@ var client = require("models/client");
 var key = require("./key");
 var set = require("./set");
 var folder = require("storage/folder");
-var callbackify = require("util").callbackify;
+var promisify = require("util").promisify;
+var withCallback = require("helper/withCallback");
 var User = require("../user");
 var validate = require("./validate");
 var generateID = require("./generateID");
@@ -13,8 +14,24 @@ var _ = require("lodash");
 
 var UID_PLACEHOLDER = "";
 
-module.exports = function create(uid, info, callback) {
-  ensure(uid, "string").and(info, "object").and(callback, "function");
+// validate calls back (errors), errors being null or an object of messages
+// keyed by field
+function validateAsync(blog) {
+  return new Promise(function (resolve, reject) {
+    validate(UID_PLACEHOLDER, blog, function (errors) {
+      if (errors) return reject(errors);
+      resolve();
+    });
+  });
+}
+
+// User.set has no promise form yet
+var setUser = promisify(User.set);
+
+// Resolves to the new blog. Rejects with validate's errors object (fields
+// mapped to errors) or the error that stopped the creation.
+module.exports = withCallback(async function create(uid, info) {
+  ensure(uid, "string").and(info, "object");
 
   var blogs;
   var blog;
@@ -31,11 +48,7 @@ module.exports = function create(uid, info, callback) {
     title = "Untitled blog";
   }
 
-  try {
-    blogID = generateID();
-  } catch (e) {
-    return callback(e);
-  }
+  blogID = generateID();
 
   blog = {
     owner: uid,
@@ -50,34 +63,21 @@ module.exports = function create(uid, info, callback) {
 
   extend(blog).and(info).and(blogDefaults);
 
-  validate(UID_PLACEHOLDER, blog, function (errors) {
-    if (errors) return callback(errors);
+  await validateAsync(blog);
 
-    User.getById(uid, function (err, user) {
-      if (err || !user) return callback(err || new Error("No user"));
+  var user = await User.getById(uid);
+  if (!user) throw new Error("No user");
 
-      blogs = user.blogs || [];
-      blogs.push(blogID);
+  blogs = user.blogs || [];
+  blogs.push(blogID);
 
-      User.set(uid, { blogs: blogs, lastSession: blogID }, function (err) {
-        if (err) return callback(err);
+  await setUser(uid, { blogs: blogs, lastSession: blogID });
 
-        client
-          .sAdd(key.ids, blogID)
-          .then(function () {
-            set(blogID, blog, function (err) {
-              if (err) return callback(err);
+  await client.sAdd(key.ids, blogID);
+  await set(blogID, blog);
 
-              // A new blog's folder is empty, but must exist
-              callbackify(folder.mkdir)(blogID, "/", function (err) {
-                if (err) return callback(err);
+  // A new blog's folder is empty, but must exist
+  await folder.mkdir(blogID, "/");
 
-                return callback(err, blog);
-              });
-            });
-          })
-          .catch(callback);
-      });
-    });
-  });
-};
+  return blog;
+});

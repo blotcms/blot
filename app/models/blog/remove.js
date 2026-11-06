@@ -1,8 +1,7 @@
-var async = require("async");
 var client = require("models/client");
 var config = require("config");
 var folder = require("storage/folder");
-var callbackify = require("util").callbackify;
+var promisify = require("util").promisify;
 var assets = require("storage/assets");
 var get = require("./get");
 var set = require("./set");
@@ -11,6 +10,7 @@ var templateKey = require("models/template/key");
 var BackupDomain = require("./util/backupDomain");
 var flushCache = require("./flushCache");
 var folderLock = require("sync/lock");
+var withCallback = require("helper/withCallback");
 
 var START_CURSOR = "0";
 var SCAN_SIZE = 1000;
@@ -20,166 +20,136 @@ function isValidBlogID(blogID) {
   return typeof blogID === "string" && BLOG_ID_REGEX.test(blogID);
 }
 
-function remove(blogID, callback) {
-  if (!isValidBlogID(blogID)) return callback(new Error("Invalid blog id"));
+// Resolves to the removed blog. Rejects with the error that stopped the
+// removal: an invalid id, no such blog, or a failed step.
+var remove = withCallback(async function remove(blogID) {
+  if (!isValidBlogID(blogID)) throw new Error("Invalid blog id");
 
-  get({ id: blogID }, function (err, blog) {
-    if (err || !blog || !blog.id) return callback(err || new Error("No blog"));
+  var blog = await get({ id: blogID });
+  if (!blog || !blog.id) throw new Error("No blog");
 
-    // We need to enable the blog to disconnect the client
-    // since we need to acquire a sync lock...
-    set(blogID, { isDisabled: false }, function (err) {
-      if (err) return callback(err);
+  // We need to enable the blog to disconnect the client
+  // since we need to acquire a sync lock...
+  await set(blogID, { isDisabled: false });
 
-      flushCache(blogID, function (err) {
-        if (err) return callback(err);
+  await flushCache(blogID);
 
-        // The order of these tasks is important right now.
-        // For example, if you wipe the blog's folder before disconnecting
-        // the client, you might run into an error. It would be nice to
-        // be able to run them in parallel though
-        var tasks = [disconnectClient, updateUser, wipeFolders, deleteKeys].map(
-          function (task) {
-            return task.bind(null, blog);
-          }
-        );
+  // The order of these tasks is important right now.
+  // For example, if you wipe the blog's folder before disconnecting
+  // the client, you might run into an error. It would be nice to
+  // be able to run them in parallel though
+  await disconnectClient(blog);
+  await updateUser(blog);
+  await wipeFolders(blog);
+  await deleteKeys(blog);
 
-        async.series(tasks, function (err) {
-          callback(err, blog);
-        });
-      });
-    });
-  });
-}
+  return blog;
+});
 
-function wipeFolders(blog, callback) {
+async function wipeFolders(blog) {
   if (!blog.id || typeof blog.id !== "string")
-    return callback(new Error("Invalid blog id"));
+    throw new Error("Invalid blog id");
 
   // removeAll only ever deletes the one folder named for the blog (blog IDs
   // must be a single path segment), never anything above or beside it
-  async.parallel(
-    [
-      function (callback) {
-        callbackify(folder.removeAll)(blog.id, function (err) {
-          callback(err);
-        });
-      },
-      function (callback) {
-        assets.removeAll(blog.id).then(function () {
-          callback();
-        }, callback);
-      },
-    ],
-    function (err) {
-      callback(err);
-    }
-  );
+  await Promise.all([folder.removeAll(blog.id), assets.removeAll(blog.id)]);
 }
 
-function deleteKeys(blog, callback) {
-  (async function () {
-    try {
-      var multi = client.multi();
-      var patterns = ["template:" + blog.id + ":*", "blog:" + blog.id + ":*"];
+async function deleteKeys(blog) {
+  var multi = client.multi();
+  var patterns = ["template:" + blog.id + ":*", "blog:" + blog.id + ":*"];
 
-      var remove = [
-        "template:owned_by:" + blog.id,
-        templateKey.folderPendingRemoval(blog.id),
-        templateKey.folderFresh(blog.id),
-      ];
+  var remove = [
+    "template:owned_by:" + blog.id,
+    templateKey.folderPendingRemoval(blog.id),
+    templateKey.folderFresh(blog.id),
+  ];
 
-      if (blog.handle) {
-        remove.push("handle:" + blog.handle);
-        remove.push("domain:" + blog.handle + "." + config.host);
-      }
+  if (blog.handle) {
+    remove.push("handle:" + blog.handle);
+    remove.push("domain:" + blog.handle + "." + config.host);
+  }
 
-      // TODO ALSO remove alternate key with/out 'www', e.g. www.example.com
-      if (blog.domain) {
-        remove.push("domain:" + blog.domain);
-        remove.push("domain:" + BackupDomain(blog.domain));
-      }
+  // TODO ALSO remove alternate key with/out 'www', e.g. www.example.com
+  if (blog.domain) {
+    remove.push("domain:" + blog.domain);
+    remove.push("domain:" + BackupDomain(blog.domain));
+  }
 
-      for (const pattern of patterns) {
-        var cursor = START_CURSOR;
+  for (const pattern of patterns) {
+    var cursor = START_CURSOR;
 
-        do {
-          var res = await client.scan(cursor, {
-            MATCH: pattern,
-            COUNT: SCAN_SIZE,
-          });
-
-          if (!res || typeof res !== "object") {
-            throw new Error("Unexpected SCAN reply: " + JSON.stringify(res));
-          }
-
-          cursor = String(res.cursor);
-
-          if (Array.isArray(res.keys)) {
-            remove = remove.concat(res.keys);
-          }
-        } while (cursor !== START_CURSOR);
-      }
-
-      // A sync (or a script under sync/hold) may still hold the folder
-      // lock. Deleting it under them makes their release find it gone, and
-      // a holder whose lock is lost crashes the process. The holder
-      // releases it, or it expires on its own within the lock's TTL.
-      var folderLockKey = folderLock.key(blog.id);
-      remove = remove.filter(function (name) {
-        return name !== folderLockKey;
+    do {
+      var res = await client.scan(cursor, {
+        MATCH: pattern,
+        COUNT: SCAN_SIZE,
       });
 
-      if (remove.length > 0) multi.del(remove);
-      multi.sRem(key.ids, blog.id);
-      await multi.exec();
-      callback();
-    } catch (err) {
-      callback(err);
-    }
-  })();
+      if (!res || typeof res !== "object") {
+        throw new Error("Unexpected SCAN reply: " + JSON.stringify(res));
+      }
+
+      cursor = String(res.cursor);
+
+      if (Array.isArray(res.keys)) {
+        remove = remove.concat(res.keys);
+      }
+    } while (cursor !== START_CURSOR);
+  }
+
+  // A sync (or a script under sync/hold) may still hold the folder
+  // lock. Deleting it under them makes their release find it gone, and
+  // a holder whose lock is lost crashes the process. The holder
+  // releases it, or it expires on its own within the lock's TTL.
+  var folderLockKey = folderLock.key(blog.id);
+  remove = remove.filter(function (name) {
+    return name !== folderLockKey;
+  });
+
+  if (remove.length > 0) multi.del(remove);
+  multi.sRem(key.ids, blog.id);
+  await multi.exec();
 }
 
-function disconnectClient(blog, callback) {
+function disconnectClient(blog) {
   var clients = require("clients");
 
-  if (!blog.client || !clients[blog.client]) return callback(null);
+  if (!blog.client || !clients[blog.client]) return Promise.resolve();
 
-  clients[blog.client].disconnect(blog.id, function (err) {
-    // we still want to continue even if there is an error
-    if (err) {
-      console.error("Error disconnecting client:", err);
-    }
+  return new Promise(function (resolve) {
+    clients[blog.client].disconnect(blog.id, function (err) {
+      // we still want to continue even if there is an error
+      if (err) {
+        console.error("Error disconnecting client:", err);
+      }
 
-    callback(null);
+      resolve();
+    });
   });
 }
 
-function updateUser(blog, callback) {
+async function updateUser(blog) {
   var User = require("models/user");
-  User.getById(blog.owner, function (err, user) {
-    if (err) return callback(err);
+  var user = await User.getById(blog.owner);
 
-    // If the user has already been deleted then
-    // we don't need to worry about this.
-    if (!user || !user.blogs) return callback();
+  // If the user has already been deleted then
+  // we don't need to worry about this.
+  if (!user || !user.blogs) return;
 
-    var changes = {};
+  var changes = {};
 
-    var blogs = user.blogs.slice();
+  var blogs = user.blogs.slice();
 
-    blogs = blogs.filter(function (otherBlogID) {
-      return otherBlogID !== blog.id;
-    });
-
-    changes.blogs = blogs;
-
-    if (user.lastSession === blog.id) changes.lastSession = "";
-
-    User.set(blog.owner, changes, function (err) {
-      callback(err);
-    });
+  blogs = blogs.filter(function (otherBlogID) {
+    return otherBlogID !== blog.id;
   });
+
+  changes.blogs = blogs;
+
+  if (user.lastSession === blog.id) changes.lastSession = "";
+
+  // User.set has no promise form yet
+  await promisify(User.set)(blog.owner, changes);
 }
 
 module.exports = remove;
