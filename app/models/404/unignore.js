@@ -1,20 +1,15 @@
 var client = require("models/client");
 var ensure = require("helper/ensure");
+var withCallback = require("helper/withCallback");
 var key = require("./key");
 
-module.exports = function (blogID, url, callback) {
-  ensure(blogID, "string").and(url, "string").and(callback, "function");
+// Resolves to the number of URLs removed
+module.exports = withCallback(async function unignore(blogID, url) {
+  ensure(blogID, "string").and(url, "string");
 
   var ignoreKey = key.ignore(blogID);
 
   ensure(ignoreKey, "string");
 
-  (async function () {
-    try {
-      var result = await client.sRem(ignoreKey, url);
-      return callback(null, result);
-    } catch (err) {
-      return callback(err);
-    }
-  })();
-};
+  return await client.sRem(ignoreKey, url);
+});

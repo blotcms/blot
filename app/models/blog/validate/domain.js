@@ -11,18 +11,20 @@ var SUBDOMAIN =
 var TOO_LONG = "Please choose a domain shorter than 70 letters.";
 
 var config = require("config");
+var withCallback = require("helper/withCallback");
 
-module.exports = function (blogID, domain, callback) {
+// Resolves to the valid domain. Rejects with a message (a string) or an Error.
+module.exports = withCallback(async function validateDomain(blogID, domain) {
   var get = require("../get");
 
   try {
-    ensure(blogID, "string").and(domain, "string").and(callback, "function");
+    ensure(blogID, "string").and(domain, "string");
 
     domain = domain.replace(" ", "");
     domain = domain.trim();
     domain = domain.toLowerCase();
 
-    if (!domain) return callback(null, "");
+    if (!domain) return "";
 
     // http://google.com -> google.com
     if (domain.indexOf("://") > -1) domain = url.parse(domain).hostname;
@@ -30,26 +32,30 @@ module.exports = function (blogID, domain, callback) {
     // mañana.com -> xn--maana-pta.com
     domain = punycode.toASCII(domain);
   } catch (e) {
-    return callback(INVALID);
+    throw INVALID;
   }
 
   if (!HOST.test(domain)) {
-    return callback(INVALID);
+    throw INVALID;
   }
 
   if (domain.endsWith(config.host)) {
-    return callback(SUBDOMAIN);
+    throw SUBDOMAIN;
   }
 
   if (domain.length > 70) {
-    return callback(new Error(TOO_LONG));
+    throw new Error(TOO_LONG);
   }
 
-  get({ domain: domain }, function (err, blog) {
-    if (blog && blog.id && blog.id !== blogID) {
-      return callback(IN_USE);
-    }
+  // A failed lookup is treated as the domain being free, as it was
+  var blog;
+  try {
+    blog = await get({ domain: domain });
+  } catch (err) {}
 
-    return callback(null, domain);
-  });
-};
+  if (blog && blog.id && blog.id !== blogID) {
+    throw IN_USE;
+  }
+
+  return domain;
+});

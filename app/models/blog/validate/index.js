@@ -18,41 +18,44 @@ var validator = {
 // Export a function which provides async access
 // to all the async modules. this requires user
 // each time and is bad in that respect
-module.exports = function (blogID, updates, callback) {
-  ensure(blogID, "string").and(updates, MODEL).and(callback, "function");
+// Resolves to the valid updates. Rejects with an object of errors keyed by
+// field, or with the error that stopped validation.
+module.exports = async function validate(blogID, updates) {
+  ensure(blogID, "string").and(updates, MODEL);
 
-  var totalUpdates = 0,
-    validUpdates = {},
-    errors = {};
+  var validUpdates = {},
+    errors = {},
+    pending = [];
 
   for (var i in updates)
     if (type(validator[i]) === "function") {
-      totalUpdates++;
+      pending.push(i);
     } else {
       validUpdates[i] = updates[i];
     }
 
-  if (!totalUpdates) {
-    if (_.isEmpty(errors)) errors = null;
+  // The validators all start together and finish in any order
+  var results = await Promise.all(
+    pending.map(function (key) {
+      return validator[key](blogID, updates[key]).then(
+        function (validUpdate) {
+          return { key: key, validUpdate: validUpdate };
+        },
+        function (error) {
+          return { key: key, error: error };
+        }
+      );
+    })
+  );
 
-    return callback(errors, validUpdates);
-  }
+  results.forEach(function (result) {
+    if (result.error) errors[result.key] = result.error;
+    // validUpdate might be falsy (empty string, FALSE)
+    if (result.validUpdate !== undefined)
+      validUpdates[result.key] = result.validUpdate;
+  });
 
-  for (var key in updates)
-    if (type(validator[key]) === "function")
-      validator[key](blogID, updates[key], onValidation(key));
+  if (!_.isEmpty(errors)) throw errors;
 
-  function onValidation(key) {
-    return function (error, validUpdate) {
-      if (error) errors[key] = error;
-
-      // validUpdate might be falsy (empty string, FALSE)
-      if (validUpdate !== undefined) validUpdates[key] = validUpdate;
-
-      if (!--totalUpdates) {
-        if (_.isEmpty(errors)) errors = null;
-        callback(errors, validUpdates);
-      }
-    };
-  }
+  return validUpdates;
 };
