@@ -1,7 +1,5 @@
 const _ = require("lodash");
-const async = require("async");
 const getByUrl = require("./getByUrl");
-const withCallback = require("helper/withCallback");
 const debug = require("debug")("blot:entry:set:backlinksToUpdate");
 
 // This function takes an entry currently being updated
@@ -13,19 +11,15 @@ const debug = require("debug")("blot:entry:set:backlinksToUpdate");
 //   it should appear on that post's backlinks list
 // - this entry's permalink has changed and the URL that
 //   appears on other post's backlinks list needs to change
-function backlinksToUpdate(
+//
+// Resolves to an object of linked entry path -> its new backlinks.
+async function backlinksToUpdate(
   blogID,
   entry,
   previousInternalLinks,
   previousPermalink,
-  previousUrl,
-  callback
+  previousUrl
 ) {
-  if (typeof previousUrl === "function") {
-    callback = previousUrl;
-    previousUrl = undefined;
-  }
-
   // The value we record on other entries' backlinks lists to point back
   // at this entry. Pages (and any entry without an explicit Permalink/
   // Link/Url in their metadata) have an empty entry.permalink, so fall
@@ -51,65 +45,72 @@ function backlinksToUpdate(
 
   let changes = {};
 
-  async.filter(
-    allInternalLinks,
-    function (urlPath, next) {
+  // All the lookups run in parallel
+  const found = await Promise.all(
+    allInternalLinks.map(async function (urlPath) {
       debug("getting", blogID, urlPath);
-      // A failed lookup is the same as no entry
-      withCallback(getByUrl)(blogID, urlPath, function (err, backLinkedEntry) {
-        if (!backLinkedEntry) {
-          debug("no backlinked entry for", urlPath);
-          return next(null, false);
-        }
 
-        debug("found backlinked entry", backLinkedEntry.path, "for", urlPath);
-        changes[urlPath] = {
-          path: backLinkedEntry.path,
-          backlinks: backLinkedEntry.backlinks,
-          previousBacklinks: backLinkedEntry.backlinks.slice(),
-        };
-        next(null, true);
-      });
-    },
-    function (err, validInternalLinks) {
-      debug(entry.path, ":validInternalLinks", validInternalLinks);
-      // Remove this entry from the backlinks list
-      // of the entries which contain it.
-      formerInternalLinks
-        .filter((link) => validInternalLinks.indexOf(link) > -1)
-        .forEach((link) => {
-          changes[link].backlinks = changes[link].backlinks.filter(
-            (link) => link !== permalink && link !== formerPermalink
-          );
-        });
+      let backLinkedEntry;
 
-      currentInternalLinks
-        .filter((link) => validInternalLinks.indexOf(link) > -1)
-        .forEach((link) => {
-          if (permalink) changes[link].backlinks.push(permalink);
-          if (permalink !== formerPermalink) {
-            changes[link].backlinks = changes[link].backlinks.filter(
-              (link) => link !== formerPermalink
-            );
-          }
-        });
-
-      let result = {};
-
-      for (const url in changes) {
-        const previousBacklinks = changes[url].previousBacklinks;
-        const updatedBacklinks = _.uniq(changes[url].backlinks);
-
-        if (_.isEqual(previousBacklinks, updatedBacklinks)) continue;
-
-        result[changes[url].path] = updatedBacklinks;
+      try {
+        backLinkedEntry = await getByUrl(blogID, urlPath);
+      } catch (err) {
+        // A failed lookup is the same as no entry
       }
 
-      debug(entry.path, "result", result);
-      debug(entry.path, "[backlinks]", entry.backlinks);
-      callback(null, result);
-    }
+      if (!backLinkedEntry) {
+        debug("no backlinked entry for", urlPath);
+        return false;
+      }
+
+      debug("found backlinked entry", backLinkedEntry.path, "for", urlPath);
+      changes[urlPath] = {
+        path: backLinkedEntry.path,
+        backlinks: backLinkedEntry.backlinks,
+        previousBacklinks: backLinkedEntry.backlinks.slice(),
+      };
+      return true;
+    })
   );
+
+  const validInternalLinks = allInternalLinks.filter((link, i) => found[i]);
+
+  debug(entry.path, ":validInternalLinks", validInternalLinks);
+  // Remove this entry from the backlinks list
+  // of the entries which contain it.
+  formerInternalLinks
+    .filter((link) => validInternalLinks.indexOf(link) > -1)
+    .forEach((link) => {
+      changes[link].backlinks = changes[link].backlinks.filter(
+        (link) => link !== permalink && link !== formerPermalink
+      );
+    });
+
+  currentInternalLinks
+    .filter((link) => validInternalLinks.indexOf(link) > -1)
+    .forEach((link) => {
+      if (permalink) changes[link].backlinks.push(permalink);
+      if (permalink !== formerPermalink) {
+        changes[link].backlinks = changes[link].backlinks.filter(
+          (link) => link !== formerPermalink
+        );
+      }
+    });
+
+  let result = {};
+
+  for (const url in changes) {
+    const previousBacklinks = changes[url].previousBacklinks;
+    const updatedBacklinks = _.uniq(changes[url].backlinks);
+
+    if (_.isEqual(previousBacklinks, updatedBacklinks)) continue;
+
+    result[changes[url].path] = updatedBacklinks;
+  }
+
+  debug(entry.path, "result", result);
+  debug(entry.path, "[backlinks]", entry.backlinks);
+  return result;
 }
 
 module.exports = backlinksToUpdate;
