@@ -5,7 +5,7 @@ xdescribe("scheduled posts", function () {
   const Blog = require("models/blog");
   const sync = require("sync");
   const blogServer = require("../../blog");
-  const fs = require("fs-extra");
+  const storageFolder = require("storage/folder");
   const Express = require("express");
   const config = require("config");
   const guid = require("helper/guid");
@@ -31,15 +31,16 @@ xdescribe("scheduled posts", function () {
             done();
           });
         }, MINUTE);
-        fs.outputFileSync(this.blogDirectory + path, contents, "utf-8");
-        folder.update(path, err => {
-          if (err) return callback(err);
-          finish(null, () => {
-            request(this.origin, { strictSSL: false }, (err, res, body) => {
-              expect(body).not.toContain(id);
+        storageFolder.write(this.blog.id, path, contents).then(() => {
+          folder.update(path, err => {
+            if (err) return callback(err);
+            finish(null, () => {
+              request(this.origin, { strictSSL: false }, (err, res, body) => {
+                expect(body).not.toContain(id);
+              });
             });
           });
-        });
+        }, callback);
       });
     },
     MINUTE * 2

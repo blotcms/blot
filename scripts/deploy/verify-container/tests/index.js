@@ -138,45 +138,18 @@ describe("deploy verify-container", function () {
     }
   });
 
-  it("fails the data volume marker check when the marker is missing", async function () {
-    const markerCheck = checks.find((c) => c.name === "data volume marker");
+  it("checks the data directory is writable", async function () {
+    const dataCheck = checks.find((c) => c.name === "data directory writable");
     const fs = require("fs");
     const os = require("os");
     const path = require("path");
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "verify-"));
 
     try {
-      const run = () =>
-        rejection(markerCheck.run({ config: { data_directory: dir } }));
-
-      expect((await run()).message).toMatch(/data volume not mounted/);
-
-      fs.writeFileSync(path.join(dir, ".blot-data-volume"), "vol-0123456789abcdef0\n");
-      expect(await run()).toBe(null);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("fails the blog folder check when the data mount is empty", async function () {
-    const dataCheck = checks.find((c) => c.name === "blog folders match redis");
-    const fs = require("fs");
-    const os = require("os");
-    const path = require("path");
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "verify-"));
-    const redis = { sMembers: async () => ["BLOG_1", "BLOG_2", "BLOG_3"] };
-
-    try {
-      const run = () =>
-        rejection(dataCheck.run({ config: { blog_folder_dir: dir }, redis }));
-
-      expect((await run()).message).toMatch(/no blog folders/);
-
-      fs.mkdirSync(path.join(dir, "BLOG_1"));
-      expect((await run()).message).toMatch(/wrong or stale data mount/);
-
-      fs.mkdirSync(path.join(dir, "BLOG_2"));
-      expect(await run()).toBe(null);
+      expect(await rejection(dataCheck.run({ config: { data_directory: dir } }))).toBe(null);
+      expect(
+        await rejection(dataCheck.run({ config: { data_directory: path.join(dir, "missing") } }))
+      ).not.toBe(null);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

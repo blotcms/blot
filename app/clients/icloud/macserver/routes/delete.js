@@ -4,6 +4,7 @@ import { iCloudDriveDirectory } from "../config.js";
 import clfdate from "../util/clfdate.js";
 import normalizeMacserverPath from "./normalizeMacserverPath.js";
 import { watch, unwatch } from "../watcher/index.js";
+import { forgetPath } from "../pushedFiles.js";
 
 export default async (req, res) => {
   const blogID = req.header("blogID");
@@ -35,6 +36,10 @@ export default async (req, res) => {
       .status(400)
       .send("Invalid path: attempted to access parent directory");
   }
+
+  // The watcher is stopped, so it never sees this removal: forget the path
+  // here, or the file put back with the same size and mtime would be skipped
+  forgetPath(blogID, normalizedPath);
 
   // first unwatch the blogID to prevent further events from being triggered
   try {

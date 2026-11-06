@@ -48,7 +48,10 @@ sums() {
     /etc/redis6/redis6.conf /etc/redis6/blot-memory.conf /etc/cron.d/blot-redis /usr/local/bin/mount-instance-store.sh \
     /etc/tmpfiles.d/blot-redis.conf /etc/systemd/journald.conf.d/zz-blot-host.conf \
     /etc/systemd/system/fail2ban.service.d/20-memory.conf \
-    /usr/local/sbin/blot-sandbox-cgroup.sh /etc/systemd/system/blot-sandbox-cgroup.service
+    /usr/local/sbin/blot-sandbox-cgroup.sh /etc/systemd/system/blot-sandbox-cgroup.service \
+    /usr/local/lib/blot-storage/offsite-lib.sh /usr/local/lib/blot-storage/offsite-sync.sh \
+    /usr/local/lib/blot-storage/offsite-restore-test.sh /etc/systemd/system/blot-storage-offsite.service \
+    /etc/systemd/system/blot-storage-offsite.timer /etc/logrotate.d/blot-storage-offsite
     stat -c "%n %U:%G %a" /var/www/blot /var/www/blot/data /var/www/blot/app/blog/static /run/blot/redis
     readlink /usr/local/bin/redis-cli; id -nG ec2-user deploy
     redis6-cli INFO server | grep process_id'
@@ -73,6 +76,16 @@ setup "$TMP/run3"
 sums > "$TMP/sums2"
 check "a third run leaves the managed files as they were" cmp -s "$TMP/sums1" "$TMP/sums2"
 
+# A host set up before the data volume went away: the unit and the drop-in that
+# gated docker on it. Skip mode has no systemctl, so only the files are checked.
+in_ct 'touch /etc/systemd/system/mount-data-volume.service /etc/systemd/system/docker.service.d/20-data-volume.conf'
+setup "$TMP/run4" || exit 1
+check "the data volume unit and its docker drop-in are removed" in_ct '
+  [ ! -e /etc/systemd/system/mount-data-volume.service ] && [ ! -e /etc/systemd/system/docker.service.d/20-data-volume.conf ]'
+check "and nothing else about docker changed" in_ct '[ -f /etc/systemd/system/docker.service.d/30-redis.conf ]'
+setup "$TMP/run5" || exit 1
+check "removing them again is a no-op" bash -c "! grep -q 'removed mount-data-volume' '$TMP/run5'"
+
 check "journald is capped and fail2ban has a memory limit" in_ct '
   grep -qx "SystemMaxUse=500M" /etc/systemd/journald.conf.d/zz-blot-host.conf &&
   grep -qx "MemoryMax=256M" /etc/systemd/system/fail2ban.service.d/20-memory.conf'
@@ -82,6 +95,18 @@ check "redis-cli resolves to redis6-cli" \
 check "fail2ban-client and iptables exist" in_ct 'command -v fail2ban-client && command -v iptables'
 check "firewalld is not installed" in_ct '! rpm -q firewalld'
 check "sqlite3 is installed, for bans.sh export" in_ct 'command -v sqlite3'
+check "rclone is installed, with the S3 and B2 backends, for the storage offsite sync" in_ct '
+  rclone version > /dev/null && rclone help backends | grep -qw s3 && rclone help backends | grep -qw b2'
+check "the storage offsite scripts are installed, and the unit runs the sync as ec2-user" in_ct '
+  d=/usr/local/lib/blot-storage
+  [ -x $d/offsite-sync.sh ] && [ -x $d/offsite-restore-test.sh ] && [ -f $d/offsite-lib.sh ] &&
+  bash -n $d/offsite-sync.sh && bash -n $d/offsite-restore-test.sh &&
+  u=/etc/systemd/system/blot-storage-offsite.service
+  grep -qx "ExecStart=$d/offsite-sync.sh" $u && grep -qx "User=ec2-user" $u && grep -qx "MemoryMax=2G" $u && grep -qx "OOMPolicy=continue" $u &&
+  grep -qx "StandardOutput=append:/home/ec2-user/storage-offsite.log" $u &&
+  grep -qx "OnCalendar=\*-\*-\* 02:10:00 UTC" /etc/systemd/system/blot-storage-offsite.timer'
+check "with no bucket file the sync is off and exits 0" in_ct '
+  runuser -u ec2-user -- /usr/local/lib/blot-storage/offsite-sync.sh | grep -q "off (no bucket in /etc/blot/storage-offsite-bucket)"'
 check "docker is installed and not running" in_ct 'rpm -q docker && ! grep -lx dockerd /proc/[0-9]*/comm 2> /dev/null'
 check "cron entry" in_ct '[ "$(grep -v "^#" /etc/cron.d/blot-docker-health)" = "* * * * * root /usr/local/bin/check_docker_health.sh >> /home/ec2-user/docker-health-check.log 2>&1" ] &&
   [ "$(stat -c "%a %U:%G" /etc/cron.d/blot-docker-health)" = "644 root:root" ]'
@@ -239,6 +264,8 @@ check "bootstrap.sh copies the files and runs setup.sh" \
 check "the deploy-user script is found in the copied layout" in_ct '[ -f /tmp/blot-host/setup-deploy-user.sh ] && [ -f /tmp/blot-host/host/setup.sh ]'
 check "the Redis files are copied in the layout its setup expects" in_ct '
   for f in redis.conf bin/backup.sh bin/tcpmem-log.sh host/setup.sh host/mount-instance-store.sh; do [ -f /tmp/blot-host/redis/$f ] || exit 1; done'
+check "and the storage offsite scripts where setup.sh looks for them" in_ct '
+  for f in offsite-lib.sh offsite-sync.sh offsite-restore-test.sh; do [ -f /tmp/blot-host/storage-bucket/bin/$f ] || exit 1; done'
 check "the key survives the remote shell's quoting" in_ct "[ \"\$(grep -c 'test@example.com' /home/deploy/.ssh/authorized_keys)\" = 1 ]"
 
 echo "# Amazon Linux 2023 without the optional env"

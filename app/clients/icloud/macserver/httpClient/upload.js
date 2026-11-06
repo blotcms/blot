@@ -8,6 +8,7 @@ import clfdate from "../util/clfdate.js";
 import fs from "fs-extra";
 import * as brctl from "../brctl/index.js";
 import fetch from "./rateLimitedFetchWithRetriesAndTimeout.js";
+import { isUnchanged, recordPushed } from "../pushedFiles.js";
 import { join } from "path";
 
 class FileTooLargeError extends Error {
@@ -111,10 +112,19 @@ export default async (blogID, path) => {
     throw new Error(`Stat failed: ${e.message}`);
   }
 
+  // Checked before the download: an evicted file is reported as changed each
+  // time iCloud evicts or re-materialises it, and downloading it to find out
+  // nothing changed is what can time out.
+  if (isUnchanged(blogID, path, preStat)) {
+    console.log(clfdate(), `Skipping upload: unchanged since last push: ${filePath}`);
+    return;
+  }
+
   if (preStat.size > maxFileSize) {
     const modifiedTime = preStat.mtime.toISOString();
 
     await notifyOversizedFile(preStat.size, modifiedTime);
+    recordPushed(blogID, path, preStat);
 
     throw new FileTooLargeError({
       path,
@@ -145,6 +155,7 @@ export default async (blogID, path) => {
     const modifiedTime = stat.mtime.toISOString();
 
     await notifyOversizedFile(stat.size, modifiedTime);
+    recordPushed(blogID, path, stat);
 
     throw new FileTooLargeError({
       path,
@@ -210,5 +221,6 @@ export default async (blogID, path) => {
     throw new Error(`Upload failed with status ${response.status}`);
   }
 
+  recordPushed(blogID, path, stat);
   console.log(clfdate(), "Upload successful:", text);
 };

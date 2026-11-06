@@ -30,7 +30,7 @@ module.exports = function disconnect(blogID, callback) {
         debug("dropping blog from database");
 
         folder.status("Removing Dropbox credentials");
-        database.drop(blogID, function () {
+        database.drop(blogID, function (err) {
           if (err) return done(err, callback);
 
           if (!account) {

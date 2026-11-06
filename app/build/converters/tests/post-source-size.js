@@ -1,4 +1,4 @@
-const fs = require("fs-extra");
+const folder = require("storage/folder");
 const html = require("build/converters/html");
 const markdown = require("build/converters/markdown");
 const markdownWithoutPandoc = require("build/converters/markdown-without-pandoc");
@@ -37,17 +37,16 @@ describe("post source size limit", function () {
   implementations.forEach(([name, converter, extension, limit]) => {
     it(`${name} accepts a file exactly at the ${limit.label} limit`, function (done) {
       const entryPath = `/at-limit${extension}`;
-      fs.outputFileSync(
-        this.blogDirectory + entryPath,
-        Buffer.alloc(limit.bytes, 32)
-      );
+      const blog = this.blog;
 
-      converter.read(this.blog, entryPath, function (err, output, stat) {
-        if (err) return done.fail(err);
-        expect(typeof output).toBe("string");
-        expect(stat.size).toBe(limit.bytes);
-        done();
-      });
+      folder.write(blog.id, entryPath, Buffer.alloc(limit.bytes, 32)).then(function () {
+        converter.read(blog, entryPath, function (err, output, stat) {
+          if (err) return done.fail(err);
+          expect(typeof output).toBe("string");
+          expect(stat.size).toBe(limit.bytes);
+          done();
+        });
+      }, done.fail);
     });
   });
 
@@ -70,16 +69,15 @@ describe("post source size limit", function () {
   ].forEach(([name, converter, extension, limit]) => {
     it(`${name} rejects ${extension} one byte over the ${limit.label} limit`, function (done) {
       const entryPath = `/over-limit${extension}`;
-      fs.outputFileSync(
-        this.blogDirectory + entryPath,
-        Buffer.alloc(limit.bytes + 1, 32)
-      );
+      const blog = this.blog;
 
-      converter.read(this.blog, entryPath, function (err) {
-        expect(err).toEqual(jasmine.any(Error));
-        expect(err.code).toBe("TOO_LARGE");
-        done();
-      });
+      folder.write(blog.id, entryPath, Buffer.alloc(limit.bytes + 1, 32)).then(function () {
+        converter.read(blog, entryPath, function (err) {
+          expect(err).toEqual(jasmine.any(Error));
+          expect(err.code).toBe("TOO_LARGE");
+          done();
+        });
+      }, done.fail);
     });
   });
 });

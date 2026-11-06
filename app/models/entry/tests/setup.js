@@ -1,5 +1,5 @@
 module.exports = function () {
-  const fs = require("fs-extra");
+  const folder = require("storage/folder");
   const async = require("async");
   const build = require("build");
   const get = require("../get");
@@ -36,19 +36,19 @@ module.exports = function () {
     };
 
     this.remove = async path => {
-      return new Promise((resolve, reject) => {
-        fs.remove(this.blogDirectory + path, err => {
-          if (err) reject(err);
-          drop(this.blog.id, path, () => {
-            resolve();
-          });
+      await folder.remove(this.blog.id, path);
+
+      return new Promise(resolve => {
+        drop(this.blog.id, path, () => {
+          resolve();
         });
       });
     };
 
     this.set = async (path, contents) => {
+      await folder.write(this.blog.id, path, contents);
+
       return new Promise((resolve, reject) => {
-        fs.outputFileSync(this.blogDirectory + path, contents);
         build(this.blog, path, (err, entry) => {
           if (err) return reject(err);
           set(this.blog.id, path, entry, err => {

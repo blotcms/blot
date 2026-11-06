@@ -115,7 +115,6 @@ module.exports = {
   tmp_directory: BLOT_TMP_DIRECTORY,
   log_directory:
     process.env.BLOT_LOG_DIRECTORY || BLOT_DATA_DIRECTORY + "/logs",
-  blog_folder_dir: BLOT_DATA_DIRECTORY + "/blogs",
   ip: process.env.BLOT_IP || "127.0.0.1",
   ipv6: BLOT_IPV6,
 
@@ -191,16 +190,12 @@ module.exports = {
   // because a slow client's clone or push holds its place for the whole
   // transfer, and a push should not wait behind two slow clones: 4 is about
   // 400 MB at the very worst, on node-b, which serves every push, clone and
-  // fetch. Background is 2, about 200 MB at worst, though Blot's commits, most
-  // of it, take a few MB each; gc is the large background command, and only
-  // one runs at a time. So about 600 MB a process at the very worst.
-  // gc_delay is how long after a commit or push a repository waits for its
-  // gc, so a burst of writes makes one (gc.js).
+  // fetch. Background is 2, about 200 MB at worst: Blot's commits, the git
+  // store's compaction and the import of a new repository. So about 600 MB a
+  // process at the very worst.
   git: {
     interactive_processes: parseInt(process.env.BLOT_GIT_INTERACTIVE_PROCESSES) || 4,
     background_processes: parseInt(process.env.BLOT_GIT_BACKGROUND_PROCESSES) || 2,
-    gc_processes: parseInt(process.env.BLOT_GIT_GC_PROCESSES) || 1,
-    gc_delay: parseInt(process.env.BLOT_GIT_GC_DELAY_MS) || 60 * 1000,
   },
 
   // Untrusted, user-supplied URLs (remote images in posts, imports, domain
@@ -268,43 +263,6 @@ module.exports = {
     secret: process.env.BLOT_YOUTUBE_SECRET,
   },
 
-  // Which blogs' folder writes are mirrored to the storage bucket and
-  // models/file after they land on disk (app/storage/folder/mirror.js,
-  // #2258 Phase C): "off" (the default), "all", or blog IDs separated by
-  // commas, e.g. "blog_abc,blog_def". Disk stays authoritative either way.
-  // Read on every write, so it can be changed in place by specs.
-  folder_mirror: process.env.BLOT_FOLDER_MIRROR || "off",
-
-  // Which blogs' folders live in S3 rather than on disk
-  // (app/storage/folder/primary.js, #2258 Phase D), in the same form: "off"
-  // (the default, every blog on disk), "all", or blog IDs separated by
-  // commas. A named blog moves to S3 only once its copy there is complete (a
-  // backfill or the daily reconcile finished or checked it cleanly) and not
-  // behind its disk, and only while the mirror above covers it (so S3 is kept
-  // in step whenever the blog is on disk). So mirror a blog and backfill it
-  // (scripts/storage/backfill-folder.js) before or after naming it here; in
-  // development, set BLOT_FOLDER_MIRROR too. Blogs on the Local, Git or
-  // Google Drive client stay on disk. Changes to a blog on S3
-  // are copied to disk, so unsetting this rolls it back (restore its disk
-  // copy first if it is dirty: see app/storage/README). Read on every call.
-  folder_primary: process.env.BLOT_FOLDER_PRIMARY || "off",
-
-  // Shadow reads (app/storage/folder/shadow.js, #2258 Phase C): for the
-  // mirrored blogs above, this fraction of folder reads is repeated against
-  // the S3 backend once the disk has answered, and the two results compared
-  // and timed. 0 (the default) is off, 1 is every read. Read on every call.
-  // scripts/storage/shadow-report.js prints what it found.
-  folder_shadow: {
-    rate: Number(process.env.BLOT_FOLDER_SHADOW_RATE) || 0,
-    // Shadow reads running at once in a process; a sample over this is dropped
-    max_in_flight: 4,
-    // Files bigger than this have their size compared, not their bytes
-    max_compare_bytes: 16 * 1024 * 1024,
-    // A mismatch is checked again after this long, so a read which raced a
-    // sync (disk changed, S3 not yet) counts as transient, not as drift
-    recheck_ms: 5000,
-  },
-
   // Credentials for the S3 client in app/storage/s3.js. When these aren't
   // set the AWS SDK's default provider chain is used instead.
   aws: {
@@ -334,31 +292,22 @@ module.exports = {
     endpoint: process.env.BLOT_STORAGE_ENDPOINT || "",
   },
 
-  // The git object store (app/clients/git/store) in shadow mode
-  // (app/clients/git/shadow): the repositories on disk stay the source of
-  // truth, and every push and every one of Blot's commits is also mirrored
-  // into the storage bucket, under {blogID}/git/, to compare on real traffic.
+  // The git object store (app/clients/git/store), where every git blog's
+  // repository is, under {blogID}/git/ in the storage bucket
+  // (app/clients/git/served).
   git_store: {
-    // Off unless set: "all", or a comma-separated list of blog IDs
-    shadow: process.env.BLOT_GIT_STORE_SHADOW || "",
-    // Where shadow mode also appends its log lines, so they outlive the
-    // containers (app/clients/git/shadow/file-log.js). Empty is off (the
-    // shadow specs turn it off, or point it at their own file). app/scheduler/prune-tmp.js leaves its directory alone.
-    shadow_log:
-      process.env.BLOT_GIT_STORE_SHADOW_LOG !== undefined
-        ? process.env.BLOT_GIT_STORE_SHADOW_LOG
-        : BLOT_TMP_DIRECTORY + "/shadow-log/shadow.log",
     // The store's local cache and scratch space. In production tmp is on the
     // host's instance store (/var/instance-ssd/tmp), which is where this
-    // belongs: nothing in it needs to survive. Each process takes a
-    // directory of its own inside it.
-    cache_directory:
-      process.env.BLOT_GIT_STORE_CACHE_DIRECTORY ||
-      BLOT_TMP_DIRECTORY + "/git-store",
-    // The budget of each process's cache, scratch space included
-    cache_bytes:
-      parseInt(process.env.BLOT_GIT_STORE_CACHE_BYTES, 10) ||
-      1024 * 1024 * 1024,
+    // belongs: nothing in it needs to survive. Every process on the host
+    // shares one cache in it (<cache_directory>/host).
+    cache_directory: BLOT_TMP_DIRECTORY + "/git-store",
+    // The budget of the host's cache, scratch space for pushes included,
+    // across every process
+    cache_bytes: 50 * 1024 * 1024 * 1024,
+    // Besides its budget, the cache gives space back, and refuses new
+    // entries and scratch, while the disk it is on has less free than this
+    // (as folder_cache does)
+    min_free_percent: 10,
   },
 
   // The content cache of the S3 backend of storage/folder

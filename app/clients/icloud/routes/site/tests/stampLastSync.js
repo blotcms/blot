@@ -1,5 +1,4 @@
-const fs = require("fs-extra");
-const localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
+const folder = require("storage/folder");
 
 // The hourly sweep only walks blogs the macserver pushed to in the last hour,
 // so the routes it drives must stamp lastSync - and nothing else may.
@@ -72,7 +71,6 @@ describe("icloud routes stamp lastSync", function () {
     });
 
     blogID = `icloud-stamp-test-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-    await fs.ensureDir(localPath(blogID, "/"));
     stamped = [];
     walked = [];
 
@@ -111,7 +109,7 @@ describe("icloud routes stamp lastSync", function () {
       if (originals[name]) require.cache[paths[name]] = originals[name];
       else delete require.cache[paths[name]];
     });
-    await fs.remove(localPath(blogID, "/"));
+    await folder.removeAll(blogID);
   });
 
   it("/upload stamps the blog", async function () {
@@ -133,7 +131,7 @@ describe("icloud routes stamp lastSync", function () {
   });
 
   it("/delete stamps the blog", async function () {
-    await fs.outputFile(localPath(blogID, "/post.txt"), "hello");
+    await folder.write(blogID, "/post.txt", "hello");
 
     await require(paths.delete)(fakeReq(pathHeaders("/post.txt")), fakeRes());
 
@@ -182,6 +180,6 @@ describe("icloud routes stamp lastSync", function () {
     );
 
     expect(res.statusCode).toBe(200);
-    expect(await fs.pathExists(localPath(blogID, "/post.txt"))).toBe(true);
+    expect(await folder.exists(blogID, "/post.txt")).toBe(true);
   });
 });

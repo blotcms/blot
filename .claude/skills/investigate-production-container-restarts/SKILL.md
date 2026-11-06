@@ -297,37 +297,23 @@ access log with a long request time.
 Example (green, 9 Oct 2026): `Error: aborted` (`ECONNRESET`) emitted "on
 Service instance", during a ~580 MB `git push`. Pushover wrapped each git
 request in an http-duplex `Service` that re-emitted the request's errors, and
-only some of those objects had a listener (#2086). Pushover is gone: pushes
-are received in Node (`app/clients/git/receivePack.js`), which reads the
-request as a stream and ends the push's `git index-pack` when the client goes.
+only some of those objects had a listener (#2086). Pushover is gone: pushes,
+clones and fetches are served from the git store (`app/clients/git/served/`),
+which reads the request as a stream and lets go of its git processes and
+scratch space when the client goes.
 
 For the git client, also check:
 
-- every push and fetch logs one line when it ends:
-  `Git: receive-pack|upload-pack <handle> exit=… duration=… rx=… tx=…
-  [stderr=…]`. For a push, `exit` is `index-pack`'s status if it failed, 1 for
-  any other failure (a client that went away, an error), and 0 otherwise,
-  including a push the checks refused (its reasons are in `stderr=`). Each
-  push also logs `Git: push-client <handle> agent="…"`, the client's git
-  version.
-- stuck git processes (fetches run as `git upload-pack`; a push's pack is read
-  by `git index-pack --stdin --fix-thin`, then checked by `git rev-list` and
-  `git cat-file`, and no `git-receive-pack` process exists any more; before
-  #2086 an aborted push left `index-pack` waiting forever, holding hundreds of
-  MB inside the container's memory limit):
+- every request and operation on the store logs one line:
+  `[git-store-served] blog=<id> op=advertise|clone|fetch|push|write|... outcome=... ms=...`
+  (blog IDs only, on stdout). Each push also logs `Git: push-client <handle> agent="…"`,
+  the client's git version.
+- stuck git processes (a push's pack is read by `git index-pack`, clones and
+  compaction run `git pack-objects`, new-folder setup `git fast-import`; the
+  daily `sweep-git` job emails about any running for more than 2 hours):
 
   ```bash
-  ssh -n blot "docker exec blot-green sh -c 'ps -o pid,etime,rss,args | grep -E \"[g]it[ -](upload-pack|index-pack|rev-list)\"'"
-  ```
-
-- leftover push staging directories (`objects/tmp_objdir-incoming-*` in the
-  bare repos). A push killed by a crash or deploy can't clean up after
-  itself; `app/clients/git/sweepQuarantine.js` removes ones older than 24h
-  daily at 05:00 on green. Several similar-sized directories in one repo
-  mean a user retried a large push that kept failing:
-
-  ```bash
-  ssh -n blot "docker exec blot-green sh -c 'find /usr/src/app/data/git -mindepth 3 -maxdepth 3 -type d -name \"tmp_objdir-incoming-*\" -exec du -sh {} +'"
+  ssh -n blot "docker exec blot-green sh -c 'ps -o pid,etime,rss,args | grep -E \"[g]it.*(index-pack|pack-objects|fast-import|rev-list)\"'"
   ```
 
 ### Neither — the deploy's own health check failed

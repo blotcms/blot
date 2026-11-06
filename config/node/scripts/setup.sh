@@ -120,8 +120,7 @@ chown -R ec2-user:ec2-user /etc/blot
 
 chown -R ec2-user:ec2-user $BLOT_DIRECTORY
 
-# nvme-cli lists the NVMe disks (the data volume is mounted by
-# config/host/scripts/mount-data-volume.sh, installed by config/host/deploy.sh)
+# nvme-cli lists the NVMe disks
 yum install -y nvme-cli
 
 # TODO:

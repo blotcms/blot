@@ -1,9 +1,6 @@
-// The contract of storage/folder, run against both backends: the local disk,
-// which every blog uses by default, and S3 (MinIO here), and once more for a
-// blog which config.folder_primary puts on S3 (#2258 Phase D), so through
-// the per-blog routing and with its copy to disk. Behaviour only one backend has (symlinks and the
-// on-disk place of a file locally; objects, markers and the index on S3) is
-// specified after the shared contract, under that backend.
+// The contract of storage/folder, on S3 (MinIO here). Behaviour specific to
+// the bucket (objects, markers, the index and the content cache) is specified
+// after the shared contract.
 describe("storage/folder", function () {
   var { Readable } = require("stream");
   global.test.blog();
@@ -16,7 +13,7 @@ describe("storage/folder", function () {
   var fetch = require("node-fetch");
   var { join } = require("path");
 
-  // A directory outside every blog folder, with a file a symlink might expose
+  // A directory outside every blog folder, for files to copy in
   var outside;
 
   beforeEach(async function () {
@@ -83,7 +80,6 @@ describe("storage/folder", function () {
           .serve(req, res, state.blogID, req.path, state.options)
           .catch(function (err) {
             if (err instanceof folder.NotFoundError) return res.sendStatus(404);
-            if (err.code === "ELOOP") return res.sendStatus(403);
             next(err);
           });
       });
@@ -900,254 +896,6 @@ describe("storage/folder", function () {
     });
   }
 
-  describe("on the local disk", function () {
-    contract();
-
-    describe("path confinement on disk", function () {
-      it("keeps .. inside the blog's folder", async function () {
-        await fs.outputFile(join(this.blogDirectory, "../escaped.txt"), "outside");
-
-        var err = await rejection(folder.read(this.blog.id, "/../escaped.txt"));
-
-        expect(err.code).toEqual("ENOENT");
-        expect((await folder.path(this.blog.id, "/../../escaped.txt")).indexOf(this.blogDirectory + "/")).toEqual(0);
-        expect(await folder.path(this.blog.id, "/a/../../../x")).toEqual(this.blogDirectory + "/x");
-
-        await fs.remove(join(this.blogDirectory, "../escaped.txt"));
-      });
-
-      it("writes with .. inside the folder too", async function () {
-        await folder.write(this.blog.id, "/../../escaped.txt", "x");
-
-        expect(await fs.pathExists(join(this.blogDirectory, "escaped.txt"))).toBe(true);
-        expect(await fs.pathExists(join(this.blogDirectory, "../escaped.txt"))).toBe(false);
-      });
-
-      it("rejects a blog ID which is a path", async function () {
-        expect(await rejection(folder.path("../other", "/a.txt"))).toBeDefined();
-        expect(await rejection(folder.path("", "/a.txt"))).toBeDefined();
-      });
-    });
-
-    describe("symlinks", function () {
-      it("refuses to read through a symlink to a file", async function () {
-        await fs.symlink(join(outside, "secret.txt"), join(this.blogDirectory, "link.txt"));
-
-        var err = await rejection(folder.read(this.blog.id, "/link.txt"));
-
-        expect(err.code).toEqual("ELOOP");
-        expect((await rejection(folder.stat(this.blog.id, "/link.txt"))).code).toEqual("ELOOP");
-        expect((await rejection(folder.ensureLocal(this.blog.id, "/link.txt"))).code).toEqual("ELOOP");
-        expect((await streamError(folder.createReadStream(this.blog.id, "/link.txt"))).code).toEqual("ELOOP");
-        expect(await folder.exists(this.blog.id, "/link.txt")).toBe(false);
-      });
-
-      it("refuses to read through a symlinked ancestor", async function () {
-        await fs.symlink(outside, join(this.blogDirectory, "dir"));
-
-        expect((await rejection(folder.read(this.blog.id, "/dir/secret.txt"))).code).toEqual("ELOOP");
-        expect((await rejection(folder.list(this.blog.id, "/dir"))).code).toEqual("ELOOP");
-        expect((await rejection(folder.resolveCaseInsensitive(this.blog.id, "/DIR/secret.txt"))).code).toEqual("ELOOP");
-      });
-
-      it("refuses to write through a symlink", async function () {
-        await fs.symlink(join(outside, "secret.txt"), join(this.blogDirectory, "link.txt"));
-        await fs.symlink(outside, join(this.blogDirectory, "dir"));
-
-        expect((await rejection(folder.write(this.blog.id, "/link.txt", "x"))).code).toEqual("ELOOP");
-        expect((await rejection(folder.write(this.blog.id, "/dir/new.txt", "x"))).code).toEqual("ELOOP");
-        expect((await rejection(folder.mkdir(this.blog.id, "/dir/sub"))).code).toEqual("ELOOP");
-        expect((await rejection(folder.commit(this.blog.id, "/dir/new.txt"))).code).toEqual("ELOOP");
-        expect((await rejection(folder.remove(this.blog.id, "/dir/secret.txt"))).code).toEqual("ELOOP");
-
-        expect(await fs.readFile(join(outside, "secret.txt"), "utf8")).toEqual("secret");
-        expect(await fs.pathExists(join(outside, "new.txt"))).toBe(false);
-      });
-
-      it("never follows symlinks when listing or walking", async function () {
-        await folder.write(this.blog.id, "/real.txt", "x");
-        await fs.symlink(join(outside, "secret.txt"), join(this.blogDirectory, "link.txt"));
-        await fs.symlink(outside, join(this.blogDirectory, "dir"));
-
-        expect(names(await folder.list(this.blog.id, "/"))).toEqual(["real.txt"]);
-        expect(await collect(folder.walk(this.blog.id, "/"))).toEqual(["/real.txt"]);
-      });
-
-      it("removes a symlink itself, not what it points at", async function () {
-        await fs.symlink(outside, join(this.blogDirectory, "dir"));
-
-        await folder.remove(this.blog.id, "/dir");
-
-        expect(await fs.pathExists(join(this.blogDirectory, "dir"))).toBe(false);
-        expect(await fs.pathExists(join(outside, "secret.txt"))).toBe(true);
-      });
-
-      it("listNames skips symlinks and rejects a symlinked directory", async function () {
-        await folder.write(this.blog.id, "/d/a.txt", "a");
-        await fs.symlink(join(outside, "secret.txt"), join(this.blogDirectory, "d", "link.txt"));
-        await fs.symlink(outside, join(this.blogDirectory, "dir"));
-
-        expect(await folder.listNames(this.blog.id, "/d")).toEqual([{ name: "a.txt", isDirectory: false }]);
-        expect((await rejection(folder.listNames(this.blog.id, "/dir"))).code).toEqual("ELOOP");
-      });
-
-      it("refuses a symlink before a tool can write through it", async function () {
-        var target = join(outside, "target.txt");
-
-        await fs.outputFile(target, "outside");
-        await fs.ensureDir(this.blogDirectory);
-        await fs.symlink(target, join(this.blogDirectory, "link.txt"));
-
-        expect((await rejection(folder.path(this.blog.id, "/link.txt"))).code).toEqual("ELOOP");
-      });
-
-      it("removes a symlinked folder without following it", async function () {
-        await fs.remove(this.blogDirectory);
-        await fs.symlink(outside, this.blogDirectory);
-
-        await folder.removeAll(this.blog.id);
-
-        expect(await fs.pathExists(join(outside, "secret.txt"))).toBe(true);
-      });
-
-      describe("when serving", function () {
-        var state = {};
-
-        useServer(state);
-
-        it("will not serve a symlink, or a file below a symlinked directory", async function () {
-          await fs.symlink(join(outside, "secret.txt"), join(this.blogDirectory, "link.txt"));
-          await fs.symlink(outside, join(this.blogDirectory, "dir"));
-
-          expect((await fetch(state.origin + "/link.txt")).status).toEqual(403);
-          expect((await fetch(state.origin + "/dir/secret.txt")).status).toEqual(403);
-        });
-      });
-    });
-
-    describe("files on disk", function () {
-      it("writes where the blog's folder is", async function () {
-        await folder.write(this.blog.id, "/a/b/string.txt", "string");
-
-        expect(await fs.readFile(join(this.blogDirectory, "a/b/string.txt"), "utf8")).toEqual("string");
-      });
-
-      it("path is the file's own place", async function () {
-        expect(await folder.path(this.blog.id, "/tool/out.txt")).toEqual(join(this.blogDirectory, "tool/out.txt"));
-      });
-
-      it("ensureLocal is the file itself", async function () {
-        await folder.write(this.blog.id, "/a.txt", "x");
-
-        expect(await folder.ensureLocal(this.blog.id, "/a.txt")).toEqual(join(this.blogDirectory, "a.txt"));
-      });
-
-      it("withLocal gives the file itself", async function () {
-        await folder.write(this.blog.id, "/a.txt", "x");
-
-        expect(await folder.withLocal(this.blog.id, "/a.txt", async (local) => local)).toEqual(
-          join(this.blogDirectory, "a.txt")
-        );
-      });
-
-      it("stat's modified time is the file's", async function () {
-        await folder.write(this.blog.id, "/a.txt", "12345");
-
-        var stat = await folder.stat(this.blog.id, "/a.txt");
-        var real = await fs.stat(join(this.blogDirectory, "a.txt"));
-
-        expect(stat).toEqual({ isDirectory: false, size: 5, modified: real.mtimeMs });
-      });
-
-      it("picks as helper/caseSensitivePath does when none is exact", async function () {
-        await folder.write(this.blog.id, "/Templates/a.txt", "upper");
-        await folder.write(this.blog.id, "/templates/a.txt", "lower");
-
-        var caseSensitivePath = require("helper/caseSensitivePath");
-        var listing = await fs.readdir(this.blogDirectory);
-        var expected = caseSensitivePath.pick(listing, "TEMPLATES");
-
-        expect(await folder.resolveCaseInsensitive(this.blog.id, "/TEMPLATES/a.txt")).toEqual("/" + expected + "/a.txt");
-      });
-
-      it("removeAll removes the folder and nothing else", async function () {
-        await folder.write(this.blog.id, "/a/b.txt", "x");
-
-        await folder.removeAll(this.blog.id);
-
-        expect(await fs.pathExists(this.blogDirectory)).toBe(false);
-        expect(await fs.pathExists(join(this.blogDirectory, ".."))).toBe(true);
-      });
-
-      describe("when serving", function () {
-        var state = {};
-
-        useServer(state);
-
-        it("keeps .. inside the folder", async function () {
-          await fs.outputFile(join(this.blogDirectory, "../escaped.txt"), "outside");
-
-          var err = await rejection(folder.serve({ headers: {} }, {}, state.blogID, "/../escaped.txt"));
-
-          expect(err instanceof folder.NotFoundError).toBe(true);
-
-          await fs.remove(join(this.blogDirectory, "../escaped.txt"));
-        });
-      });
-    });
-
-    // These paths are resolved by folder.path against the blog's folder: a
-    // trailing slash is kept for the root only, "." and ".." are resolved, and
-    // nothing can climb out of the folder.
-    describe("path resolution", function () {
-      var BLOG_ID = "XYZ";
-      var BLOG_DIR = require("config").blog_folder_dir;
-
-      function resolved(path) {
-        return folder.path(BLOG_ID, path);
-      }
-
-      it("resolves root of blog folder when passed an empty string", async function () {
-        expect(await resolved("")).toEqual(`${BLOG_DIR}/${BLOG_ID}/`);
-      });
-
-      it("resolves a local path", async function () {
-        expect(await resolved("/foo")).toEqual(`${BLOG_DIR}/${BLOG_ID}/foo`);
-      });
-
-      it("resolves root of blog folder with trailing slash", async function () {
-        expect(await resolved("/")).toEqual(`${BLOG_DIR}/${BLOG_ID}/`);
-      });
-
-      it("resolves paths with a dot and a slash", async function () {
-        expect(await resolved("./bar")).toEqual(`${BLOG_DIR}/${BLOG_ID}/bar`);
-      });
-
-      it("resolves a local path without leading slash", async function () {
-        expect(await resolved("foo")).toEqual(`${BLOG_DIR}/${BLOG_ID}/foo`);
-      });
-
-      it("resolves a local path with trailing slash", async function () {
-        expect(await resolved("foo/")).toEqual(`${BLOG_DIR}/${BLOG_ID}/foo`);
-      });
-
-      it("resolves a local path with dots inside the blog folder", async function () {
-        expect(await resolved("/foo/bar/../baz")).toEqual(`${BLOG_DIR}/${BLOG_ID}/foo/baz`);
-      });
-
-      it("will not resolve a local path with dots outside the blog folder", async function () {
-        expect(await resolved("/foo/bar/../baz/../../../")).toEqual(`${BLOG_DIR}/${BLOG_ID}/`);
-        expect(await resolved("/../../")).toEqual(`${BLOG_DIR}/${BLOG_ID}/`);
-      });
-
-      it("will not resolve a local path outside the blog folder", async function () {
-        expect(await resolved("/Users/David/Projects/blot/blogs")).toEqual(
-          `${BLOG_DIR}/${BLOG_ID}/Users/David/Projects/blot/blogs`
-        );
-      });
-    });
-  });
-
   describe("on S3", function () {
     var config = require("config");
     var crypto = require("crypto");
@@ -1156,15 +904,6 @@ describe("storage/folder", function () {
     var backend = require("storage/folder/s3");
 
     require("./minio")();
-
-    // Before the blog is made, so it is made on S3 too
-    beforeAll(function () {
-      folder.useBackend("s3");
-    });
-
-    afterAll(function () {
-      folder.useBackend();
-    });
 
     contract();
 
@@ -1597,7 +1336,7 @@ describe("storage/folder", function () {
 
           await fs.writeFile(source, "uploaded");
 
-          // As if the file on disk was rewritten while the mirror uploaded it
+          // As if the source was rewritten while it was being uploaded
           spyOn(s3, "uploadFile").and.callFake(async function () {
             var uploaded = await upload.apply(s3, arguments);
             await fs.writeFile(source, "rewritten");
@@ -1727,39 +1466,5 @@ describe("storage/folder", function () {
         expect(await fs.readFile(await folder.ensureLocal(this.blog.id, "/a.txt"), "utf8")).toEqual("x");
       });
     });
-  });
-
-  // Routed per blog, as the app does it: the flag names the blog, so every
-  // call goes to S3 and every change is copied to disk too. The guard's
-  // checks (an index, a clean mirror, the client) have their own specs in
-  // folder-primary.js; here the blog starts empty, with no index, so the
-  // guard is stood in for.
-  describe("for a blog on S3 by its flag", function () {
-    var config = require("config");
-    var client = require("models/client");
-    var primary = require("storage/folder/primary");
-
-    require("./minio")();
-
-    var saved;
-
-    beforeEach(function () {
-      saved = config.folder_primary;
-      config.folder_primary = this.blog.id;
-      spyOn(primary, "usesS3").and.callFake(function () {
-        return Promise.resolve(true);
-      });
-    });
-
-    afterEach(async function () {
-      config.folder_primary = saved;
-      await client.sRem(primary.DIRTY_KEY, this.blog.id);
-    });
-
-    it("goes to S3", async function () {
-      expect(await folder.backendFor(this.blog.id)).toEqual("s3");
-    });
-
-    contract();
   });
 });

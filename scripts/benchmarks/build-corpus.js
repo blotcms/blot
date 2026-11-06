@@ -10,8 +10,9 @@
  * cache-able artifacts under --out-dir (default .benchmarks/corpus/):
  *
  *   - redis-dump.rdb   Redis SAVE dump: every entry/tag/index key
- *   - blogs.tar.gz     data/blogs/ (raw source + hard-linked media - small,
- *                       see the media-pool trick in workload.js)
+ *   - minio.tar.gz     the MinIO data directory: the blogs' folders (raw
+ *                       source + media), which live only in the storage
+ *                       bucket, plus the assets the build generated
  *   - manifest.json    which blog IDs/handles make up the corpus, plus each
  *                       site's tags/search keywords/hub path, so
  *                       corpusMode "render" can run against it without
@@ -20,9 +21,9 @@
  * Used standalone for local rehearsal (with small --sites/--files overrides)
  * and by .github/workflows/benchmarks-corpus.yml.
  *
- * The assets the build generates (resized images, thumbnails) go to the
- * throwaway MinIO and are not snapshotted: the render benchmark requests
- * pages, never those files, so nothing restores them.
+ * The assets the build generates (resized images, thumbnails) are in the same
+ * bucket, so they are in the snapshot too; the render benchmark never requests
+ * them.
  *
  * NOTE: this script has not been exercised end-to-end in this environment
  * (no Docker/Redis available) - see scripts/benchmarks/README.md for what
@@ -96,7 +97,7 @@ function printHelp() {
       "  --files <n>            Total posts across all sites (default: " +
         BENCHMARK_DEFAULTS.corpusFiles +
         ")",
-      "  --media-fraction <0-1> Fraction of posts with a hard-linked media file (default: " +
+      "  --media-fraction <0-1> Fraction of posts with a media file (default: " +
         BENCHMARK_DEFAULTS.corpusMediaFraction +
         ")",
       "  --seed <value>         Deterministic seed (default: " +
@@ -132,10 +133,9 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
 
   const dataDir = path.join(args.outDir, "data");
-  const blogsDir = path.join(dataDir, "blogs");
 
   fs.removeSync(dataDir);
-  fs.ensureDirSync(blogsDir);
+  fs.ensureDirSync(dataDir);
   fs.ensureDirSync(args.outDir);
 
   const benchId = `blot-corpus-${process.pid}-${Math.floor(Math.random() * 1e6)}`;
@@ -271,17 +271,18 @@ function main() {
     path.join(args.outDir, "redis-dump.rdb"),
   ]);
 
-  // Tar the blog folders. Hard links within data/blogs (see workload.js's
-  // media strategy) are deduplicated by tar automatically.
-  run("tar", [
-    "-czf",
-    path.join(args.outDir, "blogs.tar.gz"),
-    "-C",
-    dataDir,
-    "blogs",
+  // Snapshot MinIO: its data directory holds the blogs' folders. docker cp
+  // streams the directory as a tar archive, which restoring feeds back to
+  // `docker cp -` (see benchmarks-render.yml).
+  run("sh", [
+    "-c",
+    `docker cp "${minioContainer}:/data/." - | gzip > "${path.join(
+      args.outDir,
+      "minio.tar.gz"
+    )}"`,
   ]);
 
-  const artifacts = ["redis-dump.rdb", "blogs.tar.gz"].map(
+  const artifacts = ["redis-dump.rdb", "minio.tar.gz"].map(
     (name) => {
       const p = path.join(args.outDir, name);
       const size = fs.existsSync(p) ? fs.statSync(p).size : 0;

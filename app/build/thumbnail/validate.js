@@ -1,44 +1,29 @@
-var sandbox = require("sandbox");
 var config = require("./config");
 var FORMATS = config.FORMATS;
 var MIN_WIDTH = config.MIN_WIDTH;
 var MIN_HEIGHT = config.MIN_HEIGHT;
-var debug = require("debug")("blot:entry:build:thumbnail:validate");
 
-module.exports = function (path, callback) {
-  var format, width, height;
+// What the thumbnail job is told to accept (app/sandbox/jobs/thumbnail.js),
+// so it checks a candidate and makes its thumbnails in one jail
+var ACCEPT = { formats: FORMATS, minWidth: MIN_WIDTH, minHeight: MIN_HEIGHT };
 
-  debug(path);
-  sandbox.run("metadata", {}, { path: path }).then(function (result) {
-    var err;
-    var info = result.meta;
+// Why an image can't be a thumbnail, from its { format, width, height } as the
+// job read them, or null if it can
+function check(info) {
+  if (!info || !info.format) return new Error("Could not read file info");
 
-    if (!info || !info.format) {
-      err = new Error("Could not read file info");
-      return callback(err);
-    }
+  var format = info.format.toLowerCase();
 
-    debug(path, info);
-    format = info.format.toLowerCase();
-    width = info.width;
-    height = info.height;
+  if (FORMATS.indexOf(format) === -1)
+    return new Error("Image (" + format + ") is not a supported format");
 
-    if (FORMATS.indexOf(format) === -1) {
-      err = new Error("Image (" + format + ") is not a supported format");
-      return callback(err);
-    }
+  if (info.width < MIN_WIDTH)
+    return new Error("Image (" + info.width + "px wide) is too small");
 
-    if (width < MIN_WIDTH) {
-      err = new Error("Image (" + width + "px wide) is too small");
-      return callback(err);
-    }
+  if (info.height < MIN_HEIGHT)
+    return new Error("Image (" + info.height + "px tall) is too small");
 
-    if (height < MIN_HEIGHT) {
-      err = new Error("Image (" + height + "px tall) is too small");
-      return callback(err);
-    }
+  return null;
+}
 
-    debug(path, "is valid");
-    callback();
-  }, callback);
-};
+module.exports = { check: check, ACCEPT: ACCEPT };

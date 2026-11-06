@@ -90,6 +90,34 @@ module.exports = [
     },
   ],
   [
+    "answers a conditional get with the bytes and an ETag, then not modified until the object changes",
+    async (store) => {
+      await store.put("k", Buffer.from("one"));
+      const first = await store.get("k", { ifNoneMatch: null });
+      expect(first.bytes.toString()).toBe("one");
+      expect(typeof first.etag).toBe("string");
+      expect(first.etag.length).toBeGreaterThan(0);
+
+      expect(await store.get("k", { ifNoneMatch: first.etag })).toEqual({ notModified: true, etag: first.etag });
+      // The condition is answered before the size is looked at
+      expect(await store.get("k", { ifNoneMatch: first.etag, maxBytes: 1 })).toEqual({ notModified: true, etag: first.etag });
+
+      await store.put("k", Buffer.from("two"));
+      const changed = await store.get("k", { ifNoneMatch: first.etag });
+      expect(changed.notModified).toBeFalsy();
+      expect(changed.bytes.toString()).toBe("two");
+      expect(changed.etag).not.toBe(first.etag);
+      expect(await store.get("k", { ifNoneMatch: changed.etag })).toEqual({ notModified: true, etag: changed.etag });
+
+      expect((await store.get("k", { ifNoneMatch: '"0123456789abcdef0123456789abcdef"' })).bytes.toString()).toBe("two");
+      expect(await fails(store.get("k", { ifNoneMatch: '"0123456789abcdef0123456789abcdef"', maxBytes: 1 }))).toEqual(jasmine.any(TooLargeError));
+      expect(await fails(store.get("nope", { ifNoneMatch: first.etag }))).toEqual(jasmine.any(NotFoundError));
+
+      // Without ifNoneMatch, a get is a Buffer as ever
+      expect(Buffer.isBuffer(await store.get("k"))).toBe(true);
+    },
+  ],
+  [
     "reads a range",
     async (store) => {
       await store.put("k", Buffer.from("0123456789"));

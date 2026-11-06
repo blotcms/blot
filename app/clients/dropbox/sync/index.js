@@ -377,6 +377,7 @@ function Apply(client, blogID, log, status) {
           return callbackify(contentHash)(
             blogID,
             item.resolved_relative_path,
+            item.size,
             function (err, localHash) {
               if (item.content_hash && localHash && localHash === item.content_hash) {
                 log(item.resolved_relative_path, "Oversized file already matches local copy");
@@ -409,7 +410,7 @@ function Apply(client, blogID, log, status) {
         
         log(item.resolved_relative_path, "Hashing any existing file contents");
 
-        callbackify(contentHash)(blogID, item.resolved_relative_path, function (
+        callbackify(contentHash)(blogID, item.resolved_relative_path, item.size, function (
           err,
           content_hash
         ) {
@@ -501,9 +502,15 @@ function Apply(client, blogID, log, status) {
 
 // The hash of the file in the folder, in the form of Dropbox's content_hash,
 // or undefined if it can't be read (it isn't there, or is a folder): either
-// way the file is downloaded.
-async function contentHash(blogID, path) {
+// way the file is downloaded. Hashing can mean reading the whole file, so when
+// Dropbox's size for the file is known it is compared first, from the index:
+// files of different sizes can't have the same bytes.
+async function contentHash(blogID, path, size) {
   try {
+    if (typeof size === "number") {
+      const stat = await storage.stat(blogID, path);
+      if (stat.isDirectory || stat.size !== size) return undefined;
+    }
     return (await storage.stat(blogID, path, { hash: true })).hash;
   } catch (err) {
     return undefined;

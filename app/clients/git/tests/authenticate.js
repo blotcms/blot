@@ -25,10 +25,6 @@ describe("git client authenticate", function () {
       [
         function (next) {
           if (!otherBlog) return next();
-          fs.remove(repo.directory(otherBlog.handle), next);
-        },
-        function (next) {
-          if (!otherBlog) return next();
           Blog.remove(otherBlog.id, next);
         },
         function (next) {

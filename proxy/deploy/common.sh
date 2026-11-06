@@ -361,8 +361,7 @@ run_args() { # run_args <name>
     -e "NODE_OPTIONS=$node_options"
     -e "BLOT_WORKER_MAX_OLD_SPACE_SIZE=$UNIT_NODE_B_MAX_OLD_SPACE_SIZE"
     -e "BLOT_TMP_DIRECTORY=$TMP_DIRECTORY"
-    # rslave: a mount made on the host at this path (swapping the data volume,
-    # config/host/scripts/mount-data-volume.sh) reaches the running unit
+    # rslave: a mount made on the host at this path reaches the running unit
     --mount "type=bind,source=$DATA_DIRECTORY_ON_SERVER,target=$DATA_DIRECTORY_ON_CONTAINER,bind-propagation=rslave"
     # scratch space on the instance store; --mount fails on a missing source
     --mount "type=bind,source=$TMP_DIRECTORY,target=$TMP_DIRECTORY"
@@ -443,7 +442,7 @@ wait_healthy() { # wait_healthy <name> <timeout> [check function, default health
 }
 
 # The deploy-time checks of the app itself, run inside the unit
-# (scripts/deploy/verify-container): Redis, the data volume, the storage bucket,
+# (scripts/deploy/verify-container): Redis, the data directory, the storage bucket,
 # the sandbox, a canary blog and the dashboard log-in page rendered by this
 # container's own node-a. Blue runs them before green is touched. As the app
 # user, uid 1000 (the image ends USER root, for OpenResty's master): run as

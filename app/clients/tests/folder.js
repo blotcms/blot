@@ -1,4 +1,7 @@
 const fs = require("fs-extra");
+const os = require("os");
+const { join } = require("path");
+const folder = require("storage/folder");
 const { promisify } = require("util");
 const clients = require("clients");
 const blogFolder = require("../folder");
@@ -31,19 +34,19 @@ describe("clients/folder", function () {
   describe("a blog with no client", function () {
     it("writes and removes in the blog folder", async function () {
       await blogFolder.write(this.blog.id, "/a.txt", "hello");
-      expect(fs.readFileSync(this.blogDirectory + "/a.txt", "utf8")).toBe("hello");
+      expect(await test.folder.readText(this.blog.id, "/a.txt")).toBe("hello");
 
       await blogFolder.remove(this.blog.id, "/a.txt");
-      expect(fs.existsSync(this.blogDirectory + "/a.txt")).toBe(false);
+      expect(await folder.exists(this.blog.id, "/a.txt")).toBe(false);
     });
 
     it("copies a file in with writeFrom", async function () {
-      const source = this.blogDirectory + "/../router-source-" + Date.now();
+      const source = join(os.tmpdir(), "router-source-" + Date.now());
       fs.outputFileSync(source, "from disk");
 
       try {
         await blogFolder.writeFrom(this.blog, "/b/c.txt", source);
-        expect(fs.readFileSync(this.blogDirectory + "/b/c.txt", "utf8")).toBe(
+        expect(await test.folder.readText(this.blog.id, "/b/c.txt")).toBe(
           "from disk"
         );
       } finally {
@@ -54,7 +57,7 @@ describe("clients/folder", function () {
     it("treats a client name that is not available as no client", async function () {
       await setClient(this.blog.id, "not-a-client");
       await blogFolder.write(this.blog.id, "/d.txt", "still local");
-      expect(fs.readFileSync(this.blogDirectory + "/d.txt", "utf8")).toBe(
+      expect(await test.folder.readText(this.blog.id, "/d.txt")).toBe(
         "still local"
       );
     });
@@ -72,7 +75,7 @@ describe("clients/folder", function () {
         "/e.txt",
         "via client",
       ]);
-      expect(fs.existsSync(this.blogDirectory + "/e.txt")).toBe(false);
+      expect(await folder.exists(this.blog.id, "/e.txt")).toBe(false);
 
       await blogFolder.remove(this.blog.id, "/e.txt");
       expect(client.remove).toHaveBeenCalledTimes(1);
@@ -85,7 +88,7 @@ describe("clients/folder", function () {
     it("reads a file into a Buffer for the client with writeFrom", async function () {
       const client = stubClient();
       const blog = Object.assign({}, this.blog, { client: "routerSpecClient" });
-      const source = this.blogDirectory + "/../router-source-" + Date.now();
+      const source = join(os.tmpdir(), "router-source-" + Date.now());
       fs.outputFileSync(source, "buffered");
 
       try {
@@ -99,7 +102,7 @@ describe("clients/folder", function () {
       expect(args[1]).toBe("f.txt");
       expect(Buffer.isBuffer(args[2])).toBe(true);
       expect(args[2].toString()).toBe("buffered");
-      expect(fs.existsSync(this.blogDirectory + "/f.txt")).toBe(false);
+      expect(await folder.exists(this.blog.id, "/f.txt")).toBe(false);
     });
 
     it("rejects with the client's error", async function () {

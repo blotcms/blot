@@ -1,7 +1,8 @@
 #!/bin/bash
 # Usage: bootstrap.sh <ssh-host>
 # Sets up a new Amazon Linux 2023 app host: copies host/, setup-deploy-user.sh
-# and the Redis host files (config/redis) over and runs host/setup.sh with sudo,
+# the Redis host files (config/redis) and the storage bucket's offsite scripts
+# (config/storage-bucket/bin) over and runs host/setup.sh with sudo,
 # which sets up Redis too. Run it before config/host/deploy.sh. Safe to re-run
 # on a live host (see host/setup.sh).
 # Runs on a Mac, so it has to work in bash 3.2.
@@ -36,6 +37,9 @@ COPYFILE_DISABLE=1 tar -cf - -C "$HERE" host -C "$ROOT/scripts/deploy" setup-dep
 # The layout config/redis/host/setup.sh expects: its ROOT is the parent of host/.
 COPYFILE_DISABLE=1 tar -cf - -C "$ROOT/config/redis" redis.conf bin host |
   ssh_run "$HOST" 'mkdir /tmp/blot-host/redis && tar -xf - -C /tmp/blot-host/redis'
+# And the storage bucket's offsite scripts, as storage-bucket/bin.
+COPYFILE_DISABLE=1 tar -cf - -C "$ROOT/config" storage-bucket/bin |
+  ssh_run "$HOST" 'tar -xf - -C /tmp/blot-host'
 
 echo "Running setup on $HOST"
 # printf %q quotes the values for the remote shell.

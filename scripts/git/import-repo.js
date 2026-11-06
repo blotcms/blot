@@ -1,14 +1,15 @@
-// Imports an existing git repository (a bare repository, say
-// data/git/<handle>.git) into an empty repository of the git store
+// Imports an existing git repository (a full clone of a blog's repository,
+// say) into an empty repository of the git store
 // (app/clients/git/store): one pack of everything reachable from its branches
 // and tags, a history pack, and the first manifest. It never writes to the
-// source, and refuses to import into a store repository which already has a
-// manifest. Refs other than branches and tags, and objects nothing reaches,
+// source, and refuses to import into a store repository which is not empty
+// (the tombstone a removal leaves is). Refs other than branches and tags, and objects nothing reaches,
 // are left behind (see "Importing an existing repository" in the store's README).
 //
 // This is not wired into the app, and the target is always explicit: there is
-// no default bucket. It is for trying the import out locally and, later, for
-// the rewrite.
+// no default bucket. It is for trying the import out locally, and for
+// repairing a blog's repository in the store from a full clone (into its
+// <blogID>/git/ prefix, once the copy there is removed).
 //
 // Usage:
 //   node scripts/git/import-repo.js <git-dir> --dir <folder> [options]
@@ -16,10 +17,11 @@
 //
 // Target (one of):
 //   --dir <folder>     a local directory used as the object store
-//   --bucket <name>    an S3 bucket (with --prefix, the keys' prefix); the AWS SDK
-//                      finds credentials as usual, and for MinIO use --endpoint
-//                      with BLOT_AWS_KEY and BLOT_AWS_SECRET (or AWS_ACCESS_KEY_ID
-//                      and AWS_SECRET_ACCESS_KEY)
+//   --bucket <name>    an S3 bucket (with --prefix, the keys' prefix), with
+//                      BLOT_AWS_KEY and BLOT_AWS_SECRET when set, as in a
+//                      unit, and otherwise the AWS SDK's usual credentials
+//                      (AWS_ACCESS_KEY_ID and the rest, a profile); for MinIO
+//                      add --endpoint
 //   --prefix <prefix>  the prefix inside the bucket (default none)
 //   --endpoint <url>   an S3-compatible endpoint (MinIO); uses path-style URLs
 //   --region <region>  the bucket's region (default us-east-1)

@@ -1,6 +1,6 @@
 describe("build multiple", function () {
   var build = require("../index");
-  var fs = require("fs-extra");
+  var folder = require("storage/folder");
   var path = require("path");
 
   global.test.blog();
@@ -16,14 +16,15 @@ describe("build multiple", function () {
   });
 
   it("aggregates convertible files inside a + folder", async function () {
-    var root = path.join(this.blogDirectory, "album+");
+    var root = "/album+";
 
-    fs.outputFileSync(path.join(root, "one.md"), "# One\n\nBody");
-    fs.outputFileSync(
+    await folder.write(this.blog.id, path.join(root, "one.md"), "# One\n\nBody");
+    await folder.write(
+      this.blog.id,
       path.join(root, "two.md"),
       "## Second\n\n![Image](/album+/cover.jpg)"
     );
-    fs.outputFileSync(path.join(root, "cover.jpg"), Buffer.from("fake"));
+    await folder.write(this.blog.id, path.join(root, "cover.jpg"), Buffer.from("fake"));
 
     var entry = await this.buildEntry("/album+");
 
@@ -54,10 +55,10 @@ describe("build multiple", function () {
   });
 
   it("builds the aggregated entry when a child file is targeted", async function () {
-    var root = path.join(this.blogDirectory, "note+");
+    var root = "/note+";
 
-    fs.outputFileSync(path.join(root, "first.md"), "# First");
-    fs.outputFileSync(path.join(root, "second.md"), "# Second");
+    await folder.write(this.blog.id, path.join(root, "first.md"), "# First");
+    await folder.write(this.blog.id, path.join(root, "second.md"), "# Second");
 
     var entry = await this.buildEntry("/note+/first.md");
 
@@ -73,9 +74,10 @@ describe("build multiple", function () {
   });
 
   it("injects a folder-based title when no heading exists", async function () {
-    var root = path.join(this.blogDirectory, "vacation-photos+");
+    var root = "/vacation-photos+";
 
-    fs.outputFileSync(
+    await folder.write(
+      this.blog.id,
       path.join(root, "notes.md"),
       "A quiet afternoon on the beach."
     );
@@ -103,9 +105,9 @@ describe("build multiple", function () {
       img: false,
     });
 
-    var root = path.join(this.blogDirectory, "album+");
-    fs.outputFileSync(path.join(root, "one.md"), "# One");
-    fs.outputFileSync(path.join(root, "cover.jpg"), Buffer.from("fake"));
+    var root = "/album+";
+    await folder.write(this.blog.id, path.join(root, "one.md"), "# One");
+    await folder.write(this.blog.id, path.join(root, "cover.jpg"), Buffer.from("fake"));
 
     var entry = await this.buildEntry("/album+");
 
@@ -114,13 +116,15 @@ describe("build multiple", function () {
   });
 
   it("unions comma-separated tags from every source file", async function () {
-    var root = path.join(this.blogDirectory, "tagged+");
+    var root = "/tagged+";
 
-    fs.outputFileSync(
+    await folder.write(
+      this.blog.id,
       path.join(root, "one.md"),
       "Tags: alpha, beta\n\n# One"
     );
-    fs.outputFileSync(
+    await folder.write(
+      this.blog.id,
       path.join(root, "two.md"),
       "Tags: beta, gamma\n\n# Two"
     );
@@ -131,10 +135,10 @@ describe("build multiple", function () {
   });
 
   it("unions tags even when source files spell the key with different case", async function () {
-    var root = path.join(this.blogDirectory, "tagcase+");
+    var root = "/tagcase+";
 
-    fs.outputFileSync(path.join(root, "one.md"), "Tags: alpha\n\n# One");
-    fs.outputFileSync(path.join(root, "two.md"), "tags: beta\n\n# Two");
+    await folder.write(this.blog.id, path.join(root, "one.md"), "Tags: alpha\n\n# One");
+    await folder.write(this.blog.id, path.join(root, "two.md"), "tags: beta\n\n# Two");
 
     var entry = await this.buildEntry("/tagcase+");
 
@@ -142,13 +146,15 @@ describe("build multiple", function () {
   });
 
   it("lets a later source file replace a non-tag metadata array instead of unioning it", async function () {
-    var root = path.join(this.blogDirectory, "authors+");
+    var root = "/authors+";
 
-    fs.outputFileSync(
+    await folder.write(
+      this.blog.id,
       path.join(root, "01.md"),
       ["---", "Authors:", "  - Alice", "---", "", "# One"].join("\n")
     );
-    fs.outputFileSync(
+    await folder.write(
+      this.blog.id,
       path.join(root, "02.md"),
       ["---", "Authors:", "  - Bob", "---", "", "# Two"].join("\n")
     );
@@ -161,13 +167,15 @@ describe("build multiple", function () {
   });
 
   it("excludes .textbundle asset files from folder post sources", async function () {
-    var root = path.join(this.blogDirectory, "bundle+");
+    var root = "/bundle+";
 
-    fs.outputFileSync(
+    await folder.write(
+      this.blog.id,
       path.join(root, "note.textbundle", "text.md"),
       "# Note\n\n![Pic](assets/pic.png)"
     );
-    fs.outputFileSync(
+    await folder.write(
+      this.blog.id,
       path.join(root, "note.textbundle", "assets", "pic.png"),
       Buffer.from("fake")
     );
@@ -183,10 +191,10 @@ describe("build multiple", function () {
   });
 
   it("lets later source files override a repeated scalar metadata key", async function () {
-    var root = path.join(this.blogDirectory, "drafty+");
+    var root = "/drafty+";
 
-    fs.outputFileSync(path.join(root, "01.md"), "Draft: no\n\n# One");
-    fs.outputFileSync(path.join(root, "02.md"), "Draft: yes\n\n# Two");
+    await folder.write(this.blog.id, path.join(root, "01.md"), "Draft: no\n\n# One");
+    await folder.write(this.blog.id, path.join(root, "02.md"), "Draft: yes\n\n# Two");
 
     var entry = await this.buildEntry("/drafty+");
 
@@ -194,10 +202,10 @@ describe("build multiple", function () {
   });
 
   it("lets a later source file clear an earlier scalar value", async function () {
-    var root = path.join(this.blogDirectory, "undrafty+");
+    var root = "/undrafty+";
 
-    fs.outputFileSync(path.join(root, "01.md"), "Draft: yes\n\n# One");
-    fs.outputFileSync(path.join(root, "02.md"), "Draft: no\n\n# Two");
+    await folder.write(this.blog.id, path.join(root, "01.md"), "Draft: yes\n\n# One");
+    await folder.write(this.blog.id, path.join(root, "02.md"), "Draft: no\n\n# Two");
 
     var entry = await this.buildEntry("/undrafty+");
 
@@ -205,10 +213,10 @@ describe("build multiple", function () {
   });
 
   it("overrides a repeated scalar key spelled with a different case", async function () {
-    var root = path.join(this.blogDirectory, "titlecase+");
+    var root = "/titlecase+";
 
-    fs.outputFileSync(path.join(root, "01.md"), "Title: First\n\n# One");
-    fs.outputFileSync(path.join(root, "02.md"), "title: Second\n\n# Two");
+    await folder.write(this.blog.id, path.join(root, "01.md"), "Title: First\n\n# One");
+    await folder.write(this.blog.id, path.join(root, "02.md"), "title: Second\n\n# Two");
 
     var entry = await this.buildEntry("/titlecase+");
 
@@ -220,12 +228,12 @@ describe("build multiple", function () {
   });
 
   it("injects a heading when the only h1 is beyond the first three source files", async function () {
-    var root = path.join(this.blogDirectory, "long-read+");
+    var root = "/long-read+";
 
-    fs.outputFileSync(path.join(root, "01.md"), "Intro paragraph.");
-    fs.outputFileSync(path.join(root, "02.md"), "More text.");
-    fs.outputFileSync(path.join(root, "03.md"), "Still going.");
-    fs.outputFileSync(path.join(root, "04.md"), "# The Real Heading\n\nBody.");
+    await folder.write(this.blog.id, path.join(root, "01.md"), "Intro paragraph.");
+    await folder.write(this.blog.id, path.join(root, "02.md"), "More text.");
+    await folder.write(this.blog.id, path.join(root, "03.md"), "Still going.");
+    await folder.write(this.blog.id, path.join(root, "04.md"), "# The Real Heading\n\nBody.");
 
     var entry = await this.buildEntry("/long-read+");
 
@@ -238,11 +246,11 @@ describe("build multiple", function () {
   });
 
   it("does not inject a heading when an early source file has an h1", async function () {
-    var root = path.join(this.blogDirectory, "early-head+");
+    var root = "/early-head+";
 
-    fs.outputFileSync(path.join(root, "01.md"), "No heading here.");
-    fs.outputFileSync(path.join(root, "02.md"), "# Second File Heading");
-    fs.outputFileSync(path.join(root, "03.md"), "# Third File Heading");
+    await folder.write(this.blog.id, path.join(root, "01.md"), "No heading here.");
+    await folder.write(this.blog.id, path.join(root, "02.md"), "# Second File Heading");
+    await folder.write(this.blog.id, path.join(root, "03.md"), "# Third File Heading");
 
     var entry = await this.buildEntry("/early-head+");
 
@@ -250,9 +258,10 @@ describe("build multiple", function () {
   });
 
   it("injects a heading when the only h1 is past the first three nodes of a source file", async function () {
-    var root = path.join(this.blogDirectory, "buried-head+");
+    var root = "/buried-head+";
 
-    fs.outputFileSync(
+    await folder.write(
+      this.blog.id,
       path.join(root, "01.md"),
       "One.\n\nTwo.\n\nThree.\n\n# Buried Heading"
     );
@@ -268,9 +277,10 @@ describe("build multiple", function () {
   });
 
   it("uses an explicit Title from metadata for the injected heading", async function () {
-    var root = path.join(this.blogDirectory, "trip-photos+");
+    var root = "/trip-photos+";
 
-    fs.outputFileSync(
+    await folder.write(
+      this.blog.id,
       path.join(root, "notes.md"),
       "Title: A Weekend Away\n\nNo heading in the body."
     );
@@ -301,19 +311,21 @@ describe("build multiple", function () {
   });
 
   it("returns an EMPTY error when no convertible files are present", function (done) {
-    var root = path.join(this.blogDirectory, "void+");
-    fs.ensureDirSync(root);
+    var blog = this.blog;
 
-    build(this.blog, "/void+", function (err) {
-      expect(err).toBeDefined();
-      expect(err.code).toEqual("EMPTY");
-      done();
-    });
+    folder.mkdir(blog.id, "/void+").then(function () {
+      build(blog, "/void+", function (err) {
+        expect(err).toBeDefined();
+        expect(err.code).toEqual("EMPTY");
+        done();
+      });
+    }, done.fail);
   });
 
   it("does not treat a plain file whose name ends in + as a folder post", async function () {
-    fs.outputFileSync(
-      path.join(this.blogDirectory, "post.md+"),
+    await folder.write(
+      this.blog.id,
+      path.join("/", "post.md+"),
       "# Just A File"
     );
 
@@ -336,12 +348,14 @@ describe("build multiple", function () {
   });
 
   it("refuses to aggregate when the stripped path is a real sibling file", async function () {
-    fs.outputFileSync(
-      path.join(this.blogDirectory, "article.md"),
+    await folder.write(
+      this.blog.id,
+      path.join("/", "article.md"),
       "# The Real Article"
     );
-    fs.outputFileSync(
-      path.join(this.blogDirectory, "article.md+", "extra.md"),
+    await folder.write(
+      this.blog.id,
+      path.join("/", "article.md+", "extra.md"),
       "# Extra section"
     );
 

@@ -1,6 +1,4 @@
-const fs = require("fs-extra");
 const { join } = require("path");
-const localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
 const folder = require("storage/folder");
 
 const fromiCloudPath = require.resolve("../fromiCloud");
@@ -54,7 +52,6 @@ describe("icloud fromiCloud sync", function () {
 
   beforeEach(async () => {
     blogID = `icloud-test-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-    await fs.ensureDir(localPath(blogID, "/"));
     // Other icloud specs (e.g. getHealth) require the client module, which
     // caches fromiCloud with its real dependencies. Drop that so each test
     // can inject mocks before loading fromiCloud.
@@ -63,7 +60,7 @@ describe("icloud fromiCloud sync", function () {
 
   afterEach(async () => {
     restoreModules();
-    await fs.remove(localPath(blogID, "/"));
+    await folder.removeAll(blogID);
   });
 
   it("creates a 0-byte placeholder when an oversized remote file is missing locally", async () => {
@@ -92,8 +89,7 @@ describe("icloud fromiCloud sync", function () {
       async () => {}
     );
 
-    const oversizedPath = localPath(blogID, join("/", remoteFile.name));
-    const stat = await fs.stat(oversizedPath);
+    const stat = await folder.stat(blogID, join("/", remoteFile.name));
 
     expect(stat.size).toBe(0);
     expect(summary.skipped).toBe(1);
@@ -115,9 +111,9 @@ describe("icloud fromiCloud sync", function () {
       size: 1000 * 1000 * 1000,
       isDirectory: false,
     };
-    const localFile = localPath(blogID, join("/", remoteFile.name));
+    const localFile = join("/", remoteFile.name);
 
-    await fs.outputFile(localFile, "existing local content");
+    await folder.write(blogID, localFile, "existing local content");
 
     mockModule(remoteRecursiveListPath, async () => {});
     mockModule(remoteReaddirPath, async () => [remoteFile]);
@@ -137,7 +133,7 @@ describe("icloud fromiCloud sync", function () {
       async () => {}
     );
 
-    const stat = await fs.stat(localFile);
+    const stat = await folder.stat(blogID, localFile);
 
     expect(stat.size).toBe(0);
     expect(summary.skipped).toBe(1);
@@ -179,15 +175,15 @@ describe("icloud fromiCloud sync", function () {
       const { summary, updated } = await run();
 
       expect(
-        (await fs.stat(localPath(blogID, join("/", remoteFile.name)))).size
+        (await folder.stat(blogID, join("/", remoteFile.name))).size
       ).toBe(0);
       expect(summary.placeholdersCreated).toBe(1);
       expect(updated).toEqual(["/huge.mov"]);
     });
 
     it("leaves an existing empty placeholder alone", async () => {
-      const localFile = localPath(blogID, join("/", remoteFile.name));
-      await fs.outputFile(localFile, "");
+      const localFile = join("/", remoteFile.name);
+      await folder.write(blogID, localFile, "");
       const write = spyOn(folder, "write").and.callThrough();
 
       const { summary, updated } = await run();
@@ -200,12 +196,12 @@ describe("icloud fromiCloud sync", function () {
     });
 
     it("truncates a non-empty local file to a placeholder and registers it", async () => {
-      const localFile = localPath(blogID, join("/", remoteFile.name));
-      await fs.outputFile(localFile, "existing local content");
+      const localFile = join("/", remoteFile.name);
+      await folder.write(blogID, localFile, "existing local content");
 
       const { summary, updated } = await run();
 
-      expect((await fs.stat(localFile)).size).toBe(0);
+      expect((await folder.stat(blogID, localFile)).size).toBe(0);
       expect(summary.placeholdersCreated).toBe(1);
       expect(updated).toEqual(["/huge.mov"]);
     });
@@ -233,8 +229,8 @@ describe("icloud fromiCloud sync", function () {
   });
 
   it("does not remove local files when remoteReaddir fails (partial/unconfirmed listing)", async () => {
-    const localFile = localPath(blogID, join("/", "post.txt"));
-    await fs.outputFile(localFile, "hello world");
+    const localFile = join("/", "post.txt");
+    await folder.write(blogID, localFile, "hello world");
 
     mockModule(remoteRecursiveListPath, async () => {});
     mockModule(remoteReaddirPath, async () => {
@@ -254,9 +250,9 @@ describe("icloud fromiCloud sync", function () {
       async () => {}
     );
 
-    const stat = await fs.stat(localFile);
+    const stat = await folder.stat(blogID, localFile);
 
-    expect(stat.isFile()).toBe(true);
+    expect(stat.isDirectory).toBe(false);
     expect(summary.removed).toBe(0);
     expect(published.some((line) => line.includes("Sync failed"))).toBe(true);
   });
@@ -508,7 +504,7 @@ describe("icloud fromiCloud sync", function () {
     });
 
     beforeEach(async () => {
-      await fs.ensureDir(localPath(blogID, "/pages/projects/untitled folder"));
+      await folder.mkdir(blogID, "/pages/projects/untitled folder");
     });
 
     it("excludes a rename in a directory modified around the walk", async () => {
@@ -537,7 +533,7 @@ describe("icloud fromiCloud sync", function () {
     });
 
     it("counts a removal in the root, which has no modified time", async () => {
-      await fs.outputFile(localPath(blogID, "/gone.txt"), "hello");
+      await folder.write(blogID, "/gone.txt", "hello");
 
       const summary = await walk({
         "/": [dir("pages", anHourAgo())],
@@ -551,7 +547,7 @@ describe("icloud fromiCloud sync", function () {
     });
 
     it("excludes both halves of a file replaced by a directory", async () => {
-      await fs.outputFile(localPath(blogID, "/pages/projects/inactive"), "x");
+      await folder.write(blogID, "/pages/projects/inactive", "x");
 
       const summary = await walk({
         "/": [dir("pages", anHourAgo())],
@@ -566,7 +562,7 @@ describe("icloud fromiCloud sync", function () {
     });
 
     it("does not excuse removing an ignored local file", async () => {
-      await fs.outputFile(localPath(blogID, "/pages/projects/.DS_Store"), "x");
+      await folder.write(blogID, "/pages/projects/.DS_Store", "x");
 
       const summary = await walk({
         "/": [dir("pages", anHourAgo())],
@@ -591,8 +587,8 @@ describe("icloud fromiCloud sync", function () {
       });
 
       beforeEach(async () => {
-        await fs.remove(localPath(blogID, "/pages/projects"));
-        await fs.outputFile(localPath(blogID, "/pages/old/a.md"), "a");
+        await folder.remove(blogID, "/pages/projects");
+        await folder.write(blogID, "/pages/old/a.md", "a");
       });
 
       it("excludes its files and subdirectories when the parent was modified around the walk", async () => {

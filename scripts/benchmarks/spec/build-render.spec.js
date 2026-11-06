@@ -1,8 +1,7 @@
 const path = require("path");
-const fs = require("fs-extra");
+const folder = require("storage/folder");
 const seedrandom = require("seedrandom");
 const { performance } = require("perf_hooks");
-const { join } = require("path");
 const config = require("config");
 const { ensureMediaPool } = require("../lib/generate-media");
 const { PhaseMonitor, summarizeDurations } = require("./util/metrics");
@@ -75,19 +74,16 @@ describe("blog benchmarks", function () {
     const rng = seedrandom(benchmarkConfig.seed);
 
     // The shared media pool (see lib/generate-media.js) is generated fresh
-    // into data/blogs/_benchmark-media-pool - a fixed directory *inside*
-    // config.blog_folder_dir, sibling to the per-blog folders, deliberately
-    // NOT checked into git. Living inside data/blogs means it's swept up
-    // for free by whatever already tars/restores data/blogs (see
-    // build-corpus.js and benchmarks-render.yml), so a restored corpus's
-    // hard links (see the write step below for why hard link, not symlink)
-    // keep resolving without tracking a fourth artifact. Generated once and
-    // reused for every post that wants a media file in this run.
+    // into a plain directory on disk, deliberately outside every blog's
+    // folder and NOT checked into git. It is only the source the posts' media
+    // files are copied from into the blogs' folders (in the storage bucket),
+    // so it is not part of the corpus snapshot. Generated once and reused for
+    // every post that wants a media file in this run.
     let mediaFiles = [];
 
     if (!isCorpusRender && benchmarkConfig.mediaFraction > 0) {
       const mediaPoolDir = path.join(
-        config.blog_folder_dir,
+        config.data_directory,
         "_benchmark-media-pool"
       );
       mediaFiles = await ensureMediaPool(mediaPoolDir, benchmarkConfig.seed);
@@ -129,45 +125,12 @@ describe("blog benchmarks", function () {
 
       await runWithConcurrency(writeTasks, benchmarkConfig.writeConcurrency, async (task) => {
         if (task.mediaPath != null) {
-          // Hard-link into the shared media pool (scripts/benchmarks/fixtures/
-          // media) instead of copying unique bytes per post, so even a
-          // 160k-post corpus stays cheap to write/tar.
-          //
-          // NOTE: this is deliberately a *hard* link, not a symlink.
-          // app/helper/assertNoSymlinks.js is called on every path inside a
-          // blog folder during sync (see app/sync/update/index.js and
-          // app/blog/routes/assets.js) and unconditionally rejects any
-          // symlink - including the final path component itself - with
-          // ELOOP. A hard link is indistinguishable from an ordinary file to
-          // lstat(), so it passes that check, and because every post that
-          // references the same pool file shares one inode, `tar` still only
-          // stores that file's bytes once per archive (subsequent hard-linked
-          // paths are recorded as link references), so data/blogs/ stays
-          // small exactly like the symlink approach would have, without
-          // tripping the no-symlinks guard.
-          let blogDir = join(config.blog_folder_dir, task.blog.id, "/");
-          if (blogDir.endsWith("/")) blogDir = blogDir.slice(0, -1);
-          const destPath = blogDir + task.path;
-          await fs.ensureDir(path.dirname(destPath));
-          await fs.remove(destPath);
-          try {
-            await fs.link(task.mediaPath, destPath);
-          } catch (err) {
-            // EXDEV: media pool and data/blogs live on different filesystems/
-            // mounts (e.g. some local dev setups). Fall back to a plain copy -
-            // more disk, but still correct.
-            if (err.code === "EXDEV") {
-              await fs.copy(task.mediaPath, destPath);
-            } else {
-              throw err;
-            }
-          }
+          // Copy a file of the shared media pool (lib/generate-media.js) into
+          // the blog's folder. A folder lives in the storage bucket, so each
+          // post that references a pool file stores its own copy of the bytes.
+          await folder.writeFrom(task.blog.id, task.path, task.mediaPath);
         } else if (task.sourcePath != null) {
-          let blogDir = join(config.blog_folder_dir, task.blog.id, "/");
-          if (blogDir.endsWith("/")) blogDir = blogDir.slice(0, -1);
-          const destPath = blogDir + task.path;
-          await fs.ensureDir(path.dirname(destPath));
-          await fs.copy(task.sourcePath, destPath);
+          await folder.writeFrom(task.blog.id, task.path, task.sourcePath);
         } else {
           await task.blog.write({ path: task.path, content: task.content });
         }
@@ -195,8 +158,8 @@ describe("blog benchmarks", function () {
     if (isCorpusBuild) {
       // build-corpus.js only needs the sites built and their manifest info
       // (workload.tagsBySite/searchKeywordsBySite/hubPathBySite/
-      // filesPerSite) - it snapshots Redis + data/blogs
-      // itself, so stop here rather than also rendering every page.
+      // filesPerSite) - it snapshots Redis + the
+      // MinIO data itself, so stop here rather than also rendering every page.
       global.__BLOT_BENCHMARK_RESULT = { corpus_build: true };
       global.__BLOT_CORPUS_WORKLOAD = workload;
       global.__BLOT_CORPUS_BLOGS = blogs.map((blog) => ({

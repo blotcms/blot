@@ -2,9 +2,9 @@ const client = require("models/client");
 const clfdate = require("helper/clfdate");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
 
-// An operator-set freeze on writes to the data directory, for maintenance
-// that needs the disk to stop changing for a few minutes (copying the data
-// volume to a new one, for example). Turn it on and off with
+// An operator-set freeze on writes to blogs, for maintenance
+// that needs writes to stop for a few minutes (a host cycle's switch, for
+// example: config/host/cycle.sh). Turn it on and off with
 // scripts/read-only.js. While it is on:
 //
 // - state-changing requests to the dashboard and the clients get a 503 with

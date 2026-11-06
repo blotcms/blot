@@ -96,8 +96,8 @@ uploaded as the `mega-benchmark` artifact.
 
 ## Reading the comment
 
-Medians of the runs, with their range. 🔺 marks a metric at least 15% worse
-whose head runs all came out above every base run; 🟢 the reverse. Anything
+Medians of the runs, with their range. "worse" marks a metric at least 15% worse
+whose head runs all came out above every base run; "better" the reverse. Anything
 unmarked is within noise, so a real change should show up as a marker in the
 same direction on a rerun.
 

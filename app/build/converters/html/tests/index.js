@@ -1,5 +1,5 @@
 const build = require("../../../index");
-const fs = require("fs-extra");
+const folder = require("storage/folder");
 const path = require("path");
 
 describe("html converter metadata", function () {
@@ -9,10 +9,10 @@ describe("html converter metadata", function () {
     it("preserves metadata before converting " + fixture, function (done) {
       const entryPath = "/" + fixture;
       const source = path.join(__dirname, "fixtures", fixture);
+      const blog = this.blog;
 
-      fs.copySync(source, this.blogDirectory + entryPath);
-
-      build(this.blog, entryPath, function (err, entry) {
+      folder.writeFrom(blog.id, entryPath, source).then(function () {
+      build(blog, entryPath, function (err, entry) {
         if (err) return done.fail(err);
 
         expect(entry.metadata.Title).toBe("Rock & Roll");
@@ -27,6 +27,7 @@ describe("html converter metadata", function () {
         );
         done();
       });
+      }, done.fail);
     });
   });
 });

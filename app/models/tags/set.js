@@ -77,6 +77,17 @@ module.exports = function (blogID, entry, callback) {
       var removed = _.difference(existing, tags);
       var added = _.difference(tags, existing);
 
+      // A tag's display name is shared by every entry whose tag has the same
+      // slug ("Cats" and "cats"), and the last entry saved sets it, so saving
+      // an entry can rename a tag on others even when the entry is unchanged
+      var nameKeys = tags.map(function (tag) {
+        return key.name(blogID, tag);
+      });
+      var storedNames = nameKeys.length ? await client.mGet(nameKeys) : [];
+      var renamed = storedNames.some(function (name, i) {
+        return name !== prettyTags[i];
+      });
+
       var multi = client.multi();
       var popularityKey = key.popular(blogID);
 
@@ -118,7 +129,11 @@ module.exports = function (blogID, entry, callback) {
 
       await multi.exec();
 
-      callback();
+      // changed: whether this moved any tag data other entries render: a
+      // display name, or which tags the entry is on
+      callback(null, {
+        changed: renamed || added.length > 0 || removed.length > 0,
+      });
     } catch (err) {
       callback(err);
     }

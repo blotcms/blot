@@ -11,10 +11,9 @@
 // Two lanes, each with its own cap, so neither waits behind the other:
 //
 //   interactive  what a user is waiting on: pushes (index-pack and the checks
-//                after it), upload-pack for clones and fetches
-//   background   Blot's own commits, syncs (materialize), the import of a new
-//                repository, live-clone fetches and gc. At most `gc` of them
-//                are gc, which is the one that can be large.
+//                after it), clones and fetches
+//   background   Blot's own commits, compaction, and the import of a new
+//                repository
 //
 // A command holds its place from just before it is spawned until it has
 // closed (its pipes too, so the processes it started have exited), however
@@ -24,12 +23,13 @@
 // queue: a write which failed to commit would leave the blog folder and the
 // repository apart.
 //
-//   limiter.run(lane, start, { gc })   start() spawns the command and returns
-//                                      a promise which settles once it has
-//                                      closed; run returns that promise, and
-//                                      calls start once there is room
-//   limiter.args(args)                 git's arguments with the memory
-//                                      settings in front
+//   limiter.run(lane, start)   start() spawns the command and returns a
+//                              promise which settles once it has closed; run
+//                              returns that promise, and calls start once
+//                              there is room
+//   limiter.gate(lane)         the same, as the gate the git store takes
+//   limiter.args(args)         git's arguments with the memory settings in
+//                              front
 //
 // A run inside another run (in the same async context, while the outer one
 // still holds its place) does not wait again: Blot's commit holds one place
@@ -43,8 +43,8 @@ const config = require("config");
 // system config says (the Docker image sets some of these too). They bound the
 // memory of one git process to about 100 MB:
 //
-//   pack.windowMemory      16m  the delta search window of pack-objects (for
-//                               upload-pack, gc's repack), per thread
+//   pack.windowMemory      16m  the delta search window of pack-objects, per
+//                               thread
 //   pack.deltaCacheSize    16m  deltas pack-objects keeps to write
 //   pack.threads            1   so the two above are not per core
 //   core.deltaBaseCacheLimit 16m  delta bases kept inflated, by every reader
@@ -70,17 +70,12 @@ const MEMORY = [
   ["core.packedGitWindowSize", "16m"],
 ];
 
-// No command but gc itself starts a gc, or maintenance: they would run outside
-// the limiter (detached, after the command has exited). gc.js runs gc.
+// No command starts a gc, or maintenance: they would run outside the limiter
+// (detached, after the command has exited). The store compacts its packs
+// itself.
 const NO_AUTO_GC = [
   ["gc.auto", "0"],
   ["maintenance.auto", "false"],
-];
-
-// gc in the foreground, so it is counted until it has finished
-const FOREGROUND_GC = [
-  ["gc.autoDetach", "false"],
-  ["maintenance.autoDetach", "false"],
 ];
 
 function flags(pairs) {
@@ -93,7 +88,6 @@ function flags(pairs) {
 
 const MEMORY_FLAGS = flags(MEMORY);
 const NO_AUTO_GC_FLAGS = flags(NO_AUTO_GC);
-const FOREGROUND_GC_FLAGS = flags(FOREGROUND_GC);
 
 // git's subcommand: the first argument which is not an option of git itself
 function subcommand(args) {
@@ -114,11 +108,7 @@ function args(list) {
 
   if (command === "config") return list;
 
-  return MEMORY_FLAGS.concat(command === "gc" ? FOREGROUND_GC_FLAGS : NO_AUTO_GC_FLAGS, list);
-}
-
-function isGc(list) {
-  return subcommand(list) === "gc";
+  return MEMORY_FLAGS.concat(NO_AUTO_GC_FLAGS, list);
 }
 
 // A queue with a cap on how many hold a place at once
@@ -183,31 +173,23 @@ function createLimiter(options) {
   function configure(caps) {
     lanes.interactive = createLane("interactive", caps.interactive);
     lanes.background = createLane("background", caps.background);
-    lanes.gc = createLane("gc", caps.gc);
   }
 
   configure(options);
 
-  // Resolves with a function which gives the place back. gc takes its own
-  // place first, so a gc waiting for its turn holds no background place.
-  async function acquire(lane, options) {
+  // Resolves with a function which gives the place back
+  async function acquire(lane) {
     if (LANES.indexOf(lane) === -1) throw new Error("No git lane called " + lane);
 
-    const gc = options && options.gc ? await lanes.gc.acquire() : null;
-    const release = await lanes[lane].acquire();
-
-    return function () {
-      release();
-      if (gc) gc();
-    };
+    return lanes[lane].acquire();
   }
 
-  function run(lane, start, options) {
+  function run(lane, start) {
     const outer = held.getStore();
 
     if (outer && outer.holding) return Promise.resolve().then(start);
 
-    return acquire(lane, options).then(function (release) {
+    return acquire(lane).then(function (release) {
       const place = { holding: true };
 
       return new Promise(function (resolve) {
@@ -250,10 +232,10 @@ function createLimiter(options) {
   }
 
   function currentCaps() {
-    return { interactive: lanes.interactive.max, background: lanes.background.max, gc: lanes.gc.max };
+    return { interactive: lanes.interactive.max, background: lanes.background.max };
   }
 
-  return { run, acquire, outside, gate, stats, reset, args, isGc, subcommand };
+  return { run, acquire, outside, gate, stats, reset, args, subcommand };
 }
 
 // This process's limiter. Each Node process of a unit has its own, so a unit
@@ -261,7 +243,6 @@ function createLimiter(options) {
 module.exports = createLimiter({
   interactive: config.git.interactive_processes,
   background: config.git.background_processes,
-  gc: config.git.gc_processes,
 });
 
 module.exports.createLimiter = createLimiter;

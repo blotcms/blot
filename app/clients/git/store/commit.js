@@ -1,7 +1,8 @@
 // Blot's own commits: one file written or removed, as one commit on master,
-// in the object store. It does what plumbing.js does on disk for Blot's writes
-// (repo.commit): the same identity and messages, the same refusals of paths,
-// the same executable-bit rule, and no commit when nothing changes.
+// in the object store. It makes the commits Blot's writes (repo.commit) have
+// always made with git's plumbing on disk: the same identity and messages, the
+// same refusals of paths, the same executable-bit rule, and no commit when
+// nothing changes.
 //
 //   const result = await commit({ store, cache, lock, path: "/a/b.txt", contents });
 //
@@ -88,12 +89,13 @@ const createReader = require("./reader");
 const { parseCommit } = require("./objects");
 const { buildRev } = require("./rev");
 const { noteSize } = require("./pack");
+const { keepPack } = require("./packcache");
 const { rememberWhole } = require("./idx");
 
 const MASTER = "refs/heads/master";
 
 // What the Docker image configures as the identity of any commit made on the
-// server, and so who plumbing.js's commits are by
+// server, and so who Blot's commits have always been by
 const IDENTITY = { name: "Your Name", email: "you@example.com" };
 
 // A commit made over a master which moved is made again on the new master,
@@ -141,7 +143,8 @@ function pathError(file) {
 
 // The path of a file in the repository from the path Blot knows it by: the
 // same steps as helper/pathNormalizer (which this directory may not require),
-// then plumbing.js's rules. Resolves with the parts, never empty.
+// then the rules Blot's writes have always had. Resolves with the parts,
+// never empty.
 function treePath(file) {
   if (typeof file !== "string") throw pathError(file);
 
@@ -511,11 +514,17 @@ async function build({ objects, parent, parts, blob, message, identity, when }) 
 // Uploads a pack with its index and, unless it is a history piece (read whole,
 // so nothing wants its reverse index), its reverse index, all at once. Every
 // upload has ended, one way or the other, before this settles.
-async function uploadPack(store, pack, { rev = true } = {}) {
+// The pack's bytes go in the cache at the same time (packcache.js), which never
+// fails the upload.
+async function uploadPack(store, pack, { rev = true, cache = null } = {}) {
   const body = pack.body();
   const puts = [store.put(packKey(pack.name), body), store.put(idxKey(pack.name), pack.idx)];
   if (rev) puts.push(store.put(revKey(pack.name), pack.rev));
+  const kept = Buffer.isBuffer(body)
+    ? keepPack({ cache, store, name: pack.name, size: pack.size, buffer: body })
+    : keepPack({ cache, store, name: pack.name, size: pack.size, stream: pack.body() });
   const results = await Promise.allSettled(puts);
+  await kept;
   if (body.destroy) body.destroy();
   const failed = results.find((result) => result.status === "rejected");
   if (failed) throw failed.reason;
@@ -563,7 +572,7 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
 
         // Every upload ends before this goes on, so none is still reading a
         // file from scratch when scratch is deleted
-        const results = await Promise.allSettled([uploadPack(store, pack), uploadPack(store, piece, { rev: false })]);
+        const results = await Promise.allSettled([uploadPack(store, pack, { cache }), uploadPack(store, piece, { rev: false, cache })]);
         const failed = results.find((result) => result.status === "rejected");
         if (failed) throw failed.reason;
         uploaded = { pack, piece, epoch: manifest.epochOf(base) };
@@ -582,7 +591,7 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
       });
 
       try {
-        await manifest.swap({ store, lock, base, next, uploaded: [uploaded.pack.name, uploaded.piece.name], waitForHint: false });
+        await manifest.swap({ store, lock, base, next, uploaded: [uploaded.pack.name, uploaded.piece.name] });
       } catch (err) {
         if (err instanceof OutcomeUnknownError) return { outcome: "unknown", commit: built.commit, parent, changed: null, seq: next.seq, error: err };
         if (!(err instanceof StaleManifestError)) throw err;
@@ -601,3 +610,7 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
 }
 
 module.exports = commit;
+module.exports.treePath = treePath;
+// receive.js builds its history pieces the same way
+module.exports.wholeEntry = wholeEntry;
+module.exports.assemblePack = assemblePack;

@@ -1,14 +1,13 @@
-// The git store's daily upkeep in shadow mode (#2259): for every shadowed
-// blog, the store's sweep and the cheap check of its copy against the
-// repository on disk, a deep check (a whole clone) of a few blogs in turn and
-// the git test blog, and on the first of the month deleting <blogID>/git/
-// prefixes left behind by blogs no longer on git, and clearing the scratch
-// directories a killed import or verify left (older than 12 hours). See
-// app/clients/git/shadow/maintenance.js.
+// The git store's daily upkeep (#2259): for every blog on git, the store's
+// sweep and the cheap check of its copy, a deep check (a whole clone) of a
+// few blogs in turn and the git test blog, on the first of the month deleting
+// <blogID>/git/ prefixes left behind by blogs no longer on git, and clearing
+// the scratch directories a killed import or verify left (older than 12
+// hours). See app/clients/git/served/maintenance.js.
 //
-// It does nothing unless shadow mode is set (BLOT_GIT_STORE_SHADOW) and there
-// is a storage bucket. The scheduler runs it in one process (lock.cron).
-// Emails the admin once, with every finding, only if something was found.
+// It does nothing unless there is a storage bucket. The scheduler runs it in
+// one process (lock.cron). Emails the admin once, with every finding, only if
+// something was found.
 const config = require("config");
 const clfdate = require("helper/clfdate");
 
@@ -16,13 +15,9 @@ const NAME = "git-store-maintenance";
 
 // options: sendEmail(view), and what maintenance.daily takes
 async function run(options = {}) {
-  const shadowSetting = String((config.git_store && config.git_store.shadow) || "").trim();
+  if (!(config.storage && config.storage.bucket)) return { skipped: true, sent: false };
 
-  if (!shadowSetting || !(config.storage && config.storage.bucket)) {
-    return { skipped: true, sent: false };
-  }
-
-  const maintenance = require("clients/git/shadow/maintenance");
+  const maintenance = require("clients/git/served/maintenance");
 
   if (!maintenance.configured()) return { skipped: true, sent: false };
 
@@ -59,15 +54,20 @@ async function run(options = {}) {
 
 const plural = (n, word) => n + " " + word + (n === 1 ? "" : /(s|sh|ch)$/.test(word) ? "es" : "s");
 
-// The alert email's view: what was found, by kind, blog IDs only
+// The alert email's view: the store's own findings, by kind, blog IDs only:
+// the checks of each copy (the deep sample among them), the sweep's errors
+// and the leftover copies the monthly pass deleted
 function view(report) {
   const { findings } = report;
   const count = (kind) => findings.filter((f) => f.kind === kind).length;
+  const sweepErrors = findings.filter((f) => f.check === "sweep" && f.kind === "error").length;
+  const otherErrors = count("error") - sweepErrors;
   const blogs = new Set(findings.map((f) => f.blog)).size;
   const summary = [
     count("missing") && plural(count("missing"), "missing file"),
     count("mismatch") && plural(count("mismatch"), "mismatch"),
-    count("error") && plural(count("error"), "error"),
+    sweepErrors && plural(sweepErrors, "sweep error"),
+    otherErrors && plural(otherErrors, "error"),
     count("orphan") && plural(count("orphan"), "leftover"),
   ]
     .filter(Boolean)
@@ -77,10 +77,12 @@ function view(report) {
     summary: summary + " in " + plural(blogs, "blog"),
     checked: report.blogs,
     deepChecked: report.deepChecked,
+    deepBlogs: (report.deepBlogs || []).join(", ") || "none",
     findings: findings.map((f) => ({ blog: f.blog, kind: f.kind, check: f.check, detail: f.detail })),
     hasMissing: count("missing") > 0,
     hasMismatch: count("mismatch") > 0,
-    hasErrors: count("error") > 0,
+    hasSweepErrors: sweepErrors > 0,
+    hasErrors: otherErrors > 0,
     hasOrphans: count("orphan") > 0,
   };
 }
@@ -93,7 +95,7 @@ async function job() {
     sendEmail: (locals) => new Promise((resolve, reject) => email.GIT_STORE_ALERT(null, locals, (err) => (err ? reject(err) : resolve()))),
   });
 
-  if (skipped) console.log(clfdate(), "Git store: shadow mode is off, nothing to look after");
+  if (skipped) console.log(clfdate(), "Git store: no storage bucket, nothing to look after");
   if (sent) console.log(clfdate(), "Sent git store alert email");
 }
 

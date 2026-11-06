@@ -209,8 +209,8 @@ function render() {
       el("h2", {}, pair.label),
       ...controls,
       el("span", { class: "spacer" }),
-      pair.sourceURL ? el("a", { href: pair.sourceURL, target: "_blank", rel: "noreferrer" }, "open source ↗") : null,
-      el("a", { href: pair.localURL, target: "_blank", rel: "noreferrer" }, "open result ↗"));
+      pair.sourceURL ? el("a", { href: pair.sourceURL, target: "_blank", rel: "noreferrer" }, "open source") : null,
+      el("a", { href: pair.localURL, target: "_blank", rel: "noreferrer" }, "open result"));
 
     main.appendChild(el("section", { class: pair.mobile ? "mobile" : "" }, bar, stage));
   });

@@ -4,7 +4,7 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
   // route which could not update the database answers with an error AND
   // leaves the blog folder looking unchanged, otherwise the retry finds the
   // change already on disk and does nothing.
-  const fs = require("fs-extra");
+  const folder = require("storage/folder");
   const Entry = require("models/entry");
   const redis = require("models/client");
   const { SimpleError } = require("redis");
@@ -65,7 +65,7 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
 
   beforeEach(function () {
     spyOn(console, "warn");
-    this.onDisk = (path) => this.blogDirectory + path;
+    this.inFolder = (path) => folder.exists(this.blog.id, path);
   });
 
   describe("upload", function () {
@@ -81,7 +81,7 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
         const res = await call(upload, blogID, path, Buffer.from("Hello"));
         expect(res.code).toBe(503);
         expect(res.headers["Retry-After"]).toBeTruthy();
-        expect(await fs.pathExists(this.onDisk(path))).toBe(false);
+        expect(await this.inFolder(path)).toBe(false);
       }
 
       Entry.set.and.callThrough();
@@ -105,7 +105,7 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
 
       // Same size as the version in the database, but no longer on disk, so
       // neither the retry nor a resync mistakes it for up to date
-      expect(await fs.pathExists(this.onDisk(path))).toBe(false);
+      expect(await this.inFolder(path)).toBe(false);
 
       Entry.set.and.callThrough();
 
@@ -123,7 +123,7 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
 
       const res = await call(upload, this.blog.id, path, Buffer.from("Hello"));
       expect(res.code).toBe(200);
-      expect(await fs.pathExists(this.onDisk(path))).toBe(true);
+      expect(await this.inFolder(path)).toBe(true);
     });
   });
 
@@ -138,7 +138,7 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
 
       const res = await call(remove, blogID, path);
       expect(res.code).toBe(503);
-      expect(await fs.pathExists(this.onDisk(path))).toBe(false);
+      expect(await this.inFolder(path)).toBe(false);
       expect((await getEntry(blogID, path)).deleted).toBeFalsy();
 
       Entry.drop.and.callThrough();
@@ -160,7 +160,7 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
       );
 
       expect((await call(remove, blogID, path)).code).toBe(200);
-      expect(await fs.pathExists(this.onDisk(path))).toBe(false);
+      expect(await this.inFolder(path)).toBe(false);
     });
   });
 
@@ -174,12 +174,12 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
 
       const res = await call(mkdir, blogID, path);
       expect(res.code).toBe(503);
-      expect(await fs.pathExists(this.onDisk(path))).toBe(false);
+      expect(await this.inFolder(path)).toBe(false);
 
       redis.mGet.and.callThrough();
 
       expect((await call(mkdir, blogID, path)).code).toBe(200);
-      expect(await fs.pathExists(this.onDisk(path))).toBe(true);
+      expect(await this.inFolder(path)).toBe(true);
     });
   });
 });

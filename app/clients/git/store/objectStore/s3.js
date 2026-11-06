@@ -3,8 +3,10 @@
 // The host passes in a configured S3Client, the bucket, and the prefix every
 // key sits under ({blogID}/git/). Only the S3 API subset Backblaze B2 also
 // supports is used: plain and multipart PUT, ranged GET, HEAD, DELETE and
-// LIST, and one conditional write: a PUT with If-None-Match: * (putIfAbsent),
-// which is what makes a manifest swap safe. No tagging or storage classes.
+// LIST, one conditional write: a PUT with If-None-Match: * (putIfAbsent),
+// which is what makes a manifest swap safe, and one conditional read: a GET
+// with If-None-Match: <etag> (get with ifNoneMatch), answered 304 Not
+// Modified while the object is unchanged. No tagging or storage classes.
 const {
   GetObjectCommand,
   HeadObjectCommand,
@@ -38,6 +40,10 @@ function isMissing(err) {
 
 function isPastEnd(err) {
   return err.name === "InvalidRange" || (err.$metadata && err.$metadata.httpStatusCode === 416);
+}
+
+function isNotModified(err) {
+  return err.name === "NotModified" || (err.$metadata && err.$metadata.httpStatusCode === 304);
 }
 
 function isPreconditionFailed(err) {
@@ -83,13 +89,14 @@ function createS3Store({
     return "bytes=" + offset + "-" + end;
   }
 
-  async function open(key, offset, length) {
+  async function open(key, offset, length, ifNoneMatch) {
     try {
       return await client.send(
         new GetObjectCommand({
           Bucket: bucket,
           Key: full(key),
           Range: rangeHeader(offset, length),
+          IfNoneMatch: ifNoneMatch || undefined,
         })
       );
     } catch (err) {
@@ -116,13 +123,23 @@ function createS3Store({
     throw lastError;
   }
 
-  async function get(key, { maxBytes = Infinity } = {}) {
-    const out = await open(key, 0, Infinity);
+  // With ifNoneMatch (see memory.js) it is a conditional GET, which S3 (and
+  // B2) answer with 304, thrown by the SDK, while the ETag is the one given
+  async function get(key, { maxBytes = Infinity, ifNoneMatch } = {}) {
+    const conditional = ifNoneMatch !== undefined;
+    let out;
+    try {
+      out = await open(key, 0, Infinity, ifNoneMatch);
+    } catch (err) {
+      if (conditional && ifNoneMatch && isNotModified(err)) return { notModified: true, etag: ifNoneMatch };
+      throw err;
+    }
     if (out.ContentLength > maxBytes) {
       out.Body.destroy();
       throw new TooLargeError(key + " is larger than " + maxBytes);
     }
-    return Buffer.from(await out.Body.transformToByteArray());
+    const bytes = Buffer.from(await out.Body.transformToByteArray());
+    return conditional ? { bytes, etag: out.ETag || null } : bytes;
   }
 
   // Opens the object when first read, so a missing key surfaces as the

@@ -1,21 +1,14 @@
-const fs = require("fs").promises;
-const fsExtra = require("fs-extra");
-const path = require("path");
 const express = require("express");
-const config = require("config");
+const folder = require("storage/folder");
 const { randomBytes } = require("crypto");
-const caseSensitivePath = require("util").promisify(
-  require("helper/caseSensitivePath")
-);
 
 // Covers the order the blog-folder middleware tries candidates in once the
-// exact path has missed, and that every candidate keeps the no-symlink policy.
+// exact path has missed.
 describe("blog asset fallbacks", function () {
-  let blogID, blog, server, url, readdirs;
+  let blogID, server, url, readdirs;
 
   async function write(name, content = name) {
-    await fs.mkdir(path.dirname(path.join(blog, name)), { recursive: true });
-    await fs.writeFile(path.join(blog, name), content);
+    await folder.write(blogID, name, content);
   }
 
   async function text(pathname) {
@@ -25,14 +18,12 @@ describe("blog asset fallbacks", function () {
 
   beforeEach(async function () {
     blogID = "blog_" + randomBytes(8).toString("hex");
-    blog = path.join(config.blog_folder_dir, blogID);
-    await fs.mkdir(blog, { recursive: true });
     readdirs = 0;
-    // storage/folder reads directories through fs-extra
-    const readdir = fsExtra.readdir;
-    spyOn(fsExtra, "readdir").and.callFake((...args) => {
+    // the middleware reads directories through storage/folder
+    const listNames = folder.listNames;
+    spyOn(folder, "listNames").and.callFake((...args) => {
       readdirs++;
-      return readdir(...args);
+      return listNames(...args);
     });
     const app = express();
     app.use((req, res, next) => {
@@ -49,7 +40,7 @@ describe("blog asset fallbacks", function () {
 
   afterEach(async function () {
     if (server) await new Promise((resolve) => server.close(resolve));
-    await fs.rm(blog, { recursive: true, force: true });
+    await folder.removeAll(blogID);
   });
 
   it("answers a miss under a missing directory with a single directory read", async function () {
@@ -59,7 +50,7 @@ describe("blog asset fallbacks", function () {
   });
 
   it("tries the lowercased path when the case-insensitive walk dead-ends", async function () {
-    await fs.mkdir(path.join(blog, "Docs"));
+    await folder.mkdir(blogID, "Docs");
     await write("docs/sub/page.txt", "lower");
     expect(await text("/Docs/sub/page.txt")).toBe("lower");
   });
@@ -84,10 +75,9 @@ describe("blog asset fallbacks", function () {
     await write("Pic.txt", "one");
     await write("PIC.txt", "two");
     await write("pIC.txt", "three");
-    const expected = await fs.readFile(
-      await caseSensitivePath(blog, "/pic.TXT"),
-      "utf8"
-    );
+    const expected = (
+      await folder.read(blogID, await folder.resolveCaseInsensitive(blogID, "/pic.TXT"))
+    ).toString();
     expect(await text("/pic.TXT")).toBe(expected);
   });
 
@@ -104,7 +94,7 @@ describe("blog asset fallbacks", function () {
   });
 
   it("does not serve a directory which matches by case where a file is expected", async function () {
-    await fs.mkdir(path.join(blog, "Docs.txt"));
+    await folder.mkdir(blogID, "Docs.txt");
     expect(await text("/docs.txt")).toBe(404);
     expect(await text("/Docs.txt")).toBe(404);
     await write("Docs.txt.html", "page");
@@ -150,7 +140,7 @@ describe("blog asset fallbacks", function () {
   });
 
   it("serves a file named like a directory's index only when it is a file", async function () {
-    await fs.mkdir(path.join(blog, "about/index.html"), { recursive: true });
+    await folder.mkdir(blogID, "about/index.html");
     await write("about.html", "file");
     expect(await text("/about")).toBe("file");
   });
@@ -173,68 +163,8 @@ describe("blog asset fallbacks", function () {
     expect(await text("/Exact.txt")).toBe("exact");
   });
 
-  describe("symlinks", function () {
-    beforeEach(async function () {
-      await write("real.html", "real");
-      await write("real/index.html", "real index");
-    });
-
-    it("rejects a symlink at each fallback candidate", async function () {
-      await fs.symlink("real.html", path.join(blog, "linked.html"));
-      await fs.symlink("real.html", path.join(blog, "_underscored.html"));
-      await fs.mkdir(path.join(blog, "indexed"));
-      await fs.symlink("../real.html", path.join(blog, "indexed/index.html"));
-      await fs.mkdir(path.join(blog, "uindexed"));
-      await fs.symlink("../real.html", path.join(blog, "uindexed/_index.html"));
-      await fs.symlink("real.html", path.join(blog, "Cased.txt"));
-      await fs.symlink("real.html", path.join(blog, "lowered.txt"));
-
-      for (const pathname of [
-        "/linked",
-        "/linked/",
-        "/underscored",
-        "/indexed",
-        "/indexed/",
-        "/uindexed",
-        "/CASED.txt",
-        "/cased.txt",
-        "/LOWERED.TXT",
-      ]) {
-        expect(await text(pathname)).withContext(pathname).toBe(404);
-      }
-    });
-
-    it("rejects a symlinked directory on the way to any candidate", async function () {
-      await fs.symlink("real", path.join(blog, "ancestor"));
-      await fs.symlink("real", path.join(blog, "Upper"));
-      await fs.symlink(".", path.join(blog, "self"));
-      await write("real/page.html", "page");
-      await write("real/_other.html", "other");
-
-      for (const pathname of [
-        "/ancestor",
-        "/ancestor/",
-        "/ancestor/page",
-        "/ancestor/other",
-        "/ancestor/INDEX.html",
-        "/upper/page",
-        "/UPPER/PAGE.html",
-        "/self/real",
-        "/self/real.html",
-      ]) {
-        expect(await text(pathname)).withContext(pathname).toBe(404);
-      }
-    });
-
-    it("skips a symlink to continue to a later real candidate", async function () {
-      await fs.symlink("real.html", path.join(blog, "both.html"));
-      await write("_both.html", "underscore file");
-      expect(await text("/both")).toBe("underscore file");
-    });
-
-    it("serves a real directory matched ignoring case", async function () {
-      await write("Sub/file.txt", "real");
-      expect(await text("/sub/file.txt")).toBe("real");
-    });
+  it("serves a real directory matched ignoring case", async function () {
+    await write("Sub/file.txt", "real");
+    expect(await text("/sub/file.txt")).toBe("real");
   });
 });

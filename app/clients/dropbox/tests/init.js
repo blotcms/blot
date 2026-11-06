@@ -325,132 +325,6 @@ describe("dropbox init", function () {
     });
   });
 
-  // A process that dies mid-transfer leaves transfer_pending set with nothing
-  // running the upload; resumeInterruptedTransfersOnStartup picks those up.
-  describe("resumeInterruptedTransfersOnStartup", function () {
-    const blogPath = require.resolve("models/blog");
-    const databasePath = require.resolve("../database");
-    const resetFromBlotPath = require.resolve("../sync/reset-from-blot");
-    const lockPath = require.resolve("sync/establishSyncLock");
-    const subscriberPath = require.resolve("helper/redisSubscriber");
-    const initPath = require.resolve("../init");
-    const paths = [
-      blogPath,
-      databasePath,
-      resetFromBlotPath,
-      lockPath,
-      subscriberPath,
-      initPath,
-    ];
-
-    const blogID = "blog_resumetransfer" + Date.now();
-    const originals = {};
-    let uploads, released, updated;
-
-    beforeEach(function () {
-      paths.forEach((path) => (originals[path] = require.cache[path]));
-      uploads = [];
-      released = [];
-      updated = [];
-    });
-
-    afterEach(function () {
-      paths.forEach((path) => {
-        if (originals[path]) require.cache[path] = originals[path];
-        else delete require.cache[path];
-      });
-    });
-
-    function load(account, { lockError, uploadError } = {}) {
-      require.cache[blogPath] = {
-        exports: {
-          getAllIDs: (callback) => callback(null, [blogID]),
-          get: (query, callback) =>
-            callback(null, { id: blogID, handle: "resume", client: "dropbox" }),
-        },
-      };
-      require.cache[databasePath] = {
-        exports: {
-          get: (_blogID, callback) =>
-            callback(null, typeof account === "function" ? account() : account),
-          set: (_blogID, _values, callback) => callback(null),
-        },
-      };
-      require.cache[resetFromBlotPath] = {
-        exports: async (id, _publish, _signal, update) => {
-          uploads.push(id);
-          if (update) await update("/renamed.txt");
-          if (uploadError) throw uploadError;
-        },
-      };
-      require.cache[lockPath] = {
-        exports: async () => {
-          if (lockError) throw lockError;
-          return { folder: { update: (path, cb) => (updated.push(path), cb()) }, done: async (err) => released.push(err) };
-        },
-      };
-      require.cache[subscriberPath] = {
-        exports: () => ({
-          setupPromise: Promise.resolve(),
-          cleanup: async () => {},
-        }),
-      };
-      delete require.cache[initPath];
-      return require("../init");
-    }
-
-    it("re-runs the upload under the lock for an interrupted transfer", async function () {
-      const init = load({ error_code: 0, transfer_pending: true });
-      await init.resumeInterruptedTransfersOnStartup();
-      expect(uploads).toEqual([blogID]);
-      expect(released).toEqual([null]);
-      // resetFromBlot gets the lock's folder.update so renames are recorded
-      expect(updated).toEqual(["/renamed.txt"]);
-    });
-
-    it("leaves completed transfers and recorded errors alone", async function () {
-      for (const account of [
-        { error_code: 0, transfer_pending: false },
-        { error_code: 507, transfer_pending: true },
-        { error_code: 401, transfer_pending: true },
-        null,
-      ]) {
-        const init = load(account);
-        await init.resumeInterruptedTransfersOnStartup();
-      }
-      expect(uploads).toEqual([]);
-    });
-
-    it("does not upload when a live setup finished while waiting for the lock", async function () {
-      let reads = 0;
-      // First read (pre-lock) says pending; the recheck under the lock says done
-      const init = load(() => ({ error_code: 0, transfer_pending: ++reads === 1 }));
-      await init.resumeInterruptedTransfersOnStartup();
-      expect(reads).toEqual(2);
-      expect(uploads).toEqual([]);
-      expect(released).toEqual([null]);
-    });
-
-    it("skips a blog whose lock is held by a live transfer", async function () {
-      const init = load(
-        { error_code: 0, transfer_pending: true },
-        { lockError: new Error("Failed to acquire folder lock") }
-      );
-      await init.resumeInterruptedTransfersOnStartup();
-      expect(uploads).toEqual([]);
-    });
-
-    it("releases the lock with the error when the upload fails", async function () {
-      const uploadError = new Error("upload failed");
-      const init = load(
-        { error_code: 0, transfer_pending: true },
-        { uploadError }
-      );
-      await init.resumeInterruptedTransfersOnStartup();
-      expect(released).toEqual([uploadError]);
-    });
-  });
-
   // One digest per sweep: changes, Fix() repairs, errors and a stuck lock for
   // different blogs all land in the same DROPBOX_SYNC_ISSUE email, and blogs
   // with nothing wrong (or a briefly busy lock) don't appear in it.
@@ -536,7 +410,7 @@ describe("dropbox init", function () {
         get: (_id, callback) =>
           callback(null, {
             error_code: 0,
-            transfer_pending: false,
+            transfer_pending: Boolean(behaviors[_id].transferPending),
             last_sync: behaviors[_id].lastSync || Date.now(),
           }),
         set: (_id, _values, callback) => callback(null),
@@ -790,6 +664,25 @@ describe("dropbox init", function () {
       expect(sentEmails.length).toEqual(1);
       expect(sentEmails[0].blogs.map((blog) => blog.id)).toEqual([ids.stuck]);
       expect(sentEmails[0].blogs[0].hasStuckLock).toEqual(true);
+    });
+
+    it("does not report a stuck lock for a blog still in its initial transfer", async function () {
+      const sentEmails = [];
+      const init = load(
+        {
+          [ids.stuck]: {
+            heldSince: Date.now() - 5 * HOUR,
+            lastSync: Date.now() - 5 * HOUR,
+            transferPending: true,
+          },
+        },
+        sentEmails
+      );
+
+      await init.validateAllBlogs();
+
+      expect(walked).toEqual([]);
+      expect(sentEmails).toEqual([]);
     });
 
     it("reports a partly failed walk as a walk error, with its changes, and skips Fix()", async function () {

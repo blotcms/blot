@@ -1,23 +1,24 @@
-// Checks one git blog's copy in the git store (<blogID>/git/ in the storage
-// bucket) against its repository on disk, with the checks the daily
-// maintenance runs (app/clients/git/shadow/maintenance.js), and prints the
-// result as JSON. It reads, and writes nothing to the store or the repository.
+// Checks git blogs' repositories in the git store (<blogID>/git/ in the
+// storage bucket), with the checks the daily maintenance runs
+// (app/clients/git/served/maintenance.js), and prints the result as JSON. It
+// reads, and writes nothing to the store. For a repository at an explicit
+// target, with no config, Redis or blog record (a copy restored from the
+// offsite backup), use scripts/git/check-store.js, which runs the same checks.
 //
-//   cheap (always)  branches and tags equal, peeled tags equal, and every file
-//                   the newest manifest names is in the bucket at its size
+//   cheap (always)  the store has a copy, and every file the newest manifest
+//                   names is in the bucket at its size
 //   --deep          also clone the store through its own clone code into
-//                   scratch, index-pack --strict, fsck --strict, and compare
-//                   every branch, tag and HEAD with the repository on disk
+//                   scratch, index-pack --strict, fsck --strict, and make
+//                   every branch, tag and HEAD of the manifest in the clone
 //
 // A check that finds anything is run once more after a delay (--recheck <s>,
-// default 10 seconds), in case a push was in flight. The log lines, in shadow
-// mode's format (op=verify), go to stderr.
+// default 10 seconds), in case a write was in flight. The log lines
+// (op=verify) go to stderr.
 //
 // Several blogs, one after another in one process (one Redis connection, not
 // one per blog as a loop of docker exec would open):
 //
-//   --all                  every blog on the git client which shadow mode
-//                          covers (gitBlogs() in shadow/maintenance.js)
+//   --all                  every blog on the git client
 //   --blogs <id,id,...>    these blogs
 //   --deep                 deep-check all of them
 //   --deep-sample <n>      deep-check n of them, chosen at random, and the
@@ -29,12 +30,10 @@
 // stdout is then one JSON result per blog, as each finishes (newline-
 // delimited), and a last line, the summary: { summary: true, blogs, outcomes:
 // { ok, findings, skipped }, withFindings: [{ blog, findings }] }. Skipped is a
-// blog which is gone, off git or has no repository. The exit status is 1 if
-// any blog had a finding. With --blog alone, as before, stdout is the one
-// result, indented.
+// blog which is gone or off git. The exit status is 1 if any blog had a
+// finding. With --blog alone, stdout is the one result, indented.
 //
-// Usage, on the production host, as uid 1000, which owns the repositories
-// (git refuses a repository owned by another user):
+// Usage, on the production host:
 //
 //   docker exec -u 1000 blot-blue node scripts/git/verify-store.js --blog <blogID> [--deep]
 //   docker exec -u 1000 blot-blue node scripts/git/verify-store.js --all [--deep-sample 5]
@@ -118,14 +117,15 @@ async function main() {
     process.exit(1);
   }
 
-  // A cache directory of this process's own (see backfill-store.js)
+  // A cache directory of this process's own, apart from the units' (see
+  // cache() in app/clients/git/served/context.js)
   config.container = "verify-store";
 
   // The log lines go to stderr, so stdout is the JSON alone
   const print = console.log;
   console.log = console.error;
 
-  const maintenance = require("clients/git/shadow/maintenance");
+  const maintenance = require("clients/git/served/maintenance");
   const { blog, blogs, all, deepSample, concurrency, ...rest } = options;
   let code;
 

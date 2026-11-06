@@ -102,7 +102,7 @@ function createReader({ store, cache = null, manifest = null, packs = manifest &
   const recent = recentReads();
   const opened = packs.map((entry) => ({
     name: entry.name,
-    pack: openPack({ store, key: packKey(entry.name), size: entry.size, name: entry.name, recent }),
+    pack: openPack({ store, key: packKey(entry.name), size: entry.size, name: entry.name, recent, cache }),
     index: openIndex({
       store,
       key: idxKey(entry.name),

@@ -404,14 +404,17 @@ async function resetFromBlotWithClient(
     failures.push(path);
   };
 
+  let skippedEmpty = 0;
+
   const walk = async (dir) => {
     abortIfRequested(signal);
 
     log("Checking", dir);
 
+    const remoteReading = remoteReaddir(client, join(dropboxRoot, dir), signal);
     const [remoteContents, localContents] = await Promise.all([
-      remoteReaddir(client, join(dropboxRoot, dir), signal),
-      localReaddir(blogID, dir, signal),
+      remoteReading,
+      localReaddir(blogID, dir, signal, remoteReading),
     ]);
 
     abortIfRequested(signal);
@@ -482,6 +485,18 @@ async function resetFromBlotWithClient(
         // Counted in the pre-walk — bump even when the file is already identical.
         publishTransferStatus(progress, publish, path);
 
+        // Blot writes an empty file where it could not download a file
+        // (oversized or unsupported ones), so a placeholder is
+        // indistinguishable from a file that really is empty. Uploading it
+        // would put an empty file in Dropbox, or overwrite the real file
+        // already there, so we never upload empty files. The cost is that
+        // genuinely empty files do not carry over to Dropbox.
+        if (localSizes.get(path.toLowerCase()) === 0) {
+          log("Skipping empty file (possible placeholder)", blogID, path);
+          skippedEmpty += 1;
+          continue;
+        }
+
         if (remoteCounterpart && !identicalOnRemote) {
           try {
             abortIfRequested(signal);
@@ -510,6 +525,16 @@ async function resetFromBlotWithClient(
   await walk("/");
 
   abortIfRequested(signal);
+
+  if (skippedEmpty > 0) {
+    publish(
+      "Skipped " +
+        skippedEmpty +
+        " empty file" +
+        (skippedEmpty === 1 ? "" : "s") +
+        " (possible placeholders for files Blot could not download)"
+    );
+  }
 
   // Don't report success (and don't advance the cursor) if any file failed
   // to transfer. Reporting success here is what makes resetToBlot/hourly
@@ -586,19 +611,30 @@ async function resetFromBlotWithClient(
 //   }
 // }
 
-// A file's hash is undefined if it can't be read, which never matches Dropbox's
-const contentHash = async (blogID, path) => {
+// A file's hash is undefined if it can't be read, which never matches Dropbox's.
+// Hashing can mean reading the whole file, so when Dropbox's size for the file
+// is known it is compared first, from the index: files of different sizes
+// can't have the same bytes.
+const contentHash = async (blogID, path, size) => {
   try {
+    if (typeof size === "number") {
+      const stat = await storage.stat(blogID, path);
+      if (stat.isDirectory || stat.size !== size) return undefined;
+    }
     return (await storage.stat(blogID, path, { hash: true })).hash;
   } catch (e) {
     return undefined;
   }
 };
 
-const localReaddir = async (blogID, dir, signal) => {
+// remoteContentsPromise is the same folder's listing in Dropbox, for the sizes
+const localReaddir = async (blogID, dir, signal, remoteContentsPromise) => {
   abortIfRequested(signal);
 
-  const contents = await storage.listNames(blogID, dir);
+  const [contents, remoteContents] = await Promise.all([
+    storage.listNames(blogID, dir),
+    remoteContentsPromise,
+  ]);
 
   abortIfRequested(signal);
 
@@ -607,9 +643,14 @@ const localReaddir = async (blogID, dir, signal) => {
       abortIfRequested(signal);
 
       const path_display = join(dir, name);
+      const remoteItem = remoteContents.find((item) => item.name === name);
       const content_hash = isDirectory
         ? undefined
-        : await contentHash(blogID, path_display);
+        : await contentHash(
+            blogID,
+            path_display,
+            remoteItem && !remoteItem.is_directory ? remoteItem.size : undefined
+          );
 
       abortIfRequested(signal);
 
