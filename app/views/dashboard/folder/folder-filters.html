@@ -1,0 +1,7 @@
+{{#postCount}}
+<nav class="folder-filters" aria-label="Show only">
+  {{#postGroups}}
+  <a class="{{filterClass}}" href="{{{href}}}" aria-current="{{ariaCurrent}}">{{filterTitle}}{{#showDot}}<span class="folder-filters__dot" aria-hidden="true"></span><span class="visually-hidden"> (has scheduled posts)</span>{{/showDot}}{{#isActive}}<span class="visually-hidden"> (selected; select again to show every file)</span>{{/isActive}}</a>
+  {{/postGroups}}
+</nav>
+{{/postCount}}

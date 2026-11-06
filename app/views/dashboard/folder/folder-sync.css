@@ -3,6 +3,9 @@
   folder syncs from, then search.
 
   .folder-toolbar         the row
+  .folder-filters         Posts, Pages, Drafts, Scheduled: each filters the
+                          folder to its entries (their own pages); the
+                          selected one leads back to the folder
   .folder-sync            "Syncs with [icon] Google Drive  Edit", one link
                           (folder/folder-sync.html) to the client's page,
                           which has its options: activity, resync, change,
@@ -18,6 +21,95 @@
   align-items: center;
   gap: var(--space-2) var(--space-4);
   padding: var(--space-1) var(--space-1) var(--space-2) var(--space-4);
+}
+
+/* The filters (folder/folder-filters.html): one segmented control, like a
+   Finder view switcher. The chosen segment is raised; the others are plain
+   text on the control's tray. Right-aligned beside the search box. */
+.folder-filters {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  margin-left: auto;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--surface-muted-color);
+}
+
+.folder-filters__item {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 var(--space-3);
+  border-radius: calc(var(--radius-md) - 2px);
+  color: var(--text-color);
+  font-size: var(--text-xs);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.folder-filters__item:hover {
+  background: var(--surface-strong-color);
+}
+
+.folder-filters__item:active {
+  background: var(--border-strong-color);
+}
+
+.folder-filters__item.is-selected,
+.folder-filters__item.is-selected:hover {
+  background: var(--background-color);
+  box-shadow: var(--shadow-sm);
+}
+
+.folder-filters__item:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 1px;
+}
+
+.folder-filters + .site-dashboard-search {
+  margin-left: 0;
+}
+
+/* On wider screens the header stays one line: the pills keep their size and
+   the search box gives up width */
+@media (min-width: 900px) {
+  .folder-toolbar {
+    flex-wrap: nowrap;
+  }
+
+  .folder-filters {
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+  }
+
+  .folder-toolbar .folder-sync {
+    flex-shrink: 0;
+  }
+
+  /* The same on the overview and the filter pages, so the pills don't move
+     when one is chosen (outranks the overview's own search width) */
+  .site-dashboard .folder-toolbar .folder-filters + .site-dashboard-search {
+    flex: 0 1 220px;
+    width: 220px;
+    min-width: 120px;
+  }
+}
+
+/* Scheduled shows an orange dot when anything is scheduled, so a post
+   scheduled by mistake is noticed */
+.folder-filters__dot {
+  width: 5px;
+  height: 5px;
+  margin-left: var(--space-2);
+  border-radius: 50%;
+  background: var(--indicator-amber);
+  box-shadow: 0 0 4px 1px var(--indicator-amber-glow);
+}
+
+.folder-filters__empty {
+  padding: var(--space-3) var(--space-4);
 }
 
 /* One link: transparent until hovered, then a grey pill. It leads to the

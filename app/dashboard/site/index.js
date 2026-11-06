@@ -243,9 +243,10 @@ const setView = (view) => (req, res, next) => {
   res.locals.isRecentView = view === "recent";
   res.locals.isPostsView = view === "posts";
   res.locals.isSearchView = view === "search";
-  res.locals.showPostsPanel = view === "folder" || view === "posts";
-  res.locals.showDashboardSearch = view === "folder" || view === "search";
-  res.locals.isAllPostsFilter = res.locals.dashboardFilter === "all";
+  // Posts, pages, drafts and scheduled are the folder filtered by its pills
+  res.locals.showPostsPanel = view === "posts";
+  res.locals.showDashboardSearch =
+    view === "folder" || view === "search" || view === "posts";
   res.locals.dashboardViewClass = [
     "collapse-on-small-screens site-dashboard",
     res.locals.isFolderView && "is-folder-view",
