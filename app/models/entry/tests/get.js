@@ -8,11 +8,14 @@ describe("entry.get", function () {
   var paths = ["/a.txt", "/b.txt", "/c.txt", "/d.txt", "/e.txt"];
 
   var getMany = function (blogID, ids) {
-    return new Promise(function (resolve) {
-      get(blogID, ids, function (entries, err) {
-        resolve({ entries: entries, err: err });
-      });
-    });
+    return get(blogID, ids).then(
+      function (entries) {
+        return { entries: entries };
+      },
+      function (err) {
+        return { err: err };
+      }
+    );
   };
 
   afterEach(function () {
@@ -64,7 +67,7 @@ describe("entry.get", function () {
     expect(events).toEqual(["mGet", "other work", "mGet", "mGet"]);
   });
 
-  it("returns an empty list and the error if any batch fails", async function () {
+  it("rejects with the error if any batch fails", async function () {
     for (var path of paths) await this.set(path, "Hello from " + path);
 
     get.BATCH_SIZE = 2;
@@ -77,8 +80,31 @@ describe("entry.get", function () {
 
     var result = await getMany(this.blog.id, paths);
 
-    expect(result.entries).toEqual([]);
+    expect(result.entries).toBeUndefined();
     expect(result.err.message).toEqual("boom");
+  });
+
+  it("rejects with the error for a single path too", async function () {
+    spyOn(console, "error");
+    var mGet = spyOn(redis, "mGet").and.callFake(() =>
+      Promise.reject(new Error("boom"))
+    );
+
+    var error;
+
+    try {
+      await get(this.blog.id, "/a.txt");
+    } catch (err) {
+      error = err;
+    }
+
+    mGet.and.callThrough();
+
+    expect(error.message).toEqual("boom");
+  });
+
+  it("resolves an empty list for an empty list of ids", async function () {
+    expect(await get(this.blog.id, [])).toEqual([]);
   });
 
   it("still resolves a single path to one entry, or nothing", async function () {

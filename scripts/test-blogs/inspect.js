@@ -182,9 +182,7 @@ async function getBlog() {
 }
 
 function getEntry(blogID, path) {
-  return new Promise(function (resolve) {
-    Entry.getByPath(blogID, path, resolve);
-  });
+  return Entry.getByPath(blogID, path);
 }
 
 function getRecent(blogID) {

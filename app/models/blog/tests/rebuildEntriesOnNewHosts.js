@@ -6,8 +6,7 @@ describe("Blog.set rebuilds entries linking to a new handle or domain", function
 
   global.test.blog();
 
-  var getEntry = (blogID, path) =>
-    new Promise((resolve) => Entry.get(blogID, path, resolve));
+  var getEntry = (blogID, path) => Entry.get(blogID, path);
 
   var getBlog = (blogID) =>
     new Promise((resolve, reject) =>

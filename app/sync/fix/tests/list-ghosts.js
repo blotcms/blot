@@ -47,12 +47,12 @@ describe("sync/fix/list-ghosts", function () {
       "existing-id": { id: "moved-id", title: "Moved" },
     });
 
-    spyOn(Entry, "get").and.callFake(function (_blogID, id, callback) {
+    spyOn(Entry, "get").and.callFake(function (_blogID, id) {
       if (id === "existing-id") {
-        return callback({ id: "moved-id", title: "Moved" });
+        return Promise.resolve({ id: "moved-id", title: "Moved" });
       }
 
-      return callback(undefined);
+      return Promise.resolve(undefined);
     });
 
     spyOn(Entry, "set").and.callFake(function (_blogID, id, entry, callback) {
@@ -66,9 +66,7 @@ describe("sync/fix/list-ghosts", function () {
 
       // Only the mismatched id needs a full re-fetch; the missing one is
       // already known to be a ghost from the batched read.
-      expect(Entry.get.calls.allArgs()).toEqual([
-        ["blog-id", "existing-id", jasmine.any(Function)],
-      ]);
+      expect(Entry.get.calls.allArgs()).toEqual([["blog-id", "existing-id"]]);
 
       expect(client.zRem.calls.allArgs()).toEqual([
         ["blog:blog-id:entries", "existing-id"],
@@ -115,8 +113,8 @@ describe("sync/fix/list-ghosts", function () {
       "existing-id": { id: "moved-id", title: "Moved" },
     });
 
-    spyOn(Entry, "get").and.callFake(function (_blogID, id, callback) {
-      return callback({ id: "moved-id", title: "Moved" });
+    spyOn(Entry, "get").and.callFake(function (_blogID, id) {
+      return Promise.resolve({ id: "moved-id", title: "Moved" });
     });
 
     var setEntryError = new Error("set entry failed");
@@ -163,8 +161,8 @@ describe("sync/fix/list-ghosts", function () {
 
     stubMGet("blog-id", { "existing-id": { id: "moved-id" } });
 
-    spyOn(Entry, "get").and.callFake(function (_blogID, id, callback) {
-      return callback({ id: "moved-id" });
+    spyOn(Entry, "get").and.callFake(function (_blogID, id) {
+      return Promise.resolve({ id: "moved-id" });
     });
 
     var setEntryError = new Error("set entry failed");

@@ -201,11 +201,10 @@ async function buildWith(blog, path, multiInfo) {
   // so use that same instant here rather than leaving it undefined.
   // Otherwise a post created *and* dated for today would never
   // benefit from this until some later, unrelated rebuild.
-  var existingEntry = await new Promise(function (resolve) {
-    Entry.get(blog.id, entryPath, function (existingEntry) {
-      resolve(existingEntry);
-    });
-  });
+  // A failed read is the same as no entry
+  var existingEntry = await Entry.get(blog.id, entryPath).catch(
+    () => undefined
+  );
 
   var previousCreated =
     existingEntry && typeof existingEntry.created === "number"

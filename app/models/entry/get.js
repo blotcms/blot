@@ -20,23 +20,25 @@ var Entry = require("./instance");
 // 25 is kept only to keep each parse short on large catalogs.
 var BATCH_SIZE = 25;
 
-// get(blogID, entryIDs, [fields], callback)
+// async get(blogID, entryIDs, [fields])
 //
 // entryIDs may be a single path (string) or an array of paths. `fields` is
 // accepted for call-site compatibility but ignored - every entry is read in
 // full with an MGET over the JSON string keys.
-function get(blogID, entryIDs, fields, callback) {
-  if (typeof fields === "function") {
-    callback = fields;
-  }
-
-  ensure(blogID, "string").and(callback, "function");
+//
+// Resolves to the entry for a single path (undefined if there is none), or to
+// the entries that exist, in the order requested, for an array. A Redis
+// failure is logged and rejects with the error: a caller that ignores it
+// catches it and carries on with undefined (single) or [] (array), which is
+// what the old callback form called back with before its error argument.
+async function get(blogID, entryIDs) {
+  ensure(blogID, "string");
 
   var single = false;
 
   // Empty list of entry IDs, leave now!
   if (type(entryIDs, "array") && !entryIDs.length) {
-    return callback([]);
+    return [];
   }
 
   // We're only getting one entry now...
@@ -51,26 +53,18 @@ function get(blogID, entryIDs, fields, callback) {
 
   ensure(entryIDs, "array");
 
-  readInBatches(entryIDs)
-    .then(function (entries) {
-      if (single) {
-        entries = entries[0];
-      }
+  var entries;
 
-      if (single && !entries) return callback();
+  try {
+    entries = await readInBatches(entryIDs);
+  } catch (err) {
+    console.error(err);
+    throw err;
+  }
 
-      return callback(entries);
-    })
-    .catch(function (err) {
-      console.error(err);
+  if (single) return entries[0];
 
-      // The error rides along as a second argument so a caller that caches
-      // the result can tell this apart from entries that don't exist - see
-      // getByUrl.js. Existing callers only read the first.
-      if (single) return callback(undefined, err);
-
-      return callback([], err);
-    });
+  return entries;
 }
 
 // Resolves the entries that exist, in the order requested. Rejects if any

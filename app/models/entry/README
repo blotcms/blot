@@ -97,23 +97,29 @@ List keys written by `_assign.js`:
 
 ## Public API
 
-`search` returns a promise when called without a callback (`helper/withCallback`, #2559). New code should `await` it; the callback form remains for existing callers. `get`, `getByPath` and `getByUrl` call back without an error argument, so they stay callback-only for now.
+`search` returns a promise when called without a callback (`helper/withCallback`, #2559). `get`, `getByPath` and `getByUrl` are async and take no callback; a callback-style caller uses `withCallback(Entry.get)(…, function (err, entry) {…})`.
 
-### `get(blogID, entryIDs, callback)`
+### `async get(blogID, entryIDs)`
 
 Retrieves one or more entries from Redis.
 
 - `entryIDs` may be a single path string or an array of path strings.
-- When passed a string, calls back with a single `Entry` instance or `undefined` if not found.
-- When passed an array, calls back with an array of `Entry` instances. Missing entries are omitted from the result. An empty input array calls back with an empty array immediately.
+- When passed a string, resolves to a single `Entry` instance or `undefined` if not found.
+- When passed an array, resolves to an array of `Entry` instances. Missing entries are omitted from the result. An empty input array resolves to an empty array immediately.
+- A Redis failure is logged and rejects with the error (the old callback form called back `undefined`, or `[]` for an array, with the error as a second argument). A caller that ignores errors catches it: `.catch(() => undefined)`, or `.catch(() => [])` for an array.
+- A third `fields` argument is ignored: every entry is read in full.
 - Results are instances of the `Entry` constructor defined in `instance.js`.
 
-### `getByUrl(blogID, entryUrl, callback)`
+### `async getByPath(blogID, path)`
+
+Resolves a path without regard to case; a live entry beats a same-path tombstone. Resolves to the entry in whatever state it is in, or `undefined`. A Redis failure is treated as finding nothing: it never rejects.
+
+### `async getByUrl(blogID, entryUrl)`
 
 Looks up an entry by its public URL.
 
 - Resolves the URL to a path via the `blog:{blogID}:url:{url}` Redis key, then delegates to `get`.
-- Calls back with an `Entry` instance or `undefined` if the URL is not claimed.
+- Resolves to an `Entry` instance or `undefined` if the URL is not claimed. Rejects with the Redis error if the lookup or the read fails, so a caller that caches the result can tell a failed lookup from an unclaimed URL.
 
 ### `set(blogID, path, updates, callback)`
 

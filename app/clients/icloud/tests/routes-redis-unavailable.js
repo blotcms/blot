@@ -60,8 +60,7 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
     return res;
   }
 
-  const getEntry = (blogID, path) =>
-    new Promise((resolve) => Entry.get(blogID, path, resolve));
+  const getEntry = (blogID, path) => Entry.get(blogID, path);
 
   beforeEach(function () {
     spyOn(console, "warn");

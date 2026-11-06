@@ -3,8 +3,14 @@ var redis = require("models/client");
 var get = require("./get");
 var urlKey = require("./key").url;
 
-module.exports = function getByUrl(blogID, entryUrl, callback) {
-  ensure(blogID, "string").and(entryUrl, "string").and(callback, "function");
+// async getByUrl(blogID, entryUrl)
+//
+// Resolves to the entry at the URL, or undefined if there is none. Rejects
+// with the Redis error if the lookup fails, so that callers that cache the
+// result (see blog/render/load/augmentedEntries.js) can tell a failed lookup
+// from a URL that has no entry. Callers that don't care catch it.
+module.exports = async function getByUrl(blogID, entryUrl) {
+  ensure(blogID, "string").and(entryUrl, "string");
 
   // Normalize to decoded form so percent-encoded hrefs (e.g. from Pandoc)
   // resolve to entries stored under decoded URLs (see _setUrl.js).
@@ -14,18 +20,16 @@ module.exports = function getByUrl(blogID, entryUrl, callback) {
     // leave as-is if decoding fails (malformed %)
   }
 
-  redis
-    .get(urlKey(blogID, entryUrl))
-    .then(function (entryID) {
-      if (entryID === null || entryID === undefined) return callback();
+  var entryID;
 
-      get(blogID, entryID, callback);
-    })
-    .catch(function (error) {
-      console.error("entry.getByUrl: failed to resolve URL", error);
-      // Second argument lets callers that cache the result (see
-      // blog/render/load/augmentedEntries.js) tell a failed lookup from a
-      // URL that has no entry. Existing callers only read the first.
-      callback(undefined, error);
-    });
+  try {
+    entryID = await redis.get(urlKey(blogID, entryUrl));
+  } catch (error) {
+    console.error("entry.getByUrl: failed to resolve URL", error);
+    throw error;
+  }
+
+  if (entryID === null || entryID === undefined) return;
+
+  return await get(blogID, entryID);
 };

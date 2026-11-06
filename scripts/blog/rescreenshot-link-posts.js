@@ -4,7 +4,8 @@ var Entries = require("models/entries");
 var Entry = require("models/entry");
 
 function getEntry(blogID, id) {
-  return new Promise((resolve) => Entry.get(blogID, id, resolve));
+  // A failed read is the same as no entry (as before)
+  return Entry.get(blogID, id).catch(() => undefined);
 }
 
 const processBlog = async (blog) => {

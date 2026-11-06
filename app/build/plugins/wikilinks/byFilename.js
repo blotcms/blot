@@ -76,9 +76,8 @@ module.exports = async function byFilename(blogID, pathOfPost, href, isLink) {
 
     debug("Found match at", resolvedPath);
 
-    const entry = await new Promise((resolve) =>
-      getEntry(blogID, resolvedPath, resolve)
-    );
+    // A failed read is the same as no entry
+    const entry = await getEntry(blogID, resolvedPath).catch(() => undefined);
 
     if (entry) {
       debug("Entry found for", resolvedPath, entry);

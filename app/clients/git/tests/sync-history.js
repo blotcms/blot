@@ -15,11 +15,7 @@ describe("git client sync: history", function () {
   });
 
   function entries(blogID, paths) {
-    return new Promise(function (resolve) {
-      Entry.get(blogID, paths, function (entries) {
-        resolve(entries);
-      });
-    });
+    return Entry.get(blogID, paths);
   }
 
   it(

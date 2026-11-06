@@ -98,26 +98,30 @@ describe("entries", function () {
       Entry.set(blogID, path, initialEntry, function (err) {
         if (err) return done.fail(err);
 
-        Entry.get(blogID, path, function (stored) {
-          expect(stored.scheduled).toBe(true);
+        Entry.get(blogID, path)
+          .then(function (stored) {
+            expect(stored.scheduled).toBe(true);
 
-          const rebuild = Object.assign({}, stored, {
-            metadata: {},
-            dateStampWasRemoved: true,
-          });
-
-          delete rebuild.dateStamp;
-
-          Entry.set(blogID, path, rebuild, function (err) {
-            if (err) return done.fail(err);
-
-            Entry.get(blogID, path, function (updated) {
-              expect(updated.scheduled).toBe(false);
-              expect(updated.dateStamp).toBe(updated.created);
-              done();
+            const rebuild = Object.assign({}, stored, {
+              metadata: {},
+              dateStampWasRemoved: true,
             });
-          });
-        });
+
+            delete rebuild.dateStamp;
+
+            Entry.set(blogID, path, rebuild, function (err) {
+              if (err) return done.fail(err);
+
+              Entry.get(blogID, path)
+                .then(function (updated) {
+                  expect(updated.scheduled).toBe(false);
+                  expect(updated.dateStamp).toBe(updated.created);
+                  done();
+                })
+                .catch(done.fail);
+            });
+          })
+          .catch(done.fail);
       });
     });
   });
@@ -543,14 +547,14 @@ describe("entries", function () {
 
     // spy on the Entry.get function
     // to return the full fake entry
-    spyOn(Entry, "get").and.callFake((blogID, ids, callback) => {
+    spyOn(Entry, "get").and.callFake((blogID, ids) => {
       // if array, return an array of fake entries
       if (Array.isArray(ids)) {
         const entries = ids.map((id) => ({ id }));
-        return callback(entries);
+        return Promise.resolve(entries);
         // return a single fake entry
       } else {
-        return callback({ id: ids });
+        return Promise.resolve({ id: ids });
       }
     });
 
@@ -615,9 +619,9 @@ describe("entries", function () {
     ids.forEach((id) => pipeline.zAdd(lexKey, { score: 0, value: id }));
     await pipeline.exec();
 
-    spyOn(Entry, "get").and.callFake((blogID, ids, callback) => {
-      if (Array.isArray(ids)) return callback(ids.map((id) => ({ id })));
-      return callback({ id: ids });
+    spyOn(Entry, "get").and.callFake((blogID, ids) => {
+      if (Array.isArray(ids)) return Promise.resolve(ids.map((id) => ({ id })));
+      return Promise.resolve({ id: ids });
     });
 
     const zRangeSpy = spyOn(redis, "zRange").and.callThrough();
@@ -670,9 +674,9 @@ describe("entries", function () {
 
     await redis.zAdd(key, { score: now, value: "/only.txt" });
 
-    spyOn(Entry, "get").and.callFake((blogID, ids, callback) => {
-      if (Array.isArray(ids)) return callback(ids.map((id) => ({ id })));
-      return callback({ id: ids });
+    spyOn(Entry, "get").and.callFake((blogID, ids) => {
+      if (Array.isArray(ids)) return Promise.resolve(ids.map((id) => ({ id })));
+      return Promise.resolve({ id: ids });
     });
 
     const { entries, pagination } = await Entries.getPage(this.blog.id, {
@@ -735,12 +739,12 @@ describe("entries", function () {
     ]);
 
     // Mock entries returned by Entry.get
-    spyOn(Entry, "get").and.callFake((blogID, ids, callback) => {
+    spyOn(Entry, "get").and.callFake((blogID, ids) => {
       const entries = ids.map((id, index) => ({
         id,
         dateStamp: Date.now() - index * 1000,
       }));
-      callback(entries);
+      return Promise.resolve(entries);
     });
 
     const entries = await Entries.getRecent(this.blog.id);
@@ -767,6 +771,38 @@ describe("entries", function () {
 
     try {
       await Entries.getRecent(this.blog.id, { rejectOnOutage: true });
+    } catch (e) {
+      error = e;
+    }
+
+    zRangeSpy.and.callThrough(); // the blog cleanup needs zRange
+    expect(error).toBe(outage);
+  });
+
+  it("getAll should resolve the entries, skinny by default", async function () {
+    await new Promise((resolve, reject) =>
+      Entry.set(this.blog.id, "/a.txt", buildEntry("/a.txt"), (err) =>
+        err ? reject(err) : resolve()
+      )
+    );
+
+    const entries = await Entries.getAll(this.blog.id);
+
+    expect(entries.map((entry) => entry.path)).toEqual(["/a.txt"]);
+  });
+
+  it("getAll should resolve [] on a Redis failure, or reject on an outage with rejectOnOutage", async function () {
+    const outage = new (require("redis").ClientClosedError)();
+    const zRangeSpy = spyOn(redis, "zRange").and.callFake(() =>
+      Promise.reject(outage)
+    );
+
+    expect(await Entries.getAll(this.blog.id)).toEqual([]);
+
+    let error;
+
+    try {
+      await Entries.getAll(this.blog.id, { rejectOnOutage: true });
     } catch (e) {
       error = e;
     }
@@ -805,9 +841,9 @@ describe("entries", function () {
   });
   describe("path prefix pagination", function () {
     beforeEach(function () {
-      spyOn(Entry, "get").and.callFake((blogID, ids, callback) => {
-        if (!Array.isArray(ids)) return callback({ id: ids });
-        callback(ids.map((id) => ({ id })));
+      spyOn(Entry, "get").and.callFake((blogID, ids) => {
+        if (!Array.isArray(ids)) return Promise.resolve({ id: ids });
+        return Promise.resolve(ids.map((id) => ({ id })));
       });
     });
 
@@ -950,9 +986,9 @@ describe("entries", function () {
   });
   describe("adjacentTo", function () {
     beforeEach(function () {
-      spyOn(Entry, "get").and.callFake((blogID, ids, callback) => {
+      spyOn(Entry, "get").and.callFake((blogID, ids) => {
         const entries = ids.map((id) => ({ id }));
-        callback(entries);
+        return Promise.resolve(entries);
       });
     });
 
@@ -1063,10 +1099,10 @@ describe("entries", function () {
         return candidates.shift();
       });
 
-      spyOn(Entry, "get").and.callFake(function (blogID, entryID, callback) {
-        if (entryID === "missing") return callback({ id: entryID });
+      spyOn(Entry, "get").and.callFake(function (blogID, entryID) {
+        if (entryID === "missing") return Promise.resolve({ id: entryID });
 
-        callback({ id: entryID, url: "/valid" });
+        return Promise.resolve({ id: entryID, url: "/valid" });
       });
 
       Entries.random(this.blog.id, function (entry) {
@@ -1088,9 +1124,9 @@ describe("entries", function () {
 
       spyOn(redis, "zRandMember").and.returnValue(Promise.resolve("missing"));
 
-      spyOn(Entry, "get").and.callFake(function (blogID, entryID, callback) {
+      spyOn(Entry, "get").and.callFake(function (blogID, entryID) {
         calls++;
-        callback({ id: entryID });
+        return Promise.resolve({ id: entryID });
       });
 
       Entries.random(this.blog.id, function (entry) {
@@ -1141,9 +1177,9 @@ describe("entries", function () {
       ]);
 
       // Mock Entry.get to return the entries
-      spyOn(Entry, "get").and.callFake((blogID, id, callback) => {
+      spyOn(Entry, "get").and.callFake((blogID, id) => {
         const result = entries.find((entry) => entry.id === id);
-        callback(result);
+        return Promise.resolve(result);
       });
 
       // Mock Entry.set

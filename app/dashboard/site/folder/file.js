@@ -43,20 +43,11 @@ module.exports = async function (blog, path) {
           resolve(ignored);
         });
       }),
-      new Promise((resolve) => {
-        Entry.get(blogID, path, function (entry) {
-          resolve(entry);
-        });
-      }),
-      new Promise((resolve) => {
-        if (!aggregatedLookupPath || aggregatedLookupPath === path) {
-          return resolve(null);
-        }
-
-        Entry.get(blogID, aggregatedLookupPath, function (entry) {
-          resolve(entry);
-        });
-      }),
+      // A failed read is the same as no entry
+      Entry.get(blogID, path).catch(() => undefined),
+      !aggregatedLookupPath || aggregatedLookupPath === path
+        ? null
+        : Entry.get(blogID, aggregatedLookupPath).catch(() => undefined),
     ])
       .then(async ([ignoredReason, ownEntry, aggregatedEntry]) => {
         const matchingConverter = converters.find((converter) => {

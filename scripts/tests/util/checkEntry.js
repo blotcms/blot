@@ -1,6 +1,7 @@
 var assert = require("assert");
 var colors = require("colors");
 var type = require("helper/type");
+var withCallback = require("helper/withCallback");
 
 function pad(len) {
   var str = "";
@@ -11,7 +12,9 @@ function pad(len) {
 // Check if an entry with the passed properties exists in DB
 module.exports = function CheckEntry(blogID) {
   return function (entry, callback) {
-    require("models/entry").get(blogID, entry.path, function (result) {
+    // A failed read is the same as no entry (as before)
+    var get = require("models/entry").get;
+    withCallback(get)(blogID, entry.path, function (err, result) {
       if (!result && entry.ignored === true) {
         return callback(null, result);
       }

@@ -210,9 +210,8 @@ async function render($, { blogID, path }) {
         if (isMarkdownFile(linkedPath)) {
           const { get } = require("models/entry");
 
-          const entry = await new Promise((done) =>
-            get(blogID, linkedPath, done)
-          );
+          // A failed read is the same as no entry
+          const entry = await get(blogID, linkedPath).catch(() => undefined);
 
           if (!entry) {
             debug(

@@ -82,16 +82,18 @@ module.exports = (function () {
           : undefined;
       var neighbourIDs = [previousID, nextID].filter(Boolean);
 
-      Entry.get(blogID, neighbourIDs, function (entries) {
-        var next, previous;
-
-        entries.forEach(function (entry) {
-          if (entry.id === previousID) previous = entry;
-          else if (entry.id === nextID) next = entry;
-        });
-
-        return callback(next, previous, ++rank);
+      // A failed read leaves no neighbours
+      var entries = await Entry.get(blogID, neighbourIDs).catch(function () {
+        return [];
       });
+      var next, previous;
+
+      entries.forEach(function (entry) {
+        if (entry.id === previousID) previous = entry;
+        else if (entry.id === nextID) next = entry;
+      });
+
+      return callback(next, previous, rank + 1);
     })().catch(function () {
       return callback();
     });
@@ -127,19 +129,18 @@ module.exports = (function () {
   });
 
   // includes deleted entries
-  function getAll(blogID, options, callback) {
-    if (typeof options === "function" && !callback) {
-      callback = options;
-      options = {};
-    }
-
-    ensure(blogID, "string").and(options, "object").and(callback, "function");
+  //
+  // async getAll(blogID, [options]) resolves to the entries, newest first;
+  // [] on a Redis failure, unless options.rejectOnOutage is set: a Redis
+  // outage then rejects with the error (see getRange).
+  async function getAll(blogID, options = {}) {
+    ensure(blogID, "string").and(options, "object");
 
     // By default retrieve skinnier
     // entry info when getting every entry
     if (options.skinny === undefined) options.skinny = true;
 
-    return getRangeWithCallback(blogID, 0, -1, options, callback);
+    return await getRange(blogID, 0, -1, options);
   }
 
   function get(blogID, options, callback) {
@@ -208,7 +209,8 @@ module.exports = (function () {
         async.eachSeries(
           ids,
           function (id, next) {
-            Entry.get(blogID, id, function (entry) {
+            // A failed read is the same as no entry
+            withCallback(Entry.get)(blogID, id, function (err, entry) {
               if (!entry) return next();
               dothis(entry, next);
             });
@@ -363,9 +365,9 @@ module.exports = (function () {
 
     var ids = await redis.zRangeByScore(key, after, Date.now());
 
-    // Entry.get calls back with the entries and no error argument
-    var entries = await new Promise(function (resolve) {
-      Entry.get(blogID, ids, resolve);
+    // A failed read is the same as no entries
+    var entries = await Entry.get(blogID, ids).catch(function () {
+      return [];
     });
 
     return entries || [];
@@ -378,9 +380,9 @@ module.exports = (function () {
 
     var ids = await redis.zRangeByScore(key, after, Date.now());
 
-    // Entry.get calls back with the entries and no error argument
-    var entries = await new Promise(function (resolve) {
-      Entry.get(blogID, ids, resolve);
+    // A failed read is the same as no entries
+    var entries = await Entry.get(blogID, ids).catch(function () {
+      return [];
     });
 
     return entries || [];
@@ -412,8 +414,9 @@ module.exports = (function () {
 
     if (!options.full && !options.skinny) return entryIDs;
 
-    return await new Promise(function (resolve) {
-      Entry.get(blogID, entryIDs, resolve);
+    // A failed read resolves [], even with options.rejectOnOutage
+    return await Entry.get(blogID, entryIDs).catch(function () {
+      return [];
     });
   }
 
@@ -458,7 +461,8 @@ module.exports = (function () {
 
         if (!entryID) return callback();
 
-        Entry.get(blogID, entryID, function (entry) {
+        // A failed read is the same as no entry
+        withCallback(Entry.get)(blogID, entryID, function (err, entry) {
           if (!entry || !entry.url) return attempt();
 
           callback(entry);
@@ -801,8 +805,9 @@ module.exports = (function () {
     end,
     pageNo
   ) {
-    var entries = await new Promise(function (resolve) {
-      Entry.get(blogID, entryIDs, resolve);
+    // A failed read is the same as no entries
+    var entries = await Entry.get(blogID, entryIDs).catch(function () {
+      return [];
     });
 
     var pagination = {};

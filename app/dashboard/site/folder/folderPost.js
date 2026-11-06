@@ -46,9 +46,8 @@ async function getFolderPost(blog, dir) {
 
   if (!info) return null;
 
-  const entry = await new Promise((resolve) => {
-    Entry.get(blog.id, info.entryPath, resolve);
-  });
+  // A failed read is the same as no entry
+  const entry = await Entry.get(blog.id, info.entryPath).catch(() => undefined);
 
   if (!entry || entry.deleted) return null;
   if (!isMultiEntry(entry)) return null;

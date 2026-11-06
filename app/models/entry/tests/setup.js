@@ -10,13 +10,7 @@ module.exports = function () {
   global.test.blog();
 
   beforeEach(function () {
-    this.get = async (path) => {
-      return new Promise((resolve) => {
-        get(this.blog.id, path, (entry) => {
-          resolve(entry);
-        });
-      });
-    };
+    this.get = async (path) => get(this.blog.id, path);
 
     this.search = (query) => search(this.blog.id, query);
 
@@ -46,9 +40,7 @@ module.exports = function () {
           if (err) return reject(err);
           set(this.blog.id, path, entry, (err) => {
             if (err) return reject(err);
-            get(this.blog.id, path, (entry) => {
-              resolve(entry);
-            });
+            get(this.blog.id, path).then(resolve, reject);
           });
         });
       });

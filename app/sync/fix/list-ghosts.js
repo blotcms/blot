@@ -33,9 +33,8 @@ function deleteEntryKey(blogID, id) {
 }
 
 function getEntry(blogID, id) {
-  return promisify((next) =>
-    Entry.get(blogID, id, (entry) => next(null, entry))
-  )();
+  // A failed read is the same as no entry
+  return Entry.get(blogID, id).catch(() => undefined);
 }
 
 function setEntry(blogID, id, entry) {

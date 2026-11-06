@@ -7,10 +7,8 @@ const Entry = require("models/entry");
 
 const getConfirmation = require("../util/getConfirmation");
 
-const getEntry = (blogID, id) =>
-  new Promise((resolve, reject) =>
-    Entry.get(blogID, id, (entry) => resolve(entry))
-  );
+// A failed read is the same as no entry (as before)
+const getEntry = (blogID, id) => Entry.get(blogID, id).catch(() => undefined);
 
 const processBlog = async (blog) => {
   if (!blog || blog.isDisabled) return;

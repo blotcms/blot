@@ -1,3 +1,4 @@
+var withCallback = require("helper/withCallback");
 var storage = require("storage/folder");
 var { callbackify } = require("util");
 var clfdate = require("helper/clfdate");
@@ -251,22 +252,26 @@ module.exports = function (blog, log, status) {
 //    aggregate): rebuild that folder now that the collision is gone.
 function resolveEnoentTargets(blog, path, multiInfo, callback) {
   if (multiInfo && multiInfo.folderPath === path && multiInfo.entryPath) {
-    return Entry.get(blog.id, multiInfo.entryPath, function (existing, getErr) {
-      // Without the entry we cannot tell whose aggregate it is, and guessing
-      // could unpublish the wrong post
-      if (!existing && getErr && isRedisUnavailableError(getErr))
-        return callback({ error: getErr });
+    return withCallback(Entry.get)(
+      blog.id,
+      multiInfo.entryPath,
+      function (getErr, existing) {
+        // Without the entry we cannot tell whose aggregate it is, and guessing
+        // could unpublish the wrong post
+        if (!existing && getErr && isRedisUnavailableError(getErr))
+          return callback({ error: getErr });
 
-      var sourceFolder = folderPostSourceFolder(existing);
-      var isOwnAggregate =
-        sourceFolder &&
-        pathNormalizer(sourceFolder) === pathNormalizer(multiInfo.folderPath);
+        var sourceFolder = folderPostSourceFolder(existing);
+        var isOwnAggregate =
+          sourceFolder &&
+          pathNormalizer(sourceFolder) === pathNormalizer(multiInfo.folderPath);
 
-      callback({
-        dropTargets: isOwnAggregate ? [path, multiInfo.entryPath] : [path],
-        rebuildTarget: null,
-      });
-    });
+        callback({
+          dropTargets: isOwnAggregate ? [path, multiInfo.entryPath] : [path],
+          rebuildTarget: null,
+        });
+      }
+    );
   }
 
   if (multiInfo && multiInfo.folderPath !== path && multiInfo.folderPath) {

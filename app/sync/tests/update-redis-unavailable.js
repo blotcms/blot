@@ -65,9 +65,7 @@ describe("update when Redis is unavailable", function () {
   }
 
   function getEntry(blogID, path) {
-    return new Promise(function (resolve) {
-      Entry.get(blogID, path, resolve);
-    });
+    return Entry.get(blogID, path);
   }
 
   it("passes the error on, and the next update applies the change", async function () {

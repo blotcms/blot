@@ -30,7 +30,7 @@ module.exports = function setup(options) {
           if (err) return reject(err);
           Entry.set(this.blog.id, path, entry, (err) => {
             if (err) return reject(err);
-            Entry.get(this.blog.id, path, (entry) => resolve(entry));
+            Entry.get(this.blog.id, path).then(resolve, reject);
           });
         });
       });

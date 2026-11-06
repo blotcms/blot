@@ -21,11 +21,8 @@ async function loadTitles(blogID) {
     const ids = await getListIDs(blogID, list, {});
 
     for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-      const entries = await new Promise((resolve, reject) =>
-        getEntries(blogID, ids.slice(i, i + BATCH_SIZE), (entries, err) =>
-          err ? reject(err) : resolve(entries)
-        )
-      );
+      // A failed read rejects, so a partial list of titles is never used
+      const entries = await getEntries(blogID, ids.slice(i, i + BATCH_SIZE));
 
       for (const { title, url, path } of entries)
         titles.push({ title, url, path });

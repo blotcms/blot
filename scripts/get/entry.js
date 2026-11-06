@@ -20,12 +20,12 @@ async function find(url) {
   url.path = decodeURIComponent(url.path);
 
   // Lookup errors have always been ignored here, so they count as no entry
-  var entryFromPermalink = await new Promise(function (resolve) {
-    Entry.getByUrl(found.blog.id, url.path, resolve);
-  });
-  var entryFromPath = await new Promise(function (resolve) {
-    Entry.get(found.blog.id, url.path, resolve);
-  });
+  var entryFromPermalink = await Entry.getByUrl(found.blog.id, url.path).catch(
+    () => undefined
+  );
+  var entryFromPath = await Entry.get(found.blog.id, url.path).catch(
+    () => undefined
+  );
 
   if (!entryFromPermalink && !entryFromPath)
     return { err: new Error("No entry"), user: found.user, blog: found.blog };
