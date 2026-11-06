@@ -88,16 +88,6 @@ function getPage(blogID, options) {
   });
 }
 
-// getViewByURL's callback is (err, viewName, params).
-function getViewByURL(template, url) {
-  return new Promise((resolve, reject) => {
-    Template.getViewByURL(template, url, (err, viewName, params) => {
-      if (err) return reject(err);
-      resolve({ viewName, params });
-    });
-  });
-}
-
 // Entry.get / getByUrl and several Entries helpers are NOT err-first —
 // they omit the error argument. Mirror the adapter used in models/entry/search.js.
 function getEntry(blogID, entryIDs) {
@@ -163,7 +153,7 @@ module.exports = {
   popularTags,
   checkRedirect,
   getUserById,
-  getViewByURL,
+  getViewByURL: (...args) => Template.getViewByURL(...args),
   getEntry,
   getEntryByUrl,
   lookupEntryByUrl,

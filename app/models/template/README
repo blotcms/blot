@@ -114,7 +114,7 @@ Stored as a Redis hash at key `template:{id}:view:{viewName}`.
 
 All functions below are exported from `index.js`. All callbacks follow the Node.js `(err, result)` convention unless noted.
 
-`getMetadata`, `getView`, `getViewsByURLs`, `getTemplateList`, `getByShareID` and `isOwner` return a promise when called without a callback (`helper/withCallback`, #2559); with one they behave as before. `getViewByURL` and `getAllViews` are still callback-only. `getPartials` is an `async` function with no callback form.
+`getMetadata`, `getView`, `getViewsByURLs`, `getTemplateList`, `getByShareID` and `isOwner` return a promise when called without a callback (`helper/withCallback`, #2559); with one they behave as before. `getAllViews` is still callback-only. `getViewByURL` and `getPartials` are `async` functions with no callback form.
 
 ### Template lifecycle
 
@@ -188,9 +188,9 @@ getPartials(blogID, templateID, partials, contextMap, parentContextPath, wrapOpt
 Async; returns a promise (no callback form). Resolves to `{ allPartials, retrieve }`. `contextMap`, `parentContextPath` and `wrapOptions` are optional. Resolves a partial map: partials starting with `/` are fetched as entry HTML from `models/entry`; others are fetched as named template views, recursively.
 
 ```js
-getViewByURL(templateID, url, callback)
+async getViewByURL(templateID, url)
 ```
-Returns `(err, viewName, params, query)`. First attempts pattern matching against stored URL patterns using `path-to-regexp`. Falls back to exact URL lookup. Returns `null` values for all results when no match exists.
+Resolves to `{ viewName, params, query }` and rejects on an invalid argument or a Redis error. First attempts pattern matching against stored URL patterns using `path-to-regexp`. Falls back to exact URL lookup. Returns `null` values for all results when no match exists.
 
 ### Template listing and sharing
 
