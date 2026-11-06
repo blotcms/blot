@@ -92,13 +92,11 @@ describe("git store: new-folder setup", function () {
     var setApplied = database.setApplied;
     var failed = false;
 
-    spyOn(database, "setApplied").and.callFake(
-      function (blogID, commit, callback) {
-        if (failed) return setApplied.apply(database, arguments);
-        failed = true;
-        callback(new Error("Redis is down"));
-      }
-    );
+    spyOn(database, "setApplied").and.callFake(async function () {
+      if (failed) return setApplied.apply(database, arguments);
+      failed = true;
+      throw new Error("Redis is down");
+    });
 
     var first = await setClientToGit(
       this.user,

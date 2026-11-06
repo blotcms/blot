@@ -1,13 +1,8 @@
-const { promisify } = require("util");
 const database = require("./database");
 const storage = require("storage/folder");
 const clfdate = require("helper/clfdate");
+const withCallback = require("helper/withCallback");
 const sync = require("sync");
-
-const setStatus = promisify(database.setStatus.bind(database));
-const createToken = promisify(database.createToken.bind(database));
-const setCreating = promisify(database.setCreating.bind(database));
-const clearCreating = promisify(database.clearCreating.bind(database));
 
 function delay(ms) {
   return new Promise(function (resolve) {
@@ -19,47 +14,57 @@ function delay(ms) {
 // (served/create.js), inside the sync's folder lock. While it runs the blog
 // is marked as being set up (database.setCreating, which expires by itself),
 // for the dashboard; the mark goes when the setup ends, however it ends.
-module.exports = function create(blog, callback) {
-  // A setup that cannot run (the folder is locked) leaves no mark behind
-  function finish(err) {
-    clearCreating(blog.id)
-      .catch(function () {})
-      .then(function () {
-        callback(err || null);
-      });
+async function create(blog) {
+  try {
+    await database.setCreating(blog.id);
+  } catch (err) {
+    // The dashboard shows the create page meanwhile: no reason to stop
+    console.log(
+      clfdate() +
+        " Git: create: could not mark the setup as in progress: " +
+        err.message
+    );
   }
 
-  setCreating(blog.id)
-    .catch(function (err) {
-      // The dashboard shows the create page meanwhile: no reason to stop
-      console.log(
-        clfdate() +
-          " Git: create: could not mark the setup as in progress: " +
-          err.message
-      );
-    })
-    .then(function () {
-      sync(blog.id, async function (err, folder, done) {
-        if (err) return finish(err);
+  // Settles when the sync engine calls finish, after it has released the
+  // folder lock
+  await new Promise(function (resolve, reject) {
+    // A setup that cannot run (the folder is locked) leaves no mark behind
+    function finish(err) {
+      database
+        .clearCreating(blog.id)
+        .catch(function () {})
+        .then(function () {
+          if (err) return reject(err);
+          resolve();
+        });
+    }
 
-        // Outside the try below, whose cleanup marks the setup failed: a
-        // repository the blog already has is not this setup's
-        try {
-          await require("./served/create").assertEmpty(blog.id);
-        } catch (err) {
-          return done(err, finish);
-        }
+    sync(blog.id, async function (err, folder, done) {
+      if (err) return finish(err);
 
-        try {
-          await createRepository(blog, folder);
-          done(null, finish);
-        } catch (err) {
-          await setStatus(blog.owner, "createFailed").catch(function () {});
-          done(err, finish);
-        }
-      });
+      // Outside the try below, whose cleanup marks the setup failed: a
+      // repository the blog already has is not this setup's
+      try {
+        await require("./served/create").assertEmpty(blog.id);
+      } catch (err) {
+        return done(err, finish);
+      }
+
+      try {
+        await createRepository(blog, folder);
+        done(null, finish);
+      } catch (err) {
+        await database
+          .setStatus(blog.owner, "createFailed")
+          .catch(function () {});
+        done(err, finish);
+      }
     });
-};
+  });
+}
+
+module.exports = withCallback(create);
 
 async function createRepository(blog, folder) {
   report(folder, "Creating token");
@@ -74,12 +79,8 @@ async function createRepository(blog, folder) {
   // a failure here leaves the store empty for a retry.
   try {
     // Looked up on the module each time, so a spec can make it fail
-    await new Promise((resolve, reject) =>
-      database.setApplied(blog.id, made.commit, (err) =>
-        err ? reject(err) : resolve()
-      )
-    );
-    await setStatus(blog.owner, "createComplete");
+    await database.setApplied(blog.id, made.commit);
+    await database.setStatus(blog.owner, "createComplete");
   } catch (err) {
     await made.rollback();
     throw err;
@@ -97,8 +98,8 @@ async function createRepository(blog, folder) {
 // (#2258)
 async function prepareMetadata(blog) {
   await Promise.all([
-    setStatus(blog.owner, "createInProgress"),
-    createToken(blog.owner),
+    database.setStatus(blog.owner, "createInProgress"),
+    database.createToken(blog.owner),
     assertNoLiveClone(blog.id),
   ]);
 }

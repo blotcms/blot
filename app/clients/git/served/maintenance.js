@@ -96,16 +96,12 @@ async function each(items, limit, fn) {
   );
 }
 
-function getBlog(by) {
-  return new Promise((resolve, reject) =>
-    Blog.get(by, (err, blog) => (err ? reject(err) : resolve(blog || null)))
-  );
+async function getBlog(by) {
+  return (await Blog.get(by)) || null;
 }
 
-function allBlogIDs() {
-  return new Promise((resolve, reject) =>
-    Blog.getAllIDs((err, ids) => (err ? reject(err) : resolve(ids || [])))
-  );
+async function allBlogIDs() {
+  return (await Blog.getAllIDs()) || [];
 }
 
 // An error's message on one line

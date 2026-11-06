@@ -48,6 +48,26 @@ describe("write", function () {
     expect(await folder.has(blogID, "/b")).toBe(false);
   });
 
+  it("rejects without a callback for an ignored file or a path it cannot commit", async function () {
+    var blogID = this.blog.id;
+    var rejections = [];
+
+    for (var attempt of [
+      () => write(blogID, "/.DS_Store", "content"),
+      () => repo.commit(blogID, { path: "/x/.Git/config", contents: "c" }),
+    ]) {
+      try {
+        await attempt();
+      } catch (err) {
+        rejections.push(err);
+      }
+    }
+
+    expect(rejections.length).toBe(2);
+    expect(rejections[0].message).toContain("Cannot write ignored file");
+    expect(await repo.exists(blogID)).toBe(true);
+  });
+
   it("writes a file", function (done) {
     var repoDirectory = this.repoDirectory;
     var git = Git(repoDirectory).silent(true);
