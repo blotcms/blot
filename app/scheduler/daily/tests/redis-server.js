@@ -436,13 +436,7 @@ describe("scheduler/daily/redis-server", function () {
   });
 
   describe("main", function () {
-    const run = (deps) =>
-      new Promise((resolve, reject) =>
-        redisServer(
-          (err, result) => (err ? reject(err) : resolve(result)),
-          deps
-        )
-      );
+    const run = (deps) => redisServer(deps);
 
     it("passes the two lines to the email", async function () {
       const result = await run({ client: fakeRedis(withSnapshot), now: NOW });

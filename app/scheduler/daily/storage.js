@@ -75,8 +75,8 @@ function line(value, { history = [], now = Date.now() } = {}) {
   return "Storage: " + [bucket, offsitePart(copy, now)].join(", ");
 }
 
-function main(callback, deps = {}) {
-  (async function () {
+async function main(deps = {}) {
+  try {
     const now = deps.now || Date.now();
     const client = deps.client || require("models/client");
     const value = await client.sendCommand(["GET", STORAGE_OFFSITE_KEY]);
@@ -93,19 +93,16 @@ function main(callback, deps = {}) {
       });
 
     return text ? { storage: text } : {};
-  })().then(
-    (result) => callback(null, result),
-    (err) => {
-      const reason = String((err && err.message) || err)
-        .replace(/[*`<>[\]]/g, "")
-        .slice(0, 80);
-      console.log(
-        "Daily update: could not read the storage bucket:",
-        err && err.message
-      );
-      callback(null, { storage: `Storage: unavailable (${reason})` });
-    }
-  );
+  } catch (err) {
+    const reason = String((err && err.message) || err)
+      .replace(/[*`<>[\]]/g, "")
+      .slice(0, 80);
+    console.log(
+      "Daily update: could not read the storage bucket:",
+      err && err.message
+    );
+    return { storage: `Storage: unavailable (${reason})` };
+  }
 }
 
 module.exports = main;

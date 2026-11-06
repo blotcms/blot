@@ -1,10 +1,9 @@
 const User = require("models/user");
 const extend = require("models/user/extend");
-const async = require("async");
 const prettyPrice = require("helper/prettyPrice");
 const prettyNumber = require("helper/prettyNumber");
 
-function main(callback) {
+async function main() {
   var annual_recurring_revenue = 0;
   var annual_billed_revenue = 0;
   var paypal_annual_recurring_revenue = 0;
@@ -13,62 +12,60 @@ function main(callback) {
   var total_customers = 0;
   var total_customers_paypal = 0;
 
-  User.getAllIds(function (err, uids) {
-    async.map(uids, User.getById, function (err, users) {
-      users.forEach(function (user) {
-        if (!user) return;
-        user = extend(user);
+  const uids = await User.getAllIds();
+  const users = await Promise.all(uids.map((uid) => User.getById(uid)));
 
-        if (user.isDisabled) return;
+  users.forEach(function (user) {
+    if (!user) return;
+    user = extend(user);
 
-        if (!user.isSubscribed) return;
+    if (user.isDisabled) return;
 
-        total_customers++;
-        total_active_blogs += user.pretty.amount;
+    if (!user.isSubscribed) return;
 
-        if (user.isMonthly === false) {
-          annual_recurring_revenue += user.totalFee;
-          annual_billed_revenue += user.totalFee;
-        } else {
-          annual_recurring_revenue += user.totalFee * 12;
-        }
+    total_customers++;
+    total_active_blogs += user.pretty.amount;
 
-        if (user.paypal.status) {
-          total_customers_paypal++;
-          total_active_blogs_paypal += user.pretty.amount;
-          paypal_annual_recurring_revenue += user.isMonthly
-            ? user.totalFee * 12
-            : user.totalFee;
-        }
-      });
+    if (user.isMonthly === false) {
+      annual_recurring_revenue += user.totalFee;
+      annual_billed_revenue += user.totalFee;
+    } else {
+      annual_recurring_revenue += user.totalFee * 12;
+    }
 
-      callback(null, {
-        total_customers_paypal,
-        total_active_blogs_paypal,
-        paypal_percentage:
-          (
-            (paypal_annual_recurring_revenue / annual_recurring_revenue) *
-            100
-          ).toFixed(1) + "%",
-        annual_percentage:
-          ((annual_billed_revenue / annual_recurring_revenue) * 100).toFixed(
-            1
-          ) + "%",
-        annual_recurring_revenue: prettyPrice(
-          Math.floor(annual_recurring_revenue / 100) * 100
-        ),
-        monthly_recurring_revenue: prettyPrice(
-          Math.floor(Math.floor(annual_recurring_revenue / 12) / 100) * 100
-        ),
-        total_customers,
-        sites_per_customer: (total_customers
-          ? total_active_blogs / total_customers
-          : 0
-        ).toFixed(2),
-        total_active_blogs: prettyNumber(total_active_blogs),
-      });
-    });
+    if (user.paypal.status) {
+      total_customers_paypal++;
+      total_active_blogs_paypal += user.pretty.amount;
+      paypal_annual_recurring_revenue += user.isMonthly
+        ? user.totalFee * 12
+        : user.totalFee;
+    }
   });
+
+  return {
+    total_customers_paypal,
+    total_active_blogs_paypal,
+    paypal_percentage:
+      (
+        (paypal_annual_recurring_revenue / annual_recurring_revenue) *
+        100
+      ).toFixed(1) + "%",
+    annual_percentage:
+      ((annual_billed_revenue / annual_recurring_revenue) * 100).toFixed(1) +
+      "%",
+    annual_recurring_revenue: prettyPrice(
+      Math.floor(annual_recurring_revenue / 100) * 100
+    ),
+    monthly_recurring_revenue: prettyPrice(
+      Math.floor(Math.floor(annual_recurring_revenue / 12) / 100) * 100
+    ),
+    total_customers,
+    sites_per_customer: (total_customers
+      ? total_active_blogs / total_customers
+      : 0
+    ).toFixed(2),
+    total_active_blogs: prettyNumber(total_active_blogs),
+  };
 }
 
 module.exports = main;

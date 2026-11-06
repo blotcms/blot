@@ -245,7 +245,7 @@ async function saveHistory(
   }
 }
 
-async function main(callback, deps = {}) {
+async function main(deps = {}) {
   let result;
 
   try {
@@ -264,7 +264,7 @@ async function main(callback, deps = {}) {
     };
   }
 
-  callback(null, result);
+  return result;
 }
 
 module.exports = main;

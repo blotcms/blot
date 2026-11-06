@@ -1,3 +1,4 @@
+var { promisify } = require("util");
 var clfdate = require("helper/clfdate");
 var User = require("models/user");
 var eachUser = require("../../scripts/each/user");
@@ -5,16 +6,18 @@ var email = require("helper/email");
 var subscriptionLifecycle = require("models/user/subscriptionLifecycle");
 var removal = require("models/user/removal");
 
-function deleteUserAccount(user, callback) {
+async function deleteUserAccount(user) {
   void user;
   // Safety rollout: temporarily keep this as a no-op so we can verify
   // subscription lifecycle behavior in production before permanently
   // deleting user data.
-  callback();
 }
 
-module.exports = function processSubscriptionLifecycle(callback) {
-  callback = callback || function () {};
+module.exports = async function processSubscriptionLifecycle() {
+  // These are still callback-only, so they are adapted here rather than when
+  // the file loads (the models require each other)
+  var disableUser = promisify(User.disable);
+  var overdueFor = promisify(removal.overdueFor);
 
   var disabled = 0;
   var deleted = 0;
@@ -23,25 +26,22 @@ module.exports = function processSubscriptionLifecycle(callback) {
   // Records the user as due for removal if they've passed their grace period.
   // The decision lives in models/user/removal so it matches
   // scripts/user/delete-users-to-remove.js.
-  function queueRemoval(user, overdue, next) {
+  async function queueRemoval(user, overdue) {
     var candidate = removal.removalCandidate(user, overdue);
 
-    if (!candidate) return next();
+    if (!candidate) return;
 
     usersToRemove.push({
       email: user.email,
       reason: candidate.description,
     });
 
-    deleteUserAccount(user, function (deleteErr) {
-      if (deleteErr) return next(deleteErr);
+    await deleteUserAccount(user);
 
-      deleted += 1;
-      next();
-    });
+    deleted += 1;
   }
 
-  function processUser(user, overdue, next) {
+  async function processUser(user, overdue) {
     if (overdue.overdue) {
       var overdueStartedAtISO = overdue.startedAt
         ? new Date(overdue.startedAt).toISOString()
@@ -57,7 +57,7 @@ module.exports = function processSubscriptionLifecycle(callback) {
 
         // Nothing to do. This job never re-enables accounts: it can't tell
         // an account disabled for being overdue from one disabled by hand.
-        return next();
+        return;
       }
 
       if (overdue.phase === "disabled_grace") {
@@ -68,19 +68,17 @@ module.exports = function processSubscriptionLifecycle(callback) {
           "startedAt=" + overdueStartedAtISO
         );
 
-        if (user.isDisabled) return next();
+        if (user.isDisabled) return;
 
-        return User.disable(user, function (disableErr) {
-          if (disableErr) return next(disableErr);
+        await disableUser(user);
 
-          disabled += 1;
+        disabled += 1;
 
-          // OVERDUE_CLOSURE tells both the user and the admin, so no
-          // separate admin-only email is sent for the same event.
-          email.OVERDUE_CLOSURE(user.uid);
+        // OVERDUE_CLOSURE tells both the user and the admin, so no
+        // separate admin-only email is sent for the same event.
+        email.OVERDUE_CLOSURE(user.uid);
 
-          next();
-        });
+        return;
       }
 
       console.log(
@@ -91,112 +89,105 @@ module.exports = function processSubscriptionLifecycle(callback) {
       );
 
       if (!user.isDisabled) {
-        return User.disable(user, function (disableErr) {
-          if (disableErr) return next(disableErr);
-          disabled += 1;
-          // This user skipped disabled_grace (e.g. the job failed to reach
-          // them during that window), so this is the first time they're
-          // actually disabled - tell them here instead.
-          email.OVERDUE_CLOSURE(user.uid);
-          queueRemoval(user, overdue, next);
-        });
+        await disableUser(user);
+        disabled += 1;
+        // This user skipped disabled_grace (e.g. the job failed to reach
+        // them during that window), so this is the first time they're
+        // actually disabled - tell them here instead.
+        email.OVERDUE_CLOSURE(user.uid);
       }
 
-      return queueRemoval(user, overdue, next);
+      return await queueRemoval(user, overdue);
     }
 
     var details = subscriptionLifecycle.cancellationDetails(user);
 
-    if (!details.cancelled || !details.periodEnded) return next();
+    if (!details.cancelled || !details.periodEnded) return;
 
     if (!user.isDisabled) {
-      return User.disable(user, function (disableErr) {
-        if (disableErr) return next(disableErr);
-        disabled += 1;
-        // PayPal stays CANCELLED through the end of the paid period, so the
-        // cancellation webhook does not close the account. Email when this
-        // job is what disables it. Stripe already emails from its webhook.
-        if (
-          details.provider === "paypal" &&
-          user.paypal &&
-          String(user.paypal.status).toUpperCase() === "CANCELLED"
-        )
-          email.CLOSED(user.uid);
-        queueRemoval(user, overdue, next);
-      });
+      await disableUser(user);
+      disabled += 1;
+      // PayPal stays CANCELLED through the end of the paid period, so the
+      // cancellation webhook does not close the account. Email when this
+      // job is what disables it. Stripe already emails from its webhook.
+      if (
+        details.provider === "paypal" &&
+        user.paypal &&
+        String(user.paypal.status).toUpperCase() === "CANCELLED"
+      )
+        email.CLOSED(user.uid);
     }
 
-    queueRemoval(user, overdue, next);
+    await queueRemoval(user, overdue);
   }
 
-  eachUser(
-    function (user, next) {
-      removal.overdueFor(user, function (err, overdue) {
-        // A Stripe hiccup for one unpaid user shouldn't stop the whole job
-        // (or the removal email); they'll be picked up on the next run.
-        if (err) {
-          console.log(
-            clfdate(),
-            "Subscription lifecycle could not check overdue status",
-            user.email,
-            err
-          );
-          return next();
-        }
+  // Never rejects, so the iteration over users carries on whatever happens
+  // to one of them
+  async function handleUser(user) {
+    var overdue;
 
-        // Likewise for a failed disable or removal: log it and move on so
-        // the rest of the users (and the removal email) still get processed.
-        processUser(user, overdue, function (processErr) {
-          if (processErr) {
-            console.log(
-              clfdate(),
-              "Subscription lifecycle could not process user",
-              user.email,
-              user.uid,
-              processErr
-            );
-          }
-
-          next();
-        });
-      });
-    },
-    function (err) {
-      if (err) {
-        console.log(clfdate(), "Subscription lifecycle job failed", err);
-        return callback(err);
-      }
-
+    try {
+      overdue = await overdueFor(user);
+    } catch (err) {
+      // A Stripe hiccup for one unpaid user shouldn't stop the whole job
+      // (or the removal email); they'll be picked up on the next run.
       console.log(
         clfdate(),
-        "Subscription lifecycle job complete",
-        "disabled=" + disabled,
-        "deleted=" + deleted
+        "Subscription lifecycle could not check overdue status",
+        user.email,
+        err
       );
+      return;
+    }
 
-      if (!usersToRemove.length) return callback();
-
-      email.USERS_DUE_FOR_REMOVAL(
-        "",
-        {
-          users: usersToRemove,
-          count: usersToRemove.length,
-          singular: usersToRemove.length === 1,
-        },
-        function (emailErr) {
-          // Log and swallow: the lifecycle work already succeeded by this
-          // point, so a transient email failure shouldn't fail the job.
-          if (emailErr) {
-            console.log(
-              clfdate(),
-              "Subscription lifecycle job failed to send users-to-remove summary",
-              emailErr
-            );
-          }
-
-          callback();
-        }
+    // Likewise for a failed disable or removal: log it and move on so
+    // the rest of the users (and the removal email) still get processed.
+    try {
+      await processUser(user, overdue);
+    } catch (processErr) {
+      console.log(
+        clfdate(),
+        "Subscription lifecycle could not process user",
+        user.email,
+        user.uid,
+        processErr
       );
     }
+  }
+
+  try {
+    await promisify(eachUser)(function (user, next) {
+      handleUser(user).then(function () {
+        next();
+      });
+    });
+  } catch (err) {
+    console.log(clfdate(), "Subscription lifecycle job failed", err);
+    throw err;
+  }
+
+  console.log(
+    clfdate(),
+    "Subscription lifecycle job complete",
+    "disabled=" + disabled,
+    "deleted=" + deleted
   );
+
+  if (!usersToRemove.length) return;
+
+  try {
+    await promisify(email.USERS_DUE_FOR_REMOVAL)("", {
+      users: usersToRemove,
+      count: usersToRemove.length,
+      singular: usersToRemove.length === 1,
+    });
+  } catch (emailErr) {
+    // Log and swallow: the lifecycle work already succeeded by this
+    // point, so a transient email failure shouldn't fail the job.
+    console.log(
+      clfdate(),
+      "Subscription lifecycle job failed to send users-to-remove summary",
+      emailErr
+    );
+  }
 };

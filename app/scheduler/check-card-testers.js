@@ -5,12 +5,13 @@ const User = require("models/user");
 const config = require("config");
 const stripe = require("stripe")(config.stripe.secret);
 
+// A lookup that fails counts as no user found, as it always has
 const getByCustomerId = async (customerId) => {
-  return new Promise((resolve, reject) => {
-    User.getByCustomerId(customerId, (err, user) => {
-      resolve(user);
-    });
-  });
+  try {
+    return await User.getByCustomerId(customerId);
+  } catch (err) {
+    return undefined;
+  }
 };
 
 module.exports = async function (startingAfter = null) {

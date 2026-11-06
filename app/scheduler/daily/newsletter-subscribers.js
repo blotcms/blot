@@ -1,12 +1,9 @@
-async function main(callback) {
+async function main() {
   var client = require("models/client");
 
-  try {
-    const subscribers = await client.sMembers("newsletter:list");
-    callback(null, { newsletter_subscribers: subscribers.length });
-  } catch (err) {
-    callback(err);
-  }
+  const subscribers = await client.sMembers("newsletter:list");
+
+  return { newsletter_subscribers: subscribers.length };
 }
 
 module.exports = main;

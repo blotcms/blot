@@ -11,7 +11,8 @@ var { isRedisUnavailableError } = require("helper/redisUnavailable");
 const freeDiskSpace = require("./free-disk-space");
 const os = require("os");
 const fs = require("fs-extra");
-const exec = require("child_process").exec;
+const { promisify } = require("util");
+const execAsync = promisify(require("child_process").exec);
 const zombies = require("./zombies");
 const checkCardTesters = require("./check-card-testers");
 const subscriptionLifecycleJob = require("./subscription-lifecycle");
@@ -33,10 +34,13 @@ const MINIMUM_DISK_SPACE_IN_K = 2 * 1024 * 1024;
 const LOW_DISK_NOTIFIED_KEY = "notify:low-disk-space";
 const DISK_NOTIFY_TTL_MS = 24 * 60 * 60 * 1000;
 
-function sendLowDiskEmail(disks, headline) {
-  email.WARNING_LOW_DISK_SPACE(null, { disks, headline }, function (err) {
-    if (err) console.log(clfdate(), err);
-  });
+// Never rejects: a failure to send is logged
+async function sendLowDiskEmail(disks, headline) {
+  try {
+    await promisify(email.WARNING_LOW_DISK_SPACE)(null, { disks, headline });
+  } catch (err) {
+    console.log(clfdate(), err);
+  }
 }
 
 // Emails about low disk space, at most once per DISK_NOTIFY_TTL_MS however
@@ -51,7 +55,7 @@ async function notifyLowDisk(disks) {
       lowDisk &&
       (await lock.once(LOW_DISK_NOTIFIED_KEY, DISK_NOTIFY_TTL_MS))
     ) {
-      sendLowDiskEmail(disks, "Warning: Blot's disk is low on space");
+      await sendLowDiskEmail(disks, "Warning: Blot's disk is low on space");
     }
   } catch (err) {
     console.error(
@@ -72,77 +76,115 @@ const REDIS_HOST_CHECKED_AT_KEY = "blot:redis-host:checked-at";
 // this process and the newer of the two is used.
 let redisHostCheckedAtInMemory = null;
 
-module.exports = function () {
-  // Log useful system information, once per minute
-  scheduler.scheduleJob("* * * * *", function () {
-    // Detect any zombie processes
-    zombies(function (err) {
-      if (err)
-        console.error(clfdate(), "Error checking for zombie processes", err);
-    });
+// The four checks the every-minute job starts. Each one handles its own
+// errors, so none of them can reject: an unhandled rejection exits the process.
 
-    freeDiskSpace(function (err, disks) {
-      if (err || !disks) {
-        console.error(clfdate(), "Error checking disk space", err);
-        return;
-      }
+// Detect any zombie processes
+async function checkZombies() {
+  try {
+    await zombies();
+  } catch (err) {
+    console.error(clfdate(), "Error checking for zombie processes", err);
+  }
+}
 
-      console.log(
-        clfdate(),
-        "[STATS]",
-        "Available disk space",
-        disks.map((disk) => disk.label + "=" + disk.available_human).join(", ")
-      );
+async function logDiskSpace() {
+  let disks;
 
-      notifyLowDisk(disks);
-    });
+  try {
+    disks = await freeDiskSpace();
+  } catch (err) {
+    console.error(clfdate(), "Error checking disk space", err);
+    return;
+  }
 
-    // Print most memory-intensive processes
-    exec(
-      "ps -eo pmem,pcpu,comm,args | sort -k 1 -nr | head -10",
-      function (err, stdout) {
-        if (err || !stdout) return;
+  if (!disks) {
+    console.error(clfdate(), "Error checking disk space");
+    return;
+  }
 
-        if (config.environment === "development") {
-          // this is annoying in development
-        } else {
-          console.log(clfdate(), "[STATS]", "top");
-          console.log(stdout);
-        }
-      }
+  console.log(
+    clfdate(),
+    "[STATS]",
+    "Available disk space",
+    disks.map((disk) => disk.label + "=" + disk.available_human).join(", ")
+  );
+
+  await notifyLowDisk(disks);
+}
+
+// Print most memory-intensive processes
+async function logTopProcesses() {
+  let stdout;
+
+  try {
+    ({ stdout } = await execAsync(
+      "ps -eo pmem,pcpu,comm,args | sort -k 1 -nr | head -10"
+    ));
+  } catch (err) {
+    return;
+  }
+
+  if (!stdout) return;
+
+  if (config.environment === "development") {
+    // this is annoying in development
+  } else {
+    console.log(clfdate(), "[STATS]", "top");
+    console.log(stdout);
+  }
+}
+
+// Print cpu and memory information
+async function logMemoryStats() {
+  let contents;
+
+  try {
+    contents = await fs.readFile("/proc/meminfo", "utf-8");
+  } catch (err) {
+    // This won't work on MacOS
+    return;
+  }
+
+  if (!contents) return;
+
+  try {
+    let stats = {};
+
+    contents
+      .trim()
+      .split("\n")
+      .forEach((line) => {
+        stats[line.split(":")[0].trim()] = parseInt(line.split(":")[1].trim());
+      });
+
+    let loadavg = os.loadavg()[0];
+    let totalCPUs = os.cpus().length;
+    let totalmem = stats.MemTotal;
+    let freemem = stats.MemAvailable;
+    let pretty = (num) => (100 * num).toFixed(3) + "%";
+
+    console.log(
+      clfdate(),
+      "[STATS]",
+      "cpuuse=" + pretty(loadavg / totalCPUs),
+      "totalmem=" + stats.MemTotal,
+      "totalcpus=" + totalCPUs,
+      "memuse=" + pretty((totalmem - freemem) / totalmem)
     );
+  } catch (err) {
+    console.error(clfdate(), "Error reading memory stats", err);
+  }
+}
 
-    // Print cpu and memory information
-    fs.readFile("/proc/meminfo", "utf-8", function (err, contents) {
-      // This won't work on MacOS
-      if (err || !contents) return;
-
-      let stats = {};
-
-      contents
-        .trim()
-        .split("\n")
-        .forEach((line) => {
-          stats[line.split(":")[0].trim()] = parseInt(
-            line.split(":")[1].trim()
-          );
-        });
-
-      let loadavg = os.loadavg()[0];
-      let totalCPUs = os.cpus().length;
-      let totalmem = stats.MemTotal;
-      let freemem = stats.MemAvailable;
-      let pretty = (num) => (100 * num).toFixed(3) + "%";
-
-      console.log(
-        clfdate(),
-        "[STATS]",
-        "cpuuse=" + pretty(loadavg / totalCPUs),
-        "totalmem=" + stats.MemTotal,
-        "totalcpus=" + totalCPUs,
-        "memuse=" + pretty((totalmem - freemem) / totalmem)
-      );
-    });
+module.exports = function () {
+  // Log useful system information, once per minute. The checks run
+  // concurrently, as they always have.
+  scheduler.scheduleJob("* * * * *", function () {
+    checkZombies();
+    logDiskSpace();
+    logTopProcesses();
+    logMemoryStats();
   });
 
   // Warn users about impending renewals and expiries. The scan looks at every
@@ -177,42 +219,44 @@ module.exports = function () {
   console.log(clfdate(), "Scheduled daily check of storage disk usage");
   // Checks one host's disk: scope "host" once BLOT_HOST_ID is set and there is
   // more than one host.
-  lock.cron("disk-usage-report", { hour: 10, minute: 0 }, function () {
+  lock.cron("disk-usage-report", { hour: 10, minute: 0 }, async function () {
     console.log(clfdate(), "Scheduler: Checking available disk space");
 
-    exec("df -h", function (err, stdout) {
-      if (err) {
-        console.error(
-          clfdate(),
-          "Scheduler: Error checking available disk space",
-          err
-        );
-        return;
-      }
+    let stdout;
 
-      var disk = (stdout.split("\n")[1] || "").replace(/\s+/g, " ").split(" ");
-      var usage = disk[4];
-      var available = disk[3];
+    try {
+      ({ stdout } = await execAsync("df -h"));
+    } catch (err) {
+      console.error(
+        clfdate(),
+        "Scheduler: Error checking available disk space",
+        err
+      );
+      return;
+    }
 
-      if (parseInt(usage) < 90) {
-        console.log(
-          clfdate(),
-          "Scheduler: Disk usage check passed! Usage:",
-          usage,
-          "Space available:",
-          available
-        );
-        return;
-      }
+    var disk = (stdout.split("\n")[1] || "").replace(/\s+/g, " ").split(" ");
+    var usage = disk[4];
+    var available = disk[3];
 
+    if (parseInt(usage) < 90) {
       console.log(
         clfdate(),
-        "Scheduler: Disk usage check failed! Usage:",
+        "Scheduler: Disk usage check passed! Usage:",
         usage,
         "Space available:",
         available
       );
-    });
+      return;
+    }
+
+    console.log(
+      clfdate(),
+      "Scheduler: Disk usage check failed! Usage:",
+      usage,
+      "Space available:",
+      available
+    );
   });
 
   // console.log(
@@ -232,13 +276,18 @@ module.exports = function () {
   // });
 
   console.log(clfdate(), "Scheduled daily subscription lifecycle processing");
-  lock.cron("subscription-lifecycle", { hour: 9, minute: 0 }, function () {
-    console.log(clfdate(), "Processing subscription lifecycle changes");
-    subscriptionLifecycleJob(function (err) {
-      if (err)
+  lock.cron(
+    "subscription-lifecycle",
+    { hour: 9, minute: 0 },
+    async function () {
+      console.log(clfdate(), "Processing subscription lifecycle changes");
+      try {
+        await subscriptionLifecycleJob();
+      } catch (err) {
         console.log(clfdate(), "Error processing subscription lifecycle", err);
-    });
-  });
+      }
+    }
+  );
 
   console.log(clfdate(), "Scheduled daily check of suspected fraudulent users");
   lock.cron("check-card-testers", { hour: 11, minute: 0 }, async function () {
@@ -447,24 +496,26 @@ module.exports = function () {
   });
 
   console.log(clfdate(), "Scheduled daily check of featured sites");
-  lock.cron("check-featured-sites", { hour: 8, minute: 0 }, function () {
+  lock.cron("check-featured-sites", { hour: 8, minute: 0 }, async function () {
     console.log(clfdate(), "Checking featured sites");
-    checkFeaturedSites(function (err) {
-      if (err) {
-        console.log(clfdate(), "Error: Checking featured sites", err);
-      } else {
-        console.log(clfdate(), "Checked featured sites");
-      }
-    });
+    try {
+      await checkFeaturedSites();
+      console.log(clfdate(), "Checked featured sites");
+    } catch (err) {
+      console.log(clfdate(), "Error: Checking featured sites", err);
+    }
   });
 
   // At some point I should check this doesnt consume too much memory
   console.log(clfdate(), "Scheduled daily update email");
-  lock.cron("daily-update", { hour: 12, minute: 0 }, function () {
+  lock.cron("daily-update", { hour: 12, minute: 0 }, async function () {
     console.log(clfdate(), "Generating daily update email...");
-    dailyUpdate(function () {
+    try {
+      await dailyUpdate();
       console.log(clfdate(), "Daily update email update was sent.");
-    });
+    } catch (err) {
+      console.log(clfdate(), "Error: Sending the daily update email", err);
+    }
   });
 };
 

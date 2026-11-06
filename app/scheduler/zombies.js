@@ -1,7 +1,7 @@
 const config = require("config");
-const exec = require("child_process").exec;
+const { promisify } = require("util");
+const execAsync = promisify(require("child_process").exec);
 const email = require("helper/email");
-const async = require("async");
 const clfdate = require("helper/clfdate");
 const lock = require("helper/lock");
 
@@ -26,13 +26,10 @@ async function notifyZombies() {
 }
 
 if (require.main === module) {
-  main(function (err) {
-    if (err) throw err;
-    process.exit();
-  });
+  main().then(() => process.exit());
 }
 
-function main(callback) {
+async function main() {
   const prefix = () => clfdate() + " Zombies:";
 
   console.log(prefix(), "checking");
@@ -42,42 +39,33 @@ function main(callback) {
   // process parent ID is the OS (i.e. ppid = 1). This usually
   // happens when the process becomes detached, i.e. a zombie.
   // I want to investigate and remove the causes of these.
-  exec(
-    `ps -e -o ppid= -o pid= -o command= | grep "node ${config.blot_directory}" | awk '$1 == "1" { print $2 }'`,
-    function (err, stdout) {
-      if (err) return callback(err);
-
-      // A process started directly under the container's init (as the app
-      // is in proxy/e2e) is a child of PID 1 too: never count ourselves.
-      const zombie_pids = stdout
-        .split("\n")
-        .filter((i) => !!i && i.trim() !== String(process.pid));
-
-      if (zombie_pids.length) {
-        console.log(prefix(), `${zombie_pids.length} zombies found`);
-        notifyZombies();
-      } else {
-        console.log(prefix(), `none found`);
-      }
-
-      async.eachSeries(
-        zombie_pids,
-        (pid, next) => {
-          console.log(prefix(), "killing pid =", pid);
-          exec(`kill ${pid}`, function (err, stdout) {
-            if (err) {
-              console.log(prefix(), "error killing pid =", pid, err);
-              next(err);
-            } else {
-              console.log(prefix(), "killed pid =", pid, "stdout =", stdout);
-              next();
-            }
-          });
-        },
-        callback
-      );
-    }
+  const { stdout } = await execAsync(
+    `ps -e -o ppid= -o pid= -o command= | grep "node ${config.blot_directory}" | awk '$1 == "1" { print $2 }'`
   );
+
+  // A process started directly under the container's init (as the app
+  // is in proxy/e2e) is a child of PID 1 too: never count ourselves.
+  const zombie_pids = stdout
+    .split("\n")
+    .filter((i) => !!i && i.trim() !== String(process.pid));
+
+  if (zombie_pids.length) {
+    console.log(prefix(), `${zombie_pids.length} zombies found`);
+    notifyZombies();
+  } else {
+    console.log(prefix(), `none found`);
+  }
+
+  for (const pid of zombie_pids) {
+    console.log(prefix(), "killing pid =", pid);
+    try {
+      const { stdout } = await execAsync(`kill ${pid}`);
+      console.log(prefix(), "killed pid =", pid, "stdout =", stdout);
+    } catch (err) {
+      console.log(prefix(), "error killing pid =", pid, err);
+      throw err;
+    }
+  }
 }
 
 module.exports = main;

@@ -26,8 +26,7 @@ describe("daily update storage", function () {
     };
   }
 
-  const run = (deps) =>
-    new Promise((resolve) => storage((err, result) => resolve(result), deps));
+  const run = (deps) => storage(deps);
 
   describe("line", function () {
     it("gives the size, objects and age of the last copy", function () {
