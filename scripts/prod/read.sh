@@ -184,7 +184,7 @@ case "$command" in
     one_of "${1:-}" "$REDIS_PARAMS" || fail "parameter must be one of: $REDIS_PARAMS"
     remote "redis6-cli CONFIG GET $1" ;;
   redis-memory-conf)
-    remote "cat /etc/redis6/blot-memory.conf" ;;
+    remote "sudo -n cat /etc/redis6/blot-memory.conf" ;;
   redis-role)
     remote "redis6-cli ROLE; ls /etc/blot-redis/active 2>&1" ;;
   redis-slowlog)
