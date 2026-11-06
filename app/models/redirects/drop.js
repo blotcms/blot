@@ -1,21 +1,14 @@
 var client = require("models/client");
 var ensure = require("helper/ensure");
 var key = require("./key");
+var withCallback = require("helper/withCallback");
 
-module.exports = function (blogID, from, callback) {
-  ensure(blogID, "string").and(from, "string").and(callback, "function");
+module.exports = withCallback(async function drop(blogID, from) {
+  ensure(blogID, "string").and(from, "string");
 
   var redirects = key.redirects(blogID);
   var fromKey = key.redirect(blogID, from);
 
-  (async function () {
-    try {
-      await client.zRem(redirects, from);
-      await client.del(fromKey);
-
-      callback();
-    } catch (err) {
-      callback(err);
-    }
-  })();
-};
+  await client.zRem(redirects, from);
+  await client.del(fromKey);
+});

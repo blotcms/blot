@@ -2,6 +2,8 @@
 
 Manages per-blog URL redirect rules. Redirect rules are stored in Redis and evaluated at request time by the blog's error-handling middleware to issue HTTP 301 responses before a 404 is returned.
 
+`check`, `conflicts`, `drop`, `list` and `set` now return promises when called without a callback (#2559); `get` still takes a callback.
+
 ## Role in the application
 
 This module sits in the `app/models` layer alongside other Redis-backed data models (entries, tags, 404s, etc.). It is the sole read/write interface for redirect data. The blog request pipeline calls `check` on every unmatched URL; the dashboard calls `set` and `list` to let blog owners manage their redirect rules.

@@ -3,58 +3,51 @@ var ensure = require("helper/ensure");
 var key = require("./key");
 var util = require("./util");
 var matches = util.matches;
+var withCallback = require("helper/withCallback");
 
 // var drop = require('./drop');
 
-module.exports = function (blogID, mappings, callback) {
-  ensure(blogID, "string").and(mappings, "array").and(callback, "function");
+module.exports = withCallback(async function set(blogID, mappings) {
+  ensure(blogID, "string").and(mappings, "array");
 
   var redirects = key.redirects(blogID);
 
-  (async function () {
-    try {
-      var allKeys = await client.zRange(redirects, 0, -1);
-      var multi = client.multi();
+  var allKeys = await client.zRange(redirects, 0, -1);
+  var multi = client.multi();
 
-      allKeys = allKeys || [];
-      allKeys = allKeys.map(function (from) {
-        return key.redirect(blogID, from);
-      });
-      allKeys.push(redirects);
+  allKeys = allKeys || [];
+  allKeys = allKeys.map(function (from) {
+    return key.redirect(blogID, from);
+  });
+  allKeys.push(redirects);
 
-      multi.del(allKeys);
+  multi.del(allKeys);
 
-      mappings.forEach(function (redirect, index) {
-        var from = redirect.from;
-        var to = redirect.to;
-        var fromKey = key.redirect(blogID, from);
+  mappings.forEach(function (redirect, index) {
+    var from = redirect.from;
+    var to = redirect.to;
+    var fromKey = key.redirect(blogID, from);
 
-        index = parseInt(index);
+    index = parseInt(index);
 
-        if (isNaN(index)) throw new Error("forEach returned a NaN index");
+    if (isNaN(index)) throw new Error("forEach returned a NaN index");
 
-        var candidates = mappings.slice(0, index);
+    var candidates = mappings.slice(0, index);
 
-        if (!from || !to || matches(to, candidates)) return;
+    if (!from || !to || matches(to, candidates)) return;
 
-        ensure(from, "string")
-          .and(to, "string")
-          .and(index, "number")
-          .and(fromKey, "string")
-          .and(redirects, "string");
+    ensure(from, "string")
+      .and(to, "string")
+      .and(index, "number")
+      .and(fromKey, "string")
+      .and(redirects, "string");
 
-        multi.zAdd(redirects, {
-          score: index,
-          value: from,
-        });
-        multi.set(fromKey, to);
-      });
+    multi.zAdd(redirects, {
+      score: index,
+      value: from,
+    });
+    multi.set(fromKey, to);
+  });
 
-      await multi.exec();
-
-      return callback();
-    } catch (err) {
-      return callback(err);
-    }
-  })();
-};
+  await multi.exec();
+});

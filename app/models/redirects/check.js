@@ -3,51 +3,59 @@ var ensure = require("helper/ensure");
 var key = require("./key");
 var get = require("./get");
 var util = require("./util");
+var withCallback = require("helper/withCallback");
 var is = util.is;
 var isRegex = util.isRegex;
 
-module.exports = function (blogID, input, callback) {
-  ensure(blogID, "string").and(input, "string").and(callback, "function");
+// get is not converted yet: it takes the input after its callback
+function getRedirect(blogID, from, input) {
+  return new Promise(function (resolve, reject) {
+    get(
+      blogID,
+      from,
+      function (err, redirect) {
+        if (err) return reject(err);
+        resolve(redirect);
+      },
+      input
+    );
+  });
+}
+
+module.exports = withCallback(async function check(blogID, input) {
+  ensure(blogID, "string").and(input, "string");
 
   var redirects = key.redirects(blogID);
 
-  get(blogID, input, function (err, redirect) {
-    if (err) return callback(err);
+  var redirect = await getRedirect(blogID, input);
 
-    if (redirect) return callback(null, redirect);
+  if (redirect) return redirect;
 
-    (async function () {
-      try {
-        var cursor = "0";
+  var cursor = "0";
 
-        while (true) {
-          // SORTED SET, precedence is important
-          var response = await client.zScan(redirects, cursor);
+  while (true) {
+    // SORTED SET, precedence is important
+    var response = await client.zScan(redirects, cursor);
 
-          if (!response) return callback();
+    if (!response) return;
 
-          cursor = response.cursor;
-          var matches = response.members || [];
+    cursor = response.cursor;
+    var matches = response.members || [];
 
-          if (!matches.length && cursor === "0") {
-            return callback();
-          }
+    if (!matches.length && cursor === "0") {
+      return;
+    }
 
-          for (var i = 0; i < matches.length; i++) {
-            var from = matches[i].value;
+    for (var i = 0; i < matches.length; i++) {
+      var from = matches[i].value;
 
-            if (isRegex(from) && is(input, from)) {
-              return get(blogID, from, callback, input);
-            }
-          }
-
-          if (cursor === "0") {
-            return callback();
-          }
-        }
-      } catch (scanErr) {
-        return callback(scanErr);
+      if (isRegex(from) && is(input, from)) {
+        return await getRedirect(blogID, from, input);
       }
-    })();
-  });
-};
+    }
+
+    if (cursor === "0") {
+      return;
+    }
+  }
+});
