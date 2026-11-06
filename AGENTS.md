@@ -9,7 +9,7 @@ When opening a pull request in this repo:
 - Any PR with a **Deployment plan** section also gets the `manual-deploy` label (`gh pr create --label manual-deploy`, or `gh pr edit <n> --add-label manual-deploy`), so it stands out as needing more than the `Deploy node` workflow: deploying the proxy, the macserver or the host, running a backfill/migration script, editing production config or environment variables, and so on. Add the label and the section together, and remove both if the extra steps go away.
 - If the change closes out an item in the root `TODO` file, remove that entry as part of the diff, and if it implies telling someone the work shipped, add that as a checklist item in the PR description.
 
-Never credit Claude in a commit or pull request: no `Co-Authored-By: Claude` trailer, and no commits authored as Claude.
+Never credit Claude in a commit or pull request: no `Co-Authored-By: Claude` trailer, and no commits authored as Claude. The `no-claude-coauthor` check fails PRs that do.
 
 # Pull request review
 
