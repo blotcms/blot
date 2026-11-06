@@ -1,7 +1,5 @@
 var syncPaymentMethods = require("../syncPaymentMethods");
 var User = require("../index");
-var promisify = require("util").promisify;
-var setUser = promisify(User.set);
 
 function baseStripeClient(overrides) {
   return Object.assign(
@@ -50,7 +48,7 @@ describe("user syncPaymentMethods", function () {
     beforeEach(function (done) {
       var test = this;
 
-      setUser(
+      User.set(
         this.user.uid,
         {
           subscription: { id: "sub_123", customer: "cus_123" },

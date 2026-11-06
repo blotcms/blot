@@ -1,4 +1,5 @@
 var ensure = require("helper/ensure");
+var withCallback = require("helper/withCallback");
 var validate = require("./validate");
 var client = require("models/client");
 var updateBillingEmail = require("./updateBillingEmail");
@@ -39,61 +40,54 @@ function indexes(user) {
   ];
 }
 
-module.exports = function save(uid, updates, callback) {
-  ensure(uid, "string").and(updates, "object").and(callback, "function");
+module.exports = withCallback(async function save(uid, updates) {
+  ensure(uid, "string").and(updates, "object");
 
-  (async function () {
-    for (var attempt = 0; attempt < 20; attempt++) {
-      var previous = await client.get(key.user(uid));
-      if (!previous) throw new Error("No user");
+  for (var attempt = 0; attempt < 20; attempt++) {
+    var previous = await client.get(key.user(uid));
+    if (!previous) throw new Error("No user");
 
-      var user;
-      try {
-        user = JSON.parse(previous);
-        ensure(user, "object");
-      } catch (err) {
-        throw new Error("BADJSON", { cause: err });
-      }
-      var former = JSON.parse(previous);
+    var user;
+    try {
+      user = JSON.parse(previous);
+      ensure(user, "object");
+    } catch (err) {
+      throw new Error("BADJSON", { cause: err });
+    }
+    var former = JSON.parse(previous);
 
-      var result = await new Promise(function (resolve, reject) {
-        validate(user, updates, function (err, validated, changes) {
-          if (err) return reject(err);
-          resolve({ user: validated, changes: changes });
-        });
+    var result = await new Promise(function (resolve, reject) {
+      validate(user, updates, function (err, validated, changes) {
+        if (err) return reject(err);
+        resolve({ user: validated, changes: changes });
       });
+    });
 
-      var status = await client.eval(commit, {
-        keys: [key.user(uid)].concat(indexes(result.user), indexes(former)),
-        arguments: [previous, JSON.stringify(result.user), uid],
-      });
+    var status = await client.eval(commit, {
+      keys: [key.user(uid)].concat(indexes(result.user), indexes(former)),
+      arguments: [previous, JSON.stringify(result.user), uid],
+    });
 
-      if (status === 0) continue;
-      if (status < 0) {
-        var conflict = new Error(
-          status === -2
-            ? "This email is in use."
-            : "This subscription is in use."
-        );
-        conflict.code = "EEXISTS";
-        throw conflict;
-      }
-
-      // Only dispatch external side effects after a successful commit, never
-      // from an abandoned validation attempt.
-      if (former.email && former.email !== result.user.email) {
-        updateBillingEmail(result.user, function (err) {
-          if (err)
-            console.log("Error updating email for customer on Stripe:", err);
-        });
-      }
-      return result.changes;
+    if (status === 0) continue;
+    if (status < 0) {
+      var conflict = new Error(
+        status === -2 ? "This email is in use." : "This subscription is in use."
+      );
+      conflict.code = "EEXISTS";
+      throw conflict;
     }
 
-    var busy = new Error("User changed too frequently; please retry");
-    busy.code = "EAGAIN";
-    throw busy;
-  })().then(function (changes) {
-    callback(null, changes);
-  }, callback);
-};
+    // Only dispatch external side effects after a successful commit, never
+    // from an abandoned validation attempt.
+    if (former.email && former.email !== result.user.email) {
+      updateBillingEmail(result.user).catch(function (err) {
+        console.log("Error updating email for customer on Stripe:", err);
+      });
+    }
+    return result.changes;
+  }
+
+  var busy = new Error("User changed too frequently; please retry");
+  busy.code = "EAGAIN";
+  throw busy;
+});

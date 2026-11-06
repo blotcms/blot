@@ -1,5 +1,6 @@
 var config = require("config");
 var createStripe = require("stripe");
+var withCallback = require("helper/withCallback");
 var set = require("./set");
 
 var stripeClient;
@@ -49,36 +50,45 @@ function buildPaymentMethod(pm, defaultId) {
   };
 }
 
+// Calls a Stripe method that takes a callback and resolves to its result.
+function call(method, ...args) {
+  return new Promise(function (resolve, reject) {
+    method(...args, function (err, result) {
+      if (err) return reject(err);
+      resolve(result);
+    });
+  });
+}
+
 // Generic "follow has_more with starting_after" pager shared by both the
 // modern PaymentMethods list and the legacy Cards list - both are paginated
 // the same way, so a customer with more than one page of either would
 // otherwise silently lose access to everything past the first page.
-function listAll(list, callback) {
+async function listAll(list) {
   var all = [];
+  var startingAfter;
 
-  function fetchPage(startingAfter) {
-    list(startingAfter, function (err, page) {
-      if (err) return callback(err);
+  while (true) {
+    var page = await list(startingAfter);
 
-      var data = page.data || [];
-      all = all.concat(data);
+    var data = page.data || [];
+    all = all.concat(data);
 
-      if (page.has_more && data.length)
-        return fetchPage(data[data.length - 1].id);
+    if (page.has_more && data.length) {
+      startingAfter = data[data.length - 1].id;
+      continue;
+    }
 
-      callback(null, all);
-    });
+    return all;
   }
-
-  fetchPage();
 }
 
-function listAllPaymentMethods(stripe, customerId, callback) {
-  listAll(function (startingAfter, cb) {
+function listAllPaymentMethods(stripe, customerId) {
+  return listAll(function (startingAfter) {
     var params = { customer: customerId, type: "card", limit: 100 };
     if (startingAfter) params.starting_after = startingAfter;
-    stripe.paymentMethods.list(params, cb);
-  }, callback);
+    return call(stripe.paymentMethods.list.bind(stripe.paymentMethods), params);
+  });
 }
 
 // Cards added before this feature existed were stored as legacy Card
@@ -87,32 +97,35 @@ function listAllPaymentMethods(stripe, customerId, callback) {
 // same object appears in paymentMethods.list with the same card_ id, just
 // object: "payment_method" instead of object: "card". We still fetch
 // listCards for any card Stripe does not surface that way.
-function fetchLegacyCards(stripe, customerId, defaultSourceId, callback) {
-  listAll(
-    function (startingAfter, cb) {
+async function fetchLegacyCards(stripe, customerId, defaultSourceId) {
+  var cards;
+
+  try {
+    cards = await listAll(function (startingAfter) {
       var params = { limit: 100 };
       if (startingAfter) params.starting_after = startingAfter;
-      stripe.customers.listCards(customerId, params, cb);
-    },
-    function (err, cards) {
-      if (err && err.code === "resource_missing") return callback(null, []);
-      if (err) return callback(err);
+      return call(
+        stripe.customers.listCards.bind(stripe.customers),
+        customerId,
+        params
+      );
+    });
+  } catch (err) {
+    if (err && err.code === "resource_missing") return [];
+    throw err;
+  }
 
-      var legacyCards = cards.map(function (card) {
-        return {
-          id: card.id,
-          brand: normalizeBrand(card.brand),
-          last4: card.last4,
-          exp_month: card.exp_month,
-          exp_year: card.exp_year,
-          isDefault: card.id === defaultSourceId,
-          isLegacy: true,
-        };
-      });
-
-      callback(null, legacyCards);
-    }
-  );
+  return cards.map(function (card) {
+    return {
+      id: card.id,
+      brand: normalizeBrand(card.brand),
+      last4: card.last4,
+      exp_month: card.exp_month,
+      exp_year: card.exp_year,
+      isDefault: card.id === defaultSourceId,
+      isLegacy: true,
+    };
+  });
 }
 
 // A subscription can pin its own default_payment_method or (for accounts
@@ -120,35 +133,32 @@ function fetchLegacyCards(stripe, customerId, defaultSourceId, callback) {
 // either of which takes priority over the customer-level defaults when
 // Stripe decides what to charge for that subscription. We need the live
 // subscription (not our cached copy, which may be stale) to know that.
-function fetchSubscriptionDefault(
-  stripe,
-  customerId,
-  subscriptionId,
-  callback
-) {
-  if (!subscriptionId) return callback(null, null);
+async function fetchSubscriptionDefault(stripe, customerId, subscriptionId) {
+  if (!subscriptionId) return null;
 
-  stripe.customers.retrieveSubscription(
-    customerId,
-    subscriptionId,
-    function (err, subscription) {
-      // A missing subscription (cancelled/replaced since we last cached it)
-      // genuinely has no subscription-level override left - safe to fall
-      // back to the customer-level default. Any other error (network, auth,
-      // rate limit) must not be treated the same way: silently falling back
-      // could misidentify which card Stripe will actually charge and let it
-      // be removed instead of whatever the real override was.
-      if (err && err.code === "resource_missing") return callback(null, null);
-      if (err) return callback(err);
+  var subscription;
 
-      callback(
-        null,
-        (subscription &&
-          (subscription.default_payment_method ||
-            subscription.default_source)) ||
-          null
-      );
-    }
+  try {
+    subscription = await call(
+      stripe.customers.retrieveSubscription.bind(stripe.customers),
+      customerId,
+      subscriptionId
+    );
+  } catch (err) {
+    // A missing subscription (cancelled/replaced since we last cached it)
+    // genuinely has no subscription-level override left - safe to fall
+    // back to the customer-level default. Any other error (network, auth,
+    // rate limit) must not be treated the same way: silently falling back
+    // could misidentify which card Stripe will actually charge and let it
+    // be removed instead of whatever the real override was.
+    if (err && err.code === "resource_missing") return null;
+    throw err;
+  }
+
+  return (
+    (subscription &&
+      (subscription.default_payment_method || subscription.default_source)) ||
+    null
   );
 }
 
@@ -157,82 +167,70 @@ function fetchSubscriptionDefault(
 // user record. Stripe remains the source of truth for the payment-methods
 // page itself; this cache lets other parts of the app (e.g. billing emails)
 // show card details without an extra live API call.
-module.exports = function syncPaymentMethods(user, callback) {
-  if (!user || !user.subscription || !user.subscription.customer)
-    return callback(null, []);
+async function syncPaymentMethods(user) {
+  if (!user || !user.subscription || !user.subscription.customer) return [];
 
   var stripe = getStripeClient();
 
-  if (!stripe) return callback(new Error("Stripe secret is not configured"));
+  if (!stripe) throw new Error("Stripe secret is not configured");
 
   var customerId = user.subscription.customer;
 
-  stripe.customers.retrieve(customerId, function (err, customer) {
-    if (err) return callback(err);
+  var customer = await call(
+    stripe.customers.retrieve.bind(stripe.customers),
+    customerId
+  );
 
-    fetchSubscriptionDefault(
-      stripe,
-      customerId,
-      user.subscription.id,
-      function (err, subscriptionDefaultId) {
-        if (err) return callback(err);
+  var subscriptionDefaultId = await fetchSubscriptionDefault(
+    stripe,
+    customerId,
+    user.subscription.id
+  );
 
-        // Stripe's real precedence for what a subscription actually
-        // charges: its own default_payment_method, then its own
-        // default_source, then the customer's invoice_settings default,
-        // then the customer's default_source. subscriptionDefaultId above
-        // already folds the first two together; this folds in the rest.
-        // The result is a single id we can match against either a modern
-        // PaymentMethod or a legacy Card, whichever it turns out to be.
-        var defaultId =
-          subscriptionDefaultId ||
-          (customer.invoice_settings &&
-            customer.invoice_settings.default_payment_method) ||
-          customer.default_source ||
-          null;
+  // Stripe's real precedence for what a subscription actually
+  // charges: its own default_payment_method, then its own
+  // default_source, then the customer's invoice_settings default,
+  // then the customer's default_source. subscriptionDefaultId above
+  // already folds the first two together; this folds in the rest.
+  // The result is a single id we can match against either a modern
+  // PaymentMethod or a legacy Card, whichever it turns out to be.
+  var defaultId =
+    subscriptionDefaultId ||
+    (customer.invoice_settings &&
+      customer.invoice_settings.default_payment_method) ||
+    customer.default_source ||
+    null;
 
-        listAllPaymentMethods(stripe, customerId, function (err, methods) {
-          if (err) return callback(err);
+  var methods = await listAllPaymentMethods(stripe, customerId);
 
-          var paymentMethods = methods
-            .filter(function (pm) {
-              return pm.card;
-            })
-            .map(function (pm) {
-              return buildPaymentMethod(pm, defaultId);
-            });
+  var paymentMethods = methods
+    .filter(function (pm) {
+      return pm.card;
+    })
+    .map(function (pm) {
+      return buildPaymentMethod(pm, defaultId);
+    });
 
-          fetchLegacyCards(
-            stripe,
-            customerId,
-            defaultId,
-            function (err, legacyCards) {
-              if (err) return callback(err);
+  var legacyCards = await fetchLegacyCards(stripe, customerId, defaultId);
 
-              // Same card_ id from both APIs is one card, not two. Keep the
-              // legacy row so isLegacy stays accurate for remove/default.
-              var seen = {};
-              legacyCards.forEach(function (card) {
-                seen[card.id] = true;
-              });
-              paymentMethods = legacyCards.concat(
-                paymentMethods.filter(function (pm) {
-                  return !seen[pm.id];
-                })
-              );
-
-              set(user.uid, { paymentMethods: paymentMethods }, function (err) {
-                if (err) return callback(err);
-
-                callback(null, paymentMethods);
-              });
-            }
-          );
-        });
-      }
-    );
+  // Same card_ id from both APIs is one card, not two. Keep the
+  // legacy row so isLegacy stays accurate for remove/default.
+  var seen = {};
+  legacyCards.forEach(function (card) {
+    seen[card.id] = true;
   });
-};
+  paymentMethods = legacyCards.concat(
+    paymentMethods.filter(function (pm) {
+      return !seen[pm.id];
+    })
+  );
+
+  await set(user.uid, { paymentMethods: paymentMethods });
+
+  return paymentMethods;
+}
+
+module.exports = withCallback(syncPaymentMethods);
 
 module.exports.getClient = getStripeClient;
 

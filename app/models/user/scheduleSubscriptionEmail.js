@@ -97,12 +97,7 @@ function decide(user, now) {
 }
 
 function getUser(uid) {
-  return new Promise(function (resolve, reject) {
-    getById(uid, function (err, user) {
-      if (err) return reject(err);
-      resolve(user);
-    });
-  });
+  return getById(uid);
 }
 
 function sendEmail(name, uid) {
@@ -156,12 +151,7 @@ async function sendForUser(uid, now) {
 // processes. An error for one user doesn't stop the rest. Resolves to the
 // number of emails sent.
 async function scan(now) {
-  var uids = await new Promise(function (resolve, reject) {
-    getAllIds(function (err, uids) {
-      if (err) return reject(err);
-      resolve(uids);
-    });
-  });
+  var uids = await getAllIds();
   var sent = 0;
 
   for (var i = 0; i < uids.length; i++) {
