@@ -10,6 +10,7 @@ const removeTemplateAssetsIfUnreferenced =
   require("./save/upload-image").removeTemplateAssetsIfUnreferenced;
 const loadFavicon = require("./load/favicon");
 const syntaxHighlighterPreview = require("./syntax-highlighter-preview");
+const previewState = require("./preview-state");
 const clfdate = require("helper/clfdate");
 const makeSlug = require("helper/makeSlug");
 const holdFolderLock = require("models/template/withFolderLock").holdForRequest;
@@ -264,6 +265,7 @@ TemplateEditor.route("/:templateSlug")
   )
   .get(function (req, res) {
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
+    previewState(req, res);
     res.render("dashboard/template/settings");
   });
 
@@ -461,7 +463,7 @@ TemplateEditor.route("/:templateSlug/duplicate")
           req.blog.handle +
           "/template/" +
           template.id.split(":").slice(1).join(":"),
-        "Copied template <b>" + template.name + "</b>"
+        "Copied template “" + template.name + "”"
       );
     } catch (err) {
       next(err);
@@ -507,7 +509,7 @@ TemplateEditor.route("/:templateSlug/photo")
   .get(require("./load/favicon"), function (req, res) {
     res.locals.title = `Photo - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
-    res.locals.photoPath = `${req.baseUrl}/${req.params.templateSlug}/photo`;
+    res.locals.photoPath = `${req.baseUrl}/${encodeURIComponent(req.params.templateSlug)}/photo`;
     res.render("dashboard/template/photo");
   })
   .post(require("./load/favicon"), require("./save/photo"));
@@ -554,7 +556,7 @@ TemplateEditor.route("/:templateSlug/delete")
               res.locals.dashboardBase +
                 "/template/" +
                 (currentTemplateIDSlug || ""),
-              "Deleted template <b>" + req.template.displayName + "</b>"
+              "Deleted template “" + req.template.displayName + "”"
             );
           })
           .catch(next);
@@ -587,7 +589,7 @@ TemplateEditor.route("/:templateSlug/reset")
         .then(() => {
           res.message(
             res.locals.dashboardBase + "/template/" + idSlug,
-            "Reset template <b>" + req.template.displayName + "</b>"
+            "Reset template “" + req.template.displayName + "”"
           );
         })
         .catch(next);

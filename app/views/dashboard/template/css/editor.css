@@ -259,3 +259,28 @@
   background: var(--background-color);
 }
 
+
+/* The source as plain text until the editor script replaces it (it hides
+   this textarea), so the first paint already shows the code at about its
+   final height. The padding stands in for CodeMirror's line number gutter. */
+.source-code-textarea {
+  display: block;
+  flex-grow: 1;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--editor-codemirror-min-height);
+  margin: 0;
+  padding: 0 0.25em 0 2.1em;
+  border: 0;
+  border-radius: 0;
+  background: var(--background-color);
+  color: var(--codemirror-color);
+  font-family: monospace;
+  font-size: inherit;
+  line-height: inherit;
+  field-sizing: content;
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  outline: 0;
+}

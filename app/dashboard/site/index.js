@@ -86,6 +86,26 @@ const sidebarLabels = {
   delete: "Delete",
 };
 
+// Every page has a title of its own: a page that doesn't set one (or sets
+// just the site's name) is named after its last breadcrumb, e.g.
+// "Settings · David - Blot". The overview keeps the site's name.
+site.use((req, res, next) => {
+  const render = res.render.bind(res);
+  res.render = (view, options, callback) => {
+    const label = req.blog && req.blog.pretty && req.blog.pretty.label;
+    const crumbs = res.locals.breadcrumbs || [];
+    const opts = typeof options === "object" && options ? options : null;
+    const current = (opts && opts.title) || res.locals.title;
+    if (label && crumbs.length > 2 && (!current || current === label)) {
+      const title = crumbs[crumbs.length - 1].label + " · " + label;
+      res.locals.title = title;
+      if (opts) opts.title = title;
+    }
+    return render(view, options, callback);
+  };
+  next();
+});
+
 site.use((req, res, next) => {
   const path = req.path.replace(/\/$/, "") || "/";
   const selectedItem = getSidebarSelection(path);
@@ -130,6 +150,18 @@ site.use((req, res, next) => {
         ? `${res.locals.base}/settings/folder`
         : `${res.locals.base}/activity`,
   };
+
+  // The state class js/sync_status.js gives the folder pages' status line
+  // (clients/sync-status.html), from the same text, so its icon is right
+  // in the first paint
+  const statusText = req.blog.healthIssue
+    ? req.blog.healthIssue.label || ""
+    : (req.blog.status && req.blog.status.message) || "";
+  res.locals.syncStatusClass = statusText.startsWith("Synced")
+    ? "synced"
+    : statusText.startsWith("Error")
+      ? "error"
+      : "syncing";
 
   loadBlogs(req, res, (err) => {
     if (err) return next(err);

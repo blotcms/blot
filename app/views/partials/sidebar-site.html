@@ -18,7 +18,7 @@
           <span class="site-switcher__site-title">{{pretty.label}}</span>
           <span class="site-switcher__site-domain">{{pretty.url}}</span>
         </span>
-        {{#isCurrent}}<span class="site-switcher__check" aria-label="Current site">✓</span>{{/isCurrent}}
+        {{#isCurrent}}<span class="site-switcher__check" aria-hidden="true">✓</span><span class="visually-hidden"> (current site)</span>{{/isCurrent}}
       </a>
       {{/blogs}}
     </nav>

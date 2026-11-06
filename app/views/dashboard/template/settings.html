@@ -9,14 +9,15 @@
     </div>
     <div class="template-editor-preview">
                
-        <div class="iframe-container" data-origin="{{{previewOrigin}}}">
+        <div class="iframe-container {{previewContainerClass}}" data-origin="{{{previewOrigin}}}">
             <div class="iframe-scroll">
                 <iframe id="full_size_preview"
+                          class="{{previewIframeClass}}"
                           title="Preview of your site"
-                          width="960"
-                          height="1400"
+                          width="{{previewWidth}}"
+                          height="{{previewHeight}}"
                           scrolling="no"
-                        src="{{{preview}}}"
+                        src="{{preview}}"
                         ></iframe>
             </div>
             <div class="iframe-loading" data-iframe-loading aria-hidden="true">
@@ -27,8 +28,8 @@
         </div>
         
          <div class="segmented-control" style="width:200px;margin:12px 0;font-size: 12px;" data-view-toggle>
-                    <button type="button" class="template-button selected" data-view="desktop" aria-pressed="true">Desktop</button>
-                    <button type="button" class="template-button" data-view="mobile" aria-pressed="false">Mobile</button>
+                    <button type="button" class="template-button {{previewDesktopSelected}}" data-view="desktop" aria-pressed="{{previewDesktopPressed}}">Desktop</button>
+                    <button type="button" class="template-button {{previewMobileSelected}}" data-view="mobile" aria-pressed="{{previewMobilePressed}}">Mobile</button>
                 </div>
     </div>
 </div>
@@ -87,7 +88,7 @@
   <div
     class="template-font-picker__options"
     data-font-picker-options
-    role="listbox"
+    role="group"
     aria-label="Available fonts"
   >
     {{#fontPickerOptions}}
@@ -97,8 +98,7 @@
       data-font-option-id="{{{id}}}"
       data-font-stack="{{stack}}"
       data-font-tags="{{tagsString}}"
-      role="option"
-      aria-selected="false"
+      aria-pressed="false"
     >
       {{#specimenURL}}
         <img class="font-specimen" src="{{{specimenURL}}}" width="{{specimenWidth}}" height="{{specimenHeight}}" alt="{{name}}" loading="lazy" decoding="async">

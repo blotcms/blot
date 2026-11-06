@@ -16,31 +16,31 @@
   </p>
   
   {{#BADTOKEN}}
-  <p class="error">The link to set your password has expired</p>
+  <p class="error" role="alert">The link to set your password has expired</p>
   {{/BADTOKEN}}
 
   {{#BADEMAIL}}
-  <p class="error">That email address does not match a Blot account.</p>
+  <p class="error" role="alert">That email address does not match a Blot account.</p>
   {{/BADEMAIL}}
 
   {{#NOEMAIL}}
-  <p class="error">Please enter your email address.</p>
+  <p class="error" role="alert">Please enter your email address.</p>
   {{/NOEMAIL}}
 
   {{#NOPASSWORD}}
-  <p class="error">Please enter your password.</p>
+  <p class="error" role="alert">Please enter your password.</p>
   {{/NOPASSWORD}}
 
   {{#BADPASSWORD}}
-  <p class="error">That was not your password.</p>
+  <p class="error" role="alert">That was not your password.</p>
   {{/BADPASSWORD}}
 
   {{#EMAILTOOLONG}}
-  <p class="error">Your email address is too long.</p>
+  <p class="error" role="alert">Your email address is too long.</p>
   {{/EMAILTOOLONG}}
 
   {{#PASSWORDTOOLONG}}
-  <p class="error">Your password is too long.</p>
+  <p class="error" role="alert">Your password is too long.</p>
   {{/PASSWORDTOOLONG}}
 
     <input type="hidden" name="_csrf" value="{{csrftoken}}" />
@@ -55,7 +55,8 @@
       {{/validemail}}
     </p>
     <p>
-      <label for="password">Password <a style="float:right;" id="reset" href="/log-in/reset{{#email}}?email={{email}}{{/email}}">Reset your password</a></label>
+      <a style="float:right;" id="reset" href="/log-in/reset{{#email}}?email={{email}}{{/email}}">Reset your password</a>
+      <label for="password">Password</label>
       {{#validemail}}
       <input id="password" name="password" required="" type="password" autocomplete="current-password" maxlength="{{maxPasswordLength}}" autofocus />
       {{/validemail}}

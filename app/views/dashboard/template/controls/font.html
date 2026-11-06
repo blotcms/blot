@@ -22,7 +22,8 @@
     aria-haspopup="listbox"
     aria-expanded="false"
     aria-controls="template-font-picker"
-    aria-describedby="font_label_{{key}}"
+    aria-labelledby="font_label_{{key}} font_trigger_{{key}}"
+    id="font_trigger_{{key}}"
   >
     <span data-font-picker-label>
       {{#value}}
@@ -39,18 +40,5 @@
     </span>
   </button>
 
-  <input
-    type="number"
-    class="number-stepper__input"
-    data-number-stepper
-    data-number-stepper-label="font size"
-    id="locals.{{key}}.font_size"
-    aria-label="{{label}} font size"
-    name="locals.{{key}}.font_size"
-    value="{{font_size}}"
-    min="9"
-    max="96"
-    step="1"
-    inputmode="numeric"
-  >
+  {{> number-stepper}}
 </form>

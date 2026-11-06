@@ -173,6 +173,61 @@ function runLoad() {
   });
 }
 
+// Replacing .live-updates would destroy a focused row link or an open row
+// menu's trigger, so hold the latest HTML until focus has left the container
+// and no menu is open, then apply it.
+var pendingLiveHTML = null;
+var pendingLiveTimer = null;
+
+function liveUpdatesBusy(node) {
+  return (
+    node.contains(document.activeElement) ||
+    !!node.querySelector('[aria-expanded="true"]')
+  );
+}
+
+function swapLiveUpdates(node, html) {
+  if (liveUpdatesBusy(node)) {
+    pendingLiveHTML = html;
+    if (!pendingLiveTimer) {
+      pendingLiveTimer = setInterval(function () {
+        var current = q(".live-updates");
+        if (!current || pendingLiveHTML === null) {
+          clearInterval(pendingLiveTimer);
+          pendingLiveTimer = null;
+          return;
+        }
+        if (liveUpdatesBusy(current)) return;
+        clearInterval(pendingLiveTimer);
+        pendingLiveTimer = null;
+        var latest = pendingLiveHTML;
+        pendingLiveHTML = null;
+        if (current.innerHTML !== latest) swapLiveUpdates(current, latest);
+      }, 300);
+    }
+    return;
+  }
+
+  pendingLiveHTML = null;
+  node.innerHTML = html;
+
+  try {
+    window.sortTable();
+  } catch (e) {
+    console.error(e);
+  }
+  try {
+    window.initCopyButtons();
+  } catch (e) {
+    console.error(e);
+  }
+  try {
+    renderSyncStatusMessage();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
 function loadFolder(callback) {
   var xhr = new XMLHttpRequest();
   var messagesAtStart = messageCount;
@@ -205,23 +260,9 @@ function loadFolder(callback) {
           var newState = newNode.innerHTML;
 
           if (newState !== currentState) {
-            currentNode.innerHTML = newState;
-
-            try {
-              window.sortTable();
-            } catch (e) {
-              console.error(e);
-            }
-            try {
-              window.initCopyButtons();
-            } catch (e) {
-              console.error(e);
-            }
-            try {
-              renderSyncStatusMessage();
-            } catch (e) {
-              console.error(e);
-            }
+            swapLiveUpdates(currentNode, newState);
+          } else {
+            pendingLiveHTML = null;
           }
         }
 

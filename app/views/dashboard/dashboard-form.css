@@ -629,3 +629,25 @@ label.format .format-custom input[type="text"] {
 label.format .buttons {
   padding: 0 var(--space-5);
 }
+
+/* Stripe's card field (js/account-card-form.js) mounts after load: keep its
+   line's height so the form below doesn't move */
+#card {
+  min-height: 1.2em;
+}
+
+/* Redirect row handle is a button (keyboard reordering with the arrow keys) */
+#redirects button.handle {
+  margin: 0;
+  border-width: 0 1px 0 0;
+  border-style: solid;
+  border-radius: 0;
+  background: none;
+  font: inherit;
+}
+
+#redirects button.handle:focus-visible,
+#redirects .redirectWarning:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}

@@ -1,36 +1,49 @@
+function buildStepper(input) {
+  const label = input.dataset.numberStepperLabel || "value";
+  const stepper = document.createElement("div");
+  stepper.className = "number-stepper";
+
+  const value = document.createElement("span");
+  value.className = "number-stepper__value";
+  value.setAttribute("aria-hidden", "true");
+  value.dataset.numberStepperValue = "";
+
+  const readout = document.createElement("span");
+  readout.className = "number-stepper__readout";
+
+  const makeButton = (direction, text, action) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "number-stepper__step";
+    button.dataset.numberStep = direction;
+    button.setAttribute("aria-label", `${action} ${label}`);
+    button.textContent = text;
+    return button;
+  };
+
+  input.parentNode.insertBefore(stepper, input);
+  input.parentNode.removeChild(input);
+  readout.append(value, input);
+  stepper.append(
+    makeButton("-1", "−", "Decrease"),
+    readout,
+    makeButton("1", "+", "Increase")
+  );
+}
+
 Array.from(document.querySelectorAll("[data-number-stepper]")).forEach(
   (input) => {
-    if (input.dataset.numberStepperReady) return;
-    input.dataset.numberStepperReady = "true";
+    if (input.dataset.numberStepperInit) return;
+    input.dataset.numberStepperInit = "true";
 
-    const label = input.dataset.numberStepperLabel || "value";
-    const stepper = document.createElement("div");
-    stepper.className = "number-stepper";
+    // The server renders the stepper (controls/number-stepper.html); this
+    // builds it only for an input that arrives bare
+    if (!input.closest(".number-stepper")) buildStepper(input);
 
-    const value = document.createElement("span");
-    value.className = "number-stepper__value";
-    value.setAttribute("aria-hidden", "true");
-    value.dataset.numberStepperValue = "";
-
-    const readout = document.createElement("span");
-    readout.className = "number-stepper__readout";
-
-    const makeButton = (direction, text, action) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "number-stepper__step";
-      button.dataset.numberStep = direction;
-      button.setAttribute("aria-label", `${action} ${label}`);
-      button.textContent = text;
-      return button;
-    };
-
-    const decrease = makeButton("-1", "−", "Decrease");
-    const increase = makeButton("1", "+", "Increase");
-    input.parentNode.insertBefore(stepper, input);
-    input.parentNode.removeChild(input);
-    readout.append(value, input);
-    stepper.append(decrease, readout, increase);
+    const stepper = input.closest(".number-stepper");
+    const value = stepper.querySelector("[data-number-stepper-value]");
+    const decrease = stepper.querySelector('[data-number-step="-1"]');
+    const increase = stepper.querySelector('[data-number-step="1"]');
 
     const renderValue = (next, previous, direction) => {
       value.replaceChildren();

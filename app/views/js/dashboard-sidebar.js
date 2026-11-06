@@ -1,42 +1,5 @@
 (function () {
   var root = document.documentElement;
-  document
-    .querySelectorAll("details[data-dashboard-sidebar-tree]")
-    .forEach(function (group) {
-      var key = "dashboard-sidebar-tree:" + group.dataset.dashboardSidebarTree;
-      var hasCurrentItem = !!group.querySelector(
-        ".dashboard-sidebar__link.is-active, .dashboard-sidebar__link.selected, .template-row.selected"
-      );
-
-      try {
-        var storedState = window.localStorage.getItem(key);
-        if (storedState && !hasCurrentItem) group.open = storedState === "open";
-      } catch (err) {}
-
-      var positionMobileMenu = function () {
-        if (!group.open || window.innerWidth > 768) return;
-
-        var content = group.querySelector(".dashboard-sidebar__tree-content");
-        var summary = group.querySelector("summary");
-        if (!content || !summary) return;
-
-        var bounds = summary.getBoundingClientRect();
-        var maxLeft = window.innerWidth - content.offsetWidth - 10;
-        content.style.left =
-          Math.max(10, Math.min(bounds.left, maxLeft)) + "px";
-        content.style.top = bounds.bottom + 4 + "px";
-      };
-
-      positionMobileMenu();
-      group.addEventListener("toggle", function () {
-        try {
-          window.localStorage.setItem(key, group.open ? "open" : "closed");
-        } catch (err) {}
-        positionMobileMenu();
-      });
-      window.addEventListener("resize", positionMobileMenu);
-    });
-
   var storageKey = "dashboard-sidebar-width";
   var getCssNumber = function (name, fallback) {
     var value = parseFloat(

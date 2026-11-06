@@ -21,8 +21,8 @@
       <span class="error-form__time">{{time}}</span>
     </div>
     <div class="error-form__actions">
-      <button class="btn btn-sm" name="ignore" value="{{{url}}}">Ignore</button>
-      <a class="btn btn-sm btn-soft" href="{{{base}}}/settings/redirects?create={{url}}"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M7.75 2a.75.75 0 0 1 .75.75V7h4.25a.75.75 0 0 1 0 1.5H8.5v4.25a.75.75 0 0 1-1.5 0V8.5H2.75a.75.75 0 0 1 0-1.5H7V2.75A.75.75 0 0 1 7.75 2Z"></path></svg>Add redirect</a>
+      <button class="btn btn-sm" name="ignore" value="{{url}}">Ignore</button>
+      <a class="btn btn-sm btn-soft" href="{{{base}}}/settings/redirects?create={{createParam}}"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M7.75 2a.75.75 0 0 1 .75.75V7h4.25a.75.75 0 0 1 0 1.5H8.5v4.25a.75.75 0 0 1-1.5 0V8.5H2.75a.75.75 0 0 1 0-1.5H7V2.75A.75.75 0 0 1 7.75 2Z"></path></svg>Add redirect</a>
     </div>
   </form>
   {{/list}}
@@ -42,8 +42,8 @@
       <a class="link" href="{{blog.url}}{{url}}" target="_blank" rel="noopener">{{url}}</a>
     </div>
     <div class="error-form__actions">
-      <button class="btn btn-sm" name="unignore" value="{{{url}}}">Unignore</button>
-      <a class="btn btn-sm btn-soft" href="{{{base}}}/settings/redirects?create={{url}}">Add redirect</a>
+      <button class="btn btn-sm" name="unignore" value="{{url}}">Unignore</button>
+      <a class="btn btn-sm btn-soft" href="{{{base}}}/settings/redirects?create={{createParam}}">Add redirect</a>
     </div>
   </form>
   {{/ignored}}

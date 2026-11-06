@@ -1,4 +1,3 @@
-require("./template-editor.js");
 require("./template-editor-preview-iframe.js");
 
 require("../controls/number-stepper.js");

@@ -92,58 +92,18 @@
   </p>
   </div>
   <div style="font-size: 14px;{{^ignored}}border-top: 1px solid #eeeeec;{{/ignored}}padding: 24px 36px">
-  {{#extension.pdf}}
-  <!-- Embedding and linking PDF -->
-  <p>Embed this PDF in another post:</p>
+  {{#embeds}}
+  <p>{{label}}</p>
   <section class="multilingual">
-    <pre data-lang="markdown"><code>&lt;embed src="{{{path}}}" type="application/pdf"&gt;</code></pre>
-    <pre data-lang="html"><code>&lt;embed src="{{{path}}}" type="application/pdf"&gt;</code></pre>
+    <pre data-lang="markdown" id="{{markdownId}}" style="display:block"><code>{{markdown}}</code></pre>
+    <pre data-lang="html" id="{{htmlId}}" style="display:none"><code>{{html}}</code></pre>
+    <button class="copy" data-copy="{{markdown}}"><span class="icon-copy" aria-hidden="true"></span> Copy</button>
+    <ul class="lang-tabs">
+      <li><a href="#{{markdownId}}" class="active">Markdown</a></li>
+      <li><a href="#{{htmlId}}">HTML</a></li>
+    </ul>
   </section>
-  <p>Link to this PDF from another post:</p>
-  <section class="multilingual">
-    <pre data-lang="markdown"><code>[Download PDF]({{{path}}})</code></pre>
-    <pre data-lang="html"><code>&lt;a href="{{{path}}}"&gt;Download PDF&lt;/a&gt;</code></pre>
-  </section>
-  {{/extension.pdf}}
-  {{#extension.category.image}}
-  <!-- Embedding and linking image -->
-  <p>How to embed this image:</p>
-  <section class="multilingual">
-    <pre data-lang="markdown"><code>![Image]({{{path}}})</code></pre>
-    <pre data-lang="html"><code>&lt;img src="{{{path}}}"&gt;</code></pre>
-  </section>
-  <p>How to link to this image:</p>
-  <section class="multilingual">
-    <pre data-lang="markdown"><code>[View image]({{{path}}})</code></pre>
-    <pre data-lang="html"><code>&lt;a href="{{{path}}}"&gt;View image&lt;/a&gt;</code></pre>
-  </section>
-  {{/extension.category.image}}
-  {{#extension.category.video}}
-  <!-- Embedding and linking video -->
-  <p>How to embed this video:</p>
-  <section class="multilingual">
-    <pre data-lang="markdown"><code>![Video]({{{path}}})</code></pre>
-    <pre data-lang="html"><code>&lt;video src="{{{path}}}"&gt;</code></pre>
-  </section>
-  <p>How to link to this video:</p>
-  <section class="multilingual">
-    <pre data-lang="markdown"><code>[View video]({{{path}}})</code></pre>
-    <pre data-lang="html"><code>&lt;a href="{{{path}}}"&gt;View video&lt;/a&gt;</code></pre>
-  </section>
-  {{/extension.category.video}}
-  {{#extension.category.audio}}
-  <!-- Embedding and linking audio -->
-  <p>How to embed this audio:</p>
-  <section class="multilingual">
-    <pre data-lang="markdown"><code>![Audio]({{{path}}})</code></pre>
-    <pre data-lang="html"><code>&lt;audio controls src="{{{path}}}"&gt;</code></pre>
-  </section>
-  <p>How to link to this audio:</p>
-  <section class="multilingual">
-    <pre data-lang="markdown"><code>[Listen to audio]({{{path}}})</code></pre>
-    <pre data-lang="html"><code>&lt;a href="{{{path}}}"&gt;Listen to audio&lt;/a&gt;</code></pre>
-  </section>
-  {{/extension.category.audio}}
+  {{/embeds}}
 </div>
   {{/entry}}
 </div>

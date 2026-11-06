@@ -5,7 +5,7 @@
     <ol>
       {{#breadcrumbs}}
       {{^last}}<li><a href="{{{url}}}">{{label}}</a></li>{{/last}}
-      {{#last}}<li><span class="truncate" aria-current="page">{{label}}</span></li>{{/last}}
+      {{#last}}<li aria-current="page"><span class="truncate">{{label}}</span></li>{{/last}}
       {{/breadcrumbs}}
     </ol>
   </nav>

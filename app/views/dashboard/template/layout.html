@@ -2,20 +2,22 @@
 <html lang="en">
 {{> head}}
 <body>
+    <a class="skip-link" href="#main">Skip to content</a>
     <div class="template-layout">
         {{> site-dashboard-sidebar}}
-        <main class="template-main">
+        <main class="template-main" id="main" tabindex="-1">
                 {{> dashboard-trail}}
                 {{#template.name}}
                 <div class="template-heading-row">
                   <h1 class="visually-hidden">{{template.displayName}}</h1>
                   <div class="site-dashboard-title-switcher is-switcher-enabled template-editor-title-switcher">
                     <details class="site-switcher" data-dismissable>
-                      <summary class="site-switcher__trigger" aria-label="Switch template">
+                      <summary class="site-switcher__trigger">
                         <span class="site-dashboard-title">{{template.displayName}}</span>
                         <span class="site-switcher__chevron" aria-hidden="true">
                           <svg aria-hidden="true" viewBox="0 0 16 16"><path d="M4.25 5.75 8 2l3.75 3.75M4.25 10.25 8 14l3.75-3.75" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/></svg>
                         </span>
+                        <span class="visually-hidden">Switch template</span>
                       </summary>
                       <div class="site-switcher__menu">
                         <nav class="site-switcher__sites" aria-label="Your templates">
@@ -25,7 +27,7 @@
                               <span class="site-switcher__site-title">{{name}}</span>
                               <span class="site-switcher__site-domain">{{switcherSubtext}}</span>
                             </span>
-                            {{#isOpenInEditor}}<span class="site-switcher__check" aria-label="Currently open">✓</span>{{/isOpenInEditor}}
+                            {{#isOpenInEditor}}<span class="site-switcher__check" aria-hidden="true">✓</span><span class="visually-hidden">(currently open)</span>{{/isOpenInEditor}}
                           </a>
                           {{/templateSwitcherTemplates}}
                         </nav>
@@ -92,6 +94,7 @@
         </main>
     </div>
 </div>
+<div id="dashboard-announcer" class="visually-hidden" role="status" aria-live="polite"></div>
 {{> truncate-script}}
 <script defer type="text/javascript" src="{{#cdn}}/dashboard.min.js{{/cdn}}"></script>
 {{^templateOverviewPage}}<script defer type="text/javascript" src="{{#cdn}}/template-editor.min.js{{/cdn}}"></script>{{/templateOverviewPage}}

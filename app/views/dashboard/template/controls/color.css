@@ -89,6 +89,12 @@
 }
 
 .color-picker-popup {
+  box-sizing: border-box;
+  width: 100%;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
   display: flex;
   align-items: center;
   cursor: pointer;

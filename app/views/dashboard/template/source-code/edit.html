@@ -6,10 +6,13 @@
     {{> source-code-header}}
     
     {{#view}}
-    <div id="editor"></div>
     <textarea
       id="source"
-      style="display:none"
+      class="source-code-textarea"
+      aria-label="Source code"
+      rows="{{rows}}"
+      wrap="soft"
+      spellcheck="false"
       data-mode="{{editorMode}}"
       name="content"
     >{{content}}</textarea>

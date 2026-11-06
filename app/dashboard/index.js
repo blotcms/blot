@@ -181,7 +181,9 @@ dashboard.get("/", require("dashboard/util/load-blogs"), async (req, res) => {
   const [cookieSort, cookieOrder] = String(
     (req.cookies && req.cookies["sites-sort"]) || ""
   ).split(".");
-  const sort = sortValues[cookieSort] ? cookieSort : "name";
+  // Own keys only: "hasOwnProperty" or "__proto__" would reach the object's
+  // prototype and throw in the sort
+  const sort = Object.hasOwn(sortValues, cookieSort) ? cookieSort : "name";
   const order = cookieOrder === "desc" ? "desc" : "asc";
   const direction = order === "desc" ? -1 : 1;
 

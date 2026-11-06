@@ -15,6 +15,8 @@
 // and the widths are kept as percentages in localStorage under
 // data-table-resize-key.
 
+var announce = require("./announce.js");
+
 var MIN_WIDTH = 48;
 
 function load(key) {
@@ -162,6 +164,13 @@ function bindSorting(table) {
           : defaultOrder(th);
       updateIndicators(table, key, order);
       sorter.onSort(key, order);
+      // aria-sort on the header isn't read when the button is pressed
+      announce(
+        "Sorted by " +
+          th.textContent.trim() +
+          ", " +
+          (order === "desc" ? "descending" : "ascending")
+      );
     });
   });
 

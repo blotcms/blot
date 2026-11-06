@@ -23,6 +23,13 @@ async function middleware(req, res, next) {
 
     addPaginationUrls(res.locals.folder, res.locals.base, dir, req.query);
 
+    // The classes js/folder-directory.js would add, rendered so the first
+    // paint already shows the clamped list and its View all button (the
+    // page's <noscript> styles undo them without scripts)
+    const pagination = res.locals.folder.pagination;
+    res.locals.folder.boxState =
+      "js-enhanced" + (pagination && pagination.hasNext ? " is-clamped" : "");
+
     if (req.params.path) {
       // Sites › <site> › Essays › Imagination.md: the site is its folder
       for (const crumb of getFolderTrail(res.locals.base, dir)) {

@@ -4,10 +4,13 @@
   </div>
   <div class="editor-container">
     {{> source-code-header}}
-    <div id="editor"></div>
     <textarea
       id="source"
-      style="display:none"
+      class="source-code-textarea"
+      aria-label="Source code"
+      rows="{{view.rows}}"
+      wrap="soft"
+      spellcheck="false"
       data-mode="{{view.editorMode}}"
       name="content"
     >{{view.content}}</textarea>

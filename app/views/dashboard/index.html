@@ -43,7 +43,7 @@
                 {{#healthIssue}}
                 <a class="sites-table__health" href="/sites/{{handle}}/settings/folder" data-health="{{code}}" title="{{message}}">{{label}}</a>
                 {{/healthIssue}}
-                <button type="button" class="row-action-menu__trigger" aria-haspopup="true" aria-expanded="false" aria-label="Actions for {{pretty.label}}"
+                <button type="button" class="row-action-menu__trigger" aria-expanded="false" aria-controls="sites-row-menu" aria-label="Actions for {{pretty.label}}"
                   data-overview-url="/sites/{{handle}}"
                   data-visit-url="https://{{pretty.url}}"
                   data-template-url="/sites/{{handle}}/template/{{template.slug}}"

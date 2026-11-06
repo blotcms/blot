@@ -24,7 +24,6 @@ require("./file-drop.js");
 require("./site-preview-path-sync.js");
 require("./domain-record-guide.js");
 require("./domain-custom.js");
-require("./site-settings-services.js");
 require("./site-settings-autosubmit.js");
 require("./dashboard-message.js");
 require("./site-settings-links.js");

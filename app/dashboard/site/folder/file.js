@@ -122,6 +122,7 @@ module.exports = async function (blog, path) {
         // a dictionary we use to display conditionally in the UI
         file.extension = {};
         file.extension = normalizeExtension(path);
+        file.embeds = embeds(path, file.extension);
         file.converter = matchingConverter || null;
         file.converterEnabled = matchingConverterEnabled;
 
@@ -268,6 +269,73 @@ function kind(path, entry, multiInfo) {
   debug(path, extension, kind);
 
   return kind;
+}
+
+// The "how to embed / link" snippets a file page offers, in Markdown and
+// HTML, by kind of file
+const EMBEDS = {
+  pdf: [
+    [
+      "Embed this PDF in another post:",
+      (p) => `<embed src="${p}" type="application/pdf">`,
+      (p) => `<embed src="${p}" type="application/pdf">`,
+    ],
+    [
+      "Link to this PDF from another post:",
+      (p) => `[Download PDF](${p})`,
+      (p) => `<a href="${p}">Download PDF</a>`,
+    ],
+  ],
+  image: [
+    [
+      "How to embed this image:",
+      (p) => `![Image](${p})`,
+      (p) => `<img src="${p}">`,
+    ],
+    [
+      "How to link to this image:",
+      (p) => `[View image](${p})`,
+      (p) => `<a href="${p}">View image</a>`,
+    ],
+  ],
+  video: [
+    [
+      "How to embed this video:",
+      (p) => `![Video](${p})`,
+      (p) => `<video src="${p}">`,
+    ],
+    [
+      "How to link to this video:",
+      (p) => `[View video](${p})`,
+      (p) => `<a href="${p}">View video</a>`,
+    ],
+  ],
+  audio: [
+    [
+      "How to embed this audio:",
+      (p) => `![Audio](${p})`,
+      (p) => `<audio controls src="${p}">`,
+    ],
+    [
+      "How to link to this audio:",
+      (p) => `[Listen to audio](${p})`,
+      (p) => `<a href="${p}">Listen to audio</a>`,
+    ],
+  ],
+};
+
+// The snippets for a file, ready to render with their Markdown / HTML tabs
+// (folder/file.html), so the tabs are in the first paint rather than built by
+// js/multi-lingual-code.js
+function embeds(path, extension) {
+  const key = extension.pdf ? "pdf" : Object.keys(extension.category)[0];
+  return (EMBEDS[key] || []).map(([label, markdown, html], i) => ({
+    label,
+    markdown: markdown(path),
+    html: html(path),
+    markdownId: "markdown-" + i + "-0",
+    htmlId: "html-" + i + "-1",
+  }));
 }
 
 // should return a lowercase, trimmed extension

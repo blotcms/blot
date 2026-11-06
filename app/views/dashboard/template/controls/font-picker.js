@@ -88,6 +88,14 @@ function createFontPicker() {
     }
   };
 
+  // The current font is marked pressed
+  const highlightSelection = (id) => {
+    optionButtons.forEach((button) => {
+      const current = !!id && button.dataset.fontOptionId === id;
+      button.setAttribute("aria-pressed", current ? "true" : "false");
+    });
+  };
+
   const position = (anchor) => {
     if (!anchor) return;
 
@@ -157,7 +165,7 @@ function createFontPicker() {
     activeContext = context;
     container.hidden = false;
     container.setAttribute("aria-hidden", "false");
-    // highlightSelection(context.currentValue);
+    highlightSelection(context.currentValue);
 
     requestAnimationFrame(() => {
       position(context.anchor);

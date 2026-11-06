@@ -8,6 +8,9 @@ var dictionary = {
 document
   .querySelectorAll("section.multilingual")
   .forEach(function (block, blockIndex) {
+    // Rendered with its tabs already (the dashboard's file page)
+    if (block.querySelector(".lang-tabs")) return;
+
     // Create a <ul> element to hold the language tabs
     var tabs = document.createElement("ul");
     tabs.classList.add("lang-tabs");

@@ -53,6 +53,9 @@
   padding: 0 var(--space-2);
   color: var(--secondary-text-color);
   content: "\203A";
+  /* Empty alt text, so screen readers skip the separator; browsers without
+     this syntax ignore it and keep the line above */
+  content: "\203A" / "";
 }
 
 .trail a {

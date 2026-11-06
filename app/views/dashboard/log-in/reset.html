@@ -40,15 +40,15 @@ input[type="submit"].link:hover {
 
 {{^sent}}
 {{#BADEMAIL}}
-<p class="error">That email address does not match a Blot account.</p>
+<p class="error" role="alert">That email address does not match a Blot account.</p>
 {{/BADEMAIL}}
 
 {{#NOEMAIL}}
-<p class="error">Please enter your email address to reset your password.</p>
+<p class="error" role="alert">Please enter your email address to reset your password.</p>
 {{/NOEMAIL}}
 
 {{#EMAILTOOLONG}}
-<p class="error">Your email address is too long.</p>
+<p class="error" role="alert">Your email address is too long.</p>
 {{/EMAILTOOLONG}}
 
 <p style="margin-top: 24px;margin-bottom: 24px">{{^error}}If you cannot remember the email address for your account please <a href="/support">contact support</a>.{{/error}}</p>

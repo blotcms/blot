@@ -120,6 +120,8 @@
 
 .number-stepper__readout:focus-within {
   background: var(--background-color);
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
 }
 
 .number-stepper__readout:hover {

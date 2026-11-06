@@ -58,6 +58,9 @@ linkFormat.get(
         value: arr[1],
         checked: checked,
         custom: arr[0] === "Custom format" ? "custom" : "",
+        // The custom field and its buttons show only while Custom is chosen
+        // (js/site-settings-links.js toggles them after that)
+        customStyle: checked ? "" : "display:none",
         example: example,
       };
     });

@@ -9,7 +9,7 @@
   <div class="folder-container">
   {{/root}}
 
-    <div class="folder-box {{#root}}root{{/root}} {{#directory}}directory{{/directory}}" data-folder-base="{{base}}" data-csrf-token="{{csrftoken}}" style="position:relative;">
+    <div class="folder-box {{#root}}root{{/root}} {{#directory}}directory{{/directory}} {{boxState}}" data-folder-base="{{base}}" data-csrf-token="{{csrftoken}}" style="position:relative;">
     <div class="folder-drop-target" aria-hidden="true" style="display:none;position:absolute;inset:0;z-index:10;align-items:center;justify-content:center;background:rgba(0, 112, 232, 0.08);border:2px dashed rgba(0, 112, 232, 0.6);border-radius:6px;color:var(--text-color);font-weight:600;pointer-events:none;">Drop files to upload</div>
     {{#root}}{{#isFolderView}}
     <div class="folder-toolbar">
@@ -78,8 +78,8 @@
               <button
                 class="directory-row__menu-trigger row-action-menu__trigger"
                 type="button"
-                aria-haspopup="true"
                 aria-expanded="false"
+                aria-controls="folder-file-action-menu"
                 aria-label="Actions for {{name}}"
                 data-url="{{{url}}}"
                 data-view-url="{{{base}}}/folder{{{url}}}"
@@ -101,6 +101,12 @@
         <script type="application/json" id="folder-pagination-data">{{#pagination}}{ "page": {{page}}, "pageSize": {{pageSize}}, "sort": "{{sort}}", "order": "{{order}}", "total": {{total}}, "hasNext": {{#hasNext}}true{{/hasNext}}{{^hasNext}}false{{/hasNext}} }{{/pagination}}{{^pagination}}{}{{/pagination}}</script>
 
         {{#pagination.multiplePages}}
+        <noscript><style>
+          .folder-box.js-enhanced .directory-pagination { display: flex; }
+          .folder-box.is-clamped .directory-scroll { max-height: none; overflow: visible; }
+          .folder-box.is-clamped .directory-fade,
+          .folder-box.is-clamped .directory-expand { display: none; }
+        </style></noscript>
         <nav class="directory-pagination" aria-label="Folder pages">
           {{#pagination.hasPrevious}}
           <a class="directory-pagination__link" href="{{{pagination.previousUrl}}}" rel="prev">Previous</a>

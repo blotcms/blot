@@ -1,3 +1,4 @@
+var announce = require("./announce.js");
 var checkboxes = document.querySelectorAll(".plugin input[type=checkbox]");
 
 // Shown above the form when a save fails, and read out by screen readers
@@ -13,7 +14,12 @@ function showError(form, text) {
     form.parentNode.insertBefore(box, form);
   }
 
-  box.querySelector("span").textContent = text;
+  // Cleared first, so the same error a second time is read again
+  var span = box.querySelector("span");
+  span.textContent = "";
+  setTimeout(function () {
+    span.textContent = text;
+  }, 50);
 }
 
 // onFail runs when the save didn't go through, so the control can be put back
@@ -35,6 +41,7 @@ function submitForm(form, onFail) {
 
     var box = document.querySelector("[data-autosave-error]");
     if (box) box.parentNode.removeChild(box);
+    announce("Saved");
 
     // The save may have started a rebuild: js/global-sync.js shows it
     document.dispatchEvent(new CustomEvent("blot:sync-check"));
@@ -73,9 +80,16 @@ if (checkboxes.length) {
 }
 
 // Forms marked data-autosave save each choice as it is made, like the
-// switches above (the image metadata options)
+// switches above (the image metadata options). Arrowing through radios or a
+// closed select fires a change per key, so only the choice made once the
+// keys stop is saved.
 document.querySelectorAll("form[data-autosave]").forEach(function (form) {
+  var timer;
   form.addEventListener("change", function (event) {
-    if (event.target.matches("input[type=radio], select")) submitForm(form);
+    if (!event.target.matches("input[type=radio], select")) return;
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      submitForm(form);
+    }, 400);
   });
 });

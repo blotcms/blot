@@ -23,8 +23,6 @@
   --scroll-container-width: 100%;
   --scroll-container-max-width: var(--sidebar-max-width);
   --scroll-container-height: 100vh;
-  --template-list-padding-right: 17px;
-  --template-list-padding-bottom: 4rem;
   --segmented-control-padding: var(--space-0);
   --segmented-control-gap: var(--space-0);
   --segmented-control-border-radius: var(--radius-md);
@@ -99,27 +97,6 @@ body.is-resizing-dashboard-sidebar * {
 
 .template-main .line {
   background-color: transparent;
-}
-
-#template-list {
-  position: relative;
-  width: 100%;
-  height: 100vh;
-  padding-right: var(--template-list-padding-right);
-  box-sizing: content-box;
-  overflow-y: scroll;
-}
-
-#template-list::after {
-  content: "";
-  display: block;
-  height: var(--template-list-padding-bottom);
-}
-
-.template-list-divider {
-  border: 0;
-  border-top: 1px solid var(--template-editor-divider-color);
-  margin: var(--space-2) 0;
 }
 
 #source-file-list {

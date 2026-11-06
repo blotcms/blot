@@ -9,9 +9,24 @@
 var ReconnectingEventSource = require("./reconnecting-event-source.js");
 
 var summarise = require("./sync-summarise.js");
+var announce = require("./announce.js");
+
+// Screen readers hear the sync change state (started, done, failed), not
+// every progress message, through the page's one announcer
+var STATE_ANNOUNCEMENTS = {
+  syncing: "Syncing your folder",
+  synced: "Folder synced",
+  error: "Sync failed",
+};
+
+function announceState(el, state) {
+  if (el.getAttribute("data-state") === state) return;
+  announce(STATE_ANNOUNCEMENTS[state]);
+}
 
 function render(el, message) {
   var summary = summarise(message);
+  announceState(el, summary.state);
   var label = el.querySelector(".global-sync__label");
   var count = el.querySelector(".global-sync__count");
 

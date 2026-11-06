@@ -1208,3 +1208,28 @@ kbd {
   border-radius: 4px;
   color: var(--medium-text-color);
 }
+
+/* The first stop on every page: hidden until it has keyboard focus (the
+   fallbacks are for documentation pages, which lack the dashboard tokens) */
+.skip-link {
+  position: absolute;
+  z-index: 1000;
+  top: var(--space-2, 8px);
+  left: var(--space-2, 8px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border-radius: var(--radius-md, 8px);
+  background: var(--background-color);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.08));
+  color: var(--accent-color);
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
+  transform: none;
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+main:focus {
+  outline: none;
+}

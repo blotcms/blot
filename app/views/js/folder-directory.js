@@ -138,6 +138,127 @@
     );
   }
 
+  // Keyboard handling shared by the remove, download and upload dialogs:
+  // move focus in on open, keep Tab inside, close on Escape (by pressing the
+  // dialog's Cancel button) and give focus back on close.
+  var openDialog = null;
+
+  function dialogButtons(modal) {
+    return Array.from(modal.querySelectorAll("button")).filter(function (b) {
+      return !b.disabled;
+    });
+  }
+
+  function findRowTrigger(path) {
+    var wanted = String(path || "").replace(/^\/+/, "");
+    var open = document.querySelector(
+      '.row-action-menu__trigger[aria-expanded="true"]'
+    );
+    if (open) return open;
+    var found = null;
+    Array.from(document.querySelectorAll(".row-action-menu__trigger")).forEach(
+      function (t) {
+        var url = (t.getAttribute("data-url") || "").replace(/^\/+/, "");
+        if (url === wanted) found = t;
+      }
+    );
+    return found;
+  }
+
+  function trapDialog(modal, returnEl, focusSelector) {
+    if (!returnEl && document.activeElement !== document.body) {
+      returnEl = document.activeElement;
+    }
+    openDialog = { modal: modal, returnEl: returnEl || null };
+    var first =
+      (focusSelector && modal.querySelector(focusSelector)) ||
+      dialogButtons(modal)[0];
+    if (first) first.focus();
+  }
+
+  function releaseDialog(modal, skipFocus) {
+    if (!openDialog || openDialog.modal !== modal) return;
+    var el = openDialog.returnEl;
+    openDialog = null;
+    if (!skipFocus && el && el.isConnected) el.focus();
+  }
+
+  document.addEventListener("keydown", function (event) {
+    if (!openDialog) return;
+    var modal = openDialog.modal;
+    if (event.key === "Escape") {
+      var cancel = modal.querySelector(
+        '[data-upload-action="cancel"], [data-remove-action="cancel"], [data-download-action="cancel"]'
+      );
+      if (cancel && !cancel.disabled) {
+        event.preventDefault();
+        cancel.click();
+      }
+      return;
+    }
+    if (event.key !== "Tab") return;
+    var buttons = dialogButtons(modal);
+    if (!buttons.length) {
+      event.preventDefault();
+      return;
+    }
+    var first = buttons[0];
+    var last = buttons[buttons.length - 1];
+    var active = document.activeElement;
+    if (!modal.contains(active)) {
+      event.preventDefault();
+      first.focus();
+    } else if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+
+  // After a removal the row is gone: focus the next row's link, else the
+  // previous one, else the table.
+  function focusNeighbourRow(neighbourUrls) {
+    for (var i = 0; i < neighbourUrls.length; i++) {
+      var found = null;
+      Array.from(
+        document.querySelectorAll(".row-action-menu__trigger")
+      ).forEach(function (t) {
+        if (t.getAttribute("data-url") === neighbourUrls[i]) found = t;
+      });
+      var link =
+        found && found.closest("tr").querySelector("a.directory-row__link");
+      if (link) {
+        link.focus();
+        return;
+      }
+    }
+    if (table) {
+      table.setAttribute("tabindex", "-1");
+      table.focus();
+    }
+  }
+
+  function neighbourRowUrls(path) {
+    var wanted = String(path || "").replace(/^\/+/, "");
+    var rows = Array.from(document.querySelectorAll("tr[data-directory-row]"));
+    var urls = [];
+    rows.forEach(function (row, i) {
+      var t = row.querySelector(".row-action-menu__trigger");
+      if (
+        !t ||
+        (t.getAttribute("data-url") || "").replace(/^\/+/, "") !== wanted
+      )
+        return;
+      [rows[i + 1], rows[i - 1]].forEach(function (r) {
+        var nt = r && r.querySelector(".row-action-menu__trigger");
+        if (nt) urls.push(nt.getAttribute("data-url"));
+      });
+    });
+    return urls;
+  }
+
   function openRemoveModal(targetFile) {
     if (!removeModal || !targetFile || !targetFile.path) return;
     removeTargetFile = targetFile;
@@ -148,11 +269,17 @@
     }
     resetRemoveModalButtonState();
     removeModal.hidden = false;
+    trapDialog(
+      removeModal,
+      findRowTrigger(targetFile.path),
+      '[data-remove-action="cancel"]'
+    );
   }
 
-  function closeRemoveModal() {
+  function closeRemoveModal(skipFocus) {
     if (!removeModal) return;
     removeModal.hidden = true;
+    releaseDialog(removeModal, skipFocus === true);
     removeTargetPath = null;
     removeTargetFile = null;
     var label = removeModal.querySelector("[data-remove-path-label]");
@@ -187,8 +314,11 @@
             );
           }
 
-          closeRemoveModal();
-          refreshFolderContents();
+          var neighbours = neighbourRowUrls(relativeUrl);
+          closeRemoveModal(true);
+          refreshFolderContents(function () {
+            focusNeighbourRow(neighbours);
+          });
         });
     });
   }
@@ -258,11 +388,13 @@
     }
     resetDownloadModalButtonState();
     downloadModal.hidden = false;
+    trapDialog(downloadModal, findRowTrigger(targetFile.path));
   }
 
   function closeDownloadModal() {
     if (!downloadModal) return;
     downloadModal.hidden = true;
+    releaseDialog(downloadModal);
     downloadTargetFile = null;
     var label = downloadModal.querySelector("[data-download-path-label]");
     if (label) label.textContent = "";
@@ -869,11 +1001,13 @@
     }
     uploadModal.hidden = false;
     document.body.classList.add("upload-modal-open");
+    trapDialog(uploadModal, null);
   }
 
   function closeUploadModal() {
     if (!uploadModal) return;
     uploadModal.hidden = true;
+    releaseDialog(uploadModal);
     document.body.classList.remove("upload-modal-open");
     if (typeof resetUploadModalButtonState === "function") {
       resetUploadModalButtonState();

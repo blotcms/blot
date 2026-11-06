@@ -79,6 +79,13 @@ SourceCode.route("/create")
     });
   });
 
+// Rows for the source textarea, which the first paint shows until the editor
+// script replaces it, so the page is about as tall as it will be
+function rowsFor(content) {
+  const lines = String(content || "").split("\n").length;
+  return Math.min(Math.max(lines, 1), 500);
+}
+
 // Views with no URL that can be visited directly (e.g. only parameterised
 // patterns) have no preview, so send the visitor to the editor instead.
 function renderViewPreview(req, res, mode) {
@@ -121,6 +128,7 @@ SourceCode.route("/:viewSlug/edit")
     req.view.formAction =
       res.locals.base + "/source-code/" + req.view.name + "/edit";
     res.locals.selected = { ...res.locals.selected, edit: "selected" };
+    req.view.rows = rowsFor(req.view.content);
 
     res.locals.title = `${req.view.name} - ${req.template.displayName}`;
 
@@ -243,6 +251,7 @@ SourceCode.route("/:viewSlug/configure")
 
     req.view.content = JSON.stringify(configureData, null, 2);
     req.view.editorMode = "javascript";
+    req.view.rows = rowsFor(req.view.content);
     req.view.formAction =
       res.locals.base + "/source-code/" + req.view.name + "/configure";
     res.locals.selected = { ...res.locals.selected, config: "selected" };

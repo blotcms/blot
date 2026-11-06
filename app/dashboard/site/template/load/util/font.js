@@ -19,6 +19,15 @@ module.exports = (key, value) => {
       };
     }),
     font_size: value.font_size || 16,
+    stepper: {
+      id: `locals.${key}.font_size`,
+      label:
+        `${key ? desnake(key).replace(/ font$/i, "") : ""} font size`.trim(),
+      ariaLabel: `${key ? desnake(key).replace(/ font$/i, "") : ""} font size`,
+      value: value.font_size || 16,
+      min: 9,
+      max: 96,
+    },
     line_height: value.line_height || 1.4,
     value: (() => {
       const found = FONTS.find(({ id }) => id === value.id);

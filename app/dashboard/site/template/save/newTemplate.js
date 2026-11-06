@@ -90,8 +90,8 @@ module.exports = function (req, res, next) {
       res.message(
         redirect,
         req.body.shared
-          ? `Added template <b>${newTemplate.name}</b> to your templates`
-          : `Copied template <b>${newTemplate.name}</b>`
+          ? `Added template “${newTemplate.name}” to your templates`
+          : `Copied template “${newTemplate.name}”`
       );
     }
   );

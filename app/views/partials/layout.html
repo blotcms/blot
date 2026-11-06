@@ -4,8 +4,9 @@
   {{> head}}
 </head>
 <body class="{{bodyClass}}">
+  <a class="skip-link" href="#main">Skip to content</a>
   {{> header}}
-  <main class="content">
+  <main class="content" id="main" tabindex="-1">
     {{#show-main-section-right}}
     <section class="main-section main-section-with-toc">
       <section class="main-section-content {{#show-toc-or-on-this-page}}js-toc-content{{/show-toc-or-on-this-page}}">
@@ -53,5 +54,10 @@
     {{/show-main-section-right}}
     {{> footer}}
   </main>
+{{#selected.dashboard}}
+<!-- One polite announcer for scripts' status messages (saved, removed,
+     sorted): a region present from the start is read when its text changes -->
+<div id="dashboard-announcer" class="visually-hidden" role="status" aria-live="polite"></div>
+{{/selected.dashboard}}
 </body>
 </html>
