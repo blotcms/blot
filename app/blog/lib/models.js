@@ -78,14 +78,9 @@ function getUserById(id) {
   });
 }
 
-// getPage's callback is (err, entries, pagination) — promisify would drop pagination.
+// Resolves to { entries, pagination }
 function getPage(blogID, options) {
-  return new Promise((resolve, reject) => {
-    Entries.getPage(blogID, options, (err, entries, pagination) => {
-      if (err) return reject(err);
-      resolve({ entries, pagination });
-    });
-  });
+  return Entries.getPage(blogID, options);
 }
 
 // Entry.get / getByUrl and several Entries helpers are NOT err-first —
