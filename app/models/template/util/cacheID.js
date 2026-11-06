@@ -1,4 +1,5 @@
 var crypto = require("crypto");
+var withCallback = require("helper/withCallback");
 
 // A template's views are cached per blog cacheID and template cacheID (see
 // blog/render/full-view-cache), so every change to a template's views or
@@ -14,20 +15,20 @@ function create() {
 // proxies (models/blog/set), which is only needed when the template is the
 // one the blog has installed: nothing else renders a template the blog isn't
 // using except its preview subdomains, which the template cacheID covers.
-function bumpBlogIfInstalled(owner, templateID, callback) {
-  if (!owner || owner === "SITE") return callback();
+async function bumpBlogIfInstalled(owner, templateID) {
+  if (!owner || owner === "SITE") return;
 
   // Required here to avoid a dependency loop
   var Blog = require("models/blog");
 
-  Blog.get({ id: owner }, function (err, blog) {
-    if (err) return callback(err);
-    if (!blog || blog.template !== templateID) return callback();
+  var blog = await Blog.get({ id: owner });
 
-    Blog.set(owner, { cacheID: Date.now() }, function (err) {
-      callback(err);
-    });
-  });
+  if (!blog || blog.template !== templateID) return;
+
+  await Blog.set(owner, { cacheID: Date.now() });
 }
 
-module.exports = { create, bumpBlogIfInstalled };
+module.exports = {
+  create,
+  bumpBlogIfInstalled: withCallback(bumpBlogIfInstalled),
+};

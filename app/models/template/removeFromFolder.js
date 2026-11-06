@@ -1,37 +1,26 @@
 var joinpath = require("path").join;
 var isOwner = require("./isOwner");
 var blogFolder = require("clients/folder");
-var callbackify = require("util").callbackify;
 var getAllViews = require("./getAllViews");
 var withCallback = require("helper/withCallback");
 var determineTemplateFolder = require("./determineTemplateFolder");
 var withFolderLock = require("./withFolderLock");
 
-function removeFromFolderUnlocked(blogID, templateID, callback) {
-  isOwner(blogID, templateID, function (err, owner) {
-    if (err) return callback(err);
+async function removeFromFolderUnlocked(blogID, templateID) {
+  var owner = await isOwner(blogID, templateID);
 
-    if (!owner) return callback(null);
+  if (!owner) return;
 
-    withCallback(getAllViews)(templateID, function (err, result) {
-      if (err) return callback(err);
+  var result = await getAllViews(templateID);
+  var views = result.views;
+  var metadata = result.metadata;
 
-      var views = result.views;
-      var metadata = result.metadata;
+  if (!views || !metadata || !metadata.localEditing) return;
 
-      if (!views || !metadata || !metadata.localEditing) return callback(null);
+  var folderName = await determineTemplateFolder(blogID);
+  var dir = joinpath(folderName, metadata.slug);
 
-      determineTemplateFolder(blogID, function (folderErr, folderName) {
-        if (folderErr) {
-          return callback(folderErr);
-        }
-
-        var dir = joinpath(folderName, metadata.slug);
-
-        callbackify(blogFolder.remove)(blogID, dir, callback);
-      });
-    });
-  });
+  return blogFolder.remove(blogID, dir);
 }
 
-module.exports = withFolderLock(removeFromFolderUnlocked);
+module.exports = withCallback(withFolderLock(removeFromFolderUnlocked));

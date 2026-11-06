@@ -292,11 +292,9 @@ describe("template", function () {
     it("passes an error creating a new template to the callback", function (done) {
       var dir = this.dir + "/new-template";
       var error = redisError();
-      var create = jasmine
-        .createSpy("create")
-        .and.callFake(function (owner, name, metadata, callback) {
-          callback(error);
-        });
+      var create = jasmine.createSpy("create").and.callFake(function () {
+        return Promise.reject(error);
+      });
 
       folder
         .write(this.blog.id, dir + "/entries.html", "{{#entries}}{{/entries}}")
@@ -315,8 +313,8 @@ describe("template", function () {
     it("passes an error reading the template's metadata to the callback", function (done) {
       var error = redisError();
       var create = jasmine.createSpy("create");
-      var getMetadata = function (id, callback) {
-        callback(error);
+      var getMetadata = function () {
+        return Promise.reject(error);
       };
 
       this.put("/style.css", "body {color:pink}").then(() => {
@@ -334,8 +332,8 @@ describe("template", function () {
 
     it("passes an error saving the template's metadata to the callback", function (done) {
       var error = redisError();
-      var setMetadata = function (id, updates, callback) {
-        callback(error);
+      var setMetadata = function () {
+        return Promise.reject(error);
       };
 
       this.put("/style.css", "body {color:pink}").then(() => {

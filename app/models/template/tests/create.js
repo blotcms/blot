@@ -58,12 +58,20 @@ describe("template", function () {
     );
   });
 
-  it("throws an error if you try to create a template with no name", function (done) {
-    expect(function () {
-      create(this.blog.id, null, null, function () {});
-    }).toThrow();
+  it("passes an error to the callback if you try to create a template with no name", function (done) {
+    create(this.blog.id, null, null, function (err) {
+      expect(err).toEqual(jasmine.any(Error));
+      done();
+    });
+  });
 
-    done();
+  it("returns a promise when given no callback", async function () {
+    const template = await create(this.blog.id, "promised", {});
+
+    expect(template.name).toEqual("promised");
+    await expectAsync(create(this.blog.id, "promised", {})).toBeRejectedWith(
+      jasmine.objectContaining({ code: "EEXISTS" })
+    );
   });
 
   it("creates a template whose name contains a slash", function (done) {

@@ -1,13 +1,12 @@
 var ensure = require("helper/ensure");
+var withCallback = require("helper/withCallback");
 var makeID = require("./util/makeID");
 var setMetadata = require("./setMetadata");
 
-module.exports = function update(owner, name, metadata, callback) {
-  ensure(owner, "string")
-    .and(name, "string")
-    .and(metadata, "object")
-    .and(callback, "function");
+module.exports = withCallback(async function update(owner, name, metadata) {
+  ensure(owner, "string").and(name, "string").and(metadata, "object");
 
   var id = makeID(owner, name);
-  setMetadata(id, metadata, callback);
-};
+
+  return setMetadata(id, metadata);
+});

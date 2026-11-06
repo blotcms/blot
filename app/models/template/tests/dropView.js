@@ -10,6 +10,15 @@ describe("template", function () {
     dropView(this.template.id, this.view.name, done);
   });
 
+  it("dropView returns a promise when given no callback", async function () {
+    const result = await dropView(this.template.id, this.view.name);
+
+    expect(result).toEqual("Deleted " + this.template.id);
+    await expectAsync(
+      dropView(this.template.id, this.view.name)
+    ).toBeRejected();
+  });
+
   it("dropView gives the template a new cache ID", function (done) {
     var test = this;
     getMetadata(test.template.id, function (err, before) {

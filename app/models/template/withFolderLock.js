@@ -55,39 +55,40 @@ async function acquire(blogID) {
   }
 }
 
-// Wraps fn(blogID, templateID, callback) so it runs while holding the lock,
-// unless the current request already holds it.
+// Wraps the async fn(blogID, templateID) so it runs while holding the lock,
+// unless the current request already holds it. A lock that can't be released
+// is logged and fn's own outcome is still returned.
 function withFolderLock(fn) {
-  return function (blogID, templateID, callback) {
+  return async function (blogID, templateID) {
     const hold = requestHold.getStore();
 
     if (hold && hold.blogID === blogID && !hold.released) {
-      return fn(blogID, templateID, callback);
+      return fn(blogID, templateID);
     }
 
-    acquire(blogID).then(
-      function (release) {
-        fn(blogID, templateID, function () {
-          const args = arguments;
-          release().then(
-            () => callback.apply(null, args),
-            function (err) {
-              console.error(
-                clfdate(),
-                "[TEMPLATE]",
-                blogID,
-                "failed to release folder lock",
-                err.message
-              );
-              callback.apply(null, args);
-            }
-          );
-        });
-      },
-      function (err) {
-        callback(busyError(err));
+    let release;
+
+    try {
+      release = await acquire(blogID);
+    } catch (err) {
+      throw busyError(err);
+    }
+
+    try {
+      return await fn(blogID, templateID);
+    } finally {
+      try {
+        await release();
+      } catch (err) {
+        console.error(
+          clfdate(),
+          "[TEMPLATE]",
+          blogID,
+          "failed to release folder lock",
+          err.message
+        );
       }
-    );
+    }
   };
 }
 

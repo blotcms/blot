@@ -1,4 +1,5 @@
 var clone = require("./clone");
+var withCallback = require("helper/withCallback");
 var ensure = require("helper/ensure");
 var makeSlug = require("helper/makeSlug");
 var makeID = require("./util/makeID");
@@ -9,11 +10,8 @@ var setMetadata = require("./setMetadata");
 
 // Associates a theme with a UID owner
 // and an existing theme to clone if possible
-module.exports = function create(owner, name, metadata, callback) {
-  ensure(owner, "string")
-    .and(metadata, "object")
-    .and(name, "string")
-    .and(callback, "function");
+module.exports = withCallback(async function create(owner, name, metadata) {
+  ensure(owner, "string").and(metadata, "object").and(name, "string");
 
   name = name.slice(0, 100);
   metadata.slug = metadata.slug || makeSlug(name).slice(0, 30);
@@ -47,33 +45,18 @@ module.exports = function create(owner, name, metadata, callback) {
 
   var id = metadata.id;
 
-  (async function () {
-    try {
-      var stat = await client.exists(key.metadata(id));
+  var stat = await client.exists(key.metadata(id));
 
-      if (stat) {
-        var err = new Error(
-          "A template called " + name + " name already exists"
-        );
-        err.code = "EEXISTS";
-        return callback(err);
-      }
+  if (stat) {
+    var err = new Error("A template called " + name + " name already exists");
+    err.code = "EEXISTS";
+    throw err;
+  }
 
-      await client.sAdd(key.blogTemplates(owner), id);
-      setMetadata(id, metadata, function (setErr) {
-        if (setErr) return callback(setErr);
+  await client.sAdd(key.blogTemplates(owner), id);
+  await setMetadata(id, metadata);
 
-        if (metadata.cloneFrom) {
-          return clone(metadata.cloneFrom, id, metadata, function (cloneErr) {
-            if (cloneErr) return callback(cloneErr);
-            callback(null, metadata);
-          });
-        }
+  if (metadata.cloneFrom) await clone(metadata.cloneFrom, id, metadata);
 
-        callback(null, metadata);
-      });
-    } catch (err) {
-      callback(err);
-    }
-  })();
-};
+  return metadata;
+});
