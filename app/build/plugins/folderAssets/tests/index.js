@@ -359,6 +359,25 @@ describe("folderAssets plugin", function () {
     expect(entry.html).not.toContain(BLOT_CDN_TOKEN);
   });
 
+  it("leaves another host's network-path image and a generated asset as written", async function () {
+    var path = "/Hello.txt";
+    var contents =
+      '<img src="//images.example.org/photo.jpg" srcset="//images.example.org/big.jpg 2x">' +
+      '<video poster="//images.example.org/still.png"></video>' +
+      '<img src="/_assets/doc/image1.png"> <img src="/_Image_Cache/x.jpg">';
+
+    await folder.write(this.blog.id, path, contents);
+
+    var entry = await buildEntry(this.blog, path);
+
+    expect(entry.html).toContain('src="//images.example.org/photo.jpg"');
+    expect(entry.html).toContain('srcset="//images.example.org/big.jpg 2x"');
+    expect(entry.html).toContain('poster="//images.example.org/still.png"');
+    expect(entry.html).toContain('src="/_assets/doc/image1.png"');
+    expect(entry.html).toContain('src="/_Image_Cache/x.jpg"');
+    expect(entry.html).not.toContain(BLOT_CDN_TOKEN);
+  });
+
   it("decodes the path of a missing poster and srcset file before recording it as a dependency", async function () {
     var path = "/Hello.txt";
     var contents =

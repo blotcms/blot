@@ -6,6 +6,7 @@ const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
 const unwrapFolderLink = require("blog/render/replaceFolderLinks/unwrapFolderLink");
 const {
   GLOBAL_STATIC_DIR,
+  BLOG_STATIC_PATHS,
   isReservedStaticPath,
 } = require("blog/lib/staticPaths");
 const blogHosts = require("blog/lib/blogHosts");
@@ -255,12 +256,21 @@ async function bakeValue(ctx, value, attr) {
   return wasBaked ? raw : null;
 }
 
-// Whether a missing file is baked as a pending CDN URL. The CDN route never
-// serves a dot segment (a dotfile, or a '..' the browser would have
-// resolved against the page instead), so those stay on the blog's domain.
+// Whether a missing file is baked as a pending CDN URL. Only a path in the
+// blog's folder: not a network-path reference to another host
+// (//example.org/a.jpg), a global static path (/katex/...) or a generated
+// asset (/_assets/..., in storage/assets, which the CDN's folder route
+// never reads). The CDN route never serves a dot segment either (a dotfile,
+// or a '..' the browser would have resolved against the page instead), so
+// those stay on the blog's domain.
 function isPendingImage(path) {
   return (
     PENDING_EXT_REGEX.test(path) &&
+    !path.startsWith("//") &&
+    !isReservedStaticPath(path) &&
+    !BLOG_STATIC_PATHS.some(
+      (dir) => path.toLowerCase().startsWith(dir + "/")
+    ) &&
     !path.split("/").some((segment) => segment.charAt(0) === ".")
   );
 }
