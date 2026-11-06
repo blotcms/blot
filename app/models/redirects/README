@@ -2,7 +2,7 @@
 
 Manages per-blog URL redirect rules. Redirect rules are stored in Redis and evaluated at request time by the blog's error-handling middleware to issue HTTP 301 responses before a 404 is returned.
 
-`check`, `conflicts`, `drop`, `list` and `set` now return promises when called without a callback (#2559); `get` still takes a callback.
+`check`, `conflicts`, `drop`, `list` and `set` now return promises when called without a callback (#2559); `get` is `async get(blogID, from, input)` and always returns a promise.
 
 ## Role in the application
 
@@ -49,13 +49,12 @@ Rules are silently dropped if:
 - `from` or `to` is an empty string.
 - `to` matches a `from` value that appears earlier in the list (loop prevention).
 
-### `get(blogID, from, callback [, input])`
+### `async get(blogID, from [, input])`
 
-Fetches the redirect destination stored under `from` for the given blog.
+Fetches the redirect destination stored under `from` for the given blog. Returns a promise resolving to the destination string or `null`; it rejects on a Redis error and takes no callback.
 
 - `blogID` — string
 - `from` — string; the exact path or regex pattern stored as a key
-- `callback` — called with `(err, to)` where `to` is the destination string or `null`
 - `input` — optional string; the original request URL. Required when `from` is a regex pattern so that capture groups in `to` can be substituted.
 
 When `from` is a non-regex value, `input` is ignored and the raw stored value is returned. When `from` is a regex and `input` is provided, the destination is produced by applying `input.replace(from, to)`.
