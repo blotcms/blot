@@ -20,15 +20,6 @@ function fail(message, code) {
   process.exit(code || 1);
 }
 
-function getAllViews(name) {
-  return new Promise(function (resolve, reject) {
-    Template.getAllViews(name, function (err, views, metadata) {
-      if (err) return reject(err);
-      resolve({ views: views, metadata: metadata });
-    });
-  });
-}
-
 async function main() {
   if (!process.argv[2])
     fail("Pass a blog identifier (blog ID) as the first argument");
@@ -48,7 +39,9 @@ async function main() {
   var views, metadata;
 
   try {
-    ({ views, metadata } = await getAllViews(blog.template));
+    const result = await Template.getAllViews(blog.template);
+    views = result && result.views;
+    metadata = result && result.metadata;
   } catch (err) {
     fail(err.message);
   }

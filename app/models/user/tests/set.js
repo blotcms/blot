@@ -4,29 +4,17 @@ describe("user", function () {
   var set = require("../index").set;
   var client = require("models/client");
   var key = require("../key");
+  var promisify = require("util").promisify;
 
-  it("set will remove key for old email when email changes", function (done) {
+  it("set will remove key for old email when email changes", async function () {
     var test = this;
 
-    (async function () {
-      try {
-        var uid = await client.get(key.email(test.user.email));
-        expect(uid).toEqual(test.user.uid);
+    var uid = await client.get(key.email(test.user.email));
+    expect(uid).toEqual(test.user.uid);
 
-        set(uid, { email: "foo@gmail.com" }, async function (err) {
-          if (err) return done.fail(err);
+    await promisify(set)(uid, { email: "foo@gmail.com" });
 
-          try {
-            var updatedUid = await client.get(key.email(test.user.email));
-            expect(updatedUid).toEqual(null);
-            done();
-          } catch (err) {
-            done.fail(err);
-          }
-        });
-      } catch (err) {
-        done.fail(err);
-      }
-    })();
+    var updatedUid = await client.get(key.email(test.user.email));
+    expect(updatedUid).toEqual(null);
   });
 });

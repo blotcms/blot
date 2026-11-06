@@ -563,7 +563,6 @@ function logReport() {
  */
 async function processBlogViews(user, blog) {
   const getTemplateListAsync = promisify(Template.getTemplateList);
-  const getAllViewsAsync = promisify(Template.getAllViews);
 
   const templates = await getTemplateListAsync(blog.id);
 
@@ -579,7 +578,7 @@ async function processBlogViews(user, blog) {
     let views;
 
     try {
-      views = await getAllViewsAsync(template.id);
+      ({ views } = await Template.getAllViews(template.id));
     } catch (error) {
       console.error(`Error getting views for template ${template.id}:`, error);
       continue;

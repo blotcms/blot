@@ -1,8 +1,12 @@
 var Template = require("models/template");
+var withCallback = require("helper/withCallback");
 var arrayify = require("helper/arrayify");
 
 module.exports = function (req, res, next) {
-  Template.getAllViews(req.template.id, function (err, views, template) {
+  withCallback(Template.getAllViews)(req.template.id, function (err, result) {
+    var views = result && result.views;
+    var template = result && result.metadata;
+
     if (err || !views || !template) return next(new Error("No template"));
 
     res.locals.getAllViews = { views, template };

@@ -1,4 +1,5 @@
 var getAllViews = require("./getAllViews");
+var withCallback = require("helper/withCallback");
 var ensure = require("helper/ensure");
 var client = require("models/client");
 var key = require("./key");
@@ -13,8 +14,15 @@ module.exports = function drop(owner, templateName, callback) {
 
   ensure(owner, "string").and(templateID, "string").and(callback, "function");
 
-  getAllViews(templateID, function (err, views, metadata) {
+  withCallback(getAllViews)(templateID, function (err, result) {
     if (err && err.code !== "ENOENT") return callback(err);
+
+    var views, metadata;
+
+    if (!err) {
+      views = result.views;
+      metadata = result.metadata;
+    }
 
     if (err && err.code === "ENOENT") {
       metadata = null;

@@ -129,12 +129,7 @@ describe("upload template route", function () {
   }
 
   const getViews = (templateID) =>
-    new Promise((resolve, reject) => {
-      Template.getAllViews(templateID, (err, views) => {
-        if (err) return reject(err);
-        resolve(views);
-      });
-    });
+    Template.getAllViews(templateID).then((result) => result.views);
 
   const getTemplates = (blogID) =>
     new Promise((resolve, reject) => {

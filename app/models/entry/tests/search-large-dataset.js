@@ -6,7 +6,7 @@ describe("entry.search (large dataset)", function () {
   // Some of these tests take a while to run, so we need to increase the timeout
   global.test.timeout(60 * 1000);
 
-  it("returns results within timeout even with large dataset", async function (done) {
+  it("returns results within timeout even with large dataset", async function () {
     await this.setMany(
       Array.from({ length: 1000 }, (_, i) => ({
         path: `/post${i}.txt`,
@@ -21,7 +21,5 @@ describe("entry.search (large dataset)", function () {
 
     expect(duration).toBeLessThanOrEqual(4100);
     expect(results.length).toEqual(25);
-
-    done();
   });
 });

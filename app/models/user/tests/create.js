@@ -1,35 +1,26 @@
 describe("user", function () {
   var User = require("models/user");
+  var promisify = require("util").promisify;
+  var create = promisify(User.create);
+  var remove = promisify(User.remove);
 
-  it("creates and deletes a user", function (done) {
+  it("creates and deletes a user", async function () {
     var email = "XXX@gmail.com";
     var passwordHash = "123";
     var subscription = {};
     var paypal = {};
 
-    User.create(
-      email,
-      passwordHash,
-      subscription,
-      paypal,
-      function (err, user) {
-        expect(err).toBe(null);
-        expect(user).toEqual(jasmine.any(Object));
-        expect(user.created).toEqual(jasmine.any(Number));
-        expect(user.created).toBeGreaterThan(0);
-        expect(user.welcomeEmailSent).toBe(false);
-        expect(user.paymentMethods).toEqual([]);
+    var user = await create(email, passwordHash, subscription, paypal);
+    expect(user).toEqual(jasmine.any(Object));
+    expect(user.created).toEqual(jasmine.any(Number));
+    expect(user.created).toBeGreaterThan(0);
+    expect(user.welcomeEmailSent).toBe(false);
+    expect(user.paymentMethods).toEqual([]);
 
-        User.remove(user.uid, function (err) {
-          expect(err).toBe(null);
-          done();
-        });
-      }
-    );
+    await remove(user.uid);
   });
 
-  it("retries creation when SETNX reports collision with false", function (done) {
-    var create = require("models/user/create");
+  it("retries creation when SETNX reports collision with false", async function () {
     var client = require("models/client");
 
     var execCalls = 0;
@@ -59,11 +50,8 @@ describe("user", function () {
       };
     });
 
-    create("retry-false@gmail.com", "hash", {}, {}, function (err, user) {
-      expect(err).toBe(null);
-      expect(user).toEqual(jasmine.any(Object));
-      expect(execCalls).toBe(2);
-      done();
-    });
+    var user = await create("retry-false@gmail.com", "hash", {}, {});
+    expect(user).toEqual(jasmine.any(Object));
+    expect(execCalls).toBe(2);
   });
 });

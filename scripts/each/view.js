@@ -7,7 +7,7 @@ var progress = require("./progress");
 // The promise core. doThis is (user, blog, template, view) and may return a promise.
 function eachView(doThis) {
   return eachTemplate.promise(async function (user, blog, template) {
-    var views = await promisify(Template.getAllViews)(template.id);
+    var { views } = await Template.getAllViews(template.id);
 
     var names = Object.keys(views || {});
     var bar = progress.push("View", names.length);

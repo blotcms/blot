@@ -45,18 +45,9 @@ const postsCache = createRenderCache("posts", {
   // all 404ing at once) that all miss the same cold page.
   fetchMethod: async (key, staleValue, { context }) => {
     const { blogID, query, keep } = context;
-    const page = await new Promise((resolve, reject) => {
-      // Required here: models/entries requires this module (and specs spy
-      // on getPage)
-      require("models/entries").getPage(
-        blogID,
-        query,
-        (err, entries, pagination) => {
-          if (err) reject(err);
-          else resolve({ entries, pagination });
-        }
-      );
-    });
+    // Required here: models/entries requires this module (and specs spy
+    // on getPage)
+    const page = await require("models/entries").getPage(blogID, query);
     stripHeavyFields(page.entries || [], keep);
     return prepareCacheValue(page, { preserveEntryInstances: true });
   },

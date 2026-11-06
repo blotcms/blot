@@ -188,9 +188,7 @@ function getEntry(blogID, path) {
 }
 
 function getRecent(blogID) {
-  return new Promise(function (resolve) {
-    Entries.getRecent(blogID, resolve);
-  });
+  return Entries.getRecent(blogID);
 }
 
 async function main() {

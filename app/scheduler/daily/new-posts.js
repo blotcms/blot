@@ -4,7 +4,6 @@ const Entries = require("models/entries");
 
 const getAllBlogIDs = promisify(Blog.getAllIDs);
 const getBlog = promisify(Blog.get);
-const getEntriesPage = promisify(Entries.getPage);
 
 function shuffle(items) {
   for (let i = items.length - 1; i > 0; i--) {
@@ -25,7 +24,7 @@ async function main(callback) {
 
         const extendedBlog = Blog.extend(blog);
         // Limiting to the newest 10 entries per blog is fine for this report.
-        const entries = await getEntriesPage(blogID, {
+        const { entries } = await Entries.getPage(blogID, {
           pageNumber: 1,
           pageSize: 10,
         });

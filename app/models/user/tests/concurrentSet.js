@@ -4,7 +4,7 @@ var set = require("../set");
 var getById = require("../getById");
 var promisify = require("util").promisify;
 var save = promisify(set);
-var get = promisify(getById);
+var get = getById;
 
 describe("atomic user updates", function () {
   var uid = "atomic-user-test";
