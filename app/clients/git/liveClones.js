@@ -40,16 +40,12 @@ const MASTER = "refs/heads/master";
 // How many commits back from master the search for the clone's HEAD goes
 const MAX_WALK = 100000;
 
-function getBlog(id) {
-  return new Promise((resolve, reject) =>
-    Blog.get({ id }, (err, blog) => (err ? reject(err) : resolve(blog || null)))
-  );
+async function getBlog(id) {
+  return (await Blog.get({ id })) || null;
 }
 
-function allBlogIDs() {
-  return new Promise((resolve, reject) =>
-    Blog.getAllIDs((err, ids) => (err ? reject(err) : resolve(ids || [])))
-  );
+async function allBlogIDs() {
+  return (await Blog.getAllIDs()) || [];
 }
 
 async function readText(blogID, path) {

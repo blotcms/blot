@@ -4,30 +4,31 @@ const database = require("./database");
 const health = require("../health");
 const { classify } = require("./error");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
+const withCallback = require("helper/withCallback");
 
-module.exports = async (blogID, path, contents, callback) => {
+async function write(blogID, path, contents) {
   if (shouldIgnoreFile(path)) {
-    return callback(new Error(`Cannot write ignored file: ${path}`));
+    throw new Error(`Cannot write ignored file: ${path}`);
   }
 
   try {
     await folder.write(blogID, path, contents);
   } catch (error) {
     console.error(`Blog: ${blogID} Error writing to ${path}:`, error);
-    return callback(error);
+    throw error;
   }
 
   try {
     // The shared iCloud folder was deleted: uploading would make the
     // macserver re-create an unshared folder. Keep the local write only.
     const account = await database.get(blogID);
-    if (classify(account) === health.CODES.SOURCE_MISSING) return callback();
+    if (classify(account) === health.CODES.SOURCE_MISSING) return;
 
     await remoteUpload(blogID, path);
   } catch (error) {
     console.error(`Error uploading ${path} to remote:`, error);
-    return callback(error);
+    throw error;
   }
+}
 
-  callback();
-};
+module.exports = withCallback(write);

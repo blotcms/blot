@@ -1,4 +1,3 @@
-const { promisify } = require("util");
 const Blog = require("models/blog");
 const database = require("../../database");
 const initialTransfer = require("../../sync/initialTransfer");
@@ -10,8 +9,6 @@ const email = require("helper/email");
 const notificationCap = require("../../util/notificationCap");
 const syncReport = require("clients/util/syncReport");
 const stampLastSync = require("./stampLastSync");
-
-const getBlog = promisify(Blog.get);
 
 const RESYNC_DEDUP_WINDOW_MS = 10 * 1000;
 // Process-local resync deduplication: if multiple Node processes handle requests,
@@ -152,7 +149,7 @@ module.exports = async function (req, res) {
         // retries with no resync.
         let blog;
         try {
-          blog = await getBlog({ id: blogID });
+          blog = await Blog.get({ id: blogID });
         } catch (err) {
           console.error("Resync failed: couldn't load blog", blogID, err);
           refused = true;

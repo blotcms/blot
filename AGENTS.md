@@ -68,10 +68,22 @@ Bunny does not sit in front of blogs. Blog pages, on subdomains and custom domai
 # Production commands
 
 - Ask the operator before each command on production (`ssh blot`, `ssh macserver`, `docker exec` on a unit), read-only ones included, unless they have given you autonomy for the task at hand. A grant covers only the goal it was given for.
+- Batch approval requests. The operator often approves from a phone, so plan the production steps for a goal up front and ask once: list each command, say which are read-only, and what you will do with the result. Then run the approved list without asking again; ask again only for a step that wasn't on it.
 - `scripts/prod/read.sh` is the exception: its subcommands (container status and logs, the access and error logs, host disk and memory, Redis INFO, slowlog and logs, fail2ban status) are read-only and may run without asking. Prefer it to hand-written `ssh blot` reads, and filter its output locally. Add a subcommand to it rather than asking for a one-off read you expect to repeat.
 - Run scripts that touch blog folders as the app user: `docker exec -u 1000 blot-blue ...`. As root, git fails its ownership check.
 - For a one-off read-only scan, write the script outside the repo, `docker cp` it into the unit, run it and delete it. Only scripts that write data (migrations, backfills with `--apply`) go in a PR.
 - Before reading keys from a broad Redis pattern, check their `TYPE`. WRONGTYPE errors from scripts count towards the Redis host alert.
+
+# Autonomy grants
+
+The operator decides how much autonomy a goal gets, and it varies with risk. When they grant some, write it into the goal's plan issue (create one if there isn't one) under a **Grant** heading, in their words plus:
+
+- **Scope:** the paths, PRs or systems it covers.
+- **May:** what you may do without asking, e.g. merge your own PRs once CI is green and Codex is done, deploy master's head, run named production scripts.
+- **Must ask:** what still needs the operator, e.g. cutover or cleanup PRs, deletions, env changes, anything customer-facing.
+- **Ends:** when the grant stops, e.g. when a named PR merges or the issue closes.
+
+Any session or subagent working on that goal reads the Grant first and acts only within it. A grant never carries over to other work, and without one the default is to ask.
 
 # Working in this repo
 

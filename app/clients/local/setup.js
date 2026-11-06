@@ -9,6 +9,7 @@ const clfdate = require("helper/clfdate");
 const source = require("./source");
 const { reconcile, seed } = require("./sync");
 const watch = require("./watch");
+const withCallback = require("helper/withCallback");
 const prefix = () => clfdate() + " Local folder client:";
 
 // Brings the blog's folder in line with its source directory, creating the
@@ -72,28 +73,40 @@ async function reconcileSource(blogID, dir) {
   return dir;
 }
 
-function setup(blogID, callback) {
-  Blog.get({ id: blogID }, function (err, blog) {
-    if (err || !blog) return callback();
-    Fix(blog, async function (err, report) {
-      // Fix() can fail after repairing some checks, so log first.
-      const repaired = syncReport.summarize(report);
-      if (repaired) console.log(prefix(), "Fix repaired", blogID, repaired);
-      if (err) return callback();
-      if (config.environment === "development") {
-        try {
-          const dir = await reconcileSource(blogID);
-          await watch(blogID, dir);
-        } catch (e) {
-          console.error(prefix(), "Unable to set up", blogID, e);
-          return callback();
-        }
-      }
-      console.log(prefix(), "Setup complete", blogID);
-      callback();
+// Always resolves: a blog which can't be loaded or fixed, or a source which
+// can't be set up, is logged and left as it is.
+async function setup(blogID) {
+  let blog;
+
+  try {
+    blog = await Blog.get({ id: blogID });
+  } catch (err) {
+    return;
+  }
+
+  if (!blog) return;
+
+  const { err, report } = await new Promise(function (resolve) {
+    Fix(blog, function (err, report) {
+      resolve({ err, report });
     });
   });
+
+  // Fix() can fail after repairing some checks, so log first.
+  const repaired = syncReport.summarize(report);
+  if (repaired) console.log(prefix(), "Fix repaired", blogID, repaired);
+  if (err) return;
+  if (config.environment === "development") {
+    try {
+      const dir = await reconcileSource(blogID);
+      await watch(blogID, dir);
+    } catch (e) {
+      console.error(prefix(), "Unable to set up", blogID, e);
+      return;
+    }
+  }
+  console.log(prefix(), "Setup complete", blogID);
 }
 
-module.exports = setup;
+module.exports = withCallback(setup);
 module.exports.reconcileSource = reconcileSource;

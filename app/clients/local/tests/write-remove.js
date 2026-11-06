@@ -37,6 +37,23 @@ describe("local client write and remove", function () {
       );
     });
 
+    it("returns promises when called without a callback", async function () {
+      await write(this.blog.id, "/promise.txt", "P");
+      expect((await folder.read(this.blog.id, "/promise.txt")).toString()).toBe(
+        "P"
+      );
+      await remove(this.blog.id, "/promise.txt");
+      expect(await folder.exists(this.blog.id, "/promise.txt")).toBe(false);
+
+      let error;
+      try {
+        await write(this.blog.id, "/.DS_Store", "x");
+      } catch (err) {
+        error = err;
+      }
+      expect(error).toBeDefined();
+    });
+
     it("does not write an ignored name", async function () {
       let error;
       try {

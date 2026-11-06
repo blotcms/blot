@@ -7,14 +7,10 @@ var moment = require("moment");
 var Entries = require("models/entries");
 var User = require("models/user");
 var colors = require("colors/safe");
-var async = require("async");
-var withCallback = require("helper/withCallback");
 var verifySiteIsOnline = require("./verifySiteIsOnline");
 
 if (require.main === module) {
-  main(function (err, sites) {
-    if (err) throw err;
-
+  main().then(function (sites) {
     console.log("Found " + sites.length + " sites to consider:\n");
 
     sites.forEach(function (site) {
@@ -44,74 +40,78 @@ var featured = require("./featured").sites.map(function (site) {
   return site.host;
 });
 
-function main(callback) {
-  Blog.getAllIDs(function (err, ids) {
-    async.map(
-      ids,
-      function (id, next) {
-        Blog.get({ id: id }, function (err, blog) {
-          if (err || !blog || blog.isDisabled || !blog.domain) return next();
+async function main() {
+  var ids = await Blog.getAllIDs();
 
-          User.getById(blog.owner, function (err, user) {
-            if (err || !user || user.isDisabled) return next();
+  var sites = await Promise.all(
+    ids.map(async function (id) {
+      var blog, user, page;
 
-            withCallback(Entries.getPage)(
-              blog.id,
-              { pageNumber: 1, pageSize: 1 },
-              function (error, page) {
-                if (error) return next();
-
-                var entries = page.entries;
-                if (!entries || !entries.length) return next();
-
-                next(null, {
-                  host: blog.domain,
-                  email: user.email,
-                  lastPublishedPost: entries[0].dateStamp,
-                });
-              }
-            );
-          });
-        });
-      },
-      async function (err, sites) {
-        if (err) return callback(err);
-
-        sites = sites.filter(function (site) {
-          return site && site.host && featured.indexOf(site.host) === -1;
-        });
-
-        // ensure we're only checking unique sites
-        sites = sites.filter(function (site, index, self) {
-          return (
-            index ===
-            self.findIndex(function (t) {
-              return t.host === site.host;
-            })
-          );
-        });
-
-        const filteredSites = [];
-
-        console.log("Checking", sites.length, "candidates");
-
-        for (var i = 0; i < sites.length; i++) {
-          var isOnline = await verifySiteIsOnline(sites[i].host);
-          if (isOnline) {
-            filteredSites.push(sites[i]);
-          }
-        }
-
-        console.log(filteredSites.length, "candidates remain post-filter");
-
-        filteredSites.sort(function (a, b) {
-          if (a.lastPublishedPost > b.lastPublishedPost) return 1;
-          if (b.lastPublishedPost > a.lastPublishedPost) return -1;
-          if (a.lastPublishedPost === b.lastPublishedPost) return 0;
-        });
-
-        callback(null, filteredSites);
+      try {
+        blog = await Blog.get({ id: id });
+      } catch (err) {
+        return;
       }
+
+      if (!blog || blog.isDisabled || !blog.domain) return;
+
+      try {
+        user = await User.getById(blog.owner);
+      } catch (err) {
+        return;
+      }
+
+      if (!user || user.isDisabled) return;
+
+      try {
+        page = await Entries.getPage(blog.id, { pageNumber: 1, pageSize: 1 });
+      } catch (error) {
+        return;
+      }
+
+      var entries = page.entries;
+      if (!entries || !entries.length) return;
+
+      return {
+        host: blog.domain,
+        email: user.email,
+        lastPublishedPost: entries[0].dateStamp,
+      };
+    })
+  );
+
+  sites = sites.filter(function (site) {
+    return site && site.host && featured.indexOf(site.host) === -1;
+  });
+
+  // ensure we're only checking unique sites
+  sites = sites.filter(function (site, index, self) {
+    return (
+      index ===
+      self.findIndex(function (t) {
+        return t.host === site.host;
+      })
     );
   });
+
+  const filteredSites = [];
+
+  console.log("Checking", sites.length, "candidates");
+
+  for (var i = 0; i < sites.length; i++) {
+    var isOnline = await verifySiteIsOnline(sites[i].host);
+    if (isOnline) {
+      filteredSites.push(sites[i]);
+    }
+  }
+
+  console.log(filteredSites.length, "candidates remain post-filter");
+
+  filteredSites.sort(function (a, b) {
+    if (a.lastPublishedPost > b.lastPublishedPost) return 1;
+    if (b.lastPublishedPost > a.lastPublishedPost) return -1;
+    if (a.lastPublishedPost === b.lastPublishedPost) return 0;
+  });
+
+  return filteredSites;
 }
