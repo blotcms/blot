@@ -24,7 +24,17 @@ var isRedisUnavailableError = require("helper/redisUnavailable").isRedisUnavaila
 
 var MAX_CHECKS_WITHOUT_RESULTS = 5;
 
-module.exports = function main(blog, callback) {
+// options.stampLastSync (default true) controls whether this sync records
+// last_sync. The hourly validation's catch-up sync passes false: last_sync
+// is what marks a blog as recently synced by a webhook, so a catch-up must
+// leave whatever stamp is there.
+module.exports = function main(blog, options, callback) {
+  if (typeof options === "function") {
+    callback = options;
+    options = {};
+  }
+  var stampLastSync = !options || options.stampLastSync !== false;
+
   debug("Blog:", blog.id, "Attempting to acquire lock on the blog folder.");
 
   // Redlock options to ensure we acquire a lock eventually...
@@ -33,15 +43,17 @@ module.exports = function main(blog, callback) {
   Sync(blog.id, function (err, folder, done) {
     if (err) return callback(err);
 
-    Database.set(
-      blog.id,
-      { last_sync: Date.now() },
-      function (lastSyncErr) {
-        if (lastSyncErr) {
-          folder.log("Error setting pre-sync timestamp", lastSyncErr);
+    if (stampLastSync) {
+      Database.set(
+        blog.id,
+        { last_sync: Date.now() },
+        function (lastSyncErr) {
+          if (lastSyncErr) {
+            folder.log("Error setting pre-sync timestamp", lastSyncErr);
+          }
         }
-      }
-    );
+      );
+    }
 
     folder.log("Creating Dropbox client");
     // We need to look up the Dropbox account for this blog
@@ -163,7 +175,8 @@ module.exports = function main(blog, callback) {
                 account.error_source = "";
                 account.error_since = 0;
               }
-              account.last_sync = Date.now();
+              if (stampLastSync) account.last_sync = Date.now();
+              else delete account.last_sync;
               account.cursor = result.cursor;
               // we store account folder for use on the dashboard
               if (result.path_display) account.folder = result.path_display;
@@ -359,21 +372,35 @@ function Apply(client, blogID, log, status) {
           log(item.resolved_relative_path, message);
           status("Skipping oversized file " + item.resolved_relative_path);
 
-          return callbackify(storage.write)(
+          // A file we uploaded ourselves (upload sessions allow >100MB) comes
+          // back as a change: leave the real local copy alone if it matches.
+          return callbackify(contentHash)(
             blogID,
             item.resolved_relative_path,
-            "",
-            function (err) {
-              if (err) {
-                log(
-                  item.resolved_relative_path,
-                  "Error creating placeholder for oversized file",
-                  err
-                );
-                status("Error creating placeholder " + item.resolved_relative_path);
+            item.size,
+            function (err, localHash) {
+              if (item.content_hash && localHash && localHash === item.content_hash) {
+                log(item.resolved_relative_path, "Oversized file already matches local copy");
+                return callback();
               }
 
-              callback();
+              callbackify(storage.write)(
+                blogID,
+                item.resolved_relative_path,
+                "",
+                function (err) {
+                  if (err) {
+                    log(
+                      item.resolved_relative_path,
+                      "Error creating placeholder for oversized file",
+                      err
+                    );
+                    status("Error creating placeholder " + item.resolved_relative_path);
+                  }
+
+                  callback();
+                }
+              );
             }
           );
         }

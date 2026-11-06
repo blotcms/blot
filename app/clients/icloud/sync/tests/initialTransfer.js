@@ -2,7 +2,7 @@ const initialTransferPath = require.resolve("../initialTransfer");
 const databasePath = require.resolve("../../database");
 const toiCloudPath = require.resolve("../toiCloud");
 const fromiCloudPath = require.resolve("../fromiCloud");
-const resolveCaseConflictsPath = require.resolve("../resolveCaseConflicts");
+const resolveCaseConflictsPath = require.resolve("../../../util/resolveCaseConflicts");
 const establishSyncLockPath = require.resolve("sync/establishSyncLock");
 const fetchPath = require.resolve(
   "../../util/rateLimitedFetchWithRetriesAndTimeout"

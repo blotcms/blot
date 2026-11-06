@@ -47,7 +47,10 @@ describe("dropbox setup abort subscriber", function () {
     };
     require.cache[syncPath] = {
       exports: function (_blogID, worker) {
-        const folder = { status: jasmine.createSpy("status") };
+        const folder = {
+          status: jasmine.createSpy("status"),
+          update: (path, callback) => callback && callback(),
+        };
         const done = jasmine.createSpy("done").and.callFake(function (err, cb) {
           if (typeof cb === "function") cb(err);
         });
@@ -70,6 +73,12 @@ describe("dropbox setup abort subscriber", function () {
     };
     require.cache[databasePath] = {
       exports: {
+        get: function (_id, callback) {
+          callback(null, null);
+        },
+        listBlogs: function (_id, callback) {
+          callback(null, []);
+        },
         set: function (_id, _data, callback) {
           callback(null);
         },
@@ -106,7 +115,10 @@ describe("dropbox setup abort subscriber", function () {
     };
     require.cache[syncPath] = {
       exports: function (_blogID, worker) {
-        const folder = { status: jasmine.createSpy("status") };
+        const folder = {
+          status: jasmine.createSpy("status"),
+          update: (path, callback) => callback && callback(),
+        };
         const done = jasmine.createSpy("done").and.callFake(function (err, cb) {
           if (typeof cb === "function") cb(err);
         });
@@ -130,6 +142,12 @@ describe("dropbox setup abort subscriber", function () {
     require.cache[resetPath] = { exports: async function () {} };
     require.cache[databasePath] = {
       exports: {
+        get: function (_id, callback) {
+          callback(null, null);
+        },
+        listBlogs: function (_id, callback) {
+          callback(null, []);
+        },
         set: function (_id, _data, callback) {
           callback(null);
         },

@@ -60,6 +60,9 @@ const MUTATION_ALLOWED_PREFIXES = [
   "app/clients/icloud/",
   "app/clients/git/",
   "app/clients/local/",
+  // Shared by the Dropbox and iCloud initial transfers, which call it on the
+  // blog's folder while they hold its sync lock.
+  "app/clients/util/resolveCaseConflicts.js",
   "app/clients/folder.js", // the router
   // Syncs Blot's own demo blogs, which have no client.
   "app/templates/folders/",

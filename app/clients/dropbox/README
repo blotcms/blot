@@ -27,6 +27,7 @@ The Dropbox client operates using a webhook-based event notification system comb
 - **`getHealth.js`**: Implements the shared client health method. Reads the account row and maps a durable `error_code` / `error_source` to `{state, issues}`.
 - **`init.js`**: Initialization logic run at server startup. Schedules hourly sync validation for all Dropbox-connected blogs and triggers resyncs for recently synced blogs on restart.
 - **`database.js`**: Manages Redis-backed persistence of Dropbox account information (tokens, folder paths, sync cursors, `transfer_pending`, etc.). Uses the model defined within this file to enforce type safety.
+- **`sync/reset-from-blot.js`**: The initial transfer to Dropbox. It first runs the shared `clients/util/resolveCaseConflicts` so paths differing only by case (`a.txt` and `A.txt`) are renamed to `a (conflict).txt` before upload.
 - **`delta.js`**: Constructs a delta (change set) by querying Dropbox's `filesListFolder` and `filesListFolderContinue` APIs. Computes relative paths for each change and handles case-only renames (e.g., `foo.txt` → `FOO.txt`).
 - **`disconnect.js`**: Handles disconnecting a blog from Dropbox by removing credentials, clearing the OAuth token, and revoking it if no other blogs use the same account.
 - **`write.js`**: Writes a file to both the local Blot folder and uploads it to Dropbox. Uses the retry wrapper for resilience.

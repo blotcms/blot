@@ -186,6 +186,56 @@ describe("dropbox resetToBlot", function () {
     expect(summary.firstError).toEqual("/a.txt: download exploded");
   });
 
+  describe("a file over the download size limit", function () {
+    const constants = require("../util/constants");
+    let maxFileSize;
+
+    // A limit below the fixtures' sizes, so a matching local copy can have
+    // the same size as the Dropbox file. reset-to-blot reads it when it loads.
+    beforeEach(function () {
+      maxFileSize = constants.MAX_FILE_SIZE;
+      constants.MAX_FILE_SIZE = 4;
+    });
+
+    afterEach(function () {
+      constants.MAX_FILE_SIZE = maxFileSize;
+    });
+
+    const oversized = (content_hash, size) => ({
+      ".tag": "file",
+      name: "big.txt",
+      path_display: "/big.txt",
+      content_hash,
+      size,
+      server_modified: "2026-01-01T00:00:00Z",
+    });
+
+    it("keeps a local copy whose content hash matches (a file Blot uploaded)", async function () {
+      await storage.write(blogID, "/big.txt", "real contents");
+      const { hash, size } = await storage.stat(blogID, "/big.txt", { hash: true });
+      const resetToBlot = load({ "/": [oversized(hash, size)] });
+
+      const summary = await resetToBlot(blogID, () => {}, async () => {});
+
+      expect(summary.skipped).toEqual(1);
+      expect((await storage.read(blogID, "/big.txt")).toString()).toEqual(
+        "real contents"
+      );
+    });
+
+    it("replaces a local copy that differs, or is absent, with an empty placeholder", async function () {
+      await storage.write(blogID, "/big.txt", "something else");
+      let resetToBlot = load({ "/": [oversized("not-the-local-hash", 14)] });
+      await resetToBlot(blogID, () => {}, async () => {});
+      expect((await storage.read(blogID, "/big.txt")).toString()).toEqual("");
+
+      await storage.remove(blogID, "/big.txt");
+      resetToBlot = load({ "/": [oversized("not-the-local-hash", 14)] });
+      await resetToBlot(blogID, () => {}, async () => {});
+      expect((await storage.read(blogID, "/big.txt")).toString()).toEqual("");
+    });
+  });
+
   it("updates every path inside a folder it removes", async function () {
     await storage.write(blogID, "/Sub/a.txt", "x");
     await storage.write(blogID, "/Sub/Inner/b.txt", "x");

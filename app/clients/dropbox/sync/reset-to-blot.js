@@ -446,6 +446,16 @@ const walk = async (
           Boolean(localCounterpart && localCounterpart.is_directory)
         );
         summary.skipped += 1;
+        // A file we uploaded ourselves (upload sessions allow >100MB) must
+        // not be replaced with an empty placeholder.
+        if (
+          localCounterpart &&
+          !localCounterpart.is_directory &&
+          remoteItem.content_hash &&
+          localCounterpart.content_hash === remoteItem.content_hash
+        ) {
+          continue;
+        }
         try {
           await storage.write(blogID, pathOnBlot, "");
           await updatePath(pathOnBlot);

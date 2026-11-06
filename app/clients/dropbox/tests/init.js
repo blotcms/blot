@@ -438,7 +438,9 @@ describe("dropbox init", function () {
         fixedLoads[blog.id] = blog.load;
         callback(behavior.fixError || null, behavior.fixReport || {});
       });
-      stub("sync", function (blog, callback) {
+      stub("sync", function (blog, options, callback) {
+        // The catch-up sync must not stamp last_sync
+        expect(options).toEqual({ stampLastSync: false });
         synced.push(blog.id);
         callback(behaviors[blog.id].syncError || null);
       });

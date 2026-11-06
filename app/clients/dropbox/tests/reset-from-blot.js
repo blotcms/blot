@@ -55,6 +55,7 @@ describe("dropbox resetFromBlot", function () {
         callback(
           null,
           {
+            filesCreateFolder: async () => ({ result: {} }),
             usersGetSpaceUsage: async () => ({ result: spaceUsage }),
             filesListFolderGetLatestCursor: async () => ({
               result: { cursor: "new-cursor" },
@@ -210,6 +211,94 @@ describe("dropbox resetFromBlot", function () {
           values.transfer_pending === false
       )
     ).toEqual(true);
+  });
+
+  it("renames paths which differ only by case before uploading, since Dropbox is case-insensitive", async function () {
+    await storage.write(blogID, "/a.txt", "lower");
+    await storage.write(blogID, "/A.txt", "upper");
+
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 0,
+        allocation: { ".tag": "individual", allocated: 1000000 },
+      },
+      remote: {},
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    const updated = [];
+    // Same shape as sync()'s folder.update: callback-style, promisified by
+    // the setup route before it is handed to resetFromBlot.
+    const folderUpdate = (path, callback) => {
+      updated.push(path);
+      callback();
+    };
+    await resetFromBlot(
+      blogID,
+      () => {},
+      { aborted: false },
+      require("util").promisify(folderUpdate)
+    );
+
+    expect(uploadCalls.length).toEqual(2);
+    expect(
+      new Set(uploadCalls.map((destination) => destination.toLowerCase())).size
+    ).toEqual(2);
+    expect(uploadCalls.some((d) => d.includes("(conflict)"))).toEqual(true);
+    expect(updated).toContain("/");
+    expect(
+      saved.some((values) => values.cursor === "new-cursor")
+    ).toEqual(true);
+  });
+
+  it("leaves ignored paths such as case-distinct refs inside .git untouched when resolving case conflicts", async function () {
+    await storage.write(blogID, "/a.txt", "hello");
+    await storage.write(blogID, "/.git/refs/heads/Feature", "1");
+    await storage.write(blogID, "/.git/refs/heads/feature", "2");
+
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 0,
+        allocation: { ".tag": "individual", allocated: 1000000 },
+      },
+      remote: {},
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    await resetFromBlot(blogID, () => {}, { aborted: false });
+
+    expect(
+      (await storage.listNames(blogID, "/.git/refs/heads")).map((e) => e.name).sort()
+    ).toEqual(["Feature", "feature"]);
+    expect(uploadCalls.length).toEqual(1);
+  });
+
+  it("does not merge case-conflicting folders that contain ignored paths", async function () {
+    await storage.write(blogID, "/a/.git/HEAD", "one");
+    await storage.write(blogID, "/A/.git/HEAD", "two");
+
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 0,
+        allocation: { ".tag": "individual", allocated: 1000000 },
+      },
+      remote: {},
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    await resetFromBlot(blogID, () => {}, { aborted: false });
+
+    const top = (await storage.listNames(blogID, "/")).map((e) => e.name).sort();
+    expect(top.length).toEqual(2);
+    expect(top.some((name) => name.includes("(conflict)"))).toEqual(true);
+    const contents = [];
+    for (const name of top) {
+      expect(
+        (await storage.listNames(blogID, "/" + name + "/.git")).map((e) => e.name)
+      ).toEqual(["HEAD"]);
+      contents.push((await storage.read(blogID, "/" + name + "/.git/HEAD")).toString());
+    }
+    expect(contents.sort()).toEqual(["one", "two"]);
   });
 
   it("does not upload empty files, which may be placeholders, or overwrite a remote file with one", async function () {

@@ -1,7 +1,7 @@
 const { promisify } = require("util");
 const folder = require("storage/folder");
 const localReaddir = require("../sync/util/localReaddir");
-const resolveCaseConflicts = require("../sync/resolveCaseConflicts");
+const resolveCaseConflicts = require("../../util/resolveCaseConflicts");
 
 // The iCloud client reaches the blog folder through storage/folder. These use
 // the real config and a real blog folder.
@@ -80,6 +80,27 @@ describe("iCloud client access to the blog folder", function () {
       expect(names.length).toBe(2);
       expect(names.some((name) => name.includes("(conflict)"))).toBe(true);
       expect(updated).toContain("/");
+    });
+
+    it("stops with an AbortError when the signal is aborted", async function () {
+      await folder.write(this.blog.id, "/Post.txt", "upper");
+      await folder.write(this.blog.id, "/post.txt", "lower");
+
+      const signal = { aborted: false };
+      const publish = () => {
+        signal.aborted = true;
+      };
+      let error;
+      try {
+        await resolveCaseConflicts(this.blog.id, publish, async () => {}, signal);
+      } catch (e) {
+        error = e;
+      }
+
+      expect(error && error.name).toBe("AbortError");
+      const names = (await folder.listNames(this.blog.id, "/")).map((e) => e.name);
+      expect(names.some((name) => name.includes("(conflict)"))).toBe(true);
+      expect(names.length).toBe(2);
     });
 
     it("merges directories which differ only by case", async function () {

@@ -12,6 +12,7 @@ const set = promisify(require("../database").set);
 const persistError = promisify(require("../util/persistError"));
 const { SOURCES, classify } = require("../util/classifyError");
 const tagSource = require("../util/tagSource");
+const resolveCaseConflicts = require("../../util/resolveCaseConflicts");
 const createClient = promisify((blogID, cb) =>
   require("../util/createClient")(blogID, (err, ...results) => cb(err, results))
 );
@@ -196,7 +197,7 @@ function publishTransferStatus(progress, publish, path) {
   );
 }
 
-async function resetFromBlot(blogID, publish, signal) {
+async function resetFromBlot(blogID, publish, signal, update) {
   if (!publish)
     publish = function () {
       log.apply(null, arguments);
@@ -226,7 +227,8 @@ async function resetFromBlot(blogID, publish, signal) {
       publish,
       signal,
       client,
-      account
+      account,
+      update
     );
   } catch (err) {
     if (!err || err.name !== "AbortError") {
@@ -264,8 +266,23 @@ async function resetFromBlotWithClient(
   publish,
   signal,
   client,
-  account
+  account,
+  update
 ) {
+  abortIfRequested(signal);
+
+  // Dropbox is case-insensitive, so two paths in the blog folder that
+  // differ only by case (a.txt and A.txt) would overwrite each other or
+  // fail to upload. Rename the losers (same as the iCloud initial transfer)
+  // before anything is counted or uploaded.
+  publish("Resolving case conflicts");
+  await resolveCaseConflicts(
+    blogID,
+    publish,
+    update,
+    signal,
+    isDotfileOrDotfolder
+  );
   abortIfRequested(signal);
 
   let dropboxRoot = "/";
