@@ -332,28 +332,7 @@ TemplateEditor.route("/:templateSlug/local-editing")
         );
       });
     } else {
-      Template.setMetadata(
-        req.template.id,
-        { localEditing: true },
-        function (err) {
-          if (err) return next(err);
-
-          // Respond once the files are written, so the folder lock taken for
-          // this request is held until then.
-          Template.writeToFolder(req.blog.id, req.template.id, function () {
-            // could we do something with this error? it would be useful to
-            // have a progress bar here to prevent busted folder state
-            res.message(
-              "/sites/" +
-                req.blog.handle +
-                "/template-folder/" +
-                req.template.id.split(":").slice(1).join(":") +
-                "/source-code",
-              "Moved template to your folder"
-            );
-          });
-        }
-      );
+      require("./save/enable-local-editing")(req, res, next);
     }
   });
 

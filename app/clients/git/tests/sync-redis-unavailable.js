@@ -1,7 +1,6 @@
 const fs = require("fs-extra");
 const vm = require("vm");
 const { SimpleError } = require("redis");
-const validateTree = require("../validateTree");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
 
 // What a sync does about the commit Blot last applied, which it records in
@@ -17,15 +16,16 @@ describe("Git sync when Redis is unavailable", function () {
   let writes;
   let readError;
   let writeError;
-  let head;
+  let master;
   let emptyDiff;
   let crash;
   let materialized;
   let materializeError;
 
+  // The commits the store has
   const known = ["old", "new"];
-  const unavailable = () =>
-    new SimpleError("NOREPLICAS Not enough good replicas to write.");
+  const EMPTY_TREE = "nothing";
+  const unavailable = () => new SimpleError("NOREPLICAS Not enough good replicas to write.");
 
   beforeEach(function () {
     updates = [];
@@ -36,38 +36,65 @@ describe("Git sync when Redis is unavailable", function () {
     writes = 0;
     readError = null;
     writeError = null;
-    head = "old";
+    master = "old";
     emptyDiff = false;
     crash = null;
     materialized = [];
     materializeError = null;
   });
 
-  // Runs sync.js with the git commands faked. A push moves the remote from
-  // "old" to "new" and changes a.txt and b.txt; with no push the remote stays
-  // where the clone is. Resetting moves the clone's HEAD, as it does for real.
-  // The repository has the commits in known, and no others.
+  // Loads a module of the git client in a context of its own, with some of
+  // what it requires replaced
+  function load(file, stubs) {
+    const module = { exports: {} };
+    vm.runInNewContext(fs.readFileSync(require.resolve(file), "utf8"), {
+      module,
+      exports: module.exports,
+      console,
+      require: (name) => (name in stubs ? stubs[name] : require(name)),
+    });
+    return module.exports;
+  }
+
+  // Runs sync.js and served/sync.js with the store, the materializer and the
+  // database faked. A push moves master in the store from "old" to "new",
+  // which changes a.txt and b.txt.
   async function run({ push }) {
-    const remote = push ? "new" : head;
-    const git = {
-      raw(args, cb) {
-        let value = "";
-        if (args[0] === "rev-parse" && args.includes("--quiet"))
-          value = known.includes(args[3].replace("^{commit}", ""))
-            ? args[3].replace("^{commit}", "")
-            : "";
-        else if (args[0] === "rev-parse" && args.includes("--verify")) value = remote;
-        else if (args[0] === "rev-parse") value = head;
-        else if (args[0] === "ls-tree") value = "100644 blob abc\tfile.txt\0";
-        else if (args[0] === "reset") head = args[3];
-        return cb ? cb(null, value) : Promise.resolve(value);
+    if (push) master = "new";
+
+    const served = load("../served/sync", {
+      "../database": {
+        getApplied: (id, cb) => cb(readError, applied),
+        setApplied: (id, commit, cb) => {
+          if (writeError) return cb(writeError);
+          writes++;
+          applied = commit;
+          cb(null);
+        },
       },
-    };
+      "../store/manifest": {
+        read: async () => ({ refs: { "refs/heads/master": master } }),
+        isEmpty: () => false,
+      },
+      "../store/reader": () => ({
+        read: async (oid) => {
+          if (known.includes(oid)) return { type: "commit" };
+          throw Object.assign(new Error("not found"), { code: "NOT_FOUND" });
+        },
+      }),
+      "./materialize": Object.assign(
+        async ({ from, to }) => {
+          materialized.push([from, to]);
+          if (materializeError) throw materializeError;
+          return emptyDiff ? [] : ["a.txt", "b.txt"];
+        },
+        { EMPTY_TREE }
+      ),
+      "./context": { storeFor: () => ({}), cache: () => ({}) },
+    });
 
     return new Promise((resolve) => {
-      const stubs = {
-        "./git": () => git,
-        debug: () => () => {},
+      const sync = load("../sync", {
         sync: (id, cb) =>
           cb(
             null,
@@ -86,40 +113,10 @@ describe("Git sync when Redis is unavailable", function () {
               cb(err);
             }
           ),
-        "./checkGitRepoExists": (blogID, cb) => cb(null, "/not-used"),
-        "./repo": {
-          directory: (handle) => "/not-used/" + handle + ".git",
-          followLiveClone: (git, handle, commit, cb) =>
-            git.raw(["reset", "--mixed", "--quiet", commit], cb),
-        },
-        "./materialize": Object.assign(
-          (directory, folder, base, commit, cb) => {
-            materialized.push([base, commit]);
-            if (materializeError) return cb(materializeError);
-            cb(null, emptyDiff ? [] : ["a.txt", "b.txt"]);
-          },
-          { EMPTY_TREE: "nothing" }
-        ),
-        "./database": {
-          getApplied: (id, cb) => cb(readError, applied),
-          setApplied: (id, commit, cb) => {
-            if (writeError) return cb(writeError);
-            writes++;
-            applied = commit;
-            cb(null);
-          },
-        },
-        "models/blog": {},
-        "./validateTree": validateTree,
-      };
-      const module = { exports: {} };
-      vm.runInNewContext(fs.readFileSync(require.resolve("../sync"), "utf8"), {
-        module,
-        exports: module.exports,
-        console,
-        require: (name) => (name in stubs ? stubs[name] : require(name)),
+        "./served/sync": served,
       });
-      module.exports("test", "test", resolve);
+
+      sync("test", "test", resolve);
     });
   }
 
@@ -134,8 +131,7 @@ describe("Git sync when Redis is unavailable", function () {
     expect(applied).toBe("old");
     expect(writes).toBe(0);
 
-    // The freeze is over and nothing was pushed since: the clone has already
-    // moved to the new commit, but the recorded one has not
+    // The freeze is over and nothing was pushed since
     failing = {};
     updates = [];
 
@@ -149,7 +145,6 @@ describe("Git sync when Redis is unavailable", function () {
     crash = "b.txt";
 
     expect(await run({ push: true })).toBe("crashed");
-    expect(head).toBe("new");
     expect(applied).toBe("old");
 
     crash = null;
@@ -167,8 +162,9 @@ describe("Git sync when Redis is unavailable", function () {
     failing = {};
     updates = [];
 
-    // The next push is compared with what was applied, not with the clone
+    // The next push is compared with what was applied
     expect(await run({ push: true })).toBe(null);
+    expect(materialized.pop()).toEqual(["old", "new"]);
     expect(updates).toEqual(["a.txt", "b.txt"]);
     expect(applied).toBe("new");
   });
@@ -208,59 +204,40 @@ describe("Git sync when Redis is unavailable", function () {
     expect(applied).toBe("new");
   });
 
-  it("compares from the clone before the pull when no commit is recorded", async function () {
+  it("compares from nothing when no commit is recorded", async function () {
     applied = null;
 
     expect(await run({ push: true })).toBe(null);
+    expect(materialized).toEqual([[EMPTY_TREE, "new"]]);
     expect(updates).toEqual(["a.txt", "b.txt"]);
     expect(applied).toBe("new");
-  });
-
-  it("applies the paths Redis refused again when no commit was recorded", async function () {
-    applied = null;
-    failing["b.txt"] = unavailable();
-
-    expect(isRedisUnavailableError(await run({ push: true }))).toBe(true);
-    expect(applied).toBe("old");
-
-    failing = {};
-    updates = [];
-
-    expect(await run({ push: false })).toBe(null);
-    expect(updates).toEqual(["a.txt", "b.txt"]);
-    expect(applied).toBe("new");
-  });
-
-  it("compares from nothing when the repository has lost the clone's commit", async function () {
-    applied = null;
-    head = "lost";
-
-    expect(await run({ push: true })).toBe(null);
-    expect(materialized).toEqual([["nothing", "new"]]);
-    expect(updates).toEqual(["a.txt", "b.txt"]);
-    expect(applied).toBe("new");
-    expect(logs.join("\n")).toContain("lost is not in the repo");
   });
 
   it("starts from nothing again if a sync from nothing was interrupted", async function () {
     applied = null;
-    head = "lost";
     failing["b.txt"] = unavailable();
 
     expect(isRedisUnavailableError(await run({ push: true }))).toBe(true);
-
-    // The clone has moved on, but what was recorded has not
-    expect(head).toBe("new");
-    expect(applied).toBe("nothing");
+    expect(applied).toBe(EMPTY_TREE);
 
     failing = {};
     updates = [];
     materialized = [];
 
     expect(await run({ push: false })).toBe(null);
-    expect(materialized).toEqual([["nothing", "new"]]);
+    expect(materialized).toEqual([[EMPTY_TREE, "new"]]);
     expect(updates).toEqual(["a.txt", "b.txt"]);
     expect(applied).toBe("new");
+  });
+
+  it("compares from nothing when the store has lost the recorded commit", async function () {
+    applied = "gone";
+
+    expect(await run({ push: true })).toBe(null);
+    expect(materialized).toEqual([[EMPTY_TREE, "new"]]);
+    expect(updates).toEqual(["a.txt", "b.txt"]);
+    expect(applied).toBe("new");
+    expect(logs.join("\n")).toContain("gone is not in the store");
   });
 
   it("fails, and keeps the recorded commit, if the blog folder cannot be updated", async function () {
@@ -282,29 +259,13 @@ describe("Git sync when Redis is unavailable", function () {
     expect(applied).toBe("new");
   });
 
-  it("records the commit when none is recorded and nothing has changed", async function () {
-    applied = null;
-
-    expect(await run({ push: false })).toBe(null);
-    expect(updates).toEqual([]);
-    expect(applied).toBe("old");
-  });
-
-  it("compares from the clone before the pull when the recorded commit has gone", async function () {
-    applied = "gone";
-
-    expect(await run({ push: true })).toBe(null);
-    expect(updates).toEqual(["a.txt", "b.txt"]);
-    expect(applied).toBe("new");
-    expect(logs.join("\n")).toContain("gone is not in the repo");
-  });
-
-  it("does nothing, and writes nothing, when the recorded commit is the new one", async function () {
+  it("does nothing, and writes nothing, when the recorded commit is master", async function () {
     applied = "new";
-    head = "new";
+    master = "new";
 
     expect(await run({ push: false })).toBe(null);
     expect(updates).toEqual([]);
+    expect(materialized).toEqual([]);
     expect(writes).toBe(0);
   });
 

@@ -8,16 +8,21 @@ describe("org converter", function () {
   fs.readdirSync(dir)
     .filter((file) => org.is(file))
     .forEach((file) => {
-      it("handles " + file.slice(0, -4).split("-").join(" "), function (done) {
+      it("handles " + file.slice(0, -4).split("-").join(" "), async function () {
         // Copy the .bib and csl files to the root of the blog folder
-        fs.copySync(dir, this.blogDirectory);
+        await test.folder.copyDirectory(this.blog.id, dir);
 
         const path = "/" + file;
-        org.read(this.blog, path, function (err, html) {
-          if (err) return done.fail(err);
+        const html = await new Promise((resolve, reject) => {
+          org.read(this.blog, path, function (err, html) {
+            if (err) return reject(err);
+            resolve(html);
+          });
+        });
 
+        {
           let expected;
-          
+
           try {
             expected = fs.readFileSync(dir + path + ".html", "utf8");
           } catch (e) { }
@@ -26,8 +31,7 @@ describe("org converter", function () {
             fs.outputFileSync(dir + path + ".expected.html", html);
 
           expect(expected).toEqual(html);
-          done();
-        });
+        }
       });
     });
 });

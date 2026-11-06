@@ -333,7 +333,7 @@ of the rules:
 - After the promotion, check `/redis-health`, the app containers' restart
   counts, and that the next hourly backup arrives from the new host.
 - The old host stays up about a day after `settle`, replicating from the new
-  one, then `cycle.sh finish --any-age` terminates it by instance ID (rule 3).
+  one, then `cycle.sh finish` terminates it by instance ID (rule 3).
   It is not a rollback target after the first minutes (rule 4).
 
 ## Disaster recovery and drills
@@ -470,3 +470,18 @@ Entry template:
 - Follow-up: if the alert returns, look at `CLIENT LIST` for short-lived
   clients, and ask whoever is running scripts in the units.
 
+### 2026-11-06 — host cycle onto a 30 GB root disk (blotcms/blot#2552)
+
+- Trigger / evidence: the data volume was retired (#2258, #2259), so the host
+  was moved to a new one with a 30 GB root disk and the newest AL2023 image,
+  by the volume-free `cycle.sh` after two drills.
+- Fix / outcome: 06:06-06:35 UTC. launch 306s, replicate 94s, app (third
+  try: `units.sh` refused a detached worktree, then one ssh connect timed out
+  from the Mac), switch 172s, settle about 2.5 min. FAILOVER took 114ms with
+  the replica 856 bytes behind. Writes were frozen 110s (41s in the drill);
+  the per-step timing isn't logged. Probes of the site and a test blog every
+  2s through switch and the first normal deploy afterwards: no failures.
+  `finish` ran the same day at the operator's request; the old host is
+  terminated, so rollback is now a restore from backups.
+- Follow-up: under "Host cycle follow-ups" in `TODO` (the first offsite sync
+  from the new host, timing the freeze, host keys at launch).

@@ -61,9 +61,9 @@ env:
     - app/sync
     - app/templates
     - config/redis
+    - config/storage-bucket
     - proxy
     - scripts/deploy
-    - scripts/host-cycle
     - scripts/storage
 
   # The nightly run, and a manual one. It slows the specs down too much for
@@ -91,7 +91,7 @@ jobs:
           node-version: ${{ steps.versions.outputs.NODE_VERSION }}
 
       # Builds and pushes the test image when nothing has pushed it yet, i.e.
-      # when Dockerfile, .dockerignore or package.json changed. (Here rather
+      # when Dockerfile, .dockerignore, package.json or package-lock.json changed. (Here rather
       # than in a job of its own: it's a few seconds when the image exists.
       # The test jobs don't wait for this job, only for the image.)
       - name: Set image tag
@@ -155,6 +155,10 @@ jobs:
       - name: Check blog folders are only reached through app/storage
         if: always()
         run: node scripts/tests/ci/check-folder-access.js
+
+      - name: Check scripts and workflows have no emoji
+        if: always()
+        run: node scripts/tests/ci/check-no-emoji.js
 
       - name: List test suites
         if: always()
@@ -267,7 +271,7 @@ jobs:
           mkdir -p "$SRC/scripts/tests/ci" "$SRC/config"
           # Each is tried a few times: one 5xx from the API would otherwise
           # fail the whole job before any test runs
-          for f in Dockerfile .dockerignore package.json config/versions.env scripts/tests/ci/image-tag.sh; do
+          for f in Dockerfile .dockerignore package.json package-lock.json config/versions.env scripts/tests/ci/image-tag.sh; do
             for attempt in 1 2 3 4 5; do
               gh api -H "Accept: application/vnd.github.raw" \
                 "repos/$GITHUB_REPOSITORY/contents/$f?ref=$GITHUB_SHA" > "$SRC/$f" && break
@@ -494,5 +498,5 @@ jobs:
         run: |
           echo "Job results: $RESULTS"
           for r in $RESULTS; do
-            [ "$r" = "success" ] || { echo "❌ A required job did not succeed"; exit 1; }
+            [ "$r" = "success" ] || { echo "[FAIL] A required job did not succeed"; exit 1; }
           done

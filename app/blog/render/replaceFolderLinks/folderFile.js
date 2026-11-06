@@ -49,4 +49,11 @@ function folderUrl(blogID, path, version, suffix) {
   return `${BLOT_CDN_TOKEN}/folder/v-${version}/${blogID}${encodeFolderPath(path)}${suffix || ""}`;
 }
 
-module.exports = { hashFolderFile, getStat, folderUrl };
+// The version baked for an image that isn't in the folder yet (see
+// app/build/plugins/folderAssets): the CDN route serves whatever file is at
+// the path, so the URL starts working once the image syncs, and the rebuild
+// that follows bakes its content version instead. A different URL from the
+// file's own, so a cached 404 for the pending one never hides it.
+const PENDING_VERSION = "pending";
+
+module.exports = { hashFolderFile, getStat, folderUrl, PENDING_VERSION };

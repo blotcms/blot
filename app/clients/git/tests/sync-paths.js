@@ -10,6 +10,7 @@ describe("git client sync: paths and file contents", function () {
   var fs = require("fs-extra");
   var crypto = require("crypto");
   var helpers = require("./setup/helpers");
+  var folder = require("./setup/folder");
 
   afterEach(async function () {
     await this.local.expectSynced();
@@ -97,7 +98,7 @@ describe("git client sync: paths and file contents", function () {
     await this.local.commit("Rename Readme.txt to README.txt");
     await this.local.push();
 
-    expect(await fs.readdir(this.blogDirectory + "/case")).toEqual(["README.txt"]);
+    expect(await folder.names(this.blog.id, "/case")).toEqual(["README.txt"]);
     expect(await helpers.blogFile(this, "/case/README.txt")).toEqual(
       Buffer.from("Same file, different case")
     );
@@ -110,10 +111,8 @@ describe("git client sync: paths and file contents", function () {
     });
     await this.local.push();
 
-    expect((await fs.stat(this.blogDirectory + "/swap/a-file.txt")).isFile()).toBe(true);
-    expect(
-      (await fs.stat(this.blogDirectory + "/swap/a-directory.txt")).isDirectory()
-    ).toBe(true);
+    expect(await folder.isDirectory(this.blog.id, "/swap/a-file.txt")).toBe(false);
+    expect(await folder.isDirectory(this.blog.id, "/swap/a-directory.txt")).toBe(true);
 
     await this.local.remove("/swap/a-file.txt");
     await this.local.remove("/swap/a-directory.txt");
@@ -122,11 +121,11 @@ describe("git client sync: paths and file contents", function () {
     await this.local.commit("Swap files and directories");
     await this.local.push();
 
-    expect((await fs.stat(this.blogDirectory + "/swap/a-file.txt")).isDirectory()).toBe(true);
+    expect(await folder.isDirectory(this.blog.id, "/swap/a-file.txt")).toBe(true);
     expect(await helpers.blogFile(this, "/swap/a-file.txt/inner.txt")).toEqual(
       Buffer.from("Now I am inside a directory")
     );
-    expect((await fs.stat(this.blogDirectory + "/swap/a-directory.txt")).isFile()).toBe(true);
+    expect(await folder.isDirectory(this.blog.id, "/swap/a-directory.txt")).toBe(false);
     expect(await helpers.blogFile(this, "/swap/a-directory.txt")).toEqual(
       Buffer.from("Now I am a file")
     );
@@ -210,14 +209,12 @@ describe("git client sync: paths and file contents", function () {
     await this.local.push();
 
     expect(await helpers.blogFile(this, path)).toEqual(Buffer.from("#!/bin/sh\necho hello\n"));
-    expect((await fs.stat(this.blogDirectory + path)).mode & 0o111).toBe(0);
 
     // Only the mode changes, the content does not
     await fs.chmod(this.local.path(path), 0o644);
     await this.local.commit("Make it not executable");
     await this.local.push();
 
-    expect((await fs.stat(this.blogDirectory + path)).mode & 0o111).toBe(0);
     expect(await helpers.blogFile(this, path)).toEqual(Buffer.from("#!/bin/sh\necho hello\n"));
   });
 });

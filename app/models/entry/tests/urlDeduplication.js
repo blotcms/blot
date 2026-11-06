@@ -1,4 +1,4 @@
-const fs = require("fs-extra");
+const folder = require("storage/folder");
 const build = require("build");
 const setUrl = require("../_setUrl");
 
@@ -8,8 +8,9 @@ describe("entry.urlDeduplication", function () {
   it("setUrl returns conflictingEntryPath when first candidate conflicts", async function () {
     await this.set("/original.txt", "Link: conflict\nHello, original!");
 
-    await fs.outputFile(
-      this.blogDirectory + "/conflict.txt",
+    await folder.write(
+      this.blog.id,
+      "/conflict.txt",
       "Link: conflict\nHello, conflict!"
     );
 
@@ -78,8 +79,9 @@ describe("entry.urlDeduplication", function () {
   });
 
   it("publishes a folder post at its plus-stripped path", async function () {
-    await fs.outputFile(
-      this.blogDirectory + "/album+/one.md",
+    await folder.write(
+      this.blog.id,
+      "/album+/one.md",
       "Link: /album\n\n# One"
     );
 
@@ -103,8 +105,9 @@ describe("entry.urlDeduplication", function () {
   });
 
   it("returns null conflictingEntryPath when no conflict", async function () {
-    await fs.outputFile(
-      this.blogDirectory + "/unique.txt",
+    await folder.write(
+      this.blog.id,
+      "/unique.txt",
       "Link: unique\nHello, unique!"
     );
 

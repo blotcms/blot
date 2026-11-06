@@ -8,6 +8,10 @@ const { isRedisUnavailableError } = require("helper/redisUnavailable");
 const key = require("models/template/key");
 const assets = require("storage/assets");
 const folder = require("storage/folder");
+const {
+  getStat,
+  PENDING_VERSION,
+} = require("blog/render/replaceFolderLinks/folderFile");
 
 const GLOBAL_STATIC_FILES = config.blot_directory + "/app/blog/static";
 
@@ -52,7 +56,18 @@ cdn.use("/documentation/v-:version", static(config.views_directory));
 // not fall through to another static root. Any other HTTP error from sending
 // an existing file, such as a 416 for a bad range, goes on as it did from
 // express.static.
+//
+// v-pending is an image the build linked before it synced (see
+// app/build/plugins/folderAssets). It is cached for a short time, so a page
+// or feed copy that still links it shows the image soon after it arrives,
+// and a replaced image isn't stuck behind it for a year; its 404 is
+// cacheable for a minute. Bunny overrides the origin's cache time, so its
+// edge rule for v-pending does the same at the edge (see "Edge rules" in
+// config/storage-bucket/README.md). The path is as the author wrote it, so
+// it is found case-insensitively, like the build's own lookup.
 cdn.use("/folder/v-:version", async (req, res, next) => {
+  const pending = req.params.version === PENDING_VERSION;
+
   let pathname;
 
   try {
@@ -73,8 +88,17 @@ cdn.use("/folder/v-:version", async (req, res, next) => {
   }
 
   try {
-    const relPath = match[2] || "/";
-    const stat = await folder.stat(match[1], relPath);
+    let relPath = match[2] || "/";
+    let stat;
+
+    if (pending) {
+      ({ stat, path: relPath } = await getStat(match[1], relPath));
+    } else {
+      stat = await folder.stat(match[1], relPath);
+    }
+
+    // Only ever an image's URL, never a directory's
+    if (pending && stat.isDirectory) return pendingNotFound(res);
 
     if (stat.isDirectory && pathname.slice(-1) !== "/") {
       return res.redirect(301, req.originalUrl.replace(/^[^?]*/, "$&/"));
@@ -83,14 +107,20 @@ cdn.use("/folder/v-:version", async (req, res, next) => {
     if (req.method !== "GET" && req.method !== "HEAD") return methodNotAllowed(res);
 
     // A trailing slash serves the directory's index.html
-    await folder.serve(req, res, match[1], relPath, { maxAge: "1y" });
+    await folder.serve(req, res, match[1], relPath, { maxAge: pending ? "1h" : "1y" });
   } catch (err) {
     // The client went away after we started sending
     if (res.headersSent) return;
     if (err.status && err.status !== 404) return next(err);
+    if (pending) return pendingNotFound(res);
     res.sendStatus(404);
   }
 });
+
+function pendingNotFound(res) {
+  res.set("Cache-Control", "public, max-age=60");
+  res.sendStatus(404);
+}
 
 // Template output from the {{#cdn}} helper, stored in Redis by hash, e.g.
 // /template/{hash[0:2]}/{hash[2:4]}/{hash[4:]}/{basename}

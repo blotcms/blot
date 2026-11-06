@@ -229,8 +229,7 @@ describe("backlinks", function () {
 
 
   it("does not create a backlink from a resolved link to a plain local file", async function () {
-    const fs = require("fs-extra");
-    await fs.outputFile(this.blogDirectory + "/beach.jpg", "fake image data");
+    await require("storage/folder").write(this.blog.id, "/beach.jpg", "fake image data");
 
     await this.write({
       path: "/vacation.txt",
@@ -247,8 +246,7 @@ describe("backlinks", function () {
   it("still creates a backlink from an anchor sharing a path with one the autoImage plugin removed", async function () {
     // /photo.jpg is a real file, but also deliberately set as another
     // entry's custom permalink, so the two collide.
-    const fs = require("fs-extra");
-    await fs.outputFile(this.blogDirectory + "/photo.jpg", "fake image data");
+    await require("storage/folder").write(this.blog.id, "/photo.jpg", "fake image data");
 
     await this.write({
       path: "/other.txt",

@@ -191,17 +191,38 @@ async function lock(blogID, options = {}) {
   let compromised = false;
   let lastExtended = Date.now();
   let lastTickAt = lastExtended;
+  // At most one EXTEND is ever outstanding: a tick that finds the previous
+  // one still unanswered does nothing, so a slow Redis can't stack requests
+  // on the shared connection or have an old reply race a newer one.
+  let inFlight = false;
+
+  function compromise(err) {
+    if (released || compromised) return;
+    compromised = true;
+    held.delete(handle);
+    clearInterval(timer);
+    err.code = "ECOMPROMISED";
+    onCompromised(err);
+  }
 
   const timer = setInterval(async () => {
     if (released || compromised) return;
+    const tickAt = Date.now();
+    const tickDelayMs = tickAt - lastTickAt - heartbeat;
+    lastTickAt = tickAt;
+    if (inFlight) {
+      // The pending EXTEND may never answer; the lock still can't outlive
+      // its TTL, so give up once that has elapsed.
+      if (tickAt - lastExtended >= ttl) {
+        compromise(new Error("Lock heartbeat stalled: " + lockKey));
+      }
+      return;
+    }
+    inFlight = true;
     let err;
     // Redis starts the new TTL when it runs the script, so measure from
     // before the round trip; a delayed reply must not lengthen our lease.
-    const attemptedAt = Date.now();
-    // How much later than scheduled this tick actually fired: a JS-side
-    // (event-loop) delay, distinct from the Redis round trip measured below.
-    const tickDelayMs = attemptedAt - lastTickAt - heartbeat;
-    lastTickAt = attemptedAt;
+    const attemptedAt = tickAt;
 
     const stallTimer = setTimeout(
       () => probe(lockKey, Date.now() - attemptedAt),
@@ -248,13 +269,10 @@ async function lock(blogID, options = {}) {
       // until then nobody else can have taken the lock.
       if (Date.now() - lastExtended < ttl) return;
       err = e;
+    } finally {
+      inFlight = false;
     }
-    if (released || compromised) return;
-    compromised = true;
-    held.delete(handle);
-    clearInterval(timer);
-    err.code = "ECOMPROMISED";
-    onCompromised(err);
+    compromise(err);
   }, heartbeat);
   timer.unref();
 

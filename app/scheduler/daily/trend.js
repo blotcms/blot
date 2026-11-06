@@ -1,5 +1,5 @@
 // The "27% (stable, 19 GB free)" format the daily email uses for Redis memory,
-// the Redis host's disk and the data disk, and the history behind the trend.
+// the Redis host's disk, and the history behind the trend.
 //
 // Each figure keeps the last few daily readings of how much it uses, as JSON
 // [{ time, used, scope? }] in Redis with no TTL. The trend is the growth from
@@ -10,7 +10,8 @@
 // A different `scope` (the Redis host's name) starts the history afresh.
 const prettySize = require("helper/prettySize");
 
-const HOUR = 60 * 60 * 1000;
+const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
 // A reading closer than this to the last one is no basis for a trend (and is
@@ -24,6 +25,13 @@ const STABLE_DAYS = 365;
 
 // prettySize takes kilobytes, 1000 to the unit, and divides by 1024.
 const size = (bytes) => prettySize(bytes / 1000, 1);
+
+// "3m", "2h", "3d"
+function compact(ms) {
+  if (ms < HOUR) return Math.max(0, Math.round(ms / MINUTE)) + "m";
+  if (ms < 48 * HOUR) return Math.round(ms / HOUR) + "h";
+  return Math.round(ms / DAY) + "d";
+}
 
 function parse(value) {
   try {
@@ -84,4 +92,4 @@ async function save(client, key, history, reading) {
   }
 }
 
-module.exports = { parse, record, trend, status, save, size, MIN_GAP_MS, MAX_POINTS };
+module.exports = { compact, parse, record, trend, status, save, size, MIN_GAP_MS, MAX_POINTS };

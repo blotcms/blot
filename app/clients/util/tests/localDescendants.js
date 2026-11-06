@@ -1,14 +1,15 @@
 describe("clients/util localDescendants", function () {
-  const fs = require("fs-extra");
-  const { join } = require("path");
+  const folder = require("storage/folder");
   const localDescendants = require("../localDescendants");
 
   global.test.blog();
 
   it("lists everything inside a folder as blog paths, parents first", async function () {
-    await fs.outputFile(join(this.blogDirectory, "Folder", "a.txt"), "a");
-    await fs.outputFile(join(this.blogDirectory, "Folder", "sub", "b.txt"), "b");
-    await fs.ensureDir(join(this.blogDirectory, "Folder", "empty"));
+    await test.folder.writeFiles(this.blog.id, {
+      "/Folder/a.txt": "a",
+      "/Folder/sub/b.txt": "b",
+    });
+    await folder.mkdir(this.blog.id, "/Folder/empty");
 
     const paths = await localDescendants(this.blog.id, "/Folder");
 
@@ -21,7 +22,7 @@ describe("clients/util localDescendants", function () {
   });
 
   it("is empty for a file or a missing path", async function () {
-    await fs.outputFile(join(this.blogDirectory, "a.txt"), "a");
+    await folder.write(this.blog.id, "/a.txt", "a");
 
     expect(await localDescendants(this.blog.id, "/a.txt")).toEqual([]);
     expect(await localDescendants(this.blog.id, "/missing")).toEqual([]);

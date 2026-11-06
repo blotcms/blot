@@ -6,12 +6,14 @@ const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
 const unwrapFolderLink = require("blog/render/replaceFolderLinks/unwrapFolderLink");
 const {
   GLOBAL_STATIC_DIR,
+  BLOG_STATIC_PATHS,
   isReservedStaticPath,
 } = require("blog/lib/staticPaths");
 const blogHosts = require("blog/lib/blogHosts");
 const {
   hashFolderFile,
   folderUrl,
+  PENDING_VERSION,
 } = require("blog/render/replaceFolderLinks/folderFile");
 const {
   htmlExtRegex,
@@ -25,6 +27,12 @@ const {
 } = require("blog/render/replaceFolderLinks/shared");
 
 const ATTRS = ["href", "src", "poster"];
+
+// A missing file with one of these extensions, linked from src, poster or
+// srcset, is baked as a pending CDN URL (see bakeValue). Only images: an
+// href can name a page or route the blog serves itself (/feed.rss), and the
+// CDN only serves files.
+const PENDING_EXT_REGEX = /\.(avif|gif|jpe?g|png|svg|webp)$/i;
 
 // Bounds concurrent file reads/hashes for one entry (a gallery post can
 // reference dozens of files).
@@ -118,7 +126,7 @@ function bake($, options) {
       if (!value || typeof value !== "string") return;
 
       tasks.push(() =>
-        bakeValue(ctx, value, attr === "poster").then((result) => {
+        bakeValue(ctx, value, attr).then((result) => {
           if (result === null) return;
           $el.attr(attr, result);
           ctx.changed = true;
@@ -194,14 +202,16 @@ function isEligible(value) {
   return true;
 }
 
-// Returns the new attribute value, or null to leave it untouched.
+// Returns the new attribute value, or null to leave it untouched. attr is
+// the attribute the value came from: href, src, poster or srcset.
 //
 // poster and srcset aren't normalized by app/build/dependencies/index.js
-// (it only walks href/src), so with resolveRelative set, a value that is
-// relative to the entry (poster="movie.jpg") is first resolved against the
-// entry's own path.
-async function bakeValue(ctx, value, resolveRelative) {
-  if (resolveRelative) value = resolveAgainstEntry(ctx, value);
+// (it only walks href/src), so a value of theirs that is relative to the
+// entry (poster="movie.jpg") is first resolved against the entry's own path.
+async function bakeValue(ctx, value, attr) {
+  if (attr === "poster" || attr === "srcset") {
+    value = resolveAgainstEntry(ctx, value);
+  }
 
   const unwrapped = unwrapFolderLink(value, ctx.blogID);
   const wasBaked = unwrapped !== null;
@@ -219,16 +229,50 @@ async function bakeValue(ctx, value, resolveRelative) {
   // No file behind the link (or the file behind an already-baked link is
   // gone). Still record the dependency so the entry is rebuilt, and baked,
   // if the file (re)appears - regardless of whether another entry's HTML
-  // we embedded had already dropped back to the plain path. Where the link
-  // was baked, drop back to the plain path (which the origin serves)
-  // instead of keeping a URL for a now-missing versioned file.
+  // we embedded had already dropped back to the plain path.
   //
   // The path is decoded the way resolveBuildFile decodes it (baked links
   // hold an encoded path too), because the file which arrives is
   // "/my pic.jpg" and not "/my%20pic.jpg".
-  addDependency(ctx, decodeFolderPath(pathPartOf(raw)));
+  const path = decodeFolderPath(pathPartOf(raw));
 
+  addDependency(ctx, path);
+
+  // A post often syncs before its images. Left on the blog's own domain,
+  // each missing image is a request to the origin from the visitor's IP,
+  // and an image-heavy page (or a feed reader's early copy) is a burst of
+  // them that the rate limit and fail2ban count against the visitor. So
+  // link it on the CDN, with the path as written (the case the author
+  // used), which the CDN route serves case-insensitively once the file
+  // syncs. Its arrival rebuilds the entry (it depends on the path), which
+  // bakes the content-versioned URL in place of this one.
+  if (attr !== "href" && isPendingImage(path)) {
+    const suffix = raw.slice(pathPartOf(raw).length);
+    return folderUrl(ctx.blogID, path, PENDING_VERSION, suffix);
+  }
+
+  // Otherwise drop a baked link back to the plain path (which the origin
+  // serves) instead of keeping a URL for a now-missing versioned file.
   return wasBaked ? raw : null;
+}
+
+// Whether a missing file is baked as a pending CDN URL. Only a path in the
+// blog's folder: not a network-path reference to another host
+// (//example.org/a.jpg), a global static path (/katex/...) or a generated
+// asset (/_assets/..., in storage/assets, which the CDN's folder route
+// never reads). The CDN route never serves a dot segment either (a dotfile,
+// or a '..' the browser would have resolved against the page instead), so
+// those stay on the blog's domain.
+function isPendingImage(path) {
+  return (
+    PENDING_EXT_REGEX.test(path) &&
+    !path.startsWith("//") &&
+    !isReservedStaticPath(path) &&
+    !BLOG_STATIC_PATHS.some(
+      (dir) => path.toLowerCase().startsWith(dir + "/")
+    ) &&
+    !path.split("/").some((segment) => segment.charAt(0) === ".")
+  );
 }
 
 // An entry is always rebuilt when its own file changes, and (like
@@ -254,7 +298,7 @@ async function rewriteSrcset(ctx, value) {
   const rebuilt = [];
 
   for (const candidate of candidates) {
-    const result = await bakeValue(ctx, candidate.url, true);
+    const result = await bakeValue(ctx, candidate.url, "srcset");
     const url = result === null ? candidate.url : result;
 
     if (result !== null) changed = true;

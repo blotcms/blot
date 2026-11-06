@@ -2,14 +2,6 @@ describe("scheduler sweep-git", function () {
   const sweepGit = require("../sweep-git");
   const stuckProcesses = require("clients/git/stuckProcesses");
 
-  const CLEAN = {
-    repositories: 2,
-    removed: 0,
-    bytes: 0,
-    errors: 0,
-    directories: [],
-  };
-
   // `ps -eo pid=,etime=,rss=,args=` in the procps form
   const PS = [
     "    1  3-04:05:06  1780 /sbin/tini -- node app/index.js",
@@ -25,7 +17,6 @@ describe("scheduler sweep-git", function () {
 
     const result = await sweepGit({
       sendEmail: async (view) => sent.push(view),
-      sweep: async () => CLEAN,
       findStuck: async () => [],
       ...options,
     });
@@ -40,6 +31,21 @@ describe("scheduler sweep-git", function () {
     expect(stuck[0].seconds).toBe(7201);
     expect(stuck[0].rssKb).toBe(9000);
     expect(stuck[0].args).toBe("git index-pack --stdin");
+  });
+
+  it("finds the git store's pack-objects, index-pack and fast-import, with their settings in front", async function () {
+    const stuck = await stuckProcesses({
+      ps: async () =>
+        [
+          "   51  2h05   40m git -c pack.threads=1 -c pack.window=10 pack-objects --stdout -q",
+          "   52  2h05   40m git -c core.bigFileThreshold=16m index-pack --stdin --fix-thin --fsck-objects",
+          "   53  2h05   40m git -c pack.threads=1 fast-import --quiet --done",
+          "   54  2h05   40m git --git-dir=/tmp/x/repo.git --work-tree=/tmp/x/ignore check-ignore --no-index --stdin",
+          "   55  2h05   40m git -c pack.window=10 cat-file --batch",
+        ].join("\n"),
+    });
+
+    expect(stuck.map((p) => p.pid)).toEqual([51, 52, 53]);
   });
 
   // What the production container's busybox ps actually prints once a
@@ -82,26 +88,5 @@ describe("scheduler sweep-git", function () {
     expect(sent[0].stuck).toEqual([
       { pid: 41, age: "2h 0m", rss: "8.8 MB", args: "git index-pack --stdin" },
     ]);
-  });
-
-  it("sends an email when directories were removed or the sweep had errors", async function () {
-    const removed = await run({
-      sweep: async () => ({
-        ...CLEAN,
-        removed: 1,
-        bytes: 3 * 1024 * 1024,
-        directories: [
-          { repository: "example.git", bytes: 3 * 1024 * 1024, ageMs: 3 * 24 * 3600 * 1000 },
-        ],
-      }),
-    });
-
-    expect(removed.sent[0].removed).toEqual([
-      { repository: "example.git", size: "3.0 MB", age: "3 days" },
-    ]);
-
-    const failed = await run({ sweep: async () => ({ ...CLEAN, errors: 2 }) });
-
-    expect(failed.sent[0].summary).toBe("2 sweep errors");
   });
 });

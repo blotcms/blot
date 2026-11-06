@@ -148,7 +148,20 @@ function main(blog, callback) {
         try {
           await setEntry(blog.id, entry.id, entry);
         } catch (err) {
-          if (staleRaw) await client.set(staleKey, staleRaw);
+          // A failed restore must not replace the error that made us need it:
+          // report both, and propagate the original.
+          if (staleRaw) {
+            try {
+              await client.set(staleKey, staleRaw);
+            } catch (restoreErr) {
+              console.error(
+                "list-ghosts: could not restore",
+                staleKey,
+                "after failed re-save:",
+                restoreErr.message
+              );
+            }
+          }
           throw err;
         }
       }

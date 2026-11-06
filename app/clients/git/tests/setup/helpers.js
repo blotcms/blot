@@ -2,8 +2,7 @@
 // client (./client.js).
 
 var Entry = require("models/entry");
-var fs = require("fs-extra");
-var readTree = require("./client").readTree;
+var folder = require("./folder");
 
 // Resolves with the blog's entry at a path (a deleted entry stays in the
 // database as a tombstone with deleted: true), or undefined if there is none.
@@ -29,13 +28,13 @@ exports.randomPath = function (fake, extension) {
 // The blog folder's files, without its .git directory, as
 // { "relative/path": Buffer }
 exports.blogFiles = function (ctx) {
-  return readTree(ctx.blogDirectory);
+  return folder.tree(ctx.blog.id);
 };
 
 exports.blogFile = function (ctx, path) {
-  return fs.readFile(ctx.blogDirectory + path);
+  return folder.read(ctx.blog.id, path);
 };
 
 exports.blogHas = function (ctx, path) {
-  return fs.pathExists(ctx.blogDirectory + path);
+  return folder.has(ctx.blog.id, path);
 };

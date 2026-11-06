@@ -4,6 +4,7 @@ describe("asset middleware", function () {
   const config = require("config");
   const fs = require("fs-extra");
   const assets = require("storage/assets");
+  const folder = require("storage/folder");
 
   require("./util/setup")();
 
@@ -118,8 +119,8 @@ describe("asset middleware", function () {
     it("redirects large pdf and mp4 files, encoding the path", async function () {
       for (const path of ["/Big Fête.pdf", "/Videos/clip.MP4"]) {
         const res = await writeAndGet(this, path, big);
-        const stat = await fs.stat(config.blog_folder_dir + "/" + this.blog.id + path);
-        const version = require("helper/contentVersion").fromStat(stat);
+        const stat = await folder.stat(this.blog.id, path);
+        const version = require("helper/contentVersion").fromFolderStat(stat);
         const encoded = path.split("/").map(encodeURIComponent).join("/");
 
         expect(res.status).toEqual(302);
@@ -366,16 +367,6 @@ describe("asset middleware", function () {
     expect(res.headers.get("content-type")).toContain("application/json");
   });
 
-  it("rejects symbolic links even when their target is inside the blog", async function () {
-    // This would require setup in the test environment
-    await this.write({ path: "/original.txt", content: "Original" });
-    await fs.symlink(
-      config.blog_folder_dir + "/" + this.blog.id + "/original.txt",
-      config.blog_folder_dir + "/" + this.blog.id + "/link.txt"
-    );
-    expect((await this.get("/link.txt")).status).toEqual(404);
-  });
-
   it("processes hidden files correctly", async function () {
     await this.write({ path: "/.hidden.txt", content: "Hidden" });
     const res = await this.get("/.hidden.txt");
@@ -421,15 +412,6 @@ describe("asset middleware", function () {
     expect(normalizedResponse).toEqual("Hello World");
   });
 
-  it("handles files with unusual permissions", async function () {
-    await this.write({ path: "/readonly.txt", content: "Protected" });
-    await fs.chmod(
-      config.blog_folder_dir + "/" + this.blog.id + "/readonly.txt",
-      0o444
-    );
-    expect(await this.text("/readonly.txt")).toEqual("Protected");
-  });
-
   it("properly handles index.html variants", async function () {
     const variants = [
       "/folder/index.html",
@@ -465,7 +447,7 @@ describe("asset middleware", function () {
 
   it("resolves a relative link to a local file even when the post's URL differs from its folder location", async function () {
     await this.template({ "entry.html": "{{{entry.html}}}" });
-    await fs.outputFile(this.blogDirectory + "/Photos/beach.jpg", "fake image data");
+    await folder.write(this.blog.id, "/Photos/beach.jpg", "fake image data");
 
     await this.write({
       path: "/Photos/vacation.txt",

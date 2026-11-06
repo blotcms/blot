@@ -315,7 +315,6 @@
   "app/helper/tests/alarm.js": 1.174,
   "app/helper/tests/alphanum.js": 0.013,
   "app/helper/tests/amountInWords.js": 0.009,
-  "app/helper/tests/assertNoSymlinks.js": 0.007,
   "app/helper/tests/capitalize.js": 0.007,
   "app/helper/tests/caseSensitivePath.js": 0.343,
   "app/helper/tests/contentVersion.js": 0.047,

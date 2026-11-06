@@ -34,11 +34,11 @@ const processBlog = async (blog) => {
     }
 
     console.log(
-      `✅ Flushed cache for blog ${blog.id} (${blog.handle || "no handle"})`
+      `[ok] Flushed cache for blog ${blog.id} (${blog.handle || "no handle"})`
     );
   } catch (err) {
     console.error(
-      `❌ Failed to flush cache for blog ${blog.id} (${
+      `[FAIL] Failed to flush cache for blog ${blog.id} (${
         blog.handle || "no handle"
       }):`,
       err.message
@@ -86,9 +86,9 @@ if (require.main === module) {
         }
 
         if (failedBlogs > 0) {
-          console.log("\n⚠️  Some flushes failed. Review errors above.");
+          console.log("\n[WARN] Some flushes failed. Review errors above.");
         } else {
-          console.log("\n✅ All blogs flushed successfully!");
+          console.log("\n[ok] All blogs flushed successfully!");
         }
 
         // wait for flush to clear

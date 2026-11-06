@@ -209,9 +209,11 @@ function dropFromMenu(blogID, entry, callback) {
     }
 
     Blog.set(blogID, { menu: menu }, function (errors) {
-      if (errors && errors.menu) {
+      // Blog.set passes validation errors keyed by field, but a failed
+      // Redis write arrives as an Error with no .menu property.
+      if (errors) {
         debugEntry("error saving menu:", errors);
-        return callback(errors.menu);
+        return callback(errors.menu || errors);
       }
 
       debugEntry("updated menu!");

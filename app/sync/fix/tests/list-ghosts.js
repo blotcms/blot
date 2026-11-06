@@ -136,6 +136,47 @@ describe("sync/fix/list-ghosts", function () {
     });
   });
 
+  it("propagates the re-save error when restoring the stale key also fails", function (done) {
+    spyOn(console, "error");
+    spyOn(Entries, "pruneMissing").and.callFake(function (_blogID, callback) {
+      callback(null);
+    });
+
+    spyOn(client, "zRange").and.callFake(function (key) {
+      if (key === "blog:blog-id:entries") {
+        return Promise.resolve(["existing-id"]);
+      }
+
+      return Promise.resolve([]);
+    });
+
+    spyOn(client, "zRem").and.returnValue(Promise.resolve(1));
+    spyOn(client, "del").and.returnValue(Promise.resolve(1));
+    spyOn(client, "get").and.returnValue(
+      Promise.resolve(JSON.stringify({ id: "moved-id" }))
+    );
+    spyOn(client, "set").and.callFake(function () {
+      return Promise.reject(new Error("restore failed"));
+    });
+
+    stubMGet("blog-id", { "existing-id": { id: "moved-id" } });
+
+    spyOn(Entry, "get").and.callFake(function (_blogID, id, callback) {
+      return callback({ id: "moved-id" });
+    });
+
+    var setEntryError = new Error("set entry failed");
+    spyOn(Entry, "set").and.callFake(function (_blogID, id, entry, callback) {
+      callback(setEntryError);
+    });
+
+    fixListGhosts({ id: "blog-id" }, function (err) {
+      expect(err).toBe(setEntryError);
+      expect(console.error).toHaveBeenCalled();
+      done();
+    });
+  });
+
   it("fetches an id shared by several lists from Redis only once", function (done) {
     spyOn(Entries, "pruneMissing").and.callFake(function (_blogID, callback) {
       callback(null);

@@ -1,7 +1,5 @@
-// The daily git housekeeping job: sweeps stale push quarantine directories,
-// looks for git processes that have been running too long to be healthy, and
-// emails the admin only if either found something or the sweep had errors.
-const sweepQuarantine = require("../clients/git/sweepQuarantine");
+// The daily git housekeeping job: looks for git processes that have been
+// running too long to be healthy, and emails the admin only if it found some.
 const stuckProcesses = require("../clients/git/stuckProcesses");
 
 const plural = (n, word) => n + " " + word + (n === 1 ? "" : "s");
@@ -20,20 +18,11 @@ function formatSize(bytes) {
   return mb >= 1024 ? (mb / 1024).toFixed(1) + " GB" : mb.toFixed(1) + " MB";
 }
 
-// options: sweep, findStuck (default to the real ones) and sendEmail(view)
+// options: findStuck (defaults to the real one) and sendEmail(view)
 module.exports = async function sweepGit(options) {
-  const sweep = options.sweep || sweepQuarantine;
   const findStuck = options.findStuck || stuckProcesses;
 
-  let report;
   let stuck = [];
-
-  try {
-    report = await sweep();
-  } catch (err) {
-    console.error("Git: could not sweep push quarantine directories", err);
-    report = { repositories: 0, removed: 0, bytes: 0, errors: 1, directories: [] };
-  }
 
   try {
     stuck = await findStuck();
@@ -41,42 +30,18 @@ module.exports = async function sweepGit(options) {
     console.error("Git: could not look for stuck git processes", err);
   }
 
-  if (!stuck.length && !report.removed && !report.errors) {
-    return { sent: false, report, stuck };
-  }
-
-  const summary = [];
-
-  if (stuck.length) summary.push(plural(stuck.length, "stuck git process"));
-  if (report.removed) {
-    summary.push(
-      "removed " +
-        report.removed +
-        " stale push " +
-        (report.removed === 1 ? "directory" : "directories")
-    );
-  }
-  if (report.errors) summary.push(plural(report.errors, "sweep error"));
+  if (!stuck.length) return { sent: false, stuck };
 
   await options.sendEmail({
-    summary: summary.join(", "),
-    hasStuck: stuck.length > 0,
+    summary: plural(stuck.length, "stuck git process"),
+    hasStuck: true,
     stuck: stuck.map((p) => ({
       pid: p.pid,
       age: formatAge(p.seconds),
       rss: formatSize(p.rssKb * 1024),
       args: p.args,
     })),
-    hasRemoved: report.removed > 0,
-    removed: report.directories.map((d) => ({
-      repository: d.repository,
-      size: formatSize(d.bytes),
-      age: formatAge(d.ageMs / 1000),
-    })),
-    freed: formatSize(report.bytes),
-    hasErrors: report.errors > 0,
-    errors: report.errors,
   });
 
-  return { sent: true, report, stuck };
+  return { sent: true, stuck };
 };

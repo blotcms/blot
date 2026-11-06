@@ -7,7 +7,7 @@
 // BLOT_LOCAL_SOURCE_DIRECTORY when that is set. It is a path on this machine,
 // not a blog folder, so plain fs is fine for it.
 
-const { join, resolve, sep, posix } = require("path");
+const { join, resolve, posix } = require("path");
 const { promisify } = require("util");
 const config = require("config");
 
@@ -17,10 +17,6 @@ function base() {
   return process.env.BLOT_LOCAL_SOURCE_DIRECTORY
     ? resolve(process.env.BLOT_LOCAL_SOURCE_DIRECTORY)
     : join(config.data_directory, "local-sources");
-}
-
-function inside(parent, child) {
-  return child === parent || child.startsWith(parent + sep);
 }
 
 // The directory for a blog, from its handle (or its ID, for a blog with none)
@@ -33,15 +29,7 @@ async function directory(blogID) {
     throw new Error("Unsuitable name for a source directory: " + name);
   }
 
-  const dir = join(base(), name);
-
-  // Blog folders live in data/blogs. Watching one would be the old design
-  // again, writing to the folder behind storage/folder's back.
-  if (inside(join(config.data_directory, "blogs"), dir)) {
-    throw new Error("The Local client's source directory must not be inside the blog folders: " + dir);
-  }
-
-  return dir;
+  return join(base(), name);
 }
 
 // The absolute path in dir of a blog path such as "/posts/a.md", never

@@ -7,37 +7,41 @@ describe("write", function () {
 
   var write = require("clients/git/write");
   var repo = require("clients/git/repo");
+  var context = require("clients/git/served/context");
+  var removeRepo = require("clients/git/store/remove");
   var Git = require("./setup/git");
   var fs = require("fs-extra");
-  var localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
+  var folder = require("./setup/folder");
 
-  it("should return an error if there is no bare repo, and leave the blog folder alone", function (done) {
+  it("should return an error if the store has no repository, and leave the blog folder alone", async function () {
     var blogID = this.blog.id;
 
-    fs.removeSync(repo.directory(this.blog.handle));
+    await removeRepo({ store: context.objectStoreFor(blogID) });
 
-    write(blogID, "/path", "content", function (err) {
-      expect(err.message).toContain("not");
-      expect(fs.existsSync(localPath(blogID, "/path"))).toBe(false);
-
-      done();
+    var err = await new Promise(function (resolve) {
+      write(blogID, "/path", "content", resolve);
     });
+
+    expect(err.message).toContain("no copy");
+    expect(await folder.has(blogID, "/path")).toBe(false);
   });
 
-  it("should return an error for a path it cannot commit, and leave the blog folder alone", function (done) {
+  it("should return an error for a path it cannot commit, and leave the blog folder alone", async function () {
     var blogID = this.blog.id;
 
-    repo.commit(blogID, { path: "/x/.Git/config", contents: "content" }, function (err) {
-      expect(err).toEqual(jasmine.any(Error));
-      expect(fs.existsSync(localPath(blogID, "/x"))).toBe(false);
-
-      write(blogID, "/a/../b", "content", function (err) {
-        expect(err).toEqual(jasmine.any(Error));
-        expect(fs.existsSync(localPath(blogID, "/b"))).toBe(false);
-
-        done();
-      });
+    var err = await new Promise(function (resolve) {
+      repo.commit(blogID, { path: "/x/.Git/config", contents: "content" }, resolve);
     });
+
+    expect(err).toEqual(jasmine.any(Error));
+    expect(await folder.has(blogID, "/x")).toBe(false);
+
+    err = await new Promise(function (resolve) {
+      write(blogID, "/a/../b", "content", resolve);
+    });
+
+    expect(err).toEqual(jasmine.any(Error));
+    expect(await folder.has(blogID, "/b")).toBe(false);
   });
 
   it("writes a file", function (done) {

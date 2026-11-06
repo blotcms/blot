@@ -62,7 +62,18 @@
   >, which are ALIAS records by another name.
 </p>
 
-<p></p>
+<h2>Use both <em>example.com</em> and <em>www.example.com</em></h2>
+
+<p>
+  You only need to tell Blot one domain. If your site uses the apex domain,
+  create a <code>CNAME</code> record for <code>www</code> with the value
+  <code>blot.im</code> as well, and Blot will redirect
+  <em>www.example.com</em> to <em>example.com</em>, over HTTPS too. It works
+  the other way round as well: if your site uses <em>www.example.com</em>,
+  point the apex domain at Blot with an <code>ALIAS</code> or
+  <code>A</code> record and Blot will redirect <em>example.com</em> to
+  <em>www.example.com</em>.
+</p>
 
 <h2>Reference for DNS records</h2>
 <table>

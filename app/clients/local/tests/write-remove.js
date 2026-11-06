@@ -27,7 +27,7 @@ describe("local client write and remove", function () {
     await fs.remove(base);
   });
 
-  function backendSpecs() {
+  describe("against storage/folder", function () {
     it("writes a file into the source directory and the blog folder, creating parents", async function () {
       await promisify(write)(this.blog.id, "/posts/hello.txt", "Hello");
       const contents = await folder.read(this.blog.id, "/posts/hello.txt");
@@ -67,21 +67,5 @@ describe("local client write and remove", function () {
       expect(await fs.pathExists(join(base, "escape.txt"))).toBe(false);
       expect(await fs.pathExists(join(dir, "escape.txt"))).toBe(true);
     });
-  }
-
-  describe("on disk", backendSpecs);
-
-  describe("on S3", function () {
-    require("storage/tests/minio")();
-
-    beforeAll(function () {
-      folder.useBackend("s3");
-    });
-
-    afterAll(function () {
-      folder.useBackend();
-    });
-
-    backendSpecs();
   });
 });

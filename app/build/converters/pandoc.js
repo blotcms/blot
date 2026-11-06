@@ -1,5 +1,6 @@
-// Runs pandoc on a document in the sandbox (app/sandbox/jobs/pandoc.js), which
-// picks pandoc's options from these args:
+// Runs pandoc on a document in the sandbox (app/sandbox/jobs/pandoc.js, or in
+// a jail its worker, app/sandbox/jobs/pandoc-worker.lua), which picks pandoc's
+// options from these args:
 //
 //   const { html, dir, media } = await pandoc({ from: "docx" }, { path });
 //
@@ -7,8 +8,9 @@
 // are local paths, sent after the document. media is [{ name, data }]: what
 // pandoc extracted from a docx or odt, which the caller writes itself, named
 // relative to dir, the directory the HTML's image paths start with. A document
-// pandoc can't convert rejects with "Pandoc exited ...", and pandoc killed by
-// the jail's memory limit with code SANDBOX_KILLED, which emails the admin.
+// pandoc can't convert, or that takes too long, rejects with "Pandoc exited
+// ...", and pandoc killed by the jail's memory limit with code SANDBOX_KILLED,
+// which emails the admin.
 
 const fs = require("fs-extra");
 const { extname } = require("path");
@@ -38,7 +40,17 @@ async function pandoc(args, input, files = {}) {
   }
   if (parts.length) input = Buffer.concat([Buffer.isBuffer(input) ? input : await fs.readFile(input.path)].concat(parts));
 
-  const { meta, outputs } = await sandbox.run("pandoc", args, input);
+  let reply;
+  try {
+    reply = await sandbox.run("pandoc", args, input);
+  } catch (err) {
+    // The broker kills a pandoc worker that takes too long on one document
+    // (proxy/unit/sandbox/broker.js), which is the document's doing, as the
+    // job's own timeout is in-process
+    if (err.code !== "SANDBOX_TIMEOUT") throw err;
+    throw new Error("Pandoc exited with code null (SIGKILL) (timed out): " + err.message);
+  }
+  const { meta, outputs } = reply;
 
   if (!meta || typeof meta !== "object") throw new Error("pandoc: invalid reply");
 

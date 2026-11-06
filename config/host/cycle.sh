@@ -5,27 +5,26 @@
 #        cycle.sh --drill|--production [options] restore [<new>]
 # Moves everything onto a fresh host: "build a new one and move onto it" is how
 # this project upgrades a host. A thin wrapper over launch.sh, deploy.sh,
-# data-volume/resize.sh, config/redis/promote.sh, scripts/deploy/units.sh and
-# bans.sh. Read the "Host cycle" section of README.md first.
+# config/redis/promote.sh, scripts/deploy/units.sh and bans.sh. Read the "Host
+# cycle" section of README.md first. Blog folders and git repos are in S3, so
+# no files move between hosts: Redis, the env files and the Elastic IP do.
 #
 # Phases, in order. Each can be run alone and run again, and stops on a failed
 # check. What it does next is decided by looking at the hosts, not a state file.
 #   status     where a cycle stands; changes nothing
 #   launch     launch.sh, then deploy.sh: Redis and the instance store, no units
 #   replicate  the new Redis replicates the old one and has synced
-#   data       resize.sh move prepare, deploy.sh with the new volume, move copy
 #   app        pause deploys, env files, certificates, the old host's image on
 #              the new host against its read-only replica, verify
-#   switch     freeze, final copy, promote, wipe the cache, move the Elastic IP,
+#   switch     freeze the app, promote, wipe the cache, move the Elastic IP,
 #              stop the old units, import permabans, unfreeze
-#   settle     rolling deploy of the same image, verify, retag the volumes,
-#              deploys resume
-#   finish     after a few days: terminate the old hosts (by explicit ID only)
+#   settle     rolling deploy of the same image, verify, deploys resume
+#   finish     after a day or so: terminate the old hosts (by explicit ID only)
 #
 # restore is not part of a cycle: it is disaster recovery (#2261) for when the
 # host is gone, with no old host to read from. See "Recovery" in README.md.
-#   restore    launch a host, restore Redis from its newest backup, a new data
-#              volume from the newest snapshot, the units, then the Elastic IP
+#   restore    launch a host, restore Redis from its newest backup, the units,
+#              then the Elastic IP
 #
 # <old> and <new> are ssh names that work with plain `ssh <name>` as ec2-user,
 # so put them in ~/.ssh/config: units.sh takes no ssh options. launch has no
@@ -36,8 +35,8 @@
 # hosts with that tag. Nothing destructive has a default: the Elastic IP, the
 # bans file and everything finish touches are passed in. The operator sets
 # AWS_PROFILE and AWS_REGION, and launch.sh's own settings: BLOT_HOST_KEY_NAME,
-# BLOT_HOST_SSH_KEY, BLOT_SSH_PORT and REDIS_MAXMEMORY (launch and data use the
-# key too, for deploy.sh).
+# BLOT_HOST_SSH_KEY, BLOT_SSH_PORT and REDIS_MAXMEMORY (launch uses the key
+# too, for deploy.sh).
 #
 # Options:
 #   --old-redis SSH_HOST    the old Redis host, when it is not <old> (the first
@@ -51,6 +50,7 @@
 #                           ignored by git, so in data/
 #   --verify-host HOST      a blog to check as well as the site, repeatable (app)
 #   --type TYPE             instance type (launch)
+#   --root-gb N             root disk size in GB (launch, restore; default launch.sh's)
 #   --cycle NAME            a name for this cycle, tagged on the new host, which is
 #                           how launch finds it when run again (launch)
 #   --freeze-ttl SECONDS    freeze TTL, re-armed at each step of switch (default 900)
@@ -58,9 +58,6 @@
 #   --yes                   do not ask for confirmation
 #   --dry-run               run the checks and print each step; change nothing
 # restore only (everything it needs comes from here, none of it from an old host):
-#   --old-volume vol-...    the lost data volume; its newest completed snapshot is used.
-#                           The volume itself is never touched
-#   --snapshot snap-...     a snapshot to use instead (or as well, to be sure of it)
 #   --commit SHA            the 40-digit commit of the image to run
 #   --secrets-env FILE      secrets.env and proxy.env as they were on the lost host,
 #   --proxy-env FILE        kept off the host and out of the repo
@@ -68,15 +65,11 @@
 #                           Redis backups and write new ones; goes to ec2-user's ~/.aws
 #   --redis-backup NAME     a backup other than the newest (restore.sh's names)
 #   --offsite PROFILE s3://BUCKET   restore Redis from the offsite copy instead, as restore.sh
-#   --wait-prewarm          do not move the Elastic IP until the volume has loaded
-#   plus --type, --cycle, --eip, and --bans-file (optional) as above
+#   plus --type, --root-gb, --cycle, --eip, and --bans-file (optional) as above
 # finish only:
 #   --old-instance i-...    a host to terminate, repeatable. Never <new>, never
 #                           the holder of the Elastic IP, and termination
 #                           protection is not lifted for you
-#   --old-volume vol-...    the old data volume, kept, and checked to have been
-#                           retagged by settle at least 3 days ago
-#   --any-age               do not wait those 3 days
 #
 # Runs on a Mac, so it has to work in bash 3.2.
 set -euo pipefail
@@ -86,17 +79,18 @@ ROOT=$(dirname "$(dirname "$HERE")")
 
 SOCKET=/run/blot/redis/redis.sock
 PAUSE_FILE=/etc/blot/deploy-paused
-FREEZE_REASON="data volume move" # resize.sh move thaw recognises its freeze by this
-SYNC_TRIES=720                   # checks 10 seconds apart: two hours for the first sync
-FINISH_MIN_DAYS=3
-FRESH_REDIS_KEYS=10              # a fresh Redis holds only its samplers' keys (tcpmem-log.sh, redis-mem-log.sh)
+FREEZE_REASON="host cycle" # how switch tells its own freeze from someone else's
+FREEZE_GRACE=3             # seconds for requests already in flight when the freeze starts (syncs: LOCK_WAIT)
+LOCK_WAIT=120              # then how long their folder locks may take to go
+SYNC_TRIES=720             # checks 10 seconds apart: two hours for the first sync
+FRESH_REDIS_KEYS=10        # a fresh Redis holds only its samplers' keys (tcpmem-log.sh, redis-mem-log.sh)
 UNIT_NAMES="blot-blue blot-green"
 
-MODE=""; OLD_REDIS=""; OLD_DIRECT=""; EIP=""; BANS_FILE=""; VERIFY_HOSTS=""; TYPE=""; CYCLE=""
+MODE=""; OLD_REDIS=""; OLD_DIRECT=""; EIP=""; BANS_FILE=""; VERIFY_HOSTS=""; TYPE=""; CYCLE=""; ROOT_GB=""
 FREEZE_TTL=900; ANY_TIME=""; YES=""; DRY_RUN=""
-OLD_INSTANCES=""; OLD_VOLUME=""; ANY_AGE=""
-SNAPSHOT=""; COMMIT=""; SECRETS_FILE=""; PROXY_FILE=""; AWS_CREDS=""; REDIS_BACKUP=latest
-OFFSITE_PROFILE=""; OFFSITE_BUCKET=""; WAIT_PREWARM=""
+OLD_INSTANCES=""
+COMMIT=""; SECRETS_FILE=""; PROXY_FILE=""; AWS_CREDS=""; REDIS_BACKUP=latest
+OFFSITE_PROFILE=""; OFFSITE_BUCKET=""
 STAGE=""; IMAGE=""; EIP_SSH_DIR=""
 
 die() { echo "error: $*" >&2; exit 1; }
@@ -104,8 +98,8 @@ say() { printf '\n==> %s\n' "$*"; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --old-redis | --old-direct | --eip | --bans-file | --verify-host | --type | --cycle | --freeze-ttl | --old-instance | --old-volume | \
-      --snapshot | --commit | --secrets-env | --proxy-env | --aws-credentials | --redis-backup | --offsite)
+    --old-redis | --old-direct | --eip | --bans-file | --verify-host | --type | --root-gb | --cycle | --freeze-ttl | --old-instance | \
+      --commit | --secrets-env | --proxy-env | --aws-credentials | --redis-backup | --offsite)
       [ $# -ge 2 ] || die "$1 needs a value" ;;
   esac
   case "$1" in
@@ -119,11 +113,10 @@ while [ $# -gt 0 ]; do
       [[ $2 =~ ^[A-Za-z0-9.-]+$ ]] || die "--verify-host takes a host name"
       VERIFY_HOSTS="$VERIFY_HOSTS $2"; shift 2 ;;
     --type) TYPE=$2; shift 2 ;;
+    --root-gb) ROOT_GB=$2; shift 2 ;;
     --cycle) CYCLE=$2; shift 2 ;;
     --freeze-ttl) FREEZE_TTL=$2; shift 2 ;;
     --old-instance) OLD_INSTANCES="$OLD_INSTANCES $2"; shift 2 ;;
-    --old-volume) OLD_VOLUME=$2; shift 2 ;;
-    --snapshot) SNAPSHOT=$2; shift 2 ;;
     --commit) COMMIT=$2; shift 2 ;;
     --secrets-env) SECRETS_FILE=$2; shift 2 ;;
     --proxy-env) PROXY_FILE=$2; shift 2 ;;
@@ -132,8 +125,6 @@ while [ $# -gt 0 ]; do
     --offsite)
       [ $# -ge 3 ] || die "--offsite needs a read profile and an s3://bucket"
       OFFSITE_PROFILE=$2; OFFSITE_BUCKET=$3; shift 3 ;;
-    --wait-prewarm) WAIT_PREWARM=1; shift ;;
-    --any-age) ANY_AGE=1; shift ;;
     --any-time) ANY_TIME=1; shift ;;
     --yes) YES=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
@@ -143,10 +134,10 @@ while [ $# -gt 0 ]; do
 done
 PHASE=${1:-}; OLD=${2:-}; NEW=${3:-}
 [ $# -le 3 ] || die "unexpected argument $4"
-USAGE="usage: cycle.sh --drill|--production [options] status|launch|replicate|data|app|switch|settle|finish <old> <new>
+USAGE="usage: cycle.sh --drill|--production [options] status|launch|replicate|app|switch|settle|finish <old> <new>
        cycle.sh --drill|--production [options] restore [<new>]"
 case "$PHASE" in
-  status | launch | replicate | data | app | switch | settle | finish) ;;
+  status | launch | replicate | app | switch | settle | finish) ;;
   # No old host: the one argument is the new host's ssh name, which does not
   # exist until the first run has launched it.
   restore) NEW=$OLD; OLD=""; [ $# -le 2 ] || die "restore takes at most the new host's name, not $3" ;;
@@ -157,7 +148,8 @@ esac
 [ -n "$MODE" ] || [ "$PHASE" = status ] || die "say which: --drill (hosts tagged BlotDrill=true) or --production"
 [ -n "${AWS_PROFILE:-}" ] && [ -n "${AWS_REGION:-}" ] || die "set AWS_PROFILE and AWS_REGION"
 case "$FREEZE_TTL" in '' | *[!0-9]*) die "--freeze-ttl takes a number" ;; esac
-[ "$FREEZE_TTL" -ge 300 ] || die "--freeze-ttl must be at least 300: resize.sh needs that for the final copy"
+[ -z "$ROOT_GB" ] || [[ $ROOT_GB =~ ^[0-9]+$ ]] || die "--root-gb takes a number"
+[ "$FREEZE_TTL" -ge 300 ] || die "--freeze-ttl must be at least 300: the wait for folder locks, and the promotion, each run between two re-arms"
 [ -z "$EIP" ] || [[ $EIP =~ ^eipalloc-[0-9a-f]+$ ]] || die "--eip takes an allocation ID, eipalloc-..."
 
 OLD_DIRECT=${OLD_DIRECT:-$OLD}
@@ -259,7 +251,7 @@ guard() {
     fi
   fi
   if [ "$MODE" = drill ]; then
-    on "$OLD_NOW" "test -e /etc/blot/drill" || die "--drill, but $OLD_NOW has no /etc/blot/drill: resize.sh would treat it as production"
+    on "$OLD_NOW" "test -e /etc/blot/drill" || die "--drill, but $OLD_NOW has no /etc/blot/drill: its storage offsite sync would treat it as production"
   fi
   # --old-redis is another host that switch runs CONFIG SET and FAILOVER on, so
   # it gets the same checks. status only reads, and finish names its instances
@@ -274,8 +266,7 @@ guard() {
   fi
 }
 
-# Never go back past the switch: REPLICAOF would wipe a promoted Redis, and a
-# copy or a fresh deploy would write over what the new host now serves.
+# Never go back past the switch: REPLICAOF would wipe a promoted Redis.
 refuse_after_switch() {
   local info keys
   info=$(redis_info "$NEW")
@@ -284,20 +275,11 @@ refuse_after_switch() {
   [ "$keys" -le "$FRESH_REDIS_KEYS" ] || die "$NEW's Redis is a master with $keys keys, more than a fresh one holds ($FRESH_REDIS_KEYS): it has been promoted, or was never empty. Nothing before switch runs on it"
 }
 
-rs() {
-  local flags="--profile $AWS_PROFILE --region $AWS_REGION --host $OLD_NOW --app-freeze --freeze-ttl $FREEZE_TTL"
-  [ -z "$ANY_TIME" ] || flags="$flags --any-time"
-  [ -z "$YES" ] || flags="$flags --yes"
-  [ -z "$DRY_RUN" ] || flags="$flags --dry-run"
-  # shellcheck disable=SC2086
-  "$HERE/data-volume/resize.sh" $flags "$@"
-}
-
 # Host key settings as in new_host_ssh: deploy.sh goes by address, and that
 # address is one launch.sh chose not to record. Without them it fails unattended.
-deploy_host() { # deploy_host <address> [volume]
+deploy_host() { # deploy_host <address>
   SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
-    SSH_KEY=$BLOT_HOST_SSH_KEY PUBLIC_IP=$1 SSH_PORT=${BLOT_SSH_PORT:-22} DATA_VOLUME_ID=${2:-} "$HERE/deploy.sh"
+    SSH_KEY=$BLOT_HOST_SSH_KEY PUBLIC_IP=$1 SSH_PORT=${BLOT_SSH_PORT:-22} "$HERE/deploy.sh"
 }
 
 # units_ok <host>: both units are healthy and on the socket. Prints what is not.
@@ -346,7 +328,7 @@ wait_public_health() {
 # not record its host key.
 new_host_ssh() { echo "-i ${BLOT_HOST_SSH_KEY:-} -p ${BLOT_SSH_PORT:-22} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"; }
 
-# resize.sh and promote.sh read these to tell a drill from production.
+# promote.sh and the storage offsite sync read these to tell a drill from production.
 mark_drill() {
   SSH_OPTS=$(new_host_ssh) on "ec2-user@$1" "sudo mkdir -p /etc/blot /etc/blot-redis && sudo touch /etc/blot/drill /etc/blot-redis/drill"
 }
@@ -374,13 +356,13 @@ phase_launch() {
       "$HERE/bootstrap.sh" "ec2-user@$address"
   elif [ -n "$DRY_RUN" ]; then
     # shellcheck disable=SC2086
-    "$HERE/launch.sh" --profile "$AWS_PROFILE" --region "$AWS_REGION" --type "$TYPE" --tag "BlotCycle=$CYCLE" $drill_flag --dry-run
+    "$HERE/launch.sh" --profile "$AWS_PROFILE" --region "$AWS_REGION" --type "$TYPE" ${ROOT_GB:+--root-gb "$ROOT_GB"} --tag "BlotCycle=$CYCLE" $drill_flag --dry-run
     echo "would run: deploy.sh on the new host"
     return 0
   else
     say "Launching a $TYPE"
     # shellcheck disable=SC2086
-    "$HERE/launch.sh" --profile "$AWS_PROFILE" --region "$AWS_REGION" --type "$TYPE" --tag "BlotCycle=$CYCLE" $drill_flag
+    "$HERE/launch.sh" --profile "$AWS_PROFILE" --region "$AWS_REGION" --type "$TYPE" ${ROOT_GB:+--root-gb "$ROOT_GB"} --tag "BlotCycle=$CYCLE" $drill_flag
     found=$(aws_cli ec2 describe-instances \
       --filters "Name=tag:BlotCycle,Values=$CYCLE" "Name=instance-state-name,Values=running" \
       --query 'Reservations[].Instances[].[InstanceId,PublicIpAddress]' --output text)
@@ -389,7 +371,7 @@ phase_launch() {
   fi
 
   [ "$MODE" != drill ] || act mark_drill "$address"
-  say "deploy.sh, without a data volume yet: the instance store and the host's files"
+  say "deploy.sh: the instance store and the host's files"
   act deploy_host "$address"
 
   if [ -z "$DRY_RUN" ]; then
@@ -436,28 +418,6 @@ phase_replicate() {
   done
   [ "$link" = up ] || die "$NEW has not synced yet (link $link); it is still replicating, run this again to go on waiting"
   echo "$NEW is in sync with $primary. It stays a replica until switch."
-}
-
-# ---- data ----------------------------------------------------------------
-
-phase_data() {
-  local volume
-  [ -n "${BLOT_HOST_SSH_KEY:-}" ] || [ -n "$DRY_RUN" ] || die "set BLOT_HOST_SSH_KEY: deploy.sh needs it"
-  refuse_after_switch
-  say "Preparing the new volume"
-  rs move prepare --to "$NEW"
-  if [ -n "$DRY_RUN" ]; then
-    echo "would run: deploy.sh on $NEW with DATA_VOLUME_ID from move status"
-  else
-    volume=$(rs move status | sed -n 's/^Move: .* -> \(vol-[0-9a-f]*\) at .*/\1/p')
-    [ -n "$volume" ] || die "move status on $OLD_NOW names no new volume"
-    say "deploy.sh with $volume"
-    deploy_host "$(ssh_config "$NEW" hostname)" "$volume"
-  fi
-  say "Live copy passes"
-  rs move copy
-  [ -n "$DRY_RUN" ] || [ "$(on "$NEW" "sudo cat /var/www/blot/data/.blot-data-volume" | tr -d '\r')" = "$volume" ] ||
-    die "$NEW's data directory does not carry the marker of $volume"
 }
 
 # ---- app -----------------------------------------------------------------
@@ -509,14 +469,17 @@ copy_env() {
 }
 
 # copy_backup_config: backup.sh on the new host uses ~ec2-user/.aws (it has no
-# instance profile, see #2261) and the offsite bucket file. A drill gets neither,
-# so it can never upload to the real buckets.
-# copy_aws_section <file in ~/.aws> <section>: adds just that section to the new
-# host's file, on a line of its own, unless it is there already.
+# instance profile, see #2261) and the offsite bucket file, and the storage
+# bucket's offsite sync (config/storage-bucket/bin/offsite-sync.sh) uses the
+# blot-b2-storage profile and /etc/blot/storage-offsite-bucket. A drill gets
+# none of them, so it can never upload to the real buckets.
+# copy_aws_section <file in ~/.aws> <section> [<from>]: adds just that section
+# to the new host's file, on a line of its own, unless it is there already.
+# <from> is the old Redis host unless given.
 copy_aws_section() {
   on "$NEW" "grep -qsxF '$2' \"\$HOME/.aws/$1\"" && return 0
-  on "$OLD_REDIS" "awk -v s='$2' '/^\\[/ {p = (\$0 == s)} p' \"\$HOME/.aws/$1\"" |
-    pipe_to "$NEW" "umask 077; { echo; cat; } >> \"\$HOME/.aws/$1\""
+  on "${3:-$OLD_REDIS}" "awk -v s='$2' '/^\\[/ {p = (\$0 == s)} p' \"\$HOME/.aws/$1\"" |
+    pipe_to "$NEW" "umask 077; mkdir -p \"\$HOME/.aws\"; { echo; cat; } >> \"\$HOME/.aws/$1\""
 }
 
 copy_backup_config() {
@@ -536,6 +499,14 @@ copy_backup_config() {
   fi
   bucket=$(on "$OLD_REDIS" "sudo cat /etc/blot-redis/offsite-bucket 2> /dev/null" || true)
   [ -z "$bucket" ] || echo "$bucket" | pipe_to "$NEW" "sudo tee /etc/blot-redis/offsite-bucket > /dev/null"
+  # The storage offsite sync runs on the app host, so these come from the old
+  # app host. Without them it is off, and the daily email calls it overdue.
+  if on "$OLD_NOW" 'grep -qs "^\[blot-b2-storage\]" "$HOME/.aws/credentials"'; then
+    copy_aws_section credentials "[blot-b2-storage]" "$OLD_NOW"
+    copy_aws_section config "[profile blot-b2-storage]" "$OLD_NOW"
+  fi
+  bucket=$(on "$OLD_NOW" "sudo cat /etc/blot/storage-offsite-bucket 2> /dev/null" || true)
+  [ -z "$bucket" ] || echo "$bucket" | pipe_to "$NEW" "sudo mkdir -p /etc/blot && sudo tee /etc/blot/storage-offsite-bucket > /dev/null"
   on "$NEW" "aws sts get-caller-identity > /dev/null" ||
     die "ec2-user on $NEW has no working AWS credentials, so it could not back up after the switch: put the blot key in ~/.aws there (an instance profile on $OLD_REDIS does not copy), then run app again"
 }
@@ -554,8 +525,8 @@ phase_app() {
   info=$(redis_info "$NEW")
   [ "$(info_field "$info" role)" = slave ] && [ "$(info_field "$info" master_link_status)" = up ] ||
     need "$NEW's Redis is not a replica with its link up: run replicate first"
-  on "$NEW" "mountpoint -q /var/www/blot/data && mountpoint -q /var/instance-ssd" ||
-    need "the data volume or the instance store is not mounted on $NEW: run data first"
+  on "$NEW" "mountpoint -q /var/instance-ssd" ||
+    need "the instance store is not mounted on $NEW: run launch again"
 
   say "Pausing deploys on $OLD_NOW and $NEW"
   act pause_deploys "$OLD_NOW" "$NEW"
@@ -570,7 +541,7 @@ phase_app() {
   act copy_backup_config
   act "$HERE/wildcard-cert.sh" "$NEW"
 
-  # docker stays off on a new host until the two disks are there (see README.md).
+  # docker stays off on a new host until the instance store is there (see README.md).
   say "Starting the units on $NEW against its read-only replica"
   act on "$NEW" "sudo systemctl start docker"
   # A unit only reads the env files when it is created, so edited ones mean
@@ -602,8 +573,49 @@ phase_app() {
 
 # ---- switch --------------------------------------------------------------
 
-rearm() { # rearm <host whose Redis is the master>: the TTL clock starts again
+# The freeze is the app's read-only mode (app/helper/readOnly.js), a key in
+# Redis with a TTL, so it is set through the units of whichever host has the
+# master, and follows the promotion to the new one.
+rearm() { # rearm <host whose Redis is the master>: on, or the TTL clock starts again
   act on "$1" "sudo docker exec blot-blue node scripts/read-only.js on --ttl $FREEZE_TTL --reason '$FREEZE_REASON' > /dev/null"
+}
+ro_status() { # ro_status <host>: read-only.js's JSON line: the freeze, and the folder locks held
+  on "$1" "sudo docker exec blot-blue node scripts/read-only.js status" | grep '^{'
+}
+
+# freeze_old [command]: the old units turn writes away (a 503 the clients retry; a sync
+# waits before it takes its folder lock), then the requests and syncs already
+# under way finish. FAILOVER loses no write by itself, but a sync cut off half
+# way, its files in S3 and its entries not yet in Redis, would stay half done,
+# and every write after the promotion would fail on what is then a replica.
+freeze_old() {
+  local out i
+  out=$(ro_status "$OLD_NOW") || die "read-only.js status does not work on $OLD_NOW"
+  # One that is on and not ours is someone else's: lifting it later would end it.
+  if ! echo "$out" | grep -q '"readOnly":null' && ! echo "$out" | grep -qF "\"reason\":\"$FREEZE_REASON\""; then
+    die "the app on $OLD_NOW is already read-only for something else: $out"
+  fi
+  STAGE=freeze
+  rearm "$OLD_NOW"
+  [ -z "$DRY_RUN" ] || { echo "would wait ${FREEZE_GRACE}s, then up to ${LOCK_WAIT}s for the folder locks to go"; return 0; }
+  out=$(ro_status "$OLD_NOW") || die "read-only.js status failed on $OLD_NOW"
+  ! echo "$out" | grep -q '"readOnly":null' || die "the freeze did not take effect: $out"
+  # [command] runs meanwhile: anything that needs writes stopped but not the
+  # promotion, so it costs no time inside the freeze.
+  local also=""
+  if [ -n "${1:-}" ]; then "$1" & also=$!; fi
+  echo "Frozen. Waiting ${FREEZE_GRACE}s for requests already in flight"
+  sleep "$FREEZE_GRACE"
+  for i in $(seq 1 $((LOCK_WAIT / 2))); do
+    out=$(ro_status "$OLD_NOW") || die "read-only.js status failed on $OLD_NOW"
+    if echo "$out" | grep -q '"lockedBlogs":\[\]'; then
+      echo "No folder locks held"
+      [ -z "$also" ] || wait "$also" || die "$1 failed"
+      return 0
+    fi
+    sleep 2
+  done
+  die "folder locks still held after about ${LOCK_WAIT}s: $out"
 }
 
 # Holds the deploy lock, because the health cron restarts a unit that goes
@@ -613,6 +625,14 @@ rearm() { # rearm <host whose Redis is the master>: the TTL clock starts again
 stop_old_units() {
   on "$OLD_NOW" "sudo bash -c 'f=/tmp/blot-proxy-deploy.lock; [ -e \$f ] || touch \$f; exec 9< \$f; flock -w 300 9; docker stop --time 40 $UNIT_NAMES > /dev/null; docker ps --quiet --filter name=-airlock | xargs -r docker stop > /dev/null'"
   [ -z "$(on "$OLD_NOW" "sudo docker ps -q --filter name=^blot-")" ] || die "containers are still running on $OLD_NOW"
+}
+
+# The new host's cache was filled during verification and missed every purge
+# since; cached pages have no TTL. Emptied once writes have stopped, so nothing
+# can go stale again before the Elastic IP moves.
+CACHE_EMPTIED=""
+empty_new_cache() {
+  act on "$NEW" "\$HOME/proxy-deploy/reset-cache.sh ${IMAGE##*:}" && CACHE_EMPTIED=1
 }
 
 unfreeze() {
@@ -669,21 +689,25 @@ explain() {
     echo
     echo "switch stopped during: $STAGE"
     case "$STAGE" in
-      "freeze and final copy")
-        echo "$OLD_REDIS is still the Redis master and the Elastic IP has not moved. resize.sh undoes a failed freeze"
-        echo "unless the final copy finished. Check: resize.sh --host $OLD_NOW move status"
-        echo "On: run switch again. Back: resize.sh --host $OLD_NOW move thaw" ;;
+      freeze)
+        # Nothing is promoted yet, so the freeze is only in the way.
+        if [ -z "$DRY_RUN" ] && on "$OLD_NOW" "sudo docker exec blot-blue node scripts/read-only.js off" > /dev/null 2>&1; then
+          echo "$OLD_REDIS is still the Redis master, the Elastic IP has not moved, and the freeze is lifted."
+        else
+          echo "$OLD_REDIS is still the Redis master and the Elastic IP has not moved. The freeze could not be lifted:"
+          echo "ssh $OLD_NOW sudo docker exec blot-blue node scripts/read-only.js off (or it lapses within ${FREEZE_TTL}s)."
+        fi
+        echo "On: run switch again." ;;
       promotion)
-        echo "Frozen, and the old disk is read-only. promote.sh said above which host is the master."
-        echo "On: run switch again. Back, if $OLD_REDIS is still the master: resize.sh --host $OLD_NOW move thaw" ;;
+        echo "Frozen. promote.sh said above which host is the master."
+        echo "On: run switch again. Back, if $OLD_REDIS is still the master:"
+        echo "ssh $OLD_NOW sudo docker exec blot-blue node scripts/read-only.js off" ;;
       *)
         echo "$NEW's Redis is the master. The app stays frozen until the TTL (${FREEZE_TTL}s from the last re-arm), and"
         echo "writes that land after that fail until the switch finishes, so be quick."
         echo "On: run switch again; it skips what is done."
-        echo "Back: README.md, \"Rollback\". Only if $NEW has accepted no writes: promote.sh $NEW $OLD_REDIS, start the old"
-        echo "units, the Elastic IP back to $OLD_ID, then resize.sh --host $OLD_NOW move thaw. After writes, first thaw"
-        echo "$OLD_NOW (resize.sh --host $OLD_NOW move thaw) and keep $NEW primary until the reverse copy and freeze are"
-        echo "done (data-volume/README.md), then Redis, then start the old units, then the Elastic IP." ;;
+        echo "Back: README.md, \"Rollback\": freeze through $NEW, promote.sh $NEW $OLD_REDIS, start the old units and wait"
+        echo "until they are healthy, the Elastic IP back to $OLD_ID, then read-only.js off through $OLD_NOW." ;;
     esac
   } >&2
   return "$status"
@@ -742,12 +766,12 @@ phase_switch() {
 
   cat << EOF
 
- 1. freeze, final copy (resize.sh move freeze), writes stop here
+ 1. freeze the app on $OLD_NOW, wait for syncs under way: writes stop here
+    (meanwhile, empty the proxy cache on $NEW)
  2. promote $NEW's Redis, $OLD_REDIS becomes its replica
- 3. empty the proxy cache on $NEW
- 4. $EIP ($eip_address) to $NEW_ID
+ 3. $EIP ($eip_address) to $NEW_ID
+ 4. check $host through the Elastic IP, lift the freeze: writes resume here
  5. stop the units on $OLD_NOW, import permabans on $NEW
- 6. check $host through the Elastic IP, lift the freeze
 EOF
   confirm "Switch to $NEW?"
   YES=1 # asked once, here: a prompt must not eat into the freeze
@@ -755,10 +779,16 @@ EOF
 
   # A master here was promoted by this cycle (checked above), so the freeze was done.
   if [ "$role" != master ]; then
-    STAGE="freeze and final copy"
-    say "1. Freeze and final copy"
-    rs move freeze
-    rearm "$OLD_NOW"
+    say "1. Freeze, emptying the proxy cache on $NEW meanwhile"
+    if [ "$eip_on" != "$NEW_ID" ]; then
+      freeze_old empty_new_cache
+      # It ran in the background, so its CACHE_EMPTIED=1 was lost with the
+      # subshell; freeze_old returning means it succeeded (a dry run skips it).
+      [ -n "$DRY_RUN" ] || CACHE_EMPTIED=1
+    else
+      freeze_old
+    fi
+    rearm "$OLD_NOW" # the TTL starts again for the promotion
 
     STAGE=promotion
     say "2. Promote"
@@ -766,19 +796,17 @@ EOF
     else "$ROOT/config/redis/promote.sh" --yes "$OLD_REDIS" "$NEW"; fi
   fi
   STAGE="after the promotion"
-  rearm "$NEW"
-  # promote.sh can finish FAILOVER and die before it writes the markers, and
-  # backup.sh skips a host without one. Here the promotion is this cycle's
-  # (checked above or just done), so make both right, as promote.sh does.
-  act on "$NEW" "sudo touch /etc/blot-redis/active"
-  act on "$OLD_REDIS" "sudo rm -f /etc/blot-redis/active"
+  # The freeze key replicated with everything else, TTL included, so it holds
+  # on $NEW without a rearm here.
 
   if [ "$eip_on" != "$NEW_ID" ]; then
-    say "3. Emptying the proxy cache on $NEW"
-    act on "$NEW" "\$HOME/proxy-deploy/reset-cache.sh ${IMAGE##*:}"
-    rearm "$NEW"
+    # Only when a resumed switch skipped the freeze above
+    if [ -z "$CACHE_EMPTIED" ]; then
+      say "Emptying the proxy cache on $NEW"
+      empty_new_cache
+    fi
 
-    say "4. Moving $EIP to $NEW_ID"
+    say "3. Moving $EIP to $NEW_ID"
     act aws_cli ec2 associate-address --allocation-id "$EIP" --instance-id "$NEW_ID" --allow-reassociation
     if [ -z "$DRY_RUN" ]; then
       [ "$(aws_cli ec2 describe-addresses --allocation-ids "$EIP" --query 'Addresses[0].InstanceId' --output text)" = "$NEW_ID" ] ||
@@ -788,16 +816,24 @@ EOF
     fi
   fi
 
-  say "5. Stopping the units on $OLD_NOW, importing permabans"
-  rearm "$NEW"
-  act stop_old_units
-  act "$HERE/bans.sh" import "$NEW" "$BANS_FILE"
-
-  say "6. Checking and unfreezing"
+  say "4. Checking and unfreezing"
   if [ -z "$DRY_RUN" ]; then
     wait_public_health "$eip_address" "$host"
   fi
   act unfreeze
+  echo "Writes resumed $(($(date +%s) - t0))s after the freeze"
+
+  # None of this needs writes stopped. The old units get no traffic once the
+  # Elastic IP has moved, and any write they still try fails on what is now a
+  # replica.
+  say "5. Stopping the units on $OLD_NOW, importing permabans"
+  # promote.sh can finish FAILOVER and die before it writes the markers, and
+  # backup.sh skips a host without one. Here the promotion is this cycle's
+  # (checked above or just done), so make both right, as promote.sh does.
+  act on "$NEW" "sudo touch /etc/blot-redis/active"
+  act on "$OLD_REDIS" "sudo rm -f /etc/blot-redis/active"
+  act stop_old_units
+  act "$HERE/bans.sh" import "$NEW" "$BANS_FILE"
   STAGE=""
   say "Switched in $(($(date +%s) - t0))s: $NEW serves $eip_address and takes writes. Next: settle"
   echo "Before finish, change HostName for $NEW in ~/.ssh/config to $eip_address: its launch address is released."
@@ -831,21 +867,17 @@ phase_settle() {
     [ "$code" = 200 ] || die "the dashboard, https://$host/sites/log-in, answered $code"
   fi
 
-  say "Volumes: the new one takes the production name"
-  rs move retag
-
   say "Deploys can resume"
   act on "$NEW" "sudo rm -f $PAUSE_FILE"
   act on "$OLD_NOW" "sudo rm -f $PAUSE_FILE"
-  say "Settled. Keep the old host for a few days as the rollback, then: finish"
+  say "Settled. Keep the old host for about a day as the rollback, then: finish"
 }
 
 # ---- finish --------------------------------------------------------------
 
 phase_finish() {
-  local id tag protection state replaced age new_id eip_instance volume_attached delete_on_term master
+  local id protection state new_id eip_instance master
   [ -n "$OLD_INSTANCES" ] || die "finish terminates what you name and nothing else: pass --old-instance i-... (repeatable)"
-  [ -n "$OLD_VOLUME" ] || die "finish needs --old-volume vol-...: the old data volume, to check it was retagged"
   [ -n "$EIP" ] || die "finish needs --eip, to check what holds it"
   new_id=$(instance_id "$NEW")
   [ -n "$new_id" ] || die "cannot reach $NEW"
@@ -854,17 +886,6 @@ phase_finish() {
   eip_instance=$(aws_cli ec2 describe-addresses --allocation-ids "$EIP" --query 'Addresses[0].InstanceId' --output text)
   [ "$eip_instance" = "$new_id" ] || die "$EIP is not on $NEW ($new_id)"
   on "$NEW" "test ! -e $PAUSE_FILE" || die "deploys are still paused on $NEW: run settle first"
-
-  replaced=$(aws_cli ec2 describe-volumes --volume-ids "$OLD_VOLUME" --query 'Volumes[0].Tags[?Key==`BlotDataVolumeReplacedAt`]|[0].Value' --output text)
-  [ -n "$replaced" ] && [ "$replaced" != None ] || die "$OLD_VOLUME has no BlotDataVolumeReplacedAt tag: it is not the volume settle replaced"
-  if [ -z "$ANY_AGE" ]; then
-    # perl: BSD and GNU date disagree on parsing a date
-    age=$(perl -MTime::Local -e '@t = $ARGV[0] =~ /(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)/ or exit 1; print int((time - timegm($t[5], $t[4], $t[3], $t[2], $t[1] - 1, $t[0])) / 86400)' "$replaced")
-    [ "$age" -ge "$FINISH_MIN_DAYS" ] || die "$OLD_VOLUME was replaced $age day(s) ago: keep the rollback for $FINISH_MIN_DAYS days, or pass --any-age"
-  fi
-  volume_attached=$(aws_cli ec2 describe-volumes --volume-ids "$OLD_VOLUME" --query 'Volumes[0].Attachments[0].[InstanceId,DeleteOnTermination]' --output text)
-  delete_on_term=$(echo "$volume_attached" | awk '{print $2}')
-  [ "$delete_on_term" != True ] && [ "$delete_on_term" != true ] || die "$OLD_VOLUME is set to be deleted with its instance. It stays until someone decides otherwise: fix that first"
 
   # Every check for every instance before the first one goes.
   for id in $OLD_INSTANCES; do
@@ -887,19 +908,17 @@ phase_finish() {
   done
   # shellcheck disable=SC2086
   [ -n "$DRY_RUN" ] || aws_cli ec2 wait instance-terminated --instance-ids $OLD_INSTANCES
-  say "Done. $OLD_VOLUME is kept: delete it by hand once you are sure (aws ec2 delete-volume --volume-id $OLD_VOLUME)"
+  if [ -n "$DRY_RUN" ]; then say "Dry run: nothing terminated"; else say "Done:$OLD_INSTANCES terminated"; fi
 }
 
 # ---- restore -------------------------------------------------------------
 
 # Disaster recovery (#2261). The host is gone, and Redis and the units with it,
 # so nothing is read from an old host: the operator supplies the env files, the
-# credentials and the commit (see the options at the top). The lost data volume
-# is only ever named, to find its snapshots: it is never detached, attached or
-# changed, so what is newer than the snapshot can still be recovered from it.
-# Run it again after any failure; each step looks at the new host and AWS to see
-# what is done. Every step prints how long it took: a volume made from a
-# snapshot loads from S3 as it is read, and the rehearsal records how slow that is.
+# credentials and the commit (see the options at the top). Blog folders and git
+# repos are in S3 and need no restoring. Run it again after any failure; each
+# step looks at the new host and AWS to see what is done. Every step prints how
+# long it took, for the rehearsal to record.
 
 STEP_NAME=""; STEP_T0=0
 step() { # step <name>: print how long the last step took, then start this one
@@ -910,16 +929,12 @@ step() { # step <name>: print how long the last step took, then start this one
   [ -z "$STEP_NAME" ] || say "$STEP_NAME"
 }
 
-SNAP=""; SNAP_START=""; SNAP_VOLUME=""; NEW_VOL=""
-EIP_ON=""; EIP_ADDRESS=""; PREWARM_STATE=""
+EIP_ON=""; EIP_ADDRESS=""
 
 restore_inputs() {
   [ -n "$TYPE" ] || die "restore needs --type"
   [ -n "$CYCLE" ] && [[ $CYCLE =~ ^[A-Za-z0-9._-]+$ ]] ||
-    die "restore needs --cycle NAME (letters, digits, dots, dashes, underscores): the tag that finds the new host and its volume when you run it again"
-  [ -n "$OLD_VOLUME$SNAPSHOT" ] || die "restore needs --old-volume vol-... (the lost data volume) or --snapshot snap-..."
-  [ -z "$OLD_VOLUME" ] || [[ $OLD_VOLUME =~ ^vol-[0-9a-f]+$ ]] || die "--old-volume takes a volume ID, vol-..."
-  [ -z "$SNAPSHOT" ] || [[ $SNAPSHOT =~ ^snap-[0-9a-f]+$ ]] || die "--snapshot takes a snapshot ID, snap-..."
+    die "restore needs --cycle NAME (letters, digits, dots, dashes, underscores): the tag that finds the new host when you run it again"
   [ -n "$EIP" ] || die "restore needs --eip: the Elastic IP the site is served from"
   [[ $COMMIT =~ ^[0-9a-f]{40}$ ]] || die "restore needs --commit, the 40-digit commit of the image to run"
   [[ $REDIS_BACKUP =~ ^[A-Za-z0-9._/-]+$ ]] || die "--redis-backup takes a backup name, as restore.sh lists them"
@@ -936,25 +951,6 @@ restore_inputs() {
     [ -f "$BANS_FILE" ] || die "no such file: $BANS_FILE"
     git -C "$(dirname "$BANS_FILE")" check-ignore -q "$(basename "$BANS_FILE")" || die "$BANS_FILE is not ignored by git: the list of banned ranges stays out of the repo"
   fi
-}
-
-# restore_snapshot: the newest completed snapshot of the lost volume, or the one
-# named. Sets SNAP, SNAP_START (when it started: anything written after that is
-# not in it) and SNAP_VOLUME (the volume it was taken from).
-restore_snapshot() {
-  local row state
-  if [ -n "$SNAPSHOT" ]; then
-    row=$(aws_cli ec2 describe-snapshots --snapshot-ids "$SNAPSHOT" --query 'Snapshots[0].[SnapshotId,StartTime,VolumeId,State]' --output text)
-  else
-    row=$(aws_cli ec2 describe-snapshots --owner-ids self \
-      --filters "Name=volume-id,Values=$OLD_VOLUME" "Name=status,Values=completed" \
-      --query 'sort_by(Snapshots,&StartTime)[-1].[SnapshotId,StartTime,VolumeId,State]' --output text)
-  fi
-  read -r SNAP SNAP_START SNAP_VOLUME state <<< "$row"
-  [[ ${SNAP:-} =~ ^snap-[0-9a-f]+$ ]] || die "no completed snapshot of ${OLD_VOLUME:-$SNAPSHOT}"
-  [ "$state" = completed ] || die "$SNAP is $state, not completed"
-  [ -z "$OLD_VOLUME" ] || [ "$SNAP_VOLUME" = "$OLD_VOLUME" ] || die "$SNAP is a snapshot of $SNAP_VOLUME, not of $OLD_VOLUME"
-  echo "Snapshot $SNAP of $SNAP_VOLUME, started $SNAP_START. Anything written after that is only on $SNAP_VOLUME."
 }
 
 # restore_eip: where the Elastic IP is now, and that it is in the world we said
@@ -998,80 +994,6 @@ restore_redis() {
   act "$ROOT/config/redis/restore.sh" $flags "$NEW" "$REDIS_BACKUP"
 }
 
-# restore_volume: the volume from the snapshot, in the new host's zone, attached
-# to it. Found again by its BlotRestoreCycle tag. It does not get the name the
-# snapshot policy targets until the Elastic IP has moved, so that a restore that
-# is abandoned leaves nothing for the policy to keep snapshotting.
-restore_volume() {
-  local found made_from az vtype iops throughput opts tags attached used letter dev
-  found=$(aws_cli ec2 describe-volumes --filters "Name=tag:BlotRestoreCycle,Values=$CYCLE" "Name=status,Values=creating,available,in-use" \
-    --query 'Volumes[].[VolumeId,SnapshotId]' --output text)
-  [ "$(printf '%s\n' "$found" | grep -c .)" -le 1 ] || die "several volumes are tagged BlotRestoreCycle=$CYCLE; delete the ones that are not wanted: $found"
-  if [ -n "$found" ]; then
-    read -r NEW_VOL made_from <<< "$found"
-    [ "$made_from" = "$SNAP" ] || die "$NEW_VOL was made from $made_from, not $SNAP: delete it to use the newer snapshot, or pass --snapshot $made_from"
-    echo "Using $NEW_VOL, made for this cycle from $SNAP"
-  else
-    az=$(aws_cli ec2 describe-instances --instance-ids "$NEW_ID" --query 'Reservations[0].Instances[0].Placement.AvailabilityZone' --output text)
-    # The lost volume's type and speed, if it can still be read; else gp3 at its defaults.
-    read -r vtype iops throughput <<< "$(aws_cli ec2 describe-volumes --volume-ids "$SNAP_VOLUME" --query 'Volumes[0].[VolumeType,Iops,Throughput]' --output text 2> /dev/null || true)"
-    if [ -z "${vtype:-}" ]; then
-      vtype=gp3; iops=None; throughput=None
-      echo "NOTE: $SNAP_VOLUME cannot be read, so the volume is gp3 at the default speed. Raise it with modify-volume if reads are slow"
-    fi
-    # As in resize.sh: unaided, a snapshot takes far too long to load.
-    opts="--snapshot-id $SNAP --availability-zone $az --volume-type $vtype --volume-initialization-rate 300"
-    # gp2 reports a baseline Iops (3 per GB) that create-volume rejects; only these types take one.
-    case "$vtype" in gp3 | io1 | io2) [ "${iops:-None}" = None ] || opts="$opts --iops $iops" ;; esac
-    [ "$vtype" != gp3 ] || [ "${throughput:-None}" = None ] || opts="$opts --throughput $throughput"
-    tags='{"Key":"Name","Value":"Blot data (restored for '$CYCLE')"},{"Key":"BlotRestoreCycle","Value":"'$CYCLE'"},{"Key":"BlotRestoredFrom","Value":"'$SNAP_VOLUME'"}'
-    [ "$MODE" != drill ] || tags='{"Key":"Name","Value":"drill-data-volume"},{"Key":"BlotRestoreCycle","Value":"'$CYCLE'"},{"Key":"BlotDrill","Value":"true"}'
-    if [ -n "$DRY_RUN" ]; then
-      echo "would run: aws ec2 create-volume $opts, tagged BlotRestoreCycle=$CYCLE, then attach it to $NEW_ID"
-      NEW_VOL=vol-00000000000000000
-      return 0
-    fi
-    # shellcheck disable=SC2086
-    NEW_VOL=$(aws_cli ec2 create-volume $opts --tag-specifications '[{"ResourceType":"volume","Tags":['"$tags"']}]' --query VolumeId --output text)
-    echo "Created $NEW_VOL"
-  fi
-  attached=$(aws_cli ec2 describe-volumes --volume-ids "$NEW_VOL" --query 'Volumes[0].Attachments[0].InstanceId' --output text)
-  if [ "$attached" = "$NEW_ID" ]; then echo "$NEW_VOL is attached to $NEW_ID"; return 0; fi
-  [ -z "$attached" ] || [ "$attached" = None ] || die "$NEW_VOL is attached to $attached, not to $NEW_ID"
-  aws_cli ec2 wait volume-available --volume-ids "$NEW_VOL"
-  used=$(aws_cli ec2 describe-instances --instance-ids "$NEW_ID" --query 'Reservations[0].Instances[0].BlockDeviceMappings[].DeviceName' --output text | tr '\t' ' ')
-  dev=""
-  for letter in f g h i j k l m n o p; do
-    case " $used " in *" /dev/sd$letter "* | *" /dev/xvd$letter "*) ;; *) dev=/dev/sd$letter; break ;; esac
-  done
-  [ -n "$dev" ] || die "no free device name between /dev/sdf and /dev/sdp on $NEW_ID (in use: $used)"
-  aws_cli ec2 attach-volume --volume-id "$NEW_VOL" --instance-id "$NEW_ID" --device "$dev" > /dev/null
-  aws_cli ec2 wait volume-in-use --volume-ids "$NEW_VOL"
-  echo "Attached as $dev"
-}
-
-# host.sh runs on the new host, as in resize.sh move.
-host_script() { on "$NEW" "sudo bash /tmp/blot-data-volume/host.sh $*"; }
-
-# Three cold reads straight from the device, at random places, before the
-# pre-warm touches it: what a request costs while its blocks load from S3.
-read_probe() {
-  local i
-  for i in 1 2 3; do
-    on "$NEW" "dev=\$(readlink -f /dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${NEW_VOL/-/}); mb=\$((\$(sudo blockdev --getsize64 \$dev) / 1048576 - 256)); sudo dd if=\$dev of=/dev/null bs=1M count=256 skip=\$(( (RANDOM * 32768 + RANDOM) % mb )) iflag=direct 2>&1 | tail -n 1" ||
-      echo "(the read probe failed)"
-  done
-}
-
-# prewarm_line: one line on the pre-warm; sets PREWARM_STATE (running, ok, ...).
-prewarm_line() {
-  local out
-  PREWARM_STATE=unknown
-  out=$(host_script prewarm "$NEW_VOL") || { echo "pre-warm: cannot ask $NEW"; return 0; }
-  PREWARM_STATE=$(echo "$out" | sed -n 's/^prewarm=//p')
-  echo "pre-warm: $PREWARM_STATE, $(echo "$out" | sed -n 's/^prewarm_percent=//p')% read, $(echo "$out" | sed -n 's/^prewarm_duration_s=//p')s so far"
-}
-
 # copy_env_files: the env files from the operator's machine, with the socket
 # settings written into the new host's copy (the script app uses). Sets ENV_CHANGED.
 copy_env_files() {
@@ -1100,9 +1022,9 @@ confirm_eip_move() {
   cat << EOF
 
 $EIP ($EIP_ADDRESS) is on: $holder${state:+ (state $state, status checks $status)}
-Moving it makes $NEW_ID the site, with the data of the snapshot of $SNAP_START and the Redis backup.
-If that host is only unreachable and not gone, stop it first (aws ec2 stop-instances): it holds
-newer data, and if it came back beside this one there would be two Redis masters. This script
+Moving it makes $NEW_ID the site, with the Redis backup.
+If that host is only unreachable and not gone, stop it first (aws ec2 stop-instances): its Redis
+is newer, and if it came back beside this one there would be two Redis masters. This script
 neither stops nor touches it.
 EOF
   [ -z "$DRY_RUN" ] || return 0
@@ -1131,8 +1053,7 @@ phase_restore() {
   aws_cli sts get-caller-identity > /dev/null || die "the AWS session has expired"
   t0=$(date +%s)
 
-  step "Snapshot and Elastic IP"
-  restore_snapshot
+  step "Elastic IP"
   NEW_ID=""
   if [ -n "$NEW" ]; then
     restore_follow_eip
@@ -1162,24 +1083,6 @@ phase_restore() {
     echo "Redis on $NEW holds $keys keys"
   fi
 
-  step "Data volume from the snapshot"
-  restore_volume
-
-  step "Cold reads, then adopting the volume and starting the pre-warm"
-  if [ -z "$DRY_RUN" ]; then
-    COPYFILE_DISABLE=1 tar -C "$HERE/data-volume" -cf - host.sh |
-      pipe_to "$NEW" 'rm -rf /tmp/blot-data-volume && mkdir /tmp/blot-data-volume && tar -xf - -C /tmp/blot-data-volume' ||
-      die "cannot copy host.sh to $NEW"
-    read_probe
-  fi
-  act host_script adopt "$NEW_VOL" "$SNAP_VOLUME"
-  act host_script prewarm "$NEW_VOL"
-
-  step "Mounting the volume (deploy.sh)"
-  act deploy_host "$(ssh_config "$NEW" hostname)" "$NEW_VOL"
-  [ -n "$DRY_RUN" ] || [ "$(on "$NEW" "sudo cat /var/www/blot/data/.blot-data-volume" | tr -d '\r')" = "$NEW_VOL" ] ||
-    die "$NEW's data directory does not carry the marker of $NEW_VOL"
-
   step "Env files and the wildcard certificate"
   act copy_env_files
   act "$HERE/wildcard-cert.sh" "$NEW"
@@ -1204,20 +1107,6 @@ phase_restore() {
   # Only now: until the units are verified, a rerun must still redeploy them.
   act on "$NEW" "sudo rm -f /etc/blot/cycle-env-pending"
 
-  step "The volume's pre-warm"
-  if [ -z "$DRY_RUN" ]; then
-    prewarm_line
-    if [ -n "$WAIT_PREWARM" ]; then
-      while [ "$PREWARM_STATE" != ok ]; do
-        [ "$PREWARM_STATE" = running ] || die "the pre-warm is '$PREWARM_STATE'"
-        sleep 60
-        prewarm_line
-      done
-    elif [ "$PREWARM_STATE" != ok ]; then
-      echo "Still loading, so reads are slower until it finishes (--wait-prewarm waits for it before the address moves)"
-    fi
-  fi
-
   step "Moving the Elastic IP"
   if [ "$EIP_ON" = "$NEW_ID" ]; then
     echo "$EIP is already on $NEW_ID"
@@ -1234,24 +1123,19 @@ phase_restore() {
     fi
   fi
 
-  step "Backups, snapshots and permabans"
-  # From here this host is the one that backs up, and its volume the one that is snapshotted.
+  step "Backups and permabans"
+  # From here this host is the one that backs up.
   act on "$NEW" "sudo mkdir -p /etc/blot-redis && sudo touch /etc/blot-redis/active"
-  [ "$MODE" != production ] ||
-    act aws_cli ec2 create-tags --resources "$NEW_VOL" --tags "Key=Name,Value=Blot /var/www/blot/data" # must match DATA_NAME in data-volume/resize.sh
   [ -z "$BANS_FILE" ] || act "$HERE/bans.sh" import "$NEW" "$BANS_FILE"
   step ""
 
   say "Restored in $(($(date +%s) - t0))s: $NEW serves $EIP_ADDRESS"
   cat << EOF
-Before the reconcile, change HostName for $NEW in ~/.ssh/config to $EIP_ADDRESS: its launch address is released.
-The data is as of $SNAP_START. Now reconcile (README.md, "Recovery"): it prints a plan first, then
-resyncs the sync-client blogs and lists the git blogs whose owners push again:
-  ssh $NEW sudo docker exec --user 1000:1000 -e HOME=/home/node blot-blue node scripts/host-cycle/reconcile.js --since $SNAP_START
-$SNAP_VOLUME was not touched. Anything newer than the snapshot is on it, so keep it until the
-reconcile is done. It still has the name the snapshot policy targets: retag it once the new
-volume has its first snapshot.
-Not restored: the offsite backup settings (/etc/blot-redis/offsite-bucket and its profile). Set them up by hand.
+Change HostName for $NEW in ~/.ssh/config to $EIP_ADDRESS: its launch address is released.
+Redis is as of its backup, while the blog folders and git repos in S3 are current: see README.md,
+"Recovery", for blogs that changed in between.
+Not restored: the offsite backup settings (/etc/blot-redis/offsite-bucket and the blot-b2 profile, and
+/etc/blot/storage-offsite-bucket and the blot-b2-storage profile). Set them up by hand.
 EOF
 }
 
@@ -1263,9 +1147,8 @@ phase_status() {
   echo "old     $OLD_NOW: ${OLD_ID:-not reachable}"
   echo "new     $NEW: ${NEW_ID:-not reachable}"
   info=$(redis_info "$NEW"); old_info=$(redis_info "$OLD_REDIS")
-  echo "launch  redis6 $(on "$NEW" "systemctl is-active redis6" 2> /dev/null || echo down), instance store $(on "$NEW" "mountpoint -q /var/instance-ssd && echo mounted || echo missing" 2> /dev/null)"
+  echo "launch  redis6 $(on "$NEW" "systemctl is-active redis6" 2> /dev/null || echo down), instance store $(on "$NEW" "mountpoint -q /var/instance-ssd && echo mounted || echo missing" 2> /dev/null || echo unknown)"
   echo "redis   $NEW: $(info_field "$info" role) (link $(info_field "$info" master_link_status), of $(info_field "$info" master_host)); $OLD_REDIS: $(info_field "$old_info" role)"
-  echo "data    $(rs move status 2> /dev/null | grep -E '^(Move|Target|No move)' | tr -s ' ' | tr '\n' ' ')"
   for u in $UNIT_NAMES; do
     echo "app     $u on $NEW: $(docker_field "$NEW" "$u" '{{.State.Status}} {{.Config.Image}}'), on $OLD_NOW: $(docker_field "$OLD_NOW" "$u" '{{.State.Status}}')"
   done

@@ -23,10 +23,8 @@ const readHostMemory = require("./host-memory");
 const sweepGit = require("./sweep-git");
 const pruneTmp = require("./prune-tmp");
 const gitStoreMaintenance = require("./git-store-maintenance");
-const folderMirror = require("storage/folder/reconcile");
 
-// If any other disk has less than 2GB of space, we should notify the admin.
-// The data disk is watched by percentage instead (free-disk-space.js).
+// If a disk has less than 2GB of space, we should notify the admin.
 const MINIMUM_DISK_SPACE_IN_K = 2 * 1024 * 1024;
 
 // The warning emails are sent once per TTL across every process: each
@@ -34,7 +32,6 @@ const MINIMUM_DISK_SPACE_IN_K = 2 * 1024 * 1024;
 // which one sends. Like the in-memory flags they replace, nothing resets when
 // the disk recovers: the keys just expire.
 const LOW_DISK_NOTIFIED_KEY = "notify:low-disk-space";
-const DATA_DISK_NOTIFIED_KEY = "notify:data-disk-percent:";
 const DISK_NOTIFY_TTL_MS = 24 * 60 * 60 * 1000;
 
 function sendLowDiskEmail(disks, headline) {
@@ -44,38 +41,15 @@ function sendLowDiskEmail(disks, headline) {
 }
 
 // Emails about low disk space, at most once per DISK_NOTIFY_TTL_MS however
-// many processes call this. The data disk emails once per alert level
-// (90, 95, 99%), the other disks once for all of them. Never rejects.
+// many processes call this. Never rejects.
 async function notifyLowDisk(disks) {
   try {
     const lowDisk = disks.some(
-      disk => disk.label !== "data" && disk.available_k < MINIMUM_DISK_SPACE_IN_K
+      disk => disk.available_k < MINIMUM_DISK_SPACE_IN_K
     );
 
     if (lowDisk && (await lock.once(LOW_DISK_NOTIFIED_KEY, DISK_NOTIFY_TTL_MS))) {
       sendLowDiskEmail(disks, "Warning: Blot's disk is low on space");
-    }
-
-    const alert = freeDiskSpace.dataDiskAlert(disks);
-
-    if (
-      alert &&
-      (await lock.once(DATA_DISK_NOTIFIED_KEY + alert.percent, DISK_NOTIFY_TTL_MS))
-    ) {
-      sendLowDiskEmail(disks, alert.headline);
-
-      // Having emailed for this level, a later reading at a lower one (the
-      // disk recovering a little) must not email again within the TTL.
-      const lower = freeDiskSpace.DATA_DISK_ALERTS.filter(
-        other => other.percent < alert.percent
-      );
-      if (lower.length) {
-        const multi = client.multi();
-        for (const other of lower) {
-          multi.set(DATA_DISK_NOTIFIED_KEY + other.percent, "1", { PX: DISK_NOTIFY_TTL_MS });
-        }
-        await multi.exec();
-      }
     }
   } catch (err) {
     console.error(clfdate(), "Error checking whether to send low disk space email", err);
@@ -345,15 +319,12 @@ module.exports = function () {
     }
   });
 
-  // A push cut off by a crash or a deploy leaves its quarantine directory in
-  // the bare repository, and git never removes it. It runs once a day across
-  // all containers (lock.cron) and works from any of them because they share
-  // the host's git data directory. Should become scope "host" once BLOT_HOST_ID
-  // is set and there is more than one host.
-  console.log(clfdate(), "Scheduled daily sweep of stale git push quarantine directories");
+  // Git processes running far longer than a push or clone can take belong to
+  // a request that is gone. Once a day across all containers (lock.cron).
+  console.log(clfdate(), "Scheduled daily check for stuck git processes");
   lock.cron("sweep-git", { hour: 5, minute: 0 }, async function () {
     try {
-      const { report, sent } = await sweepGit({
+      const { stuck, sent } = await sweepGit({
         sendEmail: (view) =>
           new Promise((resolve, reject) =>
             email.GIT_SWEEP_ALERT(null, view, (err) =>
@@ -362,17 +333,10 @@ module.exports = function () {
           ),
       });
 
-      console.log(
-        clfdate(),
-        "Git: swept " + report.repositories + " repositories, removed",
-        report.removed,
-        "stale push quarantine directories, freed",
-        report.bytes,
-        "bytes" + (report.errors ? ", " + report.errors + " errors" : "")
-      );
+      console.log(clfdate(), "Git: found " + stuck.length + " stuck git processes");
       if (sent) console.log(clfdate(), "Sent git sweep alert email");
     } catch (err) {
-      console.log(clfdate(), "Error: Sweeping git push quarantine directories", err);
+      console.log(clfdate(), "Error: Checking for stuck git processes", err);
     }
   });
 
@@ -398,11 +362,9 @@ module.exports = function () {
     }
   });
 
-  // The git store's sweep, the check of each shadowed blog's copy against its
-  // repository on disk, and prefixes left by blogs off git. Once a day across
-  // all containers (lock.cron); it only touches the bucket and reads the
-  // repositories, so any container can run it. Nothing unless shadow mode
-  // (BLOT_GIT_STORE_SHADOW) is on.
+  // The git store's sweep, the check of each git blog's copy, and prefixes
+  // left by blogs off git. Once a day across all containers (lock.cron); it
+  // only touches the bucket and scratch space, so any container can run it.
   console.log(clfdate(), "Scheduled daily git store maintenance");
   lock.cron(gitStoreMaintenance.NAME, { hour: 6, minute: 0 }, async function () {
     try {
@@ -429,32 +391,6 @@ module.exports = function () {
         );
     } catch (err) {
       console.log(clfdate(), "Error: Reconciling scheduled entry alarms", err);
-    }
-  });
-
-  // Keeps the S3 copy of blog folders honest (#2258 Phase C), where the
-  // mirror's own writes can miss, and for blogs on S3 (Phase D) their copy on
-  // disk. Both do nothing unless BLOT_FOLDER_MIRROR or BLOT_FOLDER_PRIMARY is
-  // on and the bucket is set, and each runs on the one container which wins
-  // the lock.cron run, working one blog at a time (storage/folder/reconcile).
-  // The data directory is shared by the containers of a host, so any of them
-  // can do it. Should become scope "host" once BLOT_HOST_ID is set and there
-  // is more than one host. Not on the hour, when other jobs start.
-  console.log(clfdate(), "Scheduled hourly repair of blogs whose folder mirror write failed");
-  lock.cron("folder-mirror-repair", "25 * * * *", async function () {
-    try {
-      await folderMirror.reconcile({ mode: "dirty" });
-    } catch (err) {
-      console.log(clfdate(), "Error: Repairing the folder mirror", err);
-    }
-  });
-
-  console.log(clfdate(), "Scheduled daily check of the folder mirror");
-  lock.cron("folder-mirror-verify", { hour: 4, minute: 15 }, async function () {
-    try {
-      await folderMirror.reconcile({ mode: "full" });
-    } catch (err) {
-      console.log(clfdate(), "Error: Checking the folder mirror", err);
     }
   });
 

@@ -1,20 +1,19 @@
 const crypto = require("crypto");
 const fs = require("fs-extra");
 const vm = require("vm");
-const { join, dirname, resolve } = require("path");
+const { dirname, resolve } = require("path");
 const { Readable } = require("stream");
 
-// The real sync, download and client database, against a blog folder on each
-// storage backend, with Drive played by a fake client. What must hold on
-// both: an unchanged file is neither downloaded nor read, a file changed
-// outside the client is noticed, and records from before the client kept
-// each file's state still work (#2258, "Content hash").
-describe("Google Drive sync on each storage backend", function () {
+// The real sync, download and client database, against a blog folder in S3,
+// with Drive played by a fake client. What must hold: an unchanged file is
+// neither downloaded nor read, a file changed outside the client is noticed,
+// and records from before the client kept each file's state still work
+// (#2258, "Content hash").
+describe("Google Drive sync against storage/folder", function () {
   const folder = require("storage/folder");
   const database = require("clients/google-drive/database");
   const client = require("models/client");
   const prefix = require("clients/google-drive/database/prefix");
-  const contentFingerprint = require("../util/contentFingerprint");
 
   const md5 = (text) => crypto.createHash("md5").update(text).digest("hex");
   const sha1 = (text) => crypto.createHash("sha1").update(text).digest("hex");
@@ -174,11 +173,9 @@ describe("Google Drive sync on each storage backend", function () {
       drive.files["a.txt"] = "alpha";
       expect(await run()).toBeTruthy();
 
-      // The record as it was before this client kept each file's state: on
-      // disk the file's real fingerprint, which S3 has no way to match
-      const fingerprint = (await folder.backendFor(this.blog.id)) === "local"
-        ? contentFingerprint(await fs.stat(join(this.blogDirectory, "a.txt"), { bigint: true }))
-        : "5:1000000000";
+      // The record as it was before this client kept each file's state: the
+      // file's fingerprint on disk, which S3 has no way to match
+      const fingerprint = "5:1000000000";
       await database.folder(folderId, this.blog.id).setVerifiedContent("id-a.txt", {
         path: "/a.txt",
         checksum: md5("alpha"),
@@ -198,24 +195,9 @@ describe("Google Drive sync on each storage backend", function () {
 
   global.test.blog();
 
-  describe("on disk", function () {
-    specs();
-  });
+  specs();
 
   describe("on S3", function () {
-    require("storage/tests/minio")();
-
-    // Before the blog is made, so it is made on S3 too
-    beforeAll(function () {
-      folder.useBackend("s3");
-    });
-
-    afterAll(function () {
-      folder.useBackend();
-    });
-
-    specs();
-
     it("lists the folder without a local copy of any directory", async function () {
       await folder.write(this.blog.id, "/dir/a.txt", "alpha");
       spyOn(folder, "ensureLocal").and.callThrough();

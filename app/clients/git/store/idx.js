@@ -330,4 +330,4 @@ function openIndex({ store, key, size, cache, namespace, whole = false }) {
   };
 }
 
-module.exports = { openIndex, chooseWhole, loadWhole, rememberWhole, MAX_WHOLE, WHOLE_BUDGET };
+module.exports = { openIndex, chooseWhole, loadWhole, rememberWhole, wholeKey, MAX_WHOLE, WHOLE_BUDGET };

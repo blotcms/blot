@@ -18,10 +18,6 @@ async function reconcileSource(blogID, dir) {
   dir = dir || (await source.directory(blogID));
 
   if (!(await fs.pathExists(dir))) {
-    // The old watcher changed the disk behind storage/folder's back, so S3's
-    // copy may be behind. Marked first, so the folder is read from the disk
-    // (storage/folder does not use S3 for a blog whose mirror is behind).
-    await require("storage/folder/mirror").markBehind(blogID);
     const copied = await seed(blogID, dir);
     console.log(prefix(), "Copied", copied, "files of the folder of", blogID, "to its new source directory", dir);
     return dir;
