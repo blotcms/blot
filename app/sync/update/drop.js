@@ -1,30 +1,26 @@
-var async = require("async");
+var { promisify } = require("util");
+var withCallback = require("helper/withCallback");
 var Entry = require("models/entry");
 var Ignored = require("models/ignoredFiles");
 var Preview = require("./preview");
 var isDraft = require("./drafts").isDraft;
 var rebuildDependents = require("./rebuildDependents");
 
-module.exports = function (blogID, path, callback) {
+module.exports = withCallback(async function drop(blogID, path) {
   // We don't know if this file used to be a draft based
   // on its metadata. We should probably look this up?
-  isDraft(blogID, path, function (err, is_draft) {
-    // ORDER IS IMPORTANT
-    // Rebuild must happen after we remove the file from disk
-    var queue = [
-      Ignored.drop.bind(this, blogID, path),
-      Entry.drop.bind(this, blogID, path),
-      rebuildDependents.bind(this, blogID, path),
-    ];
+  // An error is ignored: the file is then treated as not a draft.
+  var is_draft;
 
-    if (is_draft) Preview.remove(blogID, path);
+  try {
+    is_draft = await promisify(isDraft)(blogID, path);
+  } catch (err) {}
 
-    async.eachSeries(
-      queue,
-      function (method, next) {
-        method(next);
-      },
-      callback
-    );
-  });
-};
+  if (is_draft) Preview.remove(blogID, path);
+
+  // ORDER IS IMPORTANT
+  // Rebuild must happen after we remove the file from disk
+  await promisify(Ignored.drop)(blogID, path);
+  await promisify(Entry.drop)(blogID, path);
+  await promisify(rebuildDependents)(blogID, path);
+});
