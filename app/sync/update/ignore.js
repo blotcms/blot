@@ -1,4 +1,3 @@
-var { promisify } = require("util");
 var withCallback = require("helper/withCallback");
 var ensure = require("helper/ensure");
 
@@ -10,6 +9,6 @@ module.exports = withCallback(async function ignore(blogID, path, reason) {
 
   // Remove this file from the user's blog
   // and from the folder on the server.
-  await promisify(Ignored.add)(blogID, path, reason);
-  await promisify(Entry.drop)(blogID, path);
+  await Ignored.add(blogID, path, reason);
+  await Entry.drop(blogID, path);
 });
