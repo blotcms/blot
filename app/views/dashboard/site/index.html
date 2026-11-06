@@ -88,12 +88,12 @@
               {{> folder-sync-issue}}
               {{#postItems.length}}
               <div class="directory-scroll">
-                <table class="data-table data-table--zebra directory-list">
+                <table class="data-table data-table--zebra directory-list folder-filter-table">
                   <thead>
                     <tr>
-                      <th scope="col" style="width:var(--folder-columns-name, 62%)">Name</th>
-                      <th scope="col" style="width:var(--folder-columns-size, 12%)">Size</th>
-                      <th scope="col" style="width:var(--folder-columns-modified, 26%)">Date modified</th>
+                      <th scope="col">Title</th>
+                      {{#postColumns}}<th scope="col" style="width:{{width}}">{{label}}</th>{{/postColumns}}
+                      <th scope="col" class="folder-filter-table__actions"><span class="visually-hidden">Actions</span></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -101,19 +101,19 @@
                     <tr class="directory-row row-action-menu-row">
                       <td>
                         <div class="directory-row__name-cell">
-                          <a href="{{{base}}}/folder/{{{urlPath}}}" class="directory-row__link cover entry" title="{{path}}">
+                          <a href="{{{base}}}/folder/{{{urlPath}}}" class="directory-row__link cover entry">
                             <span class="icon-file-check" aria-hidden="true"></span>
-                            <span class="truncate">{{name}}</span>
+                            <span class="truncate">{{title}}</span>
                           </a>
                         </div>
                       </td>
-                      <td>
+                      {{#cells}}
+                      <td class="folder-filter-table__cell"{{#title}} title="{{title}}"{{/title}}>
                         <a href="{{{base}}}/folder/{{{urlPath}}}" class="directory-row__link cover" aria-hidden="true" tabindex="-1"></a>
-                        {{size}}
+                        {{#datetime}}<time datetime="{{datetime}}">{{text}}</time>{{/datetime}}{{^datetime}}<span class="truncate">{{text}}</span>{{/datetime}}
                       </td>
-                      <td class="directory-row__modified-cell">
-                        <a href="{{{base}}}/folder/{{{urlPath}}}" class="directory-row__link cover" aria-hidden="true" tabindex="-1"></a>
-                        {{modified}}
+                      {{/cells}}
+                      <td class="directory-row__modified-cell folder-filter-table__actions">
                         <button
                           class="directory-row__menu-trigger row-action-menu__trigger"
                           type="button"

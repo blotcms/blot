@@ -1,6 +1,8 @@
 const Entries = require("models/entries");
 const Entry = require("models/entry");
-const Stat = require("../folder/stat");
+const moment = require("moment");
+// Adds moment().tz()
+require("moment-timezone");
 const { promisify } = require("util");
 const { LRUCache } = require("lru-cache");
 
@@ -30,15 +32,57 @@ const lists = [
   },
 ];
 
+// The columns each filter's rows show after the title, as [label, width]
+// and how a row fills them
+const COLUMNS = {
+  posts: [
+    ["File", "22%", (item) => ({ text: item.name, title: item.path })],
+    [
+      "Published",
+      "16%",
+      (item) => ({ text: item.published, datetime: item.publishedISO }),
+    ],
+    ["Tags", "18%", (item) => ({ text: item.tags })],
+  ],
+  pages: [
+    ["URL", "26%", (item) => ({ text: item.url })],
+    ["Menu", "12%", (item) => ({ text: item.inMenu })],
+    [
+      "Updated",
+      "16%",
+      (item) => ({ text: item.updated, datetime: item.updatedISO }),
+    ],
+  ],
+  drafts: [
+    ["File", "30%", (item) => ({ text: item.name, title: item.path })],
+    [
+      "Last edited",
+      "20%",
+      (item) => ({ text: item.updated, datetime: item.updatedISO }),
+    ],
+  ],
+  scheduled: [
+    [
+      "Publishes",
+      "30%",
+      // When, in the site's time zone, and how soon
+      (item) => ({
+        text: item.publishes + " · " + moment(item.dateStamp).fromNow(),
+        datetime: item.publishedISO,
+      }),
+    ],
+    ["File", "22%", (item) => ({ text: item.name, title: item.path })],
+  ],
+};
+
 // Keyed on the blog's cacheID, which a sync or a scheduled post bumps when it
 // finishes. It is stored in Redis, so blue and green agree on it.
 const cache = new LRUCache({ max: 2000 });
 
-// Every page with the folder's filter pills needs each list's total; a
-// filter page also needs one page of its list, shown as folder rows (file
-// name, size and date modified, from each file's folder stat). getListIDs has
-// no offset, so a later page reads the IDs before it too, which is cheap next
-// to loading the entries.
+// Every page with the folder's filters needs each list's total; a filter
+// page also needs one page of its list, shown as rows whose columns suit the
+// filter (see COLUMNS). getListIDs has no offset, so a later page reads the
+// IDs before it too, which is cheap next to loading the entries.
 async function loadLists(blogID, { filter, page, timeZone }) {
   const results = await Promise.all(
     lists.map(async function (list) {
@@ -79,25 +123,32 @@ async function loadLists(blogID, { filter, page, timeZone }) {
       return {
         list: result.list,
         total: result.total,
-        items: await Promise.all(
-          found.map(async function (entry) {
-            // A file removed since it was indexed shows without a size or date
-            const stat = await Stat(blogID, entry.path, timeZone).catch(
-              () => null
-            );
-            return {
-              name: entry.path.split("/").pop(),
-              path: entry.path,
-              urlPath: entry.path
-                .replace(/^\/+/, "")
-                .split("/")
-                .map(encodeURIComponent)
-                .join("/"),
-              size: stat ? stat.size : "--",
-              modified: stat ? stat.modified : "",
-            };
-          })
-        ),
+        // Plain dates, not "Today": the list is cached until the next sync
+        items: found.map(function (entry) {
+          const date = (stamp) =>
+            stamp ? moment(stamp).tz(timeZone || "UTC") : null;
+          const published = date(entry.dateStamp);
+          const updated = date(entry.updated);
+          return {
+            title: entry.title || entry.path.split("/").pop(),
+            name: entry.path.split("/").pop(),
+            path: entry.path,
+            urlPath: entry.path
+              .replace(/^\/+/, "")
+              .split("/")
+              .map(encodeURIComponent)
+              .join("/"),
+            url: entry.url || "",
+            tags: (entry.tags || []).join(", "),
+            inMenu: entry.menu ? "In menu" : "",
+            dateStamp: entry.dateStamp,
+            published: published ? published.format("MMM D, YYYY") : "",
+            publishes: published ? published.format("MMM D, YYYY, h:mm A") : "",
+            publishedISO: published ? published.toISOString() : "",
+            updated: updated ? updated.format("MMM D, YYYY") : "",
+            updatedISO: updated ? updated.toISOString() : "",
+          };
+        }),
       };
     })
   );
@@ -158,7 +209,19 @@ module.exports = async function (req, res, next) {
     const activeGroup = res.locals.postGroups.find(function (group) {
       return group.isActive;
     });
-    res.locals.postItems = activeGroup ? activeGroup.items : [];
+    // The filter page's table: a title column, the filter's own columns, and
+    // a narrow one for each row's menu
+    const columns = activeGroup ? COLUMNS[activeGroup.key] || [] : [];
+    res.locals.postColumns = columns.map(([label, width]) => ({
+      label,
+      width,
+    }));
+    res.locals.postItems = activeGroup
+      ? activeGroup.items.map((item) => ({
+          ...item,
+          cells: columns.map(([, , cell]) => cell(item)),
+        }))
+      : [];
 
     // Previous and Next links (Scheduled lists the soonest first, so not
     // Newer and Older as on the Activity page)

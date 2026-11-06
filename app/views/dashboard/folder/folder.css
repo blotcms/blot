@@ -562,3 +562,18 @@ body.upload-modal-open {
   }
 }
 
+
+/* The filter pages' tables (site/index.html): a title, the filter's own
+   columns in secondary text, and a narrow column for each row's menu */
+.folder-filter-table .folder-filter-table__cell {
+  overflow: hidden;
+  color: var(--medium-text-color);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.folder-filter-table .folder-filter-table__actions {
+  position: relative;
+  width: 40px;
+  padding-right: 0;
+}
