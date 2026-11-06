@@ -70,4 +70,21 @@ describe("withCallback", function () {
       done();
     }, 10);
   });
+
+  it("leaves an async callback's rejection unhandled", function (done) {
+    const listeners = process.listeners("unhandledRejection");
+    process.removeAllListeners("unhandledRejection");
+
+    process.once("unhandledRejection", function (err) {
+      listeners.forEach((listener) =>
+        process.on("unhandledRejection", listener)
+      );
+      expect(err.message).toBe("in async callback");
+      done();
+    });
+
+    double(2, async function () {
+      throw new Error("in async callback");
+    });
+  });
 });

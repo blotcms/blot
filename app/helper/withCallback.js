@@ -9,7 +9,8 @@ const clfdate = require("helper/clfdate");
 // A callback that throws is logged, not called a second time, and not
 // rethrown: the process exits on an unhandled rejection (app/index.js), and
 // a second call with the callback's own error was the double-callback bug
-// this replaces.
+// this replaces. What the callback returns is ignored, so an async callback
+// that rejects is still an unhandled rejection, as it was before.
 module.exports = function withCallback(fn) {
   const name = fn.name || "anonymous";
 
@@ -29,8 +30,12 @@ module.exports = function withCallback(fn) {
 
     promise
       .then(
-        (result) => callback(null, result),
-        (err) => callback(err)
+        (result) => {
+          callback(null, result);
+        },
+        (err) => {
+          callback(err);
+        }
       )
       .catch((err) => {
         console.error(clfdate(), `withCallback: ${name}'s callback threw`, err);
