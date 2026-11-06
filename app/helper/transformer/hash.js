@@ -1,16 +1,16 @@
 var fs = require("fs-extra");
 var crypto = require("crypto");
 var debug = require("debug")("blot:helper:transformer:hash");
+var withCallback = require("helper/withCallback");
 
-module.exports = function (path, callback) {
-  var hash;
+async function hash(path) {
+  var hasher = crypto.createHash("sha1");
 
-  fs.createReadStream(path)
-    .on("error", callback)
-    .pipe(crypto.createHash("sha1").setEncoding("hex"))
-    .on("finish", function () {
-      hash = this.read();
-      debug(path, "hashed to", hash);
-      callback(null, hash);
-    });
-};
+  for await (var chunk of fs.createReadStream(path)) hasher.update(chunk);
+
+  var digest = hasher.digest("hex");
+  debug(path, "hashed to", digest);
+  return digest;
+}
+
+module.exports = withCallback(hash);

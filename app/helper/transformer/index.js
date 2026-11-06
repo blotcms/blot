@@ -16,6 +16,7 @@ var resolve = require("path").resolve;
 var callbackify = require("util").callbackify;
 var resolveCaseInsensitive = callbackify(folder.resolveCaseInsensitive);
 var async = require("async");
+var withCallback = require("helper/withCallback");
 var he = require("he");
 var unwrapFolderLink = require("blog/render/replaceFolderLinks/unwrapFolderLink");
 var decodeFolderPath =
@@ -500,23 +501,16 @@ function Transformer(blogID, name) {
     })();
   }
 
-  function flush(callback) {
-    (async function () {
-      try {
-        const toDelete = await client.sMembers(keys.everything);
-        if (toDelete && toDelete.length) {
-          await client.del(toDelete);
-        }
-        callback();
-      } catch (err) {
-        callback(err);
-      }
-    })();
+  async function flush() {
+    const toDelete = await client.sMembers(keys.everything);
+    if (toDelete && toDelete.length) {
+      await client.del(toDelete);
+    }
   }
 
   return {
     lookup: lookup,
-    flush: flush,
+    flush: withCallback(flush),
   };
 }
 

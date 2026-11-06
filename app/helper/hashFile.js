@@ -3,10 +3,12 @@
 // the "content_hash" metadata field.
 const fs = require("fs");
 const stream = require("stream");
+const { pipeline } = require("stream/promises");
+const withCallback = require("helper/withCallback");
 const crypto = require("crypto");
 const BLOCK_SIZE = 4 * 1024 * 1024;
 
-function hashFile(path, callback) {
+async function hashFile(path) {
   const writableStream = new stream.Writable();
   const read = fs.createReadStream(path);
 
@@ -40,23 +42,9 @@ function hashFile(path, callback) {
     hash = overallHasher.digest("hex");
   });
 
-  stream.pipeline(read, writableStream, function (err) {
-    callback(err, hash);
-  });
+  await pipeline(read, writableStream);
+  return hash;
 }
 
 // Supports callback-based and promise-based usage
-async function main(path, callback) {
-  if (callback) {
-    hashFile(path, callback);
-  } else {
-    return new Promise((resolve, reject) => {
-      hashFile(path, function (err, digest) {
-        if (err) reject(err);
-        else resolve(digest);
-      });
-    });
-  }
-}
-
-module.exports = main;
+module.exports = withCallback(hashFile);

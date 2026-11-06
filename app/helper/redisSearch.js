@@ -1,58 +1,57 @@
 var client = require("models/client");
+var withCallback = require("helper/withCallback");
 
-function main(string, callback) {
+async function main(string) {
   var types = {};
   var result = [];
   var allKeys = [];
 
-  (async function () {
-    await redisKeys("*", async function (keys) {
-      for (const key of keys) {
-        allKeys.push(key);
+  await redisKeys("*", async function (keys) {
+    for (const key of keys) {
+      allKeys.push(key);
 
-        if (key.indexOf(string) > -1)
-          result.push({ key: key, value: "KEY ITSELF", type: "KEY" });
-      }
-    });
-
-    for (const key of allKeys) {
-      const type = await client.type(key);
-
-      types[type] = types[type] || [];
-      types[type].push(key);
+      if (key.indexOf(string) > -1)
+        result.push({ key: key, value: "KEY ITSELF", type: "KEY" });
     }
+  });
 
-    for (const type in types) {
-      const keysByType = types[type];
+  for (const key of allKeys) {
+    const type = await client.type(key);
 
-      if (type === "string") {
-        await stringSearch(string, keysByType, result);
-      } else if (type === "hash") {
-        await hashSearch(string, keysByType, result);
-      } else if (type === "list") {
-        await listSearch(string, keysByType, result);
-      } else if (type === "set") {
-        await setSearch(string, keysByType, result);
-      } else if (type === "zset") {
-        await sortedSetSearch(string, keysByType, result);
-      } else {
-        throw new Error("No handlers for strings of type: " + type);
-      }
+    types[type] = types[type] || [];
+    types[type].push(key);
+  }
+
+  for (const type in types) {
+    const keysByType = types[type];
+
+    if (type === "string") {
+      await stringSearch(string, keysByType, result);
+    } else if (type === "hash") {
+      await hashSearch(string, keysByType, result);
+    } else if (type === "list") {
+      await listSearch(string, keysByType, result);
+    } else if (type === "set") {
+      await setSearch(string, keysByType, result);
+    } else if (type === "zset") {
+      await sortedSetSearch(string, keysByType, result);
+    } else {
+      throw new Error("No handlers for strings of type: " + type);
     }
+  }
 
-    const dedupedResult = [];
-    const seen = new Set();
+  const dedupedResult = [];
+  const seen = new Set();
 
-    for (const entry of result) {
-      const signature = `${entry.type}:${entry.key}:${entry.value}`;
-      if (seen.has(signature)) continue;
+  for (const entry of result) {
+    const signature = `${entry.type}:${entry.key}:${entry.value}`;
+    if (seen.has(signature)) continue;
 
-      seen.add(signature);
-      dedupedResult.push(entry);
-    }
+    seen.add(signature);
+    dedupedResult.push(entry);
+  }
 
-    callback(null, dedupedResult);
-  })().catch(callback);
+  return dedupedResult;
 }
 
 async function stringSearch(string, keys, result) {
@@ -160,4 +159,4 @@ function normalizeScanReply(reply) {
   return { cursor: "0", keys: [] };
 }
 
-module.exports = main;
+module.exports = withCallback(main);
