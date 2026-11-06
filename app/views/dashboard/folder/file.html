@@ -7,7 +7,7 @@
 
 <div class="file-info">
 
-  <a href="{{{base}}}/folder-download{{{url}}}" target="_blank" class="template-button file-helper">
+  <a href="{{{base}}}/folder-download{{url}}" target="_blank" class="template-button file-helper">
     Download file
     <span class="icon-download"></span>
   </a>
@@ -20,7 +20,7 @@
 
     <tr>
       <td>File URL:</td>
-      <td>{{#notServed}}https://{{{blog.pretty.url}}}{{{url}}} (not published){{/notServed}}{{^notServed}}<a href="https://{{{blog.pretty.url}}}{{{url}}}" target="_blank" rel="noopener noreferrer">https://{{{blog.pretty.url}}}{{{url}}}</a> <button class="copy" data-copy="https://{{{blog.pretty.url}}}{{{url}}}"><span class="icon-copy"></span> Copy</button>{{/notServed}}</td>
+      <td>{{#notServed}}https://{{{blog.pretty.url}}}{{url}} (not published){{/notServed}}{{^notServed}}<a href="https://{{{blog.pretty.url}}}{{url}}" target="_blank" rel="noopener noreferrer">https://{{{blog.pretty.url}}}{{url}}</a> <button class="copy" data-copy="https://{{{blog.pretty.url}}}{{url}}"><span class="icon-copy"></span> Copy</button>{{/notServed}}</td>
     </tr>
 
     <tr>
@@ -44,7 +44,7 @@
     <i><span class="icon-small-check"></span></i>
     {{#viewingSource}}
     <b>File is part of a folder post</b>
-    Editing, renaming, or removing this file updates the {{type}} published at <a href="{{{blog.url}}}{{{url}}}" target="_blank">{{entryPath}}</a>.
+    Editing, renaming, or removing this file updates the {{type}} published at <a href="{{{blog.url}}}{{url}}" target="_blank">{{entryPath}}</a>.
     {{/viewingSource}}
     {{^viewingSource}}
     <b>Folder is a {{type}}</b>
@@ -112,9 +112,9 @@
 {{#entry}}
 <div class="entry-info">
 
-  <h1><a href="{{{blog.url}}}{{{url}}}" target="_blank"><span class="icon-website"></span>{{title}}</a></h1>
+  <h1><a href="{{{blog.url}}}{{url}}" target="_blank"><span class="icon-website"></span>{{title}}</a></h1>
 
-  <a href="{{{blog.url}}}{{{url}}}" target="_blank" class="template-button file-helper">
+  <a href="{{{blog.url}}}{{url}}" target="_blank" class="template-button file-helper">
     View {{type}}
     <span class="icon-zoom"></span>
   </a>
@@ -150,7 +150,7 @@
          {{#sources}}
          {{^hidden}}
          <li class="folder-post-file {{#current}}current{{/current}} {{^exists}}missing{{/exists}}">
-           <a href="{{{base}}}/folder{{{url}}}">
+           <a href="{{{base}}}/folder{{url}}">
              <span class="icon-file-check"></span>
              <span class="file-name">{{relativePath}}</span>
            </a>
@@ -167,7 +167,7 @@
            {{#sources}}
            {{#hidden}}
            <li class="folder-post-file {{#current}}current{{/current}} {{^exists}}missing{{/exists}}">
-             <a href="{{{base}}}/folder{{{url}}}">
+             <a href="{{{base}}}/folder{{url}}">
                <span class="icon-file-check"></span>
                <span class="file-name">{{relativePath}}</span>
              </a>
@@ -186,7 +186,7 @@
    <!-- Post or page link -->
    <tr>
     <td>Link:</td>
-    <td>{{{url}}} <button class="copy"><span class="icon-copy"></span> Copy</button>
+    <td>{{url}} <button class="copy"><span class="icon-copy"></span> Copy</button>
       <details>
         <summary><span class="icon-support"></span> Explain</summary>
         <p>
@@ -208,7 +208,7 @@
    <!-- Post or page URL -->
    <tr>
      <td>{{Type}} URL:</td>
-     <td><a href="https://{{{blog.pretty.url}}}{{{url}}}" target="_blank" rel="noopener noreferrer">https://{{{blog.pretty.url}}}{{{url}}}</a> <button class="copy" data-copy="https://{{{blog.pretty.url}}}{{{url}}}"><span class="icon-copy"></span> Copy</button>
+     <td><a href="https://{{{blog.pretty.url}}}{{url}}" target="_blank" rel="noopener noreferrer">https://{{{blog.pretty.url}}}{{url}}</a> <button class="copy" data-copy="https://{{{blog.pretty.url}}}{{url}}"><span class="icon-copy"></span> Copy</button>
        <details>
          <summary><span class="icon-support"></span> Explain</summary>
          <p>The public, permanent URL of this {{type}}. Use it if you want to add a link to this {{type}} from elsewhere.</p>
@@ -276,7 +276,7 @@
      <td>Thumbnail:</td>
      <td>
        {{#thumbnail.small}}
-       <img class="file-thumbnail" alt="" height="{{height}}" width="{{width}}" src="{{{url}}}" />
+       <img class="file-thumbnail" alt="" height="{{height}}" width="{{width}}" src="{{url}}" />
        {{/thumbnail.small}}
        {{^thumbnail.small}}
        <span class="file-stat-empty">--</span>

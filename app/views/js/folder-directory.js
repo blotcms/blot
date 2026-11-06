@@ -959,7 +959,10 @@
         var mapped = mapFn(item, li);
         if (typeof mapped === "string") li.textContent = mapped;
       } else {
-        li.innerHTML = `<span class="icon-file-check"></span> ${item}`;
+        var icon = document.createElement("span");
+        icon.className = "icon-file-check";
+        li.appendChild(icon);
+        li.appendChild(document.createTextNode(" " + item));
       }
 
       list.appendChild(li);

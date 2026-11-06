@@ -59,7 +59,8 @@ client_routes
   .post(function (req, res, next) {
     const redirect = req.baseUrl + "/" + req.body.client;
 
-    if (!req.body.client) {
+    // A client Blot has, by name (own keys only)
+    if (!req.body.client || !Object.hasOwn(clients, req.body.client)) {
       return next(new Error("Please select a client"));
     }
 

@@ -23,6 +23,10 @@ share
     // if no blog is found, use the first blog
     if (!req.blog) req.blog = req.blogs[0];
 
+    // Set here, not from the form, so newTemplate knows this copy of another
+    // blog's template came through its share link
+    req.sharedTemplateID = req.template.id;
+
     req.body = {
       name: req.template.name,
       cloneFrom: req.template.id,

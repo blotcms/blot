@@ -1,4 +1,5 @@
 var resaveEntries = require("models/entries").resave;
+var safeRedirect = require("dashboard/util/safe-redirect");
 var Blog = require("models/blog");
 var _ = require("lodash");
 var requestRebuild = require("./rebuild-settings");
@@ -22,7 +23,11 @@ module.exports = function (req, res, next) {
   // req.path is relative to the router mount, so fall back to the full
   // dashboard path (req.baseUrl + req.path) rather than "/", which would
   // bounce the user out to the site homepage.
-  var redirect = req.body.redirect || (req.baseUrl || "") + req.path;
+  var redirect = safeRedirect(
+    req.body.redirect,
+    (req.baseUrl || "") + req.path,
+    req.hostname
+  );
 
   Blog.set(req.blog.id, updates, function (errors, changes) {
     if (errors)

@@ -42,10 +42,26 @@ module.exports = function (req, res, next) {
   // derives from the name — otherwise a locally edited copy can be read back
   // from its folder as the template it was cloned from. Derive it rather than
   // building one which the 30-character truncation might shorten differently.
+  // A copy may start from one of Blot's templates, one of this blog's own,
+  // or another blog's template reached through its share link - never from
+  // any template ID the form names
+  const cloneFrom = req.body.cloneFrom;
+  if (
+    cloneFrom &&
+    !(
+      (typeof cloneFrom === "string" &&
+        (cloneFrom.startsWith("SITE:") ||
+          cloneFrom.startsWith(req.blog.id + ":"))) ||
+      cloneFrom === req.sharedTemplateID
+    )
+  ) {
+    return next(new Error("You can't copy that template"));
+  }
+
   template = {
     name: name,
     slug: slugForName(req.blog.id, name),
-    cloneFrom: req.body.cloneFrom,
+    cloneFrom: cloneFrom,
   };
 
   Template.create(

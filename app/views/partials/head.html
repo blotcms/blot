@@ -63,8 +63,8 @@
 <link rel="stylesheet" type="text/css" href="{{#cdn}}/examples.css{{/cdn}}" />
 {{/selected.examples}}
 {{#cookie_redirect}}
-<meta http-equiv="refresh" content="0;URL='{{{cookie_redirect}}}'" />
+<meta http-equiv="refresh" content="0;URL='{{cookie_redirect}}'" />
 <script type="text/javascript">
-  window.location = "{{{cookie_redirect}}}";
+  window.location = {{{cookie_redirect_json}}};
 </script>
 {{/cookie_redirect}}

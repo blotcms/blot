@@ -9,7 +9,7 @@
     </div>
     <div class="template-editor-preview">
                
-        <div class="iframe-container {{previewContainerClass}}" data-origin="{{{previewOrigin}}}">
+        <div class="iframe-container {{previewContainerClass}}" data-origin="{{previewOrigin}}">
             <div class="iframe-scroll">
                 <iframe id="full_size_preview"
                           class="{{previewIframeClass}}"
@@ -95,13 +95,13 @@
     <button
       type="button"
       class="template-font-picker__option"
-      data-font-option-id="{{{id}}}"
+      data-font-option-id="{{id}}"
       data-font-stack="{{stack}}"
       data-font-tags="{{tagsString}}"
       aria-pressed="false"
     >
       {{#specimenURL}}
-        <img class="font-specimen" src="{{{specimenURL}}}" width="{{specimenWidth}}" height="{{specimenHeight}}" alt="{{name}}" loading="lazy" decoding="async">
+        <img class="font-specimen" src="{{specimenURL}}" width="{{specimenWidth}}" height="{{specimenHeight}}" alt="{{name}}" loading="lazy" decoding="async">
       {{/specimenURL}}
       {{^specimenURL}}
         <span style="font-family: {{stack}};">{{name}}</span>

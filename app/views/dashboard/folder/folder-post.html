@@ -8,7 +8,7 @@
 
   <h1><span class="icon-folder-check"></span>{{folderName}}</h1>
 
-  <a href="{{{blog.url}}}{{{url}}}" target="_blank" class="template-button right-aligned file-helper">
+  <a href="{{{blog.url}}}{{url}}" target="_blank" class="template-button right-aligned file-helper">
     View {{type}}
     <span class="icon-zoom"></span>
   </a>
@@ -28,7 +28,7 @@
         <tr class="directory-row folder-post-source {{^exists}}missing{{/exists}}">
           <td>
             <div class="directory-row__name-cell">
-              <a href="{{{base}}}/folder{{{url}}}" class="directory-row__link entry">
+              <a href="{{{base}}}/folder{{url}}" class="directory-row__link entry">
                 <span class="icon-file-check"></span>
                 <span class="truncate file-name">{{relativePath}}</span>
               </a>
@@ -53,7 +53,7 @@
           <tr class="directory-row folder-post-source {{^exists}}missing{{/exists}}">
             <td>
               <div class="directory-row__name-cell">
-                <a href="{{{base}}}/folder{{{url}}}" class="directory-row__link entry">
+                <a href="{{{base}}}/folder{{url}}" class="directory-row__link entry">
                   <span class="icon-file-check"></span>
                   <span class="truncate file-name">{{relativePath}}</span>
                 </a>
@@ -91,7 +91,7 @@
 
 <div class="entry-info">
 
-  <h1><a href="{{{blog.url}}}{{{url}}}" target="_blank"><span class="icon-website"></span>{{title}}</a></h1>
+  <h1><a href="{{{blog.url}}}{{url}}" target="_blank"><span class="icon-website"></span>{{title}}</a></h1>
 
   <table class="file-stat">
 
@@ -107,7 +107,7 @@
 
    <tr>
     <td>{{Type}} link:</td>
-    <td>{{{url}}} <button class="copy"><span class="icon-copy"></span> Copy</button>
+    <td>{{url}} <button class="copy"><span class="icon-copy"></span> Copy</button>
       <details>
         <summary><span class="icon-support"></span> Explain</summary>
         <p>
@@ -121,7 +121,7 @@
 
    <tr>
      <td>{{Type}} URL:</td>
-     <td><a href="https://{{{blog.pretty.url}}}{{{url}}}" target="_blank" rel="noopener noreferrer">https://{{{blog.pretty.url}}}{{{url}}}</a> <button class="copy" data-copy="https://{{{blog.pretty.url}}}{{{url}}}"><span class="icon-copy"></span> Copy</button>
+     <td><a href="https://{{{blog.pretty.url}}}{{url}}" target="_blank" rel="noopener noreferrer">https://{{{blog.pretty.url}}}{{url}}</a> <button class="copy" data-copy="https://{{{blog.pretty.url}}}{{url}}"><span class="icon-copy"></span> Copy</button>
        <details>
          <summary><span class="icon-support"></span> Explain</summary>
          <p>The public, permanent URL of this {{type}}.</p>
@@ -153,7 +153,7 @@
      <td>Thumbnail:</td>
      <td>
        {{#thumbnail.small}}
-       <img class="file-thumbnail" alt="" height="{{height}}" width="{{width}}" src="{{{url}}}" />
+       <img class="file-thumbnail" alt="" height="{{height}}" width="{{width}}" src="{{url}}" />
        {{/thumbnail.small}}
        {{^thumbnail.small}}<span class="file-stat-empty">--</span>{{/thumbnail.small}}
        <details>
