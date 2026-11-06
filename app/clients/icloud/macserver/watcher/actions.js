@@ -4,7 +4,7 @@ import mkdir from "../httpClient/mkdir.js";
 import remove from "../httpClient/remove.js";
 import resync from "../httpClient/resync.js";
 import upload from "../httpClient/upload.js";
-import { forgetPath } from "../pushedFiles.js";
+import { forgetPath, recordDirectory } from "../pushedFiles.js";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -85,10 +85,12 @@ const performAction = async (blogID, pathInBlogDirectory, action) => {
           () => remove(blogID, pathInBlogDirectory)
         );
       } else if (action === "mkdir") {
-        return await withRetries(
+        const created = await withRetries(
           `mkdir ${blogID}/${pathInBlogDirectory}`,
           () => mkdir(blogID, pathInBlogDirectory)
         );
+        recordDirectory(blogID, pathInBlogDirectory);
+        return created;
       }
     } catch (error) {
       if (isFileMissingError(error)) {

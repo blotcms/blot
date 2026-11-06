@@ -6,7 +6,7 @@ import {
   getLimiterCount,
 } from "../limiters.js";
 import clfdate from "../util/clfdate.js";
-import { forgetBlog, recordPushed, startTracking } from "../pushedFiles.js";
+import { forgetBlog, isKnownDirectory, recordDirectory, recordPushed, startTracking } from "../pushedFiles.js";
 import { iCloudDriveDirectory } from "../config.js";
 import { constants } from "fs";
 import { join } from "path";
@@ -164,7 +164,10 @@ const walkDirectoryContents = async (blogID, pathInBlogDirectory) => {
       if (!(await exactCaseViaRealpath(buildBlogPath(blogID, childPath)))) continue;
 
       if (isDirectory) {
-        if (!hasRecentChokidarEvent(blogID, childPath, "mkdir")) {
+        // directories Blot already has are walked without asking it to
+        // create them again: one /mkdir per subfolder on every walk of a big
+        // folder would crowd out every blog's uploads
+        if (!hasRecentChokidarEvent(blogID, childPath, "mkdir") && !isKnownDirectory(blogID, childPath)) {
           await performAction(blogID, childPath, "mkdir");
         }
         if (await walkDirectoryContents(blogID, childPath)) interrupted = true;
@@ -500,6 +503,9 @@ const watch = async (blogID) => {
       // its size and mtime alone, is then skipped without a download.
       if (recordInitialScan && !initialScanComplete && event === "add" && stats) {
         recordPushed(blogID, pathInBlogDirectory, stats);
+      }
+      if (recordInitialScan && !initialScanComplete && event === "addDir" && pathInBlogDirectory) {
+        recordDirectory(blogID, pathInBlogDirectory);
       }
 
       // We only handle file events after the initial scan is complete
