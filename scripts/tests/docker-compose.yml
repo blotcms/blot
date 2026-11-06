@@ -8,7 +8,7 @@ services:
   tests:
     build:
       context: ../../
-      dockerfile: Dockerfile
+      dockerfile: config/docker/Dockerfile
       target: dev
       args:
         NODE_BASE: ${NODE_BASE:?export config/versions.env first}

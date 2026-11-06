@@ -78,6 +78,7 @@ case "$(uname -m)" in
 esac
 
 docker build \
+  -f "$(realpath "$TESTS_DIR/../..")/config/docker/Dockerfile" \
   --target dev \
   --build-arg TARGETPLATFORM="$TARGETPLATFORM" \
   --build-arg NODE_BASE="$NODE_BASE" \

@@ -114,7 +114,7 @@ ignored; annotations and credentials must never be committed.
 
 ## Production boundary and verification
 
-The production Dockerfile copies `scripts/`. Root `.dockerignore` therefore
+The production Dockerfile copies `scripts/`. `config/docker/Dockerfile.dockerignore` therefore
 explicitly excludes **`scripts/development/agentation/`** from the build context. Keep this
 exclusion when changing the build. Neither the production Dockerfile nor normal
 Compose references this overlay. The root package manifest, application source,

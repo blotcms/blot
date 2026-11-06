@@ -7,7 +7,7 @@
 #   scp -r proxy/deploy blot:~/proxy-deploy
 #
 # blue-green.sh deploys a unit: ghcr.io/blotcms/blot:<sha>, OpenResty and Node
-# in one container (#2119), which the `unit` stage of the root Dockerfile
+# in one container (#2119), which the `unit` stage of config/docker/Dockerfile
 # labels im.blot.kind=unit.
 #
 # Settings come from the environment, with these defaults for production:
@@ -235,7 +235,7 @@ resolve_image() {
   case "$1" in */*|*:*) echo "$1" ;; *) echo "$UNIT_REGISTRY_URL:$1" ;; esac
 }
 
-# Is this image a unit? The `unit` stage of the root Dockerfile labels its image
+# Is this image a unit? The `unit` stage of config/docker/Dockerfile labels its image
 # im.blot.kind=unit, and blue-green.sh refuses any other: an image without Node
 # would replace units that carry it. The image has to be on the host.
 image_is_unit() { # image_is_unit <image>

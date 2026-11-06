@@ -28,7 +28,8 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - ".github/workflows/benchmarks.yml"
-      - "Dockerfile"
+      - "config/docker/Dockerfile"
+      - "config/docker/Dockerfile.dockerignore"
       - "package.json"
       - "scripts/benchmarks/**"
       - "app/blog/**"
@@ -191,6 +192,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: config/docker/Dockerfile
           target: dev
           build-args: ${{ steps.versions.outputs.build-args }}
           load: true
