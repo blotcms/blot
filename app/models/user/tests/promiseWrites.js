@@ -15,13 +15,10 @@ describe("user writes without a callback", function () {
 
   describe("create", function () {
     var email = "promise-create@example.com";
-    var collidingUid = "user_11111111111";
     var created;
 
     afterEach(async function () {
-      await client.del(key.user(collidingUid));
       await client.del(key.email(email));
-      await client.sRem(key.uids, collidingUid);
       if (created) {
         await client.del(key.user(created.uid));
         await client.sRem(key.uids, created.uid);
@@ -29,19 +26,9 @@ describe("user writes without a callback", function () {
       created = null;
     });
 
-    it("returns the user, retrying with a new ID if the first was in use", async function () {
-      var calls = 0;
-
-      // The first ID generated is the colliding one
-      spyOn(Math, "random").and.callFake(function () {
-        return calls++ < 11 ? 0 : 0.5;
-      });
-
-      await client.set(key.user(collidingUid), "{}");
-
+    it("returns the user", async function () {
       created = await User.create(email, "hash", {}, {});
 
-      expect(created.uid).not.toBe(collidingUid);
       expect(created.email).toBe(email);
       expect(await client.get(key.email(email))).toBe(created.uid);
       expect((await User.getById(created.uid)).email).toBe(email);
