@@ -15,7 +15,7 @@ Four production blogs, one per sync client, at `https://{handle}.blot.im`:
 | `gittest` | Git | clone, commit, push (below) |
 
 Related: `investigate-dropbox-sync-issue`, `investigate-macserver-sync-issue`,
-`data-volume` (read-only freeze). Design of the asset move: `app/storage/README`,
+`scripts/read-only.js` (the read-only freeze). Design of the asset move: `app/storage/README`,
 `app/storage/assets.js`.
 
 ## Rules

@@ -1,7 +1,7 @@
-// Turn the data directory's read-only freeze (app/helper/readOnly.js) on or
+// Turn the app's read-only freeze (app/helper/readOnly.js) on or
 // off, or report it. Run inside an app container, e.g.
 //
-//   docker exec blot-blue node scripts/read-only.js on --ttl 600 --reason "volume swap"
+//   docker exec blot-blue node scripts/read-only.js on --ttl 600 --reason "maintenance"
 //   docker exec blot-blue node scripts/read-only.js status
 //   docker exec blot-blue node scripts/read-only.js off
 //

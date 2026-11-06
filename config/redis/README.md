@@ -155,10 +155,9 @@ it says so. `maxmemory` is about 70% of RAM, computed at bootstrap
 
 ## Disaster recovery
 
-Redis shares the host with the app, so losing the host loses the app and its
-data volume too: use "Recovery" in `config/host/README.md` (`cycle.sh restore`),
-which restores Redis with `restore.sh` as one of its steps and then does the
-data volume and the units. The steps below are the Redis part by hand, and what
+Redis shares the host with the app, so losing the host loses the app too: use
+"Recovery" in `config/host/README.md` (`cycle.sh restore`), which restores Redis
+with `restore.sh` as one of its steps and then starts the units. The steps below are the Redis part by hand, and what
 a rehearsal of it looks like.
 
 For when the master is gone (instance lost, data unusable) and no replica can
@@ -177,8 +176,7 @@ with the clients' folders.
    the `ssl:*:latest` count (`redis6-cli --scan --pattern 'ssl:*:latest' | wc -l`)
    is about what it was, or the proxy re-issues the missing certificates.
 4. Point the app at it. In production this is `cycle.sh restore`, which also
-   restores the data volume and units and moves the Elastic IP; there is no
-   floating IP to move.
+   starts the units and moves the Elastic IP; there is no floating IP to move.
 5. Turn on its backups: `sudo touch /etc/blot-redis/active`,
    then `sudo -u ec2-user /usr/local/bin/backup.sh hourly` for a first upload.
    A host launched with `--drill` also has `/etc/blot-redis/drill`, which
@@ -186,7 +184,8 @@ with the clients' folders.
 6. Check the app: the units' clients in `redis6-cli CLIENT LIST` are on the
    Unix socket (`laddr=/run/blot/redis/redis.sock`), `/redis-health` is fine, and expect
    `[LOCK COMPROMISED]` container restarts from the outage. Then run sync
-   validation for the blogs, since Redis lost what changed after the snapshot.
+   validation for the blogs, since Redis lost what changed after its backup
+   while the blog folders in S3 kept it.
 
 To rehearse it, run steps 1-3 on a host from `cycle.sh --drill` (it never
 uploads backups). To also exercise `promote.sh`, make the drill host a replica of the

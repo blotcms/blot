@@ -333,7 +333,7 @@ of the rules:
 - After the promotion, check `/redis-health`, the app containers' restart
   counts, and that the next hourly backup arrives from the new host.
 - The old host stays up about a day after `settle`, replicating from the new
-  one, then `cycle.sh finish --any-age` terminates it by instance ID (rule 3).
+  one, then `cycle.sh finish` terminates it by instance ID (rule 3).
   It is not a rollback target after the first minutes (rule 4).
 
 ## Disaster recovery and drills

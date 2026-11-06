@@ -257,7 +257,7 @@ rclone copy $F --exclude "/*/_*/**" "$OFFSITE_ROOT" "storage:$STORAGE_BUCKET"
   each named with a `-v<date>-<time>-<ms>` suffix, and `--b2-version-at
   "<YYYY-MM-DD HH:MM:SS>"` on a `copy` restores the bucket as it was then.
 - **A whole-bucket restore into the live bucket**: freeze writes first with
-  `scripts/read-only.js on` (the `data-volume` skill), so no sync or build
+  `scripts/read-only.js on --ttl <seconds>` in a unit, so no sync or build
   writes an object that the copy then overwrites.
 
 Afterwards, rebuild each restored blog's folder index from the bucket
@@ -452,8 +452,8 @@ nothing is rewritten. Only `/blog_*` changes origin. Everything else
 Blog folders (`{blogID}/folder/`), Git repos (`{blogID}/git/`), `_avatars` and
 `_template_assets` exist only here and can't be regenerated, and the bucket has
 no versioning. Its backup is the daily copy to Backblaze B2 described in
-"Offsite backup and restore" above, which replaces the data volume's EBS
-snapshots. The `models/file` index is rebuilt from the bucket
+"Offsite backup and restore" above, which replaced the data volume's EBS
+snapshots (the volume was retired in #2550). The `models/file` index is rebuilt from the bucket
 (`scripts/storage/rebuild-file-index.js`), so it isn't backed up. Check the
 backup (`offsite-restore-test.sh`) before anything which could lose objects.
 

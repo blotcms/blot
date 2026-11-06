@@ -423,8 +423,8 @@ should consolidate into one storage-layer method, exposed explicitly
   acknowledged once its pack is in S3, under the per-blog lock, and the blog
   folder is materialized from the repo through `storage/folder`, with no
   live `.git` in it. The bare repositories that were in
-  `{data_directory}/git/` are deleted from the host once the daily verifier
-  has run clean.
+  `{data_directory}/git/` went with the data volume when it was retired
+  (#2550).
 - **Quotas** — the Phase 2 index keeps per-blog byte and file totals, which
   enforcement can read. Until then, `scripts/user/identify-overdue-users.js`
   is the manual audit.

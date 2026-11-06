@@ -67,8 +67,6 @@ const MUTATION_ALLOWED_PREFIXES = [
   "app/models/blog/remove.js",
   // Creates the empty folder of a brand new blog, which has no client yet.
   "app/models/blog/create.js",
-  // Recreates a missing folder on a new volume during a host cycle.
-  "scripts/host-cycle/reconcile.js",
   // proxy/e2e seed scripts build fixture blogs before any client exists.
   "proxy/e2e/",
   // Benchmarks build throwaway blogs with no client to time builds.

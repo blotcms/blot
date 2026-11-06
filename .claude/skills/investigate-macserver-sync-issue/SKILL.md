@@ -91,11 +91,11 @@ explicitly asked.
 
 ## Method
 
-**A read-only freeze explains delays, not failures.** While the data volume is
-being resized (or anyone ran `scripts/read-only.js on`), syncs deliberately
+**A read-only freeze explains delays, not failures.** During a host cycle's
+switch (or whenever anyone ran `scripts/read-only.js on`), syncs deliberately
 wait and client writes get 503s; the dashboard shows "Sync paused". If the
 alert window overlaps one, look for `[READ ONLY] waiting to write` in the
-container logs and see the `data-volume` skill's incident log before
+container logs (a host cycle's freeze has the reason "host cycle") before
 classifying anything as a bug.
 
 1. **Find the resync request(s) on the macserver.** The email's `Reason:`
