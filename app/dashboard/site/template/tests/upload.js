@@ -316,11 +316,11 @@ describe("upload template route", function () {
     // Fails on the second view, after the template and first view exist.
     // Stands in for the failures we cannot catch up front, such as a partial
     // dependency cycle spanning two views in the same upload.
-    spyOn(Template, "setView").and.callFake(function (id, view, callback) {
+    spyOn(Template, "setView").and.callFake(async function (id, view) {
       if (view.name === "second.html") {
-        return callback(new Error("Could not save this view"));
+        throw new Error("Could not save this view");
       }
-      return setView(id, view, callback);
+      return setView(id, view);
     });
 
     const before = await getTemplates(this.blog.id);
@@ -352,13 +352,12 @@ describe("upload template route", function () {
     // setView writes the exact-url key before the view hash, so the failing
     // view leaves a mapping Template.drop cannot find: drop reads urls from
     // view hashes and this view never got one
-    spyOn(Template, "setView").and.callFake(function (id, view, callback) {
+    spyOn(Template, "setView").and.callFake(async function (id, view) {
       if (view.name === "second.html") {
-        return client
-          .set(key.url(id, "/second.html"), view.name)
-          .then(() => callback(new Error("Could not save this view")));
+        await client.set(key.url(id, "/second.html"), view.name);
+        throw new Error("Could not save this view");
       }
-      return setView(id, view, callback);
+      return setView(id, view);
     });
 
     const { req } = await folderRequest(this.blog, {
@@ -419,13 +418,12 @@ describe("upload template route", function () {
     const setView = Template.setView;
     const drop = Template.drop;
 
-    spyOn(Template, "setView").and.callFake(function (id, view, callback) {
+    spyOn(Template, "setView").and.callFake(async function (id, view) {
       if (view.name === "second.html") {
-        return client
-          .set(key.url(id, "/second.html"), view.name)
-          .then(() => callback(new Error("Could not save this view")));
+        await client.set(key.url(id, "/second.html"), view.name);
+        throw new Error("Could not save this view");
       }
-      return setView(id, view, callback);
+      return setView(id, view);
     });
 
     // Dropping the template frees its id for reuse. If the urls were cleared
@@ -433,16 +431,14 @@ describe("upload template route", function () {
     // between and have its mappings deleted out from under it.
     let urlsAtDropTime = null;
 
-    spyOn(Template, "drop").and.callFake(function (owner, slug, callback) {
+    spyOn(Template, "drop").and.callFake(async function (owner, slug) {
       const templateID = `${owner}:${slug}`;
 
-      Promise.all([
+      urlsAtDropTime = await Promise.all([
         client.exists(key.url(templateID, "/first.html")),
         client.exists(key.url(templateID, "/second.html")),
-      ]).then(function (existing) {
-        urlsAtDropTime = existing;
-        drop(owner, slug, callback);
-      });
+      ]);
+      return drop(owner, slug);
     });
 
     const { req } = await folderRequest(this.blog, {

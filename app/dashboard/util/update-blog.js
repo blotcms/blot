@@ -1,16 +1,15 @@
 const Blog = require("models/blog");
 
-module.exports = (blogID, updates) => {
-  return new Promise((resolve, reject) => {
-    Blog.set(blogID, updates, function (errors, changes) {
-      if (errors) {
-        for (var i in errors)
-          if (errors[i] instanceof Error) return reject(errors[i]);
+module.exports = async (blogID, updates) => {
+  let changes;
 
-        reject(errors);
-      } else {
-        resolve(changes);
-      }
-    });
-  });
+  try {
+    changes = await Blog.set(blogID, updates);
+  } catch (errors) {
+    for (var i in errors) if (errors[i] instanceof Error) throw errors[i];
+
+    throw errors;
+  }
+
+  return changes;
 };

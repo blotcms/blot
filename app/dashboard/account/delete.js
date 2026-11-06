@@ -4,7 +4,6 @@ var User = require("models/user");
 var Email = require("helper/email");
 var checkPassword = require("./util/checkPassword");
 var logout = require("./util/logout");
-var async = require("async");
 
 var Blog = require("models/blog");
 var config = require("config");
@@ -46,43 +45,73 @@ Delete.route("/")
     }
   );
 
-function emailUser(req, res, next) {
-  if (req.refund?.issued) {
-    return Email.DELETED_FIRST_PERIOD(
-      "",
-      Object.assign({}, req.user, { refund: req.refund }),
-      next
-    );
+async function emailUser(req, res, next) {
+  try {
+    await new Promise(function (resolve, reject) {
+      function done(err) {
+        if (err) return reject(err);
+        resolve();
+      }
+
+      if (req.refund?.issued) {
+        return Email.DELETED_FIRST_PERIOD(
+          "",
+          Object.assign({}, req.user, { refund: req.refund }),
+          done
+        );
+      }
+
+      Email.DELETED("", req.user, done);
+    });
+  } catch (err) {
+    return next(err);
   }
 
-  Email.DELETED("", req.user, next);
+  next();
 }
-function deleteBlogs(req, res, next) {
-  async.each(
-    req.user.blogs || [],
-    function (blogID, cb) {
-      Blog.remove(blogID, function (err) {
-        if (
-          err &&
-          (err.message === "No blog" || err.message === "Invalid blog id")
-        ) {
-          console.warn("Blog cleanup anomaly; continuing account deletion", {
-            uid: req.user && req.user.uid,
-            blogID,
-            reason: err.message,
-          });
-          return cb();
+async function deleteBlogs(req, res, next) {
+  try {
+    await Promise.all(
+      (req.user.blogs || []).map(async function (blogID) {
+        try {
+          await Blog.remove(blogID);
+        } catch (err) {
+          if (
+            err &&
+            (err.message === "No blog" || err.message === "Invalid blog id")
+          ) {
+            console.warn("Blog cleanup anomaly; continuing account deletion", {
+              uid: req.user && req.user.uid,
+              blogID,
+              reason: err.message,
+            });
+            return;
+          }
+
+          throw err;
         }
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
 
-        cb(err);
-      });
-    },
-    next
-  );
+  next();
 }
 
-function deleteUser(req, res, next) {
-  User.remove(req.user.uid, next);
+async function deleteUser(req, res, next) {
+  try {
+    await new Promise(function (resolve, reject) {
+      User.remove(req.user.uid, function (err) {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+  } catch (err) {
+    return next(err);
+  }
+
+  next();
 }
 
 async function deleteSubscription(req, res, next) {

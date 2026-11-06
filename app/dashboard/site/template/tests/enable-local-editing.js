@@ -22,8 +22,8 @@ describe("enable local editing", function () {
     const template = await createTemplate(this.blog.id);
     const failure = new Error("invalid_access_token");
 
-    spyOn(Template, "writeToFolder").and.callFake(function (_b, _t, cb) {
-      cb(failure);
+    spyOn(Template, "writeToFolder").and.callFake(async function () {
+      throw failure;
     });
 
     const req = { blog: this.blog, template };
@@ -86,9 +86,7 @@ describe("enable local editing", function () {
   it("responds once the files are written", async function () {
     const template = await createTemplate(this.blog.id);
 
-    spyOn(Template, "writeToFolder").and.callFake(function (_b, _t, cb) {
-      cb();
-    });
+    spyOn(Template, "writeToFolder").and.callFake(async function () {});
 
     const req = { blog: this.blog, template };
     const res = { message: jasmine.createSpy("message") };

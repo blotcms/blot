@@ -3,13 +3,17 @@ const Redirects = require("models/redirects");
 // Explains why a redirect will never run, e.g. because a post already
 // exists at the URL it redirects from. The warnings are a nicety, so if we
 // can't work them out we still render the list of redirects.
-module.exports = function (req, res, next) {
-  const redirects = res.locals.redirects;
+module.exports = async function (req, res, next) {
+  try {
+    const redirects = res.locals.redirects;
 
-  if (!redirects || !redirects.length) return next();
+    if (!redirects || !redirects.length) return next();
 
-  Redirects.conflicts(req.blog, redirects, function (err, conflicts) {
-    if (err) {
+    let conflicts;
+
+    try {
+      conflicts = await Redirects.conflicts(req.blog, redirects);
+    } catch (err) {
       console.error("Failed to check redirects for conflicts", err);
       return next();
     }
@@ -26,5 +30,7 @@ module.exports = function (req, res, next) {
     res.locals.redirectWarnings = total;
 
     next();
-  });
+  } catch (err) {
+    next(err);
+  }
 };

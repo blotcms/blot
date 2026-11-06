@@ -4,18 +4,6 @@ const makeID = require("models/template/util/makeID");
 const Template = require("models/template");
 const Blog = require("models/blog");
 
-const updateBlog = (blogID, updates) => {
-  return new Promise((resolve, reject) => {
-    Blog.set(blogID, updates, function (error) {
-      if (error) {
-        reject(error);
-      } else {
-        resolve();
-      }
-    });
-  });
-};
-
 // /template/:slug shows the SITE original even once the blog has moved its
 // own copy into the local editing folder (see ../load/template.js), so a
 // save made from there — Duplicate aside, the rest of that page's actions
@@ -23,12 +11,13 @@ const updateBlog = (blogID, updates) => {
 // land somewhere. Reuse the existing fork rather than trying to create
 // another one, which would fail: createTemplate rejects an id that's
 // already taken.
-const getExistingFork = (owner, name) => {
-  return new Promise((resolve) => {
-    Template.getMetadata(makeID(owner, name), (err, template) => {
-      resolve(err ? null : template || null);
-    });
-  });
+const getExistingFork = async (owner, name) => {
+  const id = makeID(owner, name);
+  try {
+    return (await Template.getMetadata(id)) || null;
+  } catch (err) {
+    return null;
+  }
 };
 
 module.exports = async (req, res, next) => {
@@ -65,7 +54,7 @@ module.exports = async (req, res, next) => {
 
     // if the blog used to use the forked template, we need to update the blog's template
     if (req.templateFork.restoreBlogTemplate) {
-      await updateBlog(req.blog.id, {
+      await Blog.set(req.blog.id, {
         template: template.id,
       });
       req.blog.template = template.id;

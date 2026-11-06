@@ -34,8 +34,14 @@ Delete.route("/")
   // Delete the credentials used to sync the blog's folder
   .post(
     checkPassword,
-    function (req, res, next) {
-      Blog.remove(req.blog.id, next);
+    async function (req, res, next) {
+      try {
+        await Blog.remove(req.blog.id);
+      } catch (err) {
+        return next(err);
+      }
+
+      next();
     },
     calculateSubscriptionChange,
     decreaseSubscription,
@@ -83,29 +89,39 @@ function calculateSubscriptionChange(req, res, next) {
   return next();
 }
 
-function decreaseSubscription(req, res, next) {
+async function decreaseSubscription(req, res, next) {
   var subscription = req.user.subscription;
   var quantity = req.newQuantity;
 
   if (!quantity || !subscription) return next();
 
-  stripe.customers.updateSubscription(
-    subscription.customer,
-    subscription.id,
-    { quantity: quantity, prorate: false },
-    function (err, subscription) {
-      if (err) return next(err);
+  try {
+    var updated = await new Promise(function (resolve, reject) {
+      stripe.customers.updateSubscription(
+        subscription.customer,
+        subscription.id,
+        { quantity: quantity, prorate: false },
+        function (err, updated) {
+          if (err) return reject(err);
+          resolve(updated);
+        }
+      );
+    });
 
-      if (!subscription) return next(new Error("No subscription"));
+    if (!updated) throw new Error("No subscription");
 
-      User.set(req.user.uid, { subscription: subscription }, function (err) {
-        if (err) return next(err);
-
-        Email.SUBSCRIPTION_DECREASE(req.user.uid);
-        next();
+    await new Promise(function (resolve, reject) {
+      User.set(req.user.uid, { subscription: updated }, function (err) {
+        if (err) return reject(err);
+        resolve();
       });
-    }
-  );
+    });
+  } catch (err) {
+    return next(err);
+  }
+
+  Email.SUBSCRIPTION_DECREASE(req.user.uid);
+  next();
 }
 
 module.exports = Delete;

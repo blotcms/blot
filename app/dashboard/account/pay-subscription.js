@@ -1,5 +1,4 @@
 var config = require("config");
-var async = require("async");
 var stripe = require("stripe")(config.stripe.secret);
 var User = require("models/user");
 var prettyPrice = require("helper/prettyPrice");
@@ -51,9 +50,9 @@ function checkCustomer(req, res, next) {
   next();
 }
 
-function listUnpaidInvoices(req, res, next) {
-  stripe.invoices.list({ customer: req.customer }, function (err, invoices) {
-    if (err) return next(err);
+async function listUnpaidInvoices(req, res, next) {
+  try {
+    const invoices = await stripe.invoices.list({ customer: req.customer });
 
     res.locals.amountDue = 0;
 
@@ -69,9 +68,11 @@ function listUnpaidInvoices(req, res, next) {
     }
 
     res.locals.amountDue = prettyPrice(res.locals.amountDue);
+  } catch (err) {
+    return next(err);
+  }
 
-    next();
-  });
+  next();
 }
 
 function formatStripeError(err, fallbackMessage) {
@@ -109,124 +110,118 @@ function storeCustomerOnRequest(req, customer) {
   req.defaultSource = customer && customer.default_source;
 }
 
-function updateCard(req, res, next) {
-  var stripeToken = req.body.stripeToken;
+async function updateCard(req, res, next) {
+  try {
+    var stripeToken = req.body.stripeToken;
 
-  if (!stripeToken) return next(new Error("No card token passed"));
+    if (!stripeToken) return next(new Error("No card token passed"));
 
-  function handleCustomerUpdate(err, customer) {
-    if (err)
-      return next(
-        formatStripeError(err, "Unable to update your payment method.")
-      );
+    let customer;
 
-    storeCustomerOnRequest(req, customer);
-
-    next();
-  }
-
-  // Handle modern payment methods (pm_...) separately
-  if (stripeToken.indexOf("pm_") === 0) {
-    if (!stripe.paymentMethods || !stripe.paymentMethods.attach) {
-      return next(
-        new Error("Stripe payment methods are not supported on this server.")
-      );
-    }
-
-    stripe.paymentMethods.attach(
-      stripeToken,
-      { customer: req.customer },
-      function (err) {
-        if (err)
-          return next(
-            formatStripeError(err, "Unable to attach your payment method.")
-          );
-
-        stripe.customers.update(
-          req.customer,
-          {
-            invoice_settings: { default_payment_method: stripeToken },
-          },
-          handleCustomerUpdate
+    // Handle modern payment methods (pm_...) separately
+    if (stripeToken.indexOf("pm_") === 0) {
+      if (!stripe.paymentMethods || !stripe.paymentMethods.attach) {
+        return next(
+          new Error("Stripe payment methods are not supported on this server.")
         );
       }
-    );
 
-    return;
-  }
+      try {
+        await stripe.paymentMethods.attach(stripeToken, {
+          customer: req.customer,
+        });
+      } catch (err) {
+        return next(
+          formatStripeError(err, "Unable to attach your payment method.")
+        );
+      }
 
-  stripe.customers.update(
-    req.customer,
-    { card: stripeToken },
-    handleCustomerUpdate
-  );
-}
-
-function payUnpaidInvoices(req, res, next) {
-  stripe.invoices.list({ customer: req.customer }, function (err, invoices) {
-    if (err) return next(err);
-
-    async.eachSeries(
-      invoices.data,
-      function (invoice, nextInvoice) {
-        if (invoice.paid) return nextInvoice();
-
-        // You can only pay an invoice once
-        var options = {};
-
-        if (req.defaultPaymentMethod) {
-          options.payment_method = req.defaultPaymentMethod;
-        } else if (req.defaultSource) {
-          options.source = req.defaultSource;
-        }
-
-        if (Object.keys(options).length) {
-          stripe.invoices.pay(invoice.id, options, function (err) {
-            nextInvoice(
-              formatStripeError(err, "Unable to pay outstanding invoices.")
-            );
-          });
-        } else {
-          stripe.invoices.pay(invoice.id, function (err) {
-            nextInvoice(
-              formatStripeError(err, "Unable to pay outstanding invoices.")
-            );
-          });
-        }
-      },
-      next
-    );
-  });
-}
-
-function updateSubscription(req, res, next) {
-  stripe.customers.retrieveSubscription(
-    req.user.subscription.customer,
-    req.user.subscription.id,
-    function (err, subscription) {
-      if (err) return next(err);
-
-      if (!subscription) return next(new Error("No subscription"));
-
-      // Store previous subscription status before updating
-      var previousSubscription = req.user.subscription || {};
-      var previousStatus = previousSubscription.status;
-
-      User.set(req.user.uid, { subscription: subscription }, function (err) {
-        if (err) return next(err);
-
-        // Send recovery email if subscription was recovered
-        if (
-          subscription.status === "active" &&
-          (previousStatus === "past_due" || previousStatus === "unpaid")
-        ) {
-          email.RECOVERED(req.user.uid);
-        }
-
-        next();
+      customer = await stripe.customers.update(req.customer, {
+        invoice_settings: { default_payment_method: stripeToken },
+      });
+    } else {
+      customer = await stripe.customers.update(req.customer, {
+        card: stripeToken,
       });
     }
-  );
+
+    storeCustomerOnRequest(req, customer);
+  } catch (err) {
+    return next(
+      formatStripeError(err, "Unable to update your payment method.")
+    );
+  }
+
+  next();
+}
+
+async function payUnpaidInvoices(req, res, next) {
+  try {
+    const invoices = await stripe.invoices.list({ customer: req.customer });
+
+    for (const invoice of invoices.data) {
+      if (invoice.paid) continue;
+
+      // You can only pay an invoice once
+      var options = {};
+
+      if (req.defaultPaymentMethod) {
+        options.payment_method = req.defaultPaymentMethod;
+      } else if (req.defaultSource) {
+        options.source = req.defaultSource;
+      }
+
+      try {
+        if (Object.keys(options).length) {
+          await stripe.invoices.pay(invoice.id, options);
+        } else {
+          await stripe.invoices.pay(invoice.id);
+        }
+      } catch (err) {
+        return next(
+          formatStripeError(err, "Unable to pay outstanding invoices.")
+        );
+      }
+    }
+  } catch (err) {
+    return next(err);
+  }
+
+  next();
+}
+
+async function updateSubscription(req, res, next) {
+  try {
+    const subscription = await stripe.customers.retrieveSubscription(
+      req.user.subscription.customer,
+      req.user.subscription.id
+    );
+
+    if (!subscription) return next(new Error("No subscription"));
+
+    // Store previous subscription status before updating
+    var previousSubscription = req.user.subscription || {};
+    var previousStatus = previousSubscription.status;
+
+    await new Promise(function (resolve, reject) {
+      User.set(req.user.uid, { subscription: subscription }, function (err) {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+
+    // Send recovery email if subscription was recovered
+    if (
+      subscription.status === "active" &&
+      (previousStatus === "past_due" || previousStatus === "unpaid")
+    ) {
+      email.RECOVERED(req.user.uid);
+    }
+  } catch (err) {
+    return next(err);
+  }
+
+  next();
 }
 
 module.exports = PaySubscription;

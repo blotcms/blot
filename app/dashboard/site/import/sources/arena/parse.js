@@ -3,7 +3,6 @@ const download = require("../../helper/download");
 const { join, extname } = require("path");
 const moment = require("moment");
 const fs = require("fs-extra");
-const async = require("async");
 const helper = require("dashboard/site/import/helper");
 const sanitize = require("./sanitize");
 
@@ -68,21 +67,28 @@ function normalizeText(item) {
   return entry;
 }
 
-function text(item, outputDirectory, write) {
-  return new Promise((resolve, reject) => {
-    async.waterfall(
-      [
-        (next) => next(null, normalizeText(item)),
-        helper.determine_path(outputDirectory),
-        helper.download_pdfs,
-        helper.download_images,
-        helper.convert_to_markdown,
-        helper.insert_metadata,
-        write,
-      ].map(lifecycle.guard),
-      (error) => (error ? reject(error) : resolve())
-    );
-  });
+// Runs one callback-style import step (helper/*) on the entry, as a promise.
+function callStep(step, entry) {
+  return new Promise((resolve, reject) =>
+    step(entry, (err, result) => (err ? reject(err) : resolve(result)))
+  );
+}
+
+async function text(item, outputDirectory, write) {
+  const steps = [
+    helper.determine_path(outputDirectory),
+    helper.download_pdfs,
+    helper.download_images,
+    helper.convert_to_markdown,
+    helper.insert_metadata,
+    write,
+  ];
+  lifecycle.check();
+  let entry = normalizeText(item);
+  for (const step of steps) {
+    lifecycle.check();
+    entry = await callStep(step, entry);
+  }
 }
 
 async function link(item, outputDirectory) {
