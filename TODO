@@ -121,7 +121,6 @@ Analyze the new log line paramater for accept encoding to determine if we should
 Redis host follow-ups (from #2041, new host since 8 Oct):
 - Lock heartbeat: no overlapping EXTENDs
 - Remaining dropped write errors: await set() in resetToDrive; Dropbox disconnect.js and _assign.js dropFromMenu check the wrong error; write order in Blog.create; the list-ghosts restore path; error paths for background resave and rebuild; a callback for the messenger's setStatus; make Entry.set atomic
-- Proxy: auto-ssl's lock and hook calls can reuse a timed-out Redis connection
 - Deploy log archive (scripts/deploy/units.sh, proxy/deploy/blue-green.sh): before a unit is replaced, archive its container logs with docker logs -t, outside /tmp, more than 3 files, size-capped
 - TLS handshakes were about a quarter of billed egress on 21 Oct (#2107): ECDSA certificates shrink each by about a third, and few TLS connections resume today, so look at session reuse and keep-alive (about 1.7 requests per connection). No `ssl_session_tickets` without a shared key (#2271)
 - restore.sh --offsite: have the host download from B2 with a short-lived presigned URL (aws s3 presign on the operator's machine, passed over stdin), so a restore doesn't depend on the operator's upload speed and the read key still stays off servers. Not tested yet
@@ -129,7 +128,6 @@ Redis host follow-ups (from #2041, new host since 8 Oct):
 - Upgrade the Redis server from 6.2 to 8.4+ for native compare-and-set (SET ... IFEQ, DELEX), then drop Lua: helper/lock extend/release become plain commands; helper/alarm claim/renew/complete need per-id claim keys to go native; also the legacy scripts in sync/lock.js, models/user/set.js, helper/flushCachePending.js, clients/icloud/database.js
 
 Proxy container follow-ups (cut over 8 Oct 2026, #1941)
-- Stored custom-domain certs without an `expiry` field (legacy records) bypass the proxy's expired-cert check in init.conf get_cert: fall back to the PEM notAfter, or migrate the records
 - Check webhooks. SSE through the container, and that a known /blog_* asset on cdn. has Cache-Control 1y and no Blot-Upstream
 - After the next 03:46 logrotate: access.log/error.log still written after copytruncate, fail2ban counts still moving
 - After the first wildcard renewal by the app (scheduler log "Wildcard SSL"): the proxy serves the new cert fingerprint from Redis within ~10 seconds, with no reload ("wildcard cert:" lines in the proxy error log mean it fell back to the file)
@@ -137,7 +135,6 @@ Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 - Reboot the host once in a maintenance window: mount-instance-store mounts without reformatting, docker starts after it, the proxy comes back with cache/log mounts, :80/:443 answer
 - http://www.blot.im/ returns 404: confirm intended
 - app/blog/static has no copy on the host, so those cdn. files fall through to Node: export them from the Node image on deploy, or accept
-- cdn. responses carry Cache-Control twice (expires 1y + add_header), as on bare metal
 - Get proxy horizontally scalable and multi-region
 - Can we add modern compression to proxy? (brotli is in; zstd is not)
 - Can the proxy remember bad urls and avoid repeatedly sending them to upstream?

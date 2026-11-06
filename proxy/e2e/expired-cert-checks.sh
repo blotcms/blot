@@ -54,6 +54,32 @@ write_expired_cert() {
   docker exec -i "$REDIS" redis-cli -x set "ssl:$1:latest" < "$workdir/$1.json" >/dev/null
 }
 
+# Stores an expired certificate for $1 in the format older versions wrote,
+# with no expiry field: the proxy has to read notAfter from the PEM. The
+# certificate is self-signed with a past validity period, which `openssl ca`
+# can give it (`req -x509` cannot).
+write_legacy_expired_cert() {
+  local d="$workdir/legacy-$1"
+  mkdir -p "$d"
+  : > "$d/index.txt"
+  echo 01 > "$d/serial"
+  printf '%s\n' \
+    "[ca]" "default_ca = c" \
+    "[c]" "database = $d/index.txt" "new_certs_dir = $d" "serial = $d/serial" \
+    "default_md = sha256" "policy = p" "unique_subject = no" \
+    "[p]" "commonName = supplied" "organizationName = optional" > "$d/ca.cnf"
+  openssl genrsa -out "$d/key.pem" 2048 2>/dev/null
+  openssl req -new -key "$d/key.pem" -subj "/O=expired-in-redis/CN=$1" -out "$d/r.csr"
+  openssl ca -batch -config "$d/ca.cnf" -selfsign -keyfile "$d/key.pem" -in "$d/r.csr" \
+    -out "$d/cert.pem" -notext -startdate 20200101000000Z -enddate 20200201000000Z 2>/dev/null
+  node -e '
+    const fs = require("fs");
+    const [pem, key] = process.argv.slice(1).map((f) => fs.readFileSync(f, "utf8"));
+    process.stdout.write(JSON.stringify({ fullchain_pem: pem, privkey_pem: key }));
+  ' "$d/cert.pem" "$d/key.pem" > "$d/stored.json"
+  docker exec -i "$REDIS" redis-cli -x set "ssl:$1:latest" < "$d/stored.json" >/dev/null
+}
+
 echo "=== A listed domain with an expired certificate is issued a new one ==="
 write_expired_cert "$TEST_DOMAIN"
 sleep "$PAST_TTL"
@@ -105,5 +131,14 @@ if ! docker logs "$PROXY" 2>&1 | grep -q "issuing new certificate for $ORPHAN"; 
   echo "FAIL: proxy did not try to issue a certificate for $ORPHAN once it was listed" >&2
   exit 1
 fi
+
+echo "=== A stored certificate with no expiry field is judged by its notAfter ==="
+LEGACY=legacy-expired.example
+trap 'cleanup; redis del "ssl:$LEGACY:latest" "domain:$LEGACY" >/dev/null 2>&1 || true' EXIT
+write_legacy_expired_cert "$LEGACY"
+subject=$(served_subject "$LEGACY")
+echo "$LEGACY: $subject"
+echo "$subject" | grep -q blot-proxy-placeholder
+docker logs "$PROXY" 2>&1 | grep -q "certificate for $LEGACY expired at"
 
 echo "all expired certificate checks passed"

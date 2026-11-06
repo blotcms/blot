@@ -198,7 +198,9 @@ start).
   certificate from Redis when a daily renewal fails after it has expired (its
   in-memory copy then lingers for up to an hour). `get_cert` in
   `config/init.conf` therefore treats a stored certificate whose `expiry` has
-  passed as missing: a domain still listed in Redis (`domain:<host>`) is
+  passed as missing (a legacy record with no `expiry` is judged by the leaf's
+  notAfter, read with the `lua-resty-openssl` bundled in OpenResty and cached
+  per worker): a domain still listed in Redis (`domain:<host>`) is
   issued a new one, any other gets the fallback certificate, and the key is
   left for renewal to delete. Deleting a certificate also drops this
   container's cached copies. Nothing on the host needs to restart the proxy to
