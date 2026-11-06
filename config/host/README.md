@@ -285,6 +285,17 @@ looking at the hosts, so after a failure fix the cause and run it again. Check
   (keeping its host key check), so they work whether or not the alias is edited;
   `-F` reaches `ProxyJump` too. Before `finish`, and for your own ssh, change
   `HostName` for `<new>` in `~/.ssh/config` to the Elastic IP.
+- **The new host's key.** `launch` connects without checking or keeping the
+  host key, so before you add `<new>` to `~/.ssh/config`, record its key and
+  check it against the fingerprint cloud-init printed:
+  `ssh-keyscan -p <port> -t ed25519 <address>` and
+  `aws ec2 get-console-output --instance-id <id> --latest` (the `ED25519` line).
+  After `switch`, the Elastic IP's entry in your `known_hosts` is still the old
+  host's key: replace it with the new host's.
+- **From a worktree.** `app` and `settle` deploy through `scripts/deploy/units.sh`,
+  which refuses unless the checkout is on `master`. A worktree detached at
+  `origin/master` needs `SKIP_BRANCH_CHECK=true`; the image is the old host's,
+  not the checkout's, either way.
 - **Two hosts.** Only a host that still has a separate Redis host (the first
   cycle, from before 2 November 2026) needs `--old-redis`, also for later
   phases that promote. Without it `<old>` is taken to run Redis too, which is

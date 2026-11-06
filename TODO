@@ -1,3 +1,11 @@
+Host cycle follow-ups, from the live cycle onto a 30 GB root on 6 Nov 2026 (#2552)
+- Check the daily email of 7 Nov: the first offsite (B2) sync from the new host runs at 02:10 UTC. Overdue or failed means the `blot-b2-storage` profile or `/etc/blot/storage-offsite-bucket` did not reach it at `app`.
+- The final data-volume snapshot (tagged `purpose=final-before-removal`) is the last cost left from the volume: move it to the archive tier around 20 Nov, or delete it once S3 plus B2 have run for a while. The operator decides.
+- `launch.sh` connects with `StrictHostKeyChecking=no` and keeps no key: have it read the ED25519 fingerprint from `get-console-output`, check it, and write a known_hosts line for `<new>` (the README says how to do it by hand).
+- Time each step of `switch` inside the freeze. Writes were frozen 110 s live against 41 s in the drill, with no failed requests; probably ssh round trips through `ProxyJump` from the operator's Mac, unmeasured. Then decide whether to run the in-freeze steps from the new host instead.
+- `cycle.sh` deploys the old host's image, so it could set `SKIP_BRANCH_CHECK=true` for `units.sh` itself instead of failing from a worktree.
+- The Deploy workflow's `commit` input fails on a short hash ("could not resolve commit") although its description says short codes work: fetch enough history, or say full hash only.
+
 Serve blog folder files on the CDN straight from S3, as assets are (left over from #2258, closed once the B2 restore test passed)
 - Today `cdn.blot.im/folder/v-<version>/<blogID>/<path>` reaches the origin, which reads the file through `storage/folder`. Every blog is on S3 now, so a Bunny edge rule could send `/folder/v-*` to the bucket instead, like `_image_cache` and `_thumbnails`.
 - Decide first: dotfiles (node 404s any path segment starting with `.`, S3 serves all but `.git`, so maybe Deny `.env`-style names too); directory URLs (node redirects to the trailing slash and serves `index.html`, S3 has only a zero-byte marker: check whether the build ever bakes a directory link); a missing object is a 403 from S3, not a 404; Content-Type comes from the object.
