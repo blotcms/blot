@@ -68,6 +68,7 @@ Bunny does not sit in front of blogs. Blog pages, on subdomains and custom domai
 # Production commands
 
 - Ask the operator before each command on production (`ssh blot`, `ssh macserver`, `docker exec` on a unit), read-only ones included, unless they have given you autonomy for the task at hand. A grant covers only the goal it was given for.
+- `scripts/prod/read.sh` is the exception: its subcommands (container status and logs, the access and error logs, host disk and memory, Redis INFO, slowlog and logs, fail2ban status) are read-only and may run without asking. Prefer it to hand-written `ssh blot` reads, and filter its output locally. Add a subcommand to it rather than asking for a one-off read you expect to repeat.
 - Run scripts that touch blog folders as the app user: `docker exec -u 1000 blot-blue ...`. As root, git fails its ownership check.
 - For a one-off read-only scan, write the script outside the repo, `docker cp` it into the unit, run it and delete it. Only scripts that write data (migrations, backfills with `--apply`) go in a PR.
 - Before reading keys from a broad Redis pattern, check their `TYPE`. WRONGTYPE errors from scripts count towards the Redis host alert.
