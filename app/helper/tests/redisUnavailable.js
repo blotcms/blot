@@ -503,7 +503,7 @@ describe("redisUnavailable", function () {
   describe("redisUnavailableHandler", function () {
     let server, origin;
 
-    beforeEach(function (done) {
+    beforeEach(async function () {
       const app = Express();
       app.get("/redis", (req, res, next) => next(new ClientOfflineError()));
       app.get("/other", (req, res, next) => {
@@ -515,14 +515,15 @@ describe("redisUnavailable", function () {
       app.use((err, req, res, next) =>
         res.status(err.status).send("passed on")
       );
-      server = app.listen(0, () => {
-        origin = "http://127.0.0.1:" + server.address().port;
-        done();
-      });
+      server = app.listen(0);
+      await new Promise((resolve) => server.once("listening", resolve));
+      origin = "http://127.0.0.1:" + server.address().port;
     });
 
-    afterEach(function (done) {
-      server.close(done);
+    afterEach(async function () {
+      await new Promise((resolve, reject) =>
+        server.close((err) => (err ? reject(err) : resolve()))
+      );
     });
 
     it("responds 503 with a generic page that must not be cached", async function () {

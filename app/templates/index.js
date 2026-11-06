@@ -8,6 +8,7 @@ var Mustache = require("mustache");
 var fs = require("fs-extra");
 var async = require("async");
 var Blog = require("models/blog");
+var withCallback = require("helper/withCallback");
 var _ = require("lodash");
 var chokidar = require("chokidar");
 var parseTemplate = require("models/template/parseTemplate");
@@ -322,8 +323,10 @@ function build(directory, callback) {
     if (metadataErr && metadataErr.code !== "ENOENT")
       return callback(metadataErr);
 
-    Template.getAllViews(id, function (viewsErr, storedViews) {
+    withCallback(Template.getAllViews)(id, function (viewsErr, viewsResult) {
       if (viewsErr && viewsErr.code !== "ENOENT") return callback(viewsErr);
+
+      var storedViews = viewsResult && viewsResult.views;
 
       var metadataSnapshot = {
         name: name,
@@ -774,8 +777,10 @@ function collectDevelopmentForks(
 
             if (!fork) return next();
 
-            Template.getAllViews(fork.id, function (err, views) {
+            withCallback(Template.getAllViews)(fork.id, function (err, result) {
               if (err) return next(err);
+
+              var views = result.views;
 
               forks.push({
                 blog: blog,
@@ -930,8 +935,11 @@ function refreshDevelopmentForks(templateID, forks, callback) {
 }
 
 function applyForkPackageOverlay(templateID, overlay, callback) {
-  Template.getAllViews(templateID, function (err, views, metadata) {
+  withCallback(Template.getAllViews)(templateID, function (err, result) {
     if (err) return callback(err);
+
+    var views = result.views;
+    var metadata = result.metadata;
 
     var packageData = applyPackageOverlay(
       packageConfiguration(metadata, views),

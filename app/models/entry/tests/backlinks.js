@@ -1,7 +1,7 @@
 describe("entry.backlinks", function () {
   require("./setup")();
 
-  it("works", async function (done) {
+  it("works", async function () {
     const path = "/post.txt";
     const contents = "Link: linker\n\n[linker](/linked)";
 
@@ -14,10 +14,9 @@ describe("entry.backlinks", function () {
     const entry = await this.get(pathLinked);
 
     expect(entry.backlinks).toEqual(["/linker"]);
-    done();
   });
 
-  it("will not contain deleted internal links", async function (done) {
+  it("will not contain deleted internal links", async function () {
     const path = "/post.txt";
     const contents = "Link: linker\n\n[linker](/linked)";
 
@@ -36,10 +35,9 @@ describe("entry.backlinks", function () {
 
     expect(entry.backlinks).toEqual(["/linker"]);
     expect(entryAfterUpdate.backlinks).toEqual([]);
-    done();
   });
 
-  it("works with multiple files", async function (done) {
+  it("works with multiple files", async function () {
     const pathFirst = "/post-1.txt";
     const contentsFirst = "Link: linker-1\n\n[linker](/linked)";
 
@@ -56,10 +54,9 @@ describe("entry.backlinks", function () {
     const entry = await this.get(pathLinked);
 
     expect(entry.backlinks.sort()).toEqual(["/linker-1", "/linker-2"]);
-    done();
   });
 
-  it("won't contain internal links from deleted posts", async function (done) {
+  it("won't contain internal links from deleted posts", async function () {
     const path = "/post.txt";
     const contents = "Link: linker\n\n[linker](/linked)";
 
@@ -77,10 +74,9 @@ describe("entry.backlinks", function () {
 
     expect(entry.backlinks).toEqual(["/linker"]);
     expect(entryAfterDrop.backlinks).toEqual([]);
-    done();
   });
 
-  it("updates the backlink when the linker's URL changes", async function (done) {
+  it("updates the backlink when the linker's URL changes", async function () {
     const path = "/post.txt";
     const contents = "Link: linker\n\n[linker](/linked)";
 
@@ -99,10 +95,9 @@ describe("entry.backlinks", function () {
 
     expect(entry.backlinks).toEqual(["/linker"]);
     expect(entryAfterUpdate.backlinks).toEqual(["/new-linker"]);
-    done();
   });
 
-  it("updates the backlinks property of deleted posts", async function (done) {
+  it("updates the backlinks property of deleted posts", async function () {
     const path = "/post.txt";
     const contents = "Link: linker\n\n[linker](/linked)";
 
@@ -126,10 +121,9 @@ describe("entry.backlinks", function () {
     expect(entry.backlinks).toEqual(["/linker"]);
     expect(entryAfterDrop.deleted).toEqual(true);
     expect(entryAfterRestore.backlinks).toEqual([]);
-    done();
   });
 
-  it("tracks backlinks for unicode target URLs linked from ASCII linkers", async function (done) {
+  it("tracks backlinks for unicode target URLs linked from ASCII linkers", async function () {
     const pathTarget = "/unicode-target.txt";
     const contentsTarget = "Permalink: grüße\n\nHey";
 
@@ -148,10 +142,9 @@ describe("entry.backlinks", function () {
 
     expect(entry.backlinks).toEqual(["/linker"]);
     expect(entryAfterUpdate.backlinks).toEqual([]);
-    done();
   });
 
-  it("preserves unicode linker permalinks in backlinks", async function (done) {
+  it("preserves unicode linker permalinks in backlinks", async function () {
     const pathTarget = "/linked.txt";
     const contentsTarget = "Link: linked\n\nHey";
 
@@ -171,6 +164,5 @@ describe("entry.backlinks", function () {
 
     expect(entry.backlinks).toEqual(["/über-uns"]);
     expect(entryAfterUpdate.backlinks).toEqual(["/über-uns-neu"]);
-    done();
   });
 });

@@ -4,10 +4,10 @@ const Blog = require("models/blog");
 const client = require("models/client");
 const userKey = require("../key");
 const blogKey = require("models/blog/key");
-const getUser = promisify(User.getById);
-const getBlog = promisify(Blog.get);
+const getUser = User.getById;
+const getBlog = Blog.get;
 const setUser = promisify(User.set);
-const setBlog = promisify(Blog.set);
+const setBlog = Blog.set;
 
 // Fail at the storage boundary once, allowing subsequent retries to use Redis.
 // Cover both transactional and Lua commits used by the user model.

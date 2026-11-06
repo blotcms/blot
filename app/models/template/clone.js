@@ -1,6 +1,7 @@
 var ensure = require("helper/ensure");
 var extend = require("helper/extend");
 var getAllViews = require("./getAllViews");
+var withCallback = require("helper/withCallback");
 var setMultipleViews = require("./setMultipleViews");
 var getMetadata = require("./getMetadata");
 var setMetadata = require("./setMetadata");
@@ -13,7 +14,9 @@ module.exports = function clone(fromID, toID, metadata, callback) {
     .and(metadata, "object")
     .and(callback, "function");
 
-  getAllViews(fromID, function (err, allViews) {
+  withCallback(getAllViews)(fromID, function (err, result) {
+    var allViews = result && result.views;
+
     if (err || !allViews) {
       var message = "No theme with that name exists to clone from " + fromID;
       return callback(new Error(message));

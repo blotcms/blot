@@ -19,39 +19,23 @@ describe("Blog.get", function () {
     });
   });
 
-  it("falls back to safe image metadata defaults", function (done) {
-    var test = this;
+  it("falls back to safe image metadata defaults", async function () {
+    await client.hDel(key.info(this.blog.id), "imageExif");
 
-    client
-      .hDel(key.info(test.blog.id), "imageExif")
-      .then(function () {
-        get({ id: test.blog.id }, function (err, blog) {
-          if (err) return done.fail(err);
+    const blog = await get({ id: this.blog.id });
 
-          expect(blog.imageExif).toBe("off");
-          expect(blog.isImageExifOff).toBe(true);
-          expect(blog.isImageExifBasic).toBe(false);
-          done();
-        });
-      })
-      .catch(done.fail);
+    expect(blog.imageExif).toBe("off");
+    expect(blog.isImageExifOff).toBe(true);
+    expect(blog.isImageExifBasic).toBe(false);
   });
 
-  it("falls back to converter defaults when missing", function (done) {
-    var test = this;
+  it("falls back to converter defaults when missing", async function () {
+    await client.hDel(key.info(this.blog.id), "converters");
 
-    client
-      .hDel(key.info(test.blog.id), "converters")
-      .then(function () {
-        get({ id: test.blog.id }, function (err, blog) {
-          if (err) return done.fail(err);
+    const blog = await get({ id: this.blog.id });
 
-          expect(blog.converters.img).toBe(true);
-          expect(blog.converters.markdown).toBe(true);
-          expect(blog.converters.docx).toBe(true);
-          done();
-        });
-      })
-      .catch(done.fail);
+    expect(blog.converters.img).toBe(true);
+    expect(blog.converters.markdown).toBe(true);
+    expect(blog.converters.docx).toBe(true);
   });
 });

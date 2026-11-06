@@ -2,11 +2,14 @@ var eachTemplate = require("./template");
 var Template = require("models/template");
 var async = require("async");
 var progress = require("./progress");
+var withCallback = require("helper/withCallback");
 
 module.exports = function (doThis, callback) {
   eachTemplate(function (user, blog, template, nextTemplate) {
-    Template.getAllViews(template.id, function (err, views) {
+    withCallback(Template.getAllViews)(template.id, function (err, result) {
       if (err) throw err;
+
+      var views = result.views;
 
       var bar = progress.push("View", Object.keys(views || {}).length);
 

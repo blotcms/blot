@@ -1,11 +1,12 @@
 describe("tags.set", function () {
-  const set = require("../set");
+  const { promisify } = require("util");
+  const set = promisify(require("../set"));
   const get = require("../get");
 
   // Create a test user and blog before each spec
   global.test.blog();
 
-  it("can be invoked without error", function (done) {
+  it("can be invoked without error", async function () {
     const entry = {
       id: "entry1",
       blogID: "blog1",
@@ -13,18 +14,15 @@ describe("tags.set", function () {
       tags: ["tag1"],
     };
 
-    set(this.blog.id, entry, function (err, result) {
-      expect(err).toBeFalsy();
-      // The entry is now on tag1, which other entries' pages render
-      expect(result).toEqual({ changed: true });
-      done();
-    });
+    const result = await set(this.blog.id, entry);
+    // The entry is now on tag1, which other entries' pages render
+    expect(result).toEqual({ changed: true });
   });
 
   ["page", "menu"].forEach(function (property) {
     it(
       "does not index a newly created tagged " + property + " entry",
-      function (done) {
+      async function () {
         const entry = {
           id: property + "-entry",
           blogID: this.blog.id,
@@ -33,19 +31,15 @@ describe("tags.set", function () {
         };
         entry[property] = true;
 
-        set(this.blog.id, entry, (err) => {
-          if (err) return done.fail(err);
+        await set(this.blog.id, entry);
 
-          get(this.blog.id, "automotive").then(({ entryIDs }) => {
-            expect(entryIDs).toEqual([]);
-            done();
-          }, done.fail);
-        });
+        const { entryIDs } = await get(this.blog.id, "automotive");
+        expect(entryIDs).toEqual([]);
       }
     );
   });
 
-  it("removes tag associations when an existing post becomes a page", function (done) {
+  it("removes tag associations when an existing post becomes a page", async function () {
     const entry = {
       id: "work-entry",
       blogID: this.blog.id,
@@ -54,21 +48,15 @@ describe("tags.set", function () {
       dateStamp: 1,
     };
 
-    set(this.blog.id, entry, (err) => {
-      if (err) return done.fail(err);
+    await set(this.blog.id, entry);
 
-      entry.page = true;
-      set(this.blog.id, entry, (err) => {
-        if (err) return done.fail(err);
+    entry.page = true;
+    await set(this.blog.id, entry);
 
-        (async () => {
-          const automotive = await get(this.blog.id, "automotive");
-          expect(automotive.entryIDs).toEqual([]);
+    const automotive = await get(this.blog.id, "automotive");
+    expect(automotive.entryIDs).toEqual([]);
 
-          const featured = await get(this.blog.id, "featured");
-          expect(featured.entryIDs).toEqual([]);
-        })().then(done, done.fail);
-      });
-    });
+    const featured = await get(this.blog.id, "featured");
+    expect(featured.entryIDs).toEqual([]);
   });
 });

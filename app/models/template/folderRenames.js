@@ -15,6 +15,7 @@
 var crypto = require("crypto");
 var client = require("models/client");
 var getAllViews = require("./getAllViews");
+var withCallback = require("helper/withCallback");
 var key = require("./key");
 
 var RENAME_WINDOW = 2 * 60 * 1000; // 2 minutes
@@ -39,9 +40,10 @@ function freshKey(blogID) {
 // Maps each view name to a hash of its content
 function viewHashes(templateID) {
   return new Promise(function (resolve, reject) {
-    getAllViews(templateID, function (err, views) {
+    withCallback(getAllViews)(templateID, function (err, result) {
       if (err) return reject(err);
 
+      var views = result.views;
       var hashes = {};
 
       Object.keys(views || {}).forEach(function (name) {

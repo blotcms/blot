@@ -3,6 +3,7 @@ var isOwner = require("./isOwner");
 var blogFolder = require("clients/folder");
 var callbackify = require("util").callbackify;
 var getAllViews = require("./getAllViews");
+var withCallback = require("helper/withCallback");
 var determineTemplateFolder = require("./determineTemplateFolder");
 var withFolderLock = require("./withFolderLock");
 
@@ -12,8 +13,11 @@ function removeFromFolderUnlocked(blogID, templateID, callback) {
 
     if (!owner) return callback(null);
 
-    getAllViews(templateID, function (err, views, metadata) {
+    withCallback(getAllViews)(templateID, function (err, result) {
       if (err) return callback(err);
+
+      var views = result.views;
+      var metadata = result.metadata;
 
       if (!views || !metadata || !metadata.localEditing) return callback(null);
 
