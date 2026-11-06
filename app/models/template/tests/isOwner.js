@@ -18,4 +18,9 @@ describe("template", function () {
       done();
     });
   });
+
+  it("returns a promise when called without a callback", async function () {
+    expect(await isOwner(this.blog.id, this.template.id)).toBe(true);
+    expect(await isOwner(this.blog.id, "nonexistent:template")).toBe(false);
+  });
 });

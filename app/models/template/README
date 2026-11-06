@@ -114,6 +114,8 @@ Stored as a Redis hash at key `template:{id}:view:{viewName}`.
 
 All functions below are exported from `index.js`. All callbacks follow the Node.js `(err, result)` convention unless noted.
 
+`getMetadata`, `getView`, `getViewsByURLs`, `getTemplateList`, `getByShareID` and `isOwner` return a promise when called without a callback (`helper/withCallback`, #2559); with one they behave as before. `getViewByURL` and `getAllViews` are still callback-only. `getPartials` is an `async` function with no callback form.
+
 ### Template lifecycle
 
 ```js
@@ -181,9 +183,9 @@ getFullView(blogID, templateID, viewName, callback)
 Returns `(err, [locals, allPartials, retrieve, mimeType, content, usesBacklinks])` — the complete rendering payload for a view, with all partials resolved and retrieve descriptors merged across the partial tree. `content` is the render source: on a template `blogID` owns, the view's content with its folder links wrapped (see Folder links in views). `usesBacklinks` is whether the view or any of its partials names `backlinks` (see util/referencedIdentifiers.js), so rendering can skip resolving them.
 
 ```js
-getPartials(blogID, templateID, partials, callback)
+getPartials(blogID, templateID, partials, contextMap, parentContextPath, wrapOptions)
 ```
-Resolves a partial map: partials starting with `/` are fetched as entry HTML from `models/entry`; others are fetched as named template views, recursively.
+Async; returns a promise (no callback form). Resolves to `{ allPartials, retrieve }`. `contextMap`, `parentContextPath` and `wrapOptions` are optional. Resolves a partial map: partials starting with `/` are fetched as entry HTML from `models/entry`; others are fetched as named template views, recursively.
 
 ```js
 getViewByURL(templateID, url, callback)

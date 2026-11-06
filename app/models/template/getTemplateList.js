@@ -2,37 +2,33 @@ var client = require("models/client");
 var key = require("./key");
 var getMetadata = require("./getMetadata");
 var ensure = require("helper/ensure");
+var withCallback = require("helper/withCallback");
 
 // The list of possible template choices
 // for a given blog. Accepts a UID and
 // returns an array of template metadata
 // objects. Does not contain any view info
-module.exports = function getTemplateList(blogID, callback) {
-  ensure(blogID, "string").and(callback, "function");
+module.exports = withCallback(async function getTemplateList(blogID) {
+  ensure(blogID, "string");
 
-  Promise.all([
+  var results = await Promise.all([
     client.sMembers(key.blogTemplates("SITE")),
     client.sMembers(key.blogTemplates(blogID)),
-  ])
-    .then(function (results) {
-      var siteTemplates = results[0] || [];
-      var blogTemplates = results[1] || [];
-      var templateIDs = siteTemplates.concat(blogTemplates);
+  ]);
+  var siteTemplates = results[0] || [];
+  var blogTemplates = results[1] || [];
+  var templateIDs = siteTemplates.concat(blogTemplates);
 
-      // Read every template's metadata at once rather than one after another;
-      // keep the order of the IDs and skip templates that failed to load
-      return Promise.all(
-        templateIDs.map(function (id) {
-          return new Promise(function (resolve) {
-            getMetadata(id, function (err, info) {
-              resolve(!err && info ? info : null);
-            });
-          });
-        })
-      );
+  // Every template's metadata is read at once rather than one after another,
+  // keeping the order of the IDs. A template whose metadata can't be read is
+  // skipped, not an error.
+  var metadata = await Promise.all(
+    templateIDs.map(function (id) {
+      return getMetadata(id).catch(function () {
+        return null;
+      });
     })
-    // One handler pair, so an error thrown by the callback can't call it twice
-    .then(function (metadata) {
-      callback(null, metadata.filter(Boolean));
-    }, callback);
-};
+  );
+
+  return metadata.filter(Boolean);
+});

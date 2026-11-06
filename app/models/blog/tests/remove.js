@@ -111,4 +111,11 @@ describe("Blog.remove", function () {
     expect(lost).not.toHaveBeenCalled();
     expect((await folderLock.inspect(blogID)).held).toBe(false);
   });
+
+  it("returns a promise without a callback", async function () {
+    var removed = await remove(this.blog.id);
+
+    expect(removed.id).toEqual(this.blog.id);
+    expect(await getAllIDs()).not.toContain(this.blog.id);
+  });
 });

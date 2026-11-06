@@ -133,4 +133,24 @@ describe("Blog.create", function () {
       );
     });
   });
+
+  it("returns a promise without a callback", async function () {
+    this.blog = await create(this.user.uid, { handle: "exampleblog" });
+
+    expect(this.blog.handle).toEqual("exampleblog");
+    expect(await getAllIDs()).toContain(this.blog.id);
+  });
+
+  it("rejects with validate's errors object", async function () {
+    this.blog = await create(this.user.uid, { handle: "exampleblog" });
+
+    var errors = await create(this.user.uid, { handle: "exampleblog" }).catch(
+      function (err) {
+        return err;
+      }
+    );
+
+    expect(errors instanceof Error).toBe(false);
+    expect(errors.handle).toEqual(jasmine.any(Error));
+  });
 });
