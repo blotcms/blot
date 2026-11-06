@@ -153,15 +153,7 @@ dashboard
         return res.message(req.baseUrl, "Please enter a valid email address");
       }
 
-      const setClientError = await new Promise((resolve) => {
-        Blog.set(req.blog.id, { client: "google-drive" }, function (err) {
-          resolve(err);
-        });
-      });
-
-      if (setClientError) {
-        return next(setClientError);
-      }
+      await Blog.set(req.blog.id, { client: "google-drive" });
 
       // Determine the service account ID we'll use to sync this blog.
       const serviceAccountId = await requestServiceAccount();
