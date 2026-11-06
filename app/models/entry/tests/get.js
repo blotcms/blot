@@ -86,7 +86,9 @@ describe("entry.get", function () {
 
   it("rejects with the error for a single path too", async function () {
     spyOn(console, "error");
-    spyOn(redis, "mGet").and.returnValue(Promise.reject(new Error("boom")));
+    var mGet = spyOn(redis, "mGet").and.callFake(() =>
+      Promise.reject(new Error("boom"))
+    );
 
     var error;
 
@@ -95,6 +97,8 @@ describe("entry.get", function () {
     } catch (err) {
       error = err;
     }
+
+    mGet.and.callThrough();
 
     expect(error.message).toEqual("boom");
   });

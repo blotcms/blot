@@ -12,10 +12,20 @@ describe("entry.getByPath", function () {
 
     spyOn(console, "error");
     var redis = require("models/client");
-    spyOn(redis, "mGet").and.returnValue(Promise.reject(new Error("boom")));
-    spyOn(redis, "zRange").and.returnValue(Promise.reject(new Error("boom")));
+    var mGet = spyOn(redis, "mGet").and.callFake(() =>
+      Promise.reject(new Error("boom"))
+    );
+    var zRange = spyOn(redis, "zRange").and.callFake(() =>
+      Promise.reject(new Error("boom"))
+    );
 
-    expect(await lookup(this.blog.id, "/pages/home.txt")).toBeUndefined();
+    var entry = await lookup(this.blog.id, "/pages/home.txt");
+
+    // the blog cleanup needs the real commands
+    mGet.and.callThrough();
+    zRange.and.callThrough();
+
+    expect(entry).toBeUndefined();
   });
 
   it("returns the entry when the path matches exactly", async function () {
