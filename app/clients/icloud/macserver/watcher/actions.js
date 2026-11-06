@@ -4,6 +4,7 @@ import mkdir from "../httpClient/mkdir.js";
 import remove from "../httpClient/remove.js";
 import resync from "../httpClient/resync.js";
 import upload from "../httpClient/upload.js";
+import { forgetPath } from "../pushedFiles.js";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -76,6 +77,9 @@ const performAction = async (blogID, pathInBlogDirectory, action) => {
           () => upload(blogID, pathInBlogDirectory)
         );
       } else if (action === "remove") {
+        // forgotten even if the remove fails, so the file is pushed again
+        // if it comes back with the same size and mtime
+        forgetPath(blogID, pathInBlogDirectory);
         await withRetries(
           `remove ${blogID}/${pathInBlogDirectory}`,
           () => remove(blogID, pathInBlogDirectory)
