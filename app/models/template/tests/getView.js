@@ -30,4 +30,17 @@ describe("template", function () {
       done();
     });
   });
+
+  it("returns a promise when called without a callback", async function () {
+    var savedView = await getView(this.template.id, this.view.name);
+    expect(savedView.name).toEqual(this.view.name);
+
+    var error;
+    try {
+      await getView(this.template.id, "");
+    } catch (e) {
+      error = e;
+    }
+    expect(error instanceof Error).toBe(true);
+  });
 });
