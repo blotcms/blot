@@ -4,6 +4,22 @@ describe("entry.search", function () {
   // Some of these tests take a while to run, so we need to increase the timeout
   global.test.timeout(60 * 1000);
 
+  it("returns a promise without a callback", async function () {
+    const search = require("../search");
+    const path = "/promise.txt";
+
+    await this.set(path, "Hello, promise!");
+
+    const results = await search(this.blog.id, "promise");
+    expect(results.length).toEqual(1);
+    expect(results[0].id).toEqual(path);
+
+    expect(await search(this.blog.id, "   ")).toEqual([]);
+
+    const err = await search(this.blog.id, 1).catch((err) => err);
+    expect(err instanceof Error).toBe(true);
+  });
+
   it("works with a single entry", async function (done) {
     const path = "/post.txt";
     const contents = `Custom: Metadata hello!
