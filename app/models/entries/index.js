@@ -410,7 +410,7 @@ module.exports = (function () {
 
   // getRange for the callback functions above: calls back with the entries and
   // no error argument. options.onError, if given, hears of a Redis outage
-  // instead, and then the callback is never called.
+  // (or bad arguments) instead, and then the callback is never called.
   function getRangeWithCallback(blogID, start, end, options, callback) {
     withCallback(getRange)(
       blogID,
@@ -419,8 +419,13 @@ module.exports = (function () {
       Object.assign({}, options, { rejectOnOutage: !!options.onError }),
       function (err, entries) {
         if (err) {
-          if (options.onError) options.onError(err);
-          return;
+          if (options.onError) return options.onError(err);
+
+          // Only bad arguments get here (getRange resolves [] for any other
+          // error without rejectOnOutage): log, and call back with [] as it
+          // does for those, rather than leaving the caller hanging
+          console.error("Entries: getRange failed", err);
+          return callback([]);
         }
 
         callback(entries);
