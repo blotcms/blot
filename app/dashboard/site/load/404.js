@@ -10,7 +10,10 @@ function withCreateParam(item) {
 }
 
 module.exports = function (req, res, next) {
-  List(req.blog.id, function (err, list, ignored) {
+  // The raw list is every path; the page formats only the latest 100
+  var options = req.query.raw ? {} : { limit: MAX_SHOWN };
+
+  List(req.blog.id, options, function (err, list, ignored, totals) {
     if (err) return next(err);
 
     var has_ignored;
@@ -23,7 +26,7 @@ module.exports = function (req, res, next) {
       return res.send(list.join("\n"));
     }
 
-    if (ignored.length) {
+    if (totals.ignored) {
       has_ignored = true;
     }
 
@@ -31,12 +34,12 @@ module.exports = function (req, res, next) {
       ignored = [];
     }
 
-    // Most recent first; show only the latest 100
-    res.locals.total = list.length.toLocaleString("en-US");
-    res.locals.shown = Math.min(list.length, MAX_SHOWN).toLocaleString("en-US");
-    res.locals.list = list.slice(0, MAX_SHOWN).map(withCreateParam);
+    // Most recent first, the latest 100 of each
+    res.locals.total = totals.list.toLocaleString("en-US");
+    res.locals.shown = list.length.toLocaleString("en-US");
+    res.locals.list = list.map(withCreateParam);
     res.locals.has_ignored = has_ignored;
-    res.locals.ignored = ignored.slice(0, MAX_SHOWN).map(withCreateParam);
+    res.locals.ignored = ignored.map(withCreateParam);
 
     next();
   });
