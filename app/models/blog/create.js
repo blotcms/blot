@@ -25,8 +25,11 @@ function validateAsync(blog) {
   });
 }
 
-// User.set has no promise form yet
-var setUser = promisify(User.set);
+// User.set has no promise form yet. Looked up when called, not when this
+// file loads: models/user and models/blog require each other.
+function setUser(uid, updates) {
+  return promisify(User.set)(uid, updates);
+}
 
 // Resolves to the new blog. Rejects with validate's errors object (fields
 // mapped to errors) or the error that stopped the creation.
