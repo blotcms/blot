@@ -129,3 +129,31 @@ describe("tags.list", function () {
     );
   });
 });
+
+describe("tags.list without a callback", function () {
+  const set = require("../set");
+  const list = require("../list");
+  const popular = require("../popular");
+
+  global.test.blog();
+
+  it("returns a promise", async function () {
+    const blogID = this.blog.id;
+    await new Promise((resolve, reject) =>
+      set(blogID, { id: "p1", path: "/p1", tags: ["tag1"] }, (err) =>
+        err ? reject(err) : resolve()
+      )
+    );
+
+    const tags = await list(blogID);
+    expect(tags.map((tag) => tag.slug)).toEqual(["tag1"]);
+    expect(await popular(blogID)).toEqual([
+      jasmine.objectContaining({ slug: "tag1", count: 1 }),
+    ]);
+  });
+
+  it("rejects on a bad blog ID", async function () {
+    await expectAsync(list(123)).toBeRejected();
+    await expectAsync(popular(123)).toBeRejected();
+  });
+});

@@ -51,6 +51,8 @@ Defined in `key.js`.
 
 ## Public API
 
+`list` and `popular` return a promise when called without a callback (`helper/withCallback`, #2559); with one they behave as before. `get` still calls back with several results, so it is callback-only.
+
 ### `set(blogID, entry, callback)`
 
 Reconciles the tag index for a single entry against its current state in Redis.
