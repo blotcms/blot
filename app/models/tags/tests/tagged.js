@@ -9,11 +9,7 @@ describe("tags.tagged sort ordering", function () {
 
   function stubTag(newestFirstIds) {
     lastTagOptions = undefined;
-    spyOn(Tags, "get").and.callFake(function (blogID, slug, options, callback) {
-      if (typeof options === "function") {
-        callback = options;
-        options = undefined;
-      }
+    spyOn(Tags, "get").and.callFake(async function (blogID, slug, options) {
       options = options || {};
       lastTagOptions = options;
 
@@ -23,7 +19,7 @@ describe("tags.tagged sort ordering", function () {
         const start = options.offset || 0;
         list = list.slice(start, start + options.limit);
       }
-      callback(null, list, slug, newestFirstIds.length);
+      return { entryIDs: list, prettyTag: slug, total: newestFirstIds.length };
     });
   }
 
