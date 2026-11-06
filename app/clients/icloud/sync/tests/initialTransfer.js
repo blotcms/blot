@@ -67,6 +67,51 @@ describe("icloud initialTransfer", function () {
     });
   });
 
+  it("reruns the verify pass after a failed listing", async function () {
+    let calls = 0;
+    const initialTransfer = load({
+      syncToiCloud: async () => {
+        calls++;
+        // second call is the first verify pass
+        if (calls === 2) throw new Error("ls stalled");
+      },
+    });
+
+    await initialTransfer("blog", { verifyRetryDelayMs: 0 });
+
+    expect(calls).toBe(3);
+    expect(store).toHaveBeenCalledWith("blog", {
+      setupComplete: true,
+      transferringToiCloud: false,
+      error: null,
+    });
+  });
+
+  it("gives up with TRANSFER_INCOMPLETE once verify retries are exhausted", async function () {
+    let calls = 0;
+    const initialTransfer = load({
+      syncToiCloud: async () => {
+        calls++;
+        if (calls > 1) throw new Error("ls stalled");
+      },
+    });
+
+    let thrown;
+    try {
+      await initialTransfer("blog", { verifyRetryDelayMs: 0 });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown && thrown.message).toBe("ls stalled");
+    expect(calls).toBe(4);
+    expect(store).toHaveBeenCalledWith("blog", {
+      transferringToiCloud: false,
+      error: "ls stalled",
+      errorCode: "TRANSFER_INCOMPLETE",
+    });
+  });
+
   it("records a failed transfer as TRANSFER_INCOMPLETE and releases the lock", async function () {
     const initialTransfer = load({
       syncToiCloud: async () => {

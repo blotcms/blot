@@ -285,7 +285,7 @@ Clarify on cancel / delete / overdue pages for accounts with grandfathered subsc
 Sync sweep digest (app/clients/util/syncReport.js) follow-ups
 - Hourly Fix() (Dropbox, iCloud, Google Drive) runs outside the folder lock, so menu-ghosts' whole-array menu write can clobber a concurrent sync's menu change - fix in app/sync/fix/menu-ghosts for all clients (raised on PR #2001)
 - iCloud: stop watching blogs that are disabled or gone (the macserver keeps uploading, gets 500 `Cannot sync blog` from sync/index.js and requests resyncs); have /upload answer 4xx so the macserver drops them
-- iCloud initial transfer: the verify pass still aborts on the first listing that fails after remoteReaddir's retries; rerun it a couple of times with a pause and make initialTransfer resumable (a stalled `ls` during the upload burst caused TRANSFER_INCOMPLETE). Check the macserver's new `ls took`/`Diagnostic snapshot`/`still running after kill` log lines for the root cause of the stalls
+- iCloud initial transfer: the verify pass now reruns twice with a pause, but still gives up with TRANSFER_INCOMPLETE if every attempt fails; make initialTransfer resumable (a stalled `ls` during the upload burst caused TRANSFER_INCOMPLETE). Check the macserver's new `ls took`/`Diagnostic snapshot`/`still running after kill` log lines for the root cause of the stalls
 - Don't report a stuck lock for a blog still in its initial setup/transfer (Dropbox transfer_pending, Drive preparing, iCloud transferringToiCloud) - a big first transfer can legitimately hold the lock >1h
 - Once-per-occurrence suppression treats "not seen this run" as cleared, including blogs that just weren't eligible that hour, so an ongoing error can be re-emailed after a quiet hour - remember issues until a successful walk/Fix actually clears them
 
@@ -425,7 +425,6 @@ Improve iCloud sync
 - iCloud macserver: a disk-usage eviction during the new-directory walk marks the blog eviction-suppressed and the walk skips everything left; pause and restart the walk instead
 - Sync no-progress watchdog: app/sync/lock.js renews a folder lock for as long as the process lives, so any hung sync holds a blog's lock until a container restart (7h+ on 16 Oct, #2147). Track the sync's last progress (file processed / status update) and, after N minutes with none, stop renewing and fail the sync so the lock expires and the next resync or hourly check can run
 - iCloud macserver should periodically validate the local blog folders to ensure the client is still connected on blot and clean up any failed initial transfers (i.e. non blog_... folders)
-- iCloud: a Blot edit while the folder is missing (SOURCE_MISSING) still reaches the macserver upload, which re-creates an unshared folder (write.js, remove.js should skip the remote write)
 - If we need to resolve further bugs with sync drift:
   - Implement additional parsing of modified paths from monitorer.js (brctl monitor -i) and reconcile these in addition to the fswatch module with the chokidar events for additional redundancy
 - Think about adding a more efficient endpoint to sync folder state. 
