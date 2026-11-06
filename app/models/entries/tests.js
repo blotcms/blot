@@ -433,7 +433,7 @@ describe("entries", function () {
     });
   });
 
-  it("getPage should reject invalid page numbers", function (done) {
+  it("getPage should reject invalid page numbers", async function () {
     const blogID = this.blog.id;
     const pageSize = 2;
 
@@ -449,30 +449,23 @@ describe("entries", function () {
       "999999999999999999999", // exceeds safe integer
     ];
 
-    let testsRemaining = invalidInputs.length;
+    for (const invalidInput of invalidInputs) {
+      let error;
 
-    invalidInputs.forEach((invalidInput) => {
-      Entries.getPage(
-        blogID,
-        { pageNumber: invalidInput, pageSize },
-        function (error, entries, pagination) {
-          expect(error).not.toBeNull();
-          expect(error.statusCode).toBe(400);
-          expect(error.message).toBe("Invalid page number");
-          expect(error.invalidInput).toBe(invalidInput);
-          expect(entries).toBeNull();
-          expect(pagination).toBeNull();
+      try {
+        await Entries.getPage(blogID, { pageNumber: invalidInput, pageSize });
+      } catch (e) {
+        error = e;
+      }
 
-          testsRemaining--;
-          if (testsRemaining === 0) {
-            done();
-          }
-        }
-      );
-    });
+      expect(error).toBeDefined();
+      expect(error.statusCode).toBe(400);
+      expect(error.message).toBe("Invalid page number");
+      expect(error.invalidInput).toBe(invalidInput);
+    }
   });
 
-  it("getPage should return a page of entries sorted by date", async function (done) {
+  it("getPage should return a page of entries sorted by date", async function () {
     const key = `blog:${this.blog.id}:entries`;
     const lexKey = `blog:${this.blog.id}:entries:lex`;
     const now = Date.now();
@@ -509,56 +502,43 @@ describe("entries", function () {
     const blogID = this.blog.id;
 
     // get the second page of entries, 2 per page, sorted by date with newest first
-    Entries.getPage(
-      blogID,
-      {
-        pageNumber: pageNo,
-        pageSize,
-        sortBy: "date",
-      },
-      function (error, entries, pagination) {
-        expect(error).toBeNull();
-        expect(entries.map((entry) => entry.id)).toEqual(["/d.txt", "/c.txt"]);
-        expect(pagination).toEqual({
-          current: 2,
-          next: 3,
-          previous: 1,
-          total: 3, // 6 entries / 2 per page
-          page_size: 2,
-          total_entries: 6,
-        });
-        expect(entries.at(-1).pagination).toEqual(pagination);
+    const { entries, pagination } = await Entries.getPage(blogID, {
+      pageNumber: pageNo,
+      pageSize,
+      sortBy: "date",
+    });
 
-        // get the first page of entries, 2 per page, sorted reverse alphabetically
-        Entries.getPage(
-          blogID,
-          { pageNumber: 1, pageSize, sortBy: "id", order: "desc" },
-          function (error, entries, pagination) {
-            expect(error).toBeNull();
-            expect(entries.map((entry) => entry.id)).toEqual([
-              "/f.txt",
-              "/e.txt",
-            ]);
-            // get the first page of entries, 2 per page, sorted alphabetically
-            Entries.getPage(
-              blogID,
-              { pageNumber: 1, pageSize, sortBy: "id", order: "asc" },
-              function (error, entries, pagination) {
-                expect(error).toBeNull();
-                expect(entries.map((entry) => entry.id)).toEqual([
-                  "/a.txt",
-                  "/b.txt",
-                ]);
-                done();
-              }
-            );
-          }
-        );
-      }
-    );
+    expect(entries.map((entry) => entry.id)).toEqual(["/d.txt", "/c.txt"]);
+    expect(pagination).toEqual({
+      current: 2,
+      next: 3,
+      previous: 1,
+      total: 3, // 6 entries / 2 per page
+      page_size: 2,
+      total_entries: 6,
+    });
+    expect(entries.at(-1).pagination).toEqual(pagination);
+
+    // get the first page of entries, 2 per page, sorted reverse alphabetically
+    const desc = await Entries.getPage(blogID, {
+      pageNumber: 1,
+      pageSize,
+      sortBy: "id",
+      order: "desc",
+    });
+    expect(desc.entries.map((entry) => entry.id)).toEqual(["/f.txt", "/e.txt"]);
+
+    // get the first page of entries, 2 per page, sorted alphabetically
+    const asc = await Entries.getPage(blogID, {
+      pageNumber: 1,
+      pageSize,
+      sortBy: "id",
+      order: "asc",
+    });
+    expect(asc.entries.map((entry) => entry.id)).toEqual(["/a.txt", "/b.txt"]);
   });
 
-  it("getPage should paginate ID sorting via Redis ranges for asc/desc without full-set fetch", async function (done) {
+  it("getPage should paginate ID sorting via Redis ranges for asc/desc without full-set fetch", async function () {
     const blogID = this.blog.id;
     const key = `blog:${blogID}:entries`;
     const lexKey = `blog:${blogID}:entries:lex`;
@@ -585,53 +565,49 @@ describe("entries", function () {
 
     const zRangeSpy = spyOn(redis, "zRange").and.callThrough();
 
-    Entries.getPage(
-      blogID,
-      { pageNumber: 1, pageSize: 2, sortBy: "id", order: "asc" },
-      function (error, entries, pagination) {
-        expect(error).toBeNull();
-        expect(entries.map((entry) => entry.id)).toEqual(["/a.txt", "/b.txt"]);
-        expect(pagination.current).toBe(1);
+    const first = await Entries.getPage(blogID, {
+      pageNumber: 1,
+      pageSize: 2,
+      sortBy: "id",
+      order: "asc",
+    });
+    expect(first.entries.map((entry) => entry.id)).toEqual([
+      "/a.txt",
+      "/b.txt",
+    ]);
+    expect(first.pagination.current).toBe(1);
 
-        expect(zRangeSpy).toHaveBeenCalledWith(lexKey, 0, 1);
-        expect(zRangeSpy).not.toHaveBeenCalledWith(lexKey, 0, -1);
+    expect(zRangeSpy).toHaveBeenCalledWith(lexKey, 0, 1);
+    expect(zRangeSpy).not.toHaveBeenCalledWith(lexKey, 0, -1);
 
-        Entries.getPage(
-          blogID,
-          { pageNumber: 2, pageSize: 2, sortBy: "id", order: "asc" },
-          function (error, entries) {
-            expect(error).toBeNull();
-            expect(entries.map((entry) => entry.id)).toEqual([
-              "/c.txt",
-              "/d.txt",
-            ]);
-            expect(zRangeSpy).toHaveBeenCalledWith(lexKey, 2, 3);
+    const second = await Entries.getPage(blogID, {
+      pageNumber: 2,
+      pageSize: 2,
+      sortBy: "id",
+      order: "asc",
+    });
+    expect(second.entries.map((entry) => entry.id)).toEqual([
+      "/c.txt",
+      "/d.txt",
+    ]);
+    expect(zRangeSpy).toHaveBeenCalledWith(lexKey, 2, 3);
 
-            Entries.getPage(
-              blogID,
-              { pageNumber: 2, pageSize: 2, sortBy: "id", order: "desc" },
-              function (error, entries) {
-                expect(error).toBeNull();
-                expect(entries.map((entry) => entry.id)).toEqual([
-                  "/d.txt",
-                  "/c.txt",
-                ]);
-                expect(zRangeSpy).toHaveBeenCalledWith(lexKey, 2, 3, {
-                  REV: true,
-                });
-                expect(zRangeSpy).not.toHaveBeenCalledWith(lexKey, 0, -1, {
-                  REV: true,
-                });
-                done();
-              }
-            );
-          }
-        );
-      }
-    );
+    const desc = await Entries.getPage(blogID, {
+      pageNumber: 2,
+      pageSize: 2,
+      sortBy: "id",
+      order: "desc",
+    });
+    expect(desc.entries.map((entry) => entry.id)).toEqual(["/d.txt", "/c.txt"]);
+    expect(zRangeSpy).toHaveBeenCalledWith(lexKey, 2, 3, {
+      REV: true,
+    });
+    expect(zRangeSpy).not.toHaveBeenCalledWith(lexKey, 0, -1, {
+      REV: true,
+    });
   });
 
-  it("getPage should return object pagination on a single page", async function (done) {
+  it("getPage should return object pagination on a single page", async function () {
     const key = `blog:${this.blog.id}:entries`;
     const now = Date.now();
 
@@ -642,41 +618,53 @@ describe("entries", function () {
       return callback({ id: ids });
     });
 
-    Entries.getPage(
-      this.blog.id,
-      { pageNumber: 1, pageSize: 10, sortBy: "date" },
-      function (error, entries, pagination) {
-        expect(error).toBeNull();
-        expect(entries.map((entry) => entry.id)).toEqual(["/only.txt"]);
-        expect(pagination).toEqual({
-          current: 1,
-          next: null,
-          previous: null,
-          total: 1,
-          page_size: 10,
-          total_entries: 1,
-        });
-        expect(entries.at(-1).pagination).toEqual(pagination);
-        done();
-      }
-    );
+    const { entries, pagination } = await Entries.getPage(this.blog.id, {
+      pageNumber: 1,
+      pageSize: 10,
+      sortBy: "date",
+    });
+
+    expect(entries.map((entry) => entry.id)).toEqual(["/only.txt"]);
+    expect(pagination).toEqual({
+      current: 1,
+      next: null,
+      previous: null,
+      total: 1,
+      page_size: 10,
+      total_entries: 1,
+    });
+    expect(entries.at(-1).pagination).toEqual(pagination);
   });
 
-  it("getPage should report total as 1 (not 0) when the blog has no entries", function (done) {
-    Entries.getPage(
-      this.blog.id,
-      { pageNumber: 1, pageSize: 10, sortBy: "date" },
-      function (error, entries, pagination) {
-        expect(error).toBeNull();
-        expect(entries).toEqual([]);
-        expect(pagination.current).toBe(1);
-        expect(pagination.total).toBe(1);
-        done();
-      }
-    );
+  it("getPage should report total as 1 (not 0) when the blog has no entries", async function () {
+    const { entries, pagination } = await Entries.getPage(this.blog.id, {
+      pageNumber: 1,
+      pageSize: 10,
+      sortBy: "date",
+    });
+
+    expect(entries).toEqual([]);
+    expect(pagination.current).toBe(1);
+    expect(pagination.total).toBe(1);
   });
 
-  it("getRecent should return the most recent entries with their indices", async function (done) {
+  it("getPage should reject with the Redis error", async function () {
+    const failure = new Error("redis down");
+    spyOn(redis, "zRange").and.callFake(() => Promise.reject(failure));
+    spyOn(console, "error");
+
+    let error;
+
+    try {
+      await Entries.getPage(this.blog.id, { pageNumber: 1 });
+    } catch (e) {
+      error = e;
+    }
+
+    expect(error).toBe(failure);
+  });
+
+  it("getRecent should return the most recent entries with their indices", async function () {
     const key = `blog:${this.blog.id}:entries`;
 
     // Add mock entries in Redis
@@ -695,20 +683,33 @@ describe("entries", function () {
       callback(entries);
     });
 
-    Entries.getRecent(this.blog.id, function (entries) {
-      expect(entries.map((entry) => entry.id)).toEqual(["id3", "id2", "id1"]);
-      expect(entries[0].index).toBe(3);
-      expect(entries[1].index).toBe(2);
-      expect(entries[2].index).toBe(1);
-      done();
-    });
+    const entries = await Entries.getRecent(this.blog.id);
+
+    expect(entries.map((entry) => entry.id)).toEqual(["id3", "id2", "id1"]);
+    expect(entries[0].index).toBe(3);
+    expect(entries[1].index).toBe(2);
+    expect(entries[2].index).toBe(1);
   });
 
-  it("getRecent should return an empty array if there are no entries", function (done) {
-    Entries.getRecent(this.blog.id, function (entries) {
-      expect(entries).toEqual([]);
-      done();
-    });
+  it("getRecent should return an empty array if there are no entries", async function () {
+    expect(await Entries.getRecent(this.blog.id)).toEqual([]);
+  });
+
+  it("getRecent should resolve [] on a Redis failure, or reject on an outage with rejectOnOutage", async function () {
+    const outage = new (require("redis").ClientClosedError)();
+    spyOn(redis, "zRange").and.callFake(() => Promise.reject(outage));
+
+    expect(await Entries.getRecent(this.blog.id)).toEqual([]);
+
+    let error;
+
+    try {
+      await Entries.getRecent(this.blog.id, { rejectOnOutage: true });
+    } catch (e) {
+      error = e;
+    }
+
+    expect(error).toBe(outage);
   });
 
   describe("path index maintenance", function () {
@@ -767,64 +768,52 @@ describe("entries", function () {
         .exec();
     }
 
-    it("filters posts by path prefix and paginates by id", async function (done) {
+    it("filters posts by path prefix and paginates by id", async function () {
       const blogID = this.blog.id;
       await seedPathPrefixEntries(blogID);
 
-      Entries.getPage(
-        blogID,
-        {
-          pageNumber: 1,
-          pageSize: 2,
-          sortBy: "id",
-          order: "asc",
-          pathPrefix: "/Blog/",
-        },
-        function (error, entries, pagination) {
-          expect(error).toBeNull();
-          expect(entries.map((entry) => entry.id)).toEqual([
-            "/Blog/a.txt",
-            "/Blog/b.txt",
-          ]);
-          expect(pagination).toEqual({
-            current: 1,
-            next: 2,
-            previous: null,
-            total: 2,
-            page_size: 2,
-            total_entries: 3,
-          });
-          expect(entries.at(-1).pagination).toEqual(pagination);
-          done();
-        }
-      );
+      const { entries, pagination } = await Entries.getPage(blogID, {
+        pageNumber: 1,
+        pageSize: 2,
+        sortBy: "id",
+        order: "asc",
+        pathPrefix: "/Blog/",
+      });
+
+      expect(entries.map((entry) => entry.id)).toEqual([
+        "/Blog/a.txt",
+        "/Blog/b.txt",
+      ]);
+      expect(pagination).toEqual({
+        current: 1,
+        next: 2,
+        previous: null,
+        total: 2,
+        page_size: 2,
+        total_entries: 3,
+      });
+      expect(entries.at(-1).pagination).toEqual(pagination);
     });
 
-    it("normalizes pathPrefix values missing a leading slash", async function (done) {
+    it("normalizes pathPrefix values missing a leading slash", async function () {
       const blogID = this.blog.id;
       await seedPathPrefixEntries(blogID);
 
-      Entries.getPage(
-        blogID,
-        {
-          pageNumber: 1,
-          pageSize: 2,
-          sortBy: "id",
-          order: "asc",
-          pathPrefix: "Blog/",
-        },
-        function (error, entries) {
-          expect(error).toBeNull();
-          expect(entries.map((entry) => entry.id)).toEqual([
-            "/Blog/a.txt",
-            "/Blog/b.txt",
-          ]);
-          done();
-        }
-      );
+      const { entries } = await Entries.getPage(blogID, {
+        pageNumber: 1,
+        pageSize: 2,
+        sortBy: "id",
+        order: "asc",
+        pathPrefix: "Blog/",
+      });
+
+      expect(entries.map((entry) => entry.id)).toEqual([
+        "/Blog/a.txt",
+        "/Blog/b.txt",
+      ]);
     });
 
-    it("applies Redis-compatible tie ordering for equal date scores under pathPrefix", async function (done) {
+    it("applies Redis-compatible tie ordering for equal date scores under pathPrefix", async function () {
       const blogID = this.blog.id;
       const entriesKey = `blog:${blogID}:entries`;
       const lexKey = `blog:${blogID}:entries:lex`;
@@ -858,63 +847,42 @@ describe("entries", function () {
       });
       const expectedDesc = await redis.zRange(taggedSetKey, 0, -1);
 
-      Entries.getPage(
-        blogID,
-        {
-          pageNumber: 1,
-          pageSize: 10,
-          sortBy: "date",
-          order: "asc",
-          pathPrefix: "/Blog/",
-        },
-        function (error, ascEntries) {
-          expect(error).toBeNull();
-          expect(ascEntries.map((entry) => entry.id)).toEqual(expectedAsc);
+      const asc = await Entries.getPage(blogID, {
+        pageNumber: 1,
+        pageSize: 10,
+        sortBy: "date",
+        order: "asc",
+        pathPrefix: "/Blog/",
+      });
+      expect(asc.entries.map((entry) => entry.id)).toEqual(expectedAsc);
 
-          Entries.getPage(
-            blogID,
-            {
-              pageNumber: 1,
-              pageSize: 10,
-              sortBy: "date",
-              order: "desc",
-              pathPrefix: "/Blog/",
-            },
-            function (error, descEntries) {
-              expect(error).toBeNull();
-              expect(descEntries.map((entry) => entry.id)).toEqual(
-                expectedDesc
-              );
-              done();
-            }
-          );
-        }
-      );
+      const desc = await Entries.getPage(blogID, {
+        pageNumber: 1,
+        pageSize: 10,
+        sortBy: "date",
+        order: "desc",
+        pathPrefix: "/Blog/",
+      });
+      expect(desc.entries.map((entry) => entry.id)).toEqual(expectedDesc);
     });
-    it("ignores empty or whitespace pathPrefix values", async function (done) {
+    it("ignores empty or whitespace pathPrefix values", async function () {
       const blogID = this.blog.id;
       await seedPathPrefixEntries(blogID);
 
-      Entries.getPage(
-        blogID,
-        {
-          pageNumber: 1,
-          pageSize: 4,
-          sortBy: "id",
-          order: "asc",
-          pathPrefix: "   ",
-        },
-        function (error, entries) {
-          expect(error).toBeNull();
-          expect(entries.map((entry) => entry.id)).toEqual([
-            "/Blog/a.txt",
-            "/Blog/b.txt",
-            "/Blog/c.txt",
-            "/Notes/d.txt",
-          ]);
-          done();
-        }
-      );
+      const { entries } = await Entries.getPage(blogID, {
+        pageNumber: 1,
+        pageSize: 4,
+        sortBy: "id",
+        order: "asc",
+        pathPrefix: "   ",
+      });
+
+      expect(entries.map((entry) => entry.id)).toEqual([
+        "/Blog/a.txt",
+        "/Blog/b.txt",
+        "/Blog/c.txt",
+        "/Notes/d.txt",
+      ]);
     });
   });
   describe("adjacentTo", function () {
