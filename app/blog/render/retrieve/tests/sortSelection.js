@@ -35,8 +35,8 @@ describe("post sorting across retrieve helpers", function () {
 
     beforeEach(function () {
       cachedRecent._clear();
-      spyOn(Entries, "getRecent").and.callFake((blogID, options, cb) =>
-        cb(newestFirst())
+      spyOn(Entries, "getRecent").and.callFake(() =>
+        Promise.resolve(newestFirst())
       );
     });
 

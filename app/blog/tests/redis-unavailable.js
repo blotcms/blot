@@ -85,8 +85,8 @@ describe("when redis is unavailable", function () {
     });
 
     const Entries = require("models/entries");
-    spyOn(Entries, "getRecent").and.callFake(function (blogID, options) {
-      options.onError(new ClientOfflineError());
+    spyOn(Entries, "getRecent").and.callFake(function () {
+      return Promise.reject(new ClientOfflineError());
     });
 
     const res = await this.get("/");

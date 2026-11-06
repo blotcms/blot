@@ -650,7 +650,9 @@ describe("entries", function () {
 
   it("getPage should reject with the Redis error", async function () {
     const failure = new Error("redis down");
-    spyOn(redis, "zRange").and.callFake(() => Promise.reject(failure));
+    const zRangeSpy = spyOn(redis, "zRange").and.callFake(() =>
+      Promise.reject(failure)
+    );
     spyOn(console, "error");
 
     let error;
@@ -661,6 +663,7 @@ describe("entries", function () {
       error = e;
     }
 
+    zRangeSpy.and.callThrough(); // the blog cleanup needs zRange
     expect(error).toBe(failure);
   });
 
@@ -697,7 +700,9 @@ describe("entries", function () {
 
   it("getRecent should resolve [] on a Redis failure, or reject on an outage with rejectOnOutage", async function () {
     const outage = new (require("redis").ClientClosedError)();
-    spyOn(redis, "zRange").and.callFake(() => Promise.reject(outage));
+    const zRangeSpy = spyOn(redis, "zRange").and.callFake(() =>
+      Promise.reject(outage)
+    );
 
     expect(await Entries.getRecent(this.blog.id)).toEqual([]);
 
@@ -709,6 +714,7 @@ describe("entries", function () {
       error = e;
     }
 
+    zRangeSpy.and.callThrough(); // the blog cleanup needs zRange
     expect(error).toBe(outage);
   });
 
