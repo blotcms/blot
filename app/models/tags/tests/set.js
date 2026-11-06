@@ -36,11 +36,10 @@ describe("tags.set", function () {
         set(this.blog.id, entry, (err) => {
           if (err) return done.fail(err);
 
-          get(this.blog.id, "automotive", (err, entryIDs) => {
-            if (err) return done.fail(err);
+          get(this.blog.id, "automotive").then(({ entryIDs }) => {
             expect(entryIDs).toEqual([]);
             done();
-          });
+          }, done.fail);
         });
       }
     );
@@ -62,16 +61,13 @@ describe("tags.set", function () {
       set(this.blog.id, entry, (err) => {
         if (err) return done.fail(err);
 
-        get(this.blog.id, "automotive", (err, automotiveIDs) => {
-          if (err) return done.fail(err);
-          expect(automotiveIDs).toEqual([]);
+        (async () => {
+          const automotive = await get(this.blog.id, "automotive");
+          expect(automotive.entryIDs).toEqual([]);
 
-          get(this.blog.id, "featured", (err, featuredIDs) => {
-            if (err) return done.fail(err);
-            expect(featuredIDs).toEqual([]);
-            done();
-          });
-        });
+          const featured = await get(this.blog.id, "featured");
+          expect(featured.entryIDs).toEqual([]);
+        })().then(done, done.fail);
       });
     });
   });

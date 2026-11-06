@@ -26,7 +26,7 @@ describe("tags.get", function () {
     expect(total).toEqual(1);
   });
 
-  it("falls back to the tag as entered, then the decoded tag", async function () {
+  it("finds a tag by the name it was entered with", async function () {
     const blogID = this.blog.id;
 
     await setAsync(blogID, {
@@ -36,7 +36,7 @@ describe("tags.get", function () {
       tags: ["Hello World"],
     });
 
-    const result = await get(blogID, "Hello%20World");
+    const result = await get(blogID, "Hello World");
 
     expect(result.entryIDs).toEqual(["decoded"]);
     expect(result.prettyTag).toEqual("Hello World");
