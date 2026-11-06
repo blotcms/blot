@@ -14,11 +14,11 @@
     <label for="site-title">Title</label>
     <input type="text" id="site-title" name="title" value="{{blog.title}}" autofocus placeholder="Title" />
 
-    <div class="buttons">
+    <div class="buttons" data-on-change>
         <button type="submit">
             Save title
         </button>
-        <a href="{{{base}}}">Cancel</a>
+        <a href="{{{base}}}/settings/title" data-cancel>Cancel</a>
     </div>
     </div>
 </form>

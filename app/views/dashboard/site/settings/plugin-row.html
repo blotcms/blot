@@ -10,12 +10,12 @@
           </span>
           <span class="setting-check__text">{{{description}}}</span>
         </label>
-        <div class="pluginOptions">
+        <div class="pluginOptions" data-changes>
           {{{formHTML}}}
           {{#needsSaveButton}}
-          <div class="buttons">
+          <div class="buttons" data-on-change>
             <button type="submit">Save changes</button>
-            <a href="">Cancel</a>
+            <a href="" data-cancel>Cancel</a>
           </div>
           {{/needsSaveButton}}
         </div>

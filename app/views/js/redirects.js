@@ -8,13 +8,52 @@ if (redirectsContainer) {
   const redirectsForm = redirectsContainer.closest("form");
   const saveButtons = redirectsForm && redirectsForm.querySelector(".buttons");
 
+  // The rows' names and values in order, without the hidden template row
+  function serialize() {
+    return Array.from(redirectsContainer.querySelectorAll("input[name]"))
+      .map(function (input) {
+        return input.name + "=" + input.value;
+      })
+      .join("\n");
+  }
+
+  const initialRows = serialize();
+
+  // Shown while the rows differ from the saved ones, so adding a redirect
+  // and removing it again hides them
   function showSaveButtons() {
-    if (saveButtons) saveButtons.hidden = false;
+    if (saveButtons) saveButtons.hidden = serialize() === initialRows;
   }
 
   if (saveButtons) {
     saveButtons.hidden = true;
     redirectsForm.addEventListener("input", showSaveButtons);
+  }
+
+  // The rows as the page loaded, so Cancel can put them back without
+  // leaving the page (without scripts it reloads it)
+  const savedRows = Array.from(redirectsContainer.childNodes).map(
+    function (node) {
+      return node.cloneNode(true);
+    }
+  );
+  const cancelLink =
+    saveButtons && saveButtons.querySelector(".redirects-cancel");
+
+  if (cancelLink) {
+    cancelLink.addEventListener("click", function (e) {
+      e.preventDefault();
+      while (redirectsContainer.firstChild) {
+        redirectsContainer.removeChild(redirectsContainer.firstChild);
+      }
+      savedRows.forEach(function (node) {
+        redirectsContainer.appendChild(node.cloneNode(true));
+      });
+      cancelLink.classList.remove("disabled");
+      saveButtons.hidden = true;
+      document.getElementById("addRedirect").focus();
+      announce("Changes discarded");
+    });
   }
 
   function announce(message) {

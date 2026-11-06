@@ -11,6 +11,7 @@ require("./folder-toast.js");
 require("./folder-directory.js");
 require("./new-template-files.js");
 require("./form-buttons.js");
+require("./form-changes.js");
 require("./focus-input.js");
 require("./determine-timezone.js");
 require("./redirects.js");

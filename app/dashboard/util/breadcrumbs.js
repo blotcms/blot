@@ -23,5 +23,13 @@ function Breadcrumbs() {
     }
   };
 
+  // The crumb before the current page: where Cancel on a form goes
+  // (partials/form-footer.html)
+  Object.defineProperty(list, "parentURL", {
+    get: function () {
+      return list.length > 1 ? list[list.length - 2].url : "/sites";
+    },
+  });
+
   return list;
 }
