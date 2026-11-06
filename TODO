@@ -415,8 +415,6 @@ Improve iCloud sync
 - iCloud server should periodically:
   - quit safari (some error flow during auth sometimes opens it)
   - close all system UI prompts (sometimes we get error for maybe accessing a revoked folder?)
-- iCloud macserver: the new-directory walk (#2147) is gated on /mkdir's directory-created header, so it is skipped if a child upload/mkdir created the folder on Blot first (some children reported, siblings missed). Decide the walk from something other than whether Blot already had the directory
-- iCloud macserver: a disk-usage eviction during the new-directory walk marks the blog eviction-suppressed and the walk skips everything left; pause and restart the walk instead
 - Sync no-progress watchdog: app/sync/lock.js renews a folder lock for as long as the process lives, so any hung sync holds a blog's lock until a container restart (7h+ on 16 Oct, #2147). Track the sync's last progress (file processed / status update) and, after N minutes with none, stop renewing and fail the sync so the lock expires and the next resync or hourly check can run
 - iCloud macserver should periodically validate the local blog folders to ensure the client is still connected on blot and clean up any failed initial transfers (i.e. non blog_... folders)
 - If we need to resolve further bugs with sync drift:
@@ -439,8 +437,6 @@ Improve iCloud sync
 - Start writing tests for icloud client
 - Start writing tests for macserver
 - Instead of our bespoke header modifiedTime we should use 'Last-Modified' and note we don't need to set this for route using res.download – res.download does this automatically
-- Fix bug: low priority, this just causes an error in the logs when freeing up disk space. Problem: attempting to evict a file within a .pages directory (a special apple file) e.g. Post.pages/preview.jpg will fail: you need to evict the parent directory perhaps?
-- Remove evict route
 - Rename /watch route to setup-complete
 - Remove recursiveReaddirRoute
   - instead, to sync folder tree, whenever readddir is called, it should maintain an internal map of the last time a blog's subfolder tree was recursively checked, and call it? or maybe just call ls and brctl download on the specific folder? or is this too slow?

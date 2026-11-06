@@ -6,7 +6,7 @@ import {
   getLimiterCount,
 } from "../limiters.js";
 import clfdate from "../util/clfdate.js";
-import { forgetBlog, recordPushed, startTracking } from "../pushedFiles.js";
+import { forgetBlog, isKnownDirectory, isUnchanged, recordDirectory, recordPushed, startTracking } from "../pushedFiles.js";
 import { iCloudDriveDirectory } from "../config.js";
 import { constants } from "fs";
 import { join } from "path";
@@ -26,6 +26,7 @@ import {
   markEvictionSuppressed,
   extendEvictionSuppression,
   isEvictionSuppressed,
+  waitForEvictionSuppressionToClear,
   pruneEvictionSuppressions,
 } from "../evictionSuppression.js";
 
@@ -111,15 +112,44 @@ const stopFsWatch = () => stopFsWatchInternal();
 // Blot has created a directory, walk it and push its contents through the same
 // actions as watcher events. The walk runs outside the per-blog limiter (each
 // performAction schedules itself), so it cannot deadlock on nested scheduling.
+//
+// A disk-usage eviction mid-walk suppresses the whole blog, so the walk would
+// skip every remaining entry. Walks report when they skipped anything for that
+// reason; syncDirectoryContents then waits for the suppression to clear and
+// walks the directory again from the top, up to MAX_WALK_RESTARTS times.
+const MAX_WALK_RESTARTS = 3;
+
 const syncDirectoryContents = async (blogID, pathInBlogDirectory) => {
+  // subfolders this walk went into, walked again on a restart even though
+  // they are known by then
+  const entered = new Set();
+
+  for (let attempt = 0; attempt <= MAX_WALK_RESTARTS; attempt++) {
+    const interrupted = await walkDirectoryContents(blogID, pathInBlogDirectory, entered);
+
+    if (!interrupted) return;
+
+    if (attempt === MAX_WALK_RESTARTS) break;
+
+    console.log(clfdate(), `Directory contents: eviction suppressed the walk, waiting to restart (${attempt + 1}/${MAX_WALK_RESTARTS}), blogID: ${blogID}, path: ${pathInBlogDirectory}`);
+
+    if (!(await waitForEvictionSuppressionToClear(blogID))) break;
+  }
+
+  console.error(clfdate(), `Directory contents: giving up on walk after eviction suppression, some entries were skipped, blogID: ${blogID}, path: ${pathInBlogDirectory}`);
+};
+
+// Returns true if any entry was skipped because of eviction suppression.
+const walkDirectoryContents = async (blogID, pathInBlogDirectory, entered) => {
   let entries;
+  let interrupted = false;
 
   try {
     entries = await fs.readdir(buildBlogPath(blogID, pathInBlogDirectory), {
       withFileTypes: true,
     });
   } catch (error) {
-    if (error.code === "ENOENT" || error.code === "ENOTDIR") return;
+    if (error.code === "ENOENT" || error.code === "ENOTDIR") return false;
     throw error;
   }
 
@@ -129,7 +159,16 @@ const syncDirectoryContents = async (blogID, pathInBlogDirectory) => {
 
     if (!isDirectory && !entry.isFile()) continue;
     if (shouldIgnore(childPath)) continue;
-    if (isEvictionSuppressed(blogID, childPath)) continue;
+    if (isEvictionSuppressed(blogID, childPath)) {
+      interrupted = true;
+      continue;
+    }
+
+    // A subfolder Blot already has gets its own walk whenever the watcher
+    // reports it, so it is neither created again nor walked from here:
+    // re-walking whole subtrees (and one /mkdir per subfolder) on every
+    // report of a big folder would crowd out every blog's uploads
+    if (isDirectory && isKnownDirectory(blogID, childPath) && !entered.has(childPath)) continue;
 
     try {
       if (!(await exactCaseViaRealpath(buildBlogPath(blogID, childPath)))) continue;
@@ -138,9 +177,14 @@ const syncDirectoryContents = async (blogID, pathInBlogDirectory) => {
         if (!hasRecentChokidarEvent(blogID, childPath, "mkdir")) {
           await performAction(blogID, childPath, "mkdir");
         }
-        await syncDirectoryContents(blogID, childPath);
+        entered.add(childPath);
+        if (await walkDirectoryContents(blogID, childPath, entered)) interrupted = true;
       } else if (!hasRecentChokidarEvent(blogID, childPath, "upload")) {
-        // if chokidar did report the file it is already being uploaded
+        // if chokidar did report the file it is already being uploaded.
+        // Files unchanged since their last push are skipped here, without
+        // queueing behind the blog's other actions or logging each one
+        const stat = await fs.stat(buildBlogPath(blogID, childPath)).catch(() => null);
+        if (stat && isUnchanged(blogID, childPath, stat)) continue;
         console.log(clfdate(), `Directory contents: upload, blogID: ${blogID}, path: ${childPath}`);
         await performAction(blogID, childPath, "upload");
       }
@@ -149,17 +193,64 @@ const syncDirectoryContents = async (blogID, pathInBlogDirectory) => {
       console.error(clfdate(), `Error syncing directory contents (${blogID}, ${childPath}):`, error);
     }
   }
+
+  return interrupted;
 };
 
-// performAction resolves true from mkdir only if Blot did not already have the
-// directory, so existing directories (fs.watch reports them whenever their
-// contents change) are not walked again.
-const mkdirAndSyncContents = async (blogID, pathInBlogDirectory) => {
-  const created = await performAction(blogID, pathInBlogDirectory, "mkdir");
+// Walk every directory the watcher reports, not only ones Blot did not already
+// have: a child upload or mkdir can create the folder on Blot first, which
+// would otherwise make /mkdir report "not created" and skip the walk (some
+// children synced, siblings missed). Walks are idempotent (chokidar-reported
+// entries are skipped and Blot dedupes uploads), and fs.watch reports existing
+// directories whenever their contents change, so walks of one directory are
+// spaced at least DIRECTORY_WALK_MIN_INTERVAL_MS apart. A request inside that
+// window schedules one trailing walk, so late-arriving children are still seen.
+const DIRECTORY_WALK_MIN_INTERVAL_MS = 60_000;
+const directoryWalks = new Map(); // key -> { lastStart, running, timer }
 
-  if (created) {
-    await syncDirectoryContents(blogID, pathInBlogDirectory);
+const requestDirectoryWalk = async (blogID, pathInBlogDirectory) => {
+  const key = `${blogID}:${pathInBlogDirectory}`;
+  const state = directoryWalks.get(key) || { lastStart: 0, running: false, timer: null };
+  directoryWalks.set(key, state);
+
+  if (state.timer) return; // a trailing walk is already scheduled
+
+  const wait = state.lastStart + DIRECTORY_WALK_MIN_INTERVAL_MS - Date.now();
+
+  if (state.running || wait > 0) {
+    state.timer = setTimeout(
+      () => {
+        state.timer = null;
+        requestDirectoryWalk(blogID, pathInBlogDirectory).catch((error) =>
+          console.error(clfdate(), `Error walking directory (${blogID}, ${pathInBlogDirectory}):`, error)
+        );
+      },
+      state.running ? DIRECTORY_WALK_MIN_INTERVAL_MS : wait
+    );
+    state.timer.unref?.();
+    return;
   }
+
+  state.running = true;
+  state.lastStart = Date.now();
+
+  try {
+    await syncDirectoryContents(blogID, pathInBlogDirectory);
+  } finally {
+    state.running = false;
+    // forget idle directories once their window has passed
+    const forget = setTimeout(() => {
+      if (!state.running && !state.timer && Date.now() - state.lastStart >= DIRECTORY_WALK_MIN_INTERVAL_MS) {
+        directoryWalks.delete(key);
+      }
+    }, DIRECTORY_WALK_MIN_INTERVAL_MS);
+    forget.unref?.();
+  }
+};
+
+const mkdirAndSyncContents = async (blogID, pathInBlogDirectory) => {
+  await performAction(blogID, pathInBlogDirectory, "mkdir");
+  await requestDirectoryWalk(blogID, pathInBlogDirectory);
 };
 
 // Handle file events
@@ -424,6 +515,9 @@ const watch = async (blogID) => {
       // its size and mtime alone, is then skipped without a download.
       if (recordInitialScan && !initialScanComplete && event === "add" && stats) {
         recordPushed(blogID, pathInBlogDirectory, stats);
+      }
+      if (recordInitialScan && !initialScanComplete && event === "addDir" && pathInBlogDirectory) {
+        recordDirectory(blogID, pathInBlogDirectory);
       }
 
       // We only handle file events after the initial scan is complete
