@@ -1,4 +1,3 @@
-var async = require("async");
 var colors = require("colors/safe");
 var eachUser = require("../each/user");
 var getConfirmation = require("../util/getConfirmation");
@@ -27,6 +26,52 @@ function printUsage() {
 if (HELP_FLAG) {
   printUsage();
   process.exit(0);
+}
+
+// scripts/each/user is callback-based and stops at the first error. Runs fn
+// for each user in turn, and passes a rejection from fn on as the error.
+function forEachUser(fn) {
+  return new Promise(function (resolve, reject) {
+    eachUser(
+      function (user, next) {
+        Promise.resolve()
+          .then(function () {
+            return fn(user);
+          })
+          .then(
+            function () {
+              next();
+            },
+            function (err) {
+              next(err);
+            }
+          );
+      },
+      function (err) {
+        if (err) return reject(err);
+        resolve();
+      }
+    );
+  });
+}
+
+function overdueFor(user) {
+  return new Promise(function (resolve, reject) {
+    removal.overdueFor(user, function (err, overdue) {
+      if (err) return reject(err);
+      resolve(overdue);
+    });
+  });
+}
+
+// Runs one of the Delete steps (callback-style); rejects with its error
+function runStep(step, req, res) {
+  return new Promise(function (resolve, reject) {
+    step(req, res, function (err) {
+      if (err) return reject(err);
+      resolve();
+    });
+  });
 }
 
 function describeUser(candidate, blogs) {
@@ -83,64 +128,62 @@ function logUserError(user, action, err) {
   );
 }
 
-function deleteAccount(user, callback) {
+async function deleteAccount(user) {
   var req = { user: user };
   var res = {};
 
-  async.applyEachSeries(
-    [Delete.exports.subscription, Delete.exports.blogs, Delete.exports.user],
-    req,
-    res,
-    callback
-  );
-}
-
-function collectCandidates(done) {
-  var candidates = [];
-
-  eachUser(
-    function (user, next) {
-      removal.overdueFor(user, function (err, overdue) {
-        if (err) {
-          logUserError(user, "checking overdue status for", err);
-          return next();
-        }
-
-        var candidate = removal.removalCandidate(user, overdue);
-
-        if (!candidate) return next();
-
-        withBlogs(user, candidate, next);
-      });
-    },
-    function (err) {
-      done(err, candidates);
-    }
-  );
-
-  function withBlogs(user, candidate, next) {
-    async.map(
-      user.blogs || [],
-      function (blogID, blogDone) {
-        Blog.get({ id: blogID }, blogDone);
-      },
-      function (err, blogs) {
-        if (err) {
-          logUserError(user, "loading blogs for", err);
-          return next();
-        }
-
-        candidate.blogs = blogs.filter(Boolean);
-        candidates.push(candidate);
-
-        next();
-      }
-    );
+  for (const step of [
+    Delete.exports.subscription,
+    Delete.exports.blogs,
+    Delete.exports.user,
+  ]) {
+    await runStep(step, req, res);
   }
 }
 
-function runFastMode(candidates, done) {
-  if (!candidates.length) return done(null, 0);
+async function collectCandidates() {
+  var candidates = [];
+
+  async function withBlogs(user, candidate) {
+    var blogs;
+
+    try {
+      blogs = await Promise.all(
+        (user.blogs || []).map(function (blogID) {
+          return Blog.get({ id: blogID });
+        })
+      );
+    } catch (err) {
+      logUserError(user, "loading blogs for", err);
+      return;
+    }
+
+    candidate.blogs = blogs.filter(Boolean);
+    candidates.push(candidate);
+  }
+
+  await forEachUser(async function (user) {
+    var overdue;
+
+    try {
+      overdue = await overdueFor(user);
+    } catch (err) {
+      logUserError(user, "checking overdue status for", err);
+      return;
+    }
+
+    var candidate = removal.removalCandidate(user, overdue);
+
+    if (!candidate) return;
+
+    await withBlogs(user, candidate);
+  });
+
+  return candidates;
+}
+
+async function runFastMode(candidates) {
+  if (!candidates.length) return 0;
 
   candidates.forEach(function (candidate, index) {
     console.log(index + 1 + ". " + describeCandidateSummary(candidate));
@@ -148,81 +191,79 @@ function runFastMode(candidates, done) {
 
   var prompt = FAST_CONFIRMATION_PROMPT.replace("<count>", candidates.length);
 
-  getConfirmation(prompt, function (_, yes) {
-    if (!yes) {
-      console.log(colors.red("Deletion cancelled."));
-      return done(null, 0);
-    }
+  var yes = await getConfirmation(prompt);
 
-    var deleted = 0;
+  if (!yes) {
+    console.log(colors.red("Deletion cancelled."));
+    return 0;
+  }
 
-    async.eachSeries(
-      candidates,
-      function (candidate, next) {
-        deleteAccount(candidate.user, function (deleteErr) {
-          if (deleteErr) {
-            logUserError(candidate.user, "deleting", deleteErr);
-            return next();
-          }
-          deleted += 1;
-          console.log(colors.green("Deleted " + candidate.user.email));
-          next();
-        });
-      },
-      function (err) {
-        done(err, deleted);
-      }
-    );
-  });
-}
-
-function runInteractiveMode(candidates, done) {
   var deleted = 0;
 
-  async.eachSeries(
-    candidates,
-    function (candidate, next) {
-      getConfirmation(
-        describeUser(candidate, candidate.blogs),
-        function (_, yes) {
-          if (!yes) {
-            console.log(colors.red("Skipped " + candidate.user.email));
-            return next();
-          }
-
-          deleteAccount(candidate.user, function (deleteErr) {
-            if (deleteErr) {
-              logUserError(candidate.user, "deleting", deleteErr);
-              return next();
-            }
-            deleted += 1;
-            console.log(colors.green("Deleted " + candidate.user.email));
-            next();
-          });
-        }
-      );
-    },
-    function (err) {
-      done(err, deleted);
+  for (const candidate of candidates) {
+    try {
+      await deleteAccount(candidate.user);
+    } catch (deleteErr) {
+      logUserError(candidate.user, "deleting", deleteErr);
+      continue;
     }
+
+    deleted += 1;
+    console.log(colors.green("Deleted " + candidate.user.email));
+  }
+
+  return deleted;
+}
+
+async function runInteractiveMode(candidates) {
+  var deleted = 0;
+
+  for (const candidate of candidates) {
+    var yes = await getConfirmation(describeUser(candidate, candidate.blogs));
+
+    if (!yes) {
+      console.log(colors.red("Skipped " + candidate.user.email));
+      continue;
+    }
+
+    try {
+      await deleteAccount(candidate.user);
+    } catch (deleteErr) {
+      logUserError(candidate.user, "deleting", deleteErr);
+      continue;
+    }
+
+    deleted += 1;
+    console.log(colors.green("Deleted " + candidate.user.email));
+  }
+
+  return deleted;
+}
+
+async function run() {
+  console.log(
+    "Scanning for cancelled and overdue users that passed their grace period..."
   );
+  if (!FAST_MODE) {
+    console.log("Tip: use -fast to review all candidates and confirm once.");
+  }
+
+  var candidates = await collectCandidates();
+
+  var deleted = FAST_MODE
+    ? await runFastMode(candidates)
+    : await runInteractiveMode(candidates);
+
+  console.log("Done. Candidates:", candidates.length, "Deleted:", deleted);
+  process.exit();
 }
 
-console.log(
-  "Scanning for cancelled and overdue users that passed their grace period..."
+run().then(
+  function () {
+    process.exit(0);
+  },
+  function (err) {
+    console.error(err);
+    process.exit(1);
+  }
 );
-if (!FAST_MODE) {
-  console.log("Tip: use -fast to review all candidates and confirm once.");
-}
-
-collectCandidates(function (err, candidates) {
-  if (err) throw err;
-
-  var runMode = FAST_MODE ? runFastMode : runInteractiveMode;
-
-  runMode(candidates, function (runErr, deleted) {
-    if (runErr) throw runErr;
-    console.log("Done. Candidates:", candidates.length, "Deleted:", deleted);
-    process.exit();
-  });
-});

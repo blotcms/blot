@@ -5,9 +5,12 @@ if (!userID) throw new Error("Please pass userID as first argument");
 if (!blogID) throw new Error("Please pass blogID as second argument");
 
 var User = require("models/user");
+var { promisify } = require("util");
 
-User.getById(userID, function (err, user) {
-  if (err || !user) throw err || new Error("No user with userID " + userID);
+async function main() {
+  var user = await User.getById(userID);
+
+  if (!user) throw new Error("No user with userID " + userID);
 
   if (user.blogs.indexOf(blogID) === -1)
     throw new Error("User " + userID + " does not have blog " + blogID);
@@ -20,13 +23,18 @@ User.getById(userID, function (err, user) {
 
   console.log("BEFORE", before, "AFTER", user.blogs);
 
-  User.set(userID, { blogs: user.blogs }, function (err) {
-    if (err) throw err;
+  await promisify(User.set)(userID, { blogs: user.blogs });
 
-    console.log(
-      "Warning! This will not affect the user's subscription settings to make sure to adjust their bill"
-    );
-    console.log("Done!");
-    process.exit();
-  });
-});
+  console.log(
+    "Warning! This will not affect the user's subscription settings to make sure to adjust their bill"
+  );
+  console.log("Done!");
+}
+
+main().then(
+  () => process.exit(0),
+  (err) => {
+    console.error(err);
+    process.exit(1);
+  }
+);

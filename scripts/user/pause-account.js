@@ -7,13 +7,13 @@
 //
 // Usage: node scripts/user/pause-account.js <email>
 
-var async = require("async");
 var config = require("config");
 var stripe = require("stripe")(config.stripe.secret);
 var colors = require("colors/safe");
 var User = require("models/user");
 var get = require("../get/user");
 var getConfirmation = require("../util/getConfirmation");
+var { promisify } = require("util");
 
 var email = process.argv[2];
 
@@ -27,69 +27,40 @@ if (!email) {
 // overdue in the first place) keeps retrying/finalizing on its own schedule
 // unless we clear it too. Open invoices are voided; draft invoices haven't
 // been finalized yet (never charged), so they're deleted outright instead.
-function clearExistingInvoices(subscriptionId, callback) {
+async function clearExistingInvoices(subscriptionId) {
   var toVoid = [];
   var toDelete = [];
 
-  async.parallel(
-    [
-      function (next) {
-        stripe.invoices
-          .list({ subscription: subscriptionId, status: "open", limit: 100 })
-          .autoPagingEach(function (invoice) {
-            toVoid.push(invoice.id);
-          })
-          .then(function () {
-            next();
-          })
-          .catch(next);
-      },
-      function (next) {
-        stripe.invoices
-          .list({ subscription: subscriptionId, status: "draft", limit: 100 })
-          .autoPagingEach(function (invoice) {
-            toDelete.push(invoice.id);
-          })
-          .then(function () {
-            next();
-          })
-          .catch(next);
-      },
-    ],
-    function (err) {
-      if (err) return callback(err);
+  await Promise.all([
+    stripe.invoices
+      .list({ subscription: subscriptionId, status: "open", limit: 100 })
+      .autoPagingEach(function (invoice) {
+        toVoid.push(invoice.id);
+      }),
+    stripe.invoices
+      .list({ subscription: subscriptionId, status: "draft", limit: 100 })
+      .autoPagingEach(function (invoice) {
+        toDelete.push(invoice.id);
+      }),
+  ]);
 
-      async.series(
-        [
-          function (next) {
-            async.each(
-              toVoid,
-              function (invoiceId, done) {
-                stripe.invoices.voidInvoice(invoiceId, done);
-              },
-              next
-            );
-          },
-          function (next) {
-            async.each(
-              toDelete,
-              function (invoiceId, done) {
-                stripe.invoices.del(invoiceId, done);
-              },
-              next
-            );
-          },
-        ],
-        function (err) {
-          callback(err, { voided: toVoid, deleted: toDelete });
-        }
-      );
-    }
+  await Promise.all(
+    toVoid.map(function (invoiceId) {
+      return stripe.invoices.voidInvoice(invoiceId);
+    })
   );
+
+  await Promise.all(
+    toDelete.map(function (invoiceId) {
+      return stripe.invoices.del(invoiceId);
+    })
+  );
+
+  return { voided: toVoid, deleted: toDelete };
 }
 
-get(email, function (err, user) {
-  if (err) throw err;
+async function main() {
+  var user = await promisify(get)(email);
 
   if (
     !user.subscription ||
@@ -124,76 +95,65 @@ get(email, function (err, user) {
     "the account from the overdue/cancellation deletion checks. (y/n)",
   ].join("\n");
 
-  getConfirmation(message, function (err, ok) {
-    if (!ok) {
-      console.log(colors.red("Did not pause " + user.email));
-      return process.exit();
-    }
+  var ok = await getConfirmation(message);
 
-    function pauseSubscription(next) {
-      stripe.customers.updateSubscription(
+  if (!ok) {
+    console.log(colors.red("Did not pause " + user.email));
+    return process.exit();
+  }
+
+  // Always check the live subscription rather than trusting our cached
+  // copy: pause_collection can have a resumes_at in the past, or the cache
+  // can simply be stale, so "already paused" isn't reliable evidence that
+  // it's still paused right now.
+  var liveSubscription = await stripe.customers.retrieveSubscription(
+    user.subscription.customer,
+    user.subscription.id
+  );
+
+  var subscription = liveSubscription.pause_collection
+    ? liveSubscription
+    : await stripe.customers.updateSubscription(
         user.subscription.customer,
         user.subscription.id,
-        { pause_collection: { behavior: "void" } },
-        next
+        { pause_collection: { behavior: "void" } }
       );
-    }
 
-    // Always check the live subscription rather than trusting our cached
-    // copy: pause_collection can have a resumes_at in the past, or the cache
-    // can simply be stale, so "already paused" isn't reliable evidence that
-    // it's still paused right now.
-    stripe.customers.retrieveSubscription(
-      user.subscription.customer,
-      user.subscription.id,
-      function (err, liveSubscription) {
-        if (err) throw err;
+  var cleared = await clearExistingInvoices(subscription.id);
 
-        var next = liveSubscription.pause_collection
-          ? function (cb) {
-              cb(null, liveSubscription);
-            }
-          : pauseSubscription;
-
-        next(function (err, subscription) {
-          if (err) throw err;
-
-          clearExistingInvoices(subscription.id, function (err, cleared) {
-            if (err) throw err;
-
-            if (cleared.voided.length) {
-              console.log(
-                colors.yellow(
-                  "Voided " +
-                    cleared.voided.length +
-                    " open invoice(s): " +
-                    cleared.voided.join(", ")
-                )
-              );
-            }
-            if (cleared.deleted.length) {
-              console.log(
-                colors.yellow(
-                  "Deleted " +
-                    cleared.deleted.length +
-                    " draft invoice(s): " +
-                    cleared.deleted.join(", ")
-                )
-              );
-            }
-
-            // Disabling always happens, even if collection was already
-            // paused by hand on Stripe: this is what keeps the blogs from
-            // rendering.
-            User.disable(user, { subscription: subscription }, function (err) {
-              if (err) throw err;
-
-              console.log(colors.green("Paused and disabled " + user.email));
-              process.exit();
-            });
-          });
-        });
-      }
+  if (cleared.voided.length) {
+    console.log(
+      colors.yellow(
+        "Voided " +
+          cleared.voided.length +
+          " open invoice(s): " +
+          cleared.voided.join(", ")
+      )
     );
-  });
-});
+  }
+  if (cleared.deleted.length) {
+    console.log(
+      colors.yellow(
+        "Deleted " +
+          cleared.deleted.length +
+          " draft invoice(s): " +
+          cleared.deleted.join(", ")
+      )
+    );
+  }
+
+  // Disabling always happens, even if collection was already
+  // paused by hand on Stripe: this is what keeps the blogs from
+  // rendering.
+  await promisify(User.disable)(user, { subscription: subscription });
+
+  console.log(colors.green("Paused and disabled " + user.email));
+}
+
+main().then(
+  () => process.exit(0),
+  (err) => {
+    console.error(err);
+    process.exit(1);
+  }
+);

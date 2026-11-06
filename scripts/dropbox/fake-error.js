@@ -69,7 +69,7 @@ async function run(mode, blogID, flags) {
       await require("clients/dropbox/sync/reset-from-blot")(blogID);
     } else {
       const Blog = require("models/blog");
-      const blog = await promisify(Blog.get)({ id: blogID });
+      const blog = await Blog.get({ id: blogID });
       await promisify(require("clients/dropbox/sync"))(blog);
     }
     console.log("completed without throwing");

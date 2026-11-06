@@ -1,23 +1,35 @@
-var async = require("async");
 var customerID = process.argv[2];
 var User = require("models/user");
 
-User.getAllIds(function (err, uids) {
-  if (err) throw err;
-  async.each(
-    uids,
-    function (uid, next) {
-      User.getById(uid, function (err, user) {
-        if (
-          user &&
-          user.subscription &&
-          user.subscription.customer === customerID
-        ) {
-          console.log("MATCH", user.email, user.blogs);
-        }
-        next();
-      });
-    },
-    process.exit
+async function main() {
+  var uids = await User.getAllIds();
+
+  await Promise.all(
+    uids.map(async function (uid) {
+      var user;
+
+      try {
+        user = await User.getById(uid);
+      } catch {
+        // Ignored before: a user that fails to load is just not a match
+        return;
+      }
+
+      if (
+        user &&
+        user.subscription &&
+        user.subscription.customer === customerID
+      ) {
+        console.log("MATCH", user.email, user.blogs);
+      }
+    })
   );
-});
+}
+
+main().then(
+  () => process.exit(0),
+  (err) => {
+    console.error(err);
+    process.exit(1);
+  }
+);

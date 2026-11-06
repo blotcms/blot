@@ -135,11 +135,7 @@ async function processBlog(blog) {
 }
 
 function blogIDs() {
-  if (!identifier) {
-    return new Promise((resolve, reject) =>
-      Blog.getAllIDs((err, ids) => (err ? reject(err) : resolve(ids)))
-    );
-  }
+  if (!identifier) return Blog.getAllIDs();
 
   return new Promise((resolve, reject) =>
     getBlog(identifier, (err, user, blog) =>
@@ -156,11 +152,7 @@ async function main() {
   );
 
   for (const blogID of await blogIDs()) {
-    const blog = await new Promise((resolve, reject) =>
-      Blog.get({ id: blogID }, (err, blog) =>
-        err ? reject(err) : resolve(blog)
-      )
-    );
+    const blog = await Blog.get({ id: blogID });
 
     if (!blog) continue;
 

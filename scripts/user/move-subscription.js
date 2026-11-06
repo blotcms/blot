@@ -4,39 +4,38 @@ var to = process.argv[3];
 var get = require("../get/user");
 
 var User = require("models/user");
+var { promisify } = require("util");
 
 console.log(from);
 console.log(to);
 
-get(from, function (err, oldUser) {
-  if (err) throw err;
+async function main() {
+  var oldUser = await promisify(get)(from);
+  var newUser = await promisify(get)(to);
 
-  get(to, function (err, newUser) {
-    if (err) throw err;
+  var customerID = oldUser.subscription.customer;
 
-    var customerID = oldUser.subscription.customer;
+  var newSubscription = { subscription: oldUser.subscription };
+  var oldSubscription = {
+    subscription: newUser.subscription,
+  };
 
-    var newSubscription = { subscription: oldUser.subscription };
-    var oldSubscription = {
-      subscription: newUser.subscription,
-    };
+  console.log("Customer ID", customerID);
 
-    console.log("Customer ID", customerID);
+  console.log("Subscription for ", to);
+  console.log(newSubscription);
 
-    console.log("Subscription for ", to);
-    console.log(newSubscription);
+  console.log("Subscription for ", from);
+  console.log(oldSubscription);
 
-    console.log("Subscription for ", from);
-    console.log(oldSubscription);
+  await promisify(User.set)(newUser.uid, newSubscription);
+  await promisify(User.disable)(oldUser, oldSubscription);
+}
 
-    User.set(newUser.uid, newSubscription, function (err) {
-      if (err) throw err;
-
-      User.disable(oldUser, oldSubscription, function (err) {
-        if (err) throw err;
-
-        process.exit();
-      });
-    });
-  });
-});
+main().then(
+  () => process.exit(0),
+  (err) => {
+    console.error(err);
+    process.exit(1);
+  }
+);

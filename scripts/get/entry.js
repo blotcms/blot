@@ -4,22 +4,47 @@ var parseUrl = require("url").parse;
 
 // Takes a URL and fetches the blog, user and entry
 
-module.exports = function get(url, callback) {
-  blog(url, function (err, user, blog) {
-    if (err) return callback(err);
-
-    url = parseUrl(url);
-
-    // getByUrl fails otherwise. This is probably a flaw?
-    url.path = decodeURIComponent(url.path);
-
-    Entry.getByUrl(blog.id, url.path, function (entryFromPermalink) {
-      Entry.get(blog.id, url.path, function (entryFromPath) {
-        if (!entryFromPermalink && !entryFromPath)
-          return callback(new Error("No entry"), user, blog);
-
-        callback(err, user, blog, entryFromPermalink || entryFromPath);
-      });
+// Resolves { err, user, blog, entry }. When the blog exists but has no such
+// entry, err is "No entry" and the user and blog are still returned.
+async function find(url) {
+  var found = await new Promise(function (resolve, reject) {
+    blog(url, function (err, user, blog) {
+      if (err) return reject(err);
+      resolve({ user, blog });
     });
   });
+
+  url = parseUrl(url);
+
+  // getByUrl fails otherwise. This is probably a flaw?
+  url.path = decodeURIComponent(url.path);
+
+  // Lookup errors have always been ignored here, so they count as no entry
+  var entryFromPermalink = await new Promise(function (resolve) {
+    Entry.getByUrl(found.blog.id, url.path, resolve);
+  });
+  var entryFromPath = await new Promise(function (resolve) {
+    Entry.get(found.blog.id, url.path, resolve);
+  });
+
+  if (!entryFromPermalink && !entryFromPath)
+    return { err: new Error("No entry"), user: found.user, blog: found.blog };
+
+  return {
+    err: null,
+    user: found.user,
+    blog: found.blog,
+    entry: entryFromPermalink || entryFromPath,
+  };
+}
+
+module.exports = function get(url, callback) {
+  find(url).then(
+    function (found) {
+      callback(found.err, found.user, found.blog, found.entry);
+    },
+    function (err) {
+      callback(err);
+    }
+  );
 };

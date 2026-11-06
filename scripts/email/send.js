@@ -1,12 +1,11 @@
 var send = require("helper/email").send;
 var getConfirmation = require("../util/getConfirmation");
-var async = require("async");
 var fs = require("fs-extra");
 var colors = require("colors/safe");
 
-module.exports = function (emailFile, users, callback) {
+async function sendToUsers(emailFile, users) {
   if (!users.length)
-    return callback(new Error("No users in list of users to send email to."));
+    throw new Error("No users in list of users to send email to.");
 
   var unique = {};
 
@@ -22,29 +21,39 @@ module.exports = function (emailFile, users, callback) {
       colors.dim("\n-------------------\n")
   );
 
-  getConfirmation(
-    "Send email to " + colors.green(users.length + " users") + "? (y/n)",
-    function (err, ok) {
-      if (!ok) {
-        console.log("Emails were not sent.");
-        return process.exit();
-      }
+  const ok = await getConfirmation(
+    "Send email to " + colors.green(users.length + " users") + "? (y/n)"
+  );
 
-      async.eachSeries(
-        users,
-        function (user, next) {
-          send(user, emailFile, user.email, function (err) {
-            if (err) console.log("Error sending message to", user.email);
-            next();
-          });
-        },
-        function (err) {
-          if (err) return callback(err);
+  if (!ok) {
+    console.log("Emails were not sent.");
+    return process.exit();
+  }
 
-          console.log("Emails sent");
-          callback();
-        }
-      );
+  for (const user of users) {
+    try {
+      await new Promise(function (resolve, reject) {
+        send(user, emailFile, user.email, function (err) {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+    } catch (err) {
+      console.log("Error sending message to", user.email);
+    }
+  }
+
+  console.log("Emails sent");
+}
+
+// Keeps the callback API. Nothing in the repository calls this module.
+module.exports = function (emailFile, users, callback) {
+  sendToUsers(emailFile, users).then(
+    function () {
+      callback();
+    },
+    function (err) {
+      callback(err);
     }
   );
 };

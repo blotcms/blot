@@ -20,28 +20,68 @@ console.log("Randomizing dates for all entries without date metadata...");
 console.log("Start date: " + limit.format());
 console.log("End date: " + end.format());
 
-get(identifier, function (err, user, blog) {
-  Entries.each(
-    blog.id,
-    function (entry, next) {
-      if (entry.deleted || entry.draft || entry.scheduled || entry.page)
-        return next();
+function getBlog(identifier) {
+  return new Promise(function (resolve, reject) {
+    get(identifier, function (err, user, blog) {
+      if (err) return reject(err);
+      resolve(blog);
+    });
+  });
+}
 
-      // if (entry.metadata.date) return next();
+function eachEntry(blogID, doThis) {
+  return new Promise(function (resolve, reject) {
+    Entries.each(
+      blogID,
+      function (entry, next) {
+        doThis(entry).then(
+          function () {
+            next();
+          },
+          function (err) {
+            next(err);
+          }
+        );
+      },
+      function (err) {
+        if (err) return reject(err);
+        resolve();
+      }
+    );
+  });
+}
 
-      var newDateStamp =
-        limit.valueOf() +
-        Math.floor(Math.random() * (end.valueOf() - limit.valueOf()));
+function setEntry(blogID, path, updates) {
+  return new Promise(function (resolve, reject) {
+    Entry.set(blogID, path, updates, function (err) {
+      if (err) return reject(err);
+      resolve();
+    });
+  });
+}
 
-      // console.log(newDateStamp, moment(newDateStamp).format(), entry.path);
+async function main() {
+  var blog = await getBlog(identifier);
 
-      Entry.set(blog.id, entry.path, { dateStamp: newDateStamp }, next);
-    },
-    function (err) {
-      if (err) throw err;
+  await eachEntry(blog.id, async function (entry) {
+    if (entry.deleted || entry.draft || entry.scheduled || entry.page) return;
 
-      console.log("Complete!");
-      process.exit();
-    }
-  );
+    // if (entry.metadata.date) return next();
+
+    var newDateStamp =
+      limit.valueOf() +
+      Math.floor(Math.random() * (end.valueOf() - limit.valueOf()));
+
+    // console.log(newDateStamp, moment(newDateStamp).format(), entry.path);
+
+    await setEntry(blog.id, entry.path, { dateStamp: newDateStamp });
+  });
+
+  console.log("Complete!");
+  process.exit();
+}
+
+main().catch(function (err) {
+  console.error(err);
+  process.exit(1);
 });

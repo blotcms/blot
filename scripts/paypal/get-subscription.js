@@ -5,8 +5,12 @@ const getConfirmation = require("../util/getConfirmation");
 const colors = require("colors/safe");
 const User = require("models/user");
 const each = require("../each/user");
+const { promisify } = require("util");
 
-async function main(user, callback) {
+// Resolves null when the subscription was updated, and undefined when the
+// user has no matching subscription (the callback version passed the same
+// values to its callback).
+async function main(user) {
   if (!user.paypal || !user.paypal.id) {
     console.log(
       colors.dim(
@@ -16,7 +20,7 @@ async function main(user, callback) {
         "does not have a PayPal subscription"
       )
     );
-    return callback();
+    return;
   }
 
   const response = await fetch(
@@ -49,44 +53,49 @@ async function main(user, callback) {
         "does not have a matching PayPal subscription anymore"
       )
     );
-    return callback();
+    return;
   }
 
-  User.set(user.uid, { paypal }, function (err) {
-    if (err) return callback(err);
-    console.log(
-      colors.green(
-        "User:",
-        user.uid,
-        user.email,
-        "subscription updated from PayPal"
-      )
-    );
-    callback(null);
-  });
+  await promisify(User.set)(user.uid, { paypal });
+  console.log(
+    colors.green(
+      "User:",
+      user.uid,
+      user.email,
+      "subscription updated from PayPal"
+    )
+  );
+  return null;
 }
 
 module.exports = main;
 
 if (require.main === module) {
   if (process.argv[2]) {
-    get(process.argv[2], function (err, user) {
-      main(user, function (err, res) {
-        if (err) throw err;
-        console.log(res);
-      });
+    (async () => {
+      const user = await promisify(get)(process.argv[2]);
+      console.log(await main(user));
+    })().catch((err) => {
+      console.error(err);
+      process.exit(1);
     });
   } else {
-    getConfirmation(
-      "Fetch latest subscription information from PayPal for all users? (y/N)",
-      function (err, ok) {
-        if (!ok) return process.exit();
-        each(main, function (err) {
-          if (err) throw err;
-          console.log("Done!");
-          process.exit();
-        });
-      }
-    );
+    (async () => {
+      const ok = await getConfirmation(
+        "Fetch latest subscription information from PayPal for all users? (y/N)"
+      );
+      if (!ok) return process.exit();
+      await promisify(each)((user, next) => {
+        main(user).then(
+          () => next(),
+          (err) => next(err)
+        );
+      });
+      console.log("Done!");
+      process.exit();
+    })().catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
   }
 }

@@ -2,7 +2,6 @@ var send = require("helper/email").send;
 var letter = process.argv[2];
 var fs = require("fs");
 var client = require("models/client");
-var async = require("async");
 
 if (!letter) {
   console.log("Select an email to send:");
@@ -14,72 +13,58 @@ if (!letter) {
   process.exit();
 }
 
-main(letter, function (err) {
-  if (err) throw err;
+main(letter).then(
+  function () {
+    console.log("All emails delivered!");
+    process.exit();
+  },
+  function (err) {
+    console.error(err);
+    process.exit(1);
+  }
+);
 
-  console.log("All emails delivered!");
-  process.exit();
-});
-
-function main(letter, callback) {
+async function main(letter) {
   var emailPath = __dirname + "/../../app/helper/email/newsletters/" + letter;
 
-  if (!fs.statSync(emailPath).isFile())
-    return callback(new Error("Not a file"));
+  if (!fs.statSync(emailPath).isFile()) throw new Error("Not a file");
 
-  getAllSubscribers(function (err, emails) {
-    if (err) return callback(err);
+  var emails = await getAllSubscribers();
 
-    console.log(
-      "Sending " + letter + " out to " + emails.length + " subscribers"
-    );
+  console.log(
+    "Sending " + letter + " out to " + emails.length + " subscribers"
+  );
 
-    async.filter(emails, alreadySent, function (err, emails) {
-      if (err) return callback(err);
+  // Checked in parallel, and the order of the list is kept
+  var unsent = await Promise.all(emails.map((email) => alreadySent(email)));
+  emails = emails.filter((email, i) => unsent[i]);
 
-      // When we want to preview a newsletter before it goes out
-      if (process.env.PREVIEW_NEWSLETTER === "true") {
-        emails = ["example@example.com"];
-      }
+  // When we want to preview a newsletter before it goes out
+  if (process.env.PREVIEW_NEWSLETTER === "true") {
+    emails = ["example@example.com"];
+  }
 
-      async.eachSeries(
-        emails,
-        function (email, next) {
-          console.log("Sending", email);
+  for (const email of emails) {
+    console.log("Sending", email);
 
-          send({ email: email }, emailPath, email, function (err) {
-            if (err) return next(err);
-
-            console.log(". Email sent to", email);
-            client
-              .sAdd("newsletter:letter:" + letter, email)
-              .then(function () {
-                next();
-              })
-              .catch(next);
-          });
-        },
-        callback
-      );
+    await new Promise(function (resolve, reject) {
+      send({ email: email }, emailPath, email, function (err) {
+        if (err) return reject(err);
+        resolve();
+      });
     });
-  });
+
+    console.log(". Email sent to", email);
+    await client.sAdd("newsletter:letter:" + letter, email);
+  }
 }
 
-function getAllSubscribers(callback) {
-  client
-    .sMembers("newsletter:list")
-    .then(function (emails) {
-      callback(null, emails);
-    })
-    .catch(callback);
+function getAllSubscribers() {
+  return client.sMembers("newsletter:list");
 }
 
-function alreadySent(email, done) {
-  client
-    .sIsMember("newsletter:letter:" + letter, email)
-    .then(function (member) {
-      if (member) console.log("Email already sent to", email);
-      done(null, !member);
-    })
-    .catch(done);
+async function alreadySent(email) {
+  var member = await client.sIsMember("newsletter:letter:" + letter, email);
+  if (member) console.log("Email already sent to", email);
+  return !member;
 }

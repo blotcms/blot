@@ -17,7 +17,6 @@
 const Blog = require("models/blog");
 const File = require("models/file");
 const hold = require("sync/hold");
-const { promisify } = require("util");
 
 function usage(message) {
   if (message) console.error(message + "\n");
@@ -44,7 +43,7 @@ async function main() {
   const options = parse(process.argv.slice(2));
   const ids = options.blog
     ? [options.blog]
-    : (await promisify(Blog.getAllIDs)()).slice().sort();
+    : (await Blog.getAllIDs()).slice().sort();
   const totals = { blogs: 0, dirs: 0, missing: 0, names: 0 };
   const skipped = [];
 

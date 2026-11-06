@@ -26,9 +26,18 @@ if (!process.argv[2]) {
   process.exit(1);
 }
 
-Blog.get({ id: process.argv[2] }, function (err, blog) {
-  if (err || !blog) {
-    console.error(err ? err.message : "No blog " + process.argv[2]);
+async function main() {
+  let blog;
+
+  try {
+    blog = await Blog.get({ id: process.argv[2] });
+  } catch (err) {
+    console.error(err.message);
+    return process.exit(1);
+  }
+
+  if (!blog) {
+    console.error("No blog " + process.argv[2]);
     return process.exit(1);
   }
 
@@ -42,4 +51,9 @@ Blog.get({ id: process.argv[2] }, function (err, blog) {
   process.stdout.write(JSON.stringify(settings), function () {
     process.exit();
   });
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
 });

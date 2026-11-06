@@ -47,6 +47,7 @@ const rebuildEntry = require("sync/update/rebuildEntry");
 const folderPostSourceFolder = require("sync/update/folderPostSourceFolder");
 const eachBlog = require("../each/blog");
 const progress = require("../each/progress");
+const { promisify } = require("util");
 
 // Errors from build() meaning the source can no longer become an entry, the
 // same as rebuildDependents' NO_LONGER_VALID_ERRORS. Here the entry is left
@@ -116,13 +117,8 @@ const log = (blog, ...rest) =>
 
 const messageOf = (err) => (err && err.message) || String(err);
 
-const fromCallback = (fn) =>
-  new Promise((resolve, reject) =>
-    fn((err, result) => (err ? reject(err) : resolve(result)))
-  );
-
 async function resolveBlog(identifier) {
-  const blogIDs = await fromCallback((cb) => Blog.getAllIDs(cb));
+  const blogIDs = await Blog.getAllIDs();
 
   // Not scripts/get/blog.js, which also mints an access token.
   const found =
@@ -143,7 +139,7 @@ async function resolveBlog(identifier) {
 const getBlogBy = (query) =>
   Object.values(query)[0] === undefined
     ? Promise.resolve(null)
-    : fromCallback((cb) => Blog.get(query, cb)).catch(() => null);
+    : Blog.get(query).catch(() => null);
 
 const getEntry = (blogID, path) =>
   new Promise((resolve) => Entry.get(blogID, path, resolve));
@@ -153,14 +149,14 @@ const getEntry = (blogID, path) =>
 function listEntryPaths(blog) {
   const paths = [];
 
-  return fromCallback((cb) =>
+  return new Promise((resolve, reject) =>
     Entries.each(
       blog.id,
       (entry, next) => {
         if (!entry.deleted) paths.push(entry.path);
         setImmediate(next);
       },
-      cb
+      (err) => (err ? reject(err) : resolve())
     )
   ).then(() => paths);
 }
@@ -190,7 +186,7 @@ async function rebuildEntries(blog, paths) {
         }
 
         try {
-          await fromCallback((cb) => rebuildEntry(blog, entry, cb));
+          await promisify(rebuildEntry)(blog, entry);
           rebuilt++;
         } catch (err) {
           if (SOURCE_GONE.indexOf(err && err.code) > -1) {
@@ -221,7 +217,7 @@ async function rebuildEntries(blog, paths) {
 
 async function processBlog(blog) {
   if (options["dry-run"]) {
-    const count = await fromCallback((cb) => Entries.getAllTotal(blog.id, cb));
+    const count = await Entries.getAllTotal(blog.id);
 
     stats.blogsDone++;
     stats.entriesRebuilt += count;
@@ -262,7 +258,7 @@ async function processBlog(blog) {
   // As app/sync/rebuild.js does: rendered pages are cached against cacheID,
   // and setting it flushes the blog's cache directories too.
   if (rebuilt) {
-    await fromCallback((cb) => Blog.set(blog.id, { cacheID: Date.now() }, cb));
+    await Blog.set(blog.id, { cacheID: Date.now() });
   }
 
   stats.blogsDone++;
@@ -318,36 +314,32 @@ function summarize() {
   }
 }
 
-// Called by each/blog for every blog with an owner. Never passes an error to
-// next: whatever goes wrong with one blog is logged, and the next carries on.
-function doThis(user, blog, next) {
+// Called by each/blog for every blog with an owner. Never throws: whatever goes
+// wrong with one blog is logged, and the next carries on.
+async function doThis(user, blog) {
   const position = ++blogsStarted + startOffset;
 
-  (async () => {
+  try {
     if (blog.isDisabled) {
       console.log(clfdate(), blog.id.slice(0, 12), "Skipping disabled blog");
-      return;
+    } else {
+      await processBlog(blog);
     }
-
-    await processBlog(blog);
-  })()
-    .catch((err) => {
-      console.error(
-        clfdate(),
-        blog.id.slice(0, 12),
-        "Error processing blog:",
-        messageOf(err)
-      );
-      stats.blogsSkipped.push({
-        id: blog.id,
-        handle: blog.handle || "",
-        reason: messageOf(err),
-      });
-    })
-    .then(() => {
-      stats.lastBlog = { position, id: blog.id };
-      next();
+  } catch (err) {
+    console.error(
+      clfdate(),
+      blog.id.slice(0, 12),
+      "Error processing blog:",
+      messageOf(err)
+    );
+    stats.blogsSkipped.push({
+      id: blog.id,
+      handle: blog.handle || "",
+      reason: messageOf(err),
     });
+  }
+
+  stats.lastBlog = { position, id: blog.id };
 }
 
 function allDone(err) {
@@ -372,7 +364,15 @@ async function main() {
     options["dry-run"] ? "Counting entries..." : "Rebuilding entries..."
   );
 
-  eachBlog(doThis, allDone, options);
+  let err = null;
+
+  try {
+    await eachBlog.promise(doThis, options);
+  } catch (eachErr) {
+    err = eachErr;
+  }
+
+  allDone(err);
 }
 
 main().catch((err) => {

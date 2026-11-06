@@ -4,8 +4,45 @@ var stripe = require("stripe")(config.stripe.secret);
 var getConfirmation = require("../util/getConfirmation");
 var each = require("../each/user");
 var colors = require("colors/safe");
+var withCallback = require("helper/withCallback");
 
-function main(user, callback) {
+// scripts/each/user is callback-based and stops at the first error. Runs fn
+// for each user in turn, and passes a rejection from fn on as the error.
+function forEachUser(fn) {
+  return new Promise(function (resolve, reject) {
+    each(
+      function (user, next) {
+        Promise.resolve()
+          .then(function () {
+            return fn(user);
+          })
+          .then(
+            function () {
+              next();
+            },
+            function (err) {
+              next(err);
+            }
+          );
+      },
+      function (err) {
+        if (err) return reject(err);
+        resolve();
+      }
+    );
+  });
+}
+
+function setUserSubscription(uid, subscription) {
+  return new Promise(function (resolve, reject) {
+    User.set(uid, { subscription: subscription }, function (err) {
+      if (err) return reject(err);
+      resolve();
+    });
+  });
+}
+
+async function main(user) {
   if (
     !user.subscription ||
     !user.subscription.customer ||
@@ -20,87 +57,91 @@ function main(user, callback) {
       )
     );
 
-    return callback();
+    return;
   }
 
-  stripe.customers.retrieveSubscription(
-    user.subscription.customer,
-    user.subscription.id,
-    function (err, subscription) {
-      if (
-        err &&
-        err.code === "resource_missing" &&
-        err.param === "subscription"
-      ) {
-        console.log(
-          colors.red(
-            "User:",
-            user.uid,
-            user.email,
-            "used to have a Stripe subscription but no longer does, customer still exists on Stripe"
-          )
-        );
-        return callback();
-      }
+  var subscription;
 
-      if (err && err.code === "resource_missing" && err.param === "id") {
-        console.log(
-          colors.red(
-            "User:",
-            user.uid,
-            user.email,
-            "used to have a Stripe subscription but no longer does, customer does not exist on Stripe"
-          )
-        );
-        return callback();
-      }
-
-      if (err) {
-        console.log(err);
-      }
-
-      if (err || !subscription)
-        return callback(err || new Error("No subscription"));
-
-      User.set(user.uid, { subscription: subscription }, function (err) {
-        if (err) return callback(err);
-
-        console.log(
+  try {
+    subscription = await stripe.customers.retrieveSubscription(
+      user.subscription.customer,
+      user.subscription.id
+    );
+  } catch (err) {
+    if (err.code === "resource_missing" && err.param === "subscription") {
+      console.log(
+        colors.red(
           "User:",
           user.uid,
           user.email,
-          user.subscription.customer,
-          "updated subscription",
-          user.subscription.id
-        );
-
-        callback(null, subscription);
-      });
+          "used to have a Stripe subscription but no longer does, customer still exists on Stripe"
+        )
+      );
+      return;
     }
+
+    if (err.code === "resource_missing" && err.param === "id") {
+      console.log(
+        colors.red(
+          "User:",
+          user.uid,
+          user.email,
+          "used to have a Stripe subscription but no longer does, customer does not exist on Stripe"
+        )
+      );
+      return;
+    }
+
+    console.log(err);
+    throw err;
+  }
+
+  if (!subscription) throw new Error("No subscription");
+
+  await setUserSubscription(user.uid, subscription);
+
+  console.log(
+    "User:",
+    user.uid,
+    user.email,
+    user.subscription.customer,
+    "updated subscription",
+    user.subscription.id
   );
+
+  return subscription;
 }
 
-function done(err) {
-  if (err) throw err;
+async function run() {
+  if (process.argv[2]) {
+    var user = await User.getByEmail(process.argv[2]);
+    if (!user) throw new Error("No user");
+
+    await main(user);
+  } else {
+    var ok = await getConfirmation(
+      "Fetch latest subscription information from Stripe for all users? (y/N)"
+    );
+
+    if (!ok) return process.exit();
+
+    await forEachUser(main);
+  }
+
   console.log("Done!");
   process.exit();
 }
 
 if (require.main === module) {
-  if (process.argv[2]) {
-    User.getByEmail(process.argv[2], function (err, user) {
-      if (err || !user) throw err || new Error("No user");
-      main(user, done);
-    });
-  } else {
-    getConfirmation(
-      "Fetch latest subscription information from Stripe for all users? (y/N)",
-      function (err, ok) {
-        if (!ok) return process.exit();
-        each(main, done);
-      }
-    );
-  }
+  run().then(
+    function () {
+      process.exit(0);
+    },
+    function (err) {
+      console.error(err);
+      process.exit(1);
+    }
+  );
 }
 
-module.exports = main;
+module.exports = withCallback(main);

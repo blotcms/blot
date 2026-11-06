@@ -20,6 +20,9 @@
 
 const path = require("path");
 const { execFile } = require("child_process");
+const { promisify } = require("util");
+
+const execFileAsync = promisify(execFile);
 
 const ROOT = path.resolve(__dirname, "..", "..");
 const FETCH_TIMEOUT_MS = 15000;
@@ -436,21 +439,28 @@ async function checkAlas() {
   }
 }
 
-function run(cmd, cmdArgs, opts) {
-  return new Promise((resolve, reject) => {
-    execFile(
+async function run(cmd, cmdArgs, opts) {
+  let err;
+  let stdout;
+  let stderr;
+  try {
+    ({ stdout, stderr } = await execFileAsync(
       cmd,
       cmdArgs,
       Object.assign(
         { cwd: ROOT, maxBuffer: 64 * 1024 * 1024, timeout: 120000 },
         opts
-      ),
-      (err, stdout, stderr) => {
-        if (stdout) return resolve(stdout); // npm audit exits non-zero when it finds issues
-        reject(err || new Error(stderr || "no output"));
-      }
-    );
-  });
+      )
+    ));
+  } catch (e) {
+    // A failed run still carries its output on the error
+    err = e;
+    stdout = e.stdout;
+    stderr = e.stderr;
+  }
+  // npm audit exits non-zero when it finds issues
+  if (stdout) return stdout;
+  throw err || new Error(stderr || "no output");
 }
 
 async function checkNpm() {
