@@ -1,5 +1,4 @@
 const async = require("async");
-const extractMetadata = require("build/metadata");
 const folder = require("storage/folder");
 const resolve = require("path").resolve;
 const dirname = require("path").dirname;

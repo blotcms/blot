@@ -14,18 +14,6 @@ const MinifyCSS = require("clean-css");
 // ancient. .eot/.ttf/.otf/.svg are no longer emitted.
 const EXTENSIONS = [".woff2", ".woff"];
 
-// Used to avoid attempting to build
-// fonts which don't require any files
-const SYSTEM_FONTS = [
-  "verdana",
-  "arial",
-  "times",
-  "helvetica",
-  "system-sans",
-  "system-mono",
-  "system-serif",
-];
-
 // Used to map source web font file names
 // to their corresponding format in the
 // @font-face rules generated, e.g.
@@ -239,40 +227,6 @@ function generateSVG(directory, text) {
     width: Math.round(width * 100) / 100,
     height: Math.round(height * 100) / 100,
   };
-}
-
-function printCandidates() {
-  let directories = fs
-    .readdirSync(__dirname)
-
-    // Ignore dot folders and folders whose name
-    // starts with a dash
-    .filter((i) => i[0] && i[0] !== "." && i[0] !== "-")
-    .filter((i) => fs.statSync(`${__dirname}/${i}`).isDirectory())
-    .filter((i) => {
-      return (
-        !fs.existsSync(`${__dirname}/${i}/package.json`) ||
-        (!fs.existsSync(`${__dirname}/${i}/style.css`) &&
-          SYSTEM_FONTS.indexOf(i) === -1)
-      );
-    });
-
-  directories.forEach((directory) =>
-    console.log(colors.green(`node app/blog/static/fonts/build ${directory}`))
-  );
-
-  fs.readdirSync(__dirname)
-    .filter((i) => i[0] && i[0] !== "." && i[0] !== "-")
-    .filter((i) => fs.statSync(`${__dirname}/${i}`).isDirectory())
-    .filter((i) => directories.indexOf(i) === -1)
-    .forEach((directory) =>
-      console.log(
-        colors.dim(
-          `node app/blog/static/fonts/build ${directory}` +
-            (SYSTEM_FONTS.indexOf(directory) === -1 ? "" : " (system)")
-        )
-      )
-    );
 }
 
 function parseFamily(directory) {

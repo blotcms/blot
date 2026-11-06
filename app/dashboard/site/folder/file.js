@@ -256,11 +256,8 @@ function kind(path, entry, multiInfo) {
     return "Folder post";
   }
 
-  let kind = "File";
-  let extension;
-
-  extension = extname(path).toLowerCase().slice(1);
-  kind = KIND[extension] || (extension ? extension.toUpperCase() : "File");
+  const extension = extname(path).toLowerCase().slice(1);
+  const kind = KIND[extension] || (extension ? extension.toUpperCase() : "File");
   debug(path, extension, kind);
 
   return kind;

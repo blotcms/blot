@@ -15,7 +15,6 @@ describe("absolute_urls", function () {
 
   it("replaces relative links with absolute URLs", function (done) {
     var result;
-    var locals = {};
     var html = '<a href="/foo"></a>';
     var template = "{{#absolute_urls}}" + html + "{{/absolute_urls}}";
 
@@ -28,7 +27,6 @@ describe("absolute_urls", function () {
 
   it("replaces relative image sources with absolute sources", function (done) {
     var result;
-    var locals = {};
     var html = '<img src="/bar.jpg">';
     var template = "{{#absolute_urls}}" + html + "{{/absolute_urls}}";
 
@@ -41,7 +39,6 @@ describe("absolute_urls", function () {
 
   it("leaves fully qualified links and images as-is", function (done) {
     var result;
-    var locals = {};
     var html =
       '<a href="http://example.com/foo"><img src="http://example.com/bar.jpg"></a>';
     var template = "{{#absolute_urls}}" + html + "{{/absolute_urls}}";

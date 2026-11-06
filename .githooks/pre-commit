@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Checks the staged JavaScript files with ESLint and Prettier. Enable with:
+#   git config core.hooksPath .githooks
+exec "$(git rev-parse --show-toplevel)/scripts/development/lint.sh" staged

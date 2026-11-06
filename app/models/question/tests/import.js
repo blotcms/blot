@@ -1,7 +1,7 @@
 describe("importQuestions", function () {
     require("./setup")();
   
-    const client = require("models/client"); // Ensure this client is correctly initialized
+    require("models/client"); // Ensure this client is correctly initialized
     const importQuestions = require('../import'); // Adjust the path as needed
     const exportQuestions = require('../export'); // We'll use this to verify the import
   

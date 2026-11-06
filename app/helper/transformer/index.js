@@ -12,7 +12,6 @@ var fs = require("fs-extra");
 var folder = require("storage/folder");
 var config = require("config");
 var assets = require("storage/assets");
-var join = require("path").join;
 var resolve = require("path").resolve;
 var callbackify = require("util").callbackify;
 var resolveCaseInsensitive = callbackify(folder.resolveCaseInsensitive);

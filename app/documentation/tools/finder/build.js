@@ -6,7 +6,6 @@ module.exports = async function () {
 
   var images = await fs.readdir(__dirname + '/images');
   var styles = await fs.readdir(__dirname + '/css');
-  var fonts = await fs.readdir(__dirname + '/fonts');
   var css = '';
 
   for (const name of styles) {

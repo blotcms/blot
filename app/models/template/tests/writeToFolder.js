@@ -1,12 +1,11 @@
 var folder = require("storage/folder");
 var join = require("path").posix.join;
-var clients = require("clients");
+require("clients");
 
 describe("template", function () {
 var { promisify } = require("util");
 var writeToFolder = require("../index").writeToFolder;
 var setView = require("../index").setView;
-var dropView = require("../index").dropView;
 var setMetadata = require("../index").setMetadata;
 var packageAPI = require("../index").package;
 var removeEnabledFromAllTemplates = require("../index").removeEnabledFromAllTemplates;

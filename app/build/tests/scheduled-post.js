@@ -20,27 +20,31 @@ xdescribe("scheduled posts", function () {
       const path = "/entry.txt";
       const id = guid();
       sync(this.blog.id, (err, folder, finish) => {
-        if (err) return callback(err);
+        if (err) return done.fail(err);
         const contents = `Date: ${moment()
           .utc()
           .add(1, "minutes")
           .format("YYYY-MM-DD HH:mm")}\n\n${id}`;
         setTimeout(() => {
-          request(this.origin, { strictSSL: false }, (err, res, body) => {
-            expect(body).toContain(id);
-            done();
-          });
+          fetch(this.origin)
+            .then((res) => res.text())
+            .then((body) => {
+              expect(body).toContain(id);
+              done();
+            }, done.fail);
         }, MINUTE);
         storageFolder.write(this.blog.id, path, contents).then(() => {
           folder.update(path, err => {
-            if (err) return callback(err);
+            if (err) return done.fail(err);
             finish(null, () => {
-              request(this.origin, { strictSSL: false }, (err, res, body) => {
-                expect(body).not.toContain(id);
-              });
+              fetch(this.origin)
+                .then((res) => res.text())
+                .then((body) => {
+                  expect(body).not.toContain(id);
+                }, done.fail);
             });
           });
-        }, callback);
+        }, done.fail);
       });
     },
     MINUTE * 2

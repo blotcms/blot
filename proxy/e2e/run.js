@@ -96,7 +96,7 @@ function once(path, { method = "GET", jar, body, headers = {} } = {}) {
 async function request(path, opts = {}, max = 5) {
   let res = await once(path, opts);
   let hops = 0;
-  let nextOpts = opts;
+  let nextOpts;
   while (
     res.status >= 300 &&
     res.status < 400 &&
@@ -245,8 +245,8 @@ async function waitForUpstream(timeoutMs = 60000) {
   // 8. The proxy's hardening rules apply end to end (blog traffic path).
   // nginx `return 444` closes the connection with no HTTP response, so Node
   // sees ECONNRESET rather than a status code (see proxy/e2e/checks.sh).
-  let gitBlocked = false;
-  let gitDetail = "";
+  let gitBlocked;
+  let gitDetail;
   try {
     const git = await once("/.git/config", { headers: { Host: BLOG_HOST } });
     gitBlocked = git.status === 444 || git.status === 403 || git.status === 404;

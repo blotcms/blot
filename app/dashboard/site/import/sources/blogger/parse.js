@@ -31,7 +31,7 @@ function parseSiteHost(input) {
     url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
   } catch (err) {
     throw new Error(
-      "Please enter a valid site URL, like https://example.blogspot.com"
+      "Please enter a valid site URL, like https://example.blogspot.com", { cause: err }
     );
   }
 

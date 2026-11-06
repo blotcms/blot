@@ -4,7 +4,6 @@
 describe("git client create without a live clone", function () {
   require("./setup")({ setClientToGit: false, clone: false });
 
-  var fs = require("fs-extra");
   var util = require("util");
   var Client = require("./setup/client");
   var repo = require("clients/git/repo");

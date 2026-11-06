@@ -328,7 +328,7 @@ function parseTemplate(template) {
         var contextPath = context ? context.slice(0, -1) : "";
         var projectedFieldContext = projectedFieldFromContext(contextPath, variable);
         var inProjectedFieldContext = hasProjectedFieldContextAncestor(contextPath);
-        var suppressAsProjectedFieldReference = false;
+        var suppressAsProjectedFieldReference;
         var isProjectedFieldInContext = false;
 
         // {{#encode_xml}} & friends: descend without recording the helper name

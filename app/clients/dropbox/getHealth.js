@@ -22,7 +22,7 @@ module.exports = async function getHealth(blogID) {
   // failure, an API error, or the process dying mid-transfer) and worth
   // surfacing as an issue.
   if (account && account.transfer_pending === true) {
-    let held = true;
+    let held;
     try {
       held = (await folderLock.inspect(blogID)).held;
     } catch (e) {

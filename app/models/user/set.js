@@ -51,7 +51,7 @@ module.exports = function save(uid, updates, callback) {
         user = JSON.parse(previous);
         ensure(user, "object");
       } catch (err) {
-        throw new Error("BADJSON");
+        throw new Error("BADJSON", { cause: err });
       }
       var former = JSON.parse(previous);
 

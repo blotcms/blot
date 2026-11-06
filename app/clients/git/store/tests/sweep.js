@@ -233,7 +233,7 @@ describe("git store sweep", function () {
       const empty = faults(createMemoryStore({ now: () => clock }));
       store = empty;
       inner = empty;
-      const lone = await upload();
+      await upload();
       at(25 * HOUR);
       await run();
       at(50 * HOUR);

@@ -18,7 +18,6 @@
 // (plus the optional local npm/gh calls). See
 // the operator's local check-security-advisories skill.
 
-const fs = require("fs");
 const path = require("path");
 const { execFile } = require("child_process");
 
@@ -38,14 +37,6 @@ const AS_JSON = flag("--json");
 
 const findings = { action: [], watch: [], ok: [], unavailable: [] };
 const add = (level, msg) => findings[level].push(msg);
-
-function read(rel) {
-  try {
-    return fs.readFileSync(path.join(ROOT, rel), "utf8");
-  } catch (e) {
-    return null;
-  }
-}
 
 async function get(url, headers) {
   const res = await fetch(url, {

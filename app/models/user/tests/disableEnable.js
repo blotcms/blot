@@ -1,17 +1,13 @@
 var promisify = require("util").promisify;
 var User = require("../index");
 var Blog = require("models/blog");
-var client = require("models/client");
-var key = require("../key");
-var blogKey = require("models/blog/key");
+require("models/client");
 
 var getUser = promisify(User.getById);
 var setUser = promisify(User.set);
 var disable = promisify(User.disable);
 var enable = promisify(User.enable);
 var getBlog = promisify(Blog.get);
-var createBlog = promisify(Blog.create);
-var removeBlog = promisify(Blog.remove);
 
 describe("user disable", function () {
   global.test.user();

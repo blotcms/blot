@@ -95,7 +95,7 @@ module.exports = function (req, res, next) {
   if (req.updates.plugins) {
     // this bullshit below is because I haven't properly declared
     // the model for blog.plugins so formJSON needs a little help...
-    for (var i in req.updates.plugins) {
+    for (const i in req.updates.plugins) {
       req.updates.plugins[i].enabled = normalizeBooleanOption(
         req.updates.plugins[i].enabled
       );
@@ -103,7 +103,7 @@ module.exports = function (req, res, next) {
     }
 
     if (req.updates.plugins.typeset) {
-      for (var x in req.updates.plugins.typeset.options)
+      for (const x in req.updates.plugins.typeset.options)
         req.updates.plugins.typeset.options[x] = normalizeBooleanOption(
           req.updates.plugins.typeset.options[x]
         );

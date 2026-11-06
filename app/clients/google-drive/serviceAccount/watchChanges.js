@@ -54,7 +54,7 @@ module.exports = async function watchChanges(serviceAccountId, drive) {
      })
     ).data.startPageToken;
   } catch (err) {
-    throw new Error(`Failed to fetch startPageToken: ${err.message}`);
+    throw new Error(`Failed to fetch startPageToken: ${err.message}`, { cause: err });
   }
 
   const watchRequest = {
@@ -76,7 +76,7 @@ module.exports = async function watchChanges(serviceAccountId, drive) {
       throw new Error("Invalid response from changes.watch API");
     }
   } catch (err) {
-    throw new Error(`Failed to set up changes.watch channel: ${err.message}`);
+    throw new Error(`Failed to set up changes.watch channel: ${err.message}`, { cause: err });
   }
 
   console.log(

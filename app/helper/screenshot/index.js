@@ -243,6 +243,7 @@ async function closePageWithTimeout(page) {
     // recovering from.
     try {
       await withTimeout(
+        // eslint-disable-next-line no-undef -- runs in the page
         page.evaluate(() => window.stop()).then(() => page.close()),
         closePageTimeout,
         "forced page cleanup"

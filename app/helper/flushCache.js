@@ -144,7 +144,7 @@ module.exports = ({
         error.name === "TimeoutError"
           ? `timed out after ${timeoutMs}ms`
           : error.message;
-      throw new Error(`Failed to flush proxy ${reverse_proxy_url}: ${reason}`);
+      throw new Error(`Failed to flush proxy ${reverse_proxy_url}: ${reason}`, { cause: error });
     }
   }
 

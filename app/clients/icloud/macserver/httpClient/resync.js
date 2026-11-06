@@ -131,6 +131,7 @@ export default async (blogID, reason) => {
   } finally {
     const entry = resyncDebounceRegistry.get(blogID);
     if (!entry) {
+      // eslint-disable-next-line no-unsafe-finally -- see TODO: this swallows a failed resync
       return;
     }
     if (entry.cleanupTimeout) {

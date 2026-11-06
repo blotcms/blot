@@ -19,9 +19,7 @@ const normalize = (redirect) => {
 module.exports = function (req, res, next) {
   if (!req.body.has_redirects) return next();
 
-  var mappings = {};
-
-  mappings = formJSON(req.body, { redirects: "object" });
+  var mappings = formJSON(req.body, { redirects: "object" });
 
   mappings = arrayify(mappings.redirects)
     .filter((mapping) => !!mapping.from && !!mapping.to)

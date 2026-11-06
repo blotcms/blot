@@ -40,7 +40,7 @@ function replace(text) {
   // below works properly
 
   text = text
-    .replace(/(\W|^)"([^\s\!\?:;\.,‽»])/g, "$1\u201c$2") // beginning "
+    .replace(/(\W|^)"([^\s!?:;.,‽»])/g, "$1\u201c$2") // beginning "
     .replace(/(\u201c[^"]*)"([^"]*$|[^\u201c"]*\u201c)/g, "$1\u201d$2") // ending "
     .replace(/([^0-9])"/g, "$1\u201d") // remaining " at end of word
     .replace(/(\W|^)'(\S)/g, "$1\u2018$2") // beginning '

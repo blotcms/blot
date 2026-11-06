@@ -30,6 +30,7 @@ describe("import identifier normalization", function () {
     });
 
     expect(result).toBe("badname");
+    // eslint-disable-next-line no-control-regex
     expect(result).not.toMatch(/[\u0000-\u001f\u007f-\u009f<>:"'`&/\\|?*]/);
   });
 

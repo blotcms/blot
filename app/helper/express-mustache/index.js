@@ -26,7 +26,7 @@ const render = async function (filePath, options, callback) {
   //   .. your locals
   //   cache: false
   // }
-  const { ext, name, root, path } = this;
+  const { ext, root } = this;
 
   // options.cache seems to default to false
   // unless environment variable NODE_ENV=production

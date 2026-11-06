@@ -52,7 +52,7 @@ module.exports = async function (startingAfter = null) {
 
 if (require.main === module) {
     module.exports().then((suspectedUsers) => {
-        suspectedUsers.forEach((user) => {
+        suspectedUsers.forEach((customer) => {
             console.log(`No user found for customer ${customer.id} with email ${customer.email}`);
             console.log(`https://dashboard.stripe.com/customers/${customer.id}`);         
             console.log('node scripts/user/refund-and-delete.js', customer.id);   

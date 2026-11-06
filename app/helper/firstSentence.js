@@ -9,7 +9,7 @@ module.exports = function firstSentence(str) {
 
   str = lines[0];
 
-  var sentenceArr = str.match(/[^\.!\?]+[\.!\?]+/g);
+  var sentenceArr = str.match(/[^.!?]+[.!?]+/g);
 
   if (sentenceArr && sentenceArr[0]) return sentenceArr[0];
 

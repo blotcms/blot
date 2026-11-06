@@ -152,6 +152,7 @@ function checkRefs(refs, what) {
   if (!refs || typeof refs !== "object" || Array.isArray(refs)) fail(what + " must be an object");
 
   for (const [name, oid] of Object.entries(refs)) {
+    // eslint-disable-next-line no-control-regex
     if (!/^refs\/[^\s\x00-\x1f\x7f~^:?*[\\]+$/.test(name) || name.includes("..")) {
       fail(what + " has an invalid ref name " + JSON.stringify(name));
     }

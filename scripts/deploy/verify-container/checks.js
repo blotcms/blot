@@ -131,7 +131,7 @@ async function binary(command, args) {
     const { stdout } = await execFileAsync(command, args, { timeout: 10000 });
     return stdout.split("\n")[0].trim();
   } catch (err) {
-    throw new Error(`${command} is not runnable: ${err.message}`);
+    throw new Error(`${command} is not runnable: ${err.message}`, { cause: err });
   }
 }
 

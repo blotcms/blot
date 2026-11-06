@@ -7,7 +7,6 @@ describe("git client remove", function () {
 
   var remove = require("clients/git/remove");
   var write = require("clients/git/write");
-  var repo = require("clients/git/repo");
   var context = require("clients/git/served/context");
   var removeRepo = require("clients/git/store/remove");
   var Git = require("./setup/git");

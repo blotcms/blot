@@ -1,4 +1,4 @@
-const templates = require('templates');
+require('templates');
 const clfdate = require('helper/clfdate');
 
 module.exports = function(){

@@ -3,7 +3,6 @@ describe("user", function () {
 
   var User = require("models/user");
   var client = require("models/client");
-  var key = require("models/user/key");
 
   var email = require("helper/email");
   var scheduleWelcomeEmail = require("models/user/scheduleWelcomeEmail");

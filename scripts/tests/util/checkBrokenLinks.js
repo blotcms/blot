@@ -74,7 +74,7 @@ class LinkChecker {
       return await this.fetch(url, { headers });
     } catch (err) {
       this.log("Error", err.message);
-      throw new Error(err.code || "Network Error");
+      throw new Error(err.code || "Network Error", { cause: err });
     }
   }
 
@@ -88,7 +88,7 @@ class LinkChecker {
     try {
       $ = cheerio.load(body);
     } catch (e) {
-      throw new Error(`Failed to parse HTML: ${e.message}`);
+      throw new Error(`Failed to parse HTML: ${e.message}`, { cause: e });
     }
 
     return $("[href], [src]")

@@ -4,7 +4,6 @@
 // own. Without MinIO's settings in the environment the specs are skipped, and
 // say so in the output.
 const crypto = require("crypto");
-const { Readable } = require("stream");
 const fx = require("./helpers/fixture");
 const cases = require("./helpers/contract");
 const timeout = require("./helpers/timeout");

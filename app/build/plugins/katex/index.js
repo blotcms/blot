@@ -18,7 +18,6 @@ const BLOCK_BOUNDARY_TAGS = [
   "dt",
   "dd",
 ];
-const BLOCK_BOUNDARY_SELECTOR = BLOCK_BOUNDARY_TAGS.join(",");
 
 function escapeHtml(value) {
   return value

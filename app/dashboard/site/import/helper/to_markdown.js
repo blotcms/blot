@@ -95,7 +95,7 @@ turndown.addRule("keep-footnotes-ref", {
 function isAlreadyMarkdown(html) {
   var hasLinks = /\[[^]+\]\([^]+\)/.test(html);
   var hasEmphasis = /[_*][^]+[_*]/.test(html);
-  var hasTitles = /^[#]+\ [^\n\r]*$/.test(html);
+  var hasTitles = /^[#]+ [^\n\r]*$/.test(html);
 
   return hasLinks || hasEmphasis || hasTitles;
 }

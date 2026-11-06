@@ -348,6 +348,7 @@ function multiList(cb) {
   );
 }
 
+// eslint-disable-next-line no-unused-vars -- manual benchmark, see the commented-out runner below
 function listTests(cb) {
   console.log("");
   massiveParallelList(function () {
@@ -493,6 +494,7 @@ function multiObject(cb) {
   );
 }
 
+// eslint-disable-next-line no-unused-vars -- manual benchmark, see the commented-out runner below
 function objectTests(cb) {
   console.log("");
   seriesMassiveObject(function () {

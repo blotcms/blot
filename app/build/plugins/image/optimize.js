@@ -43,7 +43,8 @@ function filenameFromSrc(originalSrc) {
 
     // Never let separators, control characters or replacement characters
     // (from a sequence cut off mid-character) into a file name
-    return slug.replace(/[\/\\\u0000-\u001f�]/g, "");
+    // eslint-disable-next-line no-control-regex
+    return slug.replace(/[/\\\u0000-\u001f�]/g, "");
   } catch (e) {
     debug("Failed to extract filename from originalSrc:", e);
     return null;

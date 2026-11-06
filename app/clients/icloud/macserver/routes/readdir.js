@@ -79,7 +79,7 @@ export default async (req, res) => {
     }
   }
 
-  let files = [];
+  let files;
 
   try {
     // now that we are sure the directory is in sync, we can read it

@@ -64,7 +64,7 @@ const determineYearJoined = domain =>
         if (err || !user)
           return reject(err || new Error("No user with id " + blog.owner));
 
-        let joined = new Date().getFullYear();
+        let joined;
 
         if (user && user.subscription && user.subscription.created) {
           joined = new Date(user.subscription.created * 1000).getFullYear();

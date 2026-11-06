@@ -1,5 +1,4 @@
 var User = require("models/user");
-var async = require("async");
 var dailyUpdate = require("./daily");
 var email = require("helper/email");
 var clfdate = require("helper/clfdate");

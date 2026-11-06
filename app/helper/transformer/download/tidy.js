@@ -40,7 +40,7 @@ function expire(str, ageSeconds) {
 }
 
 function date(str) {
-  var date = null;
+  var date;
 
   try {
     date = new Date(str).valueOf();

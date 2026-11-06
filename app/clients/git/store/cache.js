@@ -389,7 +389,7 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
       return null;
     }
 
-    let data = null;
+    let data;
     try {
       data = await fn(entry);
     } catch (err) {

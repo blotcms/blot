@@ -29,7 +29,6 @@ async function retry(fn, ...args) {
 
 module.exports = async (blogID, publish, update, { skipDeletions = false, abortOnError = false, skipEmptyFiles = false } = {}) => {
   publish = publish || function () {};
-  update = update || function () {};
 
   const checkWeCanContinue = CheckWeCanContinue(blogID);
 

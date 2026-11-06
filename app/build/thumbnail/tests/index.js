@@ -8,7 +8,6 @@ describe("thumbnail", function () {
 
   var he = require("he");
   var folder = require("storage/folder");
-  var fs = require("fs-extra");
   var sharp = require("sharp");
   var assets = require("storage/assets");
 

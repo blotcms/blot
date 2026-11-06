@@ -1,7 +1,7 @@
-var cheerio = require("cheerio");
 var render_folder = require("./render_folder");
 var render_text_editor = require("./render_text_editor");
 var render_code_editor = require("./render_code_editor");
+var extension = require("./determine_icon");
 
 function middleware(req, res, next) {
   var send = res.send;

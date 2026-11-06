@@ -1,4 +1,4 @@
-require("./reconnecting-event-source.js");
+const ReconnectingEventSource = require("./reconnecting-event-source.js");
 
 var THROTTLE_DELAY = 2000; // ms
 
@@ -200,12 +200,12 @@ function loadFolder(callback) {
             currentNode.innerHTML = newState;
 
             try {
-              sortTable();
+              window.sortTable();
             } catch (e) {
               console.error(e);
             }
             try {
-              initCopyButtons();
+              window.initCopyButtons();
             } catch (e) {
               console.error(e);
             }

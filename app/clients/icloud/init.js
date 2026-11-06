@@ -9,7 +9,6 @@ const database = require("./database");
 const getHealth = require("./getHealth");
 const { shouldSkipBackgroundSync } = require("./error");
 const syncFromiCloud = require("./sync/fromiCloud");
-const syncToiCloud = require("./sync/toiCloud");
 const validateBlog = require("./sync/validateBlog");
 const syncReport = require("clients/util/syncReport");
 const { exclusive, schedule } = require("clients/util/scheduleExclusive");
@@ -225,10 +224,6 @@ const resyncAllConnected = async ({ notify = true } = {}) => {
         if (!blog || blog.client !== "icloud") return;
 
         checkedBlogs += 1;
-
-        const publish = (...args) => {
-          console.log(clfdate(), "iCloud: Daily resync", blogID, ...args);
-        };
 
         let folder;
         let done;

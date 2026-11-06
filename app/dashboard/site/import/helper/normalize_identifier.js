@@ -2,6 +2,7 @@ const path = require("path");
 
 const MAX_CHARACTERS = 120;
 const MAX_BYTES = 240;
+// eslint-disable-next-line no-control-regex
 const UNSAFE_CHARACTERS = /[\u0000-\u001f\u007f-\u009f<>:"'`&|?*]/g;
 const WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
 
@@ -46,7 +47,7 @@ function clean(value, extensions) {
     identifier
       .normalize("NFC")
       .replace(UNSAFE_CHARACTERS, "")
-      .replace(/[\/\\]/g, "")
+      .replace(/[/\\]/g, "")
       .replace(/\s+/g, " ")
       .replace(/^[. ]+|[. ]+$/g, "")
   );

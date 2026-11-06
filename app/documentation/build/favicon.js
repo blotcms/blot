@@ -1,7 +1,6 @@
 const fs = require('fs-extra');
 const sharp = require('sharp');
 const toIco = require('to-ico');
-const path = require('path');
 
 module.exports = async function generateFavicon(sourcePath, destPath) {
   const faviconDimensions = [16, 24, 32, 64];

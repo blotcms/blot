@@ -17,6 +17,7 @@ describe("git store: daily maintenance", function () {
       for (var blogID of Object.keys(ctx.stores)) {
         var store = ctx.stores[blogID];
         if (!store) continue;
+        // eslint-disable-next-line no-unused-vars
         for await (var entry of store.list("")) {
           yield blogID;
           break;
@@ -250,6 +251,7 @@ describe("git store: daily maintenance", function () {
       var gone = await old(this, "blog_gone", 3 * DAY);
       this.stores.blog_broken = {
         id: "broken",
+        // eslint-disable-next-line require-yield -- a listing that fails at once
         list: async function* () {
           throw new Error("listing failed");
         },

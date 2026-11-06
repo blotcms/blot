@@ -1,4 +1,3 @@
-var debug = require("debug")("blot:build");
 var fs = require("fs");
 var bplist = require("bplist-parser");
 var ensure = require("helper/ensure");

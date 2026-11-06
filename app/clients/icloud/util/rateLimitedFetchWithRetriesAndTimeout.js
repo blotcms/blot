@@ -76,7 +76,7 @@ const fetchWithRetriesAndTimeout = async (url, options = {}) => {
 
       // If all retries fail, throw the error
       if (attempt === retries) {
-        throw new Error(`Request failed after ${retries} retries: ${error.message} ${url}`);
+        throw new Error(`Request failed after ${retries} retries: ${error.message} ${url}`, { cause: error });
       }
     }
   }

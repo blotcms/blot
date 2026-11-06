@@ -255,7 +255,7 @@ async function renew(deps = {}) {
   try {
     x509 = new crypto.X509Certificate(pem);
   } catch (e) {
-    throw new Error("Let's Encrypt returned a certificate which could not be parsed");
+    throw new Error("Let's Encrypt returned a certificate which could not be parsed", { cause: e });
   }
   if (!x509.checkHost(host) || !x509.checkHost("example." + host)) {
     throw new Error("The issued certificate does not cover " + host + " and *." + host);

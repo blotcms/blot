@@ -109,7 +109,6 @@ describe("git store reader scratch", function () {
   let work;
   let repo;
   let blobs; // [{ oid, depth, size }] by version, oldest first
-  let oracle;
 
   beforeAll(function () {
     work = fx.tempDir();

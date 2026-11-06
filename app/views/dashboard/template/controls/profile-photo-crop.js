@@ -194,8 +194,6 @@ function initializePhotoCrop(form) {
     }
 
     if (!gesture || gesture.type !== "pan" || gesture.id !== event.pointerId) startPan(event.pointerId, position);
-    const dx = position.x - gesture.pointer.x;
-    const dy = position.y - gesture.pointer.y;
     const { minX, minY } = bounds();
     const resist = (value, min, max) => {
       if (value < min) return min - Math.min(18, (min - value) * 0.2);
@@ -399,7 +397,7 @@ function initializePhotoCrop(form) {
   }, { passive: false });
   stage.addEventListener("keydown", (event) => {
     if (!state) return;
-    const { width, height } = stageSize();
+    const { width } = stageSize();
     const amount = Math.max(2, Math.round(width * (event.shiftKey ? 0.1 : 0.02)));
     if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
       event.preventDefault();

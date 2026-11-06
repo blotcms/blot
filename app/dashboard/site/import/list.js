@@ -87,7 +87,7 @@ module.exports = async function (req, res, next) {
           cancelled,
           size,
           error,
-          lastStatus: cancelled ? (lastStatus === "Cancelled" ? "Cancelled" : "Cancelling") : (!!error ? error : lastStatus),
+          lastStatus: cancelled ? (lastStatus === "Cancelled" ? "Cancelled" : "Cancelling") : (error ? error : lastStatus),
           started,
           importedOn,
           timestamp,

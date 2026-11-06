@@ -315,7 +315,7 @@ describe("transformer", function () {
       client
         .get(headersKey)
         .then(function (stringifiedHeaders) {
-          var headers = {};
+          var headers;
 
           try {
             headers = JSON.parse(stringifiedHeaders) || {};

@@ -1,7 +1,6 @@
 const img = require("../index");
 const fs = require("fs-extra");
 const folder = require("storage/folder");
-const exif = require("../exif");
 const path = require("path");
 const hash = require("helper/hash");
 const assets = require("storage/assets");
@@ -44,7 +43,7 @@ describe("img converter", function () {
 
     await folder.writeFrom(test.blog.id, path, __dirname + path);
 
-    const [err, html, stat, extras] = await readAll(test.blog, path);
+    const [err, , , extras] = await readAll(test.blog, path);
     if (err) throw err;
     expect(extras).toEqual({
       exif: {
@@ -67,7 +66,7 @@ describe("img converter", function () {
     await folder.writeFrom(test.blog.id, path, __dirname + path);
     test.blog.imageExif = "off";
 
-    const [err, html, stat, extras] = await readAll(test.blog, path);
+    const [err, , , extras] = await readAll(test.blog, path);
     if (err) throw err;
     expect(extras).toBeUndefined();
   });
@@ -80,7 +79,7 @@ describe("img converter", function () {
 
     test.blog.imageExif = "basic";
 
-    const [err, html, stat, extras] = await readAll(test.blog, path);
+    const [err, , , extras] = await readAll(test.blog, path);
     if (err) throw err;
 
     expect(extras).toEqual({
@@ -104,7 +103,7 @@ describe("img converter", function () {
     await folder.writeFrom(test.blog.id, path, __dirname + path);
     test.blog.imageExif = "full";
 
-    const [err, html, stat, extras] = await readAll(test.blog, path);
+    const [err, , , extras] = await readAll(test.blog, path);
     if (err) throw err;
 
     expect(extras).toEqual({
@@ -115,7 +114,6 @@ describe("img converter", function () {
         ExposureTime: "1/178",
         FNumber: 4.5,
         ISO: 64,
-        Flash: "Off, Did not fire",
         FocalLength: 6,
         GPSLatitude: `43 deg 28' 1.76" N`,
         GPSLongitude: `11 deg 53' 7.42" E`,

@@ -115,7 +115,7 @@ const resync = async (blog) => {
   try {
     lock = await establishSyncLock(blog.id);
   } catch (err) {
-    throw new Error(`could not acquire sync lock: ${formatError(err)}`);
+    throw new Error(`could not acquire sync lock: ${formatError(err)}`, { cause: err });
   }
 
   const { folder, done } = lock;

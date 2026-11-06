@@ -1,4 +1,3 @@
-const clfdate = require("helper/clfdate");
 const database = require("../database");
 const disconnect = require("../disconnect");
 const express = require("express");

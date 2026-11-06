@@ -53,7 +53,6 @@ Array.from(document.querySelectorAll('[data-font-picker-form]')).forEach(form =>
   };
 
   const scheduleHide = () => picker.scheduleHide();
-  const cancelHide = () => picker.cancelHide();
 
   trigger.addEventListener('click', event => {
     event.preventDefault();

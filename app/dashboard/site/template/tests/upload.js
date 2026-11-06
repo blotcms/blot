@@ -152,9 +152,6 @@ describe("upload template route", function () {
       });
     });
 
-  const uploaded = (templates) =>
-    templates.filter((template) => template.owner === templates[0].owner);
-
   it("creates a template from a dropped folder", async function () {
     const { req, paths } = await folderRequest(this.blog, {
       "my-theme/index.html": "<h1>{{title}}</h1>",

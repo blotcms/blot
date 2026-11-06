@@ -427,7 +427,6 @@ describe("Dashboard account deletion refunds", function () {
 
   it("continues when PayPal refunds fail unexpectedly", async function () {
     const startTime = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
-    const expectedAuth = `Basic ${Buffer.from("client:secret").toString("base64")}`;
 
     const transactionsData = {
       transactions: [

@@ -221,7 +221,7 @@ describe("archives cache", function () {
   });
 
   it("shares one getAll fetch with all_entries for the same request", function (done) {
-    const { archives, getAllCached } = loadArchives();
+    const { archives } = loadArchives();
     const allEntries = require("../all_entries");
 
     spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {

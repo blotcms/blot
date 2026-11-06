@@ -391,7 +391,6 @@ describe("folder module", function () {
 
   it("handles errors when metadata is corrupted or invalid", async function (done) {
     const id = "file_1";
-    const path = "/folder/file1.txt";
   
     // Corrupt metadata in Redis
     await client.hSet(`${prefix}test_folder:metadata`, id, "corrupted_metadata_string");

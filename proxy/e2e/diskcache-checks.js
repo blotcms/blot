@@ -223,10 +223,6 @@ function purge(c, hosts, token) {
   return { code: parseInt(lines.pop(), 10), text: lines.join("\n") };
 }
 
-function plain(r) {
-  return r.headers["content-encoding"] ? null : r.body;
-}
-
 // ---- sections -----------------------------------------------------------
 
 async function basicBlogAndSite() {

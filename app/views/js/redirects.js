@@ -4,7 +4,7 @@ const redirectsContainer = document.getElementById("redirects");
 
 if (redirectsContainer) {
 
-const sortable = new Sortable(sortEl, {
+new Sortable(sortEl, {
     handle: ".handle",
     ghostClass: "sortable-ghost",
     onUpdate: function () {
@@ -74,9 +74,6 @@ const sortable = new Sortable(sortEl, {
     } else {
       newlink.querySelector('input[name*="from"]').focus();
     }
-
-    e.preventDefault();
-    return false;
   }
 
   const addRedirectButton = document.getElementById("addRedirect");

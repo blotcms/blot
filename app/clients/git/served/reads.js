@@ -289,7 +289,7 @@ async function handle(req, res, blog, options) {
   const query = url.indexOf("?");
   const pathname = query === -1 ? url : url.slice(0, query);
   const repository = "/" + req.gitHandle + ".git";
-  let kind = null;
+  let kind;
 
   res.setHeader("connection", "close");
 

@@ -2,7 +2,6 @@ describe("cdn", function () {
   var cdn = require("blog/render/retrieve/cdn");
   var mustache = require("mustache");
   var config = require("config");
-  var generateCdnUrl = require("models/template/util/generateCdnUrl");
 
   global.test.blog();
 

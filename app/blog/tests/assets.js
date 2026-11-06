@@ -1,4 +1,4 @@
-const cdn = require("../../cdn");
+require("../../cdn");
 
 describe("asset middleware", function () {
   const config = require("config");

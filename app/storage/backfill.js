@@ -1,6 +1,5 @@
 const fs = require("fs-extra");
 const { join } = require("path");
-const config = require("config");
 const s3 = require("./s3");
 const { isScopeName, walkLocal, createPool } = require("./util");
 
@@ -27,6 +26,7 @@ const STALE_AFTER_MS = 2000;
 // Keys which may not survive a trip from a CDN URL to the bucket unchanged:
 // characters which are special in URLs, control characters, spaces at the
 // ends of a path segment, and anything non-ASCII.
+// eslint-disable-next-line no-control-regex
 const ODD_KEY = /[+%#?\\\u0000-\u001f\u007f]|[^\u0000-\u007f]|(^|\/)\s|\s(\/|$)/;
 
 const MAX_LISTED = {

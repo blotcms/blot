@@ -4,13 +4,11 @@ const MAX_LENGTH = 100;
 // This must always return a string but it can be empty
 module.exports = function makeSlug(string) {
   var words;
-  var trimmed = "";
+  var trimmed;
 
   ensure(string, "string");
 
-  var slug = "";
-
-  slug = string;
+  var slug = string;
 
   // Remove query sluging
   if (slug.indexOf("?=") > -1) slug = slug.slice(0, slug.indexOf("?="));
@@ -26,7 +24,7 @@ module.exports = function makeSlug(string) {
 
     // remove common punction, basically everything except & _ and - /
     // Should we be stripping all &encoded; characters?
-    .replace(/\%/g, "-percent")
+    .replace(/%/g, "-percent")
     .replace(/&amp;/g, "and")
     .replace(/&nbsp;/g, " ")
     .replace(/&thinsp;/g, " ")
@@ -64,7 +62,7 @@ module.exports = function makeSlug(string) {
     .replace(/←/g, "from")
     .replace(/\./g, "-")
     .replace(
-      /[\«\»\“\”\‘\–\’\`\~\!\@\#\$\%\^\&\*\(\)\+\=\\\|\]\}\{\[\'\"\;\:\?>\.<\,]/g,
+      /[«»“”‘–’`~!@#$%^&*()+=\\|\]}{['";:?>.<,]/g,
       "-"
     )
     .replace(/[^[:alnum:]0-9_-\s]/g, "") // remove invalid chars

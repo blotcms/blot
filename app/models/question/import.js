@@ -24,7 +24,7 @@ async function importQuestions(allQuestions) {
       });
 
       for (const reply of question.replies) {
-        const createdReply = await create({
+        await create({
           id: reply.id || "",
           title: reply.title || "",
           body: reply.body,

@@ -5,7 +5,6 @@ describe("git client sync: materializing the blog folder", function () {
   require("./setup")({ clone: false, client: true });
 
   var util = require("util");
-  var fs = require("fs-extra");
   var database = require("clients/git/database");
   var write = util.promisify(require("clients/git/write"));
   var remove = util.promisify(require("clients/git/remove"));

@@ -1,4 +1,4 @@
-var relativeDate = (function(undefined){
+var relativeDate = (function(){
 
   var SECOND = 1000,
       MINUTE = 60 * SECOND,

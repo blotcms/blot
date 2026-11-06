@@ -210,7 +210,6 @@ describe("dropbox delta relative path normalization", function () {
 
 describe("dropbox delta case-only renames", function () {
   var Delta = require("../delta");
-  var Path = require("path");
   var folder = require("storage/folder");
 
   var blogID = "blog_deltacaseonly" + Date.now();

@@ -155,7 +155,6 @@ async function read(blog, path, callback) {
       // we should also check for a closing tag.
       if (yamlOpeningTag && i === 1) {
         yamlOpeningTag.remove();
-        validYAML = true;
       }
 
       $(this).remove();

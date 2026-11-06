@@ -14,7 +14,6 @@ describe("git client authenticate", function () {
   var async = require("async");
   var Blog = require("models/blog");
   var User = require("models/user");
-  var repo = require("clients/git/repo");
   var createRepository = require("clients/git/create");
 
   var otherBlog;

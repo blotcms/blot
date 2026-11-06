@@ -313,7 +313,7 @@ const handleFileEvent = async (event, blogID, filePath) => {
           event = "unlink";
         }
       } catch (error) {
-        console.error(clfdate(), `Error verifying exact case for path: ${fullPath}:`, error);
+        console.error(clfdate(), `Error verifying exact case for path: ${pathInBlogDirectory}:`, error);
         return;
       }
     }

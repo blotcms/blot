@@ -1,11 +1,8 @@
-const request = require("request");
-const fs = require("fs-extra");
 // Inside the proxy containers (the blot-proxy-auto-ssl volume, which blot-blue
 // and blot-green share), not on the host
 const CERT_DIR = "/etc/resty-auto-ssl/letsencrypt/certs";
 const get = require("../get/blog");
 const client = require("models/client");
-const exec = require("child_process").exec;
 var getConfirmation = require("../util/getConfirmation");
 
 // This deletes the Redis certificate keys, then prints the commands to run on

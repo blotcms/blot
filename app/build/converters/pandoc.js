@@ -48,7 +48,7 @@ async function pandoc(args, input, files = {}) {
     // (proxy/unit/sandbox/broker.js), which is the document's doing, as the
     // job's own timeout is in-process
     if (err.code !== "SANDBOX_TIMEOUT") throw err;
-    throw new Error("Pandoc exited with code null (SIGKILL) (timed out): " + err.message);
+    throw new Error("Pandoc exited with code null (SIGKILL) (timed out): " + err.message, { cause: err });
   }
   const { meta, outputs } = reply;
 

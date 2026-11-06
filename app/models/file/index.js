@@ -300,7 +300,7 @@ async function setMany(blogID, items) {
   var now = Date.now();
   var wanted = new Map();
 
-  for (var item of items) {
+  for (const item of items) {
     var path = normalize(item.path);
 
     if (path === "/") throw new Error("models/file: the folder itself has no record");
@@ -318,8 +318,8 @@ async function setMany(blogID, items) {
 
   var ancestors = new Set();
 
-  for (var path of wanted.keys()) {
-    for (var ancestor of ancestorsOf(path)) {
+  for (const path of wanted.keys()) {
+    for (const ancestor of ancestorsOf(path)) {
       if (!wanted.has(ancestor)) ancestors.add(ancestor);
       else if (wanted.get(ancestor).type !== "dir") {
         throw failure("ENOTDIR", "Not a directory: " + ancestor);
@@ -342,15 +342,15 @@ async function setMany(blogID, items) {
 
   var writes = new Map();
 
-  for (var ancestor of ancestors) {
-    var found = existing.get(ancestor);
+  for (const ancestor of ancestors) {
+    const found = existing.get(ancestor);
 
     if (found && found.type !== "dir") throw failure("ENOTDIR", "Not a directory: " + ancestor);
     if (!found) writes.set(ancestor, { type: "dir", size: 0, modified: now, sha1: "" });
   }
 
-  for (var [path, item] of wanted) {
-    var found = existing.get(path);
+  for (const [path, item] of wanted) {
+    const found = existing.get(path);
 
     if (found && found.type === "dir" && item.type !== "dir") {
       throw failure("EISDIR", "Is a directory: " + path);
@@ -366,7 +366,7 @@ async function setMany(blogID, items) {
   // The lowercased lookups of every name which is new to its directory
   var added = new Map();
 
-  for (var path of writes.keys()) {
+  for (const path of writes.keys()) {
     if (existing.get(path)) continue;
 
     var lowerKey = key.lower(blogID, parentOf(path));
@@ -391,7 +391,7 @@ async function setMany(blogID, items) {
   // always complete; adding just the new name would leave it partial.
   var named = new Map();
 
-  for (var path of writes.keys()) {
+  for (const path of writes.keys()) {
     if (existing.get(path)) continue;
 
     var parent = parentOf(path);
@@ -410,17 +410,17 @@ async function setMany(blogID, items) {
     older.map(async function (dir) {
       if (await client.exists(key.names(blogID, dir))) return;
 
-      for (var entry of await scan(blogID, dir)) named.get(dir).push(entry.name);
+      for (const entry of await scan(blogID, dir)) named.get(dir).push(entry.name);
     })
   );
 
   var multi = client.multi();
 
-  for (var [dir, children] of named) addNames(multi, key.names(blogID, dir), children);
+  for (const [dir, children] of named) addNames(multi, key.names(blogID, dir), children);
   var bytes = 0;
   var files = 0;
 
-  for (var [path, record] of writes) {
+  for (const [path, record] of writes) {
     var previous = existing.get(path);
 
     multi.hSet(key.dir(blogID, parentOf(path)), nameOf(path), pack(record));
@@ -435,7 +435,7 @@ async function setMany(blogID, items) {
   lookups.forEach(function (lookup, i) {
     var joined = current[i];
 
-    for (var name of lookup.names) joined = updateNames(joined, name, true);
+    for (const name of lookup.names) joined = updateNames(joined, name, true);
 
     setNames(multi, lookup.lowerKey, lookup.folded, joined);
   });

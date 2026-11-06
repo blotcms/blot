@@ -107,6 +107,7 @@ const SLACK = 4 * MiB;
 const IDX_PER_OBJECT = 28;
 
 // The refs a repository in the store has: the same as manifest.js accepts
+// eslint-disable-next-line no-control-regex
 const REF = /^refs\/(heads|tags)\/[^\s\x00-\x1f\x7f~^:?*[\\]+$/;
 const OID = /^[0-9a-f]{40}$/;
 

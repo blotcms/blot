@@ -39,7 +39,7 @@ const configureBlog = (blogID) => {
     Blog.get({ id: blogID }, (err, blog) => {
       if (err) return reject(err);
 
-      client = !blog.client ? "local" : blog.client;
+      const client = !blog.client ? "local" : blog.client;
       
       Blog.set(blogID, { forceSSL: false, client }, (err) => {
         if (err) return reject(err);

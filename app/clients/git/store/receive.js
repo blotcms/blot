@@ -153,6 +153,7 @@ class Refused extends Error {
 function refNameProblem(ref) {
   if (ref.indexOf("refs/") !== 0) return "ref names must start with refs/";
   if (Buffer.byteLength(ref) > 1024) return "ref name is too long";
+  // eslint-disable-next-line no-control-regex
   if (/[\x00-\x20\x7f~^:?*[\\]/.test(ref)) return "ref name has a character git does not allow";
   if (/\.\.|@\{|\/\/|\/$|\.$|^@$/.test(ref)) return "ref name is not valid";
   if (/(^|\/)\./.test(ref) || /\.lock(\/|$)/.test(ref)) return "ref name is not valid";
@@ -983,7 +984,7 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, read
   const { repo, prefetch } = await opened;
   const uploads = createUploads(store, cache);
 
-  let fresh = new Map();
+  let fresh;
   let local = new Map();
   let listed = new Map();
 

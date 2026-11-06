@@ -229,6 +229,7 @@ module.exports = async (
   { id, md5Checksum, mimeType },
   { serviceAccountId, folderId, skipHotEnqueue } = {}
 ) => {
+  // eslint-disable-next-line no-async-promise-executor -- settle() guards every exit
   return new Promise(async function (resolve, reject) {
     const tempPath = join(tempDir, guid());
     let settled = false;

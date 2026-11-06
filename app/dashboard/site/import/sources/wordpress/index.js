@@ -25,7 +25,6 @@ function main(sourceFile, outputDirectory, status, options, callback) {
 
       try {
         var channel = result.rss.channel[0];
-        var title = channel && channel.title && channel.title[0];
         var link = channel && channel.link && channel.link[0];
         var exportVersion = channel && channel["wp:wxr_version"] && channel["wp:wxr_version"][0];
         

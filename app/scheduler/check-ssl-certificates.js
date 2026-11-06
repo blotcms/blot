@@ -64,7 +64,7 @@ function expiryOf(value) {
   try {
     parsed = JSON.parse(value);
   } catch (e) {
-    throw new Error("malformed JSON");
+    throw new Error("malformed JSON", { cause: e });
   }
 
   const expiry = Number(parsed && parsed.expiry);
@@ -75,7 +75,7 @@ function expiryOf(value) {
   try {
     return Date.parse(new crypto.X509Certificate(parsed.fullchain_pem).validTo);
   } catch (e) {
-    throw new Error("no expiry, and fullchain_pem could not be parsed");
+    throw new Error("no expiry, and fullchain_pem could not be parsed", { cause: e });
   }
 }
 

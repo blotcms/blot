@@ -501,7 +501,7 @@ describe("template upload client", function () {
     });
 
     it("returns to the instructions when cleared", function () {
-      const { root, dropzone, empty, selected, files, clear } = build();
+      const { root, dropzone, selected, files, clear } = build();
       global.fetch = () => new Promise(function () {});
 
       panel.init(root);

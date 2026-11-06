@@ -6,7 +6,6 @@
 describe("git client sync: history", function () {
   require("./setup")({ clone: false, client: true });
 
-  var fs = require("fs-extra");
   var Entry = require("models/entry");
   var helpers = require("./setup/helpers");
   var folder = require("./setup/folder");

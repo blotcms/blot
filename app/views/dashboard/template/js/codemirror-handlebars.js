@@ -23,7 +23,7 @@ CodeMirror.defineSimpleMode("handlebars-tags", {
     { regex: /'(?:[^\\']|\\.)*'?/, token: "string" },
 
     // Handlebars keywords
-    { regex: />|[#\/]([A-Za-z_]\w*)/, token: "keyword" },
+    { regex: />|[#/]([A-Za-z_]\w*)/, token: "keyword" },
     { regex: /(?:else|this)\b/, token: "keyword" },
 
     // Numeral
@@ -33,17 +33,17 @@ CodeMirror.defineSimpleMode("handlebars-tags", {
     { regex: /=|~|@|true|false/, token: "atom" },
 
     // Paths
-    { regex: /(?:\.\.\/)*(?:[A-Za-z_][\w\.]*)+/, token: "variable-2" },
+    { regex: /(?:\.\.\/)*(?:[A-Za-z_][\w.]*)+/, token: "variable-2" },
   ],
   handlebars_triple: [
     { regex: /\}\}\}/, pop: true, token: "tag" },
     { regex: /"(?:[^\\"]|\\.)*"?/, token: "string" },
     { regex: /'(?:[^\\']|\\.)*'?/, token: "string" },
-    { regex: />|[#\/]([A-Za-z_]\w*)/, token: "keyword" },
+    { regex: />|[#/]([A-Za-z_]\w*)/, token: "keyword" },
     { regex: /(?:else|this)\b/, token: "keyword" },
     { regex: /\d+/i, token: "number" },
     { regex: /=|~|@|true|false/, token: "atom" },
-    { regex: /(?:\.\.\/)*(?:[A-Za-z_][\w\.]*)+/, token: "variable-2" },
+    { regex: /(?:\.\.\/)*(?:[A-Za-z_][\w.]*)+/, token: "variable-2" },
   ],
   dash_comment: [
     { regex: /--\}\}/, pop: true, token: "comment" },

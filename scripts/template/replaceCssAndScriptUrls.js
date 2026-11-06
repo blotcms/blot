@@ -99,9 +99,9 @@ async function fetchAsset(assetUrl) {
   } catch (error) {
     clearTimeout(timer);
     if (error.name === "AbortError") {
-      throw new Error(`Failed to fetch ${assetUrl}: Request timed out after 10 seconds`);
+      throw new Error(`Failed to fetch ${assetUrl}: Request timed out after 10 seconds`, { cause: error });
     }
-    throw new Error(`Failed to fetch ${assetUrl}: ${error.message}`);
+    throw new Error(`Failed to fetch ${assetUrl}: ${error.message}`, { cause: error });
   }
 }
 

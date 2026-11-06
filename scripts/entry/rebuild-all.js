@@ -225,7 +225,7 @@ async function processBlog(blog) {
     return;
   }
 
-  let rebuilt = 0;
+  let rebuilt;
 
   try {
     rebuilt = await rebuildEntries(blog, paths);

@@ -7,7 +7,6 @@
 const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
-const crypto = require("crypto");
 const { spawnSync } = require("child_process");
 const { Readable } = require("stream");
 const fx = require("./helpers/fixture");
@@ -367,9 +366,6 @@ describe("git store commit", function () {
       expect(await store.head(revKey(pack.name))).not.toBeNull();
       // A history piece is read whole, so it has no reverse index
       expect(await store.head(revKey(piece.name))).toBeNull();
-      {
-      }
-
       const bare = await expectGitHappy();
       const entries = fx.listEntries({ pack: await store.get(packKey(pack.name)), idx: await store.get(idxKey(pack.name)) });
       expect(entries.map((e) => e.type).sort()).toEqual(["blob", "commit", "tree", "tree", "tree"]);

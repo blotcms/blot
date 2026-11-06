@@ -99,7 +99,8 @@ module.exports = async function savePhoto(req, res, next) {
           { onFileProcessed: () => cleanupFiles({ favicon: uploaded }) }
         );
         if (req.templateFork) photoPath = `${req.baseUrl}/${faviconTemplateSlug}/photo`;
-      } catch (error) {
+      } catch (caught) {
+        let error = caught;
         try {
           await rollbackFork(req, res);
         } catch (rollbackError) {

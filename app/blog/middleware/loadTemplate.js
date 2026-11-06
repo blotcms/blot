@@ -1,4 +1,4 @@
-const Template = require("models/template");
+require("models/template");
 const Mustache = require("mustache");
 const fs = require("fs-extra");
 const { getMetadata } = require("../lib/models");

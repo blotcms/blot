@@ -69,7 +69,7 @@ describe("gdoc converter", function () {
       // e.g. src="https://lh7-rt.googleusercontent.com/docsz/AD_4nXeOM3QajRFUH4o1uvULhy3HKKOGpPIi39yxJqyA5mUwvm9PCEz-ukcgLb0IQ_hePGn8OGUdlRrssCgWOe6-_4CNXNdjrq95OJpfoKZZWDWo3gW2ge1mdn5NzGGKL9H9pQ-pvdHEQCI?key=sopuY66csb8X0yGU9VCD5g"
       // -> src="http://localhost:7391/image.jpg"
       input = input.replace(
-        /https:\/\/lh[0-9]+-rt\.googleusercontent\.com\/docsz\/[A-Za-z0-9_\-]+(\?key=[A-Za-z0-9_\-]+)/g,
+        /https:\/\/lh[0-9]+-rt\.googleusercontent\.com\/docsz\/[A-Za-z0-9_-]+(\?key=[A-Za-z0-9_-]+)/g,
         "http://localhost:7391/image.jpg"
       );
 
@@ -89,7 +89,7 @@ describe("gdoc converter", function () {
     const input = await fs.readFile(__dirname + path, "utf8");
 
     const originalSrc = input.match(
-      /https:\/\/lh[0-9]+-rt\.googleusercontent\.com\/docsz\/[A-Za-z0-9_\-]+\?[^"']+/i
+      /https:\/\/lh[0-9]+-rt\.googleusercontent\.com\/docsz\/[A-Za-z0-9_-]+\?[^"']+/i
     )[0];
 
     const remoteUrl = new URL(originalSrc);

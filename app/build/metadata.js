@@ -129,10 +129,6 @@ function Metadata (html) {
 
     // Extract metadata from within comments
 
-    if (key.slice(0, 4) === "<!--") {
-      key = key.slice(4).trim();
-    }
-
     if (value.slice(-3) === "-->") {
       value = value.slice(0, -3).trim();
     }

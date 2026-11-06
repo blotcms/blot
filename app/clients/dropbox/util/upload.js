@@ -173,7 +173,7 @@ async function upload(client, source, destination, callback) {
     // client_modified is intentionally omitted: Blot doesn't keep a
     // provider-independent modified time for local files, so Dropbox
     // stamps the upload with its own server time instead.
-    const { result } = await client.filesUpload({
+    await client.filesUpload({
       path: destination,
       mode: { ".tag": "overwrite" },
       autorename: false,

@@ -4,7 +4,6 @@ const path = require("path");
 const { spawn } = require("child_process");
 const config = require("config");
 const build = require("documentation/build");
-const recursiveReadDir = require("helper/recursiveReadDirSync");
 
 describe("Blot's documentation'", function () {
 

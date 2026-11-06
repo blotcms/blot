@@ -77,6 +77,7 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
         callback(freeze())
       );
 
+      // eslint-disable-next-line no-unused-vars
       for (const attempt of [1, 2]) {
         const res = await call(upload, blogID, path, Buffer.from("Hello"));
         expect(res.code).toBe(503);

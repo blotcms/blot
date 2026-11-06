@@ -195,6 +195,3 @@ function removeDeletedViews (templateID, contents, callback) {
     }, callback);
 }
 
-function badPermission (blogID, templateID) {
-  return new Error("No permission for " + blogID + " to write " + templateID);
-}

@@ -87,7 +87,7 @@ async function build(callback) {
 
       if (!isOnline) return null;
 
-      let tenure = null;
+      let tenure;
       if (site.tenureStartYear != null) {
         const startMs = Date.UTC(site.tenureStartYear, 0, 1);
         tenure = Date.now() - startMs;
@@ -95,6 +95,8 @@ async function build(callback) {
         tenure = await fetchSubscriptionDuration(site.host);
       }
 
+      // tenureStartYear is dropped from the result
+       
       const { tenureStartYear, ...rest } = site;
       return {
         ...rest,

@@ -229,7 +229,6 @@ describe("updateCdnManifest", function () {
   });
 
   it("handles missing blog gracefully when rendering for CDN", async function () {
-    const test = this;
     const updateCdnManifest = require("../util/updateCdnManifest");
 
     // Create a template with invalid owner ID
@@ -400,7 +399,6 @@ describe("updateCdnManifest", function () {
   });
 
   it("never computes manifest for SITE templates", async function () {
-    const test = this;
     const updateCdnManifest = require("../util/updateCdnManifest");
 
     // Create a SITE template (not installed on any blog)

@@ -376,6 +376,7 @@ async function* endOf(queue, size, what, forward) {
   })();
 
   const stream = inflateStream(input, size, what);
+  // eslint-disable-next-line no-unused-vars
   for await (const ignored of stream.output) {
     while (outbox.length) yield outbox.shift();
   }

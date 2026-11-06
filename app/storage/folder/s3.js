@@ -79,7 +79,7 @@ function checkBlogID(blogID) {
 
   if (!blogID) throw new Error("storage/folder: blogID must be a non-empty string");
 
-  if (blogID === "." || blogID === ".." || /[\/\\\0]/.test(blogID)) {
+  if (blogID === "." || blogID === ".." || /[/\\\0]/.test(blogID)) {
     throw new Error("storage/folder: invalid blogID: " + blogID);
   }
 }

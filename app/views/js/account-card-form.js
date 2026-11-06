@@ -5,7 +5,7 @@ if (form && cardContainer && window.Stripe) {
   var stripeKey = form.dataset.stripeKey;
 
   if (stripeKey) {
-    var stripe = Stripe(stripeKey);
+    var stripe = window.Stripe(stripeKey);
     var elements = stripe.elements();
 
     var style = {

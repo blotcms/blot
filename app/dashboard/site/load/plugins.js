@@ -38,7 +38,7 @@ module.exports = function (req, res, next) {
     External: "Services",
   };
 
-  plugins = arrayify(plugins, function (plugin) {
+  arrayify(plugins, function (plugin) {
     let name = capitalize(deCamelize(plugin.category || "general"));
     let slug = name.split(" ").join("-").toLowerCase();
 

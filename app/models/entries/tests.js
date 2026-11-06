@@ -1026,8 +1026,8 @@ describe("entries", function () {
     it("should update entries with new dateStamps", async function (done) {
       const blog = { id: this.blog.id, permalink: true };
       const entries = [
-        { path: "entry1", metadata: {}, id: "id1", metadata: {} },
-        { path: "entry2", metadata: {}, id: "id2", metadata: {} },
+        { path: "entry1", id: "id1", metadata: {} },
+        { path: "entry2", id: "id2", metadata: {} },
       ];
 
       // Mock Blog.get

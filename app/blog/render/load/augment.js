@@ -2,7 +2,6 @@ const normalize = require("models/tags").normalize;
 const type = require("helper/type");
 const backlinksFor = require("./backlinks");
 const moment = require("moment");
-const debug = require("debug")("blog:render:augment");
 require("moment-timezone");
 
 // backlinks (optional): resolves the entry's backlinks. Share one across a walk

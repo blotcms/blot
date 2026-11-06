@@ -59,11 +59,6 @@ function whileRunning(promise, signal) {
   });
 }
 
-function currentSignal() {
-  const state = lifecycle.current();
-  return state && state.signal;
-}
-
 // Fetches a post's URLs a jail's worth at a time, so an import pays for a
 // jail's start once for several images, or audio files, or PDFs, not for each.
 // Nothing is fetched until download() asks for the first URL; then it and the
@@ -119,7 +114,7 @@ async function prefetch(urls, options = {}) {
 }
 
 module.exports = async function download(url, options = {}) {
-  const { kind = "file", check, prefetched } = options;
+  const { prefetched } = options;
   lifecycle.check();
   const state = lifecycle.current();
   const signal = options.signal || (state && state.signal);

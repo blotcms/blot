@@ -17,7 +17,7 @@ module.exports = async function ensureBucket() {
       err.message +
         "\nThe tests need a simulated S3: run them with `npm test`, which " +
         "starts MinIO and sets BLOT_STORAGE_BUCKET, BLOT_STORAGE_ENDPOINT, " +
-        "BLOT_AWS_KEY and BLOT_AWS_SECRET."
+        "BLOT_AWS_KEY and BLOT_AWS_SECRET.", { cause: err }
     );
   }
 

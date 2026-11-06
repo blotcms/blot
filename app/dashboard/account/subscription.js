@@ -1,7 +1,6 @@
 var Express = require("express");
 var Subscription = new Express.Router();
 var User = require("models/user");
-var User = require("models/user");
 var config = require("config");
 var stripe = require("stripe")(config.stripe.secret);
 var email = require("helper/email");

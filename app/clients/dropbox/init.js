@@ -110,7 +110,7 @@ const hasRecentSync = (account) => {
 const validateAllBlogs = async () => {
   console.log(clfdate(), "Dropbox: Running hourly sync validation");
 
-  let blogIDs = [];
+  let blogIDs;
 
   try {
     blogIDs = await getAllIDs();
@@ -251,7 +251,7 @@ const validateAllBlogs = async () => {
 const resyncRecentSyncsOnStartup = async () => {
   console.log(clfdate(), "Dropbox: Checking for recent syncs on startup");
 
-  let blogIDs = [];
+  let blogIDs;
 
   try {
     blogIDs = await getAllIDs();

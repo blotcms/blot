@@ -23,7 +23,7 @@ function Changes(latest, former) {
 
   // Determine any changes to the user's info
   for (var i in latest)
-    if (!_.isEqual(latest[i], former[i])) changes[i] = latest[i] = latest[i];
+    if (!_.isEqual(latest[i], former[i])) changes[i] = latest[i];
 
   return changes;
 }

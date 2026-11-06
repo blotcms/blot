@@ -38,9 +38,11 @@ function loads(source) {
   const found = [];
 
   for (const m of code.matchAll(/\brequire\(\s*(["'])([^"']+)\1\s*\)/g)) found.push({ specifier: m[2] });
+  // eslint-disable-next-line no-unused-vars
   for (const m of code.matchAll(/\brequire\(\s*(?!["'])/g)) found.push({ dynamic: true });
   for (const m of code.matchAll(/^\s*import\s[^;]*?from\s*(["'])([^"']+)\1/gm)) found.push({ specifier: m[2] });
   for (const m of code.matchAll(/\bimport\(\s*(["'])([^"']+)\1\s*\)/g)) found.push({ specifier: m[2] });
+  // eslint-disable-next-line no-unused-vars
   for (const m of code.matchAll(/\bimport\(\s*(?!["'])/g)) found.push({ dynamic: true });
 
   return found;

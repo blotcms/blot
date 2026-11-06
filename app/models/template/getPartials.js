@@ -1,7 +1,6 @@
 var getView = require("./getView");
 var async = require("async");
 var ensure = require("helper/ensure");
-var promisify = require("util").promisify;
 var parseTemplate = require("./parseTemplate");
 var mergeRetrieve = require("./util/mergeRetrieve");
 var {

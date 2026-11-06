@@ -81,9 +81,6 @@ function deleteKeys(blog, callback) {
   (async function () {
     try {
       var multi = client.multi();
-      var ownedTemplates =
-        (await client.sMembers("template:owned_by:" + blog.id)) || [];
-
       var patterns = ["template:" + blog.id + ":*", "blog:" + blog.id + ":*"];
 
       var remove = [

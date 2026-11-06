@@ -15,7 +15,7 @@ var _ = require("lodash");
 // case share one set.
 
 module.exports = function (blogID, entry, previous_dependencies, callback) {
-  var removed_dependencies = [];
+  var removed_dependencies;
   var current_dependencies = [];
   var multi = client.multi();
 

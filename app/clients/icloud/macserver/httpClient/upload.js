@@ -109,7 +109,7 @@ export default async (blogID, path) => {
   } catch (e) {
     if (isMissingCode(e)) throw new FileMissingError(path);
     console.error(clfdate(), `Failed to stat file before upload: ${filePath}`, e);
-    throw new Error(`Stat failed: ${e.message}`);
+    throw new Error(`Stat failed: ${e.message}`, { cause: e });
   }
 
   // Checked before the download: an evicted file is reported as changed each
@@ -148,7 +148,7 @@ export default async (blogID, path) => {
       `Failed to download file before upload: ${filePath}`,
       e
     );
-    throw new Error(`Download failed: ${e.message}`);
+    throw new Error(`Download failed: ${e.message}`, { cause: e });
   }
 
   if (stat.size > maxFileSize) {
@@ -180,7 +180,7 @@ export default async (blogID, path) => {
   } catch (error) {
     if (isMissingCode(error)) throw new FileMissingError(path);
     console.error(clfdate(), `Failed to read file for upload: ${filePath}`, error);
-    throw new Error(`Failed to read file: ${error.message}`);
+    throw new Error(`Failed to read file: ${error.message}`, { cause: error });
   }
 
   console.log(clfdate(), `Issuing HTTP /upload request to remote server: ${path}`);

@@ -2,7 +2,7 @@ const path = require("path");
 const fs = require("fs-extra");
 
 // Used to extract title text from Markdown title tags in note source files
-const HASH_TITLE_REGEX = /\# (.*)/;
+const HASH_TITLE_REGEX = /# (.*)/;
 const DASH_TITLE_REGEX = /(.*)\n[=-]+\n/;
 
 const extractName = (path, contents) => {

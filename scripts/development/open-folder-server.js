@@ -9,9 +9,9 @@ const SOURCES_DIR = path.resolve(__dirname, "../../data/local-sources");
 
 // Map client types to their folder paths in development
 const CLIENT_FOLDERS = {
-  dropbox: path.join(os.homedir(), "/Library/CloudStorage/Dropbox/Apps/Blot\ test"),
-  "google-drive": path.join(os.homedir(), "/Library/CloudStorage/GoogleDrive-dmerfield@gmail.com/My\ Drive/Sites"),
-  icloud: path.join(os.homedir(), "/Library/Mobile\ Documents/com~apple~CloudDocs/Sites"),
+  dropbox: path.join(os.homedir(), "/Library/CloudStorage/Dropbox/Apps/Blot test"),
+  "google-drive": path.join(os.homedir(), "/Library/CloudStorage/GoogleDrive-dmerfield@gmail.com/My Drive/Sites"),
+  icloud: path.join(os.homedir(), "/Library/Mobile Documents/com~apple~CloudDocs/Sites"),
 };
 
 http

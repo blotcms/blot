@@ -28,7 +28,6 @@ var BATCH_SIZE = 25;
 function get(blogID, entryIDs, fields, callback) {
   if (typeof fields === "function") {
     callback = fields;
-    fields = undefined;
   }
 
   ensure(blogID, "string").and(callback, "function");

@@ -58,7 +58,6 @@ describe("list", function () {
   });
 
   it("does not return an error if the owner does not exist", function (done) {
-    var test = this;
     getTemplateList("nonexistent:blog", function (err, result) {
       if (err) return done.fail(err);
       expect(result).toEqual(jasmine.any(Array));

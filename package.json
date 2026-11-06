@@ -8,7 +8,8 @@
     "download-folder": "./scripts/development/download-folder.sh",
     "fork": "./scripts/development/fork.sh",
     "test": "./scripts/tests/invoke.sh",
-    "lint": "eslint .",
+    "lint": "./scripts/development/lint.sh check",
+    "fix": "./scripts/development/lint.sh fix",
     "benchmark": "node scripts/benchmarks/compare.js",
     "benchmark:ci": "node scripts/benchmarks --ci",
     "start": "./scripts/development/start.sh",
@@ -114,6 +115,7 @@
     "nock": "13.5.4",
     "nodemon": "3.1.0",
     "nyc": "17.1.0",
+    "prettier": "3.9.10",
     "seedrandom": "2.4.4"
   }
 }

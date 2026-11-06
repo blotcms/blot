@@ -5,7 +5,6 @@ describe("build", function () {
   var os = require("os");
   var express = require("express");
   var app = express();
-  var exif = require("../converters/img/exif");
 
   // Only serve a test image when query contains valid user and password
   app.get("/small.jpg", function (req, res) {

@@ -1,5 +1,4 @@
 var request = require("request");
-var config = require("config");
 
 function main(callback) {
   require("../generate-access-token")(function(err, token) {

@@ -1,7 +1,7 @@
 var ensure = require("helper/ensure");
 var punycode = require("helper/punycode");
 var url = require("url");
-var HOST = /^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$/;
+var HOST = /^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9-]*[A-Za-z0-9])$/;
 
 var INVALID = "Please enter a valid hostname";
 var IN_USE = "That domain was already in use.";

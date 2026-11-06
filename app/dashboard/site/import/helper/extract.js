@@ -52,7 +52,7 @@ var htmlEntities = {
 };
 
 function unescapeHTML(str) {
-  return str.replace(/\&([^;]+);/g, function (entity, entityCode) {
+  return str.replace(/&([^;]+);/g, function (entity, entityCode) {
     var match;
 
     if (entityCode in htmlEntities) {

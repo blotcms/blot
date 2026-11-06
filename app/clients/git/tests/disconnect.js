@@ -7,7 +7,6 @@ describe("git client disconnect", function () {
     clone: false,
   });
 
-  var fs = require("fs-extra");
   var Blog = require("models/blog");
   var database = require("clients/git/database");
   var repo = require("clients/git/repo");

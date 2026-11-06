@@ -100,13 +100,13 @@ describe("git client sync", function () {
     for (var i = 0; i < 3; i++)
       files["/commit-" + i + "/" + this.fake.lorem.word() + ".txt"] = content(this);
 
-    for (var path of Object.keys(files)) {
+    for (const path of Object.keys(files)) {
       await this.local.commitFiles({ [path]: files[path] });
     }
 
     await this.local.push();
 
-    for (var path of Object.keys(files)) {
+    for (const path of Object.keys(files)) {
       expect(await helpers.blogFile(this, path)).toEqual(Buffer.from(files[path]));
     }
   });

@@ -9,7 +9,7 @@ module.exports = text => {
   // Nbsp for punc with spaces
   const NBSP = "&nbsp;";
   const NBSP_PUNCTUATION_START = /([«¿¡]) /g;
-  const NBSP_PUNCTUATION_END = / ([\!\?:;\.,‽»])/g;
+  const NBSP_PUNCTUATION_END = / ([!?:;.,‽»])/g;
 
   text = text.replace(NBSP_PUNCTUATION_START, "$1" + NBSP);
   text = text.replace(NBSP_PUNCTUATION_END, NBSP + "$1");

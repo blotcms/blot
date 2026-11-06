@@ -378,7 +378,7 @@ async function chooseImage(release) {
         { cwd: REPO_ROOT }
       ));
     } catch (err) {
-      throw new Error(`--release ${release} isn't a commit in this checkout (try git fetch)`);
+      throw new Error(`--release ${release} isn't a commit in this checkout (try git fetch)`, { cause: err });
     }
     sha = sha.trim();
     if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error(`Couldn't resolve --release ${release}: ${sha}`);

@@ -142,10 +142,10 @@ function dependencies (path, html, metadata) {
   $("link[href], a[href], [src]").each(function () {
     var $el = $(this);
     var isWikilink = $el.attr("title") === "wikilink";
-    var suffix = "";
+    var suffix;
 
-    if (!!$el.attr("href")) attribute = "href";
-    if (!!$el.attr("src")) attribute = "src";
+    if ($el.attr("href")) attribute = "href";
+    if ($el.attr("src")) attribute = "src";
 
     // Browsers strip all ASCII tab/newline characters (wherever
     // they appear, not just at the ends) and then trim leading/

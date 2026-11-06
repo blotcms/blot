@@ -1,7 +1,6 @@
 var eachBlog = require("./blog");
 var Template = require("models/template");
 var async = require("async");
-var config = require("../../config");
 var progress = require("./progress");
 
 module.exports = function (doThis, callback) {

@@ -1,4 +1,3 @@
-const exp = require("constants");
 const { promisify } = require("util");
 
 describe("template", () => {
@@ -333,7 +332,6 @@ describe("template", () => {
 	});
 
 	it("won't set a view against a template that does not exist", async function () {
-		const test = this;
 		const view = { name: "missing.html" };
 
 		try {

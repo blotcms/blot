@@ -327,11 +327,7 @@ module.exports = async (req, res, next) => {
           continue;
         }
 
-        try {
-          await folder.update(`/${entry.relativePath}`);
-        } catch (err) {
-          throw err;
-        }
+        await folder.update(`/${entry.relativePath}`);
 
         if (!client) {
           results.push({

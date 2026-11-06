@@ -67,15 +67,12 @@ function truncate (target) {
   const paddingWidth =
     parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight);
 
-  const marginWidth =
-    parseFloat(styles.marginLeft) + parseFloat(styles.marginRight);
-
   const borderWidth =
     parseFloat(styles.borderLeftWidth) + parseFloat(styles.borderRightWidth);
 
   const trueWidth = width - paddingWidth - borderWidth;
 
-  maxWidth = trueWidth - ellipsisWidth;
+  const maxWidth = trueWidth - ellipsisWidth;
 
   if (target.clientWidth === 0) {
     return;

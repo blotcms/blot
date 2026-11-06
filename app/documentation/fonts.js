@@ -1,5 +1,3 @@
-const Express = require("express");
-const fonts = new Express.Router();
 const config = require("config");
 const Mustache = require("mustache");
 const specimen = require("blog/static/fonts/specimen");

@@ -30,7 +30,7 @@ signup.use("/paypal", require("./paypal"));
 var paymentForm = signup.route("/");
 var alreadyPaid = signup.route("/paid/:token");
 var passwordForm = signup.route("/create-account");
-var firstSite = signup.route("/first-site");
+signup.route("/first-site");
 
 // For users who paid by PayPal or institutional customers
 // who paid on Stripe I have a tool to skip the form using

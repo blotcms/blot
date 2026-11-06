@@ -15,7 +15,7 @@ var MAX_DEPTH = 3;
 function extractTitle ($, path, options = {}) {
   var titleNode;
   var tag = "";
-  var title = "";
+  var title;
 
   $.root().children().each(find);
 

@@ -224,7 +224,7 @@ describe("git client: Blot's own writes", function () {
 
       await this.local.pull();
 
-      for (var path of paths) {
+      for (const path of paths) {
         expect((await this.local.read(path)).toString()).toBe("Contents of " + path);
         expect(await helpers.blogFile(this, path)).toEqual(Buffer.from("Contents of " + path));
       }

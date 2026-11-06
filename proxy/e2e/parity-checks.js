@@ -40,7 +40,6 @@ const zlib = require("zlib");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const crypto = require("crypto");
 const { execFileSync, spawnSync } = require("child_process");
 const versions = require("../../scripts/versions");
 
@@ -607,11 +606,6 @@ function header(r, name) {
   return r.raw.filter(([k]) => k === name).map(([, v]) => v);
 }
 
-const reqHeader = (spec, name) => {
-  const k = Object.keys(spec.headers || {}).find((h) => h.toLowerCase() === name);
-  return k === undefined ? undefined : spec.headers[k];
-};
-
 function decode(r) {
   const enc = (header(r, "content-encoding")[0] || "").toLowerCase();
   try {
@@ -739,7 +733,6 @@ const INTENDED = [{
 // ---- the run ------------------------------------------------------------
 
 const results = []; // every comparison
-const hardFailures = [];
 
 function label(spec) {
   return spec.id;

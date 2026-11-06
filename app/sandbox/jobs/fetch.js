@@ -88,7 +88,7 @@ const FULL = "batch is full";
 
 // A web page, SVG or script is never what a caller asked for in a file, and is
 // what a caller must not serve from a folder as if it were one
-const MARKUP = /^[\s﻿]*(<|\{)|<\s*(html|head|body|svg|script)[\s>]/i;
+const MARKUP = /^[\s\uFEFF]*(<|\{)|<\s*(html|head|body|svg|script)[\s>]/i;
 const sniff = (body) => body.subarray(0, 1024).toString("latin1");
 
 function checkFile(body, check) {

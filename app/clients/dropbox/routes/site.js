@@ -104,7 +104,7 @@ site.post("/webhook", function (req, res) {
   var signature = req.headers["x-dropbox-signature"];
   var secret;
 
-  if (!!req.query.full_access) {
+  if (req.query.full_access) {
     secret = config.dropbox.full.secret;
   } else {
     secret = config.dropbox.app.secret;

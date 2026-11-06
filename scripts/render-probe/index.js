@@ -34,6 +34,7 @@ const LOCAL_OPTIONS = {
 const DEFAULTS = { memory: "3g", oldSpace: UNIT.nodeAMaxOldSpaceSize, cpus: 1 };
 
 function usage() {
+   
   const { out, replay, ...probeOptions } = PROBE_OPTIONS;
   console.log(`Usage: npm run render-probe -- <url...> [options]
 

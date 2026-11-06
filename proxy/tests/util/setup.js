@@ -40,14 +40,14 @@ const config = {
 
 const startOpenresty = async (pathToConf, origin) => {
   try {
-    const output = child_process.execSync(
+    child_process.execSync(
       __dirname + "/start-openresty.sh " + pathToConf
     );
     // console.log(output.toString());
   } catch (e) {
     console.log("stdout: ", e.stdout.toString());
     console.log("stderr: ", e.stderr.toString());
-    throw new Error("Failed to start openresty");
+    throw new Error("Failed to start openresty", { cause: e });
   }
 
   let connected = false;
@@ -65,7 +65,7 @@ const startOpenresty = async (pathToConf, origin) => {
 
 const stopOpenresty = async () => {
   try {
-    const output = child_process.execSync(__dirname + "/stop-openresty.sh");
+    child_process.execSync(__dirname + "/stop-openresty.sh");
     // console.log(output.toString());
   } catch (e) {}
 };

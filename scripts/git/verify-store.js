@@ -126,6 +126,7 @@ async function main() {
   console.log = console.error;
 
   const maintenance = require("clients/git/served/maintenance");
+   
   const { blog, blogs, all, deepSample, concurrency, ...rest } = options;
   let code;
 

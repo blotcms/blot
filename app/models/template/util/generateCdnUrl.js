@@ -28,21 +28,5 @@ function generateCdnUrl(viewName, hash) {
   return config.cdn.origin + "/template/" + dir1 + "/" + dir2 + "/" + hashRemainder + "/" + encodedBaseName;
 }
 
-/**
- * Encode view segment by splitting on "/" and encoding each part
- * @param {string} segment - The view segment to encode
- * @returns {string} The encoded segment
- */
-function encodeViewSegment(segment) {
-  if (!segment) return "";
-
-  return segment
-    .split("/")
-    .map(function (part) {
-      return encodeURIComponent(part);
-    })
-    .join("/");
-}
-
 module.exports = generateCdnUrl;
 

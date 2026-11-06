@@ -67,7 +67,7 @@ describe("questions.list", function () {
 
   it("lets you list the questions with a given tag", async function () {
     const first = await create({ title: "How?", body: "Yes", tags: ["foo"] });
-    const second = await create({ title: "How?", body: "Yes", tags: ["bar"] });
+    await create({ title: "How?", body: "Yes", tags: ["bar"] });
     const third = await create({ title: "How?", body: "Yes", tags: ["foo"] });
 
     const { questions } = await list({ tag: "foo" });

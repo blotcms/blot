@@ -269,7 +269,7 @@ async function setupFolder(blogID, sharingLink) {
   let lastAskForAccessCheck = start;
   let loggedSkippedDirs = false;
 
-  while (true && Date.now() - start < timeout) {
+  while (Date.now() - start < timeout) {
     // Get the current state of the top-level directories
     const currentDirs = await fs.readdir(iCloudDriveDirectory, {
       withFileTypes: true,

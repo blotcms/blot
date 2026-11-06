@@ -1,5 +1,4 @@
 var _ = require("lodash");
-var ensure = require("helper/ensure");
 
 module.exports = function deserialize(sourceObj, model) {
   // We don't want to modify the

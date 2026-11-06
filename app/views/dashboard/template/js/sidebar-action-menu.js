@@ -92,7 +92,7 @@ function initSidebarActionMenu(options) {
     linkEntries.forEach(function (entry) {
       var resolver = linkMap[entry.key];
       var value = typeof resolver === "function" ? resolver(dataset, trigger) : resolver;
-      var href = null;
+      var href;
       var disabled = false;
       var hidden = false;
 

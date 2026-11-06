@@ -1,5 +1,3 @@
-const tags = require("../../tags");
-
 describe("exportQuestions", function () {
     require("./setup")();
   
@@ -260,7 +258,7 @@ describe("exportQuestions", function () {
 
       it("will throw an error if you trigger an issue with redis hGetAll", async function () {
         
-        const question = await create({ title: 'How?', body: 'Yes' });
+        await create({ title: 'How?', body: 'Yes' });
 
         spyOn(require("models/client"), "hGetAll").and.callFake(function () {
           return Promise.reject(new Error("REDIS hGetAll ISSUE"));
@@ -276,7 +274,7 @@ describe("exportQuestions", function () {
 
       it("will throw an error if you trigger an issue with redis zRange", async function () {
         
-        const question = await create({ title: 'How?', body: 'Yes' });
+        await create({ title: 'How?', body: 'Yes' });
 
         spyOn(require("models/client"), "zRange").and.callFake(function () {
           return Promise.reject(new Error("REDIS zRange ISSUE"));

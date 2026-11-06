@@ -1,9 +1,5 @@
-// ESLint (flat config). Correctness rules only: no stylistic rules, since
-// formatting is a separate decision and would touch every file.
-//
-// Existing violations are recorded in eslint-suppressions.json, so CI fails
-// only on new ones. When you fix some, run `npm run lint -- --prune-suppressions`
-// to drop them from the file.
+// ESLint (flat config). Correctness rules only: formatting is Prettier's job
+// (.prettierrc.json). Run both with scripts/development/lint.sh.
 const js = require("@eslint/js");
 const globals = require("globals");
 
@@ -48,7 +44,12 @@ module.exports = [
     },
     rules: {
       // Callback-style code routinely names unused (err, ...) arguments
-      "no-unused-vars": ["error", { args: "none", caughtErrors: "none" }],
+      "no-unused-vars": [
+        "error",
+        { args: "none", caughtErrors: "none", ignoreRestSiblings: true },
+      ],
+      // `try { ... } catch (e) {}` is the idiom for best-effort cleanup
+      "no-empty": ["error", { allowEmptyCatch: true }],
     },
   },
 
@@ -84,7 +85,8 @@ module.exports = [
       "scripts/benchmarks/spec/**/*.js",
     ],
     languageOptions: {
-      globals: { ...globals.jasmine },
+      // `test` is the spec helper scripts/tests sets up as a global
+      globals: { ...globals.jasmine, test: "readonly" },
     },
   },
 ];

@@ -31,7 +31,7 @@ module.exports = function (metadata, html) {
       if ($(this).is("img")) {
         const src = $(this).attr("src");
 
-        // The img lacks an src attribute – it happens!
+        // The img lacks an src attribute – it happens!
         if (!src) return;
 
         // We've already added this image as a candidate

@@ -1,5 +1,4 @@
 const fs = require("fs-extra");
-const os = require("os");
 const path = require("path");
 const lifecycle = require("../lifecycle");
 const wordpress = require("../sources/wordpress");
