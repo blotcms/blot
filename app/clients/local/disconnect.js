@@ -20,8 +20,13 @@ module.exports = function disconnect(blogID, callback) {
     // Nothing to repair on the way out: every change the client made went
     // through storage/folder, which the mirror follows. The source directory
     // is left where it is.
-    Blog.set(blogID, { client: "" }, function (err) {
-      done(err, callback);
-    });
+    Blog.set(blogID, { client: "" }).then(
+      function () {
+        done(null, callback);
+      },
+      function (err) {
+        done(err, callback);
+      }
+    );
   });
 };

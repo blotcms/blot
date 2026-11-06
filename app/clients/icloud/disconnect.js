@@ -6,14 +6,6 @@ const config = require("config");
 const MACSERVER_URL = config.icloud.server_address; // The Macserver base URL from config
 const MACSERVER_AUTH = config.icloud.secret; // The Macserver Authorization secret from config
 
-const removeClientFromBlog = (blogID) =>
-  new Promise((resolve, reject) => {
-    Blog.set(blogID, { client: "" }, function (err) {
-      if (err) return reject(err);
-      resolve();
-    });
-  });
-
 module.exports = async (blogID, callback) => {
   let remoteWarning = null;
 
@@ -47,7 +39,7 @@ module.exports = async (blogID, callback) => {
   try {
     // Phase B (authoritative local): always disconnect locally.
     await database.delete(blogID);
-    await removeClientFromBlog(blogID);
+    await Blog.set(blogID, { client: "" });
 
     callback(null, remoteWarning);
   } catch (error) {
