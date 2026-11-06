@@ -32,6 +32,10 @@ set -euo pipefail
 #   scripts/prod/read.sh redis-log [opts]           Redis's own log
 #   scripts/prod/read.sh redis-journal [hours]      journalctl for the redis6 unit
 #   scripts/prod/read.sh fail2ban <jail>            a fail2ban jail's status
+#   scripts/prod/read.sh errors <unit|error-log> [--since <window>] [--top <n>]
+#                                                   error and warning lines collapsed into
+#                                                   templates (ids, URLs, numbers stripped),
+#                                                   most frequent first: count, template, one example
 #
 # Options for logs, access, error-log, health-check-log and redis-log:
 #   --since <30m|6h|2d|ISO time>   logs only: start of the window
@@ -210,6 +214,48 @@ case "$command" in
   fail2ban)
     [[ "${1:-}" =~ ^[a-z0-9-]{1,40}$ ]] || fail "jail name must be lowercase letters, digits and dashes"
     remote "sudo -n fail2ban-client status $1" ;;
+  errors)
+    source="${1:-}"; shift || true
+    top=50 since=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --since)
+          [[ "${2:-}" =~ ^([0-9]{1,4}[smhd]|[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9:.]+Z?)?)$ ]] || fail "bad --since '${2:-}'"
+          since="$2"; [[ "$since" =~ ^([0-9]+)d$ ]] && since="$((BASH_REMATCH[1] * 24))h"; shift 2 ;;
+        --top) number "${2:-}"; top="$2"; shift 2 ;;
+        *) fail "errors takes only --since and --top" ;;
+      esac
+    done
+    if [[ "$source" == error-log ]]; then
+      [[ -z "$since" ]] || fail "error-log has no --since"
+      input="grep -aE '\\[(error|crit|alert|emerg|warn)\\]' $LOG_DIRECTORY/error.log"
+    else
+      name=$(unit_name "$source")
+      input="docker logs ${since:+--since $since} $name 2>&1 | grep -aiE 'error|exception|fatal|unhandled|warn|timed? ?out|ECONN|EPIPE|refused'"
+    fi
+    # The awk program is fixed text sent over stdin; only validated values are in the command line
+    remote_stdin "program=\$(cat); $input | awk -v top=$top \"\$program\"" <<'AWK'
+{
+  line = $0
+  t = line
+  sub(/^[0-9TZ:.-]+ /, "", t)                                # docker timestamp
+  gsub(/\[[0-9]{2}\/[A-Za-z]{3}\/[0-9:]+ [+-][0-9]{4}\]/, "", t) # [06/Nov/2026:21:12:51 +0000]
+  sub(/^[0-9\/]+ [0-9:]+ /, "", t)                            # error.log date
+  gsub(/https?:\/\/[^ ]+/, "<url>", t)
+  gsub(/\/[^ ]*\/[^ ]*/, "<path>", t)
+  gsub(/blog_[0-9a-f]+/, "blog_<id>", t)
+  gsub(/[0-9a-f]{16,}/, "<hex>", t)
+  gsub(/client: [^,]+/, "client: <ip>", t)
+  gsub(/[0-9]+/, "<n>", t)
+  t = substr(t, 1, 200)
+  if (!(t in count)) example[t] = substr(line, 1, 300)
+  count[t]++
+}
+END {
+  for (t in count) printf "%d\t%s\t%s\n", count[t], t, example[t] | "sort -rn | head -n " top
+}
+AWK
+    ;;
   -h|--help|help)
     usage ;;
   *)
