@@ -111,11 +111,9 @@ describe("templates startup build locks", function () {
     beforeEach(function () {
       originalFolders = require.cache[foldersPath];
       originalSetupUser = require.cache[setupUserPath];
-      setupUser = jasmine
-        .createSpy("setupUser")
-        .and.callFake(async () => {
-          throw new Error("should not run");
-        });
+      setupUser = jasmine.createSpy("setupUser").and.callFake(async () => {
+        throw new Error("should not run");
+      });
       require.cache[setupUserPath] = {
         id: setupUserPath,
         filename: setupUserPath,

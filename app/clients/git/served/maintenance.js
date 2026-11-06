@@ -91,15 +91,21 @@ async function each(items, limit, fn) {
       await fn(items[i], i);
     }
   };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, worker)
+  );
 }
 
 function getBlog(by) {
-  return new Promise((resolve, reject) => Blog.get(by, (err, blog) => (err ? reject(err) : resolve(blog || null))));
+  return new Promise((resolve, reject) =>
+    Blog.get(by, (err, blog) => (err ? reject(err) : resolve(blog || null)))
+  );
 }
 
 function allBlogIDs() {
-  return new Promise((resolve, reject) => Blog.getAllIDs((err, ids) => (err ? reject(err) : resolve(ids || []))));
+  return new Promise((resolve, reject) =>
+    Blog.getAllIDs((err, ids) => (err ? reject(err) : resolve(ids || [])))
+  );
 }
 
 // An error's message on one line
@@ -134,13 +140,27 @@ function defaultScratchDir() {
 // directory (a deploy replacing a container mid-import), judged by age alone:
 // the directory is shared by processes which cannot see each other. Logs one
 // line, without paths. Never throws.
-async function scratch({ scratchDir = defaultScratchDir(), minAge, now = Date.now() } = {}) {
+async function scratch({
+  scratchDir = defaultScratchDir(),
+  minAge,
+  now = Date.now(),
+} = {}) {
   try {
     const result = await sweepScratch({ dir: scratchDir, minAge, now });
-    log({ op: "sweep", source: "scratch", outcome: result.errors ? "error" : "ok", ...result });
+    log({
+      op: "sweep",
+      source: "scratch",
+      outcome: result.errors ? "error" : "ok",
+      ...result,
+    });
     return result;
   } catch (err) {
-    log({ op: "sweep", source: "scratch", outcome: "error", detail: scrub(err) });
+    log({
+      op: "sweep",
+      source: "scratch",
+      outcome: "error",
+      detail: scrub(err),
+    });
     return { removed: 0, spared: 0, bytes: 0, errors: 1, failed: scrub(err) };
   }
 }
@@ -211,7 +231,11 @@ async function sweepBlog(blogID) {
 // removal's tombstone, has lost its repository.
 async function cheapCheck(store) {
   const result = await check.cheapCheck(store);
-  if (result.state !== "ok") result.findings.unshift({ kind: "missing", detail: "the store has no copy of the repository" });
+  if (result.state !== "ok")
+    result.findings.unshift({
+      kind: "missing",
+      detail: "the store has no copy of the repository",
+    });
   return result;
 }
 
@@ -234,7 +258,12 @@ async function twice(check, recheckDelayMs) {
       result.attempts = attempt;
       if (!result.result.findings.length) return result;
     } catch (err) {
-      result = { result: { findings: [{ kind: "error", detail: scrub(err) }] }, attempts: attempt, ms: 0, counts: {} };
+      result = {
+        result: { findings: [{ kind: "error", detail: scrub(err) }] },
+        attempts: attempt,
+        ms: 0,
+        counts: {},
+      };
     }
   }
 
@@ -261,7 +290,8 @@ function report(blogID, check, measured) {
   };
 
   if (!findings.length) log({ ...fields, outcome: "ok" });
-  for (const finding of findings) log({ ...fields, outcome: finding.kind, detail: finding.detail });
+  for (const finding of findings)
+    log({ ...fields, outcome: finding.kind, detail: finding.detail });
 
   return findings.map((finding) => ({ blog: blogID, check, ...finding }));
 }
@@ -270,27 +300,55 @@ function report(blogID, check, measured) {
 // the cheap one passed; `cheap: false` skips it, for a blog which has just
 // had it). Resolves with { blog, skipped, deep, findings }; never rejects for
 // a failure of the check itself, which is an "error" finding.
-async function verify(blogID, { deep = false, cheap = true, scratchDir = defaultScratchDir(), recheckDelayMs = RECHECK_DELAY_MS } = {}) {
+async function verify(
+  blogID,
+  {
+    deep = false,
+    cheap = true,
+    scratchDir = defaultScratchDir(),
+    recheckDelayMs = RECHECK_DELAY_MS,
+  } = {}
+) {
   let store;
 
   try {
     store = await storeOf(blogID);
   } catch (err) {
     log({ blog: blogID, op: "verify", outcome: "error", detail: scrub(err) });
-    return { blog: blogID, findings: [{ blog: blogID, check: "lookup", kind: "error", detail: scrub(err) }], deep: false };
+    return {
+      blog: blogID,
+      findings: [
+        { blog: blogID, check: "lookup", kind: "error", detail: scrub(err) },
+      ],
+      deep: false,
+    };
   }
 
   if (!store) {
-    log({ blog: blogID, op: "verify", outcome: "skipped", detail: "the blog is gone or off git" });
+    log({
+      blog: blogID,
+      op: "verify",
+      outcome: "skipped",
+      detail: "the blog is gone or off git",
+    });
     return { blog: blogID, skipped: true, deep: false, findings: [] };
   }
 
   if (cheap) {
-    const found = report(blogID, "cheap", await twice(() => cheapCheck(store), recheckDelayMs));
-    if (found.length || !deep) return { blog: blogID, findings: found, deep: false };
+    const found = report(
+      blogID,
+      "cheap",
+      await twice(() => cheapCheck(store), recheckDelayMs)
+    );
+    if (found.length || !deep)
+      return { blog: blogID, findings: found, deep: false };
   }
 
-  const deepFindings = report(blogID, "deep", await twice(() => deepCheck(store, scratchDir), recheckDelayMs));
+  const deepFindings = report(
+    blogID,
+    "deep",
+    await twice(() => deepCheck(store, scratchDir), recheckDelayMs)
+  );
   return { blog: blogID, findings: deepFindings, deep: true };
 }
 
@@ -334,7 +392,15 @@ let listPrefixes = s3Prefixes;
 // whose lookup, listing or delete failed. A failed listing of the prefixes
 // themselves rejects.
 async function orphans({ now = Date.now(), minAge = ORPHAN_MIN_AGE_MS } = {}) {
-  const counts = { prefixes: 0, live: 0, removed: 0, spared: 0, ignored: 0, errors: 0, deleted: 0 };
+  const counts = {
+    prefixes: 0,
+    live: 0,
+    removed: 0,
+    spared: 0,
+    ignored: 0,
+    errors: 0,
+    deleted: 0,
+  };
   const findings = [];
 
   for await (const blogID of listPrefixes()) {
@@ -365,7 +431,15 @@ async function orphans({ now = Date.now(), minAge = ORPHAN_MIN_AGE_MS } = {}) {
 
       if (now - newest < minAge) {
         counts.spared++;
-        log({ blog: blogID, op: "remove", outcome: "spared", reason: "orphan", keys: keys.length, detail: "written in the last " + Math.round(minAge / 3600000) + " hours" });
+        log({
+          blog: blogID,
+          op: "remove",
+          outcome: "spared",
+          reason: "orphan",
+          keys: keys.length,
+          detail:
+            "written in the last " + Math.round(minAge / 3600000) + " hours",
+        });
         continue;
       }
 
@@ -382,17 +456,40 @@ async function orphans({ now = Date.now(), minAge = ORPHAN_MIN_AGE_MS } = {}) {
 
       // Only manifests is what a removal leaves on purpose (store/remove.js)
       if (keys.every((key) => key.startsWith(layout.MANIFEST_PREFIX))) {
-        log({ blog: blogID, op: "remove", outcome: "ok", reason: "tombstone", deleted: keys.length });
+        log({
+          blog: blogID,
+          op: "remove",
+          outcome: "ok",
+          reason: "tombstone",
+          deleted: keys.length,
+        });
         continue;
       }
 
-      findings.push({ blog: blogID, check: "orphan", kind: "orphan", detail: "deleted " + keys.length + " objects left behind" });
-      log({ blog: blogID, op: "remove", outcome: "ok", reason: "orphan", deleted: keys.length });
+      findings.push({
+        blog: blogID,
+        check: "orphan",
+        kind: "orphan",
+        detail: "deleted " + keys.length + " objects left behind",
+      });
+      log({
+        blog: blogID,
+        op: "remove",
+        outcome: "ok",
+        reason: "orphan",
+        deleted: keys.length,
+      });
     } catch (err) {
       const detail = scrub(err);
       counts.errors++;
       findings.push({ blog: blogID, check: "orphan", kind: "error", detail });
-      log({ blog: blogID, op: "remove", outcome: "error", reason: "orphan", detail });
+      log({
+        blog: blogID,
+        op: "remove",
+        outcome: "error",
+        reason: "orphan",
+        detail,
+      });
     }
   }
 
@@ -407,11 +504,25 @@ async function orphans({ now = Date.now(), minAge = ORPHAN_MIN_AGE_MS } = {}) {
 // already deletes a blog's copy twice. Resolves with a report (`orphans` is
 // null when they were not looked for); the findings are what the alert email
 // is about. `ids` limits it to those blogs (for specs).
-async function daily({ now = Date.now(), ids: only = null, deepCount = DEEP_SAMPLE, recheckDelayMs = RECHECK_DELAY_MS, scratchDir = defaultScratchDir(), orphanMinAge = ORPHAN_MIN_AGE_MS, orphanSweep = new Date(now).getUTCDate() === 1 } = {}) {
+async function daily({
+  now = Date.now(),
+  ids: only = null,
+  deepCount = DEEP_SAMPLE,
+  recheckDelayMs = RECHECK_DELAY_MS,
+  scratchDir = defaultScratchDir(),
+  orphanMinAge = ORPHAN_MIN_AGE_MS,
+  orphanSweep = new Date(now).getUTCDate() === 1,
+} = {}) {
   const started = Date.now();
   const ids = await gitBlogs({ ids: only });
   const findings = [];
-  const sweeps = { ok: 0, errors: 0, packsDeleted: 0, manifestsDeleted: 0, bytesFreed: 0 };
+  const sweeps = {
+    ok: 0,
+    errors: 0,
+    packsDeleted: 0,
+    manifestsDeleted: 0,
+    bytesFreed: 0,
+  };
   const passed = new Set();
 
   await each(ids, BLOGS_AT_ONCE, async (blogID) => {
@@ -419,7 +530,12 @@ async function daily({ now = Date.now(), ids: only = null, deepCount = DEEP_SAMP
 
     if (swept && swept.error) {
       sweeps.errors++;
-      findings.push({ blog: blogID, check: "sweep", kind: "error", detail: swept.error });
+      findings.push({
+        blog: blogID,
+        check: "sweep",
+        kind: "error",
+        detail: swept.error,
+      });
     } else if (swept) {
       sweeps.ok++;
       sweeps.packsDeleted += swept.packsDeleted || 0;
@@ -435,12 +551,18 @@ async function daily({ now = Date.now(), ids: only = null, deepCount = DEEP_SAMP
   // The deep sample, one at a time: each is a whole clone
   const sample = deepSample(ids, deepCount, now);
   const test = await getBlog({ handle: TEST_HANDLE }).catch(() => null);
-  if (test && ids.includes(test.id) && !sample.includes(test.id)) sample.push(test.id);
+  if (test && ids.includes(test.id) && !sample.includes(test.id))
+    sample.push(test.id);
 
   let deepChecked = 0;
   const deepBlogs = [];
   for (const blogID of sample.filter((id) => passed.has(id))) {
-    const checked = await verify(blogID, { deep: true, cheap: false, scratchDir, recheckDelayMs });
+    const checked = await verify(blogID, {
+      deep: true,
+      cheap: false,
+      scratchDir,
+      recheckDelayMs,
+    });
     if (checked.deep) {
       deepChecked++;
       deepBlogs.push(blogID);
@@ -451,19 +573,50 @@ async function daily({ now = Date.now(), ids: only = null, deepCount = DEEP_SAMP
   let orphaned = null;
   if (orphanSweep) {
     try {
-      const { findings: failed, ...counts } = await orphans({ now, minAge: orphanMinAge });
+      const { findings: failed, ...counts } = await orphans({
+        now,
+        minAge: orphanMinAge,
+      });
       orphaned = counts;
       findings.push(...failed);
     } catch (err) {
-      orphaned = { prefixes: 0, live: 0, removed: 0, spared: 0, ignored: 0, errors: 1, deleted: 0 };
-      findings.push({ blog: "-", check: "orphan", kind: "error", detail: scrub(err) });
+      orphaned = {
+        prefixes: 0,
+        live: 0,
+        removed: 0,
+        spared: 0,
+        ignored: 0,
+        errors: 1,
+        deleted: 0,
+      };
+      findings.push({
+        blog: "-",
+        check: "orphan",
+        kind: "error",
+        detail: scrub(err),
+      });
     }
   }
 
   const leftovers = await scratch({ scratchDir, now });
-  if (leftovers.failed) findings.push({ blog: "-", check: "scratch", kind: "error", detail: leftovers.failed });
+  if (leftovers.failed)
+    findings.push({
+      blog: "-",
+      check: "scratch",
+      kind: "error",
+      detail: leftovers.failed,
+    });
 
-  return { blogs: ids.length, sweeps, deepChecked, deepBlogs, findings, orphans: orphaned, scratch: leftovers, ms: Date.now() - started };
+  return {
+    blogs: ids.length,
+    sweeps,
+    deepChecked,
+    deepBlogs,
+    findings,
+    orphans: orphaned,
+    scratch: leftovers,
+    ms: Date.now() - started,
+  };
 }
 
 function _setPrefixLister(fn) {

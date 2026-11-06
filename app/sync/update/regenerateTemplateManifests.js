@@ -17,7 +17,9 @@ module.exports = function regenerateTemplateManifests(blogID, log, callback) {
     var failed = [];
     var templateID;
 
-    while ((templateID = await client.sPop(key.templateManifestsPending(blogID)))) {
+    while (
+      (templateID = await client.sPop(key.templateManifestsPending(blogID)))
+    ) {
       try {
         await new Promise(function (resolve, reject) {
           updateCdnManifest(templateID, function (err) {
@@ -28,7 +30,11 @@ module.exports = function regenerateTemplateManifests(blogID, log, callback) {
 
         count++;
       } catch (err) {
-        log("Error updating CDN manifest for template", templateID, err.message);
+        log(
+          "Error updating CDN manifest for template",
+          templateID,
+          err.message
+        );
         failed.push(templateID);
       }
     }

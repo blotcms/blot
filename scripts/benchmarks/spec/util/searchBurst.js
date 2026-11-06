@@ -16,7 +16,12 @@ const { timedRequest } = require("./burstRequest");
  * visitors searching a blog at once) as well as a structurally similar
  * risk to the tag/archives queueing bug.
  */
-async function runSearchBurst({ blogs, keywordsBySite, concurrency, getForBlog }) {
+async function runSearchBurst({
+  blogs,
+  keywordsBySite,
+  concurrency,
+  getForBlog,
+}) {
   const soloDurations = [];
   const burstDurations = [];
   const perSite = [];
@@ -78,7 +83,10 @@ async function runSearchBurst({ blogs, keywordsBySite, concurrency, getForBlog }
   const burstTiming = summarizeDurations(burstDurations);
 
   return {
-    keywords_tested_total: perSite.reduce((sum, s) => sum + s.keywords_tested, 0),
+    keywords_tested_total: perSite.reduce(
+      (sum, s) => sum + s.keywords_tested,
+      0
+    ),
     solo_timing_ms: soloTiming,
     burst_timing_ms: burstTiming,
     inflation_ratio:

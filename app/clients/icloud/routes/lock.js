@@ -20,9 +20,7 @@ const handleSyncLockError = ({ err, res, blogID, action }) => {
 
   if (!res.headersSent) {
     res.set("Retry-After", String(LOCK_RETRY_AFTER_SECONDS));
-    res
-      .status(423)
-      .send("Folder is locked by another sync; retry later");
+    res.status(423).send("Folder is locked by another sync; retry later");
   }
 
   return true;

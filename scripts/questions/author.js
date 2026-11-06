@@ -85,7 +85,10 @@ async function main() {
 
     process.exit(0);
   } catch (error) {
-    console.error("Error fetching question:", error && error.message ? error.message : error);
+    console.error(
+      "Error fetching question:",
+      error && error.message ? error.message : error
+    );
     process.exit(1);
   }
 }

@@ -17,7 +17,11 @@ const KEEP_ALIVE_TIMEOUT_MS = 65 * 1000;
 // The deploy sets --report-on-fatalerror (scripts/deploy/util/
 // generateDockerCommand.js), but Node won't create the report directory
 // itself, and a missing one means a V8 out-of-memory crash leaves no report.
-if (process.report && process.report.reportOnFatalError && process.report.directory) {
+if (
+  process.report &&
+  process.report.reportOnFatalError &&
+  process.report.directory
+) {
   try {
     fs.mkdirSync(process.report.directory, { recursive: true });
   } catch (err) {
@@ -31,7 +35,11 @@ if (process.report && process.report.reportOnFatalError && process.report.direct
 // surfaces as an uncaught exception and still exits the process.
 process.on("unhandledRejection", function (err) {
   if (!isRedisUnavailableError(err)) throw err;
-  console.error(clfdate(), "Unhandled rejection (Redis unavailable):", err.message);
+  console.error(
+    clfdate(),
+    "Unhandled rejection (Redis unavailable):",
+    err.message
+  );
 });
 
 function releaseId() {
@@ -182,7 +190,8 @@ setup(async (err) => {
 
     // Emails if the unit's fetch proxy stops answering or filtering
     // (app/sandbox/alerts.js). The worker child shares the proxy, so one check.
-    if (!config.preview && !config.worker_child) require("sandbox/alerts").watchProxy();
+    if (!config.preview && !config.worker_child)
+      require("sandbox/alerts").watchProxy();
 
     // Send an email notification if the server starts or restarts
     // Worktree preview sidecars (scripts/development/preview.sh) and forked
@@ -190,7 +199,8 @@ setup(async (err) => {
     if (!config.preview && !config.worker_child) {
       serverStartEvent().then(
         (event) =>
-          event && email.SERVER_START(null, { container: config.container, event })
+          event &&
+          email.SERVER_START(null, { container: config.container, event })
       );
     }
   });

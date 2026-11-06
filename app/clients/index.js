@@ -21,12 +21,12 @@ if (
 // If we have the require creds to run
 // the google drive app
 if (config.google_drive.service_accounts.length) {
-  clients['google-drive'] = require("./google-drive");
+  clients["google-drive"] = require("./google-drive");
 }
 
 // If we have the required creds to run the iCloud integration
 if (config.icloud.server_address) {
-  clients['icloud'] = require("./icloud");
+  clients["icloud"] = require("./icloud");
 }
 
 // Demo local client

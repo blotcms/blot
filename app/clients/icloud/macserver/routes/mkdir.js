@@ -34,7 +34,10 @@ export default async (req, res) => {
       .send("Invalid path: attempted to access parent directory");
   }
 
-  console.log(clfdate(), `Received mkdir request for blogID: ${blogID}, path: ${path}`);
+  console.log(
+    clfdate(),
+    `Received mkdir request for blogID: ${blogID}, path: ${path}`
+  );
 
   const stat = await fs.stat(dirPath).catch(() => null);
 
@@ -45,12 +48,19 @@ export default async (req, res) => {
     try {
       await fs.remove(dirPath);
     } catch (error) {
-      console.error(clfdate(), `Failed to remove existing path (${dirPath}):`, error);
+      console.error(
+        clfdate(),
+        `Failed to remove existing path (${dirPath}):`,
+        error
+      );
       return res.status(500).send("Failed to remove existing path");
     }
   }
 
-  console.log(clfdate(), `Received mkdir request for blogID: ${blogID}, path: ${path}`);
+  console.log(
+    clfdate(),
+    `Received mkdir request for blogID: ${blogID}, path: ${path}`
+  );
 
   // first unwatch the blogID to prevent further events from being triggered
   try {
@@ -68,7 +78,11 @@ export default async (req, res) => {
       success = true;
       break;
     } catch (error) {
-      console.error(clfdate(), `Failed to create directory (${dirPath}):`, error);
+      console.error(
+        clfdate(),
+        `Failed to create directory (${dirPath}):`,
+        error
+      );
       if (i < 4) {
         // Only wait if we're going to retry
         await new Promise((resolve) =>

@@ -12,7 +12,9 @@ async function searchResults(req, res) {
     return [];
   }
 
-  const sortOptions = getTemplateSortOptions(req.template && req.template.locals);
+  const sortOptions = getTemplateSortOptions(
+    req.template && req.template.locals
+  );
 
   // Entry.search collects a wide candidate pool, then sorts and caps by
   // the selection (a missing selection normalises to newest-first date).
@@ -21,7 +23,10 @@ async function searchResults(req, res) {
   // The HTML was only needed to match against the query; drop the heavy
   // fields the search view does not render. `entries` is included so a
   // listing view that also binds {{#entries}} does not lose html.
-  return projectEntryFields(results, req.retrieve, ["search_results", "entries"]);
+  return projectEntryFields(results, req.retrieve, [
+    "search_results",
+    "entries",
+  ]);
 }
 
 module.exports = asRetriever(searchResults);

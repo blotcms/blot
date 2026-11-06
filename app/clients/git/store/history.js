@@ -55,7 +55,11 @@ function spend(budget, bytes) {
 // inflated, and a delta's result from the delta's header, before it is applied,
 // so a pack that would expand past the budget stops at once with OverBudget.
 function readCommits(buffer, name, into, budget) {
-  if (buffer.length < PACK_HEADER + TRAILER || buffer.toString("latin1", 0, 4) !== "PACK" || buffer.readUInt32BE(4) !== 2) {
+  if (
+    buffer.length < PACK_HEADER + TRAILER ||
+    buffer.toString("latin1", 0, 4) !== "PACK" ||
+    buffer.readUInt32BE(4) !== 2
+  ) {
     throw new CorruptError(name + " is not a version 2 pack");
   }
 
@@ -68,21 +72,44 @@ function readCommits(buffer, name, into, budget) {
   for (let i = 0; i < count; i++) {
     if (at >= end) throw new CorruptError(name + " is cut short");
 
-    const entry = parseHeader(buffer.subarray(at, Math.min(at + MAX_ENTRY_HEADER, end)), at);
+    const entry = parseHeader(
+      buffer.subarray(at, Math.min(at + MAX_ENTRY_HEADER, end)),
+      at
+    );
     spend(budget, entry.size);
-    const inflated = zlib.inflateSync(buffer.subarray(at + entry.length, end), { info: true, maxOutputLength: Math.max(entry.size, 1) });
-    if (inflated.buffer.length !== entry.size) throw new CorruptError(name + " has an entry that is not the size its header says");
+    const inflated = zlib.inflateSync(buffer.subarray(at + entry.length, end), {
+      info: true,
+      maxOutputLength: Math.max(entry.size, 1),
+    });
+    if (inflated.buffer.length !== entry.size)
+      throw new CorruptError(
+        name + " has an entry that is not the size its header says"
+      );
 
     let object = { type: entry.type, data: inflated.buffer };
     if (entry.baseOffset !== undefined || entry.baseOid !== undefined) {
-      const base = entry.baseOffset !== undefined ? byOffset.get(entry.baseOffset) : byOid.get(entry.baseOid);
-      if (!base) throw new CorruptError(name + " has a delta whose base is not an earlier entry");
+      const base =
+        entry.baseOffset !== undefined
+          ? byOffset.get(entry.baseOffset)
+          : byOid.get(entry.baseOid);
+      if (!base)
+        throw new CorruptError(
+          name + " has a delta whose base is not an earlier entry"
+        );
       spend(budget, resultSize(inflated.buffer));
-      object = { type: base.type, data: applyDelta(base.data, inflated.buffer) };
+      object = {
+        type: base.type,
+        data: applyDelta(base.data, inflated.buffer),
+      };
     }
-    if (object.type !== "commit") throw new CorruptError(name + " holds something other than commits");
+    if (object.type !== "commit")
+      throw new CorruptError(name + " holds something other than commits");
 
-    const oid = crypto.createHash("sha1").update("commit " + object.data.length + "\0").update(object.data).digest("hex");
+    const oid = crypto
+      .createHash("sha1")
+      .update("commit " + object.data.length + "\0")
+      .update(object.data)
+      .digest("hex");
     byOffset.set(at, object);
     byOid.set(oid, object);
     into.set(oid, parseCommit(object.data).parents);
@@ -90,7 +117,8 @@ function readCommits(buffer, name, into, budget) {
     at += entry.length + inflated.engine.bytesWritten;
   }
 
-  if (at !== end) throw new CorruptError(name + " has more in it than its header says");
+  if (at !== end)
+    throw new CorruptError(name + " has more in it than its header says");
 }
 
 // A pack's bytes, from the cache if it is there
@@ -100,31 +128,57 @@ async function bytesOf({ store, cache, pack }) {
   // writer kept as it uploaded it is found here
   const cacheKey = cacheKeyOf(store, pack.name);
 
-  const cached = cache ? await cache.get(cacheKey, { maxBytes: pack.size }) : null;
+  const cached = cache
+    ? await cache.get(cacheKey, { maxBytes: pack.size })
+    : null;
   if (cached && cached.length === pack.size) return cached;
 
   const bytes = await store.get(key, { maxBytes: pack.size });
-  if (bytes.length !== pack.size) throw new CorruptError(pack.name + " is " + bytes.length + " bytes; the manifest says " + pack.size);
+  if (bytes.length !== pack.size)
+    throw new CorruptError(
+      pack.name +
+        " is " +
+        bytes.length +
+        " bytes; the manifest says " +
+        pack.size
+    );
   if (cache) await cache.put(cacheKey, bytes);
   return bytes;
 }
 
 // Every commit of the repository's history, or null when it is too big to hold
-async function readHistory({ store, cache = null, manifest, maxBytes = MAX_BYTES, maxExpanded = MAX_EXPANDED }) {
-  const packs = [...(manifest.history ? [manifest.history] : []), ...(manifest.historyPieces || [])];
+async function readHistory({
+  store,
+  cache = null,
+  manifest,
+  maxBytes = MAX_BYTES,
+  maxExpanded = MAX_EXPANDED,
+}) {
+  const packs = [
+    ...(manifest.history ? [manifest.history] : []),
+    ...(manifest.historyPieces || []),
+  ];
   if (packs.reduce((sum, pack) => sum + pack.size, 0) > maxBytes) return null;
 
   const commits = new Map();
-  const sources = await mapLimit(packs, CONCURRENCY, (pack) => bytesOf({ store, cache, pack }));
+  const sources = await mapLimit(packs, CONCURRENCY, (pack) =>
+    bytesOf({ store, cache, pack })
+  );
   const budget = { left: maxExpanded };
   try {
-    sources.forEach((bytes, index) => readCommits(bytes, packs[index].name, commits, budget));
+    sources.forEach((bytes, index) =>
+      readCommits(bytes, packs[index].name, commits, budget)
+    );
   } catch (err) {
     if (err instanceof OverBudget) return null;
     throw err;
   }
 
-  return { size: commits.size, has: (oid) => commits.has(oid), parents: (oid) => commits.get(oid) };
+  return {
+    size: commits.size,
+    has: (oid) => commits.has(oid),
+    parents: (oid) => commits.get(oid),
+  };
 }
 
 module.exports = { readHistory };

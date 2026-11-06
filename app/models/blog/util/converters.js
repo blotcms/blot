@@ -84,7 +84,8 @@ function apply(blog, options) {
   blog.converters = normalized;
 
   for (const id of VALID_CONVERTER_IDS) {
-    const helper = "is" + id.charAt(0).toUpperCase() + id.slice(1) + "ConverterEnabled";
+    const helper =
+      "is" + id.charAt(0).toUpperCase() + id.slice(1) + "ConverterEnabled";
     blog[helper] = normalized[id] === true;
   }
 

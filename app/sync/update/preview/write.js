@@ -17,9 +17,14 @@ module.exports = function (blogID, path, callback) {
 
       // A blog with no client is written directly, which helps
       // in writing tests for client-less blogs
-      callbackify(blogFolder.write)(blog, preview_path, contents, function (err) {
-        callback(err || null);
-      });
+      callbackify(blogFolder.write)(
+        blog,
+        preview_path,
+        contents,
+        function (err) {
+          callback(err || null);
+        }
+      );
     });
   });
 };

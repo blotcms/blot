@@ -9,14 +9,23 @@ const manifest = require("../manifest");
 const createMemoryStore = require("../objectStore/memory");
 const createReader = require("../reader");
 const createCache = require("../cache");
-const { CorruptError, StaleManifestError, OutcomeUnknownError } = require("../errors");
+const {
+  CorruptError,
+  StaleManifestError,
+  OutcomeUnknownError,
+} = require("../errors");
 const { LATEST_KEY, manifestKey } = require("../layout");
 
 const oid = (n) => String(n).repeat(40).slice(0, 40);
 const packName = (n) => "pack-" + oid(n);
 
 function packEntry(n) {
-  return { name: packName(n), size: 1000 + n, idxSize: 500 + n, objects: 10 + n };
+  return {
+    name: packName(n),
+    size: 1000 + n,
+    idxSize: 500 + n,
+    objects: 10 + n,
+  };
 }
 
 const lock = (fn) => fn();
@@ -24,7 +33,10 @@ const lock = (fn) => fn();
 async function uploaded(store, ...entries) {
   for (const entry of entries) {
     await store.put("packs/" + entry.name + ".pack", Buffer.alloc(entry.size));
-    await store.put("packs/" + entry.name + ".idx", Buffer.alloc(entry.idxSize));
+    await store.put(
+      "packs/" + entry.name + ".idx",
+      Buffer.alloc(entry.idxSize)
+    );
   }
 }
 
@@ -44,8 +56,12 @@ async function collect(iterable) {
 }
 
 // What the AWS SDK throws when the connection drops, and when S3 refuses
-const dropped = () => Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" });
-const refused = (status) => Object.assign(new Error("HTTP " + status), { $metadata: { httpStatusCode: status } });
+const dropped = () =>
+  Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" });
+const refused = (status) =>
+  Object.assign(new Error("HTTP " + status), {
+    $metadata: { httpStatusCode: status },
+  });
 
 describe("git store against a misbehaving object store", function () {
   timeout(60 * 1000);
@@ -60,13 +76,17 @@ describe("git store against a misbehaving object store", function () {
 
     it("applies the call and then throws, for an error after success", async function () {
       store.inject("put", { after: dropped() });
-      expect((await fails(store.put("j", Buffer.from("x")))).code).toBe("ECONNRESET");
+      expect((await fails(store.put("j", Buffer.from("x")))).code).toBe(
+        "ECONNRESET"
+      );
       expect((await store.get("j")).toString()).toBe("x");
     });
 
     it("throws without applying, for an error before", async function () {
       store.inject("put", { before: dropped() });
-      expect((await fails(store.put("j", Buffer.from("x")))).code).toBe("ECONNRESET");
+      expect((await fails(store.put("j", Buffer.from("x")))).code).toBe(
+        "ECONNRESET"
+      );
       expect(await store.head("j")).toBeNull();
     });
 
@@ -77,7 +97,10 @@ describe("git store against a misbehaving object store", function () {
     });
 
     it("cuts a read, a get and a stream short", async function () {
-      store.inject("read", { truncate: 3 }).inject("get", { truncate: (b) => b.length - 1 }).inject("stream", { truncate: 4 });
+      store
+        .inject("read", { truncate: 3 })
+        .inject("get", { truncate: (b) => b.length - 1 })
+        .inject("stream", { truncate: 4 });
       expect((await store.read("k", 0, 10)).toString()).toBe("012");
       expect((await store.get("k")).toString()).toBe("012345678");
       expect((await collect(store.stream("k"))).toString()).toBe("0123");
@@ -97,7 +120,9 @@ describe("git store against a misbehaving object store", function () {
     });
 
     it("answers a stale value, or throws it", async function () {
-      store.inject("head", { answer: null }).inject("get", { answer: Buffer.from("old") });
+      store
+        .inject("head", { answer: null })
+        .inject("get", { answer: Buffer.from("old") });
       expect(await store.head("k")).toBeNull();
       expect((await store.get("k")).toString()).toBe("old");
       store.inject("read", { answer: dropped() });
@@ -140,7 +165,10 @@ describe("git store against a misbehaving object store", function () {
       store = faults(createMemoryStore());
       const entry = packEntry(1);
       await uploaded(store, entry);
-      base = manifest.advance(manifest.empty(), { refs: { "refs/heads/master": oid(1) }, packs: [entry] });
+      base = manifest.advance(manifest.empty(), {
+        refs: { "refs/heads/master": oid(1) },
+        packs: [entry],
+      });
       await manifest.swap({ store, lock, base: manifest.empty(), next: base });
       store.calls.length = 0;
     });
@@ -148,10 +176,14 @@ describe("git store against a misbehaving object store", function () {
     async function push(from, n) {
       const entry = packEntry(n);
       await uploaded(store, entry);
-      return manifest.advance(from, { refs: { "refs/heads/master": oid(n) }, packs: [entry] });
+      return manifest.advance(from, {
+        refs: { "refs/heads/master": oid(n) },
+        packs: [entry],
+      });
     }
 
-    const manifestGets = () => store.calls.filter((call) => call === "get " + manifestKey(2));
+    const manifestGets = () =>
+      store.calls.filter((call) => call === "get " + manifestKey(2));
 
     it("gives each manifest it advances a nonce of its own", async function () {
       const a = await push(base, 2);
@@ -202,7 +234,9 @@ describe("git store against a misbehaving object store", function () {
 
       // The early look at the manifest missed theirs, so the create is what loses
       store.inject("head", { key: manifestKey(2), answer: null });
-      const error = await fails(manifest.swap({ store, lock, base, next: mine }));
+      const error = await fails(
+        manifest.swap({ store, lock, base, next: mine })
+      );
 
       expect(error).toEqual(jasmine.any(StaleManifestError));
       expect(await manifest.read(store)).toEqual(theirs);
@@ -216,13 +250,17 @@ describe("git store against a misbehaving object store", function () {
 
       store.inject("head", { key: manifestKey(2), answer: null });
       store.inject("putIfAbsent", { key: manifestKey(2), before: dropped() });
-      expect(await fails(manifest.swap({ store, lock, base, next: mine }))).toEqual(jasmine.any(StaleManifestError));
+      expect(
+        await fails(manifest.swap({ store, lock, base, next: mine }))
+      ).toEqual(jasmine.any(StaleManifestError));
     });
 
     it("throws StaleManifestError for a base which has moved on, without being fooled by it", async function () {
       const mine = await push(base, 2);
       await manifest.swap({ store, lock, base, next: await push(base, 3) });
-      expect(await fails(manifest.swap({ store, lock, base, next: mine }))).toEqual(jasmine.any(StaleManifestError));
+      expect(
+        await fails(manifest.swap({ store, lock, base, next: mine }))
+      ).toEqual(jasmine.any(StaleManifestError));
     });
 
     it("rethrows the error when the outcome was unknown and the manifest is not there", async function () {
@@ -230,7 +268,9 @@ describe("git store against a misbehaving object store", function () {
       const error = dropped();
       store.inject("putIfAbsent", { key: manifestKey(2), before: error });
 
-      expect(await fails(manifest.swap({ store, lock, base, next }))).toBe(error);
+      expect(await fails(manifest.swap({ store, lock, base, next }))).toBe(
+        error
+      );
       expect(await store.head(manifestKey(2))).toBeNull();
       expect((await manifest.read(store)).seq).toBe(1);
     });
@@ -240,7 +280,9 @@ describe("git store against a misbehaving object store", function () {
       const error = refused(403);
       store.inject("putIfAbsent", { key: manifestKey(2), before: error });
 
-      expect(await fails(manifest.swap({ store, lock, base, next }))).toBe(error);
+      expect(await fails(manifest.swap({ store, lock, base, next }))).toBe(
+        error
+      );
       expect(manifestGets().length).toBe(0);
     });
 
@@ -260,21 +302,27 @@ describe("git store against a misbehaving object store", function () {
       const next = await push(base, 2);
       store.inject("putIfAbsent", { key: manifestKey(2), result: false });
       store.inject("get", { key: manifestKey(2), before: dropped() });
-      expect(await fails(manifest.swap({ store, lock, base, next }))).toEqual(jasmine.any(OutcomeUnknownError));
+      expect(await fails(manifest.swap({ store, lock, base, next }))).toEqual(
+        jasmine.any(OutcomeUnknownError)
+      );
     });
 
     it("says the outcome is unknown when the read comes back cut short", async function () {
       const next = await push(base, 2);
       store.inject("putIfAbsent", { key: manifestKey(2), after: dropped() });
       store.inject("get", { key: manifestKey(2), truncate: 20 });
-      expect(await fails(manifest.swap({ store, lock, base, next }))).toEqual(jasmine.any(OutcomeUnknownError));
+      expect(await fails(manifest.swap({ store, lock, base, next }))).toEqual(
+        jasmine.any(OutcomeUnknownError)
+      );
     });
 
     it("lets the same swap be tried again after an unknown outcome, and finds it landed", async function () {
       const next = await push(base, 2);
       store.inject("putIfAbsent", { key: manifestKey(2), after: dropped() });
       store.inject("get", { key: manifestKey(2), before: dropped() });
-      expect(await fails(manifest.swap({ store, lock, base, next }))).toEqual(jasmine.any(OutcomeUnknownError));
+      expect(await fails(manifest.swap({ store, lock, base, next }))).toEqual(
+        jasmine.any(OutcomeUnknownError)
+      );
 
       expect(await manifest.swap({ store, lock, base, next })).toEqual(next);
       expect(await manifest.read(store)).toEqual(next);
@@ -283,7 +331,9 @@ describe("git store against a misbehaving object store", function () {
     it("does not take another writer's manifest at that seq for its own on a retry", async function () {
       const mine = await push(base, 2);
       await manifest.swap({ store, lock, base, next: await push(base, 3) });
-      expect(await fails(manifest.swap({ store, lock, base, next: mine }))).toEqual(jasmine.any(StaleManifestError));
+      expect(
+        await fails(manifest.swap({ store, lock, base, next: mine }))
+      ).toEqual(jasmine.any(StaleManifestError));
     });
   });
 
@@ -294,12 +344,18 @@ describe("git store against a misbehaving object store", function () {
       for (const n of [1, 2, 3]) {
         const entry = packEntry(n);
         await uploaded(store, entry);
-        const next = manifest.advance(current, { refs: { "refs/heads/master": oid(n) }, packs: [entry] });
+        const next = manifest.advance(current, {
+          refs: { "refs/heads/master": oid(n) },
+          packs: [entry],
+        });
         await manifest.swap({ store, lock, base: current, next });
         current = next;
       }
 
-      store.inject("get", { key: LATEST_KEY, answer: Buffer.from('{"seq":1}\n') });
+      store.inject("get", {
+        key: LATEST_KEY,
+        answer: Buffer.from('{"seq":1}\n'),
+      });
       const fresh = faults(store);
       expect(await manifest.read(fresh)).toEqual(current);
     });
@@ -308,11 +364,17 @@ describe("git store against a misbehaving object store", function () {
       const store = faults(createMemoryStore());
       const entry = packEntry(1);
       await uploaded(store, entry);
-      const next = manifest.advance(manifest.empty(), { refs: { "refs/heads/master": oid(1) }, packs: [entry] });
+      const next = manifest.advance(manifest.empty(), {
+        refs: { "refs/heads/master": oid(1) },
+        packs: [entry],
+      });
       await manifest.swap({ store, lock, base: manifest.empty(), next });
 
       const fresh = faults(store);
-      fresh.inject("get", { key: LATEST_KEY, answer: Buffer.from('{"seq":9}\n') });
+      fresh.inject("get", {
+        key: LATEST_KEY,
+        answer: Buffer.from('{"seq":9}\n'),
+      });
       expect(await manifest.read(fresh)).toEqual(next);
     });
   });
@@ -325,7 +387,10 @@ describe("git store against a misbehaving object store", function () {
 
     beforeAll(function () {
       workDir = fx.tempDir();
-      fixture = fx.buildFixture(workDir + "/repo", { commits: 6, large: false });
+      fixture = fx.buildFixture(workDir + "/repo", {
+        commits: 6,
+        large: false,
+      });
       fx.repackAll(fixture.dir);
       oracle = fx.catAll(fixture.dir);
       [pack] = fx.readPacks(fixture.dir);
@@ -341,8 +406,16 @@ describe("git store against a misbehaving object store", function () {
     async function open({ cache = null, byRange = false } = {}) {
       const store = faults(createMemoryStore());
       const entry = await fx.upload(store, pack, oracle.size);
-      if (byRange) cache = createCache({ dir: workDir + "/range-cache-" + ++caches, maxBytes: 8 * pack.idx.length });
-      return { store, entry, reader: createReader({ store, cache, packs: [entry] }) };
+      if (byRange)
+        cache = createCache({
+          dir: workDir + "/range-cache-" + ++caches,
+          maxBytes: 8 * pack.idx.length,
+        });
+      return {
+        store,
+        entry,
+        reader: createReader({ store, cache, packs: [entry] }),
+      };
     }
 
     // Reads every object; each is either exactly git's bytes or an error
@@ -351,7 +424,8 @@ describe("git store against a misbehaving object store", function () {
       for (const [id, want] of oracle) {
         try {
           const got = await reader.read(id);
-          if (!got || !got.data.equals(want.data)) fail("Object " + id + " read back as the wrong bytes");
+          if (!got || !got.data.equals(want.data))
+            fail("Object " + id + " read back as the wrong bytes");
         } catch (err) {
           errors.push(err);
         }
@@ -369,14 +443,18 @@ describe("git store against a misbehaving object store", function () {
         ["by half", (body) => body.length >> 1],
         ["by a byte", (body) => Math.max(body.length - 1, 0)],
       ]) {
-        it("never gives wrong bytes when " + what + " are cut short " + how, async function () {
-          const { store, reader } = await open({ byRange });
-          store.inject(op, { key, times: Infinity, truncate });
+        it(
+          "never gives wrong bytes when " + what + " are cut short " + how,
+          async function () {
+            const { store, reader } = await open({ byRange });
+            store.inject(op, { key, times: Infinity, truncate });
 
-          const errors = await readAll(reader);
-          for (const err of errors) expect(err).toEqual(jasmine.any(CorruptError));
-          if (truncate === 0) expect(errors.length).toBe(oracle.size);
-        });
+            const errors = await readAll(reader);
+            for (const err of errors)
+              expect(err).toEqual(jasmine.any(CorruptError));
+            if (truncate === 0) expect(errors.length).toBe(oracle.size);
+          }
+        );
       }
     }
 
@@ -384,13 +462,18 @@ describe("git store against a misbehaving object store", function () {
       const { store, reader } = await open();
       store.inject("read", { key: /\.pack$/, times: Infinity, truncate: 0 });
       const [id] = [...oracle.keys()];
-      const error = await fails(reader.stream(id).then((out) => collect(out.data)));
+      const error = await fails(
+        reader.stream(id).then((out) => collect(out.data))
+      );
       expect(error).toEqual(jasmine.any(CorruptError));
     });
 
     it("does not keep a cut-short ranged index read in the cache", async function () {
       const { store, reader } = await open({ byRange: true });
-      store.inject("read", { key: /\.idx$/, truncate: (body) => body.length >> 1 });
+      store.inject("read", {
+        key: /\.idx$/,
+        truncate: (body) => body.length >> 1,
+      });
 
       const [id, want] = [...oracle.entries()][0];
       expect(await fails(reader.read(id))).toEqual(jasmine.any(CorruptError));
@@ -401,9 +484,15 @@ describe("git store against a misbehaving object store", function () {
     });
 
     it("does not keep a cut-short or damaged whole index in the cache, nor in memory", async function () {
-      const cache = createCache({ dir: workDir + "/cache", maxBytes: 50 * 1024 * 1024 });
+      const cache = createCache({
+        dir: workDir + "/cache",
+        maxBytes: 50 * 1024 * 1024,
+      });
       const { store, entry, reader } = await open({ cache });
-      store.inject("get", { key: /\.idx$/, truncate: (body) => body.length >> 1 });
+      store.inject("get", {
+        key: /\.idx$/,
+        truncate: (body) => body.length >> 1,
+      });
 
       const [id, want] = [...oracle.entries()][0];
       expect(await fails(reader.read(id))).toEqual(jasmine.any(CorruptError));
@@ -422,11 +511,14 @@ describe("git store against a misbehaving object store", function () {
       const before = store.calls.length;
       const next = createReader({ store, cache, packs: [entry] });
       expect((await readAll(next)).length).toBe(0);
-      expect(store.calls.slice(before).filter((call) => call.endsWith(".idx"))).toEqual([]);
+      expect(
+        store.calls.slice(before).filter((call) => call.endsWith(".idx"))
+      ).toEqual([]);
     });
 
     it("shares one fetch of an index between lookups which need it at the same time", async function () {
-      const idxCalls = (store) => store.calls.filter((call) => call.endsWith(".idx")).length;
+      const idxCalls = (store) =>
+        store.calls.filter((call) => call.endsWith(".idx")).length;
       const [id] = [...oracle.keys()];
 
       for (const byRange of [false, true]) {
@@ -435,10 +527,18 @@ describe("git store against a misbehaving object store", function () {
         const one = idxCalls(alone.store);
 
         const together = await open({ byRange });
-        together.store.inject(byRange ? "read" : "get", { key: /\.idx$/, times: Infinity, delay: 20 });
-        const results = await Promise.all(Array.from({ length: 10 }, () => together.reader.read(id)));
+        together.store.inject(byRange ? "read" : "get", {
+          key: /\.idx$/,
+          times: Infinity,
+          delay: 20,
+        });
+        const results = await Promise.all(
+          Array.from({ length: 10 }, () => together.reader.read(id))
+        );
 
-        expect(results.every((got) => got.data.equals(oracle.get(id).data))).toBe(true);
+        expect(
+          results.every((got) => got.data.equals(oracle.get(id).data))
+        ).toBe(true);
         expect(idxCalls(together.store)).toBe(one);
       }
     });
@@ -447,15 +547,22 @@ describe("git store against a misbehaving object store", function () {
       const { store, entry } = await open();
       for (const idxSize of [entry.idxSize - 1, entry.idxSize + 1]) {
         const reader = createReader({ store, packs: [{ ...entry, idxSize }] });
-        expect(await fails(reader.read(fixture.head))).toEqual(jasmine.any(CorruptError));
+        expect(await fails(reader.read(fixture.head))).toEqual(
+          jasmine.any(CorruptError)
+        );
       }
     });
 
     it("refuses a pack which is not the length the manifest says", async function () {
       const { store, entry } = await open();
-      await store.put("packs/" + entry.name + ".pack", Buffer.concat([pack.pack, Buffer.alloc(7)]));
+      await store.put(
+        "packs/" + entry.name + ".pack",
+        Buffer.concat([pack.pack, Buffer.alloc(7)])
+      );
       const reader = createReader({ store, packs: [entry] });
-      expect(await fails(reader.read(fixture.head))).toEqual(jasmine.any(CorruptError));
+      expect(await fails(reader.read(fixture.head))).toEqual(
+        jasmine.any(CorruptError)
+      );
     });
 
     it("leaves the current manifest readable when a push dies between its uploads", async function () {
@@ -470,20 +577,37 @@ describe("git store against a misbehaving object store", function () {
 
       // A second push: its pack goes up, then the process dies before the
       // index, then (on a retry) after both but before the manifest
-      const second = fx.indexPack(fx.packRevs(fixture.dir, [fixture.commits[2]]));
-      const orphan = { name: second.name, size: second.pack.length, idxSize: second.idx.length, objects: 1 };
-      store.inject("put", { key: "packs/" + second.name + ".idx", before: dropped() });
+      const second = fx.indexPack(
+        fx.packRevs(fixture.dir, [fixture.commits[2]])
+      );
+      const orphan = {
+        name: second.name,
+        size: second.pack.length,
+        idxSize: second.idx.length,
+        objects: 1,
+      };
+      store.inject("put", {
+        key: "packs/" + second.name + ".idx",
+        before: dropped(),
+      });
       expect(await fails(fx.upload(store, second, 1))).not.toBeNull();
       expect(await store.head("packs/" + second.name + ".pack")).not.toBeNull();
       expect(await store.head("packs/" + second.name + ".idx")).toBeNull();
 
-      const next = manifest.advance(first, { refs: { "refs/heads/master": fixture.commits[2] }, packs: [orphan] });
-      const early = await fails(manifest.swap({ store, lock, base: first, next }));
+      const next = manifest.advance(first, {
+        refs: { "refs/heads/master": fixture.commits[2] },
+        packs: [orphan],
+      });
+      const early = await fails(
+        manifest.swap({ store, lock, base: first, next })
+      );
       expect(early).toEqual(jasmine.any(StaleManifestError)); // the manifest will not name a half-uploaded pack
 
       await fx.upload(store, second, 1);
       store.inject("putIfAbsent", { key: manifestKey(2), before: dropped() });
-      expect(await fails(manifest.swap({ store, lock, base: first, next }))).not.toBeNull();
+      expect(
+        await fails(manifest.swap({ store, lock, base: first, next }))
+      ).not.toBeNull();
 
       // Whatever happened, the repository is still the first manifest...
       const current = await manifest.read(store);
@@ -493,7 +617,9 @@ describe("git store against a misbehaving object store", function () {
       const reader = createReader({ store, packs: current.packs });
       expect(reader.packs).toEqual([entry.name]);
       expect((await readAll(reader)).length).toBe(0);
-      expect((await store.head("packs/" + second.name + ".pack")).size).toBe(orphan.size);
+      expect((await store.head("packs/" + second.name + ".pack")).size).toBe(
+        orphan.size
+      );
     });
   });
 });

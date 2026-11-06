@@ -24,10 +24,19 @@ module.exports = function (blog, path, metadata, previousCreated) {
   if (metadataDate) {
     // Since there is the possibilty of using YAML, the date might not be a string
     let dateMetadataString = String(metadataDate);
-    let parsedFromMetadata = fromMetadata(dateMetadataString, dateFormat, timeZone);
+    let parsedFromMetadata = fromMetadata(
+      dateMetadataString,
+      dateFormat,
+      timeZone
+    );
     dateStamp = validate(parsedFromMetadata.created);
     if (dateStamp && parsedFromMetadata.adjusted) {
-      debug("Blog:", id, "Date from metadata adjusted by timezone in metadata", dateStamp);
+      debug(
+        "Blog:",
+        id,
+        "Date from metadata adjusted by timezone in metadata",
+        dateStamp
+      );
       return dateStamp;
     } else if (dateStamp) {
       debug("Blog:", id, "Date from metadata", dateStamp);
@@ -78,7 +87,7 @@ function validate(stamp) {
   debug("Validating date", stamp);
   if (type(stamp, "number") && !isNaN(stamp) && moment.utc(stamp).isValid())
     return stamp;
-  
+
   return undefined;
 }
 
@@ -132,7 +141,7 @@ function adjustByBlogTimezone(timeZone, stamp) {
     debug("Timezone not found", timeZone);
     return stamp;
   }
-  
+
   var offset = zone.utcOffset(stamp);
   debug("Adjusting date by timezone", offset, timeZone);
   return moment.utc(stamp).add(offset, "minutes").valueOf();

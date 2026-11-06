@@ -28,7 +28,9 @@ async function importBlogger(sourceFile, outputDirectory, status, siteHost) {
   const entries = await parse(await fs.readFile(sourceFile, "utf8"), siteHost);
 
   if (!entries.length) {
-    throw new Error("No published posts or pages found in this Blogger export.");
+    throw new Error(
+      "No published posts or pages found in this Blogger export."
+    );
   }
   for (let index = 0; index < entries.length; index++) {
     lifecycle.check();
@@ -43,7 +45,13 @@ async function importBlogger(sourceFile, outputDirectory, status, siteHost) {
 
 // Supports both the dashboard's callback lifecycle and direct Promise use.
 // Options: { siteHost } — optional hostname used to rebase same-site links.
-module.exports = function main(sourceFile, outputDirectory, status, options, callback) {
+module.exports = function main(
+  sourceFile,
+  outputDirectory,
+  status,
+  options,
+  callback
+) {
   if (typeof options === "function") {
     callback = options;
     options = {};

@@ -19,7 +19,10 @@ describe("getBlogHealth", function () {
   it("treats a client without getHealth as healthy", async function () {
     clients.fakeHealthClient = {};
 
-    const blog = await getBlogHealth({ id: "blog_1", client: "fakeHealthClient" });
+    const blog = await getBlogHealth({
+      id: "blog_1",
+      client: "fakeHealthClient",
+    });
 
     expect(blog.health).toEqual(health.ok());
     expect(blog.healthIssue).toBeUndefined();
@@ -43,7 +46,10 @@ describe("getBlogHealth", function () {
       },
     };
 
-    const blog = await getBlogHealth({ id: "blog_1", client: "fakeHealthClient" });
+    const blog = await getBlogHealth({
+      id: "blog_1",
+      client: "fakeHealthClient",
+    });
 
     expect(blog.health.state).toBe("error");
     expect(blog.healthIssue).toEqual({
@@ -58,7 +64,10 @@ describe("getBlogHealth", function () {
   it("does not expose an issue while syncing", async function () {
     clients.fakeHealthClient = { getHealth: async () => health.syncing() };
 
-    const blog = await getBlogHealth({ id: "blog_1", client: "fakeHealthClient" });
+    const blog = await getBlogHealth({
+      id: "blog_1",
+      client: "fakeHealthClient",
+    });
 
     expect(blog.health.state).toBe("syncing");
     expect(blog.healthIssue).toBeUndefined();
@@ -72,7 +81,10 @@ describe("getBlogHealth", function () {
       },
     };
 
-    const blog = await getBlogHealth({ id: "blog_1", client: "fakeHealthClient" });
+    const blog = await getBlogHealth({
+      id: "blog_1",
+      client: "fakeHealthClient",
+    });
 
     expect(blog.health).toEqual(health.ok());
     expect(blog.healthIssue).toBeUndefined();
@@ -93,9 +105,7 @@ describe("getBlogHealth", function () {
       expect(blog.health.state).toBe("error");
       expect(blog.healthIssue.code).toBe("SYNC_PAUSED");
       expect(blog.healthIssue.label).toBe("Sync paused");
-      expect(blog.healthIssue.message).toBe(
-        health.ISSUES.SYNC_PAUSED.message
-      );
+      expect(blog.healthIssue.message).toBe(health.ISSUES.SYNC_PAUSED.message);
       expect(blog.healthIssue.action).toBeUndefined();
       expect(blog.healthIssue.since).toBeGreaterThanOrEqual(before);
       expect(blog.healthIssue.since).toBeLessThanOrEqual(Date.now());

@@ -20,12 +20,9 @@ function execTransaction(multi, callback) {
   }
 
   if (result && typeof result.then === "function") {
-    Promise.resolve(result).then(
-      function () {
-        onDone();
-      },
-      onDone
-    );
+    Promise.resolve(result).then(function () {
+      onDone();
+    }, onDone);
   }
 }
 

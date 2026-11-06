@@ -3,13 +3,14 @@ var join = require("path").posix.join;
 require("clients");
 
 describe("template", function () {
-var { promisify } = require("util");
-var writeToFolder = require("../index").writeToFolder;
-var setView = require("../index").setView;
-var setMetadata = require("../index").setMetadata;
-var packageAPI = require("../index").package;
-var removeEnabledFromAllTemplates = require("../index").removeEnabledFromAllTemplates;
-var writeChangeToFolder = require("../../../dashboard/site/template/save/writeChangeToFolder");
+  var { promisify } = require("util");
+  var writeToFolder = require("../index").writeToFolder;
+  var setView = require("../index").setView;
+  var setMetadata = require("../index").setMetadata;
+  var packageAPI = require("../index").package;
+  var removeEnabledFromAllTemplates =
+    require("../index").removeEnabledFromAllTemplates;
+  var writeChangeToFolder = require("../../../dashboard/site/template/save/writeChangeToFolder");
 
   require("./setup")({ createTemplate: true });
 
@@ -63,27 +64,56 @@ var writeChangeToFolder = require("../../../dashboard/site/template/save/writeCh
     var template1Dir = join(templatesRoot, "template-1");
     var template2Dir = join(templatesRoot, "template-2");
     var template3Dir = join(templatesRoot, "template-3");
-    var package1 = JSON.stringify({ name: "Template 1", enabled: true }, null, 2);
-    var package2 = JSON.stringify({ name: "Template 2", enabled: true }, null, 2);
-    var package3 = JSON.stringify({ name: "Template 3", enabled: false }, null, 2);
+    var package1 = JSON.stringify(
+      { name: "Template 1", enabled: true },
+      null,
+      2
+    );
+    var package2 = JSON.stringify(
+      { name: "Template 2", enabled: true },
+      null,
+      2
+    );
+    var package3 = JSON.stringify(
+      { name: "Template 3", enabled: false },
+      null,
+      2
+    );
 
-    await folder.write(test.blog.id, join(template1Dir, "package.json"), package1);
-    await folder.write(test.blog.id, join(template2Dir, "package.json"), package2);
-    await folder.write(test.blog.id, join(template3Dir, "package.json"), package3);
+    await folder.write(
+      test.blog.id,
+      join(template1Dir, "package.json"),
+      package1
+    );
+    await folder.write(
+      test.blog.id,
+      join(template2Dir, "package.json"),
+      package2
+    );
+    await folder.write(
+      test.blog.id,
+      join(template3Dir, "package.json"),
+      package3
+    );
 
-    var modifiedSlugs = await promisify(removeEnabledFromAllTemplates)(test.blog.id);
+    var modifiedSlugs = await promisify(removeEnabledFromAllTemplates)(
+      test.blog.id
+    );
 
     // Templates with enabled: true should be disabled
     expect(
-      JSON.parse(await readText(test, join(template1Dir, "package.json"))).enabled
+      JSON.parse(await readText(test, join(template1Dir, "package.json")))
+        .enabled
     ).toEqual(false);
     expect(
-      JSON.parse(await readText(test, join(template2Dir, "package.json"))).enabled
+      JSON.parse(await readText(test, join(template2Dir, "package.json")))
+        .enabled
     ).toEqual(false);
 
     // Templates with enabled: false should remain unchanged
     expect(
-      JSON.parse(await readText(test, join(template3Dir, "package.json"))).enabled
+      JSON.parse(await readText(test, join(template3Dir, "package.json")))
+        .enabled
     ).toEqual(false);
 
     // Should return the slugs of modified templates
@@ -96,14 +126,14 @@ var writeChangeToFolder = require("../../../dashboard/site/template/save/writeCh
   it("regenerates package.json in the local folder when local editing is enabled via package save", async function () {
     var test = this;
     var packageMetadata = { localEditing: true, name: "Local Package" };
-    var staleTemplate = Object.assign({}, this.template, { localEditing: false });
+    var staleTemplate = Object.assign({}, this.template, {
+      localEditing: false,
+    });
 
     await promisify(packageAPI.save)(this.template.id, packageMetadata);
-    await promisify(writeChangeToFolder)(
-      test.blog,
-      staleTemplate,
-      { name: "package.json" }
-    );
+    await promisify(writeChangeToFolder)(test.blog, staleTemplate, {
+      name: "package.json",
+    });
 
     var packagePath = await getTemplatePath(test, "package.json");
     expect(JSON.parse(await readText(test, packagePath)).name).toEqual(
@@ -268,9 +298,9 @@ var writeChangeToFolder = require("../../../dashboard/site/template/save/writeCh
 
     // The write only ran once the lock was free, and gave the lock back
     expect(released).toEqual(true);
-    expect(await readText(this, await getTemplatePath(this, "post.html"))).toEqual(
-      "<h1>Locked</h1>"
-    );
+    expect(
+      await readText(this, await getTemplatePath(this, "post.html"))
+    ).toEqual("<h1>Locked</h1>");
     expect((await folderLock.inspect(this.blog.id)).held).toBeFalsy();
   });
 
@@ -329,9 +359,9 @@ var writeChangeToFolder = require("../../../dashboard/site/template/save/writeCh
     });
 
     await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(await readText(this, await getTemplatePath(this, "post.html"))).toEqual(
-      "<h1>Held</h1>"
-    );
+    expect(
+      await readText(this, await getTemplatePath(this, "post.html"))
+    ).toEqual("<h1>Held</h1>");
     expect((await folderLock.inspect(blogID)).held).toBeFalsy();
   });
 });

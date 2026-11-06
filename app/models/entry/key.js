@@ -18,7 +18,9 @@ module.exports = {
   // yet (folderAssets records missing links), and the file may later arrive
   // with different casing (/Photo.JPG authored, /photo.jpg synced).
   dependents: function (blogID, path) {
-    return "blog:" + blogID + ":dependents:" + pathNormalize(path).toLowerCase();
+    return (
+      "blog:" + blogID + ":dependents:" + pathNormalize(path).toLowerCase()
+    );
   },
 
   search: function (blogID) {

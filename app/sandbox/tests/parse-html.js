@@ -16,13 +16,16 @@ describe("sandbox parse-html job", function () {
     config.sandbox.socket = socket;
   });
 
-  const run = (args, input) => sandbox.run("parse-html", args, Buffer.from(input));
+  const run = (args, input) =>
+    sandbox.run("parse-html", args, Buffer.from(input));
   const scan = (kind, input) => run({ op: "scan", kind }, input);
-  const rewrite = (kind, input, replacements) => run({ op: "rewrite", kind, replacements }, input);
+  const rewrite = (kind, input, replacements) =>
+    run({ op: "rewrite", kind, replacements }, input);
   const markdown = (input) => run({ op: "markdown" }, input);
 
   // What the importer's stages used to do in Node, to hold the job to
-  const parseAsBefore = (input) => cheerio.load(input, { decodeEntities: false });
+  const parseAsBefore = (input) =>
+    cheerio.load(input, { decodeEntities: false });
 
   describe("scan", function () {
     it("lists a post's images once each, in order, and the HTML as the parser writes it", async function () {
@@ -33,7 +36,10 @@ describe("sandbox parse-html job", function () {
 
       const { meta, outputs } = await scan("images", post);
 
-      expect(meta.urls).toEqual(["https://example.com/a.png", "https://example.com/b.png"]);
+      expect(meta.urls).toEqual([
+        "https://example.com/a.png",
+        "https://example.com/b.png",
+      ]);
       expect(outputs[0].toString()).toBe(parseAsBefore(post).html());
     });
 
@@ -46,7 +52,10 @@ describe("sandbox parse-html job", function () {
 
       const { meta } = await scan("pdfs", post);
 
-      expect(meta.urls).toEqual(["https://example.com/a.pdf", "http://example.com/b.pdf"]);
+      expect(meta.urls).toEqual([
+        "https://example.com/a.pdf",
+        "http://example.com/b.pdf",
+      ]);
     });
 
     it("lists a post's audio", async function () {
@@ -61,12 +70,18 @@ describe("sandbox parse-html job", function () {
 
     it("leaves out an address longer than the fetch job takes", async function () {
       const long = "https://example.com/" + "a".repeat(html.MAX_URL_LENGTH);
-      const { meta } = await scan("images", `<img src="${long}"><img src="https://example.com/ok.png">`);
+      const { meta } = await scan(
+        "images",
+        `<img src="${long}"><img src="https://example.com/ok.png">`
+      );
       expect(meta.urls).toEqual(["https://example.com/ok.png"]);
     });
 
     it("lists at most MAX_URLS addresses", async function () {
-      const post = Array.from({ length: html.MAX_URLS + 500 }, (_, i) => `<img src="https://example.com/${i}.png">`).join("");
+      const post = Array.from(
+        { length: html.MAX_URLS + 500 },
+        (_, i) => `<img src="https://example.com/${i}.png">`
+      ).join("");
       const { meta } = await scan("images", post);
       expect(meta.urls.length).toBe(html.MAX_URLS);
       expect(meta.urls[0]).toBe("https://example.com/0.png");
@@ -89,7 +104,10 @@ describe("sandbox parse-html job", function () {
     });
 
     it("does not count a tag-like quoted value as markup", async function () {
-      const quoted = '<a title="' + "<b ".repeat(html.MAX_TAGS * 2) + '" href="https://example.com/a.pdf">a</a>';
+      const quoted =
+        '<a title="' +
+        "<b ".repeat(html.MAX_TAGS * 2) +
+        '" href="https://example.com/a.pdf">a</a>';
       const { meta } = await scan("pdfs", quoted);
       expect(meta.urls).toEqual(["https://example.com/a.pdf"]);
     });
@@ -108,7 +126,8 @@ describe("sandbox parse-html job", function () {
         const name = map.get(value);
         if (kind === "pdfs" && $(el).text() === value) $(el).text(name);
         $(el).attr(attribute, name);
-        if (kind === "images" && $(el).parent().attr("href") === value) $(el).parent().attr("href", name);
+        if (kind === "images" && $(el).parent().attr("href") === value)
+          $(el).parent().attr("href", name);
       });
       return $.html();
     }
@@ -126,7 +145,9 @@ describe("sandbox parse-html job", function () {
 
       expect(result).toBe(rewriteAsBefore("images", post, replacements));
       expect(result).toContain('<a href="_a.png"><img src="_a.png"></a>');
-      expect(result).toContain('<a href="https://example.com/page"><img src="_a.png"></a>');
+      expect(result).toContain(
+        '<a href="https://example.com/page"><img src="_a.png"></a>'
+      );
       expect(result).toContain('src="https://example.com/b.png"');
       expect(result).toContain('src="data:image/png;base64,AAAA"');
     });
@@ -147,12 +168,15 @@ describe("sandbox parse-html job", function () {
     });
 
     it("changes the src of downloaded audio", async function () {
-      const post = '<audio src="https://example.com/a.mp3"></audio><audio src="https://example.com/b.mp3"></audio>';
+      const post =
+        '<audio src="https://example.com/a.mp3"></audio><audio src="https://example.com/b.mp3"></audio>';
       const replacements = [["https://example.com/a.mp3", "_a.mp3"]];
 
       const { outputs } = await rewrite("audio", post, replacements);
 
-      expect(outputs[0].toString()).toBe(rewriteAsBefore("audio", post, replacements));
+      expect(outputs[0].toString()).toBe(
+        rewriteAsBefore("audio", post, replacements)
+      );
       expect(outputs[0].toString()).toContain('<audio src="_a.mp3">');
     });
 
@@ -160,7 +184,9 @@ describe("sandbox parse-html job", function () {
       const post = '<img src="https://example.com/a.png">';
       const name = '_"><script>alert(1)</script>.png';
 
-      const { outputs } = await rewrite("images", post, [["https://example.com/a.png", name]]);
+      const { outputs } = await rewrite("images", post, [
+        ["https://example.com/a.png", name],
+      ]);
 
       const $ = cheerio.load(outputs[0].toString());
       expect($("script").length).toBe(0);
@@ -177,7 +203,10 @@ describe("sandbox parse-html job", function () {
         [["https://example.com/a.png", "n".repeat(600)]],
         [["javascript:alert(1)", "_a.png"]],
         [["/relative.png", "_a.png"]],
-        Array.from({ length: html.MAX_URLS + 1 }, (_, i) => [`https://example.com/${i}.png`, "_a.png"]),
+        Array.from({ length: html.MAX_URLS + 1 }, (_, i) => [
+          `https://example.com/${i}.png`,
+          "_a.png",
+        ]),
       ];
       for (const replacements of bad) {
         const { meta, outputs } = await rewrite("images", post, replacements);
@@ -191,7 +220,11 @@ describe("sandbox parse-html job", function () {
     // convert_to_markdown.js as it was when Node ran Turndown itself
     function markdownAsBefore(input) {
       const Turndown = require("turndown");
-      const turndown = new Turndown({ bulletListMarker: "-", codeBlockStyle: "fenced", emDelimiter: "*" });
+      const turndown = new Turndown({
+        bulletListMarker: "-",
+        codeBlockStyle: "fenced",
+        emDelimiter: "*",
+      });
       turndown.use(require("turndown-plugin-gfm").gfm);
       turndown.escape = (text) => text;
       turndown.keep(["audio", "video", "iframe"]);
@@ -228,7 +261,9 @@ describe("sandbox parse-html job", function () {
 
       expect(text).toContain("_Hey_ and *you* and [a](b)");
       expect(text).toContain('<audio src="a.mp3"></audio>');
-      expect(text).toContain('<iframe src="https://example.com/embed"></iframe>');
+      expect(text).toContain(
+        '<iframe src="https://example.com/embed"></iframe>'
+      );
     });
 
     it("converts tables, as GitHub flavoured Markdown", async function () {
@@ -250,50 +285,88 @@ describe("sandbox parse-html job", function () {
     };
     const operations = [
       { op: "scan", kind: "images" },
-      { op: "rewrite", kind: "images", replacements: [["https://example.com/a.png", "_a.png"]] },
+      {
+        op: "rewrite",
+        kind: "images",
+        replacements: [["https://example.com/a.png", "_a.png"]],
+      },
       { op: "markdown" },
     ];
 
     it("refuses a page over MAX_HTML_BYTES, whatever is in it", async function () {
       for (const filler of ["x", "&amp;", "<!--"]) {
-        const huge = "<p>" + filler.repeat(Math.ceil(html.MAX_HTML_BYTES / filler.length) + 1);
-        for (const args of operations) await refused(args, huge, "markup is too large");
+        const huge =
+          "<p>" +
+          filler.repeat(Math.ceil(html.MAX_HTML_BYTES / filler.length) + 1);
+        for (const args of operations)
+          await refused(args, huge, "markup is too large");
       }
-      await refused(operations[0], '<img src="data:image/png;base64,' + "A".repeat(html.MAX_HTML_BYTES) + '">', "markup is too large");
+      await refused(
+        operations[0],
+        '<img src="data:image/png;base64,' +
+          "A".repeat(html.MAX_HTML_BYTES) +
+          '">',
+        "markup is too large"
+      );
     });
 
     it("refuses a page with more than MAX_TAGS tags", async function () {
       const many = "<a>x</a>".repeat(html.MAX_TAGS / 2 + 1);
-      for (const args of operations) await refused(args, many, "markup has too many tags");
-      const links = Array.from({ length: html.MAX_TAGS }, (_, i) => `<a href="https://example.com/${i}.pdf">l</a>`).join("");
-      await refused({ op: "scan", kind: "pdfs" }, links, "markup has too many tags");
+      for (const args of operations)
+        await refused(args, many, "markup has too many tags");
+      const links = Array.from(
+        { length: html.MAX_TAGS },
+        (_, i) => `<a href="https://example.com/${i}.pdf">l</a>`
+      ).join("");
+      await refused(
+        { op: "scan", kind: "pdfs" },
+        links,
+        "markup has too many tags"
+      );
     });
 
     it("answers a page with just under MAX_TAGS tags", async function () {
-      const links = Array.from({ length: html.MAX_TAGS / 2 - 1 }, (_, i) => `<a href="https://example.com/${i}.pdf">l</a>`).join("");
+      const links = Array.from(
+        { length: html.MAX_TAGS / 2 - 1 },
+        (_, i) => `<a href="https://example.com/${i}.pdf">l</a>`
+      ).join("");
       const { meta } = await scan("pdfs", links);
       expect(meta.urls.length).toBe(html.MAX_URLS);
       expect((await markdown(links)).meta.error).toBeUndefined();
     });
 
     it("refuses a tag with too many attributes, which parse5 takes minutes over", async function () {
-      const attributes = Array.from({ length: 100 * 1000 }, (_, i) => "a" + i).join(" ");
-      for (const args of operations) await refused(args, `<img ${attributes}>`, "markup has a tag with too many attributes");
+      const attributes = Array.from(
+        { length: 100 * 1000 },
+        (_, i) => "a" + i
+      ).join(" ");
+      for (const args of operations)
+        await refused(
+          args,
+          `<img ${attributes}>`,
+          "markup has a tag with too many attributes"
+        );
     });
 
     it("refuses markup nested deeper than the parser can write back", async function () {
       for (const depth of [1000, 10 * 1000, 29 * 1000]) {
         for (const tag of ["div", "span", "blockquote"]) {
-          const deep = `<${tag}>`.repeat(depth) + '<img src="https://example.com/a.png">';
-          for (const args of operations) await refused(args, deep, "markup is nested too deeply");
+          const deep =
+            `<${tag}>`.repeat(depth) + '<img src="https://example.com/a.png">';
+          for (const args of operations)
+            await refused(args, deep, "markup is nested too deeply");
         }
       }
       const tables = "<table><tr><td>".repeat(1000);
-      for (const args of operations) await refused(args, tables, "markup is nested too deeply");
+      for (const args of operations)
+        await refused(args, tables, "markup is nested too deeply");
     });
 
     it("answers a page nested as deep as a real one can be", async function () {
-      const nested = "<div>".repeat(100) + '<img src="https://example.com/a.png">' + "</div>".repeat(100);
+      const nested =
+        "<div>".repeat(100) +
+        '<img src="https://example.com/a.png">' +
+        "</div>".repeat(100);
       const { meta, outputs } = await scan("images", nested);
       expect(meta.urls).toEqual(["https://example.com/a.png"]);
       expect(outputs[0].toString()).toBe(parseAsBefore(nested).html());
@@ -305,7 +378,16 @@ describe("sandbox parse-html job", function () {
     });
 
     it("answers markup that is not HTML at all, and an empty page", async function () {
-      for (const input of ["", "\u0000\u0001<\u0002>", "<<<<>>>><", "<a", '<a href="', "<!--", "<![CDATA[ x ]]>", "�".repeat(1000)]) {
+      for (const input of [
+        "",
+        "\u0000\u0001<\u0002>",
+        "<<<<>>>><",
+        "<a",
+        '<a href="',
+        "<!--",
+        "<![CDATA[ x ]]>",
+        "�".repeat(1000),
+      ]) {
         for (const args of operations) {
           const { meta } = await run(args, input);
           expect(meta.error).toBeUndefined();
@@ -314,20 +396,45 @@ describe("sandbox parse-html job", function () {
     });
 
     it("answers an unknown operation or kind as an error, not a failure", async function () {
-      for (const args of [undefined, null, "scan", [], {}, { op: "eval" }, { op: "__proto__" }, { op: "constructor" }]) {
+      for (const args of [
+        undefined,
+        null,
+        "scan",
+        [],
+        {},
+        { op: "eval" },
+        { op: "__proto__" },
+        { op: "constructor" },
+      ]) {
         const { meta } = await run(args, "<p>x</p>");
         expect(meta.error).toBe("unknown operation");
       }
-      for (const kind of [undefined, "links", "__proto__", "constructor", "toString", 5]) {
+      for (const kind of [
+        undefined,
+        "links",
+        "__proto__",
+        "constructor",
+        "toString",
+        5,
+      ]) {
         const { meta } = await scan(kind, "<p>x</p>");
         expect(meta.error).toBe("unknown kind");
       }
     });
 
     it("takes no selector, function or option from the caller", async function () {
-      const post = '<img src="https://example.com/a.png"><div class="x">y</div>';
+      const post =
+        '<img src="https://example.com/a.png"><div class="x">y</div>';
       const { meta, outputs } = await run(
-        { op: "scan", kind: "images", selector: "div", tag: "div", attribute: "class", wanted: "() => true", options: { xmlMode: true } },
+        {
+          op: "scan",
+          kind: "images",
+          selector: "div",
+          tag: "div",
+          attribute: "class",
+          wanted: "() => true",
+          options: { xmlMode: true },
+        },
         post
       );
       expect(meta.urls).toEqual(["https://example.com/a.png"]);
@@ -336,7 +443,8 @@ describe("sandbox parse-html job", function () {
   });
 
   describe("html.extract", function () {
-    const page = (tags) => `<!doctype html><html><head>${tags}</head><body></body></html>`;
+    const page = (tags) =>
+      `<!doctype html><html><head>${tags}</head><body></body></html>`;
     const video = (src, width, height) =>
       page(
         `<meta property="og:video" content="${src}"><meta property="og:video:width" content="${width}">` +
@@ -344,7 +452,12 @@ describe("sandbox parse-html job", function () {
       );
 
     it("og-video returns the player's address and size", function () {
-      expect(html.extract("og-video", video("https://bandcamp.com/EmbeddedPlayer/v=2/album=1/", 400, 120))).toEqual({
+      expect(
+        html.extract(
+          "og-video",
+          video("https://bandcamp.com/EmbeddedPlayer/v=2/album=1/", 400, 120)
+        )
+      ).toEqual({
         src: "https://bandcamp.com/EmbeddedPlayer/v=2/album=1/",
         width: 400,
         height: 120,
@@ -356,7 +469,11 @@ describe("sandbox parse-html job", function () {
         '<meta property="og:video" content="  https://example.com/a  ">' +
         '<meta property="og:video" content="https://example.com/b">' +
         '<meta property="og:video:width" content=" 300 "><meta property="og:video:height" content="200">';
-      expect(html.extract("og-video", page(tags))).toEqual({ src: "https://example.com/a", width: 300, height: 200 });
+      expect(html.extract("og-video", page(tags))).toEqual({
+        src: "https://example.com/a",
+        width: 300,
+        height: 200,
+      });
     });
 
     it("og-video leaves out what is missing or not valid", function () {
@@ -374,26 +491,67 @@ describe("sandbox parse-html job", function () {
         "",
       ];
       for (const src of hostile) {
-        expect(html.extract("og-video", video(src, 400, 120))).toEqual({ width: 400, height: 120 });
+        expect(html.extract("og-video", video(src, 400, 120))).toEqual({
+          width: 400,
+          height: 120,
+        });
       }
       // a quote that the parser leaves in a value is refused, not escaped
-      expect(html.extract("og-video", page("<meta property=og:video content='https://example.com/a\"b'>")).src).toBeUndefined();
-      expect(html.extract("og-video", page("<meta property=og:video content='https://example.com/a<b>c'>")).src).toBeUndefined();
+      expect(
+        html.extract(
+          "og-video",
+          page("<meta property=og:video content='https://example.com/a\"b'>")
+        ).src
+      ).toBeUndefined();
+      expect(
+        html.extract(
+          "og-video",
+          page("<meta property=og:video content='https://example.com/a<b>c'>")
+        ).src
+      ).toBeUndefined();
 
-      for (const size of ["", "abc", "-5", "0", "1.5", "1e3", "100000", "99999999999", "NaN", "Infinity", "12px"]) {
-        expect(html.extract("og-video", video("https://example.com/a", size, size))).toEqual({ src: "https://example.com/a" });
+      for (const size of [
+        "",
+        "abc",
+        "-5",
+        "0",
+        "1.5",
+        "1e3",
+        "100000",
+        "99999999999",
+        "NaN",
+        "Infinity",
+        "12px",
+      ]) {
+        expect(
+          html.extract("og-video", video("https://example.com/a", size, size))
+        ).toEqual({ src: "https://example.com/a" });
       }
     });
 
     it("only runs a named extraction", function () {
-      for (const name of [undefined, "", "meta", "__proto__", "constructor", "toString", "$('x')"]) {
-        expect(() => html.extract(name, page(""))).toThrowError(html.MarkupError);
+      for (const name of [
+        undefined,
+        "",
+        "meta",
+        "__proto__",
+        "constructor",
+        "toString",
+        "$('x')",
+      ]) {
+        expect(() => html.extract(name, page(""))).toThrowError(
+          html.MarkupError
+        );
       }
     });
 
     it("refuses what the parse-html job refuses", function () {
-      expect(() => html.extract("og-video", "x".repeat(html.MAX_HTML_BYTES + 1))).toThrowError(html.MarkupError);
-      expect(() => html.extract("og-video", "<div>".repeat(5000))).toThrowError(html.MarkupError);
+      expect(() =>
+        html.extract("og-video", "x".repeat(html.MAX_HTML_BYTES + 1))
+      ).toThrowError(html.MarkupError);
+      expect(() => html.extract("og-video", "<div>".repeat(5000))).toThrowError(
+        html.MarkupError
+      );
     });
   });
 
@@ -403,9 +561,16 @@ describe("sandbox parse-html job", function () {
     const helper = path.join(__dirname, "../../dashboard/site/import/helper");
 
     it("do not parse HTML in Node", function () {
-      for (const file of ["download_images", "download_pdfs", "download_audio", "convert_to_markdown"]) {
+      for (const file of [
+        "download_images",
+        "download_pdfs",
+        "download_audio",
+        "convert_to_markdown",
+      ]) {
         const source = fs.readFileSync(path.join(helper, file + ".js"), "utf8");
-        expect(source).not.toMatch(/require\(["'](cheerio|turndown|parse5|domino|jsdom)/);
+        expect(source).not.toMatch(
+          /require\(["'](cheerio|turndown|parse5|domino|jsdom)/
+        );
         expect(source).toContain("html_assets");
       }
     });

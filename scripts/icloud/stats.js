@@ -3,7 +3,9 @@ const statistics = require("clients/icloud/statistics");
 
 const main = async () => {
   const blogIDs = await database.list();
-  const accounts = await Promise.all(blogIDs.map((blogID) => database.get(blogID)));
+  const accounts = await Promise.all(
+    blogIDs.map((blogID) => database.get(blogID))
+  );
   const existingAccounts = accounts.filter(Boolean);
   const missingRecords = accounts.length - existingAccounts.length;
   const summary = statistics.summarize(existingAccounts);

@@ -17,7 +17,11 @@ var referencedIdentifiers = require("./referencedIdentifiers");
 // String locals are not templates: the render pipeline treats them as data
 // (see blog/render/middleware.js), so a local like snippet = "{{{html}}}" is
 // not a reason to keep `html`.
-module.exports = function hardenProjectedRetrieve(retrieve, viewContent, allPartials) {
+module.exports = function hardenProjectedRetrieve(
+  retrieve,
+  viewContent,
+  allPartials
+) {
   if (!retrieve || typeof retrieve !== "object") return retrieve;
 
   var referenced = referencedIdentifiers(viewContent, allPartials);

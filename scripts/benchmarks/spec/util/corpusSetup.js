@@ -43,7 +43,9 @@ module.exports = function setupCorpusRender(manifestPath) {
 
   beforeAll(function (done) {
     const timer = setTimeout(() => {
-      done.fail(new Error("templates({ watch: false }) did not finish in time"));
+      done.fail(
+        new Error("templates({ watch: false }) did not finish in time")
+      );
     }, 30 * 1000);
 
     templates({ watch: false }, (err) => {
@@ -97,7 +99,10 @@ module.exports = function setupCorpusRender(manifestPath) {
     };
 
     this.getForBlog = (blogOrIndex, requestPath, options = {}) =>
-      this.fetch(resolveURL(requestPath, this.blogOrigin(blogOrIndex)), options);
+      this.fetch(
+        resolveURL(requestPath, this.blogOrigin(blogOrIndex)),
+        options
+      );
 
     this.get = (requestPath, options = {}) =>
       this.getForBlog(this.blog, requestPath, options);

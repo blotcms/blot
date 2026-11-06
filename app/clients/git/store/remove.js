@@ -58,7 +58,9 @@ async function deleteAll(store, keys) {
   const worker = async () => {
     while (next < keys.length) await store.delete(keys[next++]);
   };
-  await Promise.all(Array.from({ length: Math.min(DELETES_AT_ONCE, keys.length) }, worker));
+  await Promise.all(
+    Array.from({ length: Math.min(DELETES_AT_ONCE, keys.length) }, worker)
+  );
 }
 
 // The newest manifest, or null if it is there but cannot be read
@@ -66,7 +68,8 @@ async function readNewest(store, clock) {
   try {
     return await manifest.read(store, { clock });
   } catch (err) {
-    if (err instanceof CorruptError || err instanceof TooLargeError) return null;
+    if (err instanceof CorruptError || err instanceof TooLargeError)
+      return null;
     throw err;
   }
 }
@@ -76,9 +79,13 @@ async function readNewest(store, clock) {
 // seq, or null if that number is taken (another writer got there first).
 async function tombstoneAfter(store, lock, seqs) {
   const tombstone = manifest.removed({ seq: Math.max(0, ...seqs) });
-  const created = await lock(() => store.putIfAbsent(manifestKey(tombstone.seq), manifest.serialize(tombstone)));
+  const created = await lock(() =>
+    store.putIfAbsent(manifestKey(tombstone.seq), manifest.serialize(tombstone))
+  );
   if (!created) return null;
-  await store.put(LATEST_KEY, Buffer.from(JSON.stringify({ seq: tombstone.seq }) + "\n")).catch(() => {});
+  await store
+    .put(LATEST_KEY, Buffer.from(JSON.stringify({ seq: tombstone.seq }) + "\n"))
+    .catch(() => {});
   return tombstone.seq;
 }
 
@@ -94,12 +101,15 @@ async function removeRepo({ store, lock = (fn) => fn(), clock = Date.now }) {
     for await (const { key } of store.list("")) keys.push(key);
 
     const seqs = keys.map(manifestSeq).filter((seq) => seq !== null);
-    const doomed = keys.filter((key) => key !== LATEST_KEY && manifestSeq(key) === null);
+    const doomed = keys.filter(
+      (key) => key !== LATEST_KEY && manifestSeq(key) === null
+    );
 
     // Already removed (or never written to), and nothing since. Otherwise,
     // even with no manifest yet, the deletes may take an import's uploads,
     // so a tombstone goes on top and that import's swap fails.
-    if (base && manifest.isEmpty(base) && !doomed.length) return { outcome: "removed", seq: base.seq, deleted };
+    if (base && manifest.isEmpty(base) && !doomed.length)
+      return { outcome: "removed", seq: base.seq, deleted };
 
     await deleteAll(store, doomed);
     deleted += doomed.length;
@@ -107,12 +117,20 @@ async function removeRepo({ store, lock = (fn) => fn(), clock = Date.now }) {
     if (!base) {
       const seq = await tombstoneAfter(store, lock, seqs);
       if (seq !== null) return { outcome: "removed", seq, deleted };
-      lastError = new StaleManifestError("The manifest after " + Math.max(0, ...seqs) + " was created first");
+      lastError = new StaleManifestError(
+        "The manifest after " + Math.max(0, ...seqs) + " was created first"
+      );
       continue;
     }
 
     try {
-      const tombstone = await manifest.swap({ store, lock, base, next: manifest.removed(base), clock });
+      const tombstone = await manifest.swap({
+        store,
+        lock,
+        base,
+        next: manifest.removed(base),
+        clock,
+      });
       return { outcome: "removed", seq: tombstone.seq, deleted };
     } catch (err) {
       if (!(err instanceof StaleManifestError)) throw err;
@@ -120,7 +138,13 @@ async function removeRepo({ store, lock = (fn) => fn(), clock = Date.now }) {
     }
   }
 
-  throw Object.assign(new Error("Other writers kept moving the repository on while it was being removed: " + lastError.message), { code: "EMOVED", cause: lastError });
+  throw Object.assign(
+    new Error(
+      "Other writers kept moving the repository on while it was being removed: " +
+        lastError.message
+    ),
+    { code: "EMOVED", cause: lastError }
+  );
 }
 
 module.exports = removeRepo;

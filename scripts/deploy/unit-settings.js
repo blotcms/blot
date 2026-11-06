@@ -43,9 +43,11 @@ function settings() {
 }
 
 function render() {
-  return Object.entries(settings())
-    .map(([key, value]) => `${key}=${value}`)
-    .join("\n") + "\n";
+  return (
+    Object.entries(settings())
+      .map(([key, value]) => `${key}=${value}`)
+      .join("\n") + "\n"
+  );
 }
 
 if (require.main === module) process.stdout.write(render());

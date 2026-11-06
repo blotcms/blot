@@ -115,11 +115,10 @@ class HotDocPoller {
     this.stopOnDrain = null;
 
     // Due time = next poll of that doc; see the comment at the top
-    this.alarms = alarm(
-      "google-drive-hot-docs",
-      (id) => this.handleAlarm(id),
-      { pollMs: POLL_INTERVAL_MS, batch: ALARM_BATCH }
-    );
+    this.alarms = alarm("google-drive-hot-docs", (id) => this.handleAlarm(id), {
+      pollMs: POLL_INTERVAL_MS,
+      batch: ALARM_BATCH,
+    });
 
     // Caps this process's concurrent docs.get calls; the per service account
     // rate is shared between processes through Redis (acquireDocsSlot).
@@ -164,7 +163,9 @@ class HotDocPoller {
   }
 
   getPollIntervalMs(ageSeconds) {
-    const tier = SCHEDULE_TIERS.find((entry) => ageSeconds <= entry.maxAgeSeconds);
+    const tier = SCHEDULE_TIERS.find(
+      (entry) => ageSeconds <= entry.maxAgeSeconds
+    );
     return tier ? tier.everyMs : null;
   }
 
@@ -228,7 +229,9 @@ class HotDocPoller {
     item.lastKnownRevision = latest.lastKnownRevision;
     item.lastKnownModifiedTime = latest.lastKnownModifiedTime;
     if (latest.lastKnownRevision == null) return;
-    await this.saveItem(item.id, { lastKnownRevision: latest.lastKnownRevision });
+    await this.saveItem(item.id, {
+      lastKnownRevision: latest.lastKnownRevision,
+    });
   }
 
   // Waits to win the service account's docs.get slot for the current 250ms.
@@ -261,7 +264,7 @@ class HotDocPoller {
   // quickly and efficiently. See this:
 
   // https://stackoverflow.com/questions/71772606/google-drive-files-spreadsheets-rest-api-how-to-avoid-delay-when-tracking-file
-  
+
   // We tried polling files.get, relying on changes.watch, and even files.watch
   // and revisions.list but the fastest and most reliable way to track updates
   // was to use docs.documents.get.
@@ -321,13 +324,17 @@ class HotDocPoller {
 
   async evict(item, reason, level = "info", extra = {}) {
     await this.remove(item.id, item.serviceAccountId);
-    this.log("evicted", {
-      reason,
-      blogID: item.blogID,
-      serviceAccountId: item.serviceAccountId,
-      fileId: item.fileId,
-      ...extra,
-    }, level);
+    this.log(
+      "evicted",
+      {
+        reason,
+        blogID: item.blogID,
+        serviceAccountId: item.serviceAccountId,
+        fileId: item.fileId,
+        ...extra,
+      },
+      level
+    );
   }
 
   // Evicts the oldest docs (by first seen) in a capped set beyond its limit
@@ -348,7 +355,12 @@ class HotDocPoller {
   }
 
   async enforceCaps(serviceAccountId) {
-    await this.evictOldestBeyond(ALL_KEY, MAX_ITEMS_GLOBAL, "global-cap", "info");
+    await this.evictOldestBeyond(
+      ALL_KEY,
+      MAX_ITEMS_GLOBAL,
+      "global-cap",
+      "info"
+    );
     await this.evictOldestBeyond(
       serviceAccountKey(serviceAccountId),
       MAX_ITEMS_PER_SERVICE_ACCOUNT,
@@ -401,22 +413,32 @@ class HotDocPoller {
     let rateLimited = false;
     try {
       const docs = await this.getDocs(serviceAccountId);
-      const initial = await this.fetchRateLimited(serviceAccountId, docs, fileId);
+      const initial = await this.fetchRateLimited(
+        serviceAccountId,
+        docs,
+        fileId
+      );
 
       if (initial.lastKnownRevision != null) {
-        await this.saveItem(id, { lastKnownRevision: initial.lastKnownRevision });
+        await this.saveItem(id, {
+          lastKnownRevision: initial.lastKnownRevision,
+        });
       }
     } catch (err) {
       if (isRateLimitError(err)) {
         rateLimited = true;
         this.metrics.rateLimitEvents += 1;
-        this.log("rate-limit", {
-          phase: "enqueue-initial-state",
-          blogID,
-          serviceAccountId,
-          fileId,
-          message: err?.message,
-        }, "warn");
+        this.log(
+          "rate-limit",
+          {
+            phase: "enqueue-initial-state",
+            blogID,
+            serviceAccountId,
+            fileId,
+            message: err?.message,
+          },
+          "warn"
+        );
       } else {
         this.log("enqueue-initial-state-failed", {
           blogID,
@@ -453,8 +475,8 @@ class HotDocPoller {
       ageSeconds > EVICT_AFTER_SECONDS
         ? "age"
         : this.getPollIntervalMs(ageSeconds)
-        ? null
-        : "tier-ended";
+          ? null
+          : "tier-ended";
 
     if (evictReason) {
       if (await this.evictIfUnchanged(item, evictReason)) return;
@@ -473,18 +495,27 @@ class HotDocPoller {
       if (isRateLimitError(err)) {
         rearm = false;
         this.metrics.rateLimitEvents += 1;
-        await this.boostBackoffForServiceAccount(startedAt, item.serviceAccountId);
-        this.log("rate-limit", {
-          blogID: item.blogID,
-          serviceAccountId: item.serviceAccountId,
-          fileId: item.fileId,
-          message: err?.message,
-        }, "warn");
+        await this.boostBackoffForServiceAccount(
+          startedAt,
+          item.serviceAccountId
+        );
+        this.log(
+          "rate-limit",
+          {
+            blogID: item.blogID,
+            serviceAccountId: item.serviceAccountId,
+            fileId: item.fileId,
+            message: err?.message,
+          },
+          "warn"
+        );
       } else {
         const terminalReason = getTerminalErrorReason(err);
         if (terminalReason) {
           rearm = false;
-          await this.evict(item, terminalReason, "warn", { message: err?.message });
+          await this.evict(item, terminalReason, "warn", {
+            message: err?.message,
+          });
         } else {
           this.log("poll-error", {
             blogID: item.blogID,
@@ -507,7 +538,10 @@ class HotDocPoller {
       if (stored != null && stored !== String(item.lastSeen)) {
         await this.alarms.set(id, Date.now() + 2000 + jitterMs(300));
       } else {
-        await this.alarms.set(id, startedAt + intervalMs + jitterMs(intervalMs));
+        await this.alarms.set(
+          id,
+          startedAt + intervalMs + jitterMs(intervalMs)
+        );
       }
     }
   }
@@ -611,14 +645,18 @@ class HotDocPoller {
         } catch (err) {
           const reason = getTerminalErrorReason(err);
           if (reason) {
-            this.log("download-terminal-error", {
-              reason,
-              blogID: item.blogID,
-              serviceAccountId: item.serviceAccountId,
-              fileId: item.fileId,
-              folderId: item.folderId,
-              message: err?.message,
-            }, "warn");
+            this.log(
+              "download-terminal-error",
+              {
+                reason,
+                blogID: item.blogID,
+                serviceAccountId: item.serviceAccountId,
+                fileId: item.fileId,
+                folderId: item.folderId,
+                message: err?.message,
+              },
+              "warn"
+            );
           }
 
           throw err;
@@ -684,7 +722,6 @@ class HotDocPoller {
     await sync(item.blogID);
     return "synced";
   }
-
 }
 
 module.exports = new HotDocPoller();

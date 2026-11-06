@@ -151,8 +151,7 @@ describe("blog server vhosts", function () {
   it("redirects the www variant of a custom domain to the apex", async function () {
     // A real, non-blot domain - the blog id itself contains characters
     // (e.g. underscores) that aren't valid in a domain name.
-    var domain =
-      "example-" + Math.random().toString(36).slice(2, 10) + ".com";
+    var domain = "example-" + Math.random().toString(36).slice(2, 10) + ".com";
 
     await this.blog.update({ domain: domain });
     this.url("http://www." + domain);

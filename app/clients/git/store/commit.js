@@ -82,7 +82,12 @@ const nodePath = require("path");
 const zlib = require("zlib");
 const { pipeline } = require("stream/promises");
 const { Readable } = require("stream");
-const { StaleManifestError, OutcomeUnknownError, CorruptError, TooLargeError } = require("./errors");
+const {
+  StaleManifestError,
+  OutcomeUnknownError,
+  CorruptError,
+  TooLargeError,
+} = require("./errors");
 const { packKey, idxKey, revKey } = require("./layout");
 const manifest = require("./manifest");
 const createReader = require("./reader");
@@ -133,12 +138,16 @@ function jsCrc32(crc, buffer) {
     }
   }
   let c = crc ^ 0xffffffff;
-  for (let i = 0; i < buffer.length; i++) c = crcTable[(c ^ buffer[i]) & 0xff] ^ (c >>> 8);
+  for (let i = 0; i < buffer.length; i++)
+    c = crcTable[(c ^ buffer[i]) & 0xff] ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
 }
 
 function pathError(file) {
-  return Object.assign(new Error("Cannot commit a file at this path: " + JSON.stringify(file)), { code: "EPATH" });
+  return Object.assign(
+    new Error("Cannot commit a file at this path: " + JSON.stringify(file)),
+    { code: "EPATH" }
+  );
 }
 
 // The path of a file in the repository from the path Blot knows it by: the
@@ -159,7 +168,14 @@ function treePath(file) {
 
   const parts = p.slice(1).split("/");
   for (const part of parts) {
-    if (!part || part === "." || part === ".." || part.toLowerCase() === ".git" || part.indexOf("\0") !== -1) throw pathError(file);
+    if (
+      !part ||
+      part === "." ||
+      part === ".." ||
+      part.toLowerCase() === ".git" ||
+      part.indexOf("\0") !== -1
+    )
+      throw pathError(file);
   }
   return parts;
 }
@@ -167,12 +183,19 @@ function treePath(file) {
 function checkIdentity(identity) {
   for (const field of ["name", "email"]) {
     const value = identity && identity[field];
-    if (typeof value !== "string" || !value || /[<>\n\0]/.test(value)) throw new Error("The commit's identity needs a name and an email without < > or newlines");
+    if (typeof value !== "string" || !value || /[<>\n\0]/.test(value))
+      throw new Error(
+        "The commit's identity needs a name and an email without < > or newlines"
+      );
   }
 }
 
 function hashObject(type, body) {
-  return crypto.createHash("sha1").update(type + " " + body.length + "\0").update(body).digest("hex");
+  return crypto
+    .createHash("sha1")
+    .update(type + " " + body.length + "\0")
+    .update(body)
+    .digest("hex");
 }
 
 // ---- Trees ------------------------------------------------------------
@@ -187,11 +210,17 @@ function splitTree(buffer) {
   while (at < buffer.length) {
     const space = buffer.indexOf(32, at);
     const nul = space === -1 ? -1 : buffer.indexOf(0, space);
-    if (nul === -1 || nul + 21 > buffer.length) throw new CorruptError("Invalid tree: an entry is cut short");
+    if (nul === -1 || nul + 21 > buffer.length)
+      throw new CorruptError("Invalid tree: an entry is cut short");
 
     const mode = buffer.toString("latin1", at, space);
     const name = buffer.subarray(space + 1, nul);
-    entries.push({ mode, name, oid: buffer.subarray(nul + 1, nul + 21), key: sortKey(mode, name) });
+    entries.push({
+      mode,
+      name,
+      oid: buffer.subarray(nul + 1, nul + 21),
+      key: sortKey(mode, name),
+    });
     at = nul + 21;
   }
   return entries;
@@ -202,7 +231,14 @@ function sortKey(mode, name) {
 }
 
 function joinTree(entries) {
-  return Buffer.concat(entries.flatMap((e) => [Buffer.from(e.mode + " "), e.name, Buffer.from([0]), e.oid]));
+  return Buffer.concat(
+    entries.flatMap((e) => [
+      Buffer.from(e.mode + " "),
+      e.name,
+      Buffer.from([0]),
+      e.oid,
+    ])
+  );
 }
 
 // `entries` without anything called `name`, and with `replacement`
@@ -211,7 +247,12 @@ function withEntry(entries, name, replacement) {
   const kept = entries.filter((e) => !e.name.equals(name));
   if (replacement) {
     const oid = Buffer.from(replacement.oid, "hex");
-    kept.push({ mode: replacement.mode, name, oid, key: sortKey(replacement.mode, name) });
+    kept.push({
+      mode: replacement.mode,
+      name,
+      oid,
+      key: sortKey(replacement.mode, name),
+    });
   }
   return kept.sort((a, b) => Buffer.compare(a.key, b.key));
 }
@@ -231,25 +272,44 @@ function entryHeader(type, size) {
 }
 
 function wholeEntry(type, body) {
-  return { oid: hashObject(type, body), type, bytes: Buffer.concat([entryHeader(type, body.length), zlib.deflateSync(body)]) };
+  return {
+    oid: hashObject(type, body),
+    type,
+    bytes: Buffer.concat([
+      entryHeader(type, body.length),
+      zlib.deflateSync(body),
+    ]),
+  };
 }
 
 // The version 2 index of a pack: `entries` are { oid, offset, crc }
 function buildIdx(entries, packChecksum) {
   const sorted = [...entries].sort((a, b) => (a.oid < b.oid ? -1 : 1));
   const fanout = Buffer.alloc(256 * 4);
-  for (const e of sorted) for (let b = parseInt(e.oid.slice(0, 2), 16); b < 256; b++) fanout.writeUInt32BE(fanout.readUInt32BE(b * 4) + 1, b * 4);
+  for (const e of sorted)
+    for (let b = parseInt(e.oid.slice(0, 2), 16); b < 256; b++)
+      fanout.writeUInt32BE(fanout.readUInt32BE(b * 4) + 1, b * 4);
 
   const crcs = Buffer.alloc(sorted.length * 4);
   const offsets = Buffer.alloc(sorted.length * 4);
   sorted.forEach((e, i) => {
     // The contents are the last entry, so this holds for any size of them
-    if (e.offset >= 2 ** 31) throw new Error("A pack of Blot's own has an entry too far in for a 4-byte offset");
+    if (e.offset >= 2 ** 31)
+      throw new Error(
+        "A pack of Blot's own has an entry too far in for a 4-byte offset"
+      );
     crcs.writeUInt32BE(e.crc, i * 4);
     offsets.writeUInt32BE(e.offset, i * 4);
   });
 
-  const body = Buffer.concat([Buffer.from([0xff, 0x74, 0x4f, 0x63, 0, 0, 0, 2]), fanout, ...sorted.map((e) => Buffer.from(e.oid, "hex")), crcs, offsets, packChecksum]);
+  const body = Buffer.concat([
+    Buffer.from([0xff, 0x74, 0x4f, 0x63, 0, 0, 0, 2]),
+    fanout,
+    ...sorted.map((e) => Buffer.from(e.oid, "hex")),
+    crcs,
+    offsets,
+    packChecksum,
+  ]);
   return Buffer.concat([body, crypto.createHash("sha1").update(body).digest()]);
 }
 
@@ -304,7 +364,12 @@ async function assemblePack(smalls, blob) {
 
   function body() {
     const front = [head, ...smalls.map((s) => s.bytes), ...tail];
-    if (!blob || blob.deflated) return Buffer.concat([...front, ...(blob ? [blob.deflated] : []), checksum]);
+    if (!blob || blob.deflated)
+      return Buffer.concat([
+        ...front,
+        ...(blob ? [blob.deflated] : []),
+        checksum,
+      ]);
 
     return Readable.from(
       (async function* () {
@@ -315,12 +380,20 @@ async function assemblePack(smalls, blob) {
     );
   }
 
-  return { name: "pack-" + checksum.toString("hex"), size: offset + 20, objects: count, idx, rev: buildRev(idx), body };
+  return {
+    name: "pack-" + checksum.toString("hex"),
+    size: offset + 20,
+    objects: count,
+    idx,
+    rev: buildRev(idx),
+    body,
+  };
 }
 
 // ---- The file's contents ----------------------------------------------
 
-const toChunk = (chunk) => (Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+const toChunk = (chunk) =>
+  Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
 
 function createScratch(cache) {
   let reservation = null;
@@ -333,7 +406,10 @@ function createScratch(cache) {
   let live = 0;
 
   // Small caches take smaller steps
-  const step = Math.max(1, Math.min(RESERVE_STEP, Math.floor(cache.maxBytes / 8)));
+  const step = Math.max(
+    1,
+    Math.min(RESERVE_STEP, Math.floor(cache.maxBytes / 8))
+  );
 
   return {
     // A file in scratch with `source` written into it, through the stream
@@ -349,8 +425,12 @@ function createScratch(cache) {
           const buffer = toChunk(chunk);
           files.set(file, files.get(file) + buffer.length);
           live += buffer.length;
-          if (files.get(file) > limit) throw new TooLargeError("The file is larger than the " + limit + " bytes Blot accepts");
-          if (live > reservation.bytes) await reservation.extend(Math.max(live - reservation.bytes, step));
+          if (files.get(file) > limit)
+            throw new TooLargeError(
+              "The file is larger than the " + limit + " bytes Blot accepts"
+            );
+          if (live > reservation.bytes)
+            await reservation.extend(Math.max(live - reservation.bytes, step));
           yield buffer;
         }
       }
@@ -364,7 +444,12 @@ function createScratch(cache) {
       files.delete(file);
     },
     async release() {
-      if (reservation) await reservation.release().catch((err) => console.error("Git store: could not remove scratch space", err));
+      if (reservation)
+        await reservation
+          .release()
+          .catch((err) =>
+            console.error("Git store: could not remove scratch space", err)
+          );
     },
   };
 }
@@ -377,19 +462,33 @@ function createScratch(cache) {
 // `file` in scratch is.
 async function prepareBlob(contents, { scratch, limit, size }) {
   if (typeof contents === "string") contents = Buffer.from(contents, "utf8");
-  else if (ArrayBuffer.isView(contents) && !Buffer.isBuffer(contents)) contents = Buffer.from(contents.buffer, contents.byteOffset, contents.byteLength);
+  else if (ArrayBuffer.isView(contents) && !Buffer.isBuffer(contents))
+    contents = Buffer.from(
+      contents.buffer,
+      contents.byteOffset,
+      contents.byteLength
+    );
 
   if (Buffer.isBuffer(contents)) {
-    if (contents.length > limit) throw new TooLargeError("The file is larger than the " + limit + " bytes Blot accepts");
+    if (contents.length > limit)
+      throw new TooLargeError(
+        "The file is larger than the " + limit + " bytes Blot accepts"
+      );
     const oid = hashObject("blob", contents);
     if (contents.length <= MEMORY_BLOB) {
       const deflated = zlib.deflateSync(contents);
-      return { oid, size: contents.length, compressedSize: deflated.length, deflated };
+      return {
+        oid,
+        size: contents.length,
+        compressedSize: deflated.length,
+        deflated,
+      };
     }
     return deflateToScratch([contents], contents.length, { scratch, limit });
   }
 
-  if (!contents || typeof contents[Symbol.asyncIterator] !== "function") throw new Error("Cannot commit contents of this type");
+  if (!contents || typeof contents[Symbol.asyncIterator] !== "function")
+    throw new Error("Cannot commit contents of this type");
 
   // A stream of unknown length is counted first
   let raw = null;
@@ -410,8 +509,12 @@ async function prepareBlob(contents, { scratch, limit, size }) {
 // must be exactly `size` bytes, because git names a blob by a hash which
 // starts with its length.
 async function deflateToScratch(chunks, size, { scratch, limit }) {
-  if (!Number.isSafeInteger(size) || size < 0) throw new Error("The size of the contents must be a whole number of bytes");
-  if (size > limit) throw new TooLargeError("The file is larger than the " + limit + " bytes Blot accepts");
+  if (!Number.isSafeInteger(size) || size < 0)
+    throw new Error("The size of the contents must be a whole number of bytes");
+  if (size > limit)
+    throw new TooLargeError(
+      "The file is larger than the " + limit + " bytes Blot accepts"
+    );
 
   const hash = crypto.createHash("sha1").update("blob " + size + "\0");
   let seen = 0;
@@ -420,14 +523,29 @@ async function deflateToScratch(chunks, size, { scratch, limit }) {
     for await (const chunk of chunks) {
       const buffer = toChunk(chunk);
       seen += buffer.length;
-      if (seen > size) throw new Error("The contents are longer than the " + size + " bytes they were said to be");
+      if (seen > size)
+        throw new Error(
+          "The contents are longer than the " +
+            size +
+            " bytes they were said to be"
+        );
       hash.update(buffer);
       yield buffer;
     }
-    if (seen !== size) throw new Error("The contents are " + seen + " bytes, not the " + size + " they were said to be");
+    if (seen !== size)
+      throw new Error(
+        "The contents are " +
+          seen +
+          " bytes, not the " +
+          size +
+          " they were said to be"
+      );
   }
 
-  const { file, written } = await scratch.write(Readable.from(hashed(), { objectMode: false }), { stages: [zlib.createDeflate()] });
+  const { file, written } = await scratch.write(
+    Readable.from(hashed(), { objectMode: false }),
+    { stages: [zlib.createDeflate()] }
+  );
   return { oid: hash.digest("hex"), size, compressedSize: written, file };
 }
 
@@ -447,7 +565,10 @@ function createObjects({ store, cache, base }) {
     async read(oid, wanted) {
       const found = await repo.read(oid);
       if (!found) throw new CorruptError("The repository has no object " + oid);
-      if (found.type !== wanted) throw new CorruptError("Object " + oid + " is a " + found.type + ", not a " + wanted);
+      if (found.type !== wanted)
+        throw new CorruptError(
+          "Object " + oid + " is a " + found.type + ", not a " + wanted
+        );
       return found.data;
     },
   };
@@ -458,18 +579,32 @@ function createObjects({ store, cache, base }) {
 // Builds the commit on top of master's, or returns null if the tree comes out
 // as it was. Resolves with { parent, commit, objects } where `objects` are the
 // new trees and the commit (not the contents), as { oid, type, body, bytes }.
-async function build({ objects, parent, parts, blob, message, identity, when }) {
-  const parentCommit = parent ? parseCommit(await objects.read(parent, "commit")) : null;
+async function build({
+  objects,
+  parent,
+  parts,
+  blob,
+  message,
+  identity,
+  when,
+}) {
+  const parentCommit = parent
+    ? parseCommit(await objects.read(parent, "commit"))
+    : null;
 
   // The trees along the path, from the root: what is stored, or nothing for a
   // directory which is not there (or is a file, which a write replaces)
   const levels = [];
   let treeOid = parentCommit ? parentCommit.tree : null;
   for (let depth = 0; depth < parts.length; depth++) {
-    const entries = treeOid ? splitTree(await objects.read(treeOid, "tree")) : [];
+    const entries = treeOid
+      ? splitTree(await objects.read(treeOid, "tree"))
+      : [];
     levels.push(entries);
     const name = Buffer.from(parts[depth]);
-    const next = entries.find((e) => e.mode === DIRECTORY && e.name.equals(name));
+    const next = entries.find(
+      (e) => e.mode === DIRECTORY && e.name.equals(name)
+    );
 
     // Nothing is below a file, or below a directory which is not there, to
     // remove: as in git, that is no change, and the file is not touched
@@ -505,7 +640,19 @@ async function build({ objects, parent, parts, blob, message, identity, when }) 
 
   const stamp = Math.floor(when / 1000) + " +0000";
   const person = identity.name + " <" + identity.email + "> " + stamp;
-  const body = Buffer.from("tree " + tree + "\n" + (parent ? "parent " + parent + "\n" : "") + "author " + person + "\ncommitter " + person + "\n\n" + message + "\n");
+  const body = Buffer.from(
+    "tree " +
+      tree +
+      "\n" +
+      (parent ? "parent " + parent + "\n" : "") +
+      "author " +
+      person +
+      "\ncommitter " +
+      person +
+      "\n\n" +
+      message +
+      "\n"
+  );
   const entry = wholeEntry("commit", body);
 
   return { parent, commit: entry.oid, objects: [...trees, { ...entry, body }] };
@@ -518,11 +665,20 @@ async function build({ objects, parent, parts, blob, message, identity, when }) 
 // fails the upload.
 async function uploadPack(store, pack, { rev = true, cache = null } = {}) {
   const body = pack.body();
-  const puts = [store.put(packKey(pack.name), body), store.put(idxKey(pack.name), pack.idx)];
+  const puts = [
+    store.put(packKey(pack.name), body),
+    store.put(idxKey(pack.name), pack.idx),
+  ];
   if (rev) puts.push(store.put(revKey(pack.name), pack.rev));
   const kept = Buffer.isBuffer(body)
     ? keepPack({ cache, store, name: pack.name, size: pack.size, buffer: body })
-    : keepPack({ cache, store, name: pack.name, size: pack.size, stream: pack.body() });
+    : keepPack({
+        cache,
+        store,
+        name: pack.name,
+        size: pack.size,
+        stream: pack.body(),
+      });
   const results = await Promise.allSettled(puts);
   await kept;
   if (body.destroy) body.destroy();
@@ -530,12 +686,34 @@ async function uploadPack(store, pack, { rev = true, cache = null } = {}) {
   if (failed) throw failed.reason;
 }
 
-const entryOf = ({ name, size, idx, objects }) => ({ name, size, idxSize: idx.length, objects });
+const entryOf = ({ name, size, idx, objects }) => ({
+  name,
+  size,
+  idxSize: idx.length,
+  objects,
+});
 
-async function commit({ store, cache, lock, path: file, contents, size, remove = false, identity = IDENTITY, now = Date.now(), limit = DEFAULT_LIMIT }) {
+async function commit({
+  store,
+  cache,
+  lock,
+  path: file,
+  contents,
+  size,
+  remove = false,
+  identity = IDENTITY,
+  now = Date.now(),
+  limit = DEFAULT_LIMIT,
+}) {
   const parts = treePath(file);
-  if (remove ? contents !== undefined && contents !== null : contents === undefined || contents === null) {
-    throw new Error("A commit either writes contents or removes the path, not both and not neither");
+  if (
+    remove
+      ? contents !== undefined && contents !== null
+      : contents === undefined || contents === null
+  ) {
+    throw new Error(
+      "A commit either writes contents or removes the path, not both and not neither"
+    );
   }
   checkIdentity(identity);
 
@@ -544,7 +722,9 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
   const scratch = createScratch(cache);
 
   try {
-    const blob = remove ? null : await prepareBlob(contents, { scratch, limit, size });
+    const blob = remove
+      ? null
+      : await prepareBlob(contents, { scratch, limit, size });
 
     // What was built on one manifest and is reused if master did not move
     let built = null;
@@ -556,23 +736,46 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
       const objects = createObjects({ store, cache, base });
 
       if (!built || built.parent !== parent) {
-        built = await build({ objects, parent, parts, blob, message, identity, when });
+        built = await build({
+          objects,
+          parent,
+          parts,
+          blob,
+          message,
+          identity,
+          when,
+        });
         uploaded = null;
       }
       // A rewrite landed since the upload: its purge may delete the pack, so
       // it is uploaded again. What was built still holds: it links only to
       // what master reaches, which a rewrite keeps.
-      if (uploaded && uploaded.epoch !== manifest.epochOf(base)) uploaded = null;
-      if (!built) return { outcome: "ok", commit: null, parent, changed: false, seq: base.seq, manifest: base };
+      if (uploaded && uploaded.epoch !== manifest.epochOf(base))
+        uploaded = null;
+      if (!built)
+        return {
+          outcome: "ok",
+          commit: null,
+          parent,
+          changed: false,
+          seq: base.seq,
+          manifest: base,
+        };
 
       if (!uploaded) {
         const smalls = built.objects;
         const pack = await assemblePack(smalls, blob);
-        const piece = await assemblePack(smalls.filter((o) => o.type === "commit"), null);
+        const piece = await assemblePack(
+          smalls.filter((o) => o.type === "commit"),
+          null
+        );
 
         // Every upload ends before this goes on, so none is still reading a
         // file from scratch when scratch is deleted
-        const results = await Promise.allSettled([uploadPack(store, pack, { cache }), uploadPack(store, piece, { rev: false, cache })]);
+        const results = await Promise.allSettled([
+          uploadPack(store, pack, { cache }),
+          uploadPack(store, piece, { rev: false, cache }),
+        ]);
         const failed = results.find((result) => result.status === "rejected");
         if (failed) throw failed.reason;
         uploaded = { pack, piece, epoch: manifest.epochOf(base) };
@@ -580,7 +783,12 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
         // This process uploaded them, so it knows their size, and the next
         // reader of the pack needs no request for its index
         for (const p of [pack, piece]) noteSize(store, packKey(p.name), p.size);
-        await rememberWhole({ cache, namespace: store.id, key: idxKey(pack.name), idx: pack.idx });
+        await rememberWhole({
+          cache,
+          namespace: store.id,
+          key: idxKey(pack.name),
+          idx: pack.idx,
+        });
       }
 
       const next = manifest.advance(base, {
@@ -591,18 +799,49 @@ async function commit({ store, cache, lock, path: file, contents, size, remove =
       });
 
       try {
-        await manifest.swap({ store, lock, base, next, uploaded: [uploaded.pack.name, uploaded.piece.name] });
+        await manifest.swap({
+          store,
+          lock,
+          base,
+          next,
+          uploaded: [uploaded.pack.name, uploaded.piece.name],
+        });
       } catch (err) {
-        if (err instanceof OutcomeUnknownError) return { outcome: "unknown", commit: built.commit, parent, changed: null, seq: next.seq, error: err };
+        if (err instanceof OutcomeUnknownError)
+          return {
+            outcome: "unknown",
+            commit: built.commit,
+            parent,
+            changed: null,
+            seq: next.seq,
+            error: err,
+          };
         if (!(err instanceof StaleManifestError)) throw err;
         if (attempt >= ATTEMPTS) {
-          throw Object.assign(new Error("master moved " + ATTEMPTS + " times while committing " + parts.join("/")), { code: "EMOVED" });
+          throw Object.assign(
+            new Error(
+              "master moved " +
+                ATTEMPTS +
+                " times while committing " +
+                parts.join("/")
+            ),
+            { code: "EMOVED" }
+          );
         }
         continue;
       }
 
-      await Promise.all(built.objects.map((o) => objects.put(o.oid, o.type, o.body)));
-      return { outcome: "ok", commit: built.commit, parent, changed: true, seq: next.seq, manifest: next };
+      await Promise.all(
+        built.objects.map((o) => objects.put(o.oid, o.type, o.body))
+      );
+      return {
+        outcome: "ok",
+        commit: built.commit,
+        parent,
+        changed: true,
+        seq: next.seq,
+        manifest: next,
+      };
     }
   } finally {
     await scratch.release();

@@ -23,7 +23,11 @@ if (form) {
     });
   });
 
-  window.addEventListener("pagehide", () => {
-    if (objectURL) URL.revokeObjectURL(objectURL);
-  }, { once: true });
+  window.addEventListener(
+    "pagehide",
+    () => {
+      if (objectURL) URL.revokeObjectURL(objectURL);
+    },
+    { once: true }
+  );
 }

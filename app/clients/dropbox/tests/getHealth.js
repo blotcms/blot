@@ -157,16 +157,21 @@ describe("dropbox getHealth", function () {
     const persistError = require("../util/persistError");
     save.call(this, { error_code: 0 }, function (err) {
       if (err) return done.fail(err);
-      persistError(blogID, { status: 401 }, SOURCES.APPLY, async function (err) {
-        if (err) return done.fail(err);
-        try {
-          const result = await getHealth(blogID);
-          expect(result.issues[0].code).toBe(health.CODES.REAUTH_REQUIRED);
-          done();
-        } catch (e) {
-          done.fail(e);
+      persistError(
+        blogID,
+        { status: 401 },
+        SOURCES.APPLY,
+        async function (err) {
+          if (err) return done.fail(err);
+          try {
+            const result = await getHealth(blogID);
+            expect(result.issues[0].code).toBe(health.CODES.REAUTH_REQUIRED);
+            done();
+          } catch (e) {
+            done.fail(e);
+          }
         }
-      });
+      );
     });
   });
 });

@@ -3,12 +3,12 @@ const Mustache = require("mustache");
 const config = require("config");
 const SYNTAX_HIGHLIGHTER_THEMES = require("blog/static/syntax-highlighter");
 const clfdate = require("helper/clfdate");
-const FONT_PROTECTED_PROPS = ['styles', 'name', 'stack', 'id', 'svg', 'tags'];
+const FONT_PROTECTED_PROPS = ["styles", "name", "stack", "id", "svg", "tags"];
 const SYNTAX_HIGHLIGHTER_PROPS_TO_DELETE = [
-  'background',
-  'tags',
-  'name',
-  'colors'
+  "background",
+  "tags",
+  "name",
+  "colors",
 ];
 
 // Cache for rendered font styles
@@ -27,12 +27,12 @@ function renderFontStyles(fontStyles, fontId) {
         cdn: { origin: config.cdn.origin },
       },
     });
-    
+
     fontStylesCache.set(fontId, renderedStyles);
     return renderedStyles;
   } catch (error) {
-    console.error('Error rendering font styles:', error);
-    return '';
+    console.error("Error rendering font styles:", error);
+    return "";
   }
 }
 
@@ -50,17 +50,17 @@ function updateFontProperties(targetFont, sourceFont) {
       }
     });
   } catch (error) {
-    console.error('Error updating font properties:', error);
+    console.error("Error updating font properties:", error);
   }
 }
 
 function processFonts(locals) {
   Object.entries(locals).forEach(([key, value]) => {
-    if (!key.includes('_font') && key !== 'font') return;
+    if (!key.includes("_font") && key !== "font") return;
 
     try {
-      const match = FONTS.find(font => font.id === value.id);
-      
+      const match = FONTS.find((font) => font.id === value.id);
+
       if (match) {
         updateFontProperties(locals[key], match);
       } else {
@@ -75,7 +75,9 @@ function processFonts(locals) {
 function updateSyntaxHighlighterProperties(target, source, key) {
   try {
     if (!source) {
-      console.warn(`No matching syntax highlighter theme found for ID: ${target.id}`);
+      console.warn(
+        `No matching syntax highlighter theme found for ID: ${target.id}`
+      );
       return;
     }
 
@@ -83,26 +85,34 @@ function updateSyntaxHighlighterProperties(target, source, key) {
     target.styles = source.styles;
 
     Object.entries(source).forEach(([prop, value]) => {
-      if (prop === 'id' || prop === 'styles') return;
+      if (prop === "id" || prop === "styles") return;
       target[prop] = value;
     });
 
-    SYNTAX_HIGHLIGHTER_PROPS_TO_DELETE.forEach(prop => {
+    SYNTAX_HIGHLIGHTER_PROPS_TO_DELETE.forEach((prop) => {
       delete target[prop];
     });
   } catch (error) {
-    console.error(`Error updating syntax highlighter properties for key ${key}:`, error);
+    console.error(
+      `Error updating syntax highlighter properties for key ${key}:`,
+      error
+    );
   }
 }
 
 function processSyntaxHighlighter(locals) {
   Object.entries(locals).forEach(([key, value]) => {
-    if (!key.includes('_syntax_highlighter') && key !== 'syntax_highlighter') return;
+    if (!key.includes("_syntax_highlighter") && key !== "syntax_highlighter")
+      return;
     if (!value || !value.id) return;
 
-    const match = SYNTAX_HIGHLIGHTER_THEMES.find(theme => theme.id === value.id);
+    const match = SYNTAX_HIGHLIGHTER_THEMES.find(
+      (theme) => theme.id === value.id
+    );
     if (!match) {
-      console.warn(`No matching syntax highlighter theme found for ID: ${value.id}`);
+      console.warn(
+        `No matching syntax highlighter theme found for ID: ${value.id}`
+      );
       return;
     }
 
@@ -113,12 +123,15 @@ function processSyntaxHighlighter(locals) {
 // Initialize cache with all known fonts
 function initializeFontStylesCache() {
   try {
-    FONTS.forEach(font => {
+    FONTS.forEach((font) => {
       renderFontStyles(font.styles, font.id);
     });
-    console.log(clfdate(), `Font styles cache initialized with ${fontStylesCache.size} entries`);
+    console.log(
+      clfdate(),
+      `Font styles cache initialized with ${fontStylesCache.size} entries`
+    );
   } catch (error) {
-    console.error('Error initializing font styles cache:', error);
+    console.error("Error initializing font styles cache:", error);
   }
 }
 
@@ -130,6 +143,6 @@ module.exports = (locals) => {
     processFonts(locals);
     processSyntaxHighlighter(locals);
   } catch (error) {
-    console.error('Error processing locals:', error);
+    console.error("Error processing locals:", error);
   }
 };

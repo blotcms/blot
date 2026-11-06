@@ -15,7 +15,10 @@ describe("pathPrefix helper", function () {
 
   it("filters IDs by normalized prefix and ignores non-string IDs", function () {
     expect(
-      filterEntryIDsByPathPrefix(["/blog/a.txt", 3, null, "/notes/b.txt"], "blog/")
+      filterEntryIDsByPathPrefix(
+        ["/blog/a.txt", 3, null, "/notes/b.txt"],
+        "blog/"
+      )
     ).toEqual(["/blog/a.txt"]);
   });
 });

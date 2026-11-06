@@ -94,7 +94,12 @@ async function lock(key, options = {}) {
       client
         .eval(RELEASE, { keys: [key], arguments: [staleToken] })
         .catch((e) =>
-          console.error(clfdate(), "[LOCK] stale release failed", key, e.message)
+          console.error(
+            clfdate(),
+            "[LOCK] stale release failed",
+            key,
+            e.message
+          )
         );
       continue;
     }

@@ -55,17 +55,20 @@ const MAX_WALK = 500000;
 // How many tags deep a tag is followed to check it is in the packs chosen
 const MAX_TAG_CHAIN = 16;
 
-const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+const hasOwn = (object, key) =>
+  Object.prototype.hasOwnProperty.call(object, key);
 
 // The object a ref value stands for in a snapshot: a commit, or for an
 // annotated tag the object it finally points at
-const tipOf = (manifest, oid) => (manifest.peeled && manifest.peeled[oid]) || oid;
+const tipOf = (manifest, oid) =>
+  (manifest.peeled && manifest.peeled[oid]) || oid;
 
 // The seq of the newest snapshot whose tips all satisfy `has`, or 0
 function newestProvable(manifest, has) {
   for (let i = manifest.snapshots.length - 1; i >= 0; i--) {
     const snapshot = manifest.snapshots[i];
-    if (Object.values(snapshot.refs).every((oid) => has(tipOf(manifest, oid)))) return snapshot.seq;
+    if (Object.values(snapshot.refs).every((oid) => has(tipOf(manifest, oid))))
+      return snapshot.seq;
   }
   return 0;
 }
@@ -97,14 +100,27 @@ function ancestors(graph, starts, limit) {
 //
 // `limiter` (clone.js's createLimiter) is held while history is read, because
 // that is a lot of memory for a request to hold.
-async function negotiate({ store, cache, manifest, haves, limiter = null, maxWalk = MAX_WALK, maxHistory }) {
+async function negotiate({
+  store,
+  cache,
+  manifest,
+  haves,
+  limiter = null,
+  maxWalk = MAX_WALK,
+  maxHistory,
+}) {
   let loading = null;
   const graph = () => {
     if (!loading) {
       loading = (async () => {
         const release = limiter ? await limiter.acquire() : () => {};
         try {
-          return await readHistory({ store, cache, manifest, maxBytes: maxHistory });
+          return await readHistory({
+            store,
+            cache,
+            manifest,
+            maxBytes: maxHistory,
+          });
         } finally {
           release();
         }
@@ -119,12 +135,20 @@ async function negotiate({ store, cache, manifest, haves, limiter = null, maxWal
   const direct = newestProvable(manifest, (oid) => had.has(oid));
   if (direct || !haves.length) {
     const tips = new Set();
-    for (const snapshot of manifest.snapshots) for (const oid of Object.values(snapshot.refs)) tips.add(tipOf(manifest, oid));
-    return settled({ floor: direct, commons: once(haves.filter((oid) => tips.has(oid))), walked: 0, graph });
+    for (const snapshot of manifest.snapshots)
+      for (const oid of Object.values(snapshot.refs))
+        tips.add(tipOf(manifest, oid));
+    return settled({
+      floor: direct,
+      commons: once(haves.filter((oid) => tips.has(oid))),
+      walked: 0,
+      graph,
+    });
   }
 
   const history = await graph();
-  if (!history) return { floor: 0, commons: [], ready: false, walked: 0, graph };
+  if (!history)
+    return { floor: 0, commons: [], ready: false, walked: 0, graph };
 
   const commons = once(haves.filter((oid) => history.has(oid)));
   const reached = ancestors(history, commons, maxWalk);
@@ -144,7 +168,14 @@ function settled(found) {
 // Whether the annotated tags in `wants` are in `packs`, with what they point
 // at unless that is a commit (which the client has, or is in a pack of a later
 // push as every new commit is)
-async function tagsAreSent({ store, cache, manifest, packs, wants, negotiation }) {
+async function tagsAreSent({
+  store,
+  cache,
+  manifest,
+  packs,
+  wants,
+  negotiation,
+}) {
   let isTag;
   if (manifest.peeled) {
     isTag = (oid) => hasOwn(manifest.peeled, oid);
@@ -191,7 +222,10 @@ async function choosePacks({ store, cache, manifest, wants, negotiation }) {
   if (wants.some((oid) => !current.has(oid))) return { packs: all, floor: 0 };
 
   const packs = all.filter((pack) => pack.seq > negotiation.floor);
-  if (packs.length < all.length && !(await tagsAreSent({ store, cache, manifest, packs, wants, negotiation }))) {
+  if (
+    packs.length < all.length &&
+    !(await tagsAreSent({ store, cache, manifest, packs, wants, negotiation }))
+  ) {
     return { packs: all, floor: 0 };
   }
   return { packs, floor: negotiation.floor };

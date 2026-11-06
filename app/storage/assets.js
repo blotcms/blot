@@ -63,7 +63,8 @@ function stagingRoot() {
 function root(blogID) {
   ensure(blogID, "string");
 
-  if (!blogID) throw new Error("storage/assets: blogID must be a non-empty string");
+  if (!blogID)
+    throw new Error("storage/assets: blogID must be a non-empty string");
 
   var base = stagingRoot();
   var directory = join(base, blogID);
@@ -242,7 +243,10 @@ async function commit(blogID, relPath) {
     files.push({ rel: rel, local: local });
   } else {
     for await (var file of walkLocal(local)) {
-      files.push({ rel: rel ? rel + "/" + file : file, local: join(local, file) });
+      files.push({
+        rel: rel ? rel + "/" + file : file,
+        local: join(local, file),
+      });
     }
   }
 
@@ -333,7 +337,9 @@ async function list(blogID, relDir) {
   var found = new Set();
 
   for await (var entry of s3.listEntries(prefix, "/")) {
-    var name = (entry.key || entry.prefix).slice(prefix.length).replace(/\/$/, "");
+    var name = (entry.key || entry.prefix)
+      .slice(prefix.length)
+      .replace(/\/$/, "");
 
     // a "folder" placeholder object is the prefix itself
     if (name) found.add(name);
@@ -427,7 +433,10 @@ async function download(blogID, relPath) {
   try {
     var cached = await fs.stat(destination);
 
-    if (cached.size === info.size && cached.mtimeMs >= (info.modified ? info.modified.getTime() : 0)) {
+    if (
+      cached.size === info.size &&
+      cached.mtimeMs >= (info.modified ? info.modified.getTime() : 0)
+    ) {
       return destination;
     }
   } catch (err) {
@@ -498,7 +507,11 @@ async function serveS3(req, res, blogID, relPath, options) {
     notFound: function (err) {
       return notFound(blogID, relPath, err);
     },
-    label: "[storage/assets] s3 stream failed blog=" + blogID + " path=" + strip(relPath),
+    label:
+      "[storage/assets] s3 stream failed blog=" +
+      blogID +
+      " path=" +
+      strip(relPath),
   });
 }
 
@@ -527,7 +540,9 @@ async function remove(blogID, relPath) {
 
   // An empty relPath would be a scope-wide delete, which only removeAll does
   if (resolve(local) === resolve(root(blogID))) {
-    throw new Error("storage/assets: remove needs a path inside the blog's asset directory");
+    throw new Error(
+      "storage/assets: remove needs a path inside the blog's asset directory"
+    );
   }
 
   await fs.remove(local).catch(function () {});

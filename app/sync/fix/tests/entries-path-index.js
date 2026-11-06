@@ -40,7 +40,6 @@ describe("sync/fix/entries-path-index", function () {
     });
   });
 
-
   it("returns errors from backfill when counts do not match", function (done) {
     var backfillError = new Error("backfill exploded");
 
@@ -48,9 +47,11 @@ describe("sync/fix/entries-path-index", function () {
       Promise.resolve("5"),
       Promise.resolve("3")
     );
-    spyOn(pathIndex, "backfillIndex").and.callFake(function (_blogID, callback) {
-      callback(backfillError);
-    });
+    spyOn(pathIndex, "backfillIndex").and.callFake(
+      function (_blogID, callback) {
+        callback(backfillError);
+      }
+    );
 
     fixEntriesPathIndex({ id: "blog-id" }, function (err, changes) {
       expect(err).toBe(backfillError);

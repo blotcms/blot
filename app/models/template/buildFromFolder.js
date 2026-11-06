@@ -25,95 +25,144 @@ var clfdate = require("helper/clfdate");
 module.exports = function (blogID, callback) {
   ensure(blogID, "string").and(callback, "function");
 
-  var templateDirs = [
-    "/templates",
-    "/Templates"
-  ];
+  var templateDirs = ["/templates", "/Templates"];
 
   const templatesInFolder = [];
 
   // Reading a folder whose package.json says `enabled` installs it, so note
   // which template was installed before we scan
-  getBlog({ id: blogID }).then(function (blog) {
-    scan(blog && blog.template);
-  }, function () {
-    scan(null);
-  });
-
-  function scan(installedBefore) {
-  async.eachSeries(
-    templateDirs,
-    function (templateDir, next) {
-      callbackify(folder.listNames)(blogID, templateDir, function (err, entries) {
-        if (err || !entries) return next();
-
-        var templates = entries.map(function (entry) {
-          return entry.name;
-        });
-
-        async.eachSeries(
-          templates,
-          function (template, next) {
-            if (template.startsWith('.') || shouldIgnoreFile(template)) return next();
-
-            var dir = templateDir + "/" + template;
-
-            console.log(clfdate(), blogID.slice(0, 12), "buildFromFolder: reading template", dir);
-            var id = makeID(blogID, template);
-
-            getMetadata(id, function (metadataErr, existing) {
-              var isNew = !!metadataErr || !existing;
-
-              readFromFolder(blogID, dir, function (err) {
-                if (err) {
-                  // we need to expose this error
-                  // on the design page!
-                  console.log(clfdate(), blogID.slice(0, 12), "buildFromFolder: failed to read template", dir, err);
-                }
-
-                templatesInFolder.push(template);
-
-                if (err) return next();
-
-                // A case-only rename is the same template (ids are
-                // lowercased) but writeToFolder and removeFromFolder build
-                // paths from the slug, so keep it in step with the directory
-                if (!isNew && existing.slug !== template && String(existing.slug).toLowerCase() === template.toLowerCase()) {
-                  return setMetadata(id, { slug: template }, function () { next(); });
-                }
-
-                if (!isNew) return next();
-
-                folderRenames.markFresh(blogID, id).then(
-                  function () { next(); },
-                  function (err) {
-                    console.error(clfdate(), blogID.slice(0, 12), "buildFromFolder: failed to record new template", id, err);
-                    next();
-                  }
-                );
-              });
-            });
-          },
-          next
-        );
-      });
+  getBlog({ id: blogID }).then(
+    function (blog) {
+      scan(blog && blog.template);
     },
-    function (err) {
-      console.log(clfdate(), blogID.slice(0, 12), "buildFromFolder: templates in folder", templatesInFolder.length);
-      console.log(clfdate(), blogID.slice(0, 12), "buildFromFolder: removing local templates not in folder");
-
-      removeMissing(blogID, templatesInFolder, installedBefore).then(
-        function () {
-          console.log(clfdate(), blogID.slice(0, 12), "buildFromFolder: complete");
-          callback(null);
-        },
-        function (err) {
-          console.error(clfdate(), blogID.slice(0, 12), "buildFromFolder: failed to remove templates", err);
-          callback();
-        }
-      );
+    function () {
+      scan(null);
     }
   );
+
+  function scan(installedBefore) {
+    async.eachSeries(
+      templateDirs,
+      function (templateDir, next) {
+        callbackify(folder.listNames)(
+          blogID,
+          templateDir,
+          function (err, entries) {
+            if (err || !entries) return next();
+
+            var templates = entries.map(function (entry) {
+              return entry.name;
+            });
+
+            async.eachSeries(
+              templates,
+              function (template, next) {
+                if (template.startsWith(".") || shouldIgnoreFile(template))
+                  return next();
+
+                var dir = templateDir + "/" + template;
+
+                console.log(
+                  clfdate(),
+                  blogID.slice(0, 12),
+                  "buildFromFolder: reading template",
+                  dir
+                );
+                var id = makeID(blogID, template);
+
+                getMetadata(id, function (metadataErr, existing) {
+                  var isNew = !!metadataErr || !existing;
+
+                  readFromFolder(blogID, dir, function (err) {
+                    if (err) {
+                      // we need to expose this error
+                      // on the design page!
+                      console.log(
+                        clfdate(),
+                        blogID.slice(0, 12),
+                        "buildFromFolder: failed to read template",
+                        dir,
+                        err
+                      );
+                    }
+
+                    templatesInFolder.push(template);
+
+                    if (err) return next();
+
+                    // A case-only rename is the same template (ids are
+                    // lowercased) but writeToFolder and removeFromFolder build
+                    // paths from the slug, so keep it in step with the directory
+                    if (
+                      !isNew &&
+                      existing.slug !== template &&
+                      String(existing.slug).toLowerCase() ===
+                        template.toLowerCase()
+                    ) {
+                      return setMetadata(id, { slug: template }, function () {
+                        next();
+                      });
+                    }
+
+                    if (!isNew) return next();
+
+                    folderRenames.markFresh(blogID, id).then(
+                      function () {
+                        next();
+                      },
+                      function (err) {
+                        console.error(
+                          clfdate(),
+                          blogID.slice(0, 12),
+                          "buildFromFolder: failed to record new template",
+                          id,
+                          err
+                        );
+                        next();
+                      }
+                    );
+                  });
+                });
+              },
+              next
+            );
+          }
+        );
+      },
+      function (err) {
+        console.log(
+          clfdate(),
+          blogID.slice(0, 12),
+          "buildFromFolder: templates in folder",
+          templatesInFolder.length
+        );
+        console.log(
+          clfdate(),
+          blogID.slice(0, 12),
+          "buildFromFolder: removing local templates not in folder"
+        );
+
+        removeMissing(blogID, templatesInFolder, installedBefore).then(
+          function () {
+            console.log(
+              clfdate(),
+              blogID.slice(0, 12),
+              "buildFromFolder: complete"
+            );
+            callback(null);
+          },
+          function (err) {
+            console.error(
+              clfdate(),
+              blogID.slice(0, 12),
+              "buildFromFolder: failed to remove templates",
+              err
+            );
+            callback();
+          }
+        );
+      }
+    );
   }
 };
 
@@ -131,36 +180,48 @@ function templateExists(id) {
 }
 
 async function removeMissing(blogID, templatesInFolder, installedBefore) {
-  const log = (...args) => console.log(clfdate(), blogID.slice(0, 12), "buildFromFolder:", ...args);
+  const log = (...args) =>
+    console.log(clfdate(), blogID.slice(0, 12), "buildFromFolder:", ...args);
   const templates = (await getTemplateList_(blogID)) || [];
   const blog = await getBlog({ id: blogID });
   const now = Date.now();
 
   const local = templates.filter(
-    template => template.localEditing === true && template.owner === blogID
+    (template) => template.localEditing === true && template.owner === blogID
   );
 
   // Folders and templates are matched by id, not slug: makeID lowercases, so a
   // folder renamed only in case is still the same template
-  const idsInFolder = templatesInFolder.map(name => makeID(blogID, name));
-  const orphans = local.filter(template => !idsInFolder.includes(template.id));
+  const idsInFolder = templatesInFolder.map((name) => makeID(blogID, name));
+  const orphans = local.filter(
+    (template) => !idsInFolder.includes(template.id)
+  );
 
   // Templates which aren't installed can be dropped straight away
-  for (const orphan of orphans.filter(template => template.id !== installedBefore)) {
+  for (const orphan of orphans.filter(
+    (template) => template.id !== installedBefore
+  )) {
     try {
       log("removing template", orphan.slug);
       await dropTemplate(blogID, orphan.slug);
     } catch (err) {
-      console.error(clfdate(), blogID.slice(0, 12), "buildFromFolder: failed to remove template", orphan.slug, err);
+      console.error(
+        clfdate(),
+        blogID.slice(0, 12),
+        "buildFromFolder: failed to remove template",
+        orphan.slug,
+        err
+      );
     }
   }
 
-  const installed = orphans.find(template => template.id === installedBefore);
+  const installed = orphans.find((template) => template.id === installedBefore);
 
   // Forget any pending record which no longer applies
   const pending = await folderRenames.readPending(blogID);
   for (const id of Object.keys(pending)) {
-    if (!installed || id !== installed.id) await folderRenames.clear(blogID, id);
+    if (!installed || id !== installed.id)
+      await folderRenames.clear(blogID, id);
   }
 
   if (!installed) return;
@@ -169,12 +230,17 @@ async function removeMissing(blogID, templatesInFolder, installedBefore) {
     let record = pending[installed.id];
 
     if (!record) {
-      record = { since: now, views: await folderRenames.viewHashes(installed.id) };
+      record = {
+        since: now,
+        views: await folderRenames.viewHashes(installed.id),
+      };
       await folderRenames.setPending(blogID, installed.id, record);
     }
 
     const fresh = await folderRenames.readFresh(blogID);
-    let best, bestScore = 0, tied = false;
+    let best,
+      bestScore = 0,
+      tied = false;
 
     for (const template of local) {
       if (template.id === installed.id) continue;
@@ -182,7 +248,13 @@ async function removeMissing(blogID, templatesInFolder, installedBefore) {
 
       // Only a template created around the time the folder went missing
       // (before or after) can be its rename
-      if (!(Math.abs(fresh[template.id] - record.since) < folderRenames.RENAME_WINDOW)) continue;
+      if (
+        !(
+          Math.abs(fresh[template.id] - record.since) <
+          folderRenames.RENAME_WINDOW
+        )
+      )
+        continue;
 
       const score = folderRenames.similarity(
         record.views,
@@ -210,7 +282,10 @@ async function removeMissing(blogID, templatesInFolder, installedBefore) {
       await dropTemplate(blogID, installed.slug);
       await folderRenames.clear(blogID, installed.id);
     } else if (now - record.since >= folderRenames.RENAME_WINDOW) {
-      log("installed template folder missing, installing default", installed.id);
+      log(
+        "installed template folder missing, installing default",
+        installed.id
+      );
 
       // Drop first: installing the default forks it as a blog-owned template
       // named after it, and if that's the id of the template being removed
@@ -223,15 +298,30 @@ async function removeMissing(blogID, templatesInFolder, installedBefore) {
         // bumps the blog's cacheID). If the template is gone the blog must
         // still be moved off it; if it's intact, retry on the next sync.
         if (await templateExists(installed.id)) throw dropErr;
-        console.error(clfdate(), blogID.slice(0, 12), "buildFromFolder: error after dropping template", installed.slug, dropErr);
+        console.error(
+          clfdate(),
+          blogID.slice(0, 12),
+          "buildFromFolder: error after dropping template",
+          installed.slug,
+          dropErr
+        );
       }
 
       await setBlog(blogID, { template: defaults.template });
       await folderRenames.clear(blogID, installed.id);
     } else {
-      log("installed template folder missing, waiting to see if it was renamed", installed.slug);
+      log(
+        "installed template folder missing, waiting to see if it was renamed",
+        installed.slug
+      );
     }
   } catch (err) {
-    console.error(clfdate(), blogID.slice(0, 12), "buildFromFolder: failed to handle missing installed template", installed.slug, err);
+    console.error(
+      clfdate(),
+      blogID.slice(0, 12),
+      "buildFromFolder: failed to handle missing installed template",
+      installed.slug,
+      err
+    );
   }
 }

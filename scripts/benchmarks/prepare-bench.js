@@ -22,7 +22,8 @@ const block = content.htmlBlock(random);
 function post(kb, withBreakpoint) {
   const parts = content.cut(random, block, kb * 1024).split("\n");
   parts[0] = "<h1>A title, and more</h1>";
-  if (withBreakpoint) parts.splice(Math.floor(parts.length / 3), 0, "<!-- more -->");
+  if (withBreakpoint)
+    parts.splice(Math.floor(parts.length / 3), 0, "<!-- more -->");
   return parts.join("\n");
 }
 

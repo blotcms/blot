@@ -17,7 +17,7 @@ describe("git client authenticate (malformed paths with credentials)", function 
     path,
     done,
     repository,
-    withCredentials,
+    withCredentials
   ) {
     var repo = require("clients/git/repo");
     var handleSpy = spyOn(repo, "handleSmartHttp").and.callThrough();
@@ -106,9 +106,9 @@ describe("git client authenticate (malformed paths with credentials)", function 
             testCase[1].replace("HANDLE", this.blog.handle),
             done,
             testCase[2],
-            withCredentials,
+            withCredentials
           );
-        },
+        }
       );
     });
   });

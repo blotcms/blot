@@ -10,28 +10,36 @@ const OUTPUT_PATH = join(views_directory, "git-commits.json");
 // Ignores commits to yml test file since there are so many of them
 // Ignores commits to todo file since there are so many of them
 // Ignores commits with links since they're ugly
-const bannedWords = ["merge", "typo", "commit", ".yml", "todo", "://", "dockerfile"];
+const bannedWords = [
+  "merge",
+  "typo",
+  "commit",
+  ".yml",
+  "todo",
+  "://",
+  "dockerfile",
+];
 const bannedWordsRegEx = new RegExp(bannedWords.join("|"), "i");
 
 // Adjust the tense of verbs in commit message
 const commitMessageMap = {
-  "Adds": "Added",
-  "Cleans": "Cleaned",
-  "Changes": "Changed",
-  "Fixes": "Fixed",
-  "Finishes": "Finished",
-  "Improves": "Improved",
-  "Modifies": "Modified",
-  "Removes": "Removed",
-  "Tweaks": "Tweaked",
+  Adds: "Added",
+  Cleans: "Cleaned",
+  Changes: "Changed",
+  Fixes: "Fixed",
+  Finishes: "Finished",
+  Improves: "Improved",
+  Modifies: "Modified",
+  Removes: "Removed",
+  Tweaks: "Tweaked",
   "Updates to": "Updated",
-  "Updates": "Updated"
+  Updates: "Updated",
 };
 
 const commitMessageMapRegEx = new RegExp(
   Object.keys(commitMessageMap)
     .sort((a, b) => b.length - a.length) // Sort to match longer keys first
-    .map(key => `\\b${key}\\b`) // Add word boundaries
+    .map((key) => `\\b${key}\\b`) // Add word boundaries
     .join("|"),
   "g"
 );
@@ -53,9 +61,9 @@ const middleware = async (req, res, next) => {
     const today = moment().format(dateFormat);
     const yesterday = moment().subtract(1, "days").format(dateFormat);
 
-    const updatedDays = days.map(dayGroup => {
+    const updatedDays = days.map((dayGroup) => {
       // Update each commit within the group
-      const updatedCommits = dayGroup.commits.map(commit => {
+      const updatedCommits = dayGroup.commits.map((commit) => {
         commit.time = moment(commit.date).format(dateFormat);
 
         if (commit.time === today) commit.time = "Today";
@@ -71,9 +79,9 @@ const middleware = async (req, res, next) => {
       return { day: updatedCommits[0].time, commits: updatedCommits };
     });
 
-    const updatedRecentCommits = recent_commits.map(commit => ({
+    const updatedRecentCommits = recent_commits.map((commit) => ({
       ...commit,
-      fromNow: moment(commit.date).fromNow()
+      fromNow: moment(commit.date).fromNow(),
     }));
 
     res.locals.recent_commits = updatedRecentCommits;
@@ -98,20 +106,22 @@ const build = async () => {
           "User-Agent": "GitHub-Commit-Fetcher",
           // Optional: Add your GitHub Personal Access Token if rate limits are an issue
           // Authorization: `Bearer YOUR_PERSONAL_ACCESS_TOKEN`
-        }
+        },
       }
     );
 
     if (!response.ok) {
-      throw new Error(`GitHub API responded with status ${response.status}: ${response.statusText}`);
+      throw new Error(
+        `GitHub API responded with status ${response.status}: ${response.statusText}`
+      );
     }
 
     const data = await response.json();
-    
+
     const commits = [];
     const messageMap = {};
 
-    data.forEach(commitData => {
+    data.forEach((commitData) => {
       const commit = commitData.commit;
       const message = commit.message;
       const author = commit.author?.name || "Unknown";
@@ -123,15 +133,24 @@ const build = async () => {
       if (!formattedMessage || bannedWordsRegEx.test(formattedMessage)) return;
 
       // Adjust tenses in the commit message
-      formattedMessage = formattedMessage.replace(commitMessageMapRegEx, matched => {
-        return commitMessageMap[matched];
-      });
+      formattedMessage = formattedMessage.replace(
+        commitMessageMapRegEx,
+        (matched) => {
+          return commitMessageMap[matched];
+        }
+      );
 
       // Remove references like (#393) or * at the end of commit messages
       if (formattedMessage.indexOf("(#") > -1)
-        formattedMessage = formattedMessage.slice(0, formattedMessage.indexOf("(#"));
+        formattedMessage = formattedMessage.slice(
+          0,
+          formattedMessage.indexOf("(#")
+        );
       if (formattedMessage.indexOf("*") > -1)
-        formattedMessage = formattedMessage.slice(0, formattedMessage.indexOf("*"));
+        formattedMessage = formattedMessage.slice(
+          0,
+          formattedMessage.indexOf("*")
+        );
 
       // Prevent duplicate messages
       if (messageMap[formattedMessage]) return;
@@ -141,7 +160,7 @@ const build = async () => {
         author,
         hash,
         date,
-        message: formattedMessage
+        message: formattedMessage,
       });
     });
 
@@ -154,7 +173,7 @@ const build = async () => {
 
     const daysArray = Object.entries(days).map(([day, commits]) => ({
       day,
-      commits
+      commits,
     }));
 
     const recent_commits = commits.slice(0, 5);

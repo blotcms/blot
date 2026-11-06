@@ -1,18 +1,21 @@
-const path = require('path');
-const Module = require('module');
+const path = require("path");
+const Module = require("module");
 
-process.env.NODE_PATH = [path.join(__dirname, '../../'), process.env.NODE_PATH || '']
+process.env.NODE_PATH = [
+  path.join(__dirname, "../../"),
+  process.env.NODE_PATH || "",
+]
   .filter(Boolean)
   .join(path.delimiter);
 Module._initPaths();
 
-const removeRoutePath = require.resolve('../site/folder/remove');
+const removeRoutePath = require.resolve("../site/folder/remove");
 
 const resolveModulePath = (moduleName) => {
   try {
     return require.resolve(moduleName);
   } catch (err) {
-    return require.resolve(path.join(__dirname, '../../', moduleName));
+    return require.resolve(path.join(__dirname, "../../", moduleName));
   }
 };
 
@@ -28,7 +31,10 @@ const setModuleMock = (moduleName, exportsValue, touched) => {
 };
 
 const setResolvedModuleMock = (resolvedPath, exportsValue, touched) => {
-  touched.push({ resolved: resolvedPath, previous: require.cache[resolvedPath] });
+  touched.push({
+    resolved: resolvedPath,
+    previous: require.cache[resolvedPath],
+  });
   require.cache[resolvedPath] = {
     id: resolvedPath,
     filename: resolvedPath,
@@ -64,7 +70,7 @@ const createRes = () => {
   return res;
 };
 
-describe('dashboard folder remove route', function () {
+describe("dashboard folder remove route", function () {
   let touched;
   let storage;
   let establishSyncLock;
@@ -74,27 +80,37 @@ describe('dashboard folder remove route', function () {
 
   beforeEach(function () {
     touched = [];
-    folderUpdate = jasmine.createSpy('folder.update').and.returnValue(Promise.resolve());
-    done = jasmine.createSpy('done').and.returnValue(Promise.resolve());
+    folderUpdate = jasmine
+      .createSpy("folder.update")
+      .and.returnValue(Promise.resolve());
+    done = jasmine.createSpy("done").and.returnValue(Promise.resolve());
 
     storage = {
-      NotFoundError: require('../../storage/folder/errors').NotFoundError,
-      stat: jasmine.createSpy('stat').and.returnValue(Promise.resolve({ isDirectory: false })),
-      remove: jasmine.createSpy('remove').and.returnValue(Promise.resolve()),
+      NotFoundError: require("../../storage/folder/errors").NotFoundError,
+      stat: jasmine
+        .createSpy("stat")
+        .and.returnValue(Promise.resolve({ isDirectory: false })),
+      remove: jasmine.createSpy("remove").and.returnValue(Promise.resolve()),
     };
 
     establishSyncLock = jasmine
-      .createSpy('establishSyncLock')
-      .and.returnValue(Promise.resolve({ folder: { update: folderUpdate }, done }));
+      .createSpy("establishSyncLock")
+      .and.returnValue(
+        Promise.resolve({ folder: { update: folderUpdate }, done })
+      );
 
     folderIndexMock = {
-      invalidateCache: jasmine.createSpy('invalidateCache'),
+      invalidateCache: jasmine.createSpy("invalidateCache"),
     };
 
-    setModuleMock('storage/folder', storage, touched);
-    setModuleMock('clients', {}, touched);
-    setModuleMock('sync/establishSyncLock', establishSyncLock, touched);
-    setResolvedModuleMock(require.resolve('../site/folder/index'), folderIndexMock, touched);
+    setModuleMock("storage/folder", storage, touched);
+    setModuleMock("clients", {}, touched);
+    setModuleMock("sync/establishSyncLock", establishSyncLock, touched);
+    setResolvedModuleMock(
+      require.resolve("../site/folder/index"),
+      folderIndexMock,
+      touched
+    );
 
     delete require.cache[removeRoutePath];
   });
@@ -104,128 +120,156 @@ describe('dashboard folder remove route', function () {
     restoreModuleMocks(touched);
   });
 
-  it('returns 400 when path is missing', async function () {
-    const handler = require('../site/folder/remove');
-    const req = { params: {}, body: {}, blog: { id: 'blog-1' } };
+  it("returns 400 when path is missing", async function () {
+    const handler = require("../site/folder/remove");
+    const req = { params: {}, body: {}, blog: { id: "blog-1" } };
     const res = createRes();
 
     await handler(req, res);
 
     expect(res.statusCode).toBe(400);
-    expect(res.body.error).toBe('Missing path');
+    expect(res.body.error).toBe("Missing path");
     expect(establishSyncLock).not.toHaveBeenCalled();
   });
 
-  it('rejects absolute and path traversal attempts with 400', async function () {
-    const handler = require('../site/folder/remove');
+  it("rejects absolute and path traversal attempts with 400", async function () {
+    const handler = require("../site/folder/remove");
 
     const absoluteRes = createRes();
     await handler(
-      { params: { path: '/etc/passwd' }, body: {}, blog: { id: 'blog-1' } },
+      { params: { path: "/etc/passwd" }, body: {}, blog: { id: "blog-1" } },
       absoluteRes
     );
 
     expect(absoluteRes.statusCode).toBe(400);
-    expect(absoluteRes.body.error).toBe('Absolute paths are not allowed');
+    expect(absoluteRes.body.error).toBe("Absolute paths are not allowed");
 
     const traversalRes = createRes();
     await handler(
-      { params: { path: '../../outside.txt' }, body: {}, blog: { id: 'blog-1' } },
+      {
+        params: { path: "../../outside.txt" },
+        body: {},
+        blog: { id: "blog-1" },
+      },
       traversalRes
     );
 
     expect(traversalRes.statusCode).toBe(400);
-    expect(traversalRes.body.error).toBe('Path escapes blog folder');
+    expect(traversalRes.body.error).toBe("Path escapes blog folder");
     expect(establishSyncLock).not.toHaveBeenCalled();
   });
 
-  it('returns 404 when path is not found', async function () {
-    storage.stat.and.callFake(() => Promise.reject(new storage.NotFoundError()));
-    const handler = require('../site/folder/remove');
+  it("returns 404 when path is not found", async function () {
+    storage.stat.and.callFake(() =>
+      Promise.reject(new storage.NotFoundError())
+    );
+    const handler = require("../site/folder/remove");
     const res = createRes();
 
     await handler(
-      { params: { path: 'missing.txt' }, body: {}, blog: { id: 'blog-1' } },
+      { params: { path: "missing.txt" }, body: {}, blog: { id: "blog-1" } },
       res
     );
 
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({
       ok: false,
-      removed: 'missing.txt',
-      error: 'Path not found',
+      removed: "missing.txt",
+      error: "Path not found",
     });
     expect(establishSyncLock).not.toHaveBeenCalled();
   });
 
-  it('removes an existing local file and returns ok true', async function () {
-    const handler = require('../site/folder/remove');
-    const req = { params: { path: 'post.md' }, body: {}, blog: { id: 'blog-1', cacheID: 'c1' } };
+  it("removes an existing local file and returns ok true", async function () {
+    const handler = require("../site/folder/remove");
+    const req = {
+      params: { path: "post.md" },
+      body: {},
+      blog: { id: "blog-1", cacheID: "c1" },
+    };
     const res = createRes();
 
     await handler(req, res);
 
     expect(res.statusCode).toBe(200);
     expect(res.body.ok).toBe(true);
-    expect(res.body.removed).toBe('post.md');
-    expect(storage.remove).toHaveBeenCalledWith('blog-1', 'post.md');
-    expect(folderUpdate).toHaveBeenCalledWith('/post.md');
+    expect(res.body.removed).toBe("post.md");
+    expect(storage.remove).toHaveBeenCalledWith("blog-1", "post.md");
+    expect(folderUpdate).toHaveBeenCalledWith("/post.md");
     expect(folderIndexMock.invalidateCache).toHaveBeenCalledWith(req.blog);
     expect(done).toHaveBeenCalledTimes(1);
   });
 
-  it('maps client and entry errors to 403, 400, and 502 responses', async function () {
+  it("maps client and entry errors to 403, 400, and 502 responses", async function () {
     const clients = {
       mockClient: {
-        remove: (blogID, relativePath, cb) => cb({ code: 'EACCES', message: 'denied' }),
+        remove: (blogID, relativePath, cb) =>
+          cb({ code: "EACCES", message: "denied" }),
       },
     };
 
-    setModuleMock('clients', clients, touched);
+    setModuleMock("clients", clients, touched);
     delete require.cache[removeRoutePath];
-    let handler = require('../site/folder/remove');
+    let handler = require("../site/folder/remove");
 
     let res = createRes();
     await handler(
-      { params: { path: 'locked.txt' }, body: {}, blog: { id: 'blog-1', client: 'mockClient' } },
+      {
+        params: { path: "locked.txt" },
+        body: {},
+        blog: { id: "blog-1", client: "mockClient" },
+      },
       res
     );
     expect(res.statusCode).toBe(403);
 
     clients.mockClient.remove = (blogID, relativePath, cb) =>
-      cb({ name: 'ValidationError', message: 'bad target' });
+      cb({ name: "ValidationError", message: "bad target" });
 
     delete require.cache[removeRoutePath];
-    handler = require('../site/folder/remove');
+    handler = require("../site/folder/remove");
 
     res = createRes();
     await handler(
-      { params: { path: 'invalid.txt' }, body: {}, blog: { id: 'blog-1', client: 'mockClient' } },
+      {
+        params: { path: "invalid.txt" },
+        body: {},
+        blog: { id: "blog-1", client: "mockClient" },
+      },
       res
     );
     expect(res.statusCode).toBe(400);
 
-    clients.mockClient.remove = (blogID, relativePath, cb) => cb(new Error('upstream failed'));
+    clients.mockClient.remove = (blogID, relativePath, cb) =>
+      cb(new Error("upstream failed"));
 
     delete require.cache[removeRoutePath];
-    handler = require('../site/folder/remove');
+    handler = require("../site/folder/remove");
 
     res = createRes();
     await handler(
-      { params: { path: 'broken.txt' }, body: {}, blog: { id: 'blog-1', client: 'mockClient' } },
+      {
+        params: { path: "broken.txt" },
+        body: {},
+        blog: { id: "blog-1", client: "mockClient" },
+      },
       res
     );
     expect(res.statusCode).toBe(502);
     expect(done.calls.count()).toBe(3);
   });
 
-  it('returns 423 when the folder is locked by another sync', async function () {
+  it("returns 423 when the folder is locked by another sync", async function () {
     establishSyncLock.and.returnValue(
-      Promise.reject(new Error('Failed to acquire folder lock'))
+      Promise.reject(new Error("Failed to acquire folder lock"))
     );
 
-    const handler = require('../site/folder/remove');
-    const req = { params: { path: 'post.md' }, body: {}, blog: { id: 'blog-1' } };
+    const handler = require("../site/folder/remove");
+    const req = {
+      params: { path: "post.md" },
+      body: {},
+      blog: { id: "blog-1" },
+    };
     const res = createRes();
     res.headers = {};
     res.set = function (name, value) {
@@ -239,8 +283,8 @@ describe('dashboard folder remove route', function () {
     expect(res.body).toEqual({
       ok: false,
       removed: null,
-      error: 'Folder is locked by another sync; retry later',
+      error: "Folder is locked by another sync; retry later",
     });
-    expect(res.headers['Retry-After']).toBe('10');
+    expect(res.headers["Retry-After"]).toBe("10");
   });
 });

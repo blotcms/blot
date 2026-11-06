@@ -97,7 +97,9 @@ function checkFile(body, check) {
     return;
   }
   if (MARKUP.test(sniff(body))) {
-    throw new FetchError(check === "audio" ? "not an audio file" : "not a file");
+    throw new FetchError(
+      check === "audio" ? "not an audio file" : "not a file"
+    );
   }
 }
 
@@ -115,50 +117,58 @@ function requestHeaders(headers) {
 
 function positive(value, fallback, max) {
   if (value === undefined || value === null) return fallback;
-  if (!Number.isFinite(value) || value <= 0) throw new FetchError("invalid limit");
+  if (!Number.isFinite(value) || value <= 0)
+    throw new FetchError("invalid limit");
   return Math.min(value, max);
 }
 
 // One request. Resolves with { meta, output }; rejects with a FetchError, a
 // network error or a bug.
 async function fetchOne(request, { held, deadline }) {
-  if (!request || typeof request !== "object") throw new FetchError("URL is not allowed");
+  if (!request || typeof request !== "object")
+    throw new FetchError("URL is not allowed");
   const url = checkURL(request.url);
   const kind = request.kind === undefined ? "text" : request.kind;
   if (!KINDS.includes(kind)) throw new FetchError("unknown kind");
   const method = request.method === undefined ? "GET" : request.method;
-  if (method !== "GET" && method !== "HEAD") throw new FetchError("method is not allowed");
+  if (method !== "GET" && method !== "HEAD")
+    throw new FetchError("method is not allowed");
   const redirect = request.redirect === undefined ? "follow" : request.redirect;
-  if (redirect !== "follow" && redirect !== "manual") throw new FetchError("invalid redirect option");
+  if (redirect !== "follow" && redirect !== "manual")
+    throw new FetchError("invalid redirect option");
   if (request.ip !== undefined && !net.isIP(request.ip)) {
     throw new FetchError("invalid address");
   }
   if (kind === "html" && !html.EXTRACTIONS.includes(request.extract)) {
     throw new FetchError("unknown extraction");
   }
-  if (request.check !== undefined && !["pdf", "audio"].includes(request.check)) {
+  if (
+    request.check !== undefined &&
+    !["pdf", "audio"].includes(request.check)
+  ) {
     throw new FetchError("unknown check");
   }
 
   // A request gets the whole of its time or none: with less left in the batch
   // it is put off to a jail of its own, not cut short as if the server were slow
   const timeout = positive(request.timeoutMs, DEADLINE, MAX_REQUEST_TIMEOUT);
-  if (timeout > deadline - Date.now()) throw new FetchError("batch timed out", { deferred: true });
+  if (timeout > deadline - Date.now())
+    throw new FetchError("batch timed out", { deferred: true });
 
   let limit =
     kind === "text"
       ? positive(request.maxBytes, TEXT_DEFAULT_BYTES, TEXT_MAX_BYTES)
       : kind === "html"
-      ? positive(request.maxBytes, html.MAX_HTML_BYTES, html.MAX_HTML_BYTES)
-      : kind === "file"
-      ? positive(request.maxBytes, FILE_MAX_BYTES, FILE_MAX_BYTES)
-      : MAX_BODY_BYTES;
+        ? positive(request.maxBytes, html.MAX_HTML_BYTES, html.MAX_HTML_BYTES)
+        : kind === "file"
+          ? positive(request.maxBytes, FILE_MAX_BYTES, FILE_MAX_BYTES)
+          : MAX_BODY_BYTES;
   let tooLarge =
     kind === "text" || kind === "html"
       ? "response is too large"
       : kind === "file"
-      ? "file is too large"
-      : "image is too large";
+        ? "file is too large"
+        : "image is too large";
   if (held && held + limit > BATCH_BYTES) {
     limit = Math.max(0, BATCH_BYTES - held);
     tooLarge = FULL;
@@ -179,7 +189,11 @@ async function fetchOne(request, { held, deadline }) {
     headersTimeout: timeout,
     names: NAMES,
   });
-  if (response.notModified) return { meta: { status: 304, headers: response.headers, kind }, output: Buffer.alloc(0) };
+  if (response.notModified)
+    return {
+      meta: { status: 304, headers: response.headers, kind },
+      output: Buffer.alloc(0),
+    };
 
   const meta = { status: response.status, headers: response.headers, kind };
   let output = response.body;
@@ -200,18 +214,30 @@ async function fetchOne(request, { held, deadline }) {
   } else if (kind === "image") {
     const image = await require("./reencode").reencode(output);
     output = image.data;
-    Object.assign(meta, { format: image.format, width: image.width, height: image.height });
+    Object.assign(meta, {
+      format: image.format,
+      width: image.width,
+      height: image.height,
+    });
   }
   if (response.truncated) meta.truncated = true;
 
-  if (held && held + output.length > BATCH_BYTES) throw new FetchError(FULL, { deferred: true });
+  if (held && held + output.length > BATCH_BYTES)
+    throw new FetchError(FULL, { deferred: true });
   return { meta, output };
 }
 
 async function run(args) {
   const requests = args && args.requests;
-  if (!Array.isArray(requests) || requests.length < 1 || requests.length > MAX_REQUESTS) {
-    return { meta: { error: "requests must be a list of 1 to " + MAX_REQUESTS }, outputs: [] };
+  if (
+    !Array.isArray(requests) ||
+    requests.length < 1 ||
+    requests.length > MAX_REQUESTS
+  ) {
+    return {
+      meta: { error: "requests must be a list of 1 to " + MAX_REQUESTS },
+      outputs: [],
+    };
   }
 
   const deadline = Date.now() + BATCH_DEADLINE;
@@ -238,4 +264,10 @@ async function run(args) {
   return { meta: { results }, outputs };
 }
 
-module.exports = { run, MAX_REQUESTS, BATCH_BYTES, TEXT_MAX_BYTES, FILE_MAX_BYTES };
+module.exports = {
+  run,
+  MAX_REQUESTS,
+  BATCH_BYTES,
+  TEXT_MAX_BYTES,
+  FILE_MAX_BYTES,
+};

@@ -31,11 +31,14 @@ var metadataCaseInsensitive = require("helper/metadataCaseInsensitive");
 // image-cache optimization. Second: an existing "%HH" is assumed to be
 // pre-encoding rather than a literal "%", so a file literally named
 // e.g. "50%FF.png" would need its "%" doubled by hand.
-function serializePath (path) {
-  // eslint-disable-next-line no-control-regex
-  return path.replace(/%(?![0-9A-Fa-f]{2})|[\x00-\x20"#<>?\x60]/g, function (char) {
-    return encodeURIComponent(char);
-  });
+function serializePath(path) {
+  return path.replace(
+    // eslint-disable-next-line no-control-regex
+    /%(?![0-9A-Fa-f]{2})|[\x00-\x20"#<>?\x60]/g,
+    function (char) {
+      return encodeURIComponent(char);
+    }
+  );
 }
 
 // The purpose of this module is to take the HTML for
@@ -83,7 +86,7 @@ function serializePath (path) {
 // distinguish the two cases precisely, but the complexity wasn't
 // worth what it protected against, so it was removed.
 
-function dependencies (path, html, metadata) {
+function dependencies(path, html, metadata) {
   // In future it would be nice NOT to reparse the HTML
   // Multiple times. The plugins features also do this.
   var $ = cheerio.load(html, { decodeEntities: false }, false);

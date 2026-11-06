@@ -49,7 +49,9 @@ describe("scheduler check-ssl-certificates", function () {
       },
       scan: async (cursor, options) => {
         expect(options).toEqual({ MATCH: "ssl:*:latest", COUNT: 1000 });
-        const keys = Array.from(store.keys()).filter((k) => /^ssl:.*:latest$/.test(k));
+        const keys = Array.from(store.keys()).filter((k) =>
+          /^ssl:.*:latest$/.test(k)
+        );
         if (cursor === "0") return { cursor: "1", keys: keys.slice(0, 1) };
         return { cursor: "0", keys };
       },
@@ -66,7 +68,8 @@ describe("scheduler check-ssl-certificates", function () {
 
     for (const [domain, value] of Object.entries(certs)) {
       strings[`ssl:${domain}:latest`] = value;
-      if (!noKey.includes(domain)) strings["domain:" + domain] = "blog_" + domain;
+      if (!noKey.includes(domain))
+        strings["domain:" + domain] = "blog_" + domain;
     }
 
     const sent = [];
@@ -138,7 +141,11 @@ describe("scheduler check-ssl-certificates", function () {
     it("marks a certificate under 7 days urgent, sorted by days left", async function () {
       const deps = withNow(
         setup({
-          certs: { "a.com": certJSON(20), "b.com": certJSON(6), "c.com": certJSON(7) },
+          certs: {
+            "a.com": certJSON(20),
+            "b.com": certJSON(6),
+            "c.com": certJSON(7),
+          },
         })
       );
 
@@ -154,12 +161,17 @@ describe("scheduler check-ssl-certificates", function () {
     it("skips a disabled blog, or one that no longer exists", async function () {
       const deps = withNow(
         setup({
-          certs: { "a.com": certJSON(3), "b.com": certJSON(3), "c.com": certJSON(3) },
+          certs: {
+            "a.com": certJSON(3),
+            "b.com": certJSON(3),
+            "c.com": certJSON(3),
+          },
           disabled: ["a.com"],
         })
       );
       const getBlog = deps.getBlog;
-      deps.getBlog = async (by) => (by.id === "blog_b.com" ? null : getBlog(by));
+      deps.getBlog = async (by) =>
+        by.id === "blog_b.com" ? null : getBlog(by);
 
       expect(domains(await check(deps))).toEqual(["c.com"]);
     });
@@ -212,8 +224,12 @@ describe("scheduler check-ssl-certificates", function () {
     });
 
     it("flags a systemic failure at 20 flagged certificates", async function () {
-      expect((await check(withNow(setup({ certs: many(19, 20) })))).systemic).toEqual(false);
-      expect((await check(withNow(setup({ certs: many(20, 20) })))).systemic).toEqual(true);
+      expect(
+        (await check(withNow(setup({ certs: many(19, 20) })))).systemic
+      ).toEqual(false);
+      expect(
+        (await check(withNow(setup({ certs: many(20, 20) })))).systemic
+      ).toEqual(true);
     });
 
     it("counts flagged certificates of disabled blogs towards a systemic failure", async function () {
@@ -302,7 +318,11 @@ describe("scheduler check-ssl-certificates", function () {
     it("does not email for flagged or urgent customer certificates alone", async function () {
       const deps = withNow(
         setup({
-          certs: { "a.com": certJSON(3), "b.com": certJSON(10), "c.com": certJSON(60) },
+          certs: {
+            "a.com": certJSON(3),
+            "b.com": certJSON(10),
+            "c.com": certJSON(60),
+          },
         })
       );
 

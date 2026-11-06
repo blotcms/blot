@@ -81,7 +81,8 @@ const load = async (ids) => {
     .map((result) => {
       result.replies = results
         .filter(
-          (reply) => reply && reply.parent === result.id && hasNonEmptyBody(reply.body)
+          (reply) =>
+            reply && reply.parent === result.id && hasNonEmptyBody(reply.body)
         )
         .map((reply) => {
           return { body: reply.body };

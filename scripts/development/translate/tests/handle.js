@@ -70,7 +70,11 @@ cases.forEach(([input, expected]) => {
 console.log("\ndeterminism");
 
 check("same URL always gives the same handle", () => {
-  const urls = ["https://www.example.com/blog", "https://josé.com", "https://a.github.io"];
+  const urls = [
+    "https://www.example.com/blog",
+    "https://josé.com",
+    "https://a.github.io",
+  ];
   urls.forEach((url) => {
     assert.strictEqual(deriveHandle(url), deriveHandle(url));
   });
@@ -88,7 +92,10 @@ console.log("\nvalidity");
 check("output is always alphanumeric and lowercase", () => {
   cases.forEach(([input]) => {
     const result = deriveHandle(input);
-    assert.ok(/^[a-z0-9]+$/.test(result), `${input} produced ${JSON.stringify(result)}`);
+    assert.ok(
+      /^[a-z0-9]+$/.test(result),
+      `${input} produced ${JSON.stringify(result)}`
+    );
   });
 });
 
@@ -136,16 +143,25 @@ check("suffixing never exceeds the length limit", () => {
 console.log("\nresolve");
 
 check("returns the base when it is free", () => {
-  assert.strictEqual(resolve("example", () => false), "example");
+  assert.strictEqual(
+    resolve("example", () => false),
+    "example"
+  );
 });
 
 check("skips taken handles", () => {
   const taken = new Set(["example", "example2"]);
-  assert.strictEqual(resolve("example", (h) => taken.has(h)), "example3");
+  assert.strictEqual(
+    resolve("example", (h) => taken.has(h)),
+    "example3"
+  );
 });
 
 check("returns null when everything is taken", () => {
-  assert.strictEqual(resolve("example", () => true, 5), null);
+  assert.strictEqual(
+    resolve("example", () => true, 5),
+    null
+  );
 });
 
 console.log("");

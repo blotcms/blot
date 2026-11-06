@@ -70,7 +70,13 @@
 // not yet done to the next run; every step is safe to repeat.
 const manifest = require("./manifest");
 const { NotFoundError, CorruptError, TooLargeError } = require("./errors");
-const { PACK_NAME, SWEEP_KEY, manifestKey, manifestSeq, packFile } = require("./layout");
+const {
+  PACK_NAME,
+  SWEEP_KEY,
+  manifestKey,
+  manifestSeq,
+  packFile,
+} = require("./layout");
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -96,7 +102,10 @@ const RECORD_VERSION = 1;
 
 // Two last-modified times are the same if they are in the same second: S3
 // gives a LIST's to the millisecond and a HEAD's to the second
-const sameTime = (a, b) => Number.isFinite(a) && Number.isFinite(b) && Math.floor(a / 1000) === Math.floor(b / 1000);
+const sameTime = (a, b) =>
+  Number.isFinite(a) &&
+  Number.isFinite(b) &&
+  Math.floor(a / 1000) === Math.floor(b / 1000);
 
 // The store, counting what is asked of it
 function counting(store) {
@@ -112,8 +121,11 @@ function counting(store) {
 }
 
 async function loadManifest(s, seq) {
-  const m = manifest.parse(await s.get(manifestKey(seq), { maxBytes: manifest.MAX_BYTES }));
-  if (m.seq !== seq) throw new CorruptError(manifestKey(seq) + " says it is seq " + m.seq);
+  const m = manifest.parse(
+    await s.get(manifestKey(seq), { maxBytes: manifest.MAX_BYTES })
+  );
+  if (m.seq !== seq)
+    throw new CorruptError(manifestKey(seq) + " says it is seq " + m.seq);
   return m;
 }
 
@@ -131,11 +143,25 @@ async function readRecord(s) {
   const marks = new Map();
   try {
     const record = JSON.parse(bytes.toString("utf8"));
-    if (!record || record.version !== RECORD_VERSION || !record.marked || typeof record.marked !== "object") return marks;
+    if (
+      !record ||
+      record.version !== RECORD_VERSION ||
+      !record.marked ||
+      typeof record.marked !== "object"
+    )
+      return marks;
     for (const [name, mark] of Object.entries(record.marked)) {
-      if (!PACK_NAME.test(name) || !mark || !Number.isSafeInteger(mark.at) || !mark.keys || typeof mark.keys !== "object") continue;
+      if (
+        !PACK_NAME.test(name) ||
+        !mark ||
+        !Number.isSafeInteger(mark.at) ||
+        !mark.keys ||
+        typeof mark.keys !== "object"
+      )
+        continue;
       const keys = {};
-      for (const ext of EXTS) if (Number.isSafeInteger(mark.keys[ext])) keys[ext] = mark.keys[ext];
+      for (const ext of EXTS)
+        if (Number.isSafeInteger(mark.keys[ext])) keys[ext] = mark.keys[ext];
       if (Object.keys(keys).length) marks.set(name, { at: mark.at, keys });
     }
   } catch (err) {}
@@ -145,7 +171,9 @@ async function readRecord(s) {
 function serializeRecord(marks) {
   const marked = {};
   for (const name of [...marks.keys()].sort()) marked[name] = marks.get(name);
-  return Buffer.from(JSON.stringify({ version: RECORD_VERSION, marked }, null, 2) + "\n");
+  return Buffer.from(
+    JSON.stringify({ version: RECORD_VERSION, marked }, null, 2) + "\n"
+  );
 }
 
 // Deletes the files of the pack `name`, marked as `mark`, if each is as it was
@@ -161,32 +189,67 @@ async function deleteMarked(s, { name, mark, newest }) {
   for (let i = 0; i < keys.length; i++) {
     if (!found[i]) continue;
     // Written since the mark, or not there when it was: spared
-    if (!sameTime(found[i].lastModified, mark.keys[keys[i].ext])) return { deleted: false, spared: true, bytes: 0 };
+    if (!sameTime(found[i].lastModified, mark.keys[keys[i].ext]))
+      return { deleted: false, spared: true, bytes: 0 };
     present.push({ key: keys[i].key, size: found[i].size });
   }
   if (!present.length) return { deleted: false, spared: false, bytes: 0 };
 
   if (manifest.packsNamed(newest).includes(name)) {
-    throw Object.assign(new Error("The sweep was about to delete " + name + ", which the newest manifest (seq " + newest.seq + ") names"), {
-      code: "SWEEP_REFERENCED",
-    });
+    throw Object.assign(
+      new Error(
+        "The sweep was about to delete " +
+          name +
+          ", which the newest manifest (seq " +
+          newest.seq +
+          ") names"
+      ),
+      {
+        code: "SWEEP_REFERENCED",
+      }
+    );
   }
 
   // Every DELETE has settled before this does, so a failure leaves no request
   // in flight; the next run finds what is left still as it was marked
-  const settled = await Promise.allSettled(present.map(({ key }) => s.delete(key)));
+  const settled = await Promise.allSettled(
+    present.map(({ key }) => s.delete(key))
+  );
   const failed = settled.find((result) => result.status === "rejected");
   if (failed) throw failed.reason;
-  return { deleted: true, spared: false, bytes: present.reduce((sum, { size }) => sum + size, 0) };
+  return {
+    deleted: true,
+    spared: false,
+    bytes: present.reduce((sum, { size }) => sum + size, 0),
+  };
 }
 
-async function sweep({ store, now = Date.now(), grace = DEFAULTS.grace, keepManifests = DEFAULTS.keepManifests, recoveryWindow = DEFAULTS.recoveryWindow }) {
-  if (!Number.isSafeInteger(keepManifests) || keepManifests < 1) throw new Error("keepManifests must be a whole number, at least 1");
-  if (!(grace >= MIN_GRACE)) throw new Error("grace must be at least " + MIN_GRACE + " ms");
-  if (!(recoveryWindow >= MIN_RECOVERY_WINDOW)) throw new Error("recoveryWindow must be at least " + MIN_RECOVERY_WINDOW + " ms");
+async function sweep({
+  store,
+  now = Date.now(),
+  grace = DEFAULTS.grace,
+  keepManifests = DEFAULTS.keepManifests,
+  recoveryWindow = DEFAULTS.recoveryWindow,
+}) {
+  if (!Number.isSafeInteger(keepManifests) || keepManifests < 1)
+    throw new Error("keepManifests must be a whole number, at least 1");
+  if (!(grace >= MIN_GRACE))
+    throw new Error("grace must be at least " + MIN_GRACE + " ms");
+  if (!(recoveryWindow >= MIN_RECOVERY_WINDOW))
+    throw new Error(
+      "recoveryWindow must be at least " + MIN_RECOVERY_WINDOW + " ms"
+    );
 
   const s = counting(store);
-  const stats = { manifestsDeleted: 0, packsMarked: 0, packsDeleted: 0, packsSpared: 0, pending: 0, bytesFreed: 0, requests: s.requests };
+  const stats = {
+    manifestsDeleted: 0,
+    packsMarked: 0,
+    packsDeleted: 0,
+    packsSpared: 0,
+    pending: 0,
+    bytesFreed: 0,
+    requests: s.requests,
+  };
 
   // ---- What there is: one listing ------------------------------------
 
@@ -213,15 +276,24 @@ async function sweep({ store, now = Date.now(), grace = DEFAULTS.grace, keepMani
   }
 
   const doomed = [...manifests]
-    .filter(([seq, item]) => seq <= listedNewest - keepManifests && Number.isFinite(item.lastModified) && item.lastModified < now - recoveryWindow)
+    .filter(
+      ([seq, item]) =>
+        seq <= listedNewest - keepManifests &&
+        Number.isFinite(item.lastModified) &&
+        item.lastModified < now - recoveryWindow
+    )
     .map(([seq]) => seq)
     .sort((a, b) => a - b);
   const doomedSet = new Set(doomed);
-  const kept = [...manifests.keys()].filter((seq) => !doomedSet.has(seq)).sort((a, b) => b - a);
+  const kept = [...manifests.keys()]
+    .filter((seq) => !doomedSet.has(seq))
+    .sort((a, b) => b - a);
 
   // ---- What the kept manifests name ----------------------------------
 
-  let newest = listedNewest ? await loadManifest(s, listedNewest) : manifest.empty();
+  let newest = listedNewest
+    ? await loadManifest(s, listedNewest)
+    : manifest.empty();
   let newestSeq = listedNewest;
   const named = new Set(manifest.packsNamed(newest));
 
@@ -245,8 +317,15 @@ async function sweep({ store, now = Date.now(), grace = DEFAULTS.grace, keepMani
       m = await loadManifest(s, seq);
     } catch (err) {
       if (err instanceof NotFoundError) continue;
-      const damaged = err instanceof CorruptError || err instanceof TooLargeError;
-      if (!(damaged && above.seq === seq + 1 && above.m && manifest.isEmpty(above.m))) throw err;
+      const damaged =
+        err instanceof CorruptError || err instanceof TooLargeError;
+      if (!(
+        damaged &&
+        above.seq === seq + 1 &&
+        above.m &&
+        manifest.isEmpty(above.m)
+      ))
+        throw err;
       above = { seq, m: null };
       continue;
     }
@@ -284,7 +363,9 @@ async function sweep({ store, now = Date.now(), grace = DEFAULTS.grace, keepMani
     }
 
     const listed = packs.get(name);
-    const asMarked = Object.keys(listed).every((ext) => sameTime(listed[ext].lastModified, mark.keys[ext]));
+    const asMarked = Object.keys(listed).every((ext) =>
+      sameTime(listed[ext].lastModified, mark.keys[ext])
+    );
     if (!asMarked) {
       // Written since it was marked; marked afresh once it is old again
       stats.packsSpared++;
@@ -305,7 +386,11 @@ async function sweep({ store, now = Date.now(), grace = DEFAULTS.grace, keepMani
       continue;
     }
 
-    const { deleted, spared, bytes } = await deleteMarked(s, { name, mark, newest });
+    const { deleted, spared, bytes } = await deleteMarked(s, {
+      name,
+      mark,
+      newest,
+    });
     drop(name);
     if (deleted) {
       stats.packsDeleted++;
@@ -320,10 +405,12 @@ async function sweep({ store, now = Date.now(), grace = DEFAULTS.grace, keepMani
   for (const [name, files] of packs) {
     if (named.has(name) || marks.has(name) || dropped.has(name)) continue;
     const times = Object.values(files).map((file) => file.lastModified);
-    if (!times.every((time) => Number.isFinite(time) && time <= now - grace)) continue;
+    if (!times.every((time) => Number.isFinite(time) && time <= now - grace))
+      continue;
 
     const keys = {};
-    for (const [ext, file] of Object.entries(files)) keys[ext] = file.lastModified;
+    for (const [ext, file] of Object.entries(files))
+      keys[ext] = file.lastModified;
     marks.set(name, { at: now, keys });
     stats.packsMarked++;
     changed = true;
@@ -353,4 +440,5 @@ module.exports = sweep;
 module.exports.DEFAULTS = DEFAULTS;
 module.exports.MIN_GRACE = MIN_GRACE;
 module.exports.MIN_RECOVERY_WINDOW = MIN_RECOVERY_WINDOW;
-module.exports.deleteMarked = (store, options) => deleteMarked(counting(store), options);
+module.exports.deleteMarked = (store, options) =>
+  deleteMarked(counting(store), options);

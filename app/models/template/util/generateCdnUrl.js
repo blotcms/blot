@@ -13,7 +13,9 @@ function generateCdnUrl(viewName, hash) {
   }
 
   if (!hash || typeof hash !== "string" || hash.length < 4) {
-    throw new Error("hash must be a non-empty string with at least 4 characters");
+    throw new Error(
+      "hash must be a non-empty string with at least 4 characters"
+    );
   }
 
   // URL format: /template/{hash[0:2]}/{hash[2:4]}/{hash[4:]}/{basename}
@@ -25,8 +27,17 @@ function generateCdnUrl(viewName, hash) {
   const hashRemainder = hash.substring(4);
   const viewBaseName = path.basename(viewName);
   const encodedBaseName = encodeURIComponent(viewBaseName);
-  return config.cdn.origin + "/template/" + dir1 + "/" + dir2 + "/" + hashRemainder + "/" + encodedBaseName;
+  return (
+    config.cdn.origin +
+    "/template/" +
+    dir1 +
+    "/" +
+    dir2 +
+    "/" +
+    hashRemainder +
+    "/" +
+    encodedBaseName
+  );
 }
 
 module.exports = generateCdnUrl;
-

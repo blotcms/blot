@@ -229,7 +229,8 @@ function loadFolder(callback) {
         try {
           var currentStatus = q(".sync-status");
           var newStatus = xml.querySelector(".sync-status");
-          var statusIsLive = currentNode && currentStatus && currentNode.contains(currentStatus);
+          var statusIsLive =
+            currentNode && currentStatus && currentNode.contains(currentStatus);
 
           if (currentStatus && newStatus && !statusIsLive) {
             var oldHealth = currentStatus.hasAttribute("data-health")
@@ -257,7 +258,11 @@ function loadFolder(callback) {
           var currentBadge = q(".header-health-badge");
           var newBadge = xml.querySelector(".header-health-badge");
 
-          if (currentBadge && newBadge && currentBadge.innerHTML !== newBadge.innerHTML) {
+          if (
+            currentBadge &&
+            newBadge &&
+            currentBadge.innerHTML !== newBadge.innerHTML
+          ) {
             currentBadge.innerHTML = newBadge.innerHTML;
           }
         } catch (e) {

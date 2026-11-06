@@ -220,7 +220,8 @@ describe("upload template route", function () {
     // the same way: at the entry, not at the archive.
     const zipPath = paths[0];
     const bytes = await fs.readFile(zipPath);
-    for (let i = 40; i < 80 && i < bytes.length; i++) bytes[i] = bytes[i] ^ 0xff;
+    for (let i = 40; i < 80 && i < bytes.length; i++)
+      bytes[i] = bytes[i] ^ 0xff;
     await fs.writeFile(zipPath, bytes);
     req.files.zip[0].size = bytes.length;
 
@@ -467,7 +468,9 @@ describe("upload template route", function () {
   });
 
   it("rejects a folder and a zip file in the same request", async function () {
-    const { req } = await folderRequest(this.blog, { "index.html": "<h1>Hi</h1>" });
+    const { req } = await folderRequest(this.blog, {
+      "index.html": "<h1>Hi</h1>",
+    });
     req.files.zip = [{ path: join(tmp, "nope.zip"), size: 1 }];
 
     const result = await run(req);

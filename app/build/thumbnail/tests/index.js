@@ -18,15 +18,17 @@ describe("thumbnail", function () {
     var html = '<img src="' + imagePath + '">';
     var path = "/post.txt";
 
-    folder.writeFrom(this.blog.id, imagePath, __dirname + "/images/" + imagePath).then(() => {
-      thumbnail(this.blog, path, metadata, html, function (err, result) {
-        expect(err).toBe(null);
-        expect(result).toEqual(jasmine.any(Object));
-        expect(result.small).toEqual(jasmine.any(Object));
+    folder
+      .writeFrom(this.blog.id, imagePath, __dirname + "/images/" + imagePath)
+      .then(() => {
+        thumbnail(this.blog, path, metadata, html, function (err, result) {
+          expect(err).toBe(null);
+          expect(result).toEqual(jasmine.any(Object));
+          expect(result.small).toEqual(jasmine.any(Object));
 
-        done();
-      });
-    }, done.fail);
+          done();
+        });
+      }, done.fail);
   });
 
   it("creates thumbnails from svg images", function (done) {
@@ -36,15 +38,17 @@ describe("thumbnail", function () {
     var html = '<img src="' + imagePath + '">';
     var path = "/post.txt";
 
-    folder.writeFrom(this.blog.id, imagePath, __dirname + "/images/" + imagePath).then(() => {
-      thumbnail(this.blog, path, metadata, html, function (err, result) {
-        expect(err).toBe(null);
-        expect(result).toEqual(jasmine.any(Object));
-        expect(result.small).toEqual(jasmine.any(Object));
+    folder
+      .writeFrom(this.blog.id, imagePath, __dirname + "/images/" + imagePath)
+      .then(() => {
+        thumbnail(this.blog, path, metadata, html, function (err, result) {
+          expect(err).toBe(null);
+          expect(result).toEqual(jasmine.any(Object));
+          expect(result.small).toEqual(jasmine.any(Object));
 
-        done();
-      });
-    }, done.fail);
+          done();
+        });
+      }, done.fail);
   });
 
   it("creates thumbnails from gif images", function (done) {
@@ -54,15 +58,17 @@ describe("thumbnail", function () {
     var html = '<img src="' + imagePath + '">';
     var path = "/post.txt";
 
-    folder.writeFrom(this.blog.id, imagePath, __dirname + "/images/" + imagePath).then(() => {
-      thumbnail(this.blog, path, metadata, html, function (err, result) {
-        expect(err).toBe(null);
-        expect(result).toEqual(jasmine.any(Object));
-        expect(result.small).toEqual(jasmine.any(Object));
+    folder
+      .writeFrom(this.blog.id, imagePath, __dirname + "/images/" + imagePath)
+      .then(() => {
+        thumbnail(this.blog, path, metadata, html, function (err, result) {
+          expect(err).toBe(null);
+          expect(result).toEqual(jasmine.any(Object));
+          expect(result.small).toEqual(jasmine.any(Object));
 
-        done();
-      });
-    }, done.fail);
+          done();
+        });
+      }, done.fail);
   });
 
   it("creates a thumbnail for photos whose name has been HTML encoded", function (done) {
@@ -72,15 +78,17 @@ describe("thumbnail", function () {
     var html = `<img src="${he.encode(imagePath)}">`;
     var path = "/post.txt";
 
-    folder.writeFrom(this.blog.id, imagePath, __dirname + "/images/portrait.jpg").then(() => {
-      thumbnail(this.blog, path, metadata, html, function (err, result) {
-        expect(err).toBe(null);
-        expect(result).toEqual(jasmine.any(Object));
-        expect(result.small).toEqual(jasmine.any(Object));
+    folder
+      .writeFrom(this.blog.id, imagePath, __dirname + "/images/portrait.jpg")
+      .then(() => {
+        thumbnail(this.blog, path, metadata, html, function (err, result) {
+          expect(err).toBe(null);
+          expect(result).toEqual(jasmine.any(Object));
+          expect(result.small).toEqual(jasmine.any(Object));
 
-        done();
-      });
-    }, done.fail);
+          done();
+        });
+      }, done.fail);
   });
 
   it("creates thumbnails from an <img src> already baked into a %%BLOT_CDN%% URL (app/build/plugins/folderAssets)", function (done) {
@@ -96,15 +104,17 @@ describe("thumbnail", function () {
     var html = `<img src="${bakedSrc}">`;
     var path = "/post.txt";
 
-    folder.writeFrom(this.blog.id, imagePath, __dirname + "/images/" + imagePath).then(() => {
-      thumbnail(this.blog, path, metadata, html, function (err, result) {
-        expect(err).toBe(null);
-        expect(result).toEqual(jasmine.any(Object));
-        expect(result.small).toEqual(jasmine.any(Object));
+    folder
+      .writeFrom(this.blog.id, imagePath, __dirname + "/images/" + imagePath)
+      .then(() => {
+        thumbnail(this.blog, path, metadata, html, function (err, result) {
+          expect(err).toBe(null);
+          expect(result).toEqual(jasmine.any(Object));
+          expect(result.small).toEqual(jasmine.any(Object));
 
-        done();
-      });
-    }, done.fail);
+          done();
+        });
+      }, done.fail);
   });
 
   it("decodes a baked %%BLOT_CDN%% URL whose file name contains '#'", function (done) {
@@ -114,15 +124,17 @@ describe("thumbnail", function () {
     var imagePath = "/hero #1.jpg";
     var html = `<img src="${BLOT_CDN_TOKEN}/folder/v-deadbeef/${this.blog.id}${encodeFolderPath(imagePath)}">`;
 
-    folder.writeFrom(this.blog.id, imagePath, __dirname + "/images/portrait.jpg").then(() => {
-      thumbnail(this.blog, "/post.txt", {}, html, function (err, result) {
-        expect(err).toBe(null);
-        expect(result).toEqual(jasmine.any(Object));
-        expect(result.small).toEqual(jasmine.any(Object));
+    folder
+      .writeFrom(this.blog.id, imagePath, __dirname + "/images/portrait.jpg")
+      .then(() => {
+        thumbnail(this.blog, "/post.txt", {}, html, function (err, result) {
+          expect(err).toBe(null);
+          expect(result).toEqual(jasmine.any(Object));
+          expect(result.small).toEqual(jasmine.any(Object));
 
-        done();
-      });
-    }, done.fail);
+          done();
+        });
+      }, done.fail);
   });
 
   it("ignores a query string or fragment on a baked %%BLOT_CDN%% URL", function (done) {
@@ -131,15 +143,17 @@ describe("thumbnail", function () {
     var imagePath = "/portrait.jpg";
     var html = `<img src="${BLOT_CDN_TOKEN}/folder/v-deadbeef/${this.blog.id}${imagePath}?static=1#x">`;
 
-    folder.writeFrom(this.blog.id, imagePath, __dirname + "/images/" + imagePath).then(() => {
-      thumbnail(this.blog, "/post.txt", {}, html, function (err, result) {
-        expect(err).toBe(null);
-        expect(result).toEqual(jasmine.any(Object));
-        expect(result.small).toEqual(jasmine.any(Object));
+    folder
+      .writeFrom(this.blog.id, imagePath, __dirname + "/images/" + imagePath)
+      .then(() => {
+        thumbnail(this.blog, "/post.txt", {}, html, function (err, result) {
+          expect(err).toBe(null);
+          expect(result).toEqual(jasmine.any(Object));
+          expect(result.small).toEqual(jasmine.any(Object));
 
-        done();
-      });
-    }, done.fail);
+          done();
+        });
+      }, done.fail);
   });
 
   it("does not create thumbnails if there are none", function (done) {
@@ -156,28 +170,32 @@ describe("thumbnail", function () {
     });
   });
 
-  it('should preserve the P3 ICC profile of the input image', function (done) {
-
+  it("should preserve the P3 ICC profile of the input image", function (done) {
     var thumbnail = require("../index");
     var metadata = {};
     var imagePath = "/p3.jpg";
     var html = `<img src="${imagePath}">`;
     var path = "/post.txt";
 
-    folder.writeFrom(this.blog.id, imagePath, __dirname + "/images/p3.jpg").then(() => {
-      thumbnail(this.blog, path, metadata, html, async (err, result) => {
-        expect(err).toBe(null);
-        expect(result).toEqual(jasmine.any(Object));
-        expect(result.small).toEqual(jasmine.any(Object));
+    folder
+      .writeFrom(this.blog.id, imagePath, __dirname + "/images/p3.jpg")
+      .then(() => {
+        thumbnail(this.blog, path, metadata, html, async (err, result) => {
+          expect(err).toBe(null);
+          expect(result).toEqual(jasmine.any(Object));
+          expect(result.small).toEqual(jasmine.any(Object));
 
-        const outputPath = await assets.ensureLocal(this.blog.id, result.large.path);
-        const outputMetadata = await sharp(outputPath).metadata();
+          const outputPath = await assets.ensureLocal(
+            this.blog.id,
+            result.large.path
+          );
+          const outputMetadata = await sharp(outputPath).metadata();
 
-        expect(outputMetadata.icc).toBeDefined();
-        expect(outputMetadata.icc).toContain('P3'); // Ensure it is preserved
+          expect(outputMetadata.icc).toBeDefined();
+          expect(outputMetadata.icc).toContain("P3"); // Ensure it is preserved
 
-        done();
-      });
-    }, done.fail);
+          done();
+        });
+      }, done.fail);
   });
 });

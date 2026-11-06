@@ -23,7 +23,7 @@ const regexSeparators = /[\x2E\u3002\uFF0E\uFF61]/g; // RFC 3490 separators
 
 /** Error messages */
 const errors = {
-  "overflow": "Overflow: input needs wider integers to process",
+  overflow: "Overflow: input needs wider integers to process",
   "not-basic": "Illegal input >= 0x80 (not a basic code point)",
   "invalid-input": "Invalid input",
 };
@@ -232,7 +232,6 @@ const decode = function (input) {
   for (
     let index = basic > 0 ? basic + 1 : 0;
     index < inputLength /* no final expression */;
-
   ) {
     // `index` is the index of the next character to be consumed.
     // Decode a generalized variable-length integer into `delta`,

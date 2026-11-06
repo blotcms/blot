@@ -10,15 +10,16 @@ describe("template", function () {
 
     partials[test.view.name] = "";
 
-    getPartials(test.blog.id, test.template.id, partials, function (
-      err,
+    getPartials(
+      test.blog.id,
+      test.template.id,
       partials,
-      retrieve
-    ) {
-      if (err) return done.fail(err);
-      expect(partials[test.view.name]).toEqual(test.view.content);
-      done();
-    });
+      function (err, partials, retrieve) {
+        if (err) return done.fail(err);
+        expect(partials[test.view.name]).toEqual(test.view.content);
+        done();
+      }
+    );
   });
 
   // If you have a template view 'header.html' which embeds
@@ -43,20 +44,20 @@ describe("template", function () {
 
     setView(test.template.id, parentView, function (err) {
       if (err) return done.fail(err);
-      getPartials(test.blog.id, test.template.id, partials, function (
-        err,
+      getPartials(
+        test.blog.id,
+        test.template.id,
         partials,
-        retrieve
-      ) {
-        if (err) return done.fail(err);
-        expect(partials[test.view.name]).toEqual(test.view.content);
-        expect(partials[parentView.name]).toEqual(parentView.content);
+        function (err, partials, retrieve) {
+          if (err) return done.fail(err);
+          expect(partials[test.view.name]).toEqual(test.view.content);
+          expect(partials[parentView.name]).toEqual(parentView.content);
 
-        done();
-      });
+          done();
+        }
+      );
     });
   });
-
 
   it("merges projected allEntries fields from nested partials", function (done) {
     var test = this;
@@ -86,19 +87,20 @@ describe("template", function () {
           var partials = {};
           partials[parentView.name] = "";
 
-          getPartials(test.blog.id, test.template.id, partials, function (
-            err,
+          getPartials(
+            test.blog.id,
+            test.template.id,
             partials,
-            retrieve
-          ) {
-            if (err) return done.fail(err);
+            function (err, partials, retrieve) {
+              if (err) return done.fail(err);
 
-            expect(retrieve).toEqual({
-              allEntries: { fields: { title: true, url: true } },
-            });
+              expect(retrieve).toEqual({
+                allEntries: { fields: { title: true, url: true } },
+              });
 
-            done();
-          });
+              done();
+            }
+          );
         });
       });
     });
@@ -126,19 +128,20 @@ describe("template", function () {
         var partials = {};
         partials[parentView.name] = "";
 
-        getPartials(test.blog.id, test.template.id, partials, function (
-          err,
+        getPartials(
+          test.blog.id,
+          test.template.id,
           partials,
-          retrieve
-        ) {
-          if (err) return done.fail(err);
+          function (err, partials, retrieve) {
+            if (err) return done.fail(err);
 
-          expect(retrieve).toEqual({
-            tagged: { fields: { title: true } },
-          });
+            expect(retrieve).toEqual({
+              tagged: { fields: { title: true } },
+            });
 
-          done();
-        });
+            done();
+          }
+        );
       });
     });
   });
@@ -165,17 +168,18 @@ describe("template", function () {
         var partials = {};
         partials[parentView.name] = "";
 
-        getPartials(test.blog.id, test.template.id, partials, function (
-          err,
+        getPartials(
+          test.blog.id,
+          test.template.id,
           partials,
-          retrieve
-        ) {
-          if (err) return done.fail(err);
+          function (err, partials, retrieve) {
+            if (err) return done.fail(err);
 
-          expect(retrieve.posts).toBeUndefined();
+            expect(retrieve.posts).toBeUndefined();
 
-          done();
-        });
+            done();
+          }
+        );
       });
     });
   });
@@ -205,18 +209,19 @@ describe("template", function () {
         var partials = {};
         partials[parentView.name] = "";
 
-        getPartials(test.blog.id, test.template.id, partials, function (
-          err,
-          resolved,
-          retrieve
-        ) {
-          if (err) return done.fail(err);
+        getPartials(
+          test.blog.id,
+          test.template.id,
+          partials,
+          function (err, resolved, retrieve) {
+            if (err) return done.fail(err);
 
-          expect(retrieve.latestEntry).toBe(true);
-          expect(retrieve.posts).toEqual({ fields: { title: true } });
+            expect(retrieve.latestEntry).toBe(true);
+            expect(retrieve.posts).toEqual({ fields: { title: true } });
 
-          done();
-        });
+            done();
+          }
+        );
       });
     });
   });

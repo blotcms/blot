@@ -268,7 +268,10 @@ if (previewIframeContainer) {
     if (!iframe) return;
     iframe.setAttribute("width", String(dim.width));
     iframe.setAttribute("height", String(dim.height));
-    document.documentElement.style.setProperty("--preview-width", String(dim.width));
+    document.documentElement.style.setProperty(
+      "--preview-width",
+      String(dim.width)
+    );
   };
 
   var setView = function setView(mode) {

@@ -9,7 +9,7 @@ describe("internalLinks", function () {
         html,
         {
           decodeEntities: false,
-          withDomLvl1: false // this may cause issues?
+          withDomLvl1: false, // this may cause issues?
         },
         false
       );
@@ -23,7 +23,9 @@ describe("internalLinks", function () {
   });
 
   it("ignores external links", function () {
-    expect(this.internalLinks('<a href="https://example.com/hey">Hey</a>')).toEqual([]);
+    expect(
+      this.internalLinks('<a href="https://example.com/hey">Hey</a>')
+    ).toEqual([]);
   });
 
   it("normalizes fragments and query strings to the base path", function () {
@@ -46,27 +48,27 @@ describe("internalLinks", function () {
     var blogID = "blog_abc123";
     var baked = `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${blogID}/photo.jpg`;
 
-    expect(
-      this.internalLinks(`<a href="${baked}">Photo</a>`, blogID)
-    ).toEqual(["/photo.jpg"]);
+    expect(this.internalLinks(`<a href="${baked}">Photo</a>`, blogID)).toEqual([
+      "/photo.jpg",
+    ]);
   });
 
   it("normalizes fragments and query strings on a baked link", function () {
     var blogID = "blog_abc123";
     var baked = `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${blogID}/target?x=1#section`;
 
-    expect(
-      this.internalLinks(`<a href="${baked}">Target</a>`, blogID)
-    ).toEqual(["/target"]);
+    expect(this.internalLinks(`<a href="${baked}">Target</a>`, blogID)).toEqual(
+      ["/target"]
+    );
   });
 
   it("decodes a baked link's path, keeping an encoded '#' in a file name", function () {
     var blogID = "blog_abc123";
     var baked = `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${blogID}/my%20post%231.txt?x=1#section`;
 
-    expect(
-      this.internalLinks(`<a href="${baked}">Post</a>`, blogID)
-    ).toEqual(["/my post#1.txt"]);
+    expect(this.internalLinks(`<a href="${baked}">Post</a>`, blogID)).toEqual([
+      "/my post#1.txt",
+    ]);
   });
 
   it("ignores a baked link when no blogID is provided", function () {

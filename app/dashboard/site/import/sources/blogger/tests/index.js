@@ -19,7 +19,9 @@ describe("Blogger importer", function () {
   });
 
   it("selects published posts and pages and maps Atom fields", async function () {
-    const entries = await blogger.parse(await fs.readFile(legacyFixture, "utf8"));
+    const entries = await blogger.parse(
+      await fs.readFile(legacyFixture, "utf8")
+    );
     expect(entries.length).toBe(5);
     expect(entries.map(({ id }) => id)).toEqual([
       "post-1",
@@ -40,7 +42,9 @@ describe("Blogger importer", function () {
     expect(entries[0].html).toContain(
       'href="https://example.blogspot.com/2020/01/hello-world.html"'
     );
-    expect(entries[0].permalink).toBe("https://example.blogspot.com/2020/01/shared.html");
+    expect(entries[0].permalink).toBe(
+      "https://example.blogspot.com/2020/01/shared.html"
+    );
     expect(entries[0].dateStamp).toBe(Date.parse("2020-01-02T03:04:05Z"));
     expect(entries[1].page).toBe(true);
     expect(entries[2].title).toBe("shared");
@@ -105,9 +109,7 @@ describe("Blogger importer", function () {
       "https://blogger.googleusercontent.com/img/a/AVvXsEioelOHnuW_OMF24Sw2jt4PBuTvhF2-jhbFOGTL2YnmkSjtXiDXGrv6IWFKvtZA696TRWDRBVpiN7ujjtlXBJXqtvZzSWCE7Dd70mY4ja-jfhV7ZtAOjusjibOdzCzMuSrlckggHFlIAAXWIyrzfzfEQ_LdLfhP_3KxM7N5XGbPzrdQpJwlYj5Hy2zY2Qw";
 
     expect(
-      parse.preferFullSizeImages(
-        `<a href="${full}"><img src="${thumb}"></a>`
-      )
+      parse.preferFullSizeImages(`<a href="${full}"><img src="${thumb}"></a>`)
     ).toContain(`src="${full}"`);
 
     expect(
@@ -117,9 +119,7 @@ describe("Blogger importer", function () {
     ).toContain(`src="${opaqueFull}"`);
 
     expect(
-      parse.preferFullSizeImages(
-        `<a href="${other}"><img src="${thumb}"></a>`
-      )
+      parse.preferFullSizeImages(`<a href="${other}"><img src="${thumb}"></a>`)
     ).toContain(`src="${thumb}"`);
 
     expect(
@@ -180,11 +180,19 @@ describe("Blogger importer", function () {
     const output = await fs.mkdtemp(path.join(os.tmpdir(), "blogger-import-"));
     await blogger(legacyFixture, output, () => {});
 
-    const first = await fs.readFile(path.join(output, "2020", "01-02-2020-01-shared.txt"), "utf8");
+    const first = await fs.readFile(
+      path.join(output, "2020", "01-02-2020-01-shared.txt"),
+      "utf8"
+    );
     const duplicate = path.join(output, "2020", "01-02-2020-01-shared-2.txt");
-    const page = await fs.readFile(path.join(output, "Pages", "p-about.txt"), "utf8");
+    const page = await fs.readFile(
+      path.join(output, "Pages", "p-about.txt"),
+      "utf8"
+    );
     expect(first).toContain("Tags: News, Two Words");
-    expect(first).toContain("Link: https://example.blogspot.com/2020/01/shared.html");
+    expect(first).toContain(
+      "Link: https://example.blogspot.com/2020/01/shared.html"
+    );
     expect(first).toContain("Hello **world**.");
     expect(first).toContain(
       "[other post](https://example.blogspot.com/2020/01/hello-world.html)"
@@ -206,19 +214,26 @@ describe("Blogger importer", function () {
     );
     expect(post).toContain("Link: /2014/07/kinship-terms.html");
     expect(post).toContain("[post](/2021/11/kion-fari.html)");
-    expect(post).toContain("[elsewhere](https://seadilanguage.blogspot.com/other.html)");
+    expect(post).toContain(
+      "[elsewhere](https://seadilanguage.blogspot.com/other.html)"
+    );
     await fs.remove(output);
   });
 
   it("writes Markdown from current Atom exports using blogger:filename paths", async function () {
-    const output = await fs.mkdtemp(path.join(os.tmpdir(), "blogger-atom-import-"));
+    const output = await fs.mkdtemp(
+      path.join(os.tmpdir(), "blogger-atom-import-")
+    );
     await blogger(atomFixture, output, () => {});
 
     const post = await fs.readFile(
       path.join(output, "2014", "07-28-2014-07-kinship-terms.txt"),
       "utf8"
     );
-    const page = await fs.readFile(path.join(output, "Pages", "p-about.txt"), "utf8");
+    const page = await fs.readFile(
+      path.join(output, "Pages", "p-about.txt"),
+      "utf8"
+    );
     expect(post).toContain("Link: /2014/07/kinship-terms.html");
     expect(post).toContain("Hello **world** and *friends*.");
     expect(post).toContain("| Term | Meaning |");
@@ -233,7 +248,9 @@ describe("Blogger importer", function () {
   });
 
   it("formats emphasis with asterisks and tables as Markdown tables", async function () {
-    const output = await fs.mkdtemp(path.join(os.tmpdir(), "blogger-md-format-"));
+    const output = await fs.mkdtemp(
+      path.join(os.tmpdir(), "blogger-md-format-")
+    );
     await blogger(atomFixture, output, () => {});
 
     const post = await fs.readFile(

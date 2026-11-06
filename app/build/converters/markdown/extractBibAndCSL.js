@@ -10,7 +10,6 @@ function getIgnoreCase(obj, key) {
 }
 
 module.exports = function (blog, path, metadata, callback) {
-
   let paths = {
     bib: getIgnoreCase(metadata, "bibliography"),
     csl: getIgnoreCase(metadata, "csl"),

@@ -50,7 +50,10 @@ async function* walkLocal(directory) {
 
       if (entry.isDirectory()) yield* visit(full);
       else if (entry.isFile())
-        yield full.slice(directory.length + 1).split(sep).join("/");
+        yield full
+          .slice(directory.length + 1)
+          .split(sep)
+          .join("/");
     }
   }
 
@@ -106,4 +109,9 @@ function createPool(limit) {
 
 module.exports = {
   STAGING_DIRECTORY,
-  FOLDER_STAGING_DIRECTORY, isMissing, isScopeName, walkLocal, createPool };
+  FOLDER_STAGING_DIRECTORY,
+  isMissing,
+  isScopeName,
+  walkLocal,
+  createPool,
+};

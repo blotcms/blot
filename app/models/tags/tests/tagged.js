@@ -39,7 +39,12 @@ describe("tags.tagged sort ordering", function () {
 
   it("paginates date + desc in Redis (oldest-first, no full-list fetch)", async function () {
     stubTag(NEWEST_FIRST);
-    const result = await run({ limit: 10, offset: 0, sortBy: "date", order: "desc" });
+    const result = await run({
+      limit: 10,
+      offset: 0,
+      sortBy: "date",
+      order: "desc",
+    });
 
     expect(result.entryIDs).toEqual(["a.txt", "b.txt", "c.txt", "d.txt"]);
     // Redis-side pagination: a page-sized request with rev:false, not zRange 0 -1.
@@ -49,7 +54,12 @@ describe("tags.tagged sort ordering", function () {
 
   it("sorts by file path A to Z for id + asc", async function () {
     stubTag(NEWEST_FIRST);
-    const result = await run({ limit: 10, offset: 0, sortBy: "id", order: "asc" });
+    const result = await run({
+      limit: 10,
+      offset: 0,
+      sortBy: "id",
+      order: "asc",
+    });
 
     expect(result.entryIDs).toEqual(["a.txt", "b.txt", "c.txt", "d.txt"]);
     // "id" sorting has no index, so the whole list is pulled (no limit).
@@ -58,14 +68,24 @@ describe("tags.tagged sort ordering", function () {
 
   it("sorts by file path Z to A for id + desc", async function () {
     stubTag(NEWEST_FIRST);
-    const result = await run({ limit: 10, offset: 0, sortBy: "id", order: "desc" });
+    const result = await run({
+      limit: 10,
+      offset: 0,
+      sortBy: "id",
+      order: "desc",
+    });
     expect(result.entryIDs).toEqual(["d.txt", "c.txt", "b.txt", "a.txt"]);
   });
 
   it("orders the full list before paginating for an id selection", async function () {
     stubTag(NEWEST_FIRST);
     // Page 2, one per page, sorted by file path A to Z -> second entry is b.txt.
-    const result = await run({ limit: 1, offset: 1, sortBy: "id", order: "asc" });
+    const result = await run({
+      limit: 1,
+      offset: 1,
+      sortBy: "id",
+      order: "asc",
+    });
     expect(result.entryIDs).toEqual(["b.txt"]);
   });
 

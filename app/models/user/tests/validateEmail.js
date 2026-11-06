@@ -17,7 +17,7 @@ describe("user validate email", function () {
     lastSession: "",
     passwordHash: "hash123",
     subscription: {},
-    paypal: {}
+    paypal: {},
   };
   var otherUser = {
     uid: otherUid,
@@ -27,7 +27,7 @@ describe("user validate email", function () {
     lastSession: "",
     passwordHash: "hash123",
     subscription: {},
-    paypal: {}
+    paypal: {},
   };
 
   beforeEach(async function () {
@@ -45,15 +45,19 @@ describe("user validate email", function () {
       key.user(otherUid),
       key.email(otherEmail),
       key.email("new@example.com"),
-      key.email("normalized@example.com")
+      key.email("normalized@example.com"),
     ]);
     await client.sRem(key.uids, [uid, otherUid]);
   });
 
   it("returns error for empty email", async function () {
     var error = await validate(validUser, "").then(
-      function () { return null; },
-      function (err) { return err; }
+      function () {
+        return null;
+      },
+      function (err) {
+        return err;
+      }
     );
     expect(error).not.toBeNull();
     expect(error.message).toEqual("Please enter an email");
@@ -61,8 +65,12 @@ describe("user validate email", function () {
 
   it("returns error for whitespace-only email", async function () {
     var error = await validate(validUser, "   ").then(
-      function () { return null; },
-      function (err) { return err; }
+      function () {
+        return null;
+      },
+      function (err) {
+        return err;
+      }
     );
     expect(error).not.toBeNull();
     expect(error.message).toEqual("Please enter an email");
@@ -70,8 +78,12 @@ describe("user validate email", function () {
 
   it("returns error for invalid email format", async function () {
     var error = await validate(validUser, "notanemail").then(
-      function () { return null; },
-      function (err) { return err; }
+      function () {
+        return null;
+      },
+      function (err) {
+        return err;
+      }
     );
     expect(error).not.toBeNull();
     expect(error.message).toEqual("Please enter a valid email");
@@ -79,8 +91,12 @@ describe("user validate email", function () {
 
   it("returns error for email without domain", async function () {
     var error = await validate(validUser, "user@").then(
-      function () { return null; },
-      function (err) { return err; }
+      function () {
+        return null;
+      },
+      function (err) {
+        return err;
+      }
     );
     expect(error).not.toBeNull();
     expect(error.message).toEqual("Please enter a valid email");
@@ -88,8 +104,12 @@ describe("user validate email", function () {
 
   it("returns error for email without TLD", async function () {
     var error = await validate(validUser, "user@domain").then(
-      function () { return null; },
-      function (err) { return err; }
+      function () {
+        return null;
+      },
+      function (err) {
+        return err;
+      }
     );
     expect(error).not.toBeNull();
     expect(error.message).toEqual("Please enter a valid email");
@@ -97,8 +117,12 @@ describe("user validate email", function () {
 
   it("returns error when email is already in use by another user", async function () {
     var error = await validate(validUser, otherEmail).then(
-      function () { return null; },
-      function (err) { return err; }
+      function () {
+        return null;
+      },
+      function (err) {
+        return err;
+      }
     );
     expect(error).not.toBeNull();
     expect(error.message).toEqual("This email is in use.");
@@ -143,10 +167,15 @@ describe("user validate email", function () {
 
   it("rejects an email over the RFC length limit", async function () {
     var { MAX_EMAIL_LENGTH } = require("../auth-limits");
-    var tooLong = "a".repeat(MAX_EMAIL_LENGTH - "@example.com".length + 1) + "@example.com";
+    var tooLong =
+      "a".repeat(MAX_EMAIL_LENGTH - "@example.com".length + 1) + "@example.com";
     var error = await validate(validUser, tooLong).then(
-      function () { return null; },
-      function (err) { return err; }
+      function () {
+        return null;
+      },
+      function (err) {
+        return err;
+      }
     );
     expect(error).not.toBeNull();
     expect(error.message).toEqual("Email address is too long");
@@ -154,7 +183,8 @@ describe("user validate email", function () {
 
   it("accepts an email at the RFC length limit", async function () {
     var { MAX_EMAIL_LENGTH } = require("../auth-limits");
-    var atLimit = "a".repeat(MAX_EMAIL_LENGTH - "@example.com".length) + "@example.com";
+    var atLimit =
+      "a".repeat(MAX_EMAIL_LENGTH - "@example.com".length) + "@example.com";
     var result = await validate(validUser, atLimit);
     expect(result).toEqual(atLimit);
   });
@@ -163,10 +193,16 @@ describe("user validate email", function () {
     var { MAX_EMAIL_LENGTH } = require("../auth-limits");
     var local = "é".repeat(MAX_EMAIL_LENGTH / 2 - 5);
     var tooLong = local + "@example.com";
-    expect(Buffer.byteLength(tooLong, "utf8")).toBeGreaterThan(MAX_EMAIL_LENGTH);
+    expect(Buffer.byteLength(tooLong, "utf8")).toBeGreaterThan(
+      MAX_EMAIL_LENGTH
+    );
     var error = await validate(validUser, tooLong).then(
-      function () { return null; },
-      function (err) { return err; }
+      function () {
+        return null;
+      },
+      function (err) {
+        return err;
+      }
     );
     expect(error).not.toBeNull();
     expect(error.message).toEqual("Email address is too long");
@@ -178,7 +214,7 @@ describe("user validate email", function () {
       "user.name@domain.com",
       "user+tag@domain.com",
       "user@subdomain.domain.com",
-      "user123@domain.co.uk"
+      "user123@domain.co.uk",
     ];
 
     for (var i = 0; i < validEmails.length; i++) {

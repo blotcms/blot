@@ -8,7 +8,7 @@
 module.exports = function contentFingerprint(stat) {
   if (!stat || !stat.isFile()) return null;
   const fields = [stat.size, stat.mtimeNs];
-  if (fields.some(value => value === undefined)) return null;
+  if (fields.some((value) => value === undefined)) return null;
   return fields.map(String).join(":");
 };
 

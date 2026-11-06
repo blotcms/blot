@@ -94,7 +94,9 @@ function categoryForSlug(slug) {
 
 function siteMatchesCategory(site, category) {
   if (!site || !site.bio) return false;
-  return category.keywords.some((keyword) => bioMatchesKeyword(site.bio, keyword));
+  return category.keywords.some((keyword) =>
+    bioMatchesKeyword(site.bio, keyword)
+  );
 }
 
 function filterSitesByCategory(sites, slug) {

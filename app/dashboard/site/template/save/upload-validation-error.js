@@ -2,7 +2,7 @@
 // Carries every problem we found rather than only the first, so the client can
 // show the user a complete list instead of one error at a time.
 class UploadValidationError extends Error {
-  constructor (problems) {
+  constructor(problems) {
     const count = problems.length;
     super(
       count === 1

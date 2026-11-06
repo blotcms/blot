@@ -16,11 +16,11 @@ const VIEW_DIRECTORY = config.views_directory;
 // the assets into a single file
 const cacheID = Date.now();
 
-const cdnURLHelper = require('documentation/tools/cdn-url-helper');
+const cdnURLHelper = require("documentation/tools/cdn-url-helper");
 
 const site = Express();
 
-site.locals.cdn = cdnURLHelper({cacheID, viewDirectory: VIEW_DIRECTORY});
+site.locals.cdn = cdnURLHelper({ cacheID, viewDirectory: VIEW_DIRECTORY });
 site.locals.maxEmailLength = MAX_EMAIL_LENGTH;
 site.locals.maxPasswordLength = MAX_PASSWORD_LENGTH;
 
@@ -58,7 +58,7 @@ site.locals.interval = plan.startsWith("monthly") ? "month" : "year";
 site.locals.cacheID = cacheID;
 
 site.locals.cdnURL = config.cdn.origin;
-site.locals.cdn = cdnURLHelper({cacheID, viewDirectory: VIEW_DIRECTORY});
+site.locals.cdn = cdnURLHelper({ cacheID, viewDirectory: VIEW_DIRECTORY });
 
 site.get("/health", (req, res) => {
   res.send("OK");
@@ -86,7 +86,8 @@ site.use(
     allow: [
       startsWith("/dropbox/webhook"),
       startsWith("/google-drive/webhook/"),
-      (req) => req.path.startsWith("/git/") && req.path.endsWith("/git-upload-pack"),
+      (req) =>
+        req.path.startsWith("/git/") && req.path.endsWith("/git-upload-pack"),
     ],
     // A push starts with this GET. Refusing it, rather than the POST that
     // follows, stops git before it sends anything, so it prints the 503

@@ -24,32 +24,43 @@ describe("template", function () {
     async.map(views, setView.bind(null, test.template.id), function (err) {
       if (err) return done.fail(err);
 
-      getFullView(test.blog.id, test.template.id, view.name, function (
-        err,
-        fullView
-      ) {
-        if (err) return done.fail(err);
+      getFullView(
+        test.blog.id,
+        test.template.id,
+        view.name,
+        function (err, fullView) {
+          if (err) return done.fail(err);
 
-        expect(fullView).toEqual(jasmine.any(Array));
+          expect(fullView).toEqual(jasmine.any(Array));
 
-        var allPartials = {};
-        allPartials[header.name] = header.content;
+          var allPartials = {};
+          allPartials[header.name] = header.content;
 
-        expect(fullView[0]).toEqual(view.locals); // view.locals
-        expect(fullView[1]).toEqual(allPartials); // allPartials
-        expect(fullView[2]).toEqual({}); // view.retrieve
-        expect(fullView[3]).toEqual("text/html"); // view.type
-        expect(fullView[4]).toEqual(view.content);
+          expect(fullView[0]).toEqual(view.locals); // view.locals
+          expect(fullView[1]).toEqual(allPartials); // allPartials
+          expect(fullView[2]).toEqual({}); // view.retrieve
+          expect(fullView[3]).toEqual("text/html"); // view.type
+          expect(fullView[4]).toEqual(view.content);
 
-        done();
-      });
+          done();
+        }
+      );
     });
   });
 
-
   [
-    ["a partial", "{{> links.html}}", "{{#backlinks}}{{title}}{{/backlinks}}", true],
-    ["the view", "{{#entry.backlinks}}{{title}}{{/entry.backlinks}}", "x", true],
+    [
+      "a partial",
+      "{{> links.html}}",
+      "{{#backlinks}}{{title}}{{/backlinks}}",
+      true,
+    ],
+    [
+      "the view",
+      "{{#entry.backlinks}}{{title}}{{/entry.backlinks}}",
+      "x",
+      true,
+    ],
     ["neither", "{{title}}{{> links.html}}", "{{url}}", false],
   ].forEach(function (example) {
     it("says whether backlinks are used: " + example[0], function (done) {
@@ -64,15 +75,17 @@ describe("template", function () {
         function (err) {
           if (err) return done.fail(err);
 
-          getFullView(test.blog.id, test.template.id, "entry.html", function (
-            err,
-            fullView
-          ) {
-            if (err) return done.fail(err);
+          getFullView(
+            test.blog.id,
+            test.template.id,
+            "entry.html",
+            function (err, fullView) {
+              if (err) return done.fail(err);
 
-            expect(fullView[5]).toBe(example[3]);
-            done();
-          });
+              expect(fullView[5]).toBe(example[3]);
+              done();
+            }
+          );
         }
       );
     });
@@ -88,24 +101,33 @@ describe("template", function () {
 
     var view = {
       name: "entries.html",
-      content: "{{#allEntries}}{{title}}{{/allEntries}}{{> " + partial.name + "}}",
+      content:
+        "{{#allEntries}}{{title}}{{/allEntries}}{{> " + partial.name + "}}",
     };
 
-    async.map([view, partial], setView.bind(null, test.template.id), function (err) {
-      if (err) return done.fail(err);
-
-      getFullView(test.blog.id, test.template.id, view.name, function (err, fullView) {
+    async.map(
+      [view, partial],
+      setView.bind(null, test.template.id),
+      function (err) {
         if (err) return done.fail(err);
 
-        expect(fullView[2]).toEqual({
-          allEntries: { fields: { title: true, url: true } },
-        });
+        getFullView(
+          test.blog.id,
+          test.template.id,
+          view.name,
+          function (err, fullView) {
+            if (err) return done.fail(err);
 
-        done();
-      });
-    });
+            expect(fullView[2]).toEqual({
+              allEntries: { fields: { title: true, url: true } },
+            });
+
+            done();
+          }
+        );
+      }
+    );
   });
-
 
   it("handles partial usage inside allEntries sections", function (done) {
     var test = this;
@@ -120,21 +142,29 @@ describe("template", function () {
       content: "{{#allEntries}}{{> " + partial.name + "}}{{/allEntries}}",
     };
 
-    async.map([view, partial], setView.bind(null, test.template.id), function (err) {
-      if (err) return done.fail(err);
-
-      getFullView(test.blog.id, test.template.id, view.name, function (err, fullView) {
+    async.map(
+      [view, partial],
+      setView.bind(null, test.template.id),
+      function (err) {
         if (err) return done.fail(err);
 
-        expect(fullView[2]).toEqual({
-          allEntries: { fields: { html: true } },
-        });
+        getFullView(
+          test.blog.id,
+          test.template.id,
+          view.name,
+          function (err, fullView) {
+            if (err) return done.fail(err);
 
-        done();
-      });
-    });
+            expect(fullView[2]).toEqual({
+              allEntries: { fields: { html: true } },
+            });
+
+            done();
+          }
+        );
+      }
+    );
   });
-
 
   it("keeps a heavy field a partial renders under a nested entry predicate", function (done) {
     var test = this;
@@ -152,22 +182,31 @@ describe("template", function () {
         "}}{{/thumbnail}}{{/allEntries}}",
     };
 
-    async.map([view, partial], setView.bind(null, test.template.id), function (err) {
-      if (err) return done.fail(err);
-
-      getFullView(test.blog.id, test.template.id, view.name, function (err, fullView) {
+    async.map(
+      [view, partial],
+      setView.bind(null, test.template.id),
+      function (err) {
         if (err) return done.fail(err);
 
-        // {{{html}}} inside {{#thumbnail}} has no `thumbnail.html`, so Mustache
-        // resolves it from the parent entry - projection must keep `html`.
-        // `thumbnail` is still recorded, and nothing leaks to the top level.
-        expect(fullView[2]).toEqual({
-          allEntries: { fields: { thumbnail: true, html: true } },
-        });
+        getFullView(
+          test.blog.id,
+          test.template.id,
+          view.name,
+          function (err, fullView) {
+            if (err) return done.fail(err);
 
-        done();
-      });
-    });
+            // {{{html}}} inside {{#thumbnail}} has no `thumbnail.html`, so Mustache
+            // resolves it from the parent entry - projection must keep `html`.
+            // `thumbnail` is still recorded, and nothing leaks to the top level.
+            expect(fullView[2]).toEqual({
+              allEntries: { fields: { thumbnail: true, html: true } },
+            });
+
+            done();
+          }
+        );
+      }
+    );
   });
 
   it("projects fields from partials used inside tagged.entries", function (done) {
@@ -184,19 +223,28 @@ describe("template", function () {
         "{{#tagged.entries}}{{> " + partial.name + "}}{{/tagged.entries}}",
     };
 
-    async.map([view, partial], setView.bind(null, test.template.id), function (err) {
-      if (err) return done.fail(err);
-
-      getFullView(test.blog.id, test.template.id, view.name, function (err, fullView) {
+    async.map(
+      [view, partial],
+      setView.bind(null, test.template.id),
+      function (err) {
         if (err) return done.fail(err);
 
-        expect(fullView[2]).toEqual({
-          tagged: { fields: { title: true } },
-        });
+        getFullView(
+          test.blog.id,
+          test.template.id,
+          view.name,
+          function (err, fullView) {
+            if (err) return done.fail(err);
 
-        done();
-      });
-    });
+            expect(fullView[2]).toEqual({
+              tagged: { fields: { title: true } },
+            });
+
+            done();
+          }
+        );
+      }
+    );
   });
 
   it("keeps a heavy field a nested partial renders in a fresh context", function (done) {
@@ -225,17 +273,19 @@ describe("template", function () {
       function (err) {
         if (err) return done.fail(err);
 
-        getFullView(test.blog.id, test.template.id, view.name, function (
-          err,
-          fullView
-        ) {
-          if (err) return done.fail(err);
+        getFullView(
+          test.blog.id,
+          test.template.id,
+          view.name,
+          function (err, fullView) {
+            if (err) return done.fail(err);
 
-          expect(fullView[2].allEntries.fields.html).toBe(true);
-          expect(fullView[2].allEntries.fields.title).toBe(true);
+            expect(fullView[2].allEntries.fields.html).toBe(true);
+            expect(fullView[2].allEntries.fields.title).toBe(true);
 
-          done();
-        });
+            done();
+          }
+        );
       }
     );
   });
@@ -252,18 +302,19 @@ describe("template", function () {
     setView(test.template.id, view, function (err) {
       if (err) return done.fail(err);
 
-      getFullView(test.blog.id, test.template.id, view.name, function (
-        err,
-        fullView
-      ) {
-        if (err) return done.fail(err);
+      getFullView(
+        test.blog.id,
+        test.template.id,
+        view.name,
+        function (err, fullView) {
+          if (err) return done.fail(err);
 
-        expect(fullView[2].allEntries.fields.html).toBeUndefined();
-        expect(fullView[2].allEntries.fields.title).toBe(true);
+          expect(fullView[2].allEntries.fields.html).toBeUndefined();
+          expect(fullView[2].allEntries.fields.title).toBe(true);
 
-        done();
-      });
+          done();
+        }
+      );
     });
   });
-
 });

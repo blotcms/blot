@@ -37,8 +37,10 @@ function createBroker(options = {}) {
   const socketPath = options.socket || SOCKET;
   const jobs = options.jobs || jail.JOBS;
   const maxRunning = options.maxRunning || MAX_RUNNING;
-  const maxQueued = options.maxQueued === undefined ? MAX_QUEUED : options.maxQueued;
-  const maxQueuedMs = options.maxQueuedMs === undefined ? MAX_QUEUED_MS : options.maxQueuedMs;
+  const maxQueued =
+    options.maxQueued === undefined ? MAX_QUEUED : options.maxQueued;
+  const maxQueuedMs =
+    options.maxQueuedMs === undefined ? MAX_QUEUED_MS : options.maxQueuedMs;
   const log = options.log || console.error;
   const spawnJail =
     options.spawnJail ||
@@ -68,14 +70,17 @@ function createBroker(options = {}) {
 
   function reply(socket, header, body) {
     if (socket.destroyed) return;
-    socket.end(body ? Buffer.concat([Buffer.from(header + "\n"), body]) : header + "\n");
+    socket.end(
+      body ? Buffer.concat([Buffer.from(header + "\n"), body]) : header + "\n"
+    );
     // A client still sending (we refused its input) only reads the reply once
     // its writes finish, so throw the rest away, for a while
     socket.resume();
     setTimeout(() => socket.destroy(), DRAIN_MS).unref();
   }
 
-  const fail = (socket, error) => reply(socket, JSON.stringify({ ok: false, error }));
+  const fail = (socket, error) =>
+    reply(socket, JSON.stringify({ ok: false, error }));
 
   // The first line is the job; everything after it belongs to the jail
   function readHeader(socket) {
@@ -96,10 +101,18 @@ function createBroker(options = {}) {
       try {
         name = JSON.parse(buffered.subarray(0, end).toString()).job;
       } catch (e) {}
-      if (typeof name !== "string" || !Object.prototype.hasOwnProperty.call(jobs, name)) {
+      if (
+        typeof name !== "string" ||
+        !Object.prototype.hasOwnProperty.call(jobs, name)
+      ) {
         return fail(socket, "unknown-job");
       }
-      admit({ socket, name, job: jobs[name], rest: buffered.subarray(end + 1) });
+      admit({
+        socket,
+        name,
+        job: jobs[name],
+        rest: buffered.subarray(end + 1),
+      });
     };
     socket.on("data", onData);
     // a client that sends no job line at all
@@ -166,7 +179,7 @@ function createBroker(options = {}) {
   function next() {
     // Oldest first, passing over a job that is at its own limit, or that ran
     // last in a cgroup another waiting job could use
-    for (let i = 0; i < queue.length && running.size < maxRunning; ) {
+    for (let i = 0; i < queue.length && running.size < maxRunning;) {
       const request = queue[i];
       if (request.socket.destroyed) queue.splice(i, 1);
       else if (Date.now() - request.queued > maxQueuedMs) {
@@ -208,7 +221,10 @@ function createBroker(options = {}) {
       setTimeout(() => child.kill("SIGKILL"), KILL_GRACE_MS).unref();
     };
 
-    const limit = setTimeout(() => kill("timeout"), job.timeSeconds * 1000 + KILL_GRACE_MS);
+    const limit = setTimeout(
+      () => kill("timeout"),
+      job.timeSeconds * 1000 + KILL_GRACE_MS
+    );
 
     const finish = (code, signal) => {
       if (finished) return;
@@ -233,7 +249,9 @@ function createBroker(options = {}) {
         if (ms >= job.timeSeconds * 1000) error = "timeout";
       }
       if (error) {
-        log(`broker: job=${name} error=${error} code=${code} signal=${signal} ms=${ms}`);
+        log(
+          `broker: job=${name} error=${error} code=${code} signal=${signal} ms=${ms}`
+        );
         fail(socket, error);
       } else {
         const body = Buffer.concat(output, outputBytes);
@@ -308,7 +326,16 @@ function createBroker(options = {}) {
     const child = spawnJail(name, null);
     // Its output is kept as chunks and joined once a reply is whole: joining
     // as each arrives would copy a big reply over and over
-    const worker = { child, name, started: Date.now(), requests: 0, chunks: [], bytes: 0, onData: null, onExit: null };
+    const worker = {
+      child,
+      name,
+      started: Date.now(),
+      requests: 0,
+      chunks: [],
+      bytes: 0,
+      onData: null,
+      onExit: null,
+    };
     child.stdout.on("data", (chunk) => {
       worker.chunks.push(chunk);
       worker.bytes += chunk.length;
@@ -374,7 +401,14 @@ function createBroker(options = {}) {
     const list = idle.get(worker.name) || [];
     idle.set(worker.name, list);
     const old = Date.now() - worker.started > maxAgeSeconds * 1000;
-    if (worker.exited || heavy || worker.requests >= requests || old || list.length >= maxIdle) return retire(worker);
+    if (
+      worker.exited ||
+      heavy ||
+      worker.requests >= requests ||
+      old ||
+      list.length >= maxIdle
+    )
+      return retire(worker);
     list.push(worker);
     worker.idleTimer = setTimeout(() => retire(worker), idleSeconds * 1000);
     worker.idleTimer.unref();
@@ -415,7 +449,10 @@ function createBroker(options = {}) {
       finish(error);
     };
 
-    const limit = setTimeout(() => abandon("timeout"), job.worker.requestSeconds * 1000);
+    const limit = setTimeout(
+      () => abandon("timeout"),
+      job.worker.requestSeconds * 1000
+    );
 
     worker.onExit = (code, signal) => {
       // nsjail exits 128 + the signal when the job inside it was killed, as the
@@ -433,7 +470,10 @@ function createBroker(options = {}) {
     worker.onData = () => {
       if (length === null) {
         // Until the length line has come there are only a few bytes to join
-        const buffer = worker.chunks.length === 1 ? worker.chunks[0] : Buffer.concat(worker.chunks);
+        const buffer =
+          worker.chunks.length === 1
+            ? worker.chunks[0]
+            : Buffer.concat(worker.chunks);
         const end = buffer.indexOf(10);
         if (end === -1) {
           if (buffer.length > 32) return abandon("failed");
@@ -450,10 +490,15 @@ function createBroker(options = {}) {
         if (length > job.maxOutputBytes) return abandon("output-too-large");
       }
       if (worker.bytes < length) return;
-      const all = worker.chunks.length === 1 ? worker.chunks[0] : Buffer.concat(worker.chunks, worker.bytes);
+      const all =
+        worker.chunks.length === 1
+          ? worker.chunks[0]
+          : Buffer.concat(worker.chunks, worker.bytes);
       const body = Buffer.from(all.subarray(0, length));
       keep(all.subarray(length));
-      const heavy = inputBytes > job.worker.heavyInputBytes || Date.now() - started > job.worker.heavyMs;
+      const heavy =
+        inputBytes > job.worker.heavyInputBytes ||
+        Date.now() - started > job.worker.heavyMs;
       release(worker, job, heavy);
       finish(null, body);
     };
@@ -496,7 +541,9 @@ function createBroker(options = {}) {
         try {
           prepareCgroup(directory, job.cgroupLimits);
         } catch (e) {
-          log(`broker: job=${name} cannot make its cgroup ${directory}: ${e.code || e.message}`);
+          log(
+            `broker: job=${name} cannot make its cgroup ${directory}: ${e.code || e.message}`
+          );
         }
       }
     }
@@ -507,7 +554,8 @@ function createBroker(options = {}) {
     return new Promise((resolve, reject) => {
       const directory = require("path").dirname(socketPath);
       fs.mkdirSync(directory, { recursive: true, mode: 0o710 });
-      if (options.group !== undefined) fs.chownSync(directory, 0, options.group);
+      if (options.group !== undefined)
+        fs.chownSync(directory, 0, options.group);
       fs.chmodSync(directory, 0o710);
       // a stale socket from a previous broker
       fs.rmSync(socketPath, { force: true });
@@ -516,7 +564,8 @@ function createBroker(options = {}) {
       server.listen(socketPath, () => {
         process.umask(umask);
         try {
-          if (options.group !== undefined) fs.chownSync(socketPath, 0, options.group);
+          if (options.group !== undefined)
+            fs.chownSync(socketPath, 0, options.group);
           fs.chmodSync(socketPath, 0o660);
         } catch (e) {
           return reject(e);
@@ -531,7 +580,8 @@ function createBroker(options = {}) {
     server.close();
     queue.length = 0;
     for (const { child } of running) child.kill("SIGTERM");
-    for (const list of idle.values()) for (const worker of list.slice()) kill(worker);
+    for (const list of idle.values())
+      for (const worker of list.slice()) kill(worker);
     for (const socket of sockets) socket.destroy();
     fs.rmSync(socketPath, { force: true });
   }

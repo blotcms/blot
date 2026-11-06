@@ -49,7 +49,7 @@ function safeDecode(value) {
 function parseLine(line) {
   // The request logger's response line quotes the request's slowest step,
   // which can be one of our lines cut to 80 characters: not a record.
-  if (line.includes(' slowest=+')) return null;
+  if (line.includes(" slowest=+")) return null;
 
   let index = line.indexOf(ASSET_MARKER);
   if (index !== -1) {
@@ -60,7 +60,10 @@ function parseLine(line) {
       handle: fields.handle || "",
       served: fields.served || "origin",
       path: safeDecode(fields.path),
-      referer: fields.referer && fields.referer !== "-" ? safeDecode(fields.referer) : "",
+      referer:
+        fields.referer && fields.referer !== "-"
+          ? safeDecode(fields.referer)
+          : "",
       sameSite: fields.same_site === "1",
     };
   }
@@ -116,10 +119,10 @@ function aggregate(records, topN = 10) {
       record.referer === "invalid"
         ? "invalid referer"
         : !record.referer
-        ? "no referer"
-        : record.sameSite
-        ? "same site"
-        : "other site"
+          ? "no referer"
+          : record.sameSite
+            ? "same site"
+            : "other site"
     );
     bump(asset.blogs, record.blog);
     bump(asset.paths, `${record.handle || record.blog}${record.path}`);
@@ -168,7 +171,10 @@ function format(report) {
     "[folder-asset] folder and static files served by the app",
     `  total: ${report.asset.total}`,
     table("Served", counts(report.asset.served)),
-    table("Referer (same site = one of the blog's own pages)", counts(report.asset.referers)),
+    table(
+      "Referer (same site = one of the blog's own pages)",
+      counts(report.asset.referers)
+    ),
     table(
       "Top blogs",
       report.asset.topBlogs.map((b) => [b.n, `${b.handle || "?"} (${b.blog})`])
@@ -179,7 +185,10 @@ function format(report) {
     ),
     table(
       "Top referer pages (fetch the page and find the link to the file)",
-      report.asset.topReferers.map((r) => [r.n, `${r.page}  ->  ${r.samplePath}`])
+      report.asset.topReferers.map((r) => [
+        r.n,
+        `${r.page}  ->  ${r.samplePath}`,
+      ])
     ),
   ];
 

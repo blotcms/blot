@@ -53,10 +53,12 @@ describe("enable local editing", function () {
 
     // package.json is written first and reaches the folder, then the view's
     // write fails
-    spyOn(blogFolder, "write").and.callFake(async function (blogID, path, contents) {
-      if (path.endsWith("package.json")) return write(blogID, path, contents);
-      throw failure;
-    });
+    spyOn(blogFolder, "write").and.callFake(
+      async function (blogID, path, contents) {
+        if (path.endsWith("package.json")) return write(blogID, path, contents);
+        throw failure;
+      }
+    );
 
     const req = { blog: this.blog, template };
     const res = { message: jasmine.createSpy("message") };
@@ -66,8 +68,18 @@ describe("enable local editing", function () {
 
     expect(err).toBe(failure);
     expect(blogFolder.write).toHaveBeenCalled();
-    expect(await require("storage/folder").exists(this.blog.id, "/Templates/" + template.slug)).toBe(false);
-    expect(await require("storage/folder").exists(this.blog.id, "/templates/" + template.slug)).toBe(false);
+    expect(
+      await require("storage/folder").exists(
+        this.blog.id,
+        "/Templates/" + template.slug
+      )
+    ).toBe(false);
+    expect(
+      await require("storage/folder").exists(
+        this.blog.id,
+        "/templates/" + template.slug
+      )
+    ).toBe(false);
     expect((await getMetadata(template.id)).localEditing).toBe(false);
   });
 

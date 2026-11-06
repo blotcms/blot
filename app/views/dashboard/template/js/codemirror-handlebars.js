@@ -7,7 +7,6 @@ const CodeMirror = require("codemirror");
 require("codemirror/addon/mode/simple.js");
 require("codemirror/addon/mode/multiplex.js");
 
-
 CodeMirror.defineSimpleMode("handlebars-tags", {
   start: [
     { regex: /\{\{\{/, push: "handlebars_triple", token: "tag" },
@@ -72,4 +71,3 @@ CodeMirror.defineMode("handlebars", function (config, parserConfig) {
     { open: "{{", close: "}}", mode: inner, parseDelimiters: true }
   );
 });
-

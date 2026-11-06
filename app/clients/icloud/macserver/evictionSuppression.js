@@ -4,8 +4,10 @@ const EVICTION_SUPPRESSION_TTL_MS = 30_000;
 
 const evictionSuppressionMap = new Map();
 
-const buildEvictionSuppressionKey = (blogID, pathInBlogDirectory = EVICTION_SUPPRESSION_BLOG_SCOPE) =>
-  `${blogID}:${pathInBlogDirectory}`;
+const buildEvictionSuppressionKey = (
+  blogID,
+  pathInBlogDirectory = EVICTION_SUPPRESSION_BLOG_SCOPE
+) => `${blogID}:${pathInBlogDirectory}`;
 
 const getSuppressionRecord = (key) => {
   const suppression = evictionSuppressionMap.get(key);
@@ -22,28 +24,40 @@ const getSuppressionRecord = (key) => {
   return suppression;
 };
 
-const markEvictionSuppressed = (blogID, pathInBlogDirectory = EVICTION_SUPPRESSION_BLOG_SCOPE) => {
+const markEvictionSuppressed = (
+  blogID,
+  pathInBlogDirectory = EVICTION_SUPPRESSION_BLOG_SCOPE
+) => {
   if (!blogID || !pathInBlogDirectory) {
     return;
   }
 
   const now = Date.now();
-  evictionSuppressionMap.set(buildEvictionSuppressionKey(blogID, pathInBlogDirectory), {
-    suppressUntil: Number.POSITIVE_INFINITY,
-    expiresAt: now + EVICTION_SUPPRESSION_TTL_MS,
-  });
+  evictionSuppressionMap.set(
+    buildEvictionSuppressionKey(blogID, pathInBlogDirectory),
+    {
+      suppressUntil: Number.POSITIVE_INFINITY,
+      expiresAt: now + EVICTION_SUPPRESSION_TTL_MS,
+    }
+  );
 };
 
-const extendEvictionSuppression = (blogID, pathInBlogDirectory = EVICTION_SUPPRESSION_BLOG_SCOPE) => {
+const extendEvictionSuppression = (
+  blogID,
+  pathInBlogDirectory = EVICTION_SUPPRESSION_BLOG_SCOPE
+) => {
   if (!blogID || !pathInBlogDirectory) {
     return;
   }
 
   const now = Date.now();
-  evictionSuppressionMap.set(buildEvictionSuppressionKey(blogID, pathInBlogDirectory), {
-    suppressUntil: now + EVICTION_SUPPRESSION_POST_MS,
-    expiresAt: now + EVICTION_SUPPRESSION_TTL_MS,
-  });
+  evictionSuppressionMap.set(
+    buildEvictionSuppressionKey(blogID, pathInBlogDirectory),
+    {
+      suppressUntil: now + EVICTION_SUPPRESSION_POST_MS,
+      expiresAt: now + EVICTION_SUPPRESSION_TTL_MS,
+    }
+  );
 };
 
 const isEvictionSuppressed = (blogID, pathInBlogDirectory) => {
@@ -73,7 +87,10 @@ const isEvictionSuppressed = (blogID, pathInBlogDirectory) => {
 // TTL, so a stuck eviction cannot hold callers forever).
 const waitForEvictionSuppressionToClear = async (
   blogID,
-  { timeoutMs = EVICTION_SUPPRESSION_TTL_MS + EVICTION_SUPPRESSION_POST_MS, pollMs = 500 } = {}
+  {
+    timeoutMs = EVICTION_SUPPRESSION_TTL_MS + EVICTION_SUPPRESSION_POST_MS,
+    pollMs = 500,
+  } = {}
 ) => {
   const deadline = Date.now() + timeoutMs;
 

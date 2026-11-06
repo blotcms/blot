@@ -41,19 +41,31 @@ module.exports = async function ({
 
   // Handle replies
   if (parent) {
-    multi.zAdd(keys.children(parent), { score: parseInt(created_at, 10), value: id });
-    multi.zAdd(keys.by_last_reply, { score: parseInt(created_at, 10), value: parent });
+    multi.zAdd(keys.children(parent), {
+      score: parseInt(created_at, 10),
+      value: id,
+    });
+    multi.zAdd(keys.by_last_reply, {
+      score: parseInt(created_at, 10),
+      value: parent,
+    });
     multi.zIncrBy(keys.by_number_of_replies, 1, parent);
 
     // Handle questions
   } else {
     tags.forEach((tag) => {
       multi.sAdd(keys.all_tags, tag);
-      multi.zAdd(keys.by_tag(tag), { score: parseInt(created_at, 10), value: id });
+      multi.zAdd(keys.by_tag(tag), {
+        score: parseInt(created_at, 10),
+        value: id,
+      });
     });
 
     multi.sAdd(keys.all_questions, id);
-    multi.zAdd(keys.by_last_reply, { score: parseInt(created_at, 10), value: id });
+    multi.zAdd(keys.by_last_reply, {
+      score: parseInt(created_at, 10),
+      value: id,
+    });
     multi.zAdd(keys.by_created, { score: parseInt(created_at, 10), value: id });
     multi.zAdd(keys.by_number_of_replies, { score: 0, value: id });
   }

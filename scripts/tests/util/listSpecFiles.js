@@ -14,7 +14,9 @@ module.exports = function listSpecFiles(rootDir, excludePrefixes = []) {
     .map((p) => path.relative(process.cwd(), path.resolve(process.cwd(), p)));
 
   const isExcluded = (rel) =>
-    prefixes.some((prefix) => rel === prefix || rel.startsWith(prefix + path.sep));
+    prefixes.some(
+      (prefix) => rel === prefix || rel.startsWith(prefix + path.sep)
+    );
 
   const out = [];
   (function walk(dir) {

@@ -22,30 +22,34 @@ describe("git client sync: history", function () {
     });
   }
 
-  it("syncs 200 files in a single push, and builds their entries", async function () {
-    var files = {};
-    var paths = [];
+  it(
+    "syncs 200 files in a single push, and builds their entries",
+    async function () {
+      var files = {};
+      var paths = [];
 
-    for (var i = 0; i < 200; i++) {
-      var path = "/bulk/" + (i % 10) + "/file-" + i + ".txt";
-      paths.push(path);
-      files[path] = "File number " + i;
-    }
+      for (var i = 0; i < 200; i++) {
+        var path = "/bulk/" + (i % 10) + "/file-" + i + ".txt";
+        paths.push(path);
+        files[path] = "File number " + i;
+      }
 
-    await this.local.commitFiles(files, "200 files");
-    await this.local.push(["origin", "master"], { timeout: 150 * 1000 });
+      await this.local.commitFiles(files, "200 files");
+      await this.local.push(["origin", "master"], { timeout: 150 * 1000 });
 
-    expect(Object.keys(await helpers.blogFiles(this)).length).toBe(200);
+      expect(Object.keys(await helpers.blogFiles(this)).length).toBe(200);
 
-    var built = await entries(this.blog.id, paths);
+      var built = await entries(this.blog.id, paths);
 
-    expect(built.length).toBe(200);
-    expect(
-      built.filter(function (entry) {
-        return !entry.deleted;
-      }).length
-    ).toBe(200);
-  }, 200 * 1000);
+      expect(built.length).toBe(200);
+      expect(
+        built.filter(function (entry) {
+          return !entry.deleted;
+        }).length
+      ).toBe(200);
+    },
+    200 * 1000
+  );
 
   it("removes every file in a single push", async function () {
     var one = "/one.txt";
@@ -62,7 +66,12 @@ describe("git client sync: history", function () {
     expect((await helpers.entry(this.blog.id, one)).deleted).toBe(false);
 
     await this.local.git(["rm", "-r", "--quiet", "."]);
-    await this.local.git(["commit", "--quiet", "--message", "Remove everything"]);
+    await this.local.git([
+      "commit",
+      "--quiet",
+      "--message",
+      "Remove everything",
+    ]);
     await this.local.push();
 
     expect(await helpers.blogFiles(this)).toEqual({});
@@ -84,7 +93,10 @@ describe("git client sync: history", function () {
   });
 
   it("handles an empty commit", async function () {
-    await this.local.writeAndPush("/before-empty.txt", "Before the empty commit");
+    await this.local.writeAndPush(
+      "/before-empty.txt",
+      "Before the empty commit"
+    );
 
     var before = await helpers.blogFiles(this);
 
@@ -96,13 +108,23 @@ describe("git client sync: history", function () {
 
   it("handles an amended commit, force pushed, which removes a file", async function () {
     await this.local.writeAndPush("/kept.txt", "Kept");
-    await this.local.writeAndPush("/amended-away.txt", "Pushed, then amended away");
+    await this.local.writeAndPush(
+      "/amended-away.txt",
+      "Pushed, then amended away"
+    );
 
     expect(await helpers.blogHas(this, "/amended-away.txt")).toBe(true);
 
     await this.local.remove("/amended-away.txt");
     await this.local.git(["add", "--all"]);
-    await this.local.git(["commit", "--quiet", "--amend", "--allow-empty", "--message", "Amended"]);
+    await this.local.git([
+      "commit",
+      "--quiet",
+      "--amend",
+      "--allow-empty",
+      "--message",
+      "Amended",
+    ]);
 
     // A plain push is refused, a forced one is not
     var refused = await this.local.tryPush();
@@ -112,7 +134,9 @@ describe("git client sync: history", function () {
 
     expect(await helpers.blogHas(this, "/amended-away.txt")).toBe(false);
     expect(await helpers.blogHas(this, "/kept.txt")).toBe(true);
-    expect((await helpers.entry(this.blog.id, "/amended-away.txt")).deleted).toBe(true);
+    expect(
+      (await helpers.entry(this.blog.id, "/amended-away.txt")).deleted
+    ).toBe(true);
   });
 
   it("handles a force push of unrelated history", async function () {
@@ -128,9 +152,15 @@ describe("git client sync: history", function () {
     await this.local.commitFiles({ "/new/three.txt": "From the new history" });
     await this.local.push(["--force", "origin", "unrelated:master"]);
 
-    expect(Object.keys(await helpers.blogFiles(this))).toEqual(["new/three.txt"]);
-    expect((await helpers.entry(this.blog.id, "/old/one.txt")).deleted).toBe(true);
-    expect((await helpers.entry(this.blog.id, "/new/three.txt")).deleted).toBe(false);
+    expect(Object.keys(await helpers.blogFiles(this))).toEqual([
+      "new/three.txt",
+    ]);
+    expect((await helpers.entry(this.blog.id, "/old/one.txt")).deleted).toBe(
+      true
+    );
+    expect((await helpers.entry(this.blog.id, "/new/three.txt")).deleted).toBe(
+      false
+    );
   });
 
   it("accepts a pushed tag, and does not change the blog for it", async function () {
@@ -138,7 +168,13 @@ describe("git client sync: history", function () {
 
     await local.writeAndPush("/before-tag.txt", "Before the tag");
     await local.git(["tag", "light"]);
-    await local.git(["tag", "--annotate", "--message", "An annotated tag", "annotated"]);
+    await local.git([
+      "tag",
+      "--annotate",
+      "--message",
+      "An annotated tag",
+      "annotated",
+    ]);
 
     var pushed = await local.tryPush(["origin", "light", "annotated"]);
 

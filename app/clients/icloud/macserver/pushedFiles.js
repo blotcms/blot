@@ -41,7 +41,8 @@ const record = (blogID, path, value) => {
   }
 };
 
-const recordPushed = (blogID, path, stat) => record(blogID, path, fingerprint(stat));
+const recordPushed = (blogID, path, stat) =>
+  record(blogID, path, fingerprint(stat));
 
 const recordDirectory = (blogID, path) => record(blogID, path, DIRECTORY);
 

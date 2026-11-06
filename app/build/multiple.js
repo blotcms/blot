@@ -61,28 +61,25 @@ module.exports = function buildMultiple(blog, info, callback) {
     async.mapSeries(
       files,
       function (filePath, next) {
-        Single(blog, filePath, function (
-          err,
-          html,
-          metadata,
-          stat,
-          dependencies,
-          extras,
-        ) {
-          if (err) {
-            debug("Blog:", blog.id, filePath, "error building", err);
-            return next(err);
-          }
+        Single(
+          blog,
+          filePath,
+          function (err, html, metadata, stat, dependencies, extras) {
+            if (err) {
+              debug("Blog:", blog.id, filePath, "error building", err);
+              return next(err);
+            }
 
-          next(null, {
-            path: filePath,
-            html: html,
-            metadata: metadata || {},
-            stat: stat || {},
-            dependencies: dependencies || [],
-            extras: extras || {},
-          });
-        });
+            next(null, {
+              path: filePath,
+              html: html,
+              metadata: metadata || {},
+              stat: stat || {},
+              dependencies: dependencies || [],
+              extras: extras || {},
+            });
+          }
+        );
       },
       function (err, results) {
         if (err) return callback(err);
@@ -97,7 +94,9 @@ module.exports = function buildMultiple(blog, info, callback) {
 
         results.forEach(function (result) {
           combinedMetadata = mergeMetadata(combinedMetadata, result.metadata);
-          combinedDependencies = combinedDependencies.concat(result.dependencies);
+          combinedDependencies = combinedDependencies.concat(
+            result.dependencies
+          );
           combinedExtras = mergeMetadata(combinedExtras, result.extras);
 
           if (result.stat && typeof result.stat.size === "number") {
@@ -110,7 +109,6 @@ module.exports = function buildMultiple(blog, info, callback) {
               new Date(result.stat.mtime).valueOf()
             );
           }
-
         });
 
         combinedDependencies = Array.from(new Set(combinedDependencies));
@@ -139,7 +137,14 @@ module.exports = function buildMultiple(blog, info, callback) {
           "files"
         );
 
-        callback(null, html, metadata, stat, combinedDependencies, combinedExtras);
+        callback(
+          null,
+          html,
+          metadata,
+          stat,
+          combinedDependencies,
+          combinedExtras
+        );
       }
     );
   }
@@ -167,9 +172,7 @@ function collectConvertibleFiles(blog, folderPath, callback) {
             return next(createTooManyFilesError(folderPath));
           }
 
-          const entryPath = pathNormalizer(
-            path.join(currentPath, entry.name)
-          );
+          const entryPath = pathNormalizer(path.join(currentPath, entry.name));
 
           if (shouldIgnore(entryPath)) return next();
 
@@ -245,7 +248,11 @@ function renderHtmlSections(results, folderPath, metadata) {
   });
 
   var combinedHtml = sections.join("");
-  var headerHtml = deriveHeading(folderPath, combinedHtml, metadataTitle(metadata));
+  var headerHtml = deriveHeading(
+    folderPath,
+    combinedHtml,
+    metadataTitle(metadata)
+  );
 
   return (
     '<section class="multi-file-post" data-folder="' +
@@ -272,11 +279,7 @@ function deriveHeading(folderPath, combinedHtml, explicitTitle) {
 
   if (!title) return "";
 
-  return (
-    '\n  <h1 class="multi-file-title">' +
-    escapeHtml(title) +
-    "</h1>"
-  );
+  return '\n  <h1 class="multi-file-title">' + escapeHtml(title) + "</h1>";
 }
 
 // True when prepare/title.js would actually resolve an <h1> as the entry
@@ -297,7 +300,9 @@ function hasReachableH1(combinedHtml) {
   function bestTag(first, second) {
     if (!first || !first.name) return second;
     if (!second || !second.name) return first;
-    if (TITLE_TAG_ORDER.indexOf(second.name) > TITLE_TAG_ORDER.indexOf(first.name))
+    if (
+      TITLE_TAG_ORDER.indexOf(second.name) > TITLE_TAG_ORDER.indexOf(first.name)
+    )
       return second;
     return first;
   }

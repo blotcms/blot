@@ -84,7 +84,7 @@ describe("questions.list", function () {
 
     await create({ title: "How?", body: "Yes", parent: first.id });
 
-    const { questions } = await list({ sort: 'by_created' });
+    const { questions } = await list({ sort: "by_created" });
 
     expect(questions.length).toBe(3);
     expect(questions[0].id).toBe(third.id);
@@ -102,7 +102,7 @@ describe("questions.list", function () {
 
     await create({ title: "How?", body: "Yes", parent: first.id });
 
-    const { questions } = await list({ sort: 'by_number_of_replies' });
+    const { questions } = await list({ sort: "by_number_of_replies" });
 
     expect(questions.length).toBe(3);
     expect(questions[0].id).toBe(second.id);

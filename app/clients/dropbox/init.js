@@ -70,7 +70,12 @@ const resetToBlotWithLock = async (blogID, publish) => {
 // one sequential Redis round trip per entry - a large count is the leading
 // suspect for starving another blog's lock heartbeat on the shared
 // connection, and without it that theory can only be checked after the fact.
-const logLag = (blogID, phase, entryCount, { durationMs, maxLagMs, p99LagMs }) => {
+const logLag = (
+  blogID,
+  phase,
+  entryCount,
+  { durationMs, maxLagMs, p99LagMs }
+) => {
   console.log(
     clfdate(),
     "Dropbox: validation lag",
@@ -105,7 +110,6 @@ const hasRecentSync = (account) => {
   if (!account || typeof account.last_sync !== "number") return false;
   return Date.now() - account.last_sync <= ONE_HOUR_IN_MS;
 };
-
 
 const validateAllBlogs = async () => {
   console.log(clfdate(), "Dropbox: Running hourly sync validation");
@@ -147,7 +151,11 @@ const validateAllBlogs = async () => {
 
       if (!hasRecentSync(account)) continue;
       if (transferIncomplete(account)) {
-        console.log(clfdate(), "Dropbox: Skipping blog with incomplete transfer", blogID);
+        console.log(
+          clfdate(),
+          "Dropbox: Skipping blog with incomplete transfer",
+          blogID
+        );
         continue;
       }
 
@@ -215,7 +223,11 @@ const validateAllBlogs = async () => {
           // A live sync holds the lock and covers whatever we'd catch up,
           // same as the walk's busy skip.
           if (err.message !== "Failed to acquire folder lock") throw err;
-          console.log(clfdate(), "Dropbox: Catch-up skipped, blog busy", blogID);
+          console.log(
+            clfdate(),
+            "Dropbox: Catch-up skipped, blog busy",
+            blogID
+          );
         }
 
         syncReport.recordChecked(report, blog);
@@ -272,7 +284,11 @@ const resyncRecentSyncsOnStartup = async () => {
 
       if (Date.now() - account.last_sync >= FIFTEEN_MINUTES_IN_MS) continue;
       if (transferIncomplete(account)) {
-        console.log(clfdate(), "Dropbox: Skipping blog with incomplete transfer", blogID);
+        console.log(
+          clfdate(),
+          "Dropbox: Skipping blog with incomplete transfer",
+          blogID
+        );
         continue;
       }
 
@@ -319,12 +335,7 @@ const resyncRecentSyncsOnStartup = async () => {
         console.log(clfdate(), "Dropbox: Skipping busy blog", blogID);
         continue;
       }
-      console.error(
-        clfdate(),
-        "Dropbox: Resync error for blog",
-        blogID,
-        err
-      );
+      console.error(clfdate(), "Dropbox: Resync error for blog", blogID, err);
     }
   }
 };
@@ -336,9 +347,11 @@ module.exports = async function init() {
   scheduleExclusive("dropbox-validation", "0 * * * *", validateAllBlogs);
 
   // Once per deploy across all processes, not once per process.
-  onceAtStartup("dropbox-resync-recent", resyncRecentSyncsOnStartup).catch(function (err) {
+  onceAtStartup("dropbox-resync-recent", resyncRecentSyncsOnStartup).catch(
+    function (err) {
       console.error(clfdate(), "Dropbox: Startup resync failed", err);
-    });
+    }
+  );
 };
 
 // Exposed for tests: both resyncRecentSyncsOnStartup and validateAllBlogs

@@ -33,7 +33,9 @@ module.exports = function setMetadata(id, updates, callback) {
     metadata.cdn = metadata.cdn || {};
 
     if (!metadata.owner)
-      return callback(new Error("No owner: please specify an owner for this template"));
+      return callback(
+        new Error("No owner: please specify an owner for this template")
+      );
 
     try {
       injectLocals(metadata.locals);

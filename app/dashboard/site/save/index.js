@@ -6,5 +6,5 @@ module.exports = {
   format: require("./format"),
   injectTitle: require("./injectTitle"),
   removeTmpFiles: require("./removeTmpFiles"),
-  redirects: require("./redirects")
+  redirects: require("./redirects"),
 };

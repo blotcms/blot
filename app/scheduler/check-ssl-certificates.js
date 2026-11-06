@@ -49,7 +49,10 @@ async function scanCertKeys(client) {
   let cursor = "0";
 
   do {
-    const reply = await client.scan(cursor, { MATCH: "ssl:*:latest", COUNT: 1000 });
+    const reply = await client.scan(cursor, {
+      MATCH: "ssl:*:latest",
+      COUNT: 1000,
+    });
     cursor = String(reply.cursor);
     reply.keys.forEach((key) => keys.add(key));
   } while (cursor !== "0");
@@ -75,7 +78,9 @@ function expiryOf(value) {
   try {
     return Date.parse(new crypto.X509Certificate(parsed.fullchain_pem).validTo);
   } catch (e) {
-    throw new Error("no expiry, and fullchain_pem could not be parsed", { cause: e });
+    throw new Error("no expiry, and fullchain_pem could not be parsed", {
+      cause: e,
+    });
   }
 }
 
@@ -97,7 +102,8 @@ async function checkCustomerCerts({ now, client, getBlog }) {
       try {
         const expires = expiryOf(values[j]);
         const daysLeft = daysUntil(expires, now);
-        if (daysLeft < FLAGGED_DAYS) flagged.push({ domain, daysLeft, expires });
+        if (daysLeft < FLAGGED_DAYS)
+          flagged.push({ domain, daysLeft, expires });
       } catch (err) {
         errors.push({ domain, message: err.message });
       }
@@ -133,7 +139,13 @@ async function checkCustomerCerts({ now, client, getBlog }) {
 async function checkWildcard({ now, client }) {
   const pem = await client.get(WILDCARD_PEM_KEY);
   const updated = Number(await client.get(WILDCARD_UPDATED_KEY)) * 1000 || null;
-  const wildcard = { problem: true, urgent: true, updated, expires: null, daysLeft: null };
+  const wildcard = {
+    problem: true,
+    urgent: true,
+    updated,
+    expires: null,
+    daysLeft: null,
+  };
 
   if (!pem) {
     return { ...wildcard, message: `missing from Redis (${WILDCARD_PEM_KEY})` };
@@ -143,7 +155,10 @@ async function checkWildcard({ now, client }) {
     // The first certificate in the PEM is the leaf
     wildcard.expires = Date.parse(new crypto.X509Certificate(pem).validTo);
   } catch (e) {
-    return { ...wildcard, message: `could not be parsed (${WILDCARD_PEM_KEY})` };
+    return {
+      ...wildcard,
+      message: `could not be parsed (${WILDCARD_PEM_KEY})`,
+    };
   }
 
   wildcard.daysLeft = daysUntil(wildcard.expires, now);
@@ -196,7 +211,10 @@ function view(report) {
       updatedDate: wildcard.updated ? formatDate(wildcard.updated) : "never",
     },
     hasCerts: report.certs.length > 0,
-    certs: report.certs.map((cert) => ({ ...cert, date: formatDate(cert.expires) })),
+    certs: report.certs.map((cert) => ({
+      ...cert,
+      date: formatDate(cert.expires),
+    })),
     errorCount: report.errors.length,
   };
 }
@@ -222,7 +240,9 @@ module.exports.view = view;
 if (require.main === module) {
   check()
     .then((report) => {
-      console.log(JSON.stringify({ ...report, now: new Date(report.now) }, null, 2));
+      console.log(
+        JSON.stringify({ ...report, now: new Date(report.now) }, null, 2)
+      );
       process.exit();
     })
     .catch((err) => {

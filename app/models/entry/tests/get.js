@@ -25,7 +25,14 @@ describe("entry.get", function () {
     get.BATCH_SIZE = 2;
     spyOn(redis, "mGet").and.callThrough();
 
-    var ids = ["/a.txt", "/b.txt", "/missing.txt", "/c.txt", "/d.txt", "/e.txt"];
+    var ids = [
+      "/a.txt",
+      "/b.txt",
+      "/missing.txt",
+      "/c.txt",
+      "/d.txt",
+      "/e.txt",
+    ];
     var result = await getMany(this.blog.id, ids);
 
     expect(redis.mGet).toHaveBeenCalledTimes(3);
@@ -42,9 +49,11 @@ describe("entry.get", function () {
     var events = [];
     spyOn(redis, "mGet").and.callFake(function (keys) {
       events.push("mGet");
-      return Promise.resolve(keys.map(function () {
-        return null;
-      }));
+      return Promise.resolve(
+        keys.map(function () {
+          return null;
+        })
+      );
     });
     setImmediate(function () {
       events.push("other work");

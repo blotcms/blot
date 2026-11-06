@@ -34,14 +34,28 @@ const X32_SYSCALL_BIT = 0x40000000;
 const ARCHES = {
   arm64: {
     audit: 0xc00000b7,
-    refused: { setns: 268, unshare: 97, mount: 40, umount2: 39, pivot_root: 41, sethostname: 161 },
+    refused: {
+      setns: 268,
+      unshare: 97,
+      mount: 40,
+      umount2: 39,
+      pivot_root: 41,
+      sethostname: 161,
+    },
     clone: 220,
     clone3: 435,
   },
   x64: {
     audit: 0xc000003e,
     x32: true,
-    refused: { setns: 308, unshare: 272, mount: 165, umount2: 166, pivot_root: 155, sethostname: 170 },
+    refused: {
+      setns: 308,
+      unshare: 272,
+      mount: 165,
+      umount2: 166,
+      pivot_root: 155,
+      sethostname: 170,
+    },
     clone: 56,
     clone3: 435,
   },
@@ -80,7 +94,8 @@ function program(arch) {
   labels.nosys = lines.length;
   lines.push(statement(BPF_RET_K, SECCOMP_RET_ERRNO | ENOSYS));
 
-  const offset = (target, index) => (target === null ? 0 : labels[target] - index - 1);
+  const offset = (target, index) =>
+    target === null ? 0 : labels[target] - index - 1;
   return lines.map((line, index) => ({
     ...line,
     jt: offset(line.jt, index),

@@ -23,10 +23,12 @@ const caches = [
 // misses on keys the cache had evicted (more room might have helped) against
 // missCold, any other miss. uncachedBy is "reason:count" pairs.
 function uncachedBy(reasons) {
-  return Object.entries(reasons)
-    .filter(([, n]) => n)
-    .map(([reason, n]) => reason + ":" + n)
-    .join(",") || "none";
+  return (
+    Object.entries(reasons)
+      .filter(([, n]) => n)
+      .map(([reason, n]) => reason + ":" + n)
+      .join(",") || "none"
+  );
 }
 
 module.exports = function () {

@@ -36,7 +36,6 @@ client_routes
   .route("/switch")
 
   .get(load.clients, function (req, res) {
-    
     const activeClient = req.blog.client || res.locals.effectiveClient;
 
     // filter current client from list of clients
@@ -86,53 +85,57 @@ const verbs = {
 // these still parse into a path, verb and folder URL below.
 const PROGRESS_PREFIX = /^\(\d+\/\d+\)\s+/;
 
-client_routes.route("/activity").get(load.clients, async function (req, res, next) {
-  try {
-    res.locals.breadcrumbs.add("Activity", "activity");
+client_routes
+  .route("/activity")
+  .get(load.clients, async function (req, res, next) {
+    try {
+      res.locals.breadcrumbs.add("Activity", "activity");
 
-    let { statuses, next, previous } = await getStatuses(req.blog.id);
+      let { statuses, next, previous } = await getStatuses(req.blog.id);
 
-    statuses = _.chain(statuses)
-      .groupBy("syncID")
-      .map((value, key) => ({
-        syncID: key,
-        messages: value
-          .map((item) => {
-            const message = item.message.replace(PROGRESS_PREFIX, "");
-            const matchedVerb = Object.keys(verbs).find((i) =>
-              message.startsWith(i + " /")
-            );
-
-            if (matchedVerb) {
-              const path = message.slice((matchedVerb + " ").length);
-              item.path = Path.parse(path);
-              item.verb = verbs[matchedVerb];
-              item.url = Path.join(
-                res.locals.base,
-                "folder",
-                encodeURIComponent(path.slice(1))
+      statuses = _.chain(statuses)
+        .groupBy("syncID")
+        .map((value, key) => ({
+          syncID: key,
+          messages: value
+            .map((item) => {
+              const message = item.message.replace(PROGRESS_PREFIX, "");
+              const matchedVerb = Object.keys(verbs).find((i) =>
+                message.startsWith(i + " /")
               );
-            }
 
-            item.fromNow = moment(item.datestamp).fromNow();
+              if (matchedVerb) {
+                const path = message.slice((matchedVerb + " ").length);
+                item.path = Path.parse(path);
+                item.verb = verbs[matchedVerb];
+                item.url = Path.join(
+                  res.locals.base,
+                  "folder",
+                  encodeURIComponent(path.slice(1))
+                );
+              }
 
-            return item;
-          })
-          .filter(({ message }) => message !== "Syncing" && message !== "Synced"),
-      }))
-      .filter((i) => i.messages && i.messages.length)
-      .value();
+              item.fromNow = moment(item.datestamp).fromNow();
 
-    res.render("dashboard/clients/activity", {
-      title: "Activity",
-      statuses,
-      next,
-      previous,
-    });
-  } catch (err) {
-    next(err);
-  }
-});
+              return item;
+            })
+            .filter(
+              ({ message }) => message !== "Syncing" && message !== "Synced"
+            ),
+        }))
+        .filter((i) => i.messages && i.messages.length)
+        .value();
+
+      res.render("dashboard/clients/activity", {
+        title: "Activity",
+        statuses,
+        next,
+        previous,
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
 
 client_routes
 
@@ -172,16 +175,20 @@ client_routes.post("/reset/rebuild", function (req, res) {
       function (err) {
         if (err) console.log(err);
         folder.status("Checking your site for issues");
-        Fix(req.blog, { status: folder.status, log: folder.log }, function (err, report) {
-          if (err) console.log(err);
-          // Fix() doesn't email; a rebuild only logs what it repaired.
-          const repaired = syncReport.summarize(report);
-          if (repaired) console.log("Fix repaired", req.blog.id, repaired);
-          folder.status("Finished site rebuild");
-          done(null, function (err) {
-            if (err) console.log("Error releasing sync: ", err);
-          });
-        });
+        Fix(
+          req.blog,
+          { status: folder.status, log: folder.log },
+          function (err, report) {
+            if (err) console.log(err);
+            // Fix() doesn't email; a rebuild only logs what it repaired.
+            const repaired = syncReport.summarize(report);
+            if (repaired) console.log("Fix repaired", req.blog.id, repaired);
+            folder.status("Finished site rebuild");
+            done(null, function (err) {
+              if (err) console.log("Error releasing sync: ", err);
+            });
+          }
+        );
       }
     );
   });
@@ -234,15 +241,24 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
     }
 
     folder.status("Checking your site for issues");
-    Fix(req.blog, { status: folder.status, log: folder.log }, function (err, report) {
-      if (err) console.log(err);
-      // After Fix() so its repairs go in the same email as the changes.
-      notifyAdminIfResyncFoundChanges(req.blog, res.locals.client, summary, report);
-      folder.status("Finished site rebuild");
-      done(null, function (err) {
-        if (err) console.log("Error releasing sync: ", err);
-      });
-    });
+    Fix(
+      req.blog,
+      { status: folder.status, log: folder.log },
+      function (err, report) {
+        if (err) console.log(err);
+        // After Fix() so its repairs go in the same email as the changes.
+        notifyAdminIfResyncFoundChanges(
+          req.blog,
+          res.locals.client,
+          summary,
+          report
+        );
+        folder.status("Finished site rebuild");
+        done(null, function (err) {
+          if (err) console.log("Error releasing sync: ", err);
+        });
+      }
+    );
   });
 });
 
@@ -262,8 +278,8 @@ if (config.environment === "development") {
       openUrl.searchParams.set("handle", req.blog.handle);
 
       // Include client type if available
-      if (req.query.local) { 
-        openUrl.searchParams.set("client", 'local');
+      if (req.query.local) {
+        openUrl.searchParams.set("client", "local");
       } else if (req.blog.client) {
         openUrl.searchParams.set("client", req.blog.client);
       }
@@ -274,7 +290,11 @@ if (config.environment === "development") {
         throw new Error("Request failed");
       }
 
-      res.redirect(res.locals.base + "/client" + (req.blog.client ? "/" + req.blog.client : ""));
+      res.redirect(
+        res.locals.base +
+          "/client" +
+          (req.blog.client ? "/" + req.blog.client : "")
+      );
     } catch (error) {
       next(new Error("Could not open folder on your computer"));
     }

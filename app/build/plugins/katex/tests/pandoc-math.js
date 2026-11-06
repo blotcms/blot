@@ -58,7 +58,7 @@ describe("katex pandoc math spans", function () {
     renderHtml(input, function (err, html) {
       if (err) return done.fail(err);
       expect(html).toContain(
-        "$$\\frac{&lt;script&gt;alert(1)&lt;/script&gt;$$",
+        "$$\\frac{&lt;script&gt;alert(1)&lt;/script&gt;$$"
       );
       expect(html).not.toContain("<script>");
       expect(html).not.toContain('class="math');
@@ -112,7 +112,7 @@ describe("katex pandoc math spans", function () {
           expect(html).not.toContain('class="katex-display"');
           done();
         });
-      },
+      }
     );
   });
 
@@ -137,7 +137,7 @@ describe("katex pandoc math spans", function () {
           expect(html).toContain('class="katex-display"');
           done();
         });
-      },
+      }
     );
   });
 

@@ -282,7 +282,9 @@ describe("updateCdnManifest", function () {
         name: "a.css",
         content: "{{> style.css}}",
       })
-    ).toBeRejectedWith(new Error("Your template has infinitely nested partials"));
+    ).toBeRejectedWith(
+      new Error("Your template has infinitely nested partials")
+    );
   });
 
   it("rejects rendered output that exceeds maximum size", async function () {
@@ -325,11 +327,13 @@ describe("updateCdnManifest", function () {
     // Create a new template that is NOT installed on the blog
     const templateName = "template-cdn-skip";
     await createTemplateAsync(test.blog.id, templateName, {});
-    
+
     // Get the template ID
-    const getTemplateList = promisify(require("../index").getTemplateList).bind(require("../index"));
+    const getTemplateList = promisify(require("../index").getTemplateList).bind(
+      require("../index")
+    );
     const templates = await getTemplateList(test.blog.id);
-    const uninstalledTemplate = templates.find(t => t.name === templateName);
+    const uninstalledTemplate = templates.find((t) => t.name === templateName);
 
     // Create views with CDN targets
     await setViewAsync(uninstalledTemplate.id, {
@@ -365,10 +369,14 @@ describe("updateCdnManifest", function () {
     // Create a new template
     const templateName = "template-cdn-compute";
     await createTemplateAsync(test.blog.id, templateName, {});
-    
-    const getTemplateList = promisify(require("../index").getTemplateList).bind(require("../index"));
+
+    const getTemplateList = promisify(require("../index").getTemplateList).bind(
+      require("../index")
+    );
     const templates = await getTemplateList(test.blog.id);
-    const newTemplate = templates.find(t => t.name === templateName && t.owner === test.blog.id);
+    const newTemplate = templates.find(
+      (t) => t.name === templateName && t.owner === test.blog.id
+    );
 
     // Install it on the blog
     await blogSetAsync(test.blog.id, { template: newTemplate.id });
@@ -404,10 +412,14 @@ describe("updateCdnManifest", function () {
     // Create a SITE template (not installed on any blog)
     const templateName = "template-site-cdn";
     await createTemplateAsync("SITE", templateName, {});
-    
-    const getTemplateList = promisify(require("../index").getTemplateList).bind(require("../index"));
+
+    const getTemplateList = promisify(require("../index").getTemplateList).bind(
+      require("../index")
+    );
     const siteTemplates = await getTemplateList("SITE");
-    const siteTemplate = siteTemplates.find(t => t.name === templateName && t.owner === "SITE");
+    const siteTemplate = siteTemplates.find(
+      (t) => t.name === templateName && t.owner === "SITE"
+    );
 
     // Create views with CDN targets
     await setViewAsync(siteTemplate.id, {
@@ -439,10 +451,12 @@ describe("updateCdnManifest", function () {
     // Create a template and install it
     const templateName = "template-cdn-cleanup";
     await createTemplateAsync(test.blog.id, templateName, {});
-    
-    const getTemplateList = promisify(require("../index").getTemplateList).bind(require("../index"));
+
+    const getTemplateList = promisify(require("../index").getTemplateList).bind(
+      require("../index")
+    );
     const templates = await getTemplateList(test.blog.id);
-    const template = templates.find(t => t.name === templateName);
+    const template = templates.find((t) => t.name === templateName);
 
     // Install it
     await blogSetAsync(test.blog.id, { template: template.id });
@@ -494,10 +508,12 @@ describe("updateCdnManifest", function () {
     // Create a template (not installed)
     const templateName = "template-cdn";
     await createTemplateAsync(test.blog.id, templateName, {});
-    
-    const getTemplateList = promisify(require("../index").getTemplateList).bind(require("../index"));
+
+    const getTemplateList = promisify(require("../index").getTemplateList).bind(
+      require("../index")
+    );
     const templates = await getTemplateList(test.blog.id);
-    const template = templates.find(t => t.name === templateName);
+    const template = templates.find((t) => t.name === templateName);
 
     // Create views with CDN targets
     await setViewAsync(template.id, {
@@ -538,12 +554,14 @@ describe("updateCdnManifest", function () {
     expect(metadata2.cdn["style.css"].length).toBe(32); // MD5 hash length
   });
 
-
   it("minifies javascript", async function () {
-        
-    const template = await createTemplateAsync(this.blog.id, 'testtemplate', {});
+    const template = await createTemplateAsync(
+      this.blog.id,
+      "testtemplate",
+      {}
+    );
     const viewName = "script.js";
-    const content =  `var body = document.body;
+    const content = `var body = document.body;
 
                 Element.prototype.addClass = function (classToAdd) {
                 var classes = this.className.split(' ')
@@ -577,7 +595,8 @@ describe("updateCdnManifest", function () {
                 function add_class_on_scroll(el){ el.classList.add("show")}
                 function remove_class_on_scroll (el){ el.classList.remove("show")}
                 `;
-    const minifiedContent = 'var body=document.body;Element.prototype.addClass=function(e){var s=this.className.split(" ");s.indexOf(e)===-1&&s.push(e),this.className=s.join(" ")},Element.prototype.removeClass=function(e){var s=this.className.split(" "),n=s.indexOf(e);n!==-1&&s.splice(n,1),this.className=s.join(" ")},document.getElementById("open-nav").onclick=function(e){return body.addClass("nav-is-open"),e.preventDefault(),!1},document.getElementById("close-nav").onclick=function(e){return body.removeClass("nav-is-open"),e.preventDefault(),!1};var scrollpos=window.scrollY,top_button=document.getElementById("top_button");function add_class_on_scroll(e){e.classList.add("show")}function remove_class_on_scroll(e){e.classList.remove("show")}';
+    const minifiedContent =
+      'var body=document.body;Element.prototype.addClass=function(e){var s=this.className.split(" ");s.indexOf(e)===-1&&s.push(e),this.className=s.join(" ")},Element.prototype.removeClass=function(e){var s=this.className.split(" "),n=s.indexOf(e);n!==-1&&s.splice(n,1),this.className=s.join(" ")},document.getElementById("open-nav").onclick=function(e){return body.addClass("nav-is-open"),e.preventDefault(),!1},document.getElementById("close-nav").onclick=function(e){return body.removeClass("nav-is-open"),e.preventDefault(),!1};var scrollpos=window.scrollY,top_button=document.getElementById("top_button");function add_class_on_scroll(e){e.classList.add("show")}function remove_class_on_scroll(e){e.classList.remove("show")}';
 
     // Install it to ensure CDN hashes are generated
     await this.blog.update({ template: template.id });
@@ -589,7 +608,7 @@ describe("updateCdnManifest", function () {
     });
 
     await setViewAsync(template.id, {
-      name:viewName,
+      name: viewName,
       content,
     });
 
@@ -597,72 +616,81 @@ describe("updateCdnManifest", function () {
     const metadata = await getMetadataAsync(template.id);
     const renderedKey = key.renderedOutput(metadata.cdn[viewName]);
 
-        expect((await getAsync(renderedKey)).trim()).toEqual(minifiedContent);
+    expect((await getAsync(renderedKey)).trim()).toEqual(minifiedContent);
+  });
+
+  it("leaves invalid javascript alone", async function () {
+    const template = await createTemplateAsync(
+      this.blog.id,
+      "testtemplate",
+      {}
+    );
+    const viewName = "script.js";
+    const content = 'function foo() {\n\nconsole.log("foo");\n\n';
+    const minifiedContent = content;
+
+    // Install it to ensure CDN hashes are generated
+    await this.blog.update({ template: template.id });
+
+    // Create views with CDN targets (manifest gets computed)
+    await setViewAsync(template.id, {
+      name: "head.html",
+      content: "{{#cdn}}/" + viewName + "{{/cdn}}",
     });
 
-    it("leaves invalid javascript alone", async function () {
-          
-        const template = await createTemplateAsync(this.blog.id, 'testtemplate', {});
-      const viewName = "script.js";
-      const content =  'function foo() {\n\nconsole.log("foo");\n\n';
-      const minifiedContent = content;
+    await setViewAsync(template.id, {
+      name: viewName,
+      content,
+    });
 
-      // Install it to ensure CDN hashes are generated
-      await this.blog.update({ template: template.id });
-
-      // Create views with CDN targets (manifest gets computed)
-      await setViewAsync(template.id, {
-        name: "head.html",
-        content: "{{#cdn}}/" + viewName + "{{/cdn}}",
-      });
-
-      await setViewAsync(template.id, {
-        name:viewName,
-        content,
-      });
-      
     // Get the hash that was created
     const metadata = await getMetadataAsync(template.id);
     const renderedKey = key.renderedOutput(metadata.cdn[viewName]);
 
-      expect((await getAsync(renderedKey)).trim()).toEqual(minifiedContent.trim());
+    expect((await getAsync(renderedKey)).trim()).toEqual(
+      minifiedContent.trim()
+    );
+  });
 
+  it("leaves empty javascript as-is", async function () {
+    const template = await createTemplateAsync(
+      this.blog.id,
+      "testtemplate",
+      {}
+    );
+    const viewName = "script.js";
+    const content = "";
+    const minifiedContent = content;
+
+    // Install it to ensure CDN hashes are generated
+    await this.blog.update({ template: template.id });
+
+    // Create views with CDN targets (manifest gets computed)
+    await setViewAsync(template.id, {
+      name: "head.html",
+      content: "{{#cdn}}/" + viewName + "{{/cdn}}",
     });
-    
-    it("leaves empty javascript as-is", async function () {
-        
-       
-        const template = await createTemplateAsync(this.blog.id, 'testtemplate', {});
-      const viewName = "script.js";
-      const content =  '';
-      const minifiedContent = content;
 
-      // Install it to ensure CDN hashes are generated
-      await this.blog.update({ template: template.id });
+    await setViewAsync(template.id, {
+      name: viewName,
+      content,
+    });
 
-      // Create views with CDN targets (manifest gets computed)
-      await setViewAsync(template.id, {
-        name: "head.html",
-        content: "{{#cdn}}/" + viewName + "{{/cdn}}",
-      });
-
-      await setViewAsync(template.id, {
-        name:viewName,
-        content,
-      });
-      
     // Get the hash that was created
     const metadata = await getMetadataAsync(template.id);
     const renderedKey = key.renderedOutput(metadata.cdn[viewName]);
 
-      expect((await getAsync(renderedKey)).trim()).toEqual(minifiedContent);
-    });    
+    expect((await getAsync(renderedKey)).trim()).toEqual(minifiedContent);
+  });
 
-    it("minifies css", async function () {
-        
-      const template = await createTemplateAsync(this.blog.id, 'testtemplate', {});
-      const viewName = "style.css";
-      const content =  `body {
+  it("minifies css", async function () {
+    const template = await createTemplateAsync(
+      this.blog.id,
+      "testtemplate",
+      {}
+    );
+    const viewName = "style.css";
+    const content = `body {
                 background-color: lightblue;
                 }
 
@@ -670,83 +698,89 @@ describe("updateCdnManifest", function () {
                 color: white;
                 text-align: center;
                 }`;
-      const minifiedContent = 'body{background-color:#add8e6}h1{color:#fff;text-align:center}';
+    const minifiedContent =
+      "body{background-color:#add8e6}h1{color:#fff;text-align:center}";
 
-      // Install it to ensure CDN hashes are generated
-      await this.blog.update({ template: template.id });
+    // Install it to ensure CDN hashes are generated
+    await this.blog.update({ template: template.id });
 
-      // Create views with CDN targets (manifest gets computed)
-      await setViewAsync(template.id, {
-        name: "head.html",
-        content: "{{#cdn}}/" + viewName + "{{/cdn}}",
-      });
+    // Create views with CDN targets (manifest gets computed)
+    await setViewAsync(template.id, {
+      name: "head.html",
+      content: "{{#cdn}}/" + viewName + "{{/cdn}}",
+    });
 
-      await setViewAsync(template.id, {
-        name:viewName,
-        content,
-      });
-      
+    await setViewAsync(template.id, {
+      name: viewName,
+      content,
+    });
 
     // Get the hash that was created
     const metadata = await getMetadataAsync(template.id);
     const renderedKey = key.renderedOutput(metadata.cdn[viewName]);
 
-      expect((await getAsync(renderedKey)).trim()).toEqual(minifiedContent);
+    expect((await getAsync(renderedKey)).trim()).toEqual(minifiedContent);
+  });
+
+  it("leaves invalid css alone", async function () {
+    const template = await createTemplateAsync(
+      this.blog.id,
+      "testtemplate",
+      {}
+    );
+    const viewName = "style.css";
+    const content = "body {  ^^**&* background-color: ! lightblue;";
+    const minifiedContent = content;
+
+    // Install it to ensure CDN hashes are generated
+    await this.blog.update({ template: template.id });
+
+    // Create views with CDN targets (manifest gets computed)
+    await setViewAsync(template.id, {
+      name: "head.html",
+      content: "{{#cdn}}/" + viewName + "{{/cdn}}",
     });
 
-    it("leaves invalid css alone", async function () {
-        
-       const template = await createTemplateAsync(this.blog.id, 'testtemplate', {});
-      const viewName = "style.css";
-      const content =  'body {  ^^**&* background-color: ! lightblue;';
-      const minifiedContent = content;
+    await setViewAsync(template.id, {
+      name: viewName,
+      content,
+    });
 
-      // Install it to ensure CDN hashes are generated
-      await this.blog.update({ template: template.id });
-
-      // Create views with CDN targets (manifest gets computed)
-      await setViewAsync(template.id, {
-        name: "head.html",
-        content: "{{#cdn}}/" + viewName + "{{/cdn}}",
-      });
-
-      await setViewAsync(template.id, {
-        name:viewName,
-        content,
-      });
-      
     // Get the hash that was created
     const metadata = await getMetadataAsync(template.id);
     const renderedKey = key.renderedOutput(metadata.cdn[viewName]);
 
-      expect((await getAsync(renderedKey)).trim()).toEqual(minifiedContent);
+    expect((await getAsync(renderedKey)).trim()).toEqual(minifiedContent);
+  });
+
+  it("leaves empty css as-is", async function () {
+    const template = await createTemplateAsync(
+      this.blog.id,
+      "testtemplate",
+      {}
+    );
+    const viewName = "style.css";
+    const content = "";
+    const minifiedContent = content;
+
+    // Install it to ensure CDN hashes are generated
+    await this.blog.update({ template: template.id });
+
+    // Create views with CDN targets (manifest gets computed)
+    await setViewAsync(template.id, {
+      name: "head.html",
+      content: "{{#cdn}}/" + viewName + "{{/cdn}}",
     });
 
-    it("leaves empty css as-is", async function () {
-        
-       const template = await createTemplateAsync(this.blog.id, 'testtemplate', {});
-      const viewName = "style.css";
-      const content =  '';
-      const minifiedContent = content;
+    await setViewAsync(template.id, {
+      name: viewName,
+      content,
+    });
 
-      // Install it to ensure CDN hashes are generated
-      await this.blog.update({ template: template.id });
-
-      // Create views with CDN targets (manifest gets computed)
-      await setViewAsync(template.id, {
-        name: "head.html",
-        content: "{{#cdn}}/" + viewName + "{{/cdn}}",
-      });
-
-      await setViewAsync(template.id, {
-        name:viewName,
-        content,
-      });
-      
     // Get the hash that was created
     const metadata = await getMetadataAsync(template.id);
     const renderedKey = key.renderedOutput(metadata.cdn[viewName]);
 
-      expect((await getAsync(renderedKey)).trim()).toEqual(minifiedContent);
-    });
+    expect((await getAsync(renderedKey)).trim()).toEqual(minifiedContent);
+  });
 });

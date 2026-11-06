@@ -17,21 +17,23 @@ const hotDocPoller = require("../serviceAccount/hotDocPoller");
 const database = require("../database");
 
 const isExportSizeLimitError = (err) => {
-  
   // Try to parse err.message if it's a JSON string
   let errorData = null;
 
-  if (typeof err.message === 'string') {
+  if (typeof err.message === "string") {
     try {
       errorData = JSON.parse(err.message);
     } catch (e) {
       // Not JSON, that's fine
     }
-  } else if (err.message && typeof err.message === 'object') {
+  } else if (err.message && typeof err.message === "object") {
     errorData = err.message;
   }
-  
-  return errorData?.error?.code === 403 && errorData?.error?.message?.includes("too large to be exported");
+
+  return (
+    errorData?.error?.code === 403 &&
+    errorData?.error?.message?.includes("too large to be exported")
+  );
 };
 
 const ensurePlaceholder = async (blogID, path) => {
@@ -77,7 +79,9 @@ const verifyOnBlot = async (blogID, path, md5Checksum) => {
   const hashes = file ? await verifyContent(file, md5Checksum) : null;
   if (!hashes) return null;
   const after = localState.stamp(await statOnBlot(blogID, path));
-  return after && after.size === before.size && after.modified === before.modified
+  return after &&
+    after.size === before.size &&
+    after.modified === before.modified
     ? { ...hashes, ...after }
     : null;
 };
@@ -98,19 +102,27 @@ const streamToFile = (readStream, filePath) =>
 
 // A Google Doc exported as a zip: its HTML and images. Docs over 10mb can't be
 // exported at all, so these are generous, and only there for a hostile zip.
-const ZIP_LIMITS = { maxEntries: 2000, maxBytes: 50 * 1024 * 1024, maxRatio: 200 };
+const ZIP_LIMITS = {
+  maxEntries: 2000,
+  maxBytes: 50 * 1024 * 1024,
+  maxRatio: 200,
+};
 
 // The zip is read in the sandbox (app/sandbox/jobs/unzip.js), which can't reach
 // the disk: the files are written here, each inside extractDir
 const extractZip = async (zipPath, extractDir) => {
-  const { meta, outputs } = await sandbox.run("unzip", ZIP_LIMITS, { path: zipPath });
-  if (meta.error) throw new Error("Could not unzip export: " + meta.error.reason);
+  const { meta, outputs } = await sandbox.run("unzip", ZIP_LIMITS, {
+    path: zipPath,
+  });
+  if (meta.error)
+    throw new Error("Could not unzip export: " + meta.error.reason);
 
   await fs.ensureDir(extractDir);
 
   for (let i = 0; i < meta.files.length; i++) {
     const destPath = join(extractDir, meta.files[i]);
-    if (!destPath.startsWith(extractDir + sep)) throw new Error("Zip entry outside the export");
+    if (!destPath.startsWith(extractDir + sep))
+      throw new Error("Zip entry outside the export");
     await fs.ensureDir(dirname(destPath));
     await fs.writeFile(destPath, outputs[i]);
   }
@@ -138,11 +150,7 @@ const resolveHtmlAndImagesDir = async (extractDir) => {
 };
 
 const getDriveAuth = (drive) => {
-  return (
-    drive?.context?._options?.auth ||
-    drive?._options?.auth ||
-    null
-  );
+  return drive?.context?._options?.auth || drive?._options?.auth || null;
 };
 
 const fetchZipExportStreamFromExportLink = async (drive, exportUrl) => {
@@ -240,7 +248,6 @@ module.exports = async (
     };
 
     const handleExportSizeLimit = async (err) => {
-
       if (!isExportSizeLimitError(err)) {
         return false;
       }
@@ -293,7 +300,7 @@ module.exports = async (
           });
         }
       }
-      
+
       await ensurePlaceholder(blogID, path);
       debug("   created empty file at:", colors.green(path));
       return "placeholder";
@@ -309,7 +316,8 @@ module.exports = async (
 
         if (!accountServiceAccountId || !accountFolderId) {
           const account = await database.blog.get(blogID);
-          accountServiceAccountId = accountServiceAccountId || account?.serviceAccountId;
+          accountServiceAccountId =
+            accountServiceAccountId || account?.serviceAccountId;
           accountFolderId = accountFolderId || account?.folderId;
         }
 
@@ -422,14 +430,20 @@ module.exports = async (
       // Source end can precede the final disk write. Pipeline waits for the
       // destination and destroys both streams on error before we publish.
       await streamToFile(data, tempPath);
-      const hashes = md5Checksum ? await verifyContent(tempPath, md5Checksum) : null;
+      const hashes = md5Checksum
+        ? await verifyContent(tempPath, md5Checksum)
+        : null;
       if (md5Checksum && !hashes) {
-        throw new Error("Downloaded content does not match the listed Drive checksum");
+        throw new Error(
+          "Downloaded content does not match the listed Drive checksum"
+        );
       }
       await folder.writeFrom(blogID, path, tempPath, { move: true });
       // Publication has succeeded. A concurrent local write (or stat failure)
       // must not suppress the caller's rebuild; simply decline to cache it.
-      const verified = await verifyPublished(blogID, path, hashes).catch(() => null);
+      const verified = await verifyPublished(blogID, path, hashes).catch(
+        () => null
+      );
       settle(() => resolve({ updated: true, verifiedContent: verified }));
     } catch (e) {
       debug("download error", e);

@@ -5,9 +5,7 @@ const fs = require("fs-extra");
 const { join } = require("path");
 
 const init = require("dashboard/site/import/init");
-const normalizeIdentifier = require(
-  "dashboard/site/import/helper/normalize_identifier"
-);
+const normalizeIdentifier = require("dashboard/site/import/helper/normalize_identifier");
 
 const wordpress = require("./index");
 
@@ -46,15 +44,22 @@ Importer.route("/wordpress")
     });
     const inputXML = exportUpload.path;
 
-    job.run(async () => {
-      await fs.outputFile(join(importDirectory, "identifier.txt"), identifier, "utf8");
-      await new Promise((resolve, reject) => {
-        wordpress(inputXML, outputDirectory, status, {}, err => err ? reject(err) : resolve());
-      });
-    }).catch(error => console.error("Failed to clean up import", error))
+    job
+      .run(async () => {
+        await fs.outputFile(
+          join(importDirectory, "identifier.txt"),
+          identifier,
+          "utf8"
+        );
+        await new Promise((resolve, reject) => {
+          wordpress(inputXML, outputDirectory, status, {}, (err) =>
+            err ? reject(err) : resolve()
+          );
+        });
+      })
+      .catch((error) => console.error("Failed to clean up import", error))
       .finally(() => releaseUpload())
-      .catch(error => console.error("Failed to remove import upload", error));
-
+      .catch((error) => console.error("Failed to remove import upload", error));
   });
 
 module.exports = Importer;

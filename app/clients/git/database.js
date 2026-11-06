@@ -147,7 +147,9 @@ function removeStatus(blogID, callback) {
 function setCreating(blogID, callback) {
   (async function () {
     try {
-      await client.set(creatingKey(blogID), String(Date.now()), { EX: CREATING_TTL_SECONDS });
+      await client.set(creatingKey(blogID), String(Date.now()), {
+        EX: CREATING_TTL_SECONDS,
+      });
       return callback(null);
     } catch (err) {
       return callback(err);

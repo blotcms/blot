@@ -56,7 +56,8 @@ function parse(argv) {
 
       if (arg === "--concurrency") {
         options.concurrency = parseInt(value, 10);
-        if (!(options.concurrency >= 1)) usage("--concurrency must be 1 or more");
+        if (!(options.concurrency >= 1))
+          usage("--concurrency must be 1 or more");
       } else if (arg === "--source") {
         options.directory = value;
       } else {
@@ -67,7 +68,8 @@ function parse(argv) {
     }
   }
 
-  if (options.dryRun && options.verify) usage("Use --dry-run or --verify, not both");
+  if (options.dryRun && options.verify)
+    usage("Use --dry-run or --verify, not both");
   if (!options.directory) usage("--source <dir> is required");
 
   return options;
@@ -84,9 +86,13 @@ async function main() {
   }
 
   console.log(
-    "[backfill] bucket " + config.storage.bucket + " in " + config.storage.region +
+    "[backfill] bucket " +
+      config.storage.bucket +
+      " in " +
+      config.storage.region +
       (config.storage.endpoint ? " at " + config.storage.endpoint : "") +
-      ", from " + options.directory
+      ", from " +
+      options.directory
   );
 
   const stats = await backfill(options);

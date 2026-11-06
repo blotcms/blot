@@ -11,7 +11,10 @@
 // copy is overdue or its record can't be read. Nothing is shown where no copy
 // was ever recorded (hosts without the offsite). This never fails the rest of
 // the email.
-const { parseStorageOffsite, STORAGE_OFFSITE_KEY } = require("../check-redis-host");
+const {
+  parseStorageOffsite,
+  STORAGE_OFFSITE_KEY,
+} = require("../check-redis-host");
 const trend = require("./trend");
 
 // JSON [{ time, used }] of the copies, used being the bucket's bytes, no TTL
@@ -34,7 +37,9 @@ const { size, compact } = trend;
 // history. Compared with the oldest reading within a week of the copy.
 function growth(copy, history) {
   const oldest = history.find(
-    (point) => copy.time - point.time >= MIN_HISTORY_MS && copy.time - point.time <= MAX_HISTORY_MS
+    (point) =>
+      copy.time - point.time >= MIN_HISTORY_MS &&
+      copy.time - point.time <= MAX_HISTORY_MS
   );
   if (!oldest) return "";
 
@@ -63,7 +68,9 @@ function line(value, { history = [], now = Date.now() } = {}) {
   if (!copy) return "Storage: **offsite copy record unreadable**";
 
   const change = growth(copy, history);
-  const bucket = `${size(copy.bytes)} in ${copy.objects.toLocaleString("en-US")} objects` + (change ? ` (${change})` : "");
+  const bucket =
+    `${size(copy.bytes)} in ${copy.objects.toLocaleString("en-US")} objects` +
+    (change ? ` (${change})` : "");
 
   return "Storage: " + [bucket, offsitePart(copy, now)].join(", ");
 }
@@ -79,14 +86,23 @@ function main(callback, deps = {}) {
     // A reading is stamped with when its copy finished, so a re-run before the
     // next copy leaves the history alone
     const copy = text && parseStorageOffsite(value);
-    if (copy) await trend.save(client, HISTORY_KEY, history, { time: copy.time, used: copy.bytes });
+    if (copy)
+      await trend.save(client, HISTORY_KEY, history, {
+        time: copy.time,
+        used: copy.bytes,
+      });
 
     return text ? { storage: text } : {};
   })().then(
     (result) => callback(null, result),
     (err) => {
-      const reason = String((err && err.message) || err).replace(/[*`<>[\]]/g, "").slice(0, 80);
-      console.log("Daily update: could not read the storage bucket:", err && err.message);
+      const reason = String((err && err.message) || err)
+        .replace(/[*`<>[\]]/g, "")
+        .slice(0, 80);
+      console.log(
+        "Daily update: could not read the storage bucket:",
+        err && err.message
+      );
       callback(null, { storage: `Storage: unavailable (${reason})` });
     }
   );

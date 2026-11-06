@@ -22,7 +22,6 @@ module.exports = function disconnect(blogID, callback) {
 
       folder.status("Disconnecting from Dropbox");
 
-
       debug("resetting client setting");
       Blog.set(blogID, { client: "" }, function (err) {
         if (err) return done(err, callback);

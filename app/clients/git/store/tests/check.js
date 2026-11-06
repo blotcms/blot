@@ -15,13 +15,32 @@ const createFsStore = require("../objectStore/fs");
 const { packKey, idxKey, manifestKey } = require("../layout");
 
 const MiB = 1024 * 1024;
-const script = path.join(__dirname, "..", "..", "..", "..", "..", "scripts", "git", "check-store.js");
+const script = path.join(
+  __dirname,
+  "..",
+  "..",
+  "..",
+  "..",
+  "..",
+  "scripts",
+  "git",
+  "check-store.js"
+);
 
 function run(args) {
   return new Promise((resolve) => {
-    execFile(process.execPath, [script, ...args], { maxBuffer: 1 << 24 }, (err, stdout, stderr) => {
-      resolve({ code: err ? err.code : 0, stdout: String(stdout), stderr: String(stderr) });
-    });
+    execFile(
+      process.execPath,
+      [script, ...args],
+      { maxBuffer: 1 << 24 },
+      (err, stdout, stderr) => {
+        resolve({
+          code: err ? err.code : 0,
+          stdout: String(stdout),
+          stderr: String(stderr),
+        });
+      }
+    );
   });
 }
 
@@ -33,7 +52,10 @@ function listing(dir) {
       const file = path.join(at, name);
       const stat = fs.statSync(file);
       if (stat.isDirectory()) walk(file);
-      else out.push(path.relative(dir, file) + ":" + stat.size + ":" + stat.mtimeMs);
+      else
+        out.push(
+          path.relative(dir, file) + ":" + stat.size + ":" + stat.mtimeMs
+        );
     }
   })(dir);
   return out;
@@ -54,7 +76,10 @@ describe("checking a store repository at an explicit target", function () {
     fs.mkdirSync(source);
     fx.git(source, ["init", "-q", "-b", "master"]);
     for (let i = 1; i <= 3; i++) {
-      fs.writeFileSync(path.join(source, "post-" + i + ".md"), "# Post " + i + "\n" + "line\n".repeat(100 * i));
+      fs.writeFileSync(
+        path.join(source, "post-" + i + ".md"),
+        "# Post " + i + "\n" + "line\n".repeat(100 * i)
+      );
       fx.git(source, ["add", "-A"]);
       fx.git(source, ["commit", "-q", "-m", "Commit " + i]);
     }
@@ -63,7 +88,12 @@ describe("checking a store repository at an explicit target", function () {
 
     imported = unique("imported");
     const cache = createCache({ dir: unique("cache"), maxBytes: 64 * MiB });
-    const result = await importRepo({ store: createFsStore({ root: imported }), cache, lock: (fn) => fn(), gitDir: path.join(source, ".git") });
+    const result = await importRepo({
+      store: createFsStore({ root: imported }),
+      cache,
+      lock: (fn) => fn(),
+      gitDir: path.join(source, ".git"),
+    });
     expect(result.outcome).toBe("imported");
   });
 
@@ -95,9 +125,16 @@ describe("checking a store repository at an explicit target", function () {
     expect(result.packs).toBe(current.packs.length);
     expect(result.bytes).toBeGreaterThan(0);
 
-    const deep = await run(["--dir", dir, "--deep", "--scratch", unique("scratch")]);
+    const deep = await run([
+      "--dir",
+      dir,
+      "--deep",
+      "--scratch",
+      unique("scratch"),
+    ]);
     expect(deep.code).toBe(0, deep.stderr);
-    const deeply = JSON.parse(deep.stdout);    expect(deeply.outcome).toBe("ok");
+    const deeply = JSON.parse(deep.stdout);
+    expect(deeply.outcome).toBe("ok");
     expect(deeply.deep).toBe(true);
     expect(deeply.objects).toBeGreaterThan(0);
 
@@ -117,7 +154,10 @@ describe("checking a store repository at an explicit target", function () {
     const result = JSON.parse(stdout);
     expect(result.outcome).toBe("findings");
     expect(result.deep).toBe(false);
-    const found = result.findings.map((finding) => finding.check + " " + finding.kind + " " + finding.detail.split(" ")[0]);
+    const found = result.findings.map(
+      (finding) =>
+        finding.check + " " + finding.kind + " " + finding.detail.split(" ")[0]
+    );
     expect(found).toContain("cheap missing " + packKey(pack.name));
     expect(found).toContain("cheap mismatch " + idxKey(history.name));
   });
@@ -137,7 +177,9 @@ describe("checking a store repository at an explicit target", function () {
 
   it("reports a tombstone as removed and no repository as empty", async function () {
     const dir = restored();
-    expect((await removeRepo({ store: createFsStore({ root: dir }) })).outcome).toBe("removed");
+    expect(
+      (await removeRepo({ store: createFsStore({ root: dir }) })).outcome
+    ).toBe("removed");
 
     const removed = await run(["--dir", dir, "--deep"]);
     expect(removed.code).toBe(0, removed.stderr);
@@ -160,14 +202,26 @@ describe("checking a store repository at an explicit target", function () {
 
     const { code, stdout } = await run(["--dir", under, "--all-blogs"]);
     expect(code).toBe(1);
-    const lines = stdout.trim().split("\n").map((line) => JSON.parse(line));
+    const lines = stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
     expect(lines.length).toBe(3);
-    expect(lines.slice(0, 2).map((line) => line.blog + " " + line.outcome)).toEqual(["blog_broken findings", "blog_good ok"]);
+    expect(
+      lines.slice(0, 2).map((line) => line.blog + " " + line.outcome)
+    ).toEqual(["blog_broken findings", "blog_good ok"]);
     const summary = lines[2];
     expect(summary.summary).toBe(true);
     expect(summary.blogs).toBe(2);
-    expect(summary.outcomes).toEqual({ ok: 1, findings: 1, empty: 0, removed: 0 });
-    expect(summary.withFindings.map((blog) => blog.blog)).toEqual(["blog_broken"]);
+    expect(summary.outcomes).toEqual({
+      ok: 1,
+      findings: 1,
+      empty: 0,
+      removed: 0,
+    });
+    expect(summary.withFindings.map((blog) => blog.blog)).toEqual([
+      "blog_broken",
+    ]);
   });
 
   it("exits 2 for bad arguments", async function () {

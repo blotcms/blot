@@ -23,16 +23,17 @@ describe("caseSensitivePath ", function () {
         var randomizedPath = addSlashes(randomizeCase(truePath));
         fs.outputFileSync(cwd + truePath, "");
 
-        resolveCaseInsensitivePathToFile(cwd, randomizedPath, function (
-          err,
-          resolvedPath
-        ) {
-          if (err) return done.fail(err);
+        resolveCaseInsensitivePathToFile(
+          cwd,
+          randomizedPath,
+          function (err, resolvedPath) {
+            if (err) return done.fail(err);
 
-          expect(resolvedPath).toEqual(cwd + truePath);
-          fs.emptyDirSync(cwd);
-          next();
-        });
+            expect(resolvedPath).toEqual(cwd + truePath);
+            fs.emptyDirSync(cwd);
+            next();
+          }
+        );
       },
       done
     );

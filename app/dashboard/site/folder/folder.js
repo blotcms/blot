@@ -18,11 +18,15 @@ const findMultiFolder =
 // an empty list for anything that is not a folder post so a stray data-file
 // attribute in an ordinary post cannot be mistaken for aggregation.
 function folderPostSourcePaths(html) {
-  if (typeof html !== "string" || html.indexOf('class="multi-file-post"') === -1)
+  if (
+    typeof html !== "string" ||
+    html.indexOf('class="multi-file-post"') === -1
+  )
     return [];
 
   const paths = [];
-  const pattern = /<section class="multi-file-entry"[^>]*\sdata-file="([^"]*)"/g;
+  const pattern =
+    /<section class="multi-file-entry"[^>]*\sdata-file="([^"]*)"/g;
   let match;
 
   while ((match = pattern.exec(html))) {
@@ -107,7 +111,8 @@ async function mapWithLimit(items, limit, fn) {
 function visible(entries) {
   return entries
     .filter(
-      (item) => !item.name.startsWith(".") && !item.name.endsWith(".preview.html")
+      (item) =>
+        !item.name.startsWith(".") && !item.name.endsWith(".preview.html")
     )
     .sort((a, b) => byDisplayName(a.name, b.name));
 }
@@ -128,7 +133,12 @@ function statEntry(blog, dir, name, entry) {
 // Stats one name, or resolves null if it is gone
 async function statName(blog, dir, name) {
   try {
-    return statEntry(blog, dir, name, await folder.stat(blog.id, path.join(dir, name)));
+    return statEntry(
+      blog,
+      dir,
+      name,
+      await folder.stat(blog.id, path.join(dir, name))
+    );
   } catch (err) {
     // The file was removed between the listing and the stat (common while a
     // large folder is still syncing), or is now a symlink. Skip it rather
@@ -152,9 +162,11 @@ function readStatSweep(blog, dir) {
   }
 
   // A listing carries each entry's stat, so nothing is stat'd again
-  const sweep = folder.listAll(blog.id, dir).then((entries) =>
-    visible(entries).map((entry) => statEntry(blog, dir, entry.name, entry))
-  );
+  const sweep = folder
+    .listAll(blog.id, dir)
+    .then((entries) =>
+      visible(entries).map((entry) => statEntry(blog, dir, entry.name, entry))
+    );
 
   // Don't leave a rejected promise cached.
   sweep.catch(() => {
@@ -275,7 +287,10 @@ async function decorate(blog, dir, pageStats) {
 function clampPage(requestedPage, total, pageSize) {
   const estimatedPages = Math.max(1, Math.ceil(total / pageSize));
   const parsed = parseInt(requestedPage, 10);
-  return Math.min(Math.max(Number.isFinite(parsed) ? parsed : 1, 1), estimatedPages);
+  return Math.min(
+    Math.max(Number.isFinite(parsed) ? parsed : 1, 1),
+    estimatedPages
+  );
 }
 
 async function getContents(blog, dir, options = {}) {
@@ -307,11 +322,16 @@ async function getContents(blog, dir, options = {}) {
     let cursor = startIndex;
 
     while (collected.length < pageSize && cursor < ordered.length) {
-      const batch = ordered.slice(cursor, cursor + (pageSize - collected.length));
+      const batch = ordered.slice(
+        cursor,
+        cursor + (pageSize - collected.length)
+      );
       cursor += batch.length;
 
-      const batchStats = await mapWithLimit(batch, STAT_SWEEP_CONCURRENCY, (name) =>
-        statName(blog, dir, name)
+      const batchStats = await mapWithLimit(
+        batch,
+        STAT_SWEEP_CONCURRENCY,
+        (name) => statName(blog, dir, name)
       );
 
       for (const stat of batchStats) if (stat !== null) collected.push(stat);

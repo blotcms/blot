@@ -46,21 +46,32 @@ describe("sandbox client", function () {
 
   const jobLine = (meta, outputs) =>
     Buffer.concat([
-      Buffer.from(JSON.stringify({ meta, lengths: outputs.map((o) => o.length) }) + "\n"),
+      Buffer.from(
+        JSON.stringify({ meta, lengths: outputs.map((o) => o.length) }) + "\n"
+      ),
       ...outputs,
     ]);
 
   const okReply = (body) =>
-    Buffer.concat([Buffer.from(JSON.stringify({ ok: true, length: body.length }) + "\n"), body]);
+    Buffer.concat([
+      Buffer.from(JSON.stringify({ ok: true, length: body.length }) + "\n"),
+      body,
+    ]);
 
   it("sends the job, arguments and input, and returns meta and outputs", async function () {
     let request;
     await broker((conn, received) => {
       request = received.toString();
-      conn.end(okReply(jobLine({ width: 3 }, [Buffer.from("ab"), Buffer.from("cde")])));
+      conn.end(
+        okReply(jobLine({ width: 3 }, [Buffer.from("ab"), Buffer.from("cde")]))
+      );
     });
 
-    const result = await sandbox.run("metadata", { a: 1 }, Buffer.from("INPUT"));
+    const result = await sandbox.run(
+      "metadata",
+      { a: 1 },
+      Buffer.from("INPUT")
+    );
 
     expect(request).toEqual('{"job":"metadata"}\n{"a":1}\nINPUT');
     expect(result.meta).toEqual({ width: 3 });
@@ -90,9 +101,13 @@ describe("sandbox client", function () {
 
   it("fails closed when the broker says ok:false", async function () {
     await broker((conn) => conn.end('{"ok":false,"error":"busy"}\n'));
-    expect(await code(sandbox.run("metadata", {}, Buffer.alloc(1)))).toEqual("SANDBOX_BUSY");
+    expect(await code(sandbox.run("metadata", {}, Buffer.alloc(1)))).toEqual(
+      "SANDBOX_BUSY"
+    );
 
-    await broker((conn) => conn.end('{"ok":false,"error":"input-too-large"}\n'));
+    await broker((conn) =>
+      conn.end('{"ok":false,"error":"input-too-large"}\n')
+    );
     expect(await code(sandbox.run("metadata", {}, Buffer.alloc(1)))).toEqual(
       "SANDBOX_INPUT_TOO_LARGE"
     );
@@ -126,6 +141,8 @@ describe("sandbox client", function () {
 
   it("rejects a job name it can't send", async function () {
     config.sandbox.socket = path.join(directory, "unused.sock");
-    expect(await code(sandbox.run("../x", {}, Buffer.alloc(1)))).toEqual("SANDBOX_UNKNOWN_JOB");
+    expect(await code(sandbox.run("../x", {}, Buffer.alloc(1)))).toEqual(
+      "SANDBOX_UNKNOWN_JOB"
+    );
   });
 });

@@ -5,10 +5,9 @@ var sync = require("../index");
 // process when the process dies. This process should die
 // due to an error inside the sync function...
 process.on("message", function (message) {
-  console.log('Message recieved!');
+  console.log("Message recieved!");
   sync(message, function (error) {
-
-    console.log('Acquired lock....');
+    console.log("Acquired lock....");
     // The purpose of this file is to simulate bad code
     // invoked in the callback passed to sync. We
     // want to ensure that all locks created by the process

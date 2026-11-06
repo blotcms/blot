@@ -81,7 +81,9 @@ describe("posts", function () {
 
       // tagged builds tag/slugs/prettyTags from the original sequence, so
       // the two orders must not share an entry
-      expect(cachedTagged._createCacheKey("blog-1", 111, ["a", "b"], query, [])).not.toBe(
+      expect(
+        cachedTagged._createCacheKey("blog-1", 111, ["a", "b"], query, [])
+      ).not.toBe(
         cachedTagged._createCacheKey("blog-1", 111, ["b", "a"], query, [])
       );
     });

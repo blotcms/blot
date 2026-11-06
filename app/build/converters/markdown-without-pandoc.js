@@ -6,7 +6,9 @@ const { callbackify } = require("util");
 const { marked } = require("marked");
 const extname = require("path").extname;
 const cheerio = require("cheerio");
-const { normalizeLiteralDollarMath } = require("build/math/normalizeLiteralDollars");
+const {
+  normalizeLiteralDollarMath,
+} = require("build/math/normalizeLiteralDollars");
 const postSourceSize = require("build/converters/post-source-size");
 const folderStat = callbackify(require("build/converters/folderStat"));
 const readFile = callbackify(folder.read);
@@ -33,12 +35,12 @@ module.exports = {
       });
     });
   },
-  is: function is (path) {
+  is: function is(path) {
     return (
       [".txt", ".text", ".md", ".markdown"].indexOf(
         extname(path).toLowerCase()
       ) > -1
     );
   },
-  id: "markdown"
+  id: "markdown",
 };

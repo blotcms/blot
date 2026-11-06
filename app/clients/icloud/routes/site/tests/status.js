@@ -15,7 +15,9 @@ describe("icloud status route", function () {
   // The resync email cap counts in Redis, so its counts outlive a spec
   const clearEmailCap = () =>
     require("models/client").del(
-      ["blog_a", "blog_b"].map((id) => "notify-cap:icloud-resync-requested:" + id)
+      ["blog_a", "blog_b"].map(
+        (id) => "notify-cap:icloud-resync-requested:" + id
+      )
     );
 
   const originals = new Map();
@@ -74,10 +76,9 @@ describe("icloud status route", function () {
   // A lock like establishSyncLock's, counting how often it is released
   const makeLock = () => ({
     folder: {
-      status: Object.assign(
-        (line) => events.push("status: " + line),
-        { bind: () => (line) => events.push("status: " + line) }
-      ),
+      status: Object.assign((line) => events.push("status: " + line), {
+        bind: () => (line) => events.push("status: " + line),
+      }),
       update() {},
     },
     done: async () => {
@@ -129,7 +130,9 @@ describe("icloud status route", function () {
       get: ({ id }, callback) =>
         callback(null, blog && Object.assign({}, blog, { id })),
     });
-    mockModule(entriesPath, { getAllTotal: (_id, callback) => callback(null, 3) });
+    mockModule(entriesPath, {
+      getAllTotal: (_id, callback) => callback(null, 3),
+    });
     mockModule(fixPath, (blog, callback) => {
       fixes.push(blog.id);
       events.push("fix");
@@ -239,7 +242,9 @@ describe("icloud status route", function () {
 
   it("emails when Fix() repaired something", async function () {
     mockWalk(async () => ({}));
-    mockModule(fixPath, (blog, callback) => callback(null, { "tag-ghosts": ["a"] }));
+    mockModule(fixPath, (blog, callback) =>
+      callback(null, { "tag-ghosts": ["a"] })
+    );
     const status = require(statusPath);
 
     await requestResync(status, "blog_a");
@@ -273,7 +278,9 @@ describe("icloud status route", function () {
 
   it("emails when Fix() failed", async function () {
     mockWalk(async () => ({}));
-    mockModule(fixPath, (blog, callback) => callback(new Error("fix exploded"), {}));
+    mockModule(fixPath, (blog, callback) =>
+      callback(new Error("fix exploded"), {})
+    );
     spyOn(console, "error");
     const status = require(statusPath);
 

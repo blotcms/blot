@@ -10,10 +10,10 @@ const prettySize = require("helper/prettySize");
 const LABELS = {
   "/": "root",
   "/var/instance-ssd": "instance",
-  "/var/instance-ssd/tmp": "instance"
+  "/var/instance-ssd/tmp": "instance",
 };
 
-const main = callback => {
+const main = (callback) => {
   exec("df -k", function (err, stdout) {
     if (err) return callback(err);
 
@@ -21,7 +21,7 @@ const main = callback => {
       const disks = stdout
         .split("\n")
         .slice(1)
-        .map(line => {
+        .map((line) => {
           const values = line.replace(/\s+/g, " ").split(" ");
           return {
             mount: values.at(-1),
@@ -34,10 +34,10 @@ const main = callback => {
             ),
             used_human: prettySize(values.at(2)),
             available_k: parseInt(values.at(3)),
-            available_human: prettySize(values.at(3))
+            available_human: prettySize(values.at(3)),
           };
         })
-        .filter(disk => disk.label);
+        .filter((disk) => disk.label);
 
       return callback(null, disks);
     } catch (e) {

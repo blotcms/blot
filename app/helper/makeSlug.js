@@ -14,7 +14,6 @@ module.exports = function makeSlug(string) {
   if (slug.indexOf("?=") > -1) slug = slug.slice(0, slug.indexOf("?="));
 
   slug = sliceWithoutSplittingSurrogates(slug.trim(), MAX_LENGTH + 10)
-
     // Removes 'object replacement character' which unexpectedly
     // entered a file created on Ulysses. Perhaps an embedded image?
     .split(decodeURIComponent("%EF%BF%BC"))
@@ -54,17 +53,14 @@ module.exports = function makeSlug(string) {
 
     // maps they've
     .replace(/y['’]v/g, "yv")
-    
+
     // maps apple's to apples
     .replace(/['’]s/g, "s")
 
     .replace(/→/g, "to")
     .replace(/←/g, "from")
     .replace(/\./g, "-")
-    .replace(
-      /[«»“”‘–’`~!@#$%^&*()+=\\|\]}{['";:?>.<,]/g,
-      "-"
-    )
+    .replace(/[«»“”‘–’`~!@#$%^&*()+=\\|\]}{['";:?>.<,]/g, "-")
     .replace(/[^[:alnum:]0-9_-\s]/g, "") // remove invalid chars
     .replace(/\s+/g, "-") // collapse whitespace and replace by -
     .replace(/-+/g, "-"); // collapse dashes

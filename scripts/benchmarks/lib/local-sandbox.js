@@ -24,7 +24,8 @@ const ROOT = path.resolve(__dirname, "../../..");
 function command(job) {
   return job.command.map((part) => {
     if (part === "/usr/local/bin/node") return process.execPath;
-    if (part === "/usr/local/bin/pandoc") return process.env.BLOT_PANDOC_PATH || "pandoc";
+    if (part === "/usr/local/bin/pandoc")
+      return process.env.BLOT_PANDOC_PATH || "pandoc";
     return part.replace(/^\/usr\/src\/app\//, ROOT + "/");
   });
 }
@@ -34,10 +35,14 @@ async function start() {
     throw new Error("local-sandbox: start() must run before config is loaded");
   }
 
-  const { createBroker } = require(path.join(ROOT, "proxy/unit/sandbox/broker"));
+  const { createBroker } = require(
+    path.join(ROOT, "proxy/unit/sandbox/broker")
+  );
   const { JOBS } = require(path.join(ROOT, "proxy/unit/sandbox/jail"));
 
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "blot-bench-sandbox-"));
+  const directory = fs.mkdtempSync(
+    path.join(os.tmpdir(), "blot-bench-sandbox-")
+  );
   const socket = path.join(directory, "broker.sock");
   const env = { NODE_PATH: path.join(ROOT, "node_modules") };
   for (const name of ["BLOT_PANDOC_PATH", "EXIFTOOL_PATH", "PATH"]) {

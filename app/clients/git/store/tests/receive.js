@@ -15,13 +15,20 @@ const blotWrite = require("../commit");
 const createCache = require("../cache");
 const createMemoryStore = require("../objectStore/memory");
 const createReader = require("../reader");
-const { LATEST_KEY, manifestKey, packKey, idxKey, revKey } = require("../layout");
+const {
+  LATEST_KEY,
+  manifestKey,
+  packKey,
+  idxKey,
+  revKey,
+} = require("../layout");
 
 const ZERO = "0".repeat(40);
 const MASTER = "refs/heads/master";
 const MiB = 1024 * 1024;
 
-const dropped = () => Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" });
+const dropped = () =>
+  Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" });
 
 // What the host's lock does: one swap at a time
 function createLock() {
@@ -52,7 +59,11 @@ describe("git store receive", function () {
     const packs = fx.readPacks(src);
     expect(packs.length).toBe(1);
 
-    const entry = await fx.upload(target, packs[0], fx.listEntries(packs[0]).length);
+    const entry = await fx.upload(
+      target,
+      packs[0],
+      fx.listEntries(packs[0]).length
+    );
     const base = manifest.empty();
     const next = manifest.advance(base, {
       refs: { [MASTER]: fixture.head, "refs/tags/v1": fixture.tag },
@@ -62,7 +73,12 @@ describe("git store receive", function () {
     await manifest.swap({ store: target, lock, base, next });
   }
 
-  async function setup({ wrap = (s) => s, maxBytes = 64 * MiB, limit, prepare } = {}) {
+  async function setup({
+    wrap = (s) => s,
+    maxBytes = 64 * MiB,
+    limit,
+    prepare,
+  } = {}) {
     dir = fx.tempDir();
     src = path.join(dir, "src");
     fixture = fx.buildFixture(src, { commits: 4, large: false });
@@ -104,16 +120,35 @@ describe("git store receive", function () {
     const current = await manifest.read(store);
     expect(current).toEqual(before);
     const named = new Set(
-      [...current.packs, ...(current.historyPieces || []), ...(current.history ? [current.history] : [])].flatMap((pack) => [packKey(pack.name), idxKey(pack.name), revKey(pack.name)])
+      [
+        ...current.packs,
+        ...(current.historyPieces || []),
+        ...(current.history ? [current.history] : []),
+      ].flatMap((pack) => [
+        packKey(pack.name),
+        idxKey(pack.name),
+        revKey(pack.name),
+      ])
     );
-    const written = (await packKeys()).filter((key) => !keysBefore.includes(key));
+    const written = (await packKeys()).filter(
+      (key) => !keysBefore.includes(key)
+    );
     expect(written.filter((key) => named.has(key))).toEqual([]);
     return written;
   }
 
   // Commits a change on the client, on a branch of its own off master, and
   // returns the commit. Without a file, edits one line of a tracked file.
-  function commit(branch, change = () => fs.writeFileSync(path.join(src, "docs", "big.txt"), fs.readFileSync(path.join(src, "docs", "big.txt"), "utf8").replace("line 3 ", "line 3 edited by " + branch + " "))) {
+  function commit(
+    branch,
+    change = () =>
+      fs.writeFileSync(
+        path.join(src, "docs", "big.txt"),
+        fs
+          .readFileSync(path.join(src, "docs", "big.txt"), "utf8")
+          .replace("line 3 ", "line 3 edited by " + branch + " ")
+      )
+  ) {
     fx.git(src, ["checkout", "-q", "-B", branch, fixture.head]);
     change();
     fx.git(src, ["add", "-A"]);
@@ -124,16 +159,30 @@ describe("git store receive", function () {
   // A thin pack of `tip` against the fixture's head, as a push would send it
   const thin = (tip) => fx.packRevs(src, [tip], [fixture.head], { thin: true });
 
-  const update = (tip, ref = MASTER, old = fixture.head) => ({ old, new: tip, ref });
+  const update = (tip, ref = MASTER, old = fixture.head) => ({
+    old,
+    new: tip,
+    ref,
+  });
 
   function direct(commands, pack, options = {}) {
-    return receive({ store, cache, lock, commands, pack: pack ? bodyOf(pack) : null, ...options });
+    return receive({
+      store,
+      cache,
+      lock,
+      commands,
+      pack: pack ? bodyOf(pack) : null,
+      ...options,
+    });
   }
 
   // Every object reachable from `tip` reads back from the store's packs
   async function expectReadable(current, tip) {
     const reader = createReader({ store, cache, packs: current.packs });
-    const oids = fx.text(src, ["rev-list", "--objects", tip]).split("\n").map((line) => line.split(" ")[0]);
+    const oids = fx
+      .text(src, ["rev-list", "--objects", tip])
+      .split("\n")
+      .map((line) => line.split(" ")[0]);
     const expected = fx.catAll(src, oids);
 
     for (const oid of oids) {
@@ -191,14 +240,19 @@ describe("git store receive", function () {
 
       const current = await manifest.read(store);
       const added = current.packs[current.packs.length - 1];
-      expect((await store.get(revKey(added.name))).length).toBe(12 + 4 * added.objects + 40);
+      expect((await store.get(revKey(added.name))).length).toBe(
+        12 + 4 * added.objects + 40
+      );
 
       expect(current.historyPieces.length).toBe(1);
       const piece = current.historyPieces[0];
       expect(piece.seq).toBe(current.seq);
       expect(piece.objects).toBe(1);
 
-      const entries = fx.listEntries({ pack: await store.get(packKey(piece.name)), idx: await store.get(idxKey(piece.name)) });
+      const entries = fx.listEntries({
+        pack: await store.get(packKey(piece.name)),
+        idx: await store.get(idxKey(piece.name)),
+      });
       expect(entries.map((e) => [e.oid, e.type])).toEqual([[tip, "commit"]]);
       // A piece is read whole, so it has no reverse index
       expect(await store.head(revKey(piece.name))).toBeNull();
@@ -209,7 +263,9 @@ describe("git store receive", function () {
       const before = { ...store.stats };
       expect((await push(src, [server.url, "work:master"])).code).toBe(0);
 
-      const used = Object.fromEntries(Object.keys(before).map((key) => [key, store.stats[key] - before[key]]));
+      const used = Object.fromEntries(
+        Object.keys(before).map((key) => [key, store.stats[key] - before[key]])
+      );
 
       // The manifest: read at the start and again before the swap (the hint,
       // a HEAD for what follows it, the manifest itself), then the swap
@@ -240,12 +296,15 @@ describe("git store receive", function () {
       const now = Date.now();
       const clock = () => now;
       const before = await manifest.read(other, { clock });
-      expect((await manifest.read(other, { clock, serving: true })).seq).toBe(before.seq);
+      expect((await manifest.read(other, { clock, serving: true })).seq).toBe(
+        before.seq
+      );
 
       // The hint lands slowly
       const real = store.put;
       spyOn(store, "put").and.callFake(async (key, body) => {
-        if (key === LATEST_KEY) await new Promise((resolve) => setTimeout(resolve, 300));
+        if (key === LATEST_KEY)
+          await new Promise((resolve) => setTimeout(resolve, 300));
         return real(key, body);
       });
 
@@ -262,7 +321,10 @@ describe("git store receive", function () {
       const before = await manifest.read(store);
       const puts = store.stats.puts;
 
-      const pushed = await push(src, [server.url, fixture.commits[1] + ":refs/tags/old"]);
+      const pushed = await push(src, [
+        server.url,
+        fixture.commits[1] + ":refs/tags/old",
+      ]);
       expect(pushed.code).toBe(0);
 
       const current = await manifest.read(store);
@@ -270,7 +332,9 @@ describe("git store receive", function () {
       expect(current.refs["refs/tags/old"]).toBe(fixture.commits[1]);
       // The tag's commit is not known to be reachable (this repository was seeded
       // with no history pieces), so the packs are listed again
-      expect(current.packs.map((pack) => pack.name)).toEqual(before.packs.map((pack) => pack.name));
+      expect(current.packs.map((pack) => pack.name)).toEqual(
+        before.packs.map((pack) => pack.name)
+      );
       expect(current.historyPieces).toEqual([]);
       expect(store.stats.puts - puts).toBe(1); // the hint, no packs
       expectNoScratch();
@@ -295,7 +359,10 @@ describe("git store receive", function () {
       commit("work");
       const before = await manifest.read(store);
 
-      for (const refs of [["work:master", "work:other"], ["work:other", "work:master"]]) {
+      for (const refs of [
+        ["work:master", "work:other"],
+        ["work:other", "work:master"],
+      ]) {
         const pushed = await push(src, [server.url, ...refs]);
         expect(pushed.code).not.toBe(0);
         expect(pushed.stderr).toContain("only the master branch is allowed");
@@ -353,10 +420,26 @@ describe("git store receive", function () {
     });
 
     // A raw object, written as given, which git's own commands would not make
-    const forge = (type, body) => fx.git(src, ["hash-object", "-t", type, "-w", "--stdin", "--literally"], body).toString().trim();
+    const forge = (type, body) =>
+      fx
+        .git(
+          src,
+          ["hash-object", "-t", type, "-w", "--stdin", "--literally"],
+          body
+        )
+        .toString()
+        .trim();
     const forgeCommit = (tree, parent) =>
-      forge("commit", "tree " + tree + "\n" + (parent ? "parent " + parent + "\n" : "") + "author A <a@example.com> 1 +0000\ncommitter A <a@example.com> 1 +0000\n\nForged\n");
-    const packOf = (...oids) => fx.git(src, ["pack-objects", "--stdout", "-q"], oids.join("\n") + "\n");
+      forge(
+        "commit",
+        "tree " +
+          tree +
+          "\n" +
+          (parent ? "parent " + parent + "\n" : "") +
+          "author A <a@example.com> 1 +0000\ncommitter A <a@example.com> 1 +0000\n\nForged\n"
+      );
+    const packOf = (...oids) =>
+      fx.git(src, ["pack-objects", "--stdout", "-q"], oids.join("\n") + "\n");
 
     async function expectWrongType(tip, pack) {
       const before = await manifest.read(store);
@@ -384,18 +467,33 @@ describe("git store receive", function () {
 
     it("refuses a directory entry which is a blob, and a file entry which is a tree", async function () {
       const blob = forge("blob", "just a file\n");
-      const inner = forge("tree", Buffer.concat([Buffer.from("100644 f\0"), Buffer.from(blob, "hex")]));
+      const inner = forge(
+        "tree",
+        Buffer.concat([Buffer.from("100644 f\0"), Buffer.from(blob, "hex")])
+      );
 
       for (const mode of ["40000", "100644"]) {
         const target = mode === "40000" ? blob : inner;
-        const tree = forge("tree", Buffer.concat([Buffer.from(mode + " x\0"), Buffer.from(target, "hex")]));
+        const tree = forge(
+          "tree",
+          Buffer.concat([
+            Buffer.from(mode + " x\0"),
+            Buffer.from(target, "hex"),
+          ])
+        );
         const tip = forgeCommit(tree, fixture.head);
-        await expectWrongType(tip, packOf(tip, tree, target, ...(target === inner ? [blob] : [])));
+        await expectWrongType(
+          tip,
+          packOf(tip, tree, target, ...(target === inner ? [blob] : []))
+        );
       }
     });
 
     it("refuses a commit whose tree, or parent, is a blob the repository already has", async function () {
-      const stored = fx.text(src, ["rev-parse", fixture.head + ":docs/big.txt"]);
+      const stored = fx.text(src, [
+        "rev-parse",
+        fixture.head + ":docs/big.txt",
+      ]);
       const tree = fx.text(src, ["rev-parse", fixture.head + "^{tree}"]);
 
       const withTree = forgeCommit(stored, fixture.head);
@@ -405,11 +503,23 @@ describe("git store receive", function () {
     });
 
     it("refuses a tree entry whose stored target is the wrong type", async function () {
-      const stored = fx.text(src, ["rev-parse", fixture.head + ":docs/big.txt"]);
+      const stored = fx.text(src, [
+        "rev-parse",
+        fixture.head + ":docs/big.txt",
+      ]);
       const dir = fx.text(src, ["rev-parse", fixture.head + ":docs"]);
 
-      for (const [mode, target] of [["40000", stored], ["100644", dir]]) {
-        const tree = forge("tree", Buffer.concat([Buffer.from(mode + " x\0"), Buffer.from(target, "hex")]));
+      for (const [mode, target] of [
+        ["40000", stored],
+        ["100644", dir],
+      ]) {
+        const tree = forge(
+          "tree",
+          Buffer.concat([
+            Buffer.from(mode + " x\0"),
+            Buffer.from(target, "hex"),
+          ])
+        );
         const tip = forgeCommit(tree, fixture.head);
         await expectWrongType(tip, packOf(tip, tree));
       }
@@ -417,8 +527,19 @@ describe("git store receive", function () {
 
     it("moves master to a stored commit of any size with no pack", async function () {
       const tree = fx.text(src, ["rev-parse", fixture.head + "^{tree}"]);
-      const big = fx.text(src, ["commit-tree", tree, "-p", fixture.head], "x".repeat(1200 * 1024) + "\n");
-      expect((await direct([update(big, "refs/tags/big", ZERO)], fx.packRevs(src, [big], [fixture.head], { thin: true }))).outcome).toBe("ok");
+      const big = fx.text(
+        src,
+        ["commit-tree", tree, "-p", fixture.head],
+        "x".repeat(1200 * 1024) + "\n"
+      );
+      expect(
+        (
+          await direct(
+            [update(big, "refs/tags/big", ZERO)],
+            fx.packRevs(src, [big], [fixture.head], { thin: true })
+          )
+        ).outcome
+      ).toBe("ok");
 
       const result = await direct([update(big)], null);
       expect(result.outcome).toBe("ok");
@@ -427,12 +548,33 @@ describe("git store receive", function () {
 
     it("takes a commit on top of a stored parent too large to read", async function () {
       const tree = fx.text(src, ["rev-parse", fixture.head + "^{tree}"]);
-      const big = fx.text(src, ["commit-tree", tree, "-p", fixture.head], "x".repeat(65 * MiB) + "\n");
-      const roomy = { cache: createCache({ dir: path.join(dir, "roomy"), maxBytes: 1024 * MiB }) };
-      expect((await direct([update(big)], fx.packRevs(src, [big], [fixture.head], { thin: true }), roomy)).outcome).toBe("ok");
+      const big = fx.text(
+        src,
+        ["commit-tree", tree, "-p", fixture.head],
+        "x".repeat(65 * MiB) + "\n"
+      );
+      const roomy = {
+        cache: createCache({
+          dir: path.join(dir, "roomy"),
+          maxBytes: 1024 * MiB,
+        }),
+      };
+      expect(
+        (
+          await direct(
+            [update(big)],
+            fx.packRevs(src, [big], [fixture.head], { thin: true }),
+            roomy
+          )
+        ).outcome
+      ).toBe("ok");
 
       const child = fx.text(src, ["commit-tree", tree, "-p", big], "After\n");
-      const result = await direct([update(child, MASTER, big)], fx.packRevs(src, [child], [big], { thin: true }), roomy);
+      const result = await direct(
+        [update(child, MASTER, big)],
+        fx.packRevs(src, [child], [big], { thin: true }),
+        roomy
+      );
 
       expect(result.outcome).toBe("ok");
       expect((await manifest.read(store)).refs[MASTER]).toBe(child);
@@ -454,7 +596,13 @@ describe("git store receive", function () {
         yield thin(tip);
       })();
 
-      const result = await receive({ store, cache: broken, lock, commands: [update(tip)], pack: slow });
+      const result = await receive({
+        store,
+        cache: broken,
+        lock,
+        commands: [update(tip)],
+        pack: slow,
+      });
       expect(result.outcome).toBe("failed");
       expect(result.messages).toContain("Nothing was pushed.");
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -462,31 +610,55 @@ describe("git store receive", function () {
     });
 
     describe("ref names which are a file and a directory", function () {
-      const create = (ref, oid = fixture.commits[1]) => ({ old: ZERO, new: oid, ref });
-      const conflict = (ref, other) => new RegExp("cannot lock ref '" + ref + "': '" + other + "' exists");
+      const create = (ref, oid = fixture.commits[1]) => ({
+        old: ZERO,
+        new: oid,
+        ref,
+      });
+      const conflict = (ref, other) =>
+        new RegExp("cannot lock ref '" + ref + "': '" + other + "' exists");
 
       it("refuses a ref inside an existing one", async function () {
         const result = await direct([create("refs/tags/v1/x")], null);
         expect(result.outcome).toBe("refused");
-        expect(result.results[0].error).toMatch(conflict("refs/tags/v1/x", "refs/tags/v1"));
+        expect(result.results[0].error).toMatch(
+          conflict("refs/tags/v1/x", "refs/tags/v1")
+        );
       });
 
       it("refuses a ref which an existing one is inside", async function () {
-        expect((await direct([create("refs/tags/a/b")], null)).outcome).toBe("ok");
+        expect((await direct([create("refs/tags/a/b")], null)).outcome).toBe(
+          "ok"
+        );
         const result = await direct([create("refs/tags/a")], null);
         expect(result.outcome).toBe("refused");
-        expect(result.results[0].error).toMatch(conflict("refs/tags/a", "refs/tags/a/b"));
+        expect(result.results[0].error).toMatch(
+          conflict("refs/tags/a", "refs/tags/a/b")
+        );
       });
 
       it("refuses both in one push", async function () {
-        const result = await direct([create("refs/tags/p"), create("refs/tags/p/q")], null);
+        const result = await direct(
+          [create("refs/tags/p"), create("refs/tags/p/q")],
+          null
+        );
         expect(result.outcome).toBe("refused");
-        expect(result.results.some((r) => /cannot lock ref/.test(r.error || ""))).toBe(true);
-        expect((await manifest.read(store)).refs["refs/tags/p"]).toBeUndefined();
+        expect(
+          result.results.some((r) => /cannot lock ref/.test(r.error || ""))
+        ).toBe(true);
+        expect(
+          (await manifest.read(store)).refs["refs/tags/p"]
+        ).toBeUndefined();
       });
 
       it("allows deleting one and creating inside it in the same push", async function () {
-        const result = await direct([{ old: fixture.tag, new: ZERO, ref: "refs/tags/v1" }, create("refs/tags/v1/x")], null);
+        const result = await direct(
+          [
+            { old: fixture.tag, new: ZERO, ref: "refs/tags/v1" },
+            create("refs/tags/v1/x"),
+          ],
+          null
+        );
         expect(result.outcome).toBe("ok");
         const refs = (await manifest.read(store)).refs;
         expect(refs["refs/tags/v1"]).toBeUndefined();
@@ -498,11 +670,23 @@ describe("git store receive", function () {
         const tip = commit("work");
         const body = (async function* () {
           yield thin(tip);
-          expect((await direct([create("refs/tags/z/y")], null)).outcome).toBe("ok");
+          expect((await direct([create("refs/tags/z/y")], null)).outcome).toBe(
+            "ok"
+          );
         })();
-        const result = await receive({ store, cache, lock, commands: [update(tip), create("refs/tags/z", tip)], pack: body });
+        const result = await receive({
+          store,
+          cache,
+          lock,
+          commands: [update(tip), create("refs/tags/z", tip)],
+          pack: body,
+        });
         expect(result.outcome).toBe("refused");
-        expect(result.results.some((r) => /cannot lock ref 'refs\/tags\/z'/.test(r.error || ""))).toBe(true);
+        expect(
+          result.results.some((r) =>
+            /cannot lock ref 'refs\/tags\/z'/.test(r.error || "")
+          )
+        ).toBe(true);
         expect((await manifest.read(store)).refs[MASTER]).toBe(fixture.head);
         expectNoScratch();
       });
@@ -518,7 +702,12 @@ describe("git store receive", function () {
 
       const result = await direct([update(b)], thin(b));
       expect(result.outcome).toBe("refused");
-      expect(result.results).toEqual([{ ref: MASTER, error: "the ref moved while you were pushing; pull and try again" }]);
+      expect(result.results).toEqual([
+        {
+          ref: MASTER,
+          error: "the ref moved while you were pushing; pull and try again",
+        },
+      ]);
       expect(result.messages).toContain("Nothing was pushed.");
 
       expect(await manifest.read(store)).toEqual(before);
@@ -527,8 +716,13 @@ describe("git store receive", function () {
     });
 
     describe("when another writer's manifest lands just before the push's", function () {
-      const create = (ref, oid = fixture.commits[1]) => ({ old: ZERO, new: oid, ref });
-      const MOVED_ERROR = "the ref moved while you were pushing; pull and try again";
+      const create = (ref, oid = fixture.commits[1]) => ({
+        old: ZERO,
+        new: oid,
+        ref,
+      });
+      const MOVED_ERROR =
+        "the ref moved while you were pushing; pull and try again";
 
       // A lock which, for the first `wins.length` swaps, lets `wins[n]()` land a
       // manifest after the push has built its own and before it creates it
@@ -545,12 +739,30 @@ describe("git store receive", function () {
       // What compaction does to the manifest: a new seq, the same refs and packs
       async function compaction() {
         const base = await manifest.read(store);
-        await manifest.swap({ store, lock, base, next: manifest.advance(base, { refs: base.refs }) });
+        await manifest.swap({
+          store,
+          lock,
+          base,
+          next: manifest.advance(base, { refs: base.refs }),
+        });
       }
 
-      const tagged = (ref, oid) => async () => expect((await direct([create(ref, oid)], null)).outcome).toBe("ok");
-      const blotCommit = (name) => async () => expect((await blotWrite({ store, cache, lock, path: name, contents: Buffer.from("x\n") })).changed).toBe(true);
-      const pushed = (tip) => async () => expect((await direct([update(tip)], thin(tip))).outcome).toBe("ok");
+      const tagged = (ref, oid) => async () =>
+        expect((await direct([create(ref, oid)], null)).outcome).toBe("ok");
+      const blotCommit = (name) => async () =>
+        expect(
+          (
+            await blotWrite({
+              store,
+              cache,
+              lock,
+              path: name,
+              contents: Buffer.from("x\n"),
+            })
+          ).changed
+        ).toBe(true);
+      const pushed = (tip) => async () =>
+        expect((await direct([update(tip)], thin(tip))).outcome).toBe("ok");
 
       it("applies the push on the new manifest when only the packs changed", async function () {
         const b = commit("b");
@@ -558,7 +770,13 @@ describe("git store receive", function () {
         const race = racing([compaction]);
         const puts = store.stats.puts;
 
-        const result = await receive({ store, cache, lock: race.lock, commands: [update(b)], pack: bodyOf(thin(b)) });
+        const result = await receive({
+          store,
+          cache,
+          lock: race.lock,
+          commands: [update(b)],
+          pack: bodyOf(thin(b)),
+        });
         expect(result.outcome).toBe("ok");
         expect(race.swaps).toBe(2);
         expect(result.seq).toBe(before.seq + 2);
@@ -568,8 +786,14 @@ describe("git store receive", function () {
 
         const current = await manifest.read(store);
         expect(current.seq).toBe(before.seq + 2);
-        expect(current.refs).toEqual({ [MASTER]: b, "refs/tags/v1": fixture.tag });
-        expect(current.packs.map((pack) => pack.name)).toEqual([...before.packs.map((pack) => pack.name), result.stats.packs[0]]);
+        expect(current.refs).toEqual({
+          [MASTER]: b,
+          "refs/tags/v1": fixture.tag,
+        });
+        expect(current.packs.map((pack) => pack.name)).toEqual([
+          ...before.packs.map((pack) => pack.name),
+          result.stats.packs[0],
+        ]);
         expect(current.historyPieces.length).toBe(1);
         await expectReadable(current, b);
         await expectFsck(current, b);
@@ -578,7 +802,13 @@ describe("git store receive", function () {
 
       it("succeeds when Blot commits to master while a tag is pushed", async function () {
         const race = racing([blotCommit("race.txt")]);
-        const result = await receive({ store, cache, lock: race.lock, commands: [create("refs/tags/old")], pack: null });
+        const result = await receive({
+          store,
+          cache,
+          lock: race.lock,
+          commands: [create("refs/tags/old")],
+          pack: null,
+        });
         expect(result.outcome).toBe("ok");
         expect(race.swaps).toBe(2);
 
@@ -592,7 +822,13 @@ describe("git store receive", function () {
       it("succeeds when another push moves a different ref", async function () {
         const b = commit("b");
         const race = racing([tagged("refs/tags/other")]);
-        const result = await receive({ store, cache, lock: race.lock, commands: [update(b)], pack: bodyOf(thin(b)) });
+        const result = await receive({
+          store,
+          cache,
+          lock: race.lock,
+          commands: [update(b)],
+          pack: bodyOf(thin(b)),
+        });
         expect(result.outcome).toBe("ok");
 
         const current = await manifest.read(store);
@@ -606,7 +842,13 @@ describe("git store receive", function () {
         const tag = fx.text(src, ["rev-parse", "refs/tags/rel1"]);
 
         const race = racing([blotCommit("race.txt")]);
-        const result = await receive({ store, cache, lock: race.lock, commands: [create("refs/tags/rel1", tag)], pack: bodyOf(fx.packRevs(src, [tag], [fixture.head], { thin: true })) });
+        const result = await receive({
+          store,
+          cache,
+          lock: race.lock,
+          commands: [create("refs/tags/rel1", tag)],
+          pack: bodyOf(fx.packRevs(src, [tag], [fixture.head], { thin: true })),
+        });
         expect(result.outcome).toBe("ok");
         expect(race.swaps).toBe(2);
 
@@ -620,12 +862,20 @@ describe("git store receive", function () {
         // of the manifest it lands on, which is the one after the race's
         const race = racing([compaction]);
         const before = await manifest.read(store);
-        const result = await receive({ store, cache, lock: race.lock, commands: [create("refs/tags/old")], pack: null });
+        const result = await receive({
+          store,
+          cache,
+          lock: race.lock,
+          commands: [create("refs/tags/old")],
+          pack: null,
+        });
         expect(result.outcome).toBe("ok");
 
         const current = await manifest.read(store);
         expect(current.seq).toBe(before.seq + 2);
-        expect(current.packs.map((pack) => [pack.name, pack.seq])).toEqual(before.packs.map((pack) => [pack.name, current.seq]));
+        expect(current.packs.map((pack) => [pack.name, pack.seq])).toEqual(
+          before.packs.map((pack) => [pack.name, current.seq])
+        );
       });
 
       it("refuses when another push moved the same ref, as before", async function () {
@@ -633,7 +883,13 @@ describe("git store receive", function () {
         const b = commit("b");
         const race = racing([pushed(a)]);
 
-        const result = await receive({ store, cache, lock: race.lock, commands: [update(b)], pack: bodyOf(thin(b)) });
+        const result = await receive({
+          store,
+          cache,
+          lock: race.lock,
+          commands: [update(b)],
+          pack: bodyOf(thin(b)),
+        });
         expect(result.outcome).toBe("refused");
         expect(race.swaps).toBe(1);
         expect(result.results).toEqual([{ ref: MASTER, error: MOVED_ERROR }]);
@@ -649,25 +905,51 @@ describe("git store receive", function () {
         const b = commit("b");
         const race = racing([pushed(a)]);
 
-        const result = await receive({ store, cache, lock: race.lock, commands: [update(b), create("refs/tags/new")], pack: bodyOf(thin(b)) });
+        const result = await receive({
+          store,
+          cache,
+          lock: race.lock,
+          commands: [update(b), create("refs/tags/new")],
+          pack: bodyOf(thin(b)),
+        });
         expect(result.outcome).toBe("refused");
-        expect(result.results.find((r) => r.ref === MASTER).error).toBe(MOVED_ERROR);
-        expect((await manifest.read(store)).refs["refs/tags/new"]).toBeUndefined();
+        expect(result.results.find((r) => r.ref === MASTER).error).toBe(
+          MOVED_ERROR
+        );
+        expect(
+          (await manifest.read(store)).refs["refs/tags/new"]
+        ).toBeUndefined();
       });
 
       it("refuses when the other writer made a name conflict", async function () {
         const b = commit("b");
         const race = racing([tagged("refs/tags/z/y")]);
-        const result = await receive({ store, cache, lock: race.lock, commands: [update(b), create("refs/tags/z")], pack: bodyOf(thin(b)) });
+        const result = await receive({
+          store,
+          cache,
+          lock: race.lock,
+          commands: [update(b), create("refs/tags/z")],
+          pack: bodyOf(thin(b)),
+        });
         expect(result.outcome).toBe("refused");
-        expect(result.results.some((r) => /cannot lock ref 'refs\/tags\/z'/.test(r.error || ""))).toBe(true);
+        expect(
+          result.results.some((r) =>
+            /cannot lock ref 'refs\/tags\/z'/.test(r.error || "")
+          )
+        ).toBe(true);
         expect((await manifest.read(store)).refs[MASTER]).toBe(fixture.head);
       });
 
       it("retries more than once, but not past three attempts in all", async function () {
         const b = commit("b");
         const twice = racing([compaction, compaction]);
-        const ok = await receive({ store, cache, lock: twice.lock, commands: [update(b)], pack: bodyOf(thin(b)) });
+        const ok = await receive({
+          store,
+          cache,
+          lock: twice.lock,
+          commands: [update(b)],
+          pack: bodyOf(thin(b)),
+        });
         expect(ok.outcome).toBe("ok");
         expect(twice.swaps).toBe(3);
         expect((await manifest.read(store)).refs[MASTER]).toBe(b);
@@ -675,7 +957,13 @@ describe("git store receive", function () {
         const c = commit("c");
         const before = await manifest.read(store);
         const thrice = racing([compaction, compaction, compaction]);
-        const result = await receive({ store, cache, lock: thrice.lock, commands: [update(c, MASTER, b)], pack: bodyOf(fx.packRevs(src, [c], [b], { thin: true })) });
+        const result = await receive({
+          store,
+          cache,
+          lock: thrice.lock,
+          commands: [update(c, MASTER, b)],
+          pack: bodyOf(fx.packRevs(src, [c], [b], { thin: true })),
+        });
         expect(thrice.swaps).toBe(3);
         expect(result.outcome).toBe("refused");
         expect(result.results).toEqual([{ ref: MASTER, error: MOVED_ERROR }]);
@@ -701,15 +989,36 @@ describe("git store receive", function () {
     });
 
     it("refuses a branch which points at something other than a commit", async function () {
-      const result = await direct([update(fx.text(src, ["rev-parse", fixture.head + "^{tree}"]))], null);
+      const result = await direct(
+        [update(fx.text(src, ["rev-parse", fixture.head + "^{tree}"]))],
+        null
+      );
       expect(result.outcome).toBe("refused");
       expect(result.results[0].error).toBe("branches must point to a commit");
     });
 
     it("refuses a commit whose tree points at an object nobody has", async function () {
-      const lie = fx.git(src, ["mktree", "--missing"], "100644 blob " + "ab".repeat(20) + "\tghost.txt\n").toString().trim();
-      const tip = fx.text(src, ["commit-tree", lie, "-p", fixture.head, "-m", "Points at a ghost"]);
-      const pack = fx.git(src, ["pack-objects", "--stdout", "-q"], tip + "\n" + lie + "\n");
+      const lie = fx
+        .git(
+          src,
+          ["mktree", "--missing"],
+          "100644 blob " + "ab".repeat(20) + "\tghost.txt\n"
+        )
+        .toString()
+        .trim();
+      const tip = fx.text(src, [
+        "commit-tree",
+        lie,
+        "-p",
+        fixture.head,
+        "-m",
+        "Points at a ghost",
+      ]);
+      const pack = fx.git(
+        src,
+        ["pack-objects", "--stdout", "-q"],
+        tip + "\n" + lie + "\n"
+      );
 
       const before = await manifest.read(store);
       const keys = await packKeys();
@@ -725,11 +1034,19 @@ describe("git store receive", function () {
       // "other" is built on "work", which was never pushed, so its deltas name blobs the store lacks
       const work = commit("work");
       fx.git(src, ["checkout", "-q", "-B", "other", work]);
-      fs.writeFileSync(path.join(src, "docs", "big.txt"), fs.readFileSync(path.join(src, "docs", "big.txt"), "utf8").replace("line 5 ", "line 5 else "));
+      fs.writeFileSync(
+        path.join(src, "docs", "big.txt"),
+        fs
+          .readFileSync(path.join(src, "docs", "big.txt"), "utf8")
+          .replace("line 5 ", "line 5 else ")
+      );
       fx.git(src, ["commit", "-q", "-am", "On top of work"]);
       const other = fx.text(src, ["rev-parse", "HEAD"]);
 
-      const result = await direct([update(other)], fx.packRevs(src, [other], [work], { thin: true }));
+      const result = await direct(
+        [update(other)],
+        fx.packRevs(src, [other], [work], { thin: true })
+      );
       expect(result.outcome).toBe("refused");
       expect(result.status).not.toBe("ok");
       expect(result.messages[0]).toMatch(/^Push failed: /);
@@ -737,22 +1054,34 @@ describe("git store receive", function () {
     });
 
     it("refuses bytes which are not a pack", async function () {
-      const result = await direct([update(fixture.head)], Buffer.from("PACK this is not a pack, not at all, no"));
+      const result = await direct(
+        [update(fixture.head)],
+        Buffer.from("PACK this is not a pack, not at all, no")
+      );
       expect(result.outcome).toBe("refused");
       expect(result.status).toMatch(/not valid/);
       expectNoScratch();
     });
 
     describe("with regularFilesOnly", function () {
-      const symlink = (name) => () => fs.symlinkSync("docs/big.txt", path.join(src, name));
+      const symlink = (name) => () =>
+        fs.symlinkSync("docs/big.txt", path.join(src, name));
 
       it("refuses a master which adds a symbolic link, with Blot's message, and changes nothing", async function () {
         const tip = commit("link", symlink("link"));
         const before = await manifest.read(store);
 
-        const result = await direct([update(tip)], thin(tip), { regularFilesOnly: true });
+        const result = await direct([update(tip)], thin(tip), {
+          regularFilesOnly: true,
+        });
         expect(result.outcome).toBe("refused");
-        expect(result.results).toEqual([{ ref: MASTER, error: "Git blogs support regular files only (no symbolic links or submodules)" }]);
+        expect(result.results).toEqual([
+          {
+            ref: MASTER,
+            error:
+              "Git blogs support regular files only (no symbolic links or submodules)",
+          },
+        ]);
         expect((await manifest.read(store)).seq).toBe(before.seq);
         expectNoScratch();
       });
@@ -760,10 +1089,15 @@ describe("git store receive", function () {
       it("looks into the directories a push changes", async function () {
         const tip = commit("nested", () => {
           fs.mkdirSync(path.join(src, "deep", "er"), { recursive: true });
-          fs.symlinkSync("../../docs/big.txt", path.join(src, "deep", "er", "link"));
+          fs.symlinkSync(
+            "../../docs/big.txt",
+            path.join(src, "deep", "er", "link")
+          );
         });
 
-        const result = await direct([update(tip)], thin(tip), { regularFilesOnly: true });
+        const result = await direct([update(tip)], thin(tip), {
+          regularFilesOnly: true,
+        });
         expect(result.outcome).toBe("refused");
         expect(result.results[0].error).toMatch(/regular files only/);
       });
@@ -771,11 +1105,18 @@ describe("git store receive", function () {
       it("refuses a submodule", async function () {
         // By plumbing: `git add -A` would drop a gitlink with no repository there
         fx.git(src, ["checkout", "-q", "-B", "submodule", fixture.head]);
-        fx.git(src, ["update-index", "--add", "--cacheinfo", "160000," + fixture.commits[0] + ",vendor"]);
+        fx.git(src, [
+          "update-index",
+          "--add",
+          "--cacheinfo",
+          "160000," + fixture.commits[0] + ",vendor",
+        ]);
         fx.git(src, ["commit", "-q", "-m", "A submodule"]);
         const tip = fx.text(src, ["rev-parse", "HEAD"]);
 
-        const result = await direct([update(tip)], thin(tip), { regularFilesOnly: true });
+        const result = await direct([update(tip)], thin(tip), {
+          regularFilesOnly: true,
+        });
         expect(result.outcome).toBe("refused");
         expect(result.results[0].error).toMatch(/regular files only/);
       });
@@ -786,12 +1127,18 @@ describe("git store receive", function () {
           fs.chmodSync(path.join(src, "run.sh"), 0o755);
         });
 
-        const result = await direct([update(tip)], thin(tip), { regularFilesOnly: true });
+        const result = await direct([update(tip)], thin(tip), {
+          regularFilesOnly: true,
+        });
         expect(result.outcome).toBe("ok");
 
         // A tag is not master: what it points at is not checked
         const linked = commit("tagged-link", symlink("link"));
-        const tagged = await direct([{ old: ZERO, new: linked, ref: "refs/tags/linked" }], fx.packRevs(src, [linked], [tip], { thin: true }), { regularFilesOnly: true });
+        const tagged = await direct(
+          [{ old: ZERO, new: linked, ref: "refs/tags/linked" }],
+          fx.packRevs(src, [linked], [tip], { thin: true }),
+          { regularFilesOnly: true }
+        );
         expect(tagged.outcome).toBe("ok");
       });
 
@@ -802,24 +1149,42 @@ describe("git store receive", function () {
     });
 
     it("refuses a push over the limit, after reading it all", async function () {
-      const tip = commit("big", () => fs.writeFileSync(path.join(src, "big.bin"), fx.bytes(9, 2 * MiB)));
+      const tip = commit("big", () =>
+        fs.writeFileSync(path.join(src, "big.bin"), fx.bytes(9, 2 * MiB))
+      );
       const pack = thin(tip);
       expect(pack.length).toBeGreaterThan(MiB);
 
       const result = await direct([update(tip)], pack, { limit: MiB });
       expect(result.outcome).toBe("refused");
-      expect(result.status).toBe("this push is larger than Blot accepts (1 MiB); push fewer or smaller files at a time");
+      expect(result.status).toBe(
+        "this push is larger than Blot accepts (1 MiB); push fewer or smaller files at a time"
+      );
 
-      const early = await direct([update(tip)], pack, { limit: MiB, sizeHint: pack.length });
+      const early = await direct([update(tip)], pack, {
+        limit: MiB,
+        sizeHint: pack.length,
+      });
       expect(early.status).toBe(result.status);
       expectNoScratch();
     });
 
     it("fails clearly when the cache has no room, and gives the budget back", async function () {
-      const small = createCache({ dir: path.join(dir, "small"), maxBytes: 256 * 1024 });
-      const tip = commit("big", () => fs.writeFileSync(path.join(src, "big.bin"), fx.bytes(9, 2 * MiB)));
+      const small = createCache({
+        dir: path.join(dir, "small"),
+        maxBytes: 256 * 1024,
+      });
+      const tip = commit("big", () =>
+        fs.writeFileSync(path.join(src, "big.bin"), fx.bytes(9, 2 * MiB))
+      );
 
-      const result = await receive({ store, cache: small, lock, commands: [update(tip)], pack: bodyOf(thin(tip)) });
+      const result = await receive({
+        store,
+        cache: small,
+        lock,
+        commands: [update(tip)],
+        pack: bodyOf(thin(tip)),
+      });
       expect(result.outcome).toBe("failed");
       expect(result.status).toMatch(/no room/);
       expect(result.error.code).toBe("NO_ROOM");
@@ -846,17 +1211,24 @@ describe("git store receive", function () {
     afterEach(teardown);
 
     function hugeFile(edit) {
-      const line = Buffer.from("this line of the huge file is the same on every row of it......\n");
+      const line = Buffer.from(
+        "this line of the huge file is the same on every row of it......\n"
+      );
       const data = Buffer.alloc(70 * MiB);
-      for (let at = 0; at < data.length; at += line.length) line.copy(data, at, 0, Math.min(line.length, data.length - at));
+      for (let at = 0; at < data.length; at += line.length)
+        line.copy(data, at, 0, Math.min(line.length, data.length - at));
       if (edit) data.write("EDITED " + edit, 35 * MiB);
       return data;
     }
 
     it("streams it to scratch, and the push is accepted", async function () {
-      expect(Number(fx.text(src, ["cat-file", "-s", fixture.head + ":huge.txt"]))).toBeGreaterThan(64 * MiB);
+      expect(
+        Number(fx.text(src, ["cat-file", "-s", fixture.head + ":huge.txt"]))
+      ).toBeGreaterThan(64 * MiB);
 
-      const tip = commit("work", () => fs.writeFileSync(path.join(src, "huge.txt"), hugeFile(1)));
+      const tip = commit("work", () =>
+        fs.writeFileSync(path.join(src, "huge.txt"), hugeFile(1))
+      );
       const pack = thin(tip);
       expect(pack.length).toBeLessThan(MiB);
 
@@ -875,9 +1247,12 @@ describe("git store receive", function () {
     const SMALL = 256 * 1024;
 
     function hugeFile(edit) {
-      const line = Buffer.from("this line of the huge file is the same on every row of it......\n");
+      const line = Buffer.from(
+        "this line of the huge file is the same on every row of it......\n"
+      );
       const data = Buffer.alloc(SIZE);
-      for (let at = 0; at < data.length; at += line.length) line.copy(data, at, 0, Math.min(line.length, data.length - at));
+      for (let at = 0; at < data.length; at += line.length)
+        line.copy(data, at, 0, Math.min(line.length, data.length - at));
       if (edit) data.write("EDITED " + edit, MiB);
       return data;
     }
@@ -889,10 +1264,15 @@ describe("git store receive", function () {
       const entries = fx.listEntries(stored);
       const old = fx.text(src, ["rev-parse", "HEAD~1"]);
       const oid = fx.text(src, ["rev-parse", old + ":huge.txt"]);
-      expect(entries.find((entry) => entry.oid === oid).depth).toBeGreaterThan(0);
+      expect(entries.find((entry) => entry.oid === oid).depth).toBeGreaterThan(
+        0
+      );
 
       fx.git(src, ["checkout", "-q", "-B", "x", old]);
-      fs.writeFileSync(path.join(src, "huge.txt"), hugeFile(0).fill("E", 2 * MiB, 2 * MiB + 100));
+      fs.writeFileSync(
+        path.join(src, "huge.txt"),
+        hugeFile(0).fill("E", 2 * MiB, 2 * MiB + 100)
+      );
       fx.git(src, ["commit", "-q", "-am", "On an old version"]);
       const tip = fx.text(src, ["rev-parse", "HEAD"]);
       return { tip, pack: fx.packRevs(src, [tip], [old], { thin: true }) };
@@ -914,7 +1294,10 @@ describe("git store receive", function () {
       expect(pack.length).toBeLessThan(MiB);
 
       const reserved = [];
-      const timer = setInterval(() => reserved.push(cache.stats().reservedBytes), 1);
+      const timer = setInterval(
+        () => reserved.push(cache.stats().reservedBytes),
+        1
+      );
       const result = await direct([update(tip)], pack, { smallBase: SMALL });
       clearInterval(timer);
 
@@ -942,7 +1325,9 @@ describe("git store receive", function () {
 
       await hold.release();
       expectNoScratch();
-      expect((await direct([update(tip)], pack, { smallBase: SMALL })).outcome).toBe("ok");
+      expect(
+        (await direct([update(tip)], pack, { smallBase: SMALL })).outcome
+      ).toBe("ok");
     });
 
     it("refuses the push, for good, when the whole budget could never hold it", async function () {
@@ -952,7 +1337,9 @@ describe("git store receive", function () {
       const refused = await direct([update(tip)], pack, { smallBase: SMALL });
 
       expect(refused.outcome).toBe("refused");
-      expect(refused.status).toMatch(/builds on a file of 3 MiB which is larger than Blot can currently handle. Please contact support/);
+      expect(refused.status).toMatch(
+        /builds on a file of 3 MiB which is larger than Blot can currently handle. Please contact support/
+      );
       expect((await manifest.read(store)).refs[MASTER]).toBe(fixture.head);
       expectNoScratch();
     });
@@ -1025,9 +1412,27 @@ describe("git store receive", function () {
     // The pack's upload starts once index-pack has written it, before the
     // check of the new commits, so a check that fails finds it running
     it("aborts an upload still running when a check refuses the push, and names nothing", async function () {
-      const lie = fx.git(src, ["mktree", "--missing"], "100644 blob " + "ab".repeat(20) + "\tghost.txt\n").toString().trim();
-      const tip = fx.text(src, ["commit-tree", lie, "-p", fixture.head, "-m", "Points at a ghost"]);
-      const pack = fx.git(src, ["pack-objects", "--stdout", "-q"], tip + "\n" + lie + "\n");
+      const lie = fx
+        .git(
+          src,
+          ["mktree", "--missing"],
+          "100644 blob " + "ab".repeat(20) + "\tghost.txt\n"
+        )
+        .toString()
+        .trim();
+      const tip = fx.text(src, [
+        "commit-tree",
+        lie,
+        "-p",
+        fixture.head,
+        "-m",
+        "Points at a ghost",
+      ]);
+      const pack = fx.git(
+        src,
+        ["pack-objects", "--stdout", "-q"],
+        tip + "\n" + lie + "\n"
+      );
 
       const before = await manifest.read(store);
       const keys = await packKeys();
@@ -1039,7 +1444,10 @@ describe("git store receive", function () {
       const result = await direct([update(tip)], pack);
       expect(result.outcome).toBe("refused");
       expect(result.results[0].error).toBe("missing necessary objects");
-      expect(faulty.calls.slice(calls).filter((call) => /^put .*\.pack$/.test(call)).length).toBe(2);
+      expect(
+        faulty.calls.slice(calls).filter((call) => /^put .*\.pack$/.test(call))
+          .length
+      ).toBe(2);
       // Both slow uploads had ended, refused, before receive answered: the
       // history piece's body is a Buffer and lands, the pushed pack's is a
       // stream from scratch and was destroyed
@@ -1049,8 +1457,13 @@ describe("git store receive", function () {
       // The pushed pack never landed; the one .pack that did is the piece
       const landed = written.filter((key) => key.endsWith(".pack"));
       expect(landed.length).toBe(1);
-      const piece = fx.listEntries({ pack: await store.get(landed[0]), idx: await store.get(landed[0].replace(/\.pack$/, ".idx")) });
-      expect(piece.map((entry) => [entry.oid, entry.type])).toEqual([[tip, "commit"]]);
+      const piece = fx.listEntries({
+        pack: await store.get(landed[0]),
+        idx: await store.get(landed[0].replace(/\.pack$/, ".idx")),
+      });
+      expect(piece.map((entry) => [entry.oid, entry.type])).toEqual([
+        [tip, "commit"],
+      ]);
       expectNoScratch();
     });
 
@@ -1076,7 +1489,14 @@ describe("git store receive", function () {
     function slow(inner) {
       const wrapped = { ...inner };
       const t = () => performance.now();
-      for (const op of ["head", "read", "get", "put", "putIfAbsent", "delete"]) {
+      for (const op of [
+        "head",
+        "read",
+        "get",
+        "put",
+        "putIfAbsent",
+        "delete",
+      ]) {
         wrapped[op] = async (key, ...args) => {
           const entry = { op, key, start: t() };
           timeline.push(entry);
@@ -1097,41 +1517,64 @@ describe("git store receive", function () {
     });
     afterEach(teardown);
 
-    const said = (message) => (entry) => entry.op === "say" && entry.key === message;
-    const push = (tip) => receive({ store, cache, lock, commands: [update(tip)], pack: bodyOf(thin(tip)), progress: (message) => timeline.push({ op: "say", key: message, start: performance.now() }) });
+    const said = (message) => (entry) =>
+      entry.op === "say" && entry.key === message;
+    const push = (tip) =>
+      receive({
+        store,
+        cache,
+        lock,
+        commands: [update(tip)],
+        pack: bodyOf(thin(tip)),
+        progress: (message) =>
+          timeline.push({ op: "say", key: message, start: performance.now() }),
+      });
 
     for (const warm of [false, true]) {
-      it("uploads the pack beside the checks, and creates the manifest only once every upload has landed (" + (warm ? "warm" : "cold") + ")", async function () {
-        if (warm) {
-          const first = commit("first");
-          expect((await push(first)).outcome).toBe("ok");
-          fixture.head = first;
+      it(
+        "uploads the pack beside the checks, and creates the manifest only once every upload has landed (" +
+          (warm ? "warm" : "cold") +
+          ")",
+        async function () {
+          if (warm) {
+            const first = commit("first");
+            expect((await push(first)).outcome).toBe("ok");
+            fixture.head = first;
+          }
+          timeline.length = 0;
+
+          const tip = commit("work");
+          const result = await push(tip);
+          expect(result.outcome).toBe("ok");
+
+          const pushed = result.stats.packs[0];
+          const upload = timeline.find(
+            (entry) => entry.op === "put" && entry.key === packKey(pushed)
+          );
+          const checking = timeline.find(said("Checking the new commits..."));
+          const saving = timeline.find(said("Saving to Blot..."));
+          const create = timeline.find((entry) => entry.op === "putIfAbsent");
+
+          // Started before the commits were checked, not after
+          expect(upload.start).toBeLessThan(checking.start);
+          expect(upload.start).toBeLessThan(saving.start);
+
+          // Every upload had landed before the create was sent
+          const uploads = timeline.filter(
+            (entry) => entry.op === "put" && entry.key.startsWith("packs/")
+          );
+          expect(uploads.length).toBe(5);
+          for (const entry of uploads)
+            expect(entry.end).toBeLessThanOrEqual(create.start);
+
+          // A warm push makes the same requests as before: the hint and a HEAD,
+          // the five uploads, the create and the hint
+          if (warm)
+            expect(timeline.filter((entry) => entry.op !== "say").length).toBe(
+              9
+            );
         }
-        timeline.length = 0;
-
-        const tip = commit("work");
-        const result = await push(tip);
-        expect(result.outcome).toBe("ok");
-
-        const pushed = result.stats.packs[0];
-        const upload = timeline.find((entry) => entry.op === "put" && entry.key === packKey(pushed));
-        const checking = timeline.find(said("Checking the new commits..."));
-        const saving = timeline.find(said("Saving to Blot..."));
-        const create = timeline.find((entry) => entry.op === "putIfAbsent");
-
-        // Started before the commits were checked, not after
-        expect(upload.start).toBeLessThan(checking.start);
-        expect(upload.start).toBeLessThan(saving.start);
-
-        // Every upload had landed before the create was sent
-        const uploads = timeline.filter((entry) => entry.op === "put" && entry.key.startsWith("packs/"));
-        expect(uploads.length).toBe(5);
-        for (const entry of uploads) expect(entry.end).toBeLessThanOrEqual(create.start);
-
-        // A warm push makes the same requests as before: the hint and a HEAD,
-        // the five uploads, the create and the hint
-        if (warm) expect(timeline.filter((entry) => entry.op !== "say").length).toBe(9);
-      });
+      );
     }
   });
 });

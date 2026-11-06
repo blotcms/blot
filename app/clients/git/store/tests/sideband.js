@@ -16,7 +16,13 @@ const MASTER = "refs/heads/master";
 
 // A response as the server sees it: what it was given to write, in order
 function fakeResponse() {
-  const res = { headersSent: false, destroyed: false, chunks: [], headers: {}, ended: false };
+  const res = {
+    headersSent: false,
+    destroyed: false,
+    chunks: [],
+    headers: {},
+    ended: false,
+  };
   res.setHeader = (name, value) => (res.headers[name] = value);
   res.writeHead = (status) => {
     res.status = status;
@@ -32,12 +38,17 @@ describe("git store progress", function () {
   timeout(60 * 1000);
 
   describe("the response", function () {
-    const commands = [{ old: "0".repeat(40), new: "a".repeat(40), ref: MASTER }];
+    const commands = [
+      { old: "0".repeat(40), new: "a".repeat(40), ref: MASTER },
+    ];
     const ok = { status: "ok", results: [{ ref: MASTER }], messages: [] };
 
     it("writes progress on band 2 as it happens, then the report on band 1, then a flush", function () {
       const res = fakeResponse();
-      const response = createResponse(res, { capabilities: "report-status side-band-64k", commands });
+      const response = createResponse(res, {
+        capabilities: "report-status side-band-64k",
+        commands,
+      });
 
       response.progress("Checking the pack...");
       expect(res.status).toBe(200);
@@ -45,13 +56,20 @@ describe("git store progress", function () {
       expect(res.ended).toBe(false);
 
       response.finish(ok);
-      expect(res.text()).toBe("001a\x02Checking the pack...\n" + "0030\x01000eunpack ok\n0019ok refs/heads/master\n0000" + "0000");
+      expect(res.text()).toBe(
+        "001a\x02Checking the pack...\n" +
+          "0030\x01000eunpack ok\n0019ok refs/heads/master\n0000" +
+          "0000"
+      );
       expect(res.ended).toBe(true);
     });
 
     it("sends no progress to a client which asked for quiet, but still the report", function () {
       const res = fakeResponse();
-      const response = createResponse(res, { capabilities: "report-status side-band-64k quiet", commands });
+      const response = createResponse(res, {
+        capabilities: "report-status side-band-64k quiet",
+        commands,
+      });
       response.progress("Checking the pack...");
       expect(res.chunks).toEqual([]);
 
@@ -62,7 +80,10 @@ describe("git store progress", function () {
 
     it("sends a client without side-band the plain report and nothing else", function () {
       const res = fakeResponse();
-      const response = createResponse(res, { capabilities: "report-status", commands });
+      const response = createResponse(res, {
+        capabilities: "report-status",
+        commands,
+      });
       response.progress("Checking the pack...");
       response.finish({ ...ok, messages: ["ignored"] });
       expect(res.text()).toBe("000eunpack ok\n0019ok refs/heads/master\n0000");
@@ -70,10 +91,18 @@ describe("git store progress", function () {
 
     it("sends an empty band 1 packet when a stage is silent", async function () {
       const res = fakeResponse();
-      const response = createResponse(res, { capabilities: "report-status side-band-64k", commands, keepaliveMs: 20 });
+      const response = createResponse(res, {
+        capabilities: "report-status side-band-64k",
+        commands,
+        keepaliveMs: 20,
+      });
       response.progress("Saving to Blot...");
       // At least two keepalives, however late a loaded machine runs the timers
-      for (let waited = 0; response.stats.keepalives < 2 && waited < 2000; waited += 10) {
+      for (
+        let waited = 0;
+        response.stats.keepalives < 2 && waited < 2000;
+        waited += 10
+      ) {
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
       expect(res.text()).toContain("0005\x01");
@@ -88,7 +117,10 @@ describe("git store progress", function () {
     it("reports every ref as failed, whatever was said before, when something other than a result ends it", function () {
       const res = fakeResponse();
       spyOn(console, "error");
-      const response = createResponse(res, { capabilities: "report-status side-band-64k", commands });
+      const response = createResponse(res, {
+        capabilities: "report-status side-band-64k",
+        commands,
+      });
       response.progress("Saving to Blot...");
       response.fail(new Error("boom"));
 
@@ -100,14 +132,22 @@ describe("git store progress", function () {
 
     it("carries a refusal's messages and reports its refs as ng", function () {
       const res = fakeResponse();
-      const response = createResponse(res, { capabilities: "report-status side-band-64k", commands });
+      const response = createResponse(res, {
+        capabilities: "report-status side-band-64k",
+        commands,
+      });
       response.finish({
         status: "ok",
         results: [{ ref: MASTER, error: "missing necessary objects" }],
-        messages: [MASTER + ": missing necessary objects", "Nothing was pushed."],
+        messages: [
+          MASTER + ": missing necessary objects",
+          "Nothing was pushed.",
+        ],
       });
       expect(res.text()).toContain("Nothing was pushed.");
-      expect(res.text()).toContain("ng refs/heads/master missing necessary objects");
+      expect(res.text()).toContain(
+        "ng refs/heads/master missing necessary objects"
+      );
     });
   });
 
@@ -133,14 +173,31 @@ describe("git store progress", function () {
         store,
         lock: (fn) => fn(),
         base,
-        next: manifest.advance(base, { refs: { [MASTER]: fixture.head }, head: MASTER, packs: [entry] }),
+        next: manifest.advance(base, {
+          refs: { [MASTER]: fixture.head },
+          head: MASTER,
+          packs: [entry],
+        }),
       });
 
-      const cache = createCache({ dir: path.join(dir, "cache"), maxBytes: 64 * 1024 * 1024 });
-      server = await createReceiveServer({ store, cache, lock: (fn) => fn(), keepaliveMs: 100 });
+      const cache = createCache({
+        dir: path.join(dir, "cache"),
+        maxBytes: 64 * 1024 * 1024,
+      });
+      server = await createReceiveServer({
+        store,
+        cache,
+        lock: (fn) => fn(),
+        keepaliveMs: 100,
+      });
 
       fx.git(src, ["checkout", "-q", "-b", "work"]);
-      fs.writeFileSync(path.join(src, "docs", "big.txt"), fs.readFileSync(path.join(src, "docs", "big.txt"), "utf8").replace("line 3 ", "line 3 edited "));
+      fs.writeFileSync(
+        path.join(src, "docs", "big.txt"),
+        fs
+          .readFileSync(path.join(src, "docs", "big.txt"), "utf8")
+          .replace("line 3 ", "line 3 edited ")
+      );
       fx.git(src, ["commit", "-q", "-am", "Edit"]);
     });
 
@@ -156,13 +213,25 @@ describe("git store progress", function () {
       const pushed = await push(src, [server.url, "work:master"]);
       expect(pushed.code).toBe(0);
 
-      const saving = pushed.events.find((event) => event.text.includes("remote: Saving to Blot..."));
+      const saving = pushed.events.find((event) =>
+        event.text.includes("remote: Saving to Blot...")
+      );
       expect(saving).toBeDefined();
       expect(saving.at).toBeLessThan(pushed.endedAt - 1000);
 
-      const lines = pushed.stderr.split("\n").filter((line) => line.startsWith("remote: "));
-      const stages = ["Checking the pack...", "Fetching files the push builds on...", "Checking the new commits...", "Saving to Blot...", "Push saved."];
-      expect(lines.map((line) => line.slice("remote: ".length).trim())).toEqual(stages);
+      const lines = pushed.stderr
+        .split("\n")
+        .filter((line) => line.startsWith("remote: "));
+      const stages = [
+        "Checking the pack...",
+        "Fetching files the push builds on...",
+        "Checking the new commits...",
+        "Saving to Blot...",
+        "Push saved.",
+      ];
+      expect(lines.map((line) => line.slice("remote: ".length).trim())).toEqual(
+        stages
+      );
     });
 
     it("keeps the connection alive through a silent stage, and the push still succeeds", async function () {
@@ -194,7 +263,10 @@ describe("git store progress", function () {
     });
 
     it("never looks successful when the push fails after progress was shown", async function () {
-      faulty.inject("put", { key: /\.pack$/, before: new Error("upload broke") });
+      faulty.inject("put", {
+        key: /\.pack$/,
+        before: new Error("upload broke"),
+      });
 
       const pushed = await push(src, [server.url, "work:master"]);
       expect(pushed.code).not.toBe(0);

@@ -4,18 +4,21 @@ var prettyPrice = require("helper/prettyPrice");
 
 describe("user extend", function () {
   function createUser(overrides) {
-    return Object.assign({
-      uid: "user_extend_test",
-      email: "extend@example.com",
-      blogs: ["blog1"],
-      isDisabled: false,
-      lastSession: "",
-      passwordHash: "hash123",
-      created: Date.now(),
-      welcomeEmailSent: true,
-      subscription: {},
-      paypal: {}
-    }, overrides);
+    return Object.assign(
+      {
+        uid: "user_extend_test",
+        email: "extend@example.com",
+        blogs: ["blog1"],
+        isDisabled: false,
+        lastSession: "",
+        passwordHash: "hash123",
+        created: Date.now(),
+        welcomeEmailSent: true,
+        subscription: {},
+        paypal: {},
+      },
+      overrides
+    );
   }
 
   describe("sensitive field removal", function () {
@@ -87,8 +90,8 @@ describe("user extend", function () {
           status: "active",
           customer: "cus_123",
           plan: { amount: 4400, interval: "year" },
-          quantity: 1
-        }
+          quantity: 1,
+        },
       });
       extend(user);
       expect(user.isSubscribed).toBe(true);
@@ -100,8 +103,8 @@ describe("user extend", function () {
           status: "trialing",
           customer: "cus_123",
           plan: { amount: 4400, interval: "year" },
-          quantity: 1
-        }
+          quantity: 1,
+        },
       });
       extend(user);
       expect(user.isSubscribed).toBe(true);
@@ -114,8 +117,8 @@ describe("user extend", function () {
           cancel_at_period_end: true,
           customer: "cus_123",
           plan: { amount: 4400, interval: "year" },
-          quantity: 1
-        }
+          quantity: 1,
+        },
       });
       extend(user);
       expect(user.willCancel).toBe(true);
@@ -126,7 +129,7 @@ describe("user extend", function () {
     it("sets isFreeForLife when no customer and no paypal", function () {
       var user = createUser({
         subscription: { status: "active" },
-        paypal: {}
+        paypal: {},
       });
       extend(user);
       expect(user.isFreeForLife).toBe(true);
@@ -136,8 +139,8 @@ describe("user extend", function () {
       var user = createUser({
         subscription: {
           status: "unpaid",
-          customer: "cus_123"
-        }
+          customer: "cus_123",
+        },
       });
       extend(user);
       expect(user.isUnpaid).toBe(true);
@@ -148,8 +151,8 @@ describe("user extend", function () {
       var user = createUser({
         subscription: {
           status: "past_due",
-          customer: "cus_123"
-        }
+          customer: "cus_123",
+        },
       });
       extend(user);
       expect(user.isPastDue).toBe(true);
@@ -162,8 +165,8 @@ describe("user extend", function () {
           status: "active",
           customer: "cus_123",
           plan: { amount: 500, interval: "month" },
-          quantity: 1
-        }
+          quantity: 1,
+        },
       });
       extend(user);
       expect(user.isMonthly).toBe(true);
@@ -175,8 +178,8 @@ describe("user extend", function () {
           status: "active",
           customer: "cus_123",
           plan: { amount: 4400, interval: "year" },
-          quantity: 2
-        }
+          quantity: 2,
+        },
       });
       extend(user);
       expect(user.totalFee).toBe(8800);
@@ -190,8 +193,8 @@ describe("user extend", function () {
           customer: "cus_123",
           plan: { amount: 4400, interval: "year" },
           quantity: 2,
-          current_period_end: currentPeriodEnd
-        }
+          current_period_end: currentPeriodEnd,
+        },
       });
       extend(user);
       expect(user.pretty.amount).toBe(2);
@@ -207,8 +210,8 @@ describe("user extend", function () {
           status: "active",
           customer: "cus_123",
           plan: { amount: 4400, interval: "year" },
-          quantity: 1
-        }
+          quantity: 1,
+        },
       });
       extend(user);
       expect(user.pretty.s).toEqual("");
@@ -224,7 +227,7 @@ describe("user extend", function () {
     // in the environment running the tests (they aren't in CI).
     var testPlans = {
       monthly_4: "P-TEST-MONTHLY-4",
-      yearly_44: "P-TEST-YEARLY-44"
+      yearly_44: "P-TEST-YEARLY-44",
     };
 
     beforeEach(function () {
@@ -244,9 +247,9 @@ describe("user extend", function () {
           plan_id: testPlans.yearly_44,
           quantity: "1",
           billing_info: {
-            next_billing_time: new Date(Date.now() + 86400000).toISOString()
-          }
-        }
+            next_billing_time: new Date(Date.now() + 86400000).toISOString(),
+          },
+        },
       });
       extend(user);
       expect(user.isSubscribed).toBe(true);
@@ -259,16 +262,18 @@ describe("user extend", function () {
           status: "active",
           quantity: 2,
           plan: { amount: 400, interval: "month" },
-          current_period_end: Math.floor(Date.now() / 1000) + 86400
+          current_period_end: Math.floor(Date.now() / 1000) + 86400,
         },
         paypal: {
           status: "CANCELLED",
           plan_id: testPlans.yearly_44,
           quantity: "1",
           billing_info: {
-            last_payment: { time: new Date(Date.now() - 86400000).toISOString() }
-          }
-        }
+            last_payment: {
+              time: new Date(Date.now() - 86400000).toISOString(),
+            },
+          },
+        },
       });
       extend(user);
       expect(user.isMonthly).toBe(true);
@@ -285,9 +290,9 @@ describe("user extend", function () {
           plan_id: testPlans.yearly_44,
           quantity: "1",
           billing_info: {
-            last_payment: { time: new Date().toISOString() }
-          }
-        }
+            last_payment: { time: new Date().toISOString() },
+          },
+        },
       });
       extend(user);
       expect(user.willCancel).toBe(true);
@@ -302,9 +307,9 @@ describe("user extend", function () {
           plan_id: testPlans.monthly_4,
           quantity: "1",
           billing_info: {
-            next_billing_time: new Date(Date.now() + 86400000).toISOString()
-          }
-        }
+            next_billing_time: new Date(Date.now() + 86400000).toISOString(),
+          },
+        },
       });
       extend(user);
       expect(user.isMonthly).toBe(true);
@@ -319,9 +324,9 @@ describe("user extend", function () {
           plan_id: testPlans.yearly_44,
           quantity: "1",
           billing_info: {
-            next_billing_time: new Date(Date.now() + 86400000).toISOString()
-          }
-        }
+            next_billing_time: new Date(Date.now() + 86400000).toISOString(),
+          },
+        },
       });
       extend(user);
       expect(user.isMonthly).toBe(false);
@@ -345,7 +350,7 @@ describe("user extend", function () {
     it("is true for a Stripe subscription with a status", function () {
       var user = createUser({
         subscription: { status: "active", customer: "cus_123" },
-        paypal: {}
+        paypal: {},
       });
       extend(user);
       expect(user.showPaymentMethodsLink).toBe(true);
@@ -363,9 +368,9 @@ describe("user extend", function () {
           plan_id: "P-TEST-YEARLY-44",
           quantity: "1",
           billing_info: {
-            next_billing_time: new Date(Date.now() + 86400000).toISOString()
-          }
-        }
+            next_billing_time: new Date(Date.now() + 86400000).toISOString(),
+          },
+        },
       });
       extend(user);
       expect(user.showPaymentMethodsLink).toBe(true);
@@ -388,8 +393,8 @@ describe("user extend", function () {
           Object.assign(
             { id: "pm_1", brand: "visa", last4: "4242", isDefault: true },
             monthsFromNow(-1)
-          )
-        ]
+          ),
+        ],
       });
       extend(user);
       expect(user.paymentMethods[0].isExpired).toBe(true);
@@ -404,8 +409,8 @@ describe("user extend", function () {
           Object.assign(
             { id: "pm_1", brand: "visa", last4: "4242", isDefault: true },
             monthsFromNow(1)
-          )
-        ]
+          ),
+        ],
       });
       extend(user);
       expect(user.paymentMethods[0].isExpired).toBe(false);
@@ -420,8 +425,8 @@ describe("user extend", function () {
           Object.assign(
             { id: "pm_1", brand: "visa", last4: "4242", isDefault: true },
             monthsFromNow(12)
-          )
-        ]
+          ),
+        ],
       });
       extend(user);
       expect(user.paymentMethods[0].isExpired).toBe(false);

@@ -8,7 +8,8 @@ const { generate, PNG_SIZES } = require("./favicon-assets");
 
 const ASSETS = "_template_assets";
 const faviconDirectory = (blog) => assets.path(blog.id, ASSETS);
-const faviconURL = (blog, filename) => assets.url(blog.id, `${ASSETS}/${encodeURIComponent(filename)}`);
+const faviconURL = (blog, filename) =>
+  assets.url(blog.id, `${ASSETS}/${encodeURIComponent(filename)}`);
 
 function firstFile(files = {}) {
   const list = files.favicon;
@@ -17,27 +18,47 @@ function firstFile(files = {}) {
 
 // Paths of a favicon's files, relative to the blog's asset directory
 function assetPaths(blog, favicon) {
-  if (!favicon || !favicon.prefix || !/^favicon-[a-f0-9-]+$/.test(favicon.prefix)) return [];
+  if (
+    !favicon ||
+    !favicon.prefix ||
+    !/^favicon-[a-f0-9-]+$/.test(favicon.prefix)
+  )
+    return [];
   return [
     `${ASSETS}/${favicon.prefix}.ico`,
-    ...Object.values(PNG_SIZES).map((size) => `${ASSETS}/${favicon.prefix}-${size}.png`),
+    ...Object.values(PNG_SIZES).map(
+      (size) => `${ASSETS}/${favicon.prefix}-${size}.png`
+    ),
   ];
 }
 
 const removeAssets = (blog, favicon) =>
-  Promise.all(assetPaths(blog, favicon).map((path) => assets.remove(blog.id, path).catch(() => {})));
+  Promise.all(
+    assetPaths(blog, favicon).map((path) =>
+      assets.remove(blog.id, path).catch(() => {})
+    )
+  );
 
-const update = (blog, slug, locals) => new Promise((resolve, reject) =>
-  Template.update(blog.id, slug, { locals }, (err) => err ? reject(err) : resolve())
-);
+const update = (blog, slug, locals) =>
+  new Promise((resolve, reject) =>
+    Template.update(blog.id, slug, { locals }, (err) =>
+      err ? reject(err) : resolve()
+    )
+  );
 
-const persistToFolder = (blog, template) => new Promise((resolve, reject) =>
-  writeChangeToFolder(blog, template, {}, (err) => err ? reject(err) : resolve())
-);
+const persistToFolder = (blog, template) =>
+  new Promise((resolve, reject) =>
+    writeChangeToFolder(blog, template, {}, (err) =>
+      err ? reject(err) : resolve()
+    )
+  );
 
-const listTemplates = (blogID) => new Promise((resolve, reject) =>
-  Template.getTemplateList(blogID, (err, list) => err ? reject(err) : resolve(list || []))
-);
+const listTemplates = (blogID) =>
+  new Promise((resolve, reject) =>
+    Template.getTemplateList(blogID, (err, list) =>
+      err ? reject(err) : resolve(list || [])
+    )
+  );
 
 // Duplicating a template copies its favicon local verbatim, so two templates in
 // the same blog can point at the same generated files. Only remove a previous
@@ -50,19 +71,36 @@ async function removeAssetsIfUnreferenced(blog, favicon) {
   try {
     others = await listTemplates(blog.id);
   } catch (err) {
-    console.log(clfdate(), "uploadFavicon", "Unable to check old asset references; retaining files", err.message);
+    console.log(
+      clfdate(),
+      "uploadFavicon",
+      "Unable to check old asset references; retaining files",
+      err.message
+    );
     return;
   }
   const stillUsed = others.some(
-    (t) => t && t.locals && t.locals.favicon && t.locals.favicon.prefix === favicon.prefix
+    (t) =>
+      t &&
+      t.locals &&
+      t.locals.favicon &&
+      t.locals.favicon.prefix === favicon.prefix
   );
   if (stillUsed) return;
 
   await Promise.all(
     paths.map((path) =>
-      assets.remove(blog.id, path).catch((err) =>
-        console.log(clfdate(), "uploadFavicon", "Failed to remove old asset", path, err.message)
-      )
+      assets
+        .remove(blog.id, path)
+        .catch((err) =>
+          console.log(
+            clfdate(),
+            "uploadFavicon",
+            "Failed to remove old asset",
+            path,
+            err.message
+          )
+        )
     )
   );
 }
@@ -84,13 +122,24 @@ async function deleteFavicon(blog, template, slug) {
 // which needs the same generate/persist/rollback behavior but isn't itself
 // an Express request - calling this directly keeps that call site from
 // depending on req/res internals it doesn't otherwise need.
-async function createFavicon(blog, template, slug, filePath, cropBox, { onFileProcessed, shape } = {}) {
+async function createFavicon(
+  blog,
+  template,
+  slug,
+  filePath,
+  cropBox,
+  { onFileProcessed, shape } = {}
+) {
   const previous = template.locals.favicon;
 
-  const created = await generate(filePath, faviconDirectory(blog), cropBox, { shape });
+  const created = await generate(filePath, faviconDirectory(blog), cropBox, {
+    shape,
+  });
   // generate() wrote the files to the local directory
   try {
-    await Promise.all(assetPaths(blog, created).map((path) => assets.commit(blog.id, path)));
+    await Promise.all(
+      assetPaths(blog, created).map((path) => assets.commit(blog.id, path))
+    );
   } catch (error) {
     await removeAssets(blog, created);
     throw error;
@@ -149,7 +198,10 @@ module.exports = async function uploadFavicon(req, res, next) {
   if (!isDelete && (!file || !file.size)) {
     await cleanupFiles(req.files);
     if (isAjaxRequest(req)) return res.json({ favicon: previous || null });
-    return res.message(req.body.redirect || res.locals.base, previous ? "No changes" : "Choose an image for your favicon");
+    return res.message(
+      req.body.redirect || res.locals.base,
+      previous ? "No changes" : "Choose an image for your favicon"
+    );
   }
 
   if (isDelete) {
@@ -159,7 +211,9 @@ module.exports = async function uploadFavicon(req, res, next) {
     } catch (error) {
       return next(error);
     }
-    return isAjaxRequest(req) ? res.json({ favicon: null }) : res.message(req.body.redirect || res.locals.base, "Removed favicon");
+    return isAjaxRequest(req)
+      ? res.json({ favicon: null })
+      : res.message(req.body.redirect || res.locals.base, "Removed favicon");
   }
 
   let favicon;
@@ -177,7 +231,9 @@ module.exports = async function uploadFavicon(req, res, next) {
     return next(error);
   }
 
-  return isAjaxRequest(req) ? res.json({ favicon }) : res.message(req.body.redirect || res.locals.base, "Updated favicon");
+  return isAjaxRequest(req)
+    ? res.json({ favicon })
+    : res.message(req.body.redirect || res.locals.base, "Updated favicon");
 };
 
 module.exports.removeAssetsIfUnreferenced = removeAssetsIfUnreferenced;

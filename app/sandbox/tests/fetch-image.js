@@ -4,7 +4,11 @@ describe("sandbox fetch-image job", function () {
   const sharp = require("sharp");
   const config = require("config");
   const sandbox = require("../");
-  const { MAX_REDIRECTS, MAX_DECODED_BYTES, MAX_DIMENSION } = require("../jobs/fetch-image");
+  const {
+    MAX_REDIRECTS,
+    MAX_DECODED_BYTES,
+    MAX_DIMENSION,
+  } = require("../jobs/fetch-image");
 
   const MiB = 1024 * 1024;
   const empty = Buffer.alloc(0);
@@ -45,15 +49,22 @@ describe("sandbox fetch-image job", function () {
 
   const png = (width, height) =>
     sharp({
-      create: { width, height, channels: 3, background: { r: 200, g: 50, b: 50 } },
+      create: {
+        width,
+        height,
+        channels: 3,
+        background: { r: 200, g: 50, b: 50 },
+      },
     })
       .png()
       .toBuffer();
 
-  const serve = (body, headers = {}) => (req, res) => {
-    res.writeHead(200, { "Content-Type": "image/png", ...headers });
-    res.end(body);
-  };
+  const serve =
+    (body, headers = {}) =>
+    (req, res) => {
+      res.writeHead(200, { "Content-Type": "image/png", ...headers });
+      res.end(body);
+    };
 
   it("fetches an image, re-encoded, with its caching headers", async function () {
     const image = await png(40, 30);
@@ -87,7 +98,9 @@ describe("sandbox fetch-image job", function () {
       .jpeg()
       .withMetadata({ orientation: 6 })
       .toBuffer();
-    routes["/photo"] = serve(jpeg, { "Content-Type": "application/octet-stream" });
+    routes["/photo"] = serve(jpeg, {
+      "Content-Type": "application/octet-stream",
+    });
 
     const { meta, outputs } = await fetchImage({ url: origin + "/photo" });
 
@@ -110,7 +123,9 @@ describe("sandbox fetch-image job", function () {
 
   it("keeps an animated GIF animated", async function () {
     const frame = (background) =>
-      sharp({ create: { width: 20, height: 10, channels: 3, background } }).png().toBuffer();
+      sharp({ create: { width: 20, height: 10, channels: 3, background } })
+        .png()
+        .toBuffer();
     const gif = await sharp([await frame("#ff0000"), await frame("#00ff00")], {
       join: { animated: true },
     })
@@ -118,11 +133,15 @@ describe("sandbox fetch-image job", function () {
       .toBuffer();
     routes["/animated.gif"] = serve(gif, { "Content-Type": "image/gif" });
 
-    const { meta, outputs } = await fetchImage({ url: origin + "/animated.gif" });
+    const { meta, outputs } = await fetchImage({
+      url: origin + "/animated.gif",
+    });
 
     expect(meta.format).toBe("gif");
     expect([meta.width, meta.height]).toEqual([20, 10]);
-    expect((await sharp(outputs[0], { animated: true }).metadata()).pages).toBe(2);
+    expect((await sharp(outputs[0], { animated: true }).metadata()).pages).toBe(
+      2
+    );
   });
 
   it("decodes a gzip body", async function () {
@@ -148,11 +167,15 @@ describe("sandbox fetch-image job", function () {
       };
     }
 
-    const followed = await fetchImage({ url: `${origin}/hop-${MAX_REDIRECTS}` });
+    const followed = await fetchImage({
+      url: `${origin}/hop-${MAX_REDIRECTS}`,
+    });
     expect(followed.meta.error).toBeUndefined();
     expect(followed.outputs.length).toBe(1);
 
-    const tooMany = await fetchImage({ url: `${origin}/hop-${MAX_REDIRECTS + 1}` });
+    const tooMany = await fetchImage({
+      url: `${origin}/hop-${MAX_REDIRECTS + 1}`,
+    });
     expect(tooMany.meta.error).toBe("too many redirects");
     expect(tooMany.outputs).toEqual([]);
   });
@@ -167,17 +190,22 @@ describe("sandbox fetch-image job", function () {
       res.end();
     };
 
-    expect((await fetchImage({ url: origin + "/to-file" })).meta.error).toBe("URL is not allowed");
-    expect((await fetchImage({ url: origin + "/to-credentials" })).meta.error).toBe(
-      "URL must not contain credentials"
+    expect((await fetchImage({ url: origin + "/to-file" })).meta.error).toBe(
+      "URL is not allowed"
     );
+    expect(
+      (await fetchImage({ url: origin + "/to-credentials" })).meta.error
+    ).toBe("URL must not contain credentials");
   });
 
   it("stops a gzip bomb once it has inflated past the limit", async function () {
     const bomb = zlib.gzipSync(Buffer.alloc(MAX_DECODED_BYTES + MiB));
     expect(bomb.length).toBeLessThan(MiB);
     routes["/bomb"] = (req, res) => {
-      res.writeHead(200, { "Content-Encoding": "gzip", "Content-Length": bomb.length });
+      res.writeHead(200, {
+        "Content-Encoding": "gzip",
+        "Content-Length": bomb.length,
+      });
       res.end(bomb);
     };
 
@@ -187,9 +215,12 @@ describe("sandbox fetch-image job", function () {
   });
 
   it("stops a brotli bomb once it has inflated past the limit", async function () {
-    const bomb = zlib.brotliCompressSync(Buffer.alloc(MAX_DECODED_BYTES + MiB), {
-      params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 1 },
-    });
+    const bomb = zlib.brotliCompressSync(
+      Buffer.alloc(MAX_DECODED_BYTES + MiB),
+      {
+        params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 1 },
+      }
+    );
     routes["/bomb"] = (req, res) => {
       res.writeHead(200, { "Content-Encoding": "br" });
       res.end(bomb);
@@ -219,14 +250,20 @@ describe("sandbox fetch-image job", function () {
       write();
     };
 
-    expect((await fetchImage({ url: origin + "/declared" })).meta.error).toBe("image is too large");
-    expect((await fetchImage({ url: origin + "/chunked" })).meta.error).toBe("image is too large");
+    expect((await fetchImage({ url: origin + "/declared" })).meta.error).toBe(
+      "image is too large"
+    );
+    expect((await fetchImage({ url: origin + "/chunked" })).meta.error).toBe(
+      "image is too large"
+    );
   });
 
   it("refuses a body that isn't an image, or is SVG", async function () {
     routes["/page.png"] = serve(Buffer.from("<html><body>hello</body></html>"));
     routes["/drawing.svg"] = serve(
-      Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>'),
+      Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>'
+      ),
       { "Content-Type": "image/svg+xml" }
     );
 
@@ -246,21 +283,41 @@ describe("sandbox fetch-image job", function () {
       .toBuffer();
     routes["/huge.png"] = serve(huge);
     // fewer pixels, but the limit is lower for what is decoded whole
-    const create = { width: 3700, height: 3500, channels: 3, background: "#000000" };
+    const create = {
+      width: 3700,
+      height: 3500,
+      channels: 3,
+      background: "#000000",
+    };
     routes["/huge.webp"] = serve(await sharp({ create }).webp().toBuffer());
     routes["/progressive.jpg"] = serve(
-      await sharp({ create }).jpeg({ progressive: true, chromaSubsampling: "4:4:4" }).toBuffer()
+      await sharp({ create })
+        .jpeg({ progressive: true, chromaSubsampling: "4:4:4" })
+        .toBuffer()
     );
-    routes["/interlaced.png"] = serve(await sharp({ create }).png({ progressive: true }).toBuffer());
+    routes["/interlaced.png"] = serve(
+      await sharp({ create }).png({ progressive: true }).toBuffer()
+    );
     // ...unless a progressive JPEG's chroma is subsampled
     routes["/progressive-420.jpg"] = serve(
-      await sharp({ create }).jpeg({ progressive: true, chromaSubsampling: "4:2:0" }).toBuffer()
+      await sharp({ create })
+        .jpeg({ progressive: true, chromaSubsampling: "4:2:0" })
+        .toBuffer()
     );
 
-    for (const name of ["huge.png", "huge.webp", "progressive.jpg", "interlaced.png"]) {
-      expect((await fetchImage({ url: `${origin}/${name}` })).meta.error).toBe("image is too large");
+    for (const name of [
+      "huge.png",
+      "huge.webp",
+      "progressive.jpg",
+      "interlaced.png",
+    ]) {
+      expect((await fetchImage({ url: `${origin}/${name}` })).meta.error).toBe(
+        "image is too large"
+      );
     }
-    expect((await fetchImage({ url: origin + "/progressive-420.jpg" })).meta.format).toBe("jpeg");
+    expect(
+      (await fetchImage({ url: origin + "/progressive-420.jpg" })).meta.format
+    ).toBe("jpeg");
   });
 
   it("reports a bad status, and a body cut short", async function () {
@@ -292,7 +349,9 @@ describe("sandbox fetch-image job", function () {
     expect(meta).toEqual({ status: 304, headers: { etag: '"v1"' } });
     expect(outputs).toEqual([]);
     expect(requests[0].headers["if-none-match"]).toBe('"v1"');
-    expect(requests[0].headers["if-modified-since"]).toBe("Wed, 01 Jan 2020 00:00:00 GMT");
+    expect(requests[0].headers["if-modified-since"]).toBe(
+      "Wed, 01 Jan 2020 00:00:00 GMT"
+    );
   });
 
   it("checks its arguments", async function () {
@@ -310,13 +369,14 @@ describe("sandbox fetch-image job", function () {
       expect(outputs).toEqual([]);
     }
 
-    expect((await fetchImage({ url: "http://user:pass@example.com/a.png" })).meta.error).toBe(
-      "URL must not contain credentials"
-    );
+    expect(
+      (await fetchImage({ url: "http://user:pass@example.com/a.png" })).meta
+        .error
+    ).toBe("URL must not contain credentials");
     for (const etag of ['"a"\r\nX-Injected: 1', 42, "x".repeat(600)]) {
-      expect((await fetchImage({ url: origin + "/a.png", etag })).meta.error).toBe(
-        "invalid conditional header"
-      );
+      expect(
+        (await fetchImage({ url: origin + "/a.png", etag })).meta.error
+      ).toBe("invalid conditional header");
     }
     expect(requests.length).toBe(0);
   });
@@ -327,7 +387,9 @@ describe("sandbox fetch-image job", function () {
     const { port } = closed.address();
     await new Promise((resolve) => closed.close(resolve));
 
-    const { meta } = await fetchImage({ url: `http://127.0.0.1:${port}/a.png` });
+    const { meta } = await fetchImage({
+      url: `http://127.0.0.1:${port}/a.png`,
+    });
     expect(meta.code).toBe("ECONNREFUSED");
   });
 });

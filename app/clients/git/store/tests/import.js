@@ -33,7 +33,15 @@ const lock = (fn) => fn();
 
 function lines(version) {
   const out = [];
-  for (let i = 0; i < 400; i++) out.push("line " + i + " " + (i % 40 === version % 40 ? "edited " + version : "same") + " " + ((i * 7919 + version) % 1000));
+  for (let i = 0; i < 400; i++)
+    out.push(
+      "line " +
+        i +
+        " " +
+        (i % 40 === version % 40 ? "edited " + version : "same") +
+        " " +
+        ((i * 7919 + version) % 1000)
+    );
   return out.join("\n") + "\n";
 }
 
@@ -53,10 +61,16 @@ function buildRich(dir) {
     fs.writeFileSync(path.join(dir, "docs", "big.txt"), lines(n));
     binary[(n * 4099) % binary.length] ^= 0xff;
     fs.writeFileSync(path.join(dir, "large.bin"), binary);
-    fs.writeFileSync(path.join(dir, "post-" + n + ".md"), "# Post " + n + "\n" + lines(n % 3).slice(0, 2000));
-    if (n === 2) fs.writeFileSync(path.join(dir, "img", "a.png"), fx.bytes(21, 30000));
-    if (n === 5) fs.writeFileSync(path.join(dir, "img", "b.png"), fx.bytes(22, 40000));
-    for (const [name, contents] of Object.entries(extra)) fs.writeFileSync(path.join(dir, name), contents);
+    fs.writeFileSync(
+      path.join(dir, "post-" + n + ".md"),
+      "# Post " + n + "\n" + lines(n % 3).slice(0, 2000)
+    );
+    if (n === 2)
+      fs.writeFileSync(path.join(dir, "img", "a.png"), fx.bytes(21, 30000));
+    if (n === 5)
+      fs.writeFileSync(path.join(dir, "img", "b.png"), fx.bytes(22, 40000));
+    for (const [name, contents] of Object.entries(extra))
+      fs.writeFileSync(path.join(dir, name), contents);
     fx.git(dir, ["add", "-A"]);
     fx.git(dir, ["commit", "-q", "-m", message]);
   }
@@ -80,14 +94,25 @@ function buildRich(dir) {
 
   fx.git(dir, ["tag", "light", "HEAD~2"]);
   fx.git(dir, ["tag", "-a", "v1", "-m", "Version 1", "HEAD~1"]);
-  fx.git(dir, ["tag", "-a", "v1-again", "-m", "A tag of the tag", fx.text(dir, ["rev-parse", "v1"])]);
+  fx.git(dir, [
+    "tag",
+    "-a",
+    "v1-again",
+    "-m",
+    "A tag of the tag",
+    fx.text(dir, ["rev-parse", "v1"]),
+  ]);
   fx.git(dir, ["tag", "-a", "v2", "-m", "Version 2", "HEAD"]);
 }
 
 // What an import must leave behind: an unreachable blob and commit, a stash, a
 // ref only under refs/remotes, and a note
 function addLeftovers(dir) {
-  fx.git(dir, ["hash-object", "-w", "--stdin"], "an object nothing points at\n");
+  fx.git(
+    dir,
+    ["hash-object", "-w", "--stdin"],
+    "an object nothing points at\n"
+  );
   const orphanTree = fx.text(dir, ["write-tree"]);
   fx.git(dir, ["commit-tree", orphanTree, "-m", "orphan"]);
 
@@ -95,7 +120,10 @@ function addLeftovers(dir) {
   fx.git(dir, ["stash", "-q"]);
 
   fx.git(dir, ["checkout", "-q", "-b", "tmp"]);
-  fs.writeFileSync(path.join(dir, "remote-only.md"), "only a remote has this\n");
+  fs.writeFileSync(
+    path.join(dir, "remote-only.md"),
+    "only a remote has this\n"
+  );
   fx.git(dir, ["add", "-A"]);
   fx.git(dir, ["commit", "-q", "-m", "Remote only"]);
   fx.git(dir, ["update-ref", "refs/remotes/origin/tmp", "HEAD"]);
@@ -112,7 +140,9 @@ function fingerprint(dir) {
     for (const name of fs.readdirSync(current).sort()) {
       const file = path.join(current, name);
       const stat = fs.lstatSync(file);
-      hash.update(path.relative(dir, file) + "\0" + (stat.mode & 0o7777) + "\0");
+      hash.update(
+        path.relative(dir, file) + "\0" + (stat.mode & 0o7777) + "\0"
+      );
       if (stat.isDirectory()) walk(file);
       else if (stat.isSymbolicLink()) hash.update(fs.readlinkSync(file));
       else hash.update(fs.readFileSync(file));
@@ -124,7 +154,12 @@ function fingerprint(dir) {
 const refsOf = (dir) =>
   Object.fromEntries(
     fx
-      .text(dir, ["for-each-ref", "--format=%(refname) %(objectname)", "refs/heads", "refs/tags"])
+      .text(dir, [
+        "for-each-ref",
+        "--format=%(refname) %(objectname)",
+        "refs/heads",
+        "refs/tags",
+      ])
       .split("\n")
       .filter(Boolean)
       .map((line) => line.split(" "))
@@ -152,10 +187,22 @@ describe("git store import", function () {
   function setup({ maxBytes = 64 * MiB, wrap = (store) => store } = {}) {
     const inner = createMemoryStore();
     const dir = path.join(root, "cache-" + ++counter);
-    return { inner, store: wrap(inner), cache: createCache({ dir, maxBytes }), cacheDir: dir };
+    return {
+      inner,
+      store: wrap(inner),
+      cache: createCache({ dir, maxBytes }),
+      cacheDir: dir,
+    };
   }
 
-  const run = (env, gitDir, options = {}) => importRepo({ store: env.store, cache: env.cache, lock, gitDir, ...options });
+  const run = (env, gitDir, options = {}) =>
+    importRepo({
+      store: env.store,
+      cache: env.cache,
+      lock,
+      gitDir,
+      ...options,
+    });
 
   function scratchIsEmpty(env) {
     expect(env.cache.stats().reservedBytes).toBe(0);
@@ -166,7 +213,9 @@ describe("git store import", function () {
   async function oidsOf(store, name) {
     const idx = await store.get(idxKey(name));
     const { ids, count } = compact.git.idsOf(idx, name);
-    return Array.from({ length: count }, (_, i) => ids.subarray(i * 20, i * 20 + 20).toString("hex"));
+    return Array.from({ length: count }, (_, i) =>
+      ids.subarray(i * 20, i * 20 + 20).toString("hex")
+    );
   }
 
   describe("a repository with history, tags and things to leave behind", function () {
@@ -187,7 +236,15 @@ describe("git store import", function () {
     it("imports every branch and tag into manifest 1, with HEAD and the peeled tags", function () {
       const source = refsOf(rich);
       expect(Object.keys(source).sort()).toEqual(
-        ["refs/heads/dev", "refs/heads/master", "refs/heads/wip", "refs/tags/light", "refs/tags/v1", "refs/tags/v1-again", "refs/tags/v2"].sort()
+        [
+          "refs/heads/dev",
+          "refs/heads/master",
+          "refs/heads/wip",
+          "refs/tags/light",
+          "refs/tags/v1",
+          "refs/tags/v1-again",
+          "refs/tags/v2",
+        ].sort()
       );
 
       expect(result.outcome).toBe("imported");
@@ -229,32 +286,62 @@ describe("git store import", function () {
       expect(new Set(packed)).toEqual(reachable);
       expect(packed.length).toBe(result.pack.objects);
 
-      const all = fx.text(rich, ["cat-file", "--batch-all-objects", "--batch-check=%(objectname)"]).split("\n");
+      const all = fx
+        .text(rich, [
+          "cat-file",
+          "--batch-all-objects",
+          "--batch-check=%(objectname)",
+        ])
+        .split("\n");
       expect(all.length).toBeGreaterThan(packed.length + 5);
       const stash = fx.text(rich, ["rev-parse", "refs/stash"]);
       expect(packed).not.toContain(stash);
-      expect(packed).not.toContain(fx.text(rich, ["rev-parse", "refs/remotes/origin/tmp"]));
-      expect(packed).not.toContain(fx.text(rich, ["rev-parse", "refs/notes/commits"]));
+      expect(packed).not.toContain(
+        fx.text(rich, ["rev-parse", "refs/remotes/origin/tmp"])
+      );
+      expect(packed).not.toContain(
+        fx.text(rich, ["rev-parse", "refs/notes/commits"])
+      );
 
-      expect(result.skipped.map((skip) => skip.ref).sort()).toEqual(["refs/notes/commits", "refs/remotes/origin/tmp", "refs/stash"]);
+      expect(result.skipped.map((skip) => skip.ref).sort()).toEqual([
+        "refs/notes/commits",
+        "refs/remotes/origin/tmp",
+        "refs/stash",
+      ]);
     });
 
     it("writes a history pack of every commit and nothing else, and a .rev for the main pack only", async function () {
-      const commits = fx.text(rich, ["rev-list", "--branches", "--tags"]).split("\n").sort();
+      const commits = fx
+        .text(rich, ["rev-list", "--branches", "--tags"])
+        .split("\n")
+        .sort();
       const graph = await readHistory({ store: env.store, manifest: imported });
       expect(graph.size).toBe(commits.length);
       expect(result.history.commits).toBe(commits.length);
       for (const oid of commits) {
-        expect(graph.parents(oid)).toEqual(fx.text(rich, ["rev-list", "--parents", "-n", "1", oid]).split(" ").slice(1));
+        expect(graph.parents(oid)).toEqual(
+          fx
+            .text(rich, ["rev-list", "--parents", "-n", "1", oid])
+            .split(" ")
+            .slice(1)
+        );
       }
 
-      expect(await env.store.head(revKey(imported.packs[0].name))).not.toBeNull();
+      expect(
+        await env.store.head(revKey(imported.packs[0].name))
+      ).not.toBeNull();
       expect(await env.store.head(revKey(imported.history.name))).toBeNull();
-      expect((await env.store.head(packKey(imported.history.name))).size).toBe(imported.history.size);
+      expect((await env.store.head(packKey(imported.history.name))).size).toBe(
+        imported.history.size
+      );
     });
 
     it("reads every object back through the store as git has it", async function () {
-      const reader = createReader({ store: env.store, cache: env.cache, packs: imported.packs });
+      const reader = createReader({
+        store: env.store,
+        cache: env.cache,
+        packs: imported.packs,
+      });
       const oids = fx
         .text(rich, ["rev-list", "--objects", "--branches", "--tags"])
         .split("\n")
@@ -273,7 +360,13 @@ describe("git store import", function () {
     });
 
     it("makes requests which do not depend on the size: 9, and the ones the manifest swap makes", function () {
-      expect(result.stats.requests).toEqual({ total: 9, gets: 1, lists: 1, puts: 6, putIfAbsents: 1 });
+      expect(result.stats.requests).toEqual({
+        total: 9,
+        gets: 1,
+        lists: 1,
+        puts: 6,
+        putIfAbsents: 1,
+      });
       expect(asked.puts).toBe(6);
       expect(asked.putIfAbsents).toBe(1);
       expect(asked.heads).toBe(0);
@@ -281,46 +374,92 @@ describe("git store import", function () {
     });
 
     it("passes git's checks as a clone, and the clone has the source's refs", async function () {
-      const server = await startServer({ store: env.store, cache: env.cache, manifest: () => manifest.read(env.store) });
+      const server = await startServer({
+        store: env.store,
+        cache: env.cache,
+        manifest: () => manifest.read(env.store),
+      });
       try {
         const target = path.join(root, "clone-" + ++counter);
-        const cloned = await runGit(["-c", "transfer.fsckObjects=true", "clone", "-q", server.url, target]);
+        const cloned = await runGit([
+          "-c",
+          "transfer.fsckObjects=true",
+          "clone",
+          "-q",
+          server.url,
+          target,
+        ]);
         expect(cloned.code).toBe(0, cloned.stderr);
         expect(server.errors).toEqual([]);
 
         fx.git(target, ["fsck", "--strict", "--no-dangling"]);
         const found = {};
-        for (const line of fx.text(target, ["for-each-ref", "--format=%(refname) %(objectname)", "refs/remotes/origin", "refs/tags"]).split("\n").filter(Boolean)) {
+        for (const line of fx
+          .text(target, [
+            "for-each-ref",
+            "--format=%(refname) %(objectname)",
+            "refs/remotes/origin",
+            "refs/tags",
+          ])
+          .split("\n")
+          .filter(Boolean)) {
           const [ref, oid] = line.split(" ");
-          if (ref !== "refs/remotes/origin/HEAD") found[ref.replace("refs/remotes/origin/", "refs/heads/")] = oid;
+          if (ref !== "refs/remotes/origin/HEAD")
+            found[ref.replace("refs/remotes/origin/", "refs/heads/")] = oid;
         }
         expect(found).toEqual(refsOf(rich));
-        expect(fx.text(target, ["rev-parse", "HEAD"])).toBe(fx.text(rich, ["rev-parse", "refs/heads/master"]));
+        expect(fx.text(target, ["rev-parse", "HEAD"])).toBe(
+          fx.text(rich, ["rev-parse", "refs/heads/master"])
+        );
       } finally {
         await server.close();
       }
     });
 
     it("verifyImport agrees", async function () {
-      const verified = await verifyImport({ store: env.store, cache: env.cache, gitDir: path.join(rich, ".git") });
+      const verified = await verifyImport({
+        store: env.store,
+        cache: env.cache,
+        gitDir: path.join(rich, ".git"),
+      });
       expect(verified.refs).toBe(7);
       scratchIsEmpty(env);
     });
 
     it("leaves a single pack for compaction to leave alone", async function () {
-      const outcome = await compact({ store: env.store, cache: env.cache, lock });
+      const outcome = await compact({
+        store: env.store,
+        cache: env.cache,
+        lock,
+      });
       expect(outcome.outcome).toBe("nothing");
       expect((await manifest.read(env.store)).seq).toBe(1);
     });
 
     it("materializes from the empty tree the folder git checks out", async function () {
-      const reader = createReader({ store: env.store, cache: env.cache, packs: imported.packs, scratch: env.cache });
+      const reader = createReader({
+        store: env.store,
+        cache: env.cache,
+        packs: imported.packs,
+        scratch: env.cache,
+      });
       const folder = path.join(root, "folder-" + ++counter);
       fs.mkdirSync(folder);
-      await materialize({ reader, from: null, to: imported.refs["refs/heads/master"], sink: createFolderSink({ root: folder }) });
+      await materialize({
+        reader,
+        from: null,
+        to: imported.refs["refs/heads/master"],
+        sink: createFolderSink({ root: folder }),
+      });
 
       const checkout = path.join(root, "checkout-" + ++counter);
-      fx.git(root, ["clone", "-q", "--no-hardlinks", path.join(rich, ".git"), checkout]);
+      fx.git(root, [
+        "clone",
+        "-q",
+        "--no-hardlinks",
+        path.join(rich, ".git"),
+        checkout,
+      ]);
       fs.rmSync(path.join(checkout, ".git"), { recursive: true });
       expect(listFiles(folder)).toEqual(listFiles(checkout));
     });
@@ -338,13 +477,28 @@ describe("git store import", function () {
           return next;
         };
       })();
-      const received = await createReceiveServer({ store: env.store, cache: env.cache, lock: lockOf });
-      const server = await startServer({ store: env.store, cache: env.cache, manifest: () => manifest.read(env.store) });
+      const received = await createReceiveServer({
+        store: env.store,
+        cache: env.cache,
+        lock: lockOf,
+      });
+      const server = await startServer({
+        store: env.store,
+        cache: env.cache,
+        manifest: () => manifest.read(env.store),
+      });
 
       try {
         const clone = async (name) => {
           const target = path.join(root, name + "-" + ++counter);
-          const cloned = await runGit(["-c", "transfer.fsckObjects=true", "clone", "-q", server.url, target]);
+          const cloned = await runGit([
+            "-c",
+            "transfer.fsckObjects=true",
+            "clone",
+            "-q",
+            server.url,
+            target,
+          ]);
           expect(cloned.code).toBe(0, cloned.stderr);
           return target;
         };
@@ -352,7 +506,10 @@ describe("git store import", function () {
         const writer = await clone("writer");
 
         // A push: an edit of the large file, so its pack is thin against the import
-        fs.appendFileSync(path.join(writer, "docs", "big.txt"), "pushed after the import\n");
+        fs.appendFileSync(
+          path.join(writer, "docs", "big.txt"),
+          "pushed after the import\n"
+        );
         fs.writeFileSync(path.join(writer, "new-post.md"), "# New\n");
         fx.git(writer, ["add", "-A"]);
         fx.git(writer, ["commit", "-q", "-m", "After the import"]);
@@ -363,16 +520,28 @@ describe("git store import", function () {
         expect(current.seq).toBe(2);
         expect(current.packs.map((pack) => pack.seq)).toEqual([1, 2]);
         expect(current.head).toBe("refs/heads/master");
-        expect(current.refs["refs/heads/master"]).toBe(fx.text(writer, ["rev-parse", "HEAD"]));
+        expect(current.refs["refs/heads/master"]).toBe(
+          fx.text(writer, ["rev-parse", "HEAD"])
+        );
 
-        const fetched = await runGit(["-c", "transfer.fsckObjects=true", "fetch", "-q", "origin"], { cwd: early });
+        const fetched = await runGit(
+          ["-c", "transfer.fsckObjects=true", "fetch", "-q", "origin"],
+          { cwd: early }
+        );
         expect(fetched.code).toBe(0, fetched.stderr);
         fx.git(early, ["fsck", "--strict", "--no-dangling"]);
-        expect(fx.text(early, ["rev-parse", "refs/remotes/origin/master"])).toBe(current.refs["refs/heads/master"]);
+        expect(
+          fx.text(early, ["rev-parse", "refs/remotes/origin/master"])
+        ).toBe(current.refs["refs/heads/master"]);
 
         // The history it left knows the new commit's parent
-        const graph = await readHistory({ store: env.store, manifest: current });
-        expect(graph.parents(current.refs["refs/heads/master"])).toEqual([fx.text(rich, ["rev-parse", "master"])]);
+        const graph = await readHistory({
+          store: env.store,
+          manifest: current,
+        });
+        expect(graph.parents(current.refs["refs/heads/master"])).toEqual([
+          fx.text(rich, ["rev-parse", "master"]),
+        ]);
       } finally {
         await server.close();
         await received.close();
@@ -397,7 +566,9 @@ describe("git store import", function () {
 
     it("fails clearly, without retrying, when someone else created manifest 1 first", async function () {
       const env = setup();
-      const rival = manifest.serialize(manifest.advance(manifest.empty(), { refs: {} }));
+      const rival = manifest.serialize(
+        manifest.advance(manifest.empty(), { refs: {} })
+      );
       let attempts = 0;
       env.store = {
         ...env.inner,
@@ -424,7 +595,13 @@ describe("git store import", function () {
         slept = true;
         return lock(fn);
       };
-      const result = await importRepo({ store: env.store, cache: env.cache, lock: late, gitDir: path.join(rich, ".git"), clock: () => now });
+      const result = await importRepo({
+        store: env.store,
+        cache: env.cache,
+        lock: late,
+        gitDir: path.join(rich, ".git"),
+        clock: () => now,
+      });
       expect(result.outcome).toBe("imported");
       expect(result.seq).toBe(1);
       const current = await manifest.read(env.inner);
@@ -436,9 +613,24 @@ describe("git store import", function () {
     it("reports a swap it cannot confirm as unknown, not as a success or a failure", async function () {
       const inner = createMemoryStore();
       const store = faults(inner);
-      const env = { store, inner, cache: createCache({ dir: path.join(root, "cache-" + ++counter), maxBytes: 64 * MiB }) };
-      store.inject("putIfAbsent", { key: /manifests\/0*1\.json$/, after: Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" }) });
-      store.inject("get", { key: /manifests\/0*1\.json$/, before: new Error("read ECONNRESET") });
+      const env = {
+        store,
+        inner,
+        cache: createCache({
+          dir: path.join(root, "cache-" + ++counter),
+          maxBytes: 64 * MiB,
+        }),
+      };
+      store.inject("putIfAbsent", {
+        key: /manifests\/0*1\.json$/,
+        after: Object.assign(new Error("read ECONNRESET"), {
+          code: "ECONNRESET",
+        }),
+      });
+      store.inject("get", {
+        key: /manifests\/0*1\.json$/,
+        before: new Error("read ECONNRESET"),
+      });
 
       const result = await run(env, path.join(rich, ".git"));
       expect(result.outcome).toBe("unknown");
@@ -448,7 +640,11 @@ describe("git store import", function () {
 
     it("releases its scratch space when an upload fails, and leaves the manifest as it was", async function () {
       const env = setup({ wrap: faults });
-      env.store.inject("put", { key: /\.pack$/, before: new Error("the store is down"), times: 2 });
+      env.store.inject("put", {
+        key: /\.pack$/,
+        before: new Error("the store is down"),
+        times: 2,
+      });
 
       const error = await run(env, path.join(rich, ".git")).catch((err) => err);
       expect(error.message).toBe("the store is down");
@@ -468,25 +664,46 @@ describe("git store import", function () {
     it("builds in a scratchDir of the host's instead, with no cache, and removes what it made", async function () {
       const inner = createMemoryStore();
       const scratchDir = path.join(root, "big-disk-" + ++counter);
-      const result = await importRepo({ store: inner, lock, gitDir: path.join(rich, ".git"), scratchDir });
+      const result = await importRepo({
+        store: inner,
+        lock,
+        gitDir: path.join(rich, ".git"),
+        scratchDir,
+      });
 
       expect(result.outcome).toBe("imported");
       expect(fs.readdirSync(scratchDir)).toEqual([]);
       expect((await manifest.read(inner)).packs[0].name).toBe(result.pack.name);
-      expect((await verifyImport({ store: inner, gitDir: path.join(rich, ".git"), scratchDir })).refs).toBe(7);
+      expect(
+        (
+          await verifyImport({
+            store: inner,
+            gitDir: path.join(rich, ".git"),
+            scratchDir,
+          })
+        ).refs
+      ).toBe(7);
       expect(fs.readdirSync(scratchDir)).toEqual([]);
 
       // The same pack as with a reservation: packing is deterministic
       const again = setup();
-      expect((await run(again, path.join(rich, ".git"))).pack.name).toBe(result.pack.name);
+      expect((await run(again, path.join(rich, ".git"))).pack.name).toBe(
+        result.pack.name
+      );
     });
 
     it("removes the scratchDir's work when the import fails too", async function () {
       const env = setup({ wrap: faults });
-      env.store.inject("put", { key: /\.idx$/, before: new Error("down"), times: 2 });
+      env.store.inject("put", {
+        key: /\.idx$/,
+        before: new Error("down"),
+        times: 2,
+      });
       const scratchDir = path.join(root, "big-disk-" + ++counter);
 
-      const error = await run(env, path.join(rich, ".git"), { scratchDir }).catch((err) => err);
+      const error = await run(env, path.join(rich, ".git"), {
+        scratchDir,
+      }).catch((err) => err);
       expect(error.message).toBe("down");
       expect(fs.readdirSync(scratchDir)).toEqual([]);
     });
@@ -494,11 +711,26 @@ describe("git store import", function () {
     it("finds a mismatch when verified against a source which has moved on", async function () {
       const env = setup();
       const copy = path.join(root, "moved-" + ++counter);
-      fx.git(root, ["clone", "-q", "--no-hardlinks", "--bare", path.join(rich, ".git"), copy]);
+      fx.git(root, [
+        "clone",
+        "-q",
+        "--no-hardlinks",
+        "--bare",
+        path.join(rich, ".git"),
+        copy,
+      ]);
       await run(env, copy);
 
-      fx.git(copy, ["update-ref", "refs/heads/dev", fx.text(copy, ["rev-parse", "master~1"])]);
-      const error = await verifyImport({ store: env.store, cache: env.cache, gitDir: copy }).catch((err) => err);
+      fx.git(copy, [
+        "update-ref",
+        "refs/heads/dev",
+        fx.text(copy, ["rev-parse", "master~1"]),
+      ]);
+      const error = await verifyImport({
+        store: env.store,
+        cache: env.cache,
+        gitDir: copy,
+      }).catch((err) => err);
       expect(error instanceof CorruptError).toBe(true);
       expect(error.message).toContain("refs/heads/dev");
     });
@@ -507,13 +739,27 @@ describe("git store import", function () {
   describe("sources which are not what they seem", function () {
     const copyOfRich = (name) => {
       const dir = path.join(root, name + "-" + ++counter);
-      fx.git(root, ["clone", "-q", "--no-hardlinks", "--bare", path.join(rich, ".git"), dir]);
+      fx.git(root, [
+        "clone",
+        "-q",
+        "--no-hardlinks",
+        "--bare",
+        path.join(rich, ".git"),
+        dir,
+      ]);
       return dir;
     };
 
     it("refuses a shallow repository, before it uploads anything", async function () {
       const dir = path.join(root, "shallow-" + ++counter);
-      fx.git(root, ["clone", "-q", "--depth", "1", "file://" + path.join(rich, ".git"), dir]);
+      fx.git(root, [
+        "clone",
+        "-q",
+        "--depth",
+        "1",
+        "file://" + path.join(rich, ".git"),
+        dir,
+      ]);
       expect(fs.existsSync(path.join(dir, ".git", "shallow"))).toBe(true);
 
       const env = setup();
@@ -526,7 +772,14 @@ describe("git store import", function () {
 
     it("does not publish a pack with missing parents even if the shallow file is gone", async function () {
       const dir = path.join(root, "shallow-gone-" + ++counter);
-      fx.git(root, ["clone", "-q", "--depth", "1", "file://" + path.join(rich, ".git"), dir]);
+      fx.git(root, [
+        "clone",
+        "-q",
+        "--depth",
+        "1",
+        "file://" + path.join(rich, ".git"),
+        dir,
+      ]);
       fs.rmSync(path.join(dir, ".git", "shallow"));
 
       const env = setup();
@@ -546,8 +799,18 @@ describe("git store import", function () {
 
       const env = setup();
       const result = await run(env, dir);
-      expect(result.history.commits).toBe(Number(fx.text(rich, ["rev-list", "--count", "--branches", "--tags"])));
-      expect((await verifyImport({ store: env.store, cache: env.cache, gitDir: dir })).refs).toBe(7);
+      expect(result.history.commits).toBe(
+        Number(fx.text(rich, ["rev-list", "--count", "--branches", "--tags"]))
+      );
+      expect(
+        (
+          await verifyImport({
+            store: env.store,
+            cache: env.cache,
+            gitDir: dir,
+          })
+        ).refs
+      ).toBe(7);
     });
 
     it("peels a tag as stored, not as a replace ref says", async function () {
@@ -555,30 +818,57 @@ describe("git store import", function () {
       const v1 = fx.text(dir, ["rev-parse", "refs/tags/v1"]);
       const v2 = fx.text(dir, ["rev-parse", "refs/tags/v2"]);
       fx.git(dir, ["replace", "-f", v1, v2]);
-      expect(fx.text(dir, ["rev-parse", "refs/tags/v1^{commit}"])).toBe(fx.text(dir, ["rev-parse", "refs/tags/v2^{commit}"]));
+      expect(fx.text(dir, ["rev-parse", "refs/tags/v1^{commit}"])).toBe(
+        fx.text(dir, ["rev-parse", "refs/tags/v2^{commit}"])
+      );
 
       const env = setup();
       const result = await run(env, dir);
-      expect(result.skipped.map((skip) => skip.ref)).toContain("refs/replace/" + v1);
+      expect(result.skipped.map((skip) => skip.ref)).toContain(
+        "refs/replace/" + v1
+      );
       const imported = await manifest.read(env.store);
-      expect(imported.peeled[v1]).toBe(fx.text(rich, ["rev-parse", "refs/tags/v1^{commit}"]));
+      expect(imported.peeled[v1]).toBe(
+        fx.text(rich, ["rev-parse", "refs/tags/v1^{commit}"])
+      );
       expect(imported.peeled[v1]).not.toBe(imported.peeled[v2]);
-      expect((await verifyImport({ store: env.store, cache: env.cache, gitDir: dir })).refs).toBe(7);
+      expect(
+        (
+          await verifyImport({
+            store: env.store,
+            cache: env.cache,
+            gitDir: dir,
+          })
+        ).refs
+      ).toBe(7);
     });
 
     it("imports from a linked worktree's directory, whose objects are in the common repository", async function () {
       const main = path.join(root, "wt-main-" + ++counter);
-      fx.git(root, ["clone", "-q", "--no-hardlinks", path.join(rich, ".git"), main]);
+      fx.git(root, [
+        "clone",
+        "-q",
+        "--no-hardlinks",
+        path.join(rich, ".git"),
+        main,
+      ]);
       const linked = path.join(root, "wt-linked-" + counter);
       fx.git(main, ["worktree", "add", "-q", "-b", "elsewhere", linked]);
-      const admin = fs.readFileSync(path.join(linked, ".git"), "utf8").replace(/^gitdir: /, "").trim();
+      const admin = fs
+        .readFileSync(path.join(linked, ".git"), "utf8")
+        .replace(/^gitdir: /, "")
+        .trim();
       expect(fs.existsSync(path.join(admin, "objects"))).toBe(false);
 
       const env = setup({ maxBytes: 64 * MiB });
       const result = await run(env, admin);
       expect(result.outcome).toBe("imported");
-      expect(result.refs["refs/heads/elsewhere"]).toBe(fx.text(linked, ["rev-parse", "HEAD"]));
-      expect(result.refs["refs/heads/master"]).toBe(fx.text(main, ["rev-parse", "master"]));
+      expect(result.refs["refs/heads/elsewhere"]).toBe(
+        fx.text(linked, ["rev-parse", "HEAD"])
+      );
+      expect(result.refs["refs/heads/master"]).toBe(
+        fx.text(main, ["rev-parse", "master"])
+      );
       expect(result.head).toBe("refs/heads/elsewhere");
       scratchIsEmpty(env);
     });
@@ -587,33 +877,62 @@ describe("git store import", function () {
       const dir = copyOfRich("odd-names");
       const tip = fx.text(dir, ["rev-parse", "master"]);
       const lines = [
-        Buffer.concat([Buffer.from(tip + " refs/tags/x"), Buffer.from([0xff]), Buffer.from("\n")]),
-        Buffer.concat([Buffer.from(tip + " refs/tags/x"), Buffer.from([0xef, 0xbf, 0xbd]), Buffer.from("\n")]),
+        Buffer.concat([
+          Buffer.from(tip + " refs/tags/x"),
+          Buffer.from([0xff]),
+          Buffer.from("\n"),
+        ]),
+        Buffer.concat([
+          Buffer.from(tip + " refs/tags/x"),
+          Buffer.from([0xef, 0xbf, 0xbd]),
+          Buffer.from("\n"),
+        ]),
       ];
       const packed = path.join(dir, "packed-refs");
       fs.appendFileSync(packed, Buffer.concat(lines));
       // git has to take them, or there is nothing to test
-      const listed = fx.git(dir, ["for-each-ref", "--format=%(refname)", "refs/tags"]);
-      if (!listed.includes(Buffer.from([0x78, 0xff])) || !listed.includes(Buffer.from([0x78, 0xef, 0xbf, 0xbd]))) {
+      const listed = fx.git(dir, [
+        "for-each-ref",
+        "--format=%(refname)",
+        "refs/tags",
+      ]);
+      if (
+        !listed.includes(Buffer.from([0x78, 0xff])) ||
+        !listed.includes(Buffer.from([0x78, 0xef, 0xbf, 0xbd]))
+      ) {
         pending("this git does not accept ref names that are not UTF-8");
         return;
       }
 
       const env = setup();
       const result = await run(env, dir);
-      const odd = result.skipped.filter((skip) => skip.why === "a name that is not valid UTF-8");
+      const odd = result.skipped.filter(
+        (skip) => skip.why === "a name that is not valid UTF-8"
+      );
       expect(odd.length).toBe(2);
-      expect(Object.keys(result.refs).filter((ref) => ref.startsWith("refs/tags/x"))).toEqual([]);
+      expect(
+        Object.keys(result.refs).filter((ref) => ref.startsWith("refs/tags/x"))
+      ).toEqual([]);
       expect(Object.keys(result.refs).length).toBe(7);
       // verify reads the source the same way and agrees
-      expect((await verifyImport({ store: env.store, cache: env.cache, gitDir: dir })).refs).toBe(7);
+      expect(
+        (
+          await verifyImport({
+            store: env.store,
+            cache: env.cache,
+            gitDir: dir,
+          })
+        ).refs
+      ).toBe(7);
     });
 
     it("does not write to the source, even a temporary file: it works on a read-only copy", async function () {
       const dir = copyOfRich("readonly");
       const chmod = (mode) => {
         (function walk(current) {
-          for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+          for (const entry of fs.readdirSync(current, {
+            withFileTypes: true,
+          })) {
             if (entry.isDirectory()) walk(path.join(current, entry.name));
           }
           fs.chmodSync(current, mode);
@@ -630,8 +949,17 @@ describe("git store import", function () {
 
     it("counts what a repository borrows through alternates when it reserves scratch space", async function () {
       const dir = path.join(root, "alternates-" + ++counter);
-      fx.git(root, ["clone", "-q", "--shared", "--bare", path.join(rich, ".git"), dir]);
-      expect(fs.existsSync(path.join(dir, "objects", "info", "alternates"))).toBe(true);
+      fx.git(root, [
+        "clone",
+        "-q",
+        "--shared",
+        "--bare",
+        path.join(rich, ".git"),
+        dir,
+      ]);
+      expect(
+        fs.existsSync(path.join(dir, "objects", "info", "alternates"))
+      ).toBe(true);
       expect(fx.text(dir, ["count-objects", "-v"])).toContain("size-pack: 0");
 
       // The cache is far smaller than what the alternates hold
@@ -659,7 +987,9 @@ describe("git store import", function () {
 
       // And when the cache cannot hold what git writes, git is stopped
       const tight = setup({ maxBytes: Math.floor(size * 0.6) });
-      const error = await run(tight, dir, { estimateBytes: 64 * 1024 }).catch((err) => err);
+      const error = await run(tight, dir, { estimateBytes: 64 * 1024 }).catch(
+        (err) => err
+      );
       expect(error.code).toBe("NO_ROOM");
       expect((await manifest.read(tight.inner)).seq).toBe(0);
       expect(tight.inner.stats.puts).toBe(0);
@@ -740,7 +1070,14 @@ describe("git store import", function () {
 
     it("takes master as HEAD when HEAD names a branch that does not exist", async function () {
       const dir = path.join(root, "head-missing-" + ++counter);
-      fx.git(root, ["clone", "-q", "--no-hardlinks", "--bare", path.join(rich, ".git"), dir]);
+      fx.git(root, [
+        "clone",
+        "-q",
+        "--no-hardlinks",
+        "--bare",
+        path.join(rich, ".git"),
+        dir,
+      ]);
       fx.git(dir, ["symbolic-ref", "HEAD", "refs/heads/nope"]);
 
       const env = setup();
@@ -751,7 +1088,14 @@ describe("git store import", function () {
 
     it("has no head when HEAD is missing and there is no master", async function () {
       const dir = path.join(root, "no-master-" + ++counter);
-      fx.git(root, ["clone", "-q", "--no-hardlinks", "--bare", path.join(rich, ".git"), dir]);
+      fx.git(root, [
+        "clone",
+        "-q",
+        "--no-hardlinks",
+        "--bare",
+        path.join(rich, ".git"),
+        dir,
+      ]);
       fx.git(dir, ["branch", "-q", "-m", "master", "trunk"]);
       fx.git(dir, ["symbolic-ref", "HEAD", "refs/heads/nope"]);
 
@@ -760,12 +1104,21 @@ describe("git store import", function () {
       expect(result.head).toBeNull();
       const imported = await manifest.read(env.store);
       expect(imported.head).toBeNull();
-      expect(imported.refs["refs/heads/trunk"]).toBe(fx.text(dir, ["rev-parse", "trunk"]));
+      expect(imported.refs["refs/heads/trunk"]).toBe(
+        fx.text(dir, ["rev-parse", "trunk"])
+      );
     });
 
     it("follows HEAD to another branch when it exists", async function () {
       const dir = path.join(root, "head-dev-" + ++counter);
-      fx.git(root, ["clone", "-q", "--no-hardlinks", "--bare", path.join(rich, ".git"), dir]);
+      fx.git(root, [
+        "clone",
+        "-q",
+        "--no-hardlinks",
+        "--bare",
+        path.join(rich, ".git"),
+        dir,
+      ]);
       fx.git(dir, ["symbolic-ref", "HEAD", "refs/heads/dev"]);
 
       const env = setup();
@@ -788,16 +1141,32 @@ describe("git store import", function () {
       expect(result.outcome).toBe("imported");
       expect(result.history.commits).toBe(1);
       const imported = await manifest.read(env.store);
-      expect(imported.peeled[imported.refs["refs/tags/of-tree"]]).toBe(fx.text(dir, ["rev-parse", "HEAD^{tree}"]));
-      expect(imported.peeled[imported.refs["refs/tags/of-blob"]]).toBe(fx.text(dir, ["rev-parse", "HEAD:a.txt"]));
-      expect((await verifyImport({ store: env.store, cache: env.cache, gitDir: path.join(dir, ".git") })).refs).toBe(4);
+      expect(imported.peeled[imported.refs["refs/tags/of-tree"]]).toBe(
+        fx.text(dir, ["rev-parse", "HEAD^{tree}"])
+      );
+      expect(imported.peeled[imported.refs["refs/tags/of-blob"]]).toBe(
+        fx.text(dir, ["rev-parse", "HEAD:a.txt"])
+      );
+      expect(
+        (
+          await verifyImport({
+            store: env.store,
+            cache: env.cache,
+            gitDir: path.join(dir, ".git"),
+          })
+        ).refs
+      ).toBe(4);
     });
 
     it("imports a repository with only tags to a blob, with no history pack", async function () {
       const dir = path.join(root, "only-blob-" + ++counter);
       fs.mkdirSync(dir);
       fx.git(dir, ["init", "-q", "-b", "master"]);
-      const blob = fx.text(dir, ["hash-object", "-w", "--stdin"], "just a blob\n");
+      const blob = fx.text(
+        dir,
+        ["hash-object", "-w", "--stdin"],
+        "just a blob\n"
+      );
       fx.git(dir, ["tag", "lonely", blob]);
 
       const env = setup();

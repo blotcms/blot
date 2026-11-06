@@ -80,30 +80,33 @@ module.exports = async function (blog, path) {
         let ignored = {};
 
         if (!entry) {
-
           if (
             ignoredReason &&
-            ignoredReason === 'WRONG_TYPE' &&
+            ignoredReason === "WRONG_TYPE" &&
             matchingConverter &&
             matchingConverter.id === "img" &&
             !matchingConverterEnabled
           ) {
             ignored.imageConverterDisabled = true;
-          } else if (ignoredReason && ignoredReason === 'WRONG_TYPE') {
+          } else if (ignoredReason && ignoredReason === "WRONG_TYPE") {
             ignored.wrongType = true;
           } else if (path.toLowerCase().indexOf("/templates/") === 0) {
             ignored.templateFile = true;
           } else if (
-            path.split("/").slice(0,-1).filter(function (n) {
-              return n[0] === "_";
-            }).length) {
+            path
+              .split("/")
+              .slice(0, -1)
+              .filter(function (n) {
+                return n[0] === "_";
+              }).length
+          ) {
             ignored.underscorePath = true;
           } else if (basename(path)[0] === "_") {
             ignored.underscoreName = true;
-          } else if (ignoredReason && ignoredReason === 'TOO_LARGE') {
+          } else if (ignoredReason && ignoredReason === "TOO_LARGE") {
             ignored.tooLarge = true;
             ignored.postSizeLimit = postSourceSize.limitForPath(path).label;
-          } else  {
+          } else {
             ignored.syncing = true;
           }
         }
@@ -118,10 +121,10 @@ module.exports = async function (blog, path) {
 
         // a dictionary we use to display conditionally in the UI
         file.extension = {};
-        file.extension = normalizeExtension(path)
+        file.extension = normalizeExtension(path);
         file.converter = matchingConverter || null;
         file.converterEnabled = matchingConverterEnabled;
-        
+
         file.entry = entry;
         file.ignored = ignored;
 
@@ -146,7 +149,7 @@ module.exports = async function (blog, path) {
             }
           }
 
-          entry.type = entry.draft ? 'draft' : entry.page ? 'page' :  'post';
+          entry.type = entry.draft ? "draft" : entry.page ? "page" : "post";
           entry.Type = entry.type.charAt(0).toUpperCase() + entry.type.slice(1);
 
           entry.tags = entry.tags.map((tag, i, arr) => {
@@ -163,7 +166,7 @@ module.exports = async function (blog, path) {
           }
 
           entry.backlinks = entry.backlinks.map((backlink) => {
-            return  { backlink};
+            return { backlink };
           });
 
           entry.dependencies = entry.dependencies
@@ -171,7 +174,7 @@ module.exports = async function (blog, path) {
               return !isSyntheticDependency(dependency);
             })
             .map((dependency) => {
-            return { dependency };
+              return { dependency };
             });
 
           entry.internalLinks = entry.internalLinks.map((internalLink) => {
@@ -184,11 +187,10 @@ module.exports = async function (blog, path) {
           if (sourcePaths.length && isMultiEntry(entry, multiInfo)) {
             delete rawMetadata._sourcePaths;
 
-            const folderDetails =
-              multiInfo ||
-              (sourcePaths.length
-                ? findMultiFolder(sourcePaths[0])
-                : null) || { entryPath: entry.path };
+            const folderDetails = multiInfo ||
+              (sourcePaths.length ? findMultiFolder(sourcePaths[0]) : null) || {
+                entryPath: entry.path,
+              };
 
             entry.multi = await buildMultiEntryData({
               blogID,
@@ -218,7 +220,7 @@ module.exports = async function (blog, path) {
             entry.toNow = moment.utc(entry.dateStamp).fromNow();
           }
         }
-        
+
         resolve(file);
       })
       .catch((err) => {
@@ -226,8 +228,6 @@ module.exports = async function (blog, path) {
       });
   });
 };
-
-
 
 // https://fileinfo.com/filetypes/common
 
@@ -246,9 +246,9 @@ const KIND = {
 };
 
 const CATEGORIES = {
-  "image": ["jpg", "jpeg", "png", "gif", "bmp", "tiff"],
-  "audio": ["mp3", "wav", "wma", "ogg", "flac", "aac"],
-  "video": ["mp4", "avi", "mkv", "mov", "flv", "wmv"],
+  image: ["jpg", "jpeg", "png", "gif", "bmp", "tiff"],
+  audio: ["mp3", "wav", "wma", "ogg", "flac", "aac"],
+  video: ["mp4", "avi", "mkv", "mov", "flv", "wmv"],
 };
 
 function kind(path, entry, multiInfo) {
@@ -257,27 +257,29 @@ function kind(path, entry, multiInfo) {
   }
 
   const extension = extname(path).toLowerCase().slice(1);
-  const kind = KIND[extension] || (extension ? extension.toUpperCase() : "File");
+  const kind =
+    KIND[extension] || (extension ? extension.toUpperCase() : "File");
   debug(path, extension, kind);
 
   return kind;
 }
 
-
 // should return a lowercase, trimmed extension
 // with common equivalents normalized e,g. jpeg -> jpg
-function normalizeExtension (path) {
+function normalizeExtension(path) {
   let extension = extname(path).toLowerCase().slice(1);
 
   if (extension === "jpeg") {
     extension = "jpg";
-  } 
+  }
 
-  let res = {category: {}};
+  let res = { category: {} };
 
-  res.category[Object.keys(CATEGORIES).find((category) => {
-    return CATEGORIES[category].indexOf(extension) > -1;
-  })] = true;
+  res.category[
+    Object.keys(CATEGORIES).find((category) => {
+      return CATEGORIES[category].indexOf(extension) > -1;
+    })
+  ] = true;
 
   res[extension] = true;
 
@@ -334,9 +336,7 @@ function sourcePathsForEntry(entry, multiInfo) {
   if (fromHtml.length) return fromHtml;
 
   const fromMetadata =
-    entry &&
-    entry.metadata &&
-    Array.isArray(entry.metadata._sourcePaths)
+    entry && entry.metadata && Array.isArray(entry.metadata._sourcePaths)
       ? entry.metadata._sourcePaths.slice()
       : [];
 
@@ -348,7 +348,9 @@ function sourcePathsForEntry(entry, multiInfo) {
 }
 
 function isFolderPostHtml(html) {
-  return typeof html === "string" && html.indexOf('class="multi-file-post"') !== -1;
+  return (
+    typeof html === "string" && html.indexOf('class="multi-file-post"') !== -1
+  );
 }
 
 function sourcePathsFromHtml(html) {
@@ -358,7 +360,8 @@ function sourcePathsFromHtml(html) {
   if (!isFolderPostHtml(html)) return [];
 
   const paths = [];
-  const pattern = /<section class="multi-file-entry"[^>]*\sdata-file="([^"]*)"/g;
+  const pattern =
+    /<section class="multi-file-entry"[^>]*\sdata-file="([^"]*)"/g;
   let match;
 
   while ((match = pattern.exec(html))) {
@@ -440,10 +443,12 @@ async function buildMultiEntryData({
 // Path of a source file relative to its "+" folder, e.g. "sub/notes.md".
 function relativeToFolder(folderPath, sourcePath) {
   const relative = path.relative(folderPath, sourcePath);
-  return relative && !relative.startsWith("..") ? relative : basename(sourcePath);
+  return relative && !relative.startsWith("..")
+    ? relative
+    : basename(sourcePath);
 }
 
-function isSyntheticDependency (path) {
+function isSyntheticDependency(path) {
   return SYNTHETIC_DEPENDENCY_PREFIXES.some((prefix) => {
     return path.indexOf(prefix) === 0;
   });

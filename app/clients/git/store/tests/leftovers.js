@@ -31,7 +31,11 @@ describe("git store leftovers", function () {
   });
 
   it("removes old import, verify and rewrite directories and counts the bytes", async function () {
-    const dirs = [make("import-a1B2c3", 30 * HOUR, 100), make("verify-a1B2c3", 30 * HOUR, 200), make("rewrite-a1B2c3", 30 * HOUR, 300)];
+    const dirs = [
+      make("import-a1B2c3", 30 * HOUR, 100),
+      make("verify-a1B2c3", 30 * HOUR, 200),
+      make("rewrite-a1B2c3", 30 * HOUR, 300),
+    ];
 
     const result = await sweepScratch({ dir: root, now: NOW });
 
@@ -55,7 +59,12 @@ describe("git store leftovers", function () {
   });
 
   it("leaves unrelated directories, files and links alone", async function () {
-    const others = [make("git-store", 30 * HOUR), make("import-short", 30 * HOUR), make("important-abcdef", 30 * HOUR), make("cache-a1B2c3", 30 * HOUR)];
+    const others = [
+      make("git-store", 30 * HOUR),
+      make("import-short", 30 * HOUR),
+      make("important-abcdef", 30 * HOUR),
+      make("cache-a1B2c3", 30 * HOUR),
+    ];
     const file = path.join(root, "import-a1B2c3");
     fs.writeFileSync(file, "x");
     const target = make("elsewhere", 30 * HOUR);
@@ -64,11 +73,15 @@ describe("git store leftovers", function () {
     const result = await sweepScratch({ dir: root, now: NOW });
 
     expect(result).toEqual({ removed: 0, spared: 0, bytes: 0, errors: 0 });
-    others.concat([file, target]).forEach((p) => expect(fs.existsSync(p)).toBe(true));
+    others
+      .concat([file, target])
+      .forEach((p) => expect(fs.existsSync(p)).toBe(true));
   });
 
   it("does nothing when the scratch directory does not exist", async function () {
-    expect(await sweepScratch({ dir: path.join(root, "missing"), now: NOW })).toEqual({ removed: 0, spared: 0, bytes: 0, errors: 0 });
+    expect(
+      await sweepScratch({ dir: path.join(root, "missing"), now: NOW })
+    ).toEqual({ removed: 0, spared: 0, bytes: 0, errors: 0 });
   });
 
   it("does not throw when a directory is removed underneath it", async function () {

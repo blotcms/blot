@@ -14,7 +14,7 @@ describe("index-inputs", function () {
 
   it("builds layout inputs from recognised keys", function () {
     const inputs = load({ page_size: 10 });
-    expect(inputs.some(input => input.key === "page_size")).toBe(true);
+    expect(inputs.some((input) => input.key === "page_size")).toBe(true);
   });
 
   it("never renders sorting keys (they belong to the Post sorting control)", function () {
@@ -24,11 +24,11 @@ describe("index-inputs", function () {
       sort_by: "id",
       sort_by_options: ["id", "date"],
       sort_order: "asc",
-      sort_order_options: ["asc", "desc"]
+      sort_order_options: ["asc", "desc"],
     });
 
-    ["sort", "sort_by", "sort_order"].forEach(key => {
-      expect(inputs.some(input => input.key === key)).toBe(false);
+    ["sort", "sort_by", "sort_order"].forEach((key) => {
+      expect(inputs.some((input) => input.key === key)).toBe(false);
     });
   });
 

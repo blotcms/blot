@@ -65,8 +65,16 @@ module.exports = function byPath(blogID, pathOfPost, href, isLink, callback) {
     const rootRelative = href.slice(dirOfPost.length).replace(/^\//, "");
     if (rootRelative !== href) {
       lookups.push(
-        exact.bind(null, blogID, rootRelative.startsWith("/") ? rootRelative : "/" + rootRelative),
-        rough.bind(null, blogID, rootRelative.startsWith("/") ? rootRelative : "/" + rootRelative)
+        exact.bind(
+          null,
+          blogID,
+          rootRelative.startsWith("/") ? rootRelative : "/" + rootRelative
+        ),
+        rough.bind(
+          null,
+          blogID,
+          rootRelative.startsWith("/") ? rootRelative : "/" + rootRelative
+        )
       );
     }
   }

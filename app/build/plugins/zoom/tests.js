@@ -79,8 +79,7 @@ describe("zoom plugin", function () {
   });
 
   it("handles multiple images independently", async () => {
-    const html =
-      '<img src="a.jpg" width="500"><img src="b.jpg" width="100">';
+    const html = '<img src="a.jpg" width="500"><img src="b.jpg" width="100">';
     const output = await runTest(html);
     const $ = cheerio.load(output);
     const images = $("img");

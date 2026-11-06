@@ -65,21 +65,47 @@ LISTING
   it("lists offsite backups with the local aws and never asks the host", function () {
     if (!hasBash) return pending("no bash in this image");
 
-    const result = run(["--offsite", "blot-b2-read", "s3://example", "ec2-user@host", "list"]);
+    const result = run([
+      "--offsite",
+      "blot-b2-read",
+      "s3://example",
+      "ec2-user@host",
+      "list",
+    ]);
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("daily/2026-10-30-hour-03.rdb");
     expect(result.stdout).not.toContain("other/");
-    expect(calls()).toContain("aws --profile blot-b2-read s3 ls --recursive s3://example/");
+    expect(calls()).toContain(
+      "aws --profile blot-b2-read s3 ls --recursive s3://example/"
+    );
     expect(calls()).not.toContain("ssh");
   });
 
   it("refuses a bad offsite bucket or profile", function () {
     if (!hasBash) return pending("no bash in this image");
 
-    const bucket = run(["--offsite", "blot-b2-read", "example", "ec2-user@host", "list"]);
-    const chars = run(["--offsite", "blot-b2-read", "s3://ex;ample", "ec2-user@host", "list"]);
-    const profile = run(["--offsite", "bad profile", "s3://example", "ec2-user@host", "list"]);
+    const bucket = run([
+      "--offsite",
+      "blot-b2-read",
+      "example",
+      "ec2-user@host",
+      "list",
+    ]);
+    const chars = run([
+      "--offsite",
+      "blot-b2-read",
+      "s3://ex;ample",
+      "ec2-user@host",
+      "list",
+    ]);
+    const profile = run([
+      "--offsite",
+      "bad profile",
+      "s3://example",
+      "ec2-user@host",
+      "list",
+    ]);
 
     expect(bucket.status).not.toBe(0);
     expect(chars.status).not.toBe(0);

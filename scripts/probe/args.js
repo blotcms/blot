@@ -26,13 +26,15 @@ function parseArgs(argv, spec, { strict = true } = {}) {
 
     const [, key, inline] = match;
     if (!spec[key].value) {
-      if (inline !== undefined) throw new Error(`--${key} doesn't take a value`);
+      if (inline !== undefined)
+        throw new Error(`--${key} doesn't take a value`);
       options[key] = true;
       continue;
     }
 
     const value = inline !== undefined ? inline : argv[++i];
-    if (value === undefined) throw new Error(`--${key} needs a value (${spec[key].value})`);
+    if (value === undefined)
+      throw new Error(`--${key} needs a value (${spec[key].value})`);
     options[key] = value;
   }
 

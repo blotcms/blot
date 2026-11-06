@@ -2,16 +2,19 @@ const download = require("../../helper/download");
 const lifecycle = require("../../lifecycle");
 const PAGE_SIZE = 100;
 
-module.exports = async function posts ({ slug, status }) {
+module.exports = async function posts({ slug, status }) {
   let page = 0;
   let posts = [];
   let new_posts;
 
-  async function fetchPage (page) {
+  async function fetchPage(page) {
     const url = base(slug, page);
     status(`Fetching page ${page + 1} of channel`);
     lifecycle.check();
-    const { data } = await download(url, { kind: "text", maxBytes: 8 * 1024 * 1024 });
+    const { data } = await download(url, {
+      kind: "text",
+      maxBytes: 8 * 1024 * 1024,
+    });
     return JSON.parse(data.toString("utf8")).contents;
   }
 
@@ -28,6 +31,6 @@ module.exports = async function posts ({ slug, status }) {
   return posts;
 };
 
-function base (slug, page) {
+function base(slug, page) {
   return `https://api.are.na/v2/channels/${slug}/contents?direction=desc&sort=position&per=${PAGE_SIZE}&channel_slug=${slug}&page=${page}`;
 }

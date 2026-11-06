@@ -90,7 +90,9 @@ describe("dropbox sync/index with a file over the download size limit", function
 
   it("keeps a local copy whose content hash matches", async function () {
     await storage.write(blogID, "/big.txt", "real contents");
-    const { hash, size } = await storage.stat(blogID, "/big.txt", { hash: true });
+    const { hash, size } = await storage.stat(blogID, "/big.txt", {
+      hash: true,
+    });
 
     await run(hash, size);
 

@@ -31,18 +31,16 @@ const DATA_DIRECTORY = PROXY_DIRECTORY + "/tests/data";
 
 const config = {
   openresty: {
-    port: 8787
+    port: 8787,
   },
   node: {
-    port: 8788
-  }
+    port: 8788,
+  },
 };
 
 const startOpenresty = async (pathToConf, origin) => {
   try {
-    child_process.execSync(
-      __dirname + "/start-openresty.sh " + pathToConf
-    );
+    child_process.execSync(__dirname + "/start-openresty.sh " + pathToConf);
     // console.log(output.toString());
   } catch (e) {
     console.log("stdout: ", e.stdout.toString());
@@ -90,7 +88,10 @@ module.exports = (configFile, { upstream = server } = {}) => {
     const partials = {};
     for (const file of await fs.readdir(PROXY_DIRECTORY + "/config")) {
       if (file.endsWith(".conf"))
-        partials[file] = await fs.readFile(PROXY_DIRECTORY + "/config/" + file, "utf8");
+        partials[file] = await fs.readFile(
+          PROXY_DIRECTORY + "/config/" + file,
+          "utf8"
+        );
     }
 
     const result = mustache.render(
@@ -100,7 +101,7 @@ module.exports = (configFile, { upstream = server } = {}) => {
         user: identity.username,
         group: identity.group,
         lua_directory: PROXY_DIRECTORY + "/config",
-        data_directory: DATA_DIRECTORY
+        data_directory: DATA_DIRECTORY,
       },
       partials
     );

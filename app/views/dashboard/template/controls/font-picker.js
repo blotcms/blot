@@ -34,7 +34,9 @@ function createFontPicker() {
 
   const updateMoreIndicator = () => {
     if (!optionsRoot) return;
-    const hasMore = optionsRoot.scrollHeight > optionsRoot.clientHeight + optionsRoot.scrollTop + 1;
+    const hasMore =
+      optionsRoot.scrollHeight >
+      optionsRoot.clientHeight + optionsRoot.scrollTop + 1;
     container.classList.toggle("has-more-options", hasMore);
   };
 
@@ -77,7 +79,7 @@ function createFontPicker() {
     optionButtons.forEach((button) => {
       const tags = (button.dataset.fontTags || "").split(" ").filter(Boolean);
       const shouldShow = filter === "all" || tags.indexOf(filter) > -1;
-      button.style.display = shouldShow ? 'block' : 'none';
+      button.style.display = shouldShow ? "block" : "none";
     });
 
     if (optionsRoot) {
@@ -176,7 +178,9 @@ function createFontPicker() {
   });
 
   if (optionsRoot) {
-    optionsRoot.addEventListener("scroll", updateMoreIndicator, { passive: true });
+    optionsRoot.addEventListener("scroll", updateMoreIndicator, {
+      passive: true,
+    });
   }
 
   optionButtons.forEach((button) => {

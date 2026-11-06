@@ -14,7 +14,12 @@ describe("dropbox sync when Redis is unavailable", function () {
   // persistError.js binds ../database once at load, see
   // sync-transfer-incomplete.js
   const persistErrorPath = require.resolve("../util/persistError");
-  const modulePaths = [createClientPath, databasePath, persistErrorPath, syncPath];
+  const modulePaths = [
+    createClientPath,
+    databasePath,
+    persistErrorPath,
+    syncPath,
+  ];
 
   global.test.timeout(30 * 1000);
   global.test.blog();
@@ -48,7 +53,14 @@ describe("dropbox sync when Redis is unavailable", function () {
       filesListFolderContinue: function ({ cursor }) {
         const entries =
           cursor === "cursor-0"
-            ? [{ ".tag": "file", path_display: path, name: "hello.txt", size: contents.length }]
+            ? [
+                {
+                  ".tag": "file",
+                  path_display: path,
+                  name: "hello.txt",
+                  size: contents.length,
+                },
+              ]
             : [];
         return Promise.resolve({
           result: {
@@ -59,13 +71,19 @@ describe("dropbox sync when Redis is unavailable", function () {
         });
       },
       filesListFolder: function () {
-        return Promise.reject(new Error("the sync should continue from its cursor"));
+        return Promise.reject(
+          new Error("the sync should continue from its cursor")
+        );
       },
       filesGetMetadata: function () {
-        return Promise.resolve({ result: { path_display: path, size: contents.length } });
+        return Promise.resolve({
+          result: { path_display: path, size: contents.length },
+        });
       },
       filesDownload: function () {
-        return Promise.resolve({ result: { fileBinary: Buffer.from(contents) } });
+        return Promise.resolve({
+          result: { fileBinary: Buffer.from(contents) },
+        });
       },
     };
 
@@ -106,9 +124,11 @@ describe("dropbox sync when Redis is unavailable", function () {
     const blog = this.blog;
     const checkEntry = global.test.CheckEntry(blog.id);
 
-    spyOn(Entry, "set").and.callFake(function (blogID, entryPath, entry, callback) {
-      callback(freeze());
-    });
+    spyOn(Entry, "set").and.callFake(
+      function (blogID, entryPath, entry, callback) {
+        callback(freeze());
+      }
+    );
 
     sync(blog, function (err) {
       expect(isRedisUnavailableError(err)).toBe(true);
@@ -169,9 +189,11 @@ describe("dropbox sync when Redis is unavailable", function () {
     const blog = this.blog;
 
     spyOn(console, "error");
-    spyOn(Entry, "set").and.callFake(function (blogID, entryPath, entry, callback) {
-      callback(new Error("this file is broken"));
-    });
+    spyOn(Entry, "set").and.callFake(
+      function (blogID, entryPath, entry, callback) {
+        callback(new Error("this file is broken"));
+      }
+    );
 
     sync(blog, function (err) {
       if (err) return done.fail(err);

@@ -109,7 +109,11 @@ describe("git client limiter", function () {
         );
       }
 
-      expect(await failure(lanes.run("background", () => Promise.reject(new Error("git failed"))))).toBe("git failed");
+      expect(
+        await failure(
+          lanes.run("background", () => Promise.reject(new Error("git failed")))
+        )
+      ).toBe("git failed");
       expect(
         await failure(
           lanes.run("background", function () {
@@ -118,7 +122,9 @@ describe("git client limiter", function () {
         )
       ).toBe("could not spawn");
 
-      expect(await lanes.run("background", () => "still room")).toBe("still room");
+      expect(await lanes.run("background", () => "still room")).toBe(
+        "still room"
+      );
       expect(lanes.stats().background.running).toBe(0);
     });
 
@@ -152,7 +158,11 @@ describe("git client limiter", function () {
     it("puts the memory settings in front of every command but config", function () {
       var args = limiter.args(["upload-pack", "--stateless-rpc", "/repo.git"]);
 
-      expect(args.slice(-3)).toEqual(["upload-pack", "--stateless-rpc", "/repo.git"]);
+      expect(args.slice(-3)).toEqual([
+        "upload-pack",
+        "--stateless-rpc",
+        "/repo.git",
+      ]);
       [
         "pack.threads=1",
         "pack.windowMemory=16m",
@@ -167,11 +177,24 @@ describe("git client limiter", function () {
         expect(args[args.indexOf(setting) - 1]).toBe("-c");
       });
 
-      expect(limiter.args(["config", "--local", "gc.auto"])).toEqual(["config", "--local", "gc.auto"]);
+      expect(limiter.args(["config", "--local", "gc.auto"])).toEqual([
+        "config",
+        "--local",
+        "gc.auto",
+      ]);
     });
 
     it("finds the command after git's own options, and never lets one start a gc", function () {
-      expect(limiter.subcommand(["-c", "gc.auto=0", "-c", "maintenance.auto=false", "fetch", "--all"])).toBe("fetch");
+      expect(
+        limiter.subcommand([
+          "-c",
+          "gc.auto=0",
+          "-c",
+          "maintenance.auto=false",
+          "fetch",
+          "--all",
+        ])
+      ).toBe("fetch");
       expect(limiter.args(["gc", "--auto"])).toContain("gc.auto=0");
     });
 
@@ -180,7 +203,10 @@ describe("git client limiter", function () {
       var line = "git " + limiter.args(["index-pack", "--stdin"]).join(" ");
       var stuck = await stuckProcesses({
         maxAgeSeconds: 60,
-        ps: async () => "   41  2:00:01   9000 " + line + "\n   42  2:00:01   9000 git -c a=b log\n",
+        ps: async () =>
+          "   41  2:00:01   9000 " +
+          line +
+          "\n   42  2:00:01   9000 git -c a=b log\n",
       });
 
       expect(stuck.map((process) => process.pid)).toEqual([41]);
@@ -198,7 +224,13 @@ describe("git client limiter", function () {
 
       for (var i = 0; i < 4; i++) {
         var directory = path.join(this.root, "repo-" + i + ".git");
-        childProcess.execFileSync("git", ["init", "--quiet", "--bare", "--initial-branch=master", directory]);
+        childProcess.execFileSync("git", [
+          "init",
+          "--quiet",
+          "--bare",
+          "--initial-branch=master",
+          directory,
+        ]);
         this.repositories.push(directory);
       }
 
@@ -207,7 +239,10 @@ describe("git client limiter", function () {
 
     afterEach(async function () {
       spy.restore();
-      limiter.reset({ interactive: caps.interactive.max, background: caps.background.max });
+      limiter.reset({
+        interactive: caps.interactive.max,
+        background: caps.background.max,
+      });
       await fs.remove(this.root);
     });
 
@@ -229,7 +264,9 @@ describe("git client limiter", function () {
         await Promise.all(
           this.repositories.map(function (directory) {
             var git = Git(directory);
-            return Promise.all([0, 1, 2, 3, 4].map(() => git.raw(["for-each-ref"])));
+            return Promise.all(
+              [0, 1, 2, 3, 4].map(() => git.raw(["for-each-ref"]))
+            );
           })
         );
       } finally {
@@ -264,7 +301,9 @@ describe("git client limiter", function () {
         waited = true;
       });
 
-      var served = await Git(directory, { lane: "interactive" }).raw(["for-each-ref"]);
+      var served = await Git(directory, { lane: "interactive" }).raw([
+        "for-each-ref",
+      ]);
 
       expect(served).toBe("");
       await settle();
@@ -278,9 +317,18 @@ describe("git client limiter", function () {
     it("sees the settings in git itself, and leaves config alone", async function () {
       var Git = require("clients/git/git");
 
-      await Git(this.repositories[0]).raw(["config", "--local", "gc.auto", "123"]);
-      expect(await Git(this.repositories[0]).raw(["config", "--local", "gc.auto"])).toBe("123\n");
-      expect(await Git(this.repositories[0]).raw(["config", "gc.auto"])).toBe("123\n");
+      await Git(this.repositories[0]).raw([
+        "config",
+        "--local",
+        "gc.auto",
+        "123",
+      ]);
+      expect(
+        await Git(this.repositories[0]).raw(["config", "--local", "gc.auto"])
+      ).toBe("123\n");
+      expect(await Git(this.repositories[0]).raw(["config", "gc.auto"])).toBe(
+        "123\n"
+      );
     });
 
     it("lets git see the settings", async function () {

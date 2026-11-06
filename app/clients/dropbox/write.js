@@ -37,7 +37,9 @@ function write(blogID, path, contents, callback) {
     try {
       await folder.write(blogID, path, contents);
       // A big file takes a while to upload, so it is held in the cache
-      await folder.withLocal(blogID, path, (local) => upload(client, local, pathInDropbox));
+      await folder.withLocal(blogID, path, (local) =>
+        upload(client, local, pathInDropbox)
+      );
     } catch (e) {
       return persistError(blogID, e, SOURCES.APPLY, function () {
         callback(e);

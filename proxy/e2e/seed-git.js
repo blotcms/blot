@@ -34,7 +34,9 @@ const POST_TITLE = "Seeded git post";
 async function rename(blogID, newHandle) {
   if (!blogID || !newHandle) throw new Error("usage: rename <blogID> <handle>");
   await setBlog(blogID, { handle: newHandle, client: "git" });
-  console.log("SEED_GIT_RENAMED=" + JSON.stringify({ blogID, handle: newHandle }));
+  console.log(
+    "SEED_GIT_RENAMED=" + JSON.stringify({ blogID, handle: newHandle })
+  );
 }
 
 async function seed(email, handle) {

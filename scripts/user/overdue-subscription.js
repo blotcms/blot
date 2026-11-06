@@ -14,13 +14,13 @@ var customer = {
   email: email,
   plan: config.stripe.plan,
   trial_end: Math.round(Date.now() / 1000) + 1000,
-  description: "Blot subscription"
+  description: "Blot subscription",
 };
 
 var password = "x";
 
 var blog = {
-  handle: "overdue" + uuid().split("-").join("")
+  handle: "overdue" + uuid().split("-").join(""),
 };
 
 if (require.main === module)
@@ -43,7 +43,7 @@ if (require.main === module)
     });
   });
 
-function main (callback) {
+function main(callback) {
   stripe.customers.create(customer, function (err, customer) {
     if (err) return callback(err);
 
@@ -72,7 +72,7 @@ function main (callback) {
             stripe.customers.update(
               customer.id,
               {
-                card: "tok_chargeCustomerFail"
+                card: "tok_chargeCustomerFail",
               },
               function (err) {
                 if (err) return callback(err);
@@ -84,7 +84,7 @@ function main (callback) {
                   customer.subscription.id,
                   {
                     trial_end: Math.round(Date.now() / 1000) + 3,
-                    prorate: false
+                    prorate: false,
                   },
                   function (err, subscription) {
                     if (err) return callback(err);
@@ -93,7 +93,7 @@ function main (callback) {
 
                     stripe.invoices.list(
                       { customer: customer.id },
-                      function onList (err, res) {
+                      function onList(err, res) {
                         if (err) return callback(err);
 
                         var invoices = res.data.filter(function (invoice) {

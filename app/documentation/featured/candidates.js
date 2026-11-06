@@ -43,7 +43,7 @@ var featured = require("./featured").sites.map(function (site) {
   return site.host;
 });
 
-function main (callback) {
+function main(callback) {
   Blog.getAllIDs(function (err, ids) {
     async.map(
       ids,
@@ -54,16 +54,20 @@ function main (callback) {
           User.getById(blog.owner, function (err, user) {
             if (err || !user || user.isDisabled) return next();
 
-            Entries.getPage(blog.id, { pageNumber: 1, pageSize: 1 }, function (error, entries) {
-              if (error) return next();
-              if (!entries || !entries.length) return next();
+            Entries.getPage(
+              blog.id,
+              { pageNumber: 1, pageSize: 1 },
+              function (error, entries) {
+                if (error) return next();
+                if (!entries || !entries.length) return next();
 
-              next(null, {
-                host: blog.domain,
-                email: user.email,
-                lastPublishedPost: entries[0].dateStamp
-              });
-            });
+                next(null, {
+                  host: blog.domain,
+                  email: user.email,
+                  lastPublishedPost: entries[0].dateStamp,
+                });
+              }
+            );
           });
         });
       },
@@ -86,7 +90,7 @@ function main (callback) {
 
         const filteredSites = [];
 
-        console.log('Checking', sites.length, "candidates");
+        console.log("Checking", sites.length, "candidates");
 
         for (var i = 0; i < sites.length; i++) {
           var isOnline = await verifySiteIsOnline(sites[i].host);

@@ -64,7 +64,7 @@ const { parseCommit } = require("./objects");
 const { diffTrees } = require("./treediff");
 const { CorruptError, NotFoundError, TooLargeError } = require("./errors");
 
-const MODES = { "100644": 0o644, "100755": 0o755 };
+const MODES = { 100644: 0o644, 100755: 0o755 };
 
 const SYMLINK = "120000";
 
@@ -89,13 +89,26 @@ async function treeOf(reader, commit) {
   if (!commit) return null;
 
   const object = await reader.read(commit);
-  if (!object) throw new NotFoundError("Commit " + commit + " is not in the repository");
-  if (object.type !== "commit") throw new CorruptError("Object " + commit + " is a " + object.type + ", not a commit");
+  if (!object)
+    throw new NotFoundError("Commit " + commit + " is not in the repository");
+  if (object.type !== "commit")
+    throw new CorruptError(
+      "Object " + commit + " is a " + object.type + ", not a commit"
+    );
 
   return parseCommit(object.data).tree;
 }
 
-async function materialize({ reader, from = null, to = null, sink, concurrency = DEFAULT_CONCURRENCY, maxSize, symlinks = false, log = function () {} }) {
+async function materialize({
+  reader,
+  from = null,
+  to = null,
+  sink,
+  concurrency = DEFAULT_CONCURRENCY,
+  maxSize,
+  symlinks = false,
+  log = function () {},
+}) {
   const [a, b] = await Promise.all([treeOf(reader, from), treeOf(reader, to)]);
   const result = { written: 0, removed: 0, skipped: 0 };
   const limits = maxSize === undefined ? {} : { maxSize };
@@ -111,17 +124,32 @@ async function materialize({ reader, from = null, to = null, sink, concurrency =
     } catch (err) {
       if (err.code !== "TOO_LARGE") throw err;
       throw new TooLargeError(
-        "Cannot write " + file + ": blob " + change.newOid + " is stored as a delta and is too large to resolve (" + err.message + ")"
+        "Cannot write " +
+          file +
+          ": blob " +
+          change.newOid +
+          " is stored as a delta and is too large to resolve (" +
+          err.message +
+          ")"
       );
     }
 
-    if (!blob) throw new NotFoundError("Blob " + change.newOid + " (" + file + ") is not in the repository");
-    if (blob.type !== "blob") throw new CorruptError("Object " + change.newOid + " is a " + blob.type + ", not a blob");
+    if (!blob)
+      throw new NotFoundError(
+        "Blob " + change.newOid + " (" + file + ") is not in the repository"
+      );
+    if (blob.type !== "blob")
+      throw new CorruptError(
+        "Object " + change.newOid + " is a " + blob.type + ", not a blob"
+      );
 
     const body = Readable.from(blob.data, { objectMode: false });
 
     try {
-      await sink.write(file, body, { mode: MODES[change.newMode], size: blob.size });
+      await sink.write(file, body, {
+        mode: MODES[change.newMode],
+        size: blob.size,
+      });
     } finally {
       body.destroy();
     }
@@ -130,9 +158,14 @@ async function materialize({ reader, from = null, to = null, sink, concurrency =
   }
 
   async function writeLink(file, change) {
-    const blob = await reader.read(change.newOid, { maxSize: MAX_TARGET_BYTES });
+    const blob = await reader.read(change.newOid, {
+      maxSize: MAX_TARGET_BYTES,
+    });
 
-    if (!blob) throw new NotFoundError("Blob " + change.newOid + " (" + file + ") is not in the repository");
+    if (!blob)
+      throw new NotFoundError(
+        "Blob " + change.newOid + " (" + file + ") is not in the repository"
+      );
 
     await sink.symlink(file, blob.data.toString("utf8"));
     result.written++;
@@ -175,7 +208,10 @@ async function materialize({ reader, from = null, to = null, sink, concurrency =
       const parts = change.valid ? safeParts(change.path) : null;
 
       if (!parts) {
-        log("Skipping a path that is not safe to write: " + JSON.stringify(change.path));
+        log(
+          "Skipping a path that is not safe to write: " +
+            JSON.stringify(change.path)
+        );
         result.skipped++;
       } else if (change.newMode in MODES) {
         await start("write", () => writeBlob(change.path, change));

@@ -5,7 +5,8 @@ const DEFAULT_OFF_MODE = "off";
 function extractModeFromObject(raw) {
   if (!raw || typeof raw !== "object") return undefined;
 
-  let mode = typeof raw.mode === "string" ? raw.mode.trim().toLowerCase() : undefined;
+  let mode =
+    typeof raw.mode === "string" ? raw.mode.trim().toLowerCase() : undefined;
 
   if (mode === "") mode = undefined;
 

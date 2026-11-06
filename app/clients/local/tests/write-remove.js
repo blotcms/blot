@@ -32,7 +32,9 @@ describe("local client write and remove", function () {
       await promisify(write)(this.blog.id, "/posts/hello.txt", "Hello");
       const contents = await folder.read(this.blog.id, "/posts/hello.txt");
       expect(contents.toString()).toBe("Hello");
-      expect(await fs.readFile(join(dir, "posts", "hello.txt"), "utf8")).toBe("Hello");
+      expect(await fs.readFile(join(dir, "posts", "hello.txt"), "utf8")).toBe(
+        "Hello"
+      );
     });
 
     it("does not write an ignored name", async function () {

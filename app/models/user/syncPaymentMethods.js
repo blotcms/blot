@@ -31,7 +31,7 @@ var LEGACY_BRANDS = {
   Discover: "discover",
   "Diners Club": "diners",
   JCB: "jcb",
-  UnionPay: "unionpay"
+  UnionPay: "unionpay",
 };
 
 function normalizeBrand(brand) {
@@ -45,7 +45,7 @@ function buildPaymentMethod(pm, defaultId) {
     last4: pm.card.last4,
     exp_month: pm.card.exp_month,
     exp_year: pm.card.exp_year,
-    isDefault: pm.id === defaultId
+    isDefault: pm.id === defaultId,
   };
 }
 
@@ -88,28 +88,31 @@ function listAllPaymentMethods(stripe, customerId, callback) {
 // object: "payment_method" instead of object: "card". We still fetch
 // listCards for any card Stripe does not surface that way.
 function fetchLegacyCards(stripe, customerId, defaultSourceId, callback) {
-  listAll(function (startingAfter, cb) {
-    var params = { limit: 100 };
-    if (startingAfter) params.starting_after = startingAfter;
-    stripe.customers.listCards(customerId, params, cb);
-  }, function (err, cards) {
-    if (err && err.code === "resource_missing") return callback(null, []);
-    if (err) return callback(err);
+  listAll(
+    function (startingAfter, cb) {
+      var params = { limit: 100 };
+      if (startingAfter) params.starting_after = startingAfter;
+      stripe.customers.listCards(customerId, params, cb);
+    },
+    function (err, cards) {
+      if (err && err.code === "resource_missing") return callback(null, []);
+      if (err) return callback(err);
 
-    var legacyCards = cards.map(function (card) {
-      return {
-        id: card.id,
-        brand: normalizeBrand(card.brand),
-        last4: card.last4,
-        exp_month: card.exp_month,
-        exp_year: card.exp_year,
-        isDefault: card.id === defaultSourceId,
-        isLegacy: true
-      };
-    });
+      var legacyCards = cards.map(function (card) {
+        return {
+          id: card.id,
+          brand: normalizeBrand(card.brand),
+          last4: card.last4,
+          exp_month: card.exp_month,
+          exp_year: card.exp_year,
+          isDefault: card.id === defaultSourceId,
+          isLegacy: true,
+        };
+      });
 
-    callback(null, legacyCards);
-  });
+      callback(null, legacyCards);
+    }
+  );
 }
 
 // A subscription can pin its own default_payment_method or (for accounts
@@ -117,29 +120,36 @@ function fetchLegacyCards(stripe, customerId, defaultSourceId, callback) {
 // either of which takes priority over the customer-level defaults when
 // Stripe decides what to charge for that subscription. We need the live
 // subscription (not our cached copy, which may be stale) to know that.
-function fetchSubscriptionDefault(stripe, customerId, subscriptionId, callback) {
+function fetchSubscriptionDefault(
+  stripe,
+  customerId,
+  subscriptionId,
+  callback
+) {
   if (!subscriptionId) return callback(null, null);
 
-  stripe.customers.retrieveSubscription(customerId, subscriptionId, function (
-    err,
-    subscription
-  ) {
-    // A missing subscription (cancelled/replaced since we last cached it)
-    // genuinely has no subscription-level override left - safe to fall
-    // back to the customer-level default. Any other error (network, auth,
-    // rate limit) must not be treated the same way: silently falling back
-    // could misidentify which card Stripe will actually charge and let it
-    // be removed instead of whatever the real override was.
-    if (err && err.code === "resource_missing") return callback(null, null);
-    if (err) return callback(err);
+  stripe.customers.retrieveSubscription(
+    customerId,
+    subscriptionId,
+    function (err, subscription) {
+      // A missing subscription (cancelled/replaced since we last cached it)
+      // genuinely has no subscription-level override left - safe to fall
+      // back to the customer-level default. Any other error (network, auth,
+      // rate limit) must not be treated the same way: silently falling back
+      // could misidentify which card Stripe will actually charge and let it
+      // be removed instead of whatever the real override was.
+      if (err && err.code === "resource_missing") return callback(null, null);
+      if (err) return callback(err);
 
-    callback(
-      null,
-      (subscription &&
-        (subscription.default_payment_method || subscription.default_source)) ||
-        null
-    );
-  });
+      callback(
+        null,
+        (subscription &&
+          (subscription.default_payment_method ||
+            subscription.default_source)) ||
+          null
+      );
+    }
+  );
 }
 
 // Fetches the Stripe customer's payment methods and caches a display-ready
@@ -192,30 +202,32 @@ module.exports = function syncPaymentMethods(user, callback) {
               return buildPaymentMethod(pm, defaultId);
             });
 
-          fetchLegacyCards(stripe, customerId, defaultId, function (
-            err,
-            legacyCards
-          ) {
-            if (err) return callback(err);
-
-            // Same card_ id from both APIs is one card, not two. Keep the
-            // legacy row so isLegacy stays accurate for remove/default.
-            var seen = {};
-            legacyCards.forEach(function (card) {
-              seen[card.id] = true;
-            });
-            paymentMethods = legacyCards.concat(
-              paymentMethods.filter(function (pm) {
-                return !seen[pm.id];
-              })
-            );
-
-            set(user.uid, { paymentMethods: paymentMethods }, function (err) {
+          fetchLegacyCards(
+            stripe,
+            customerId,
+            defaultId,
+            function (err, legacyCards) {
               if (err) return callback(err);
 
-              callback(null, paymentMethods);
-            });
-          });
+              // Same card_ id from both APIs is one card, not two. Keep the
+              // legacy row so isLegacy stays accurate for remove/default.
+              var seen = {};
+              legacyCards.forEach(function (card) {
+                seen[card.id] = true;
+              });
+              paymentMethods = legacyCards.concat(
+                paymentMethods.filter(function (pm) {
+                  return !seen[pm.id];
+                })
+              );
+
+              set(user.uid, { paymentMethods: paymentMethods }, function (err) {
+                if (err) return callback(err);
+
+                callback(null, paymentMethods);
+              });
+            }
+          );
         });
       }
     );

@@ -144,7 +144,9 @@ module.exports = ({
         error.name === "TimeoutError"
           ? `timed out after ${timeoutMs}ms`
           : error.message;
-      throw new Error(`Failed to flush proxy ${reverse_proxy_url}: ${reason}`, { cause: error });
+      throw new Error(`Failed to flush proxy ${reverse_proxy_url}: ${reason}`, {
+        cause: error,
+      });
     }
   }
 
@@ -175,7 +177,12 @@ module.exports = ({
         nextScore()
       );
     } catch (error) {
-      console.log(prefix(), "could not record pending purge for", target, error);
+      console.log(
+        prefix(),
+        "could not record pending purge for",
+        target,
+        error
+      );
     }
   }
 

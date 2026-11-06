@@ -14,7 +14,9 @@ const linebreaks = require("./linebreaks");
 const restoreDisplayMath = require("./restore-display-math");
 const processImages = require("./images");
 const cleanupSpans = require("./cleanup-spans");
-const { normalizeLiteralDollarMath } = require("build/math/normalizeLiteralDollars");
+const {
+  normalizeLiteralDollarMath,
+} = require("build/math/normalizeLiteralDollars");
 
 function textWithLineBreaks($, node) {
   const clonedNode = $(node).clone();
@@ -161,7 +163,7 @@ async function read(blog, path, callback) {
     });
 
     // remove all empty spans
-    $('span:empty').remove();
+    $("span:empty").remove();
 
     // replace italic inlines with em
     $('span[style*="font-style:italic"]').each(function (i, elem) {
@@ -186,7 +188,7 @@ async function read(blog, path, callback) {
     // replace underline inlines with u
     $('span[style*="text-decoration:underline"]').each(function (i, elem) {
       // if this contains a link, skip
-      if ($(this).find('a').length > 0) {
+      if ($(this).find("a").length > 0) {
         return;
       }
       $(this).replaceWith("<u>" + $(this).html() + "</u>");
@@ -201,7 +203,7 @@ async function read(blog, path, callback) {
     $('li[style*="text-decoration:line-through"]').each(function (i, elem) {
       $(this).wrapInner("<strike>" + $(this).html() + "</strike>");
     });
-    
+
     // remove all inline style attributes
     $("[style]").removeAttr("style");
 

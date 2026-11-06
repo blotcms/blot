@@ -61,9 +61,9 @@ describe("onceAtStartup", function () {
   }, 20000);
 
   it("runs the work once for two concurrent callers", async function () {
-    const fn = jasmine.createSpy("fn").and.callFake(
-      () => new Promise((resolve) => setTimeout(resolve, 300))
-    );
+    const fn = jasmine
+      .createSpy("fn")
+      .and.callFake(() => new Promise((resolve) => setTimeout(resolve, 300)));
 
     const results = await Promise.all([
       onceAtStartup(name, fn),

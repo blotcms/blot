@@ -74,7 +74,15 @@ const {
   OutcomeUnknownError,
   StoreError,
 } = require("./errors");
-const { MANIFEST_PREFIX, LATEST_KEY, PACK_NAME, manifestKey, manifestSeq, packKey, idxKey } = require("./layout");
+const {
+  MANIFEST_PREFIX,
+  LATEST_KEY,
+  PACK_NAME,
+  manifestKey,
+  manifestSeq,
+  packKey,
+  idxKey,
+} = require("./layout");
 
 const VERSION = 1;
 
@@ -137,7 +145,17 @@ const OID = /^[0-9a-f]{40}$/;
 const WRITER = /^[0-9a-zA-Z_-]{1,64}$/;
 
 function empty() {
-  return { version: VERSION, seq: 0, writer: "", head: null, refs: {}, packs: [], snapshots: [], history: null, historyPieces: [] };
+  return {
+    version: VERSION,
+    seq: 0,
+    writer: "",
+    head: null,
+    refs: {},
+    packs: [],
+    snapshots: [],
+    history: null,
+    historyPieces: [],
+  };
 }
 
 function fail(message) {
@@ -145,15 +163,20 @@ function fail(message) {
 }
 
 function checkCount(value, what) {
-  if (!Number.isSafeInteger(value) || value < 0) fail(what + " must be a whole number");
+  if (!Number.isSafeInteger(value) || value < 0)
+    fail(what + " must be a whole number");
 }
 
 function checkRefs(refs, what) {
-  if (!refs || typeof refs !== "object" || Array.isArray(refs)) fail(what + " must be an object");
+  if (!refs || typeof refs !== "object" || Array.isArray(refs))
+    fail(what + " must be an object");
 
   for (const [name, oid] of Object.entries(refs)) {
-    // eslint-disable-next-line no-control-regex
-    if (!/^refs\/[^\s\x00-\x1f\x7f~^:?*[\\]+$/.test(name) || name.includes("..")) {
+    if (
+      // eslint-disable-next-line no-control-regex
+      !/^refs\/[^\s\x00-\x1f\x7f~^:?*[\\]+$/.test(name) ||
+      name.includes("..")
+    ) {
       fail(what + " has an invalid ref name " + JSON.stringify(name));
     }
     if (!OID.test(oid)) fail(what + " has an invalid object ID for " + name);
@@ -163,21 +186,38 @@ function checkRefs(refs, what) {
 function checkPack(pack, what, seq) {
   if (!pack || typeof pack !== "object") fail(what + " must be an object");
   if (!PACK_NAME.test(pack.name)) fail(what + " has an invalid pack name");
-  for (const field of ["size", "idxSize", "objects"]) checkCount(pack[field], what + "." + field);
+  for (const field of ["size", "idxSize", "objects"])
+    checkCount(pack[field], what + "." + field);
   if (pack.size < 32) fail(what + ".size is too small to be a pack");
 }
 
 // Throws CorruptError unless `m` is a manifest this version understands
 function validate(m) {
   if (!m || typeof m !== "object") fail("not an object");
-  if (m.version !== VERSION) fail("version " + m.version + " is not supported (this reads version " + VERSION + ")");
+  if (m.version !== VERSION)
+    fail(
+      "version " +
+        m.version +
+        " is not supported (this reads version " +
+        VERSION +
+        ")"
+    );
   checkCount(m.seq, "seq");
   if (typeof m.writer !== "string") fail("writer must be a string");
-  if (m.seq > 0 ? !WRITER.test(m.writer) : m.writer !== "") fail("writer must be a nonce (and empty only at seq 0)");
+  if (m.seq > 0 ? !WRITER.test(m.writer) : m.writer !== "")
+    fail("writer must be a nonce (and empty only at seq 0)");
 
-  if (m.epoch !== undefined && (typeof m.epoch !== "string" || !WRITER.test(m.epoch))) fail("epoch must be a nonce when it is there");
+  if (
+    m.epoch !== undefined &&
+    (typeof m.epoch !== "string" || !WRITER.test(m.epoch))
+  )
+    fail("epoch must be a nonce when it is there");
 
-  if (m.head !== null && !(typeof m.head === "string" && m.head.startsWith("refs/"))) fail("head must be a ref name or null");
+  if (
+    m.head !== null &&
+    !(typeof m.head === "string" && m.head.startsWith("refs/"))
+  )
+    fail("head must be a ref name or null");
   checkRefs(m.refs, "refs");
 
   if (!Array.isArray(m.packs)) fail("packs must be a list");
@@ -194,7 +234,8 @@ function validate(m) {
   let previous = 0;
   for (const snapshot of m.snapshots) {
     checkCount(snapshot.seq, "snapshots[].seq");
-    if (snapshot.seq <= previous || snapshot.seq > m.seq) fail("snapshots are out of order");
+    if (snapshot.seq <= previous || snapshot.seq > m.seq)
+      fail("snapshots are out of order");
     previous = snapshot.seq;
     checkRefs(snapshot.refs, "snapshots[].refs");
   }
@@ -206,9 +247,11 @@ function validate(m) {
   }
 
   if (m.peeled !== undefined) {
-    if (!m.peeled || typeof m.peeled !== "object" || Array.isArray(m.peeled)) fail("peeled must be an object");
+    if (!m.peeled || typeof m.peeled !== "object" || Array.isArray(m.peeled))
+      fail("peeled must be an object");
     for (const [tag, target] of Object.entries(m.peeled)) {
-      if (!OID.test(tag) || !OID.test(target)) fail("peeled must map object IDs to object IDs");
+      if (!OID.test(tag) || !OID.test(target))
+        fail("peeled must map object IDs to object IDs");
     }
   }
 
@@ -225,7 +268,11 @@ function validate(m) {
 }
 
 function sortRefs(refs) {
-  return Object.fromEntries(Object.keys(refs).sort().map((name) => [name, refs[name]]));
+  return Object.fromEntries(
+    Object.keys(refs)
+      .sort()
+      .map((name) => [name, refs[name]])
+  );
 }
 
 // The manifest as bytes: stable, so the same manifest is the same bytes
@@ -302,7 +349,9 @@ async function load(store, seq, now) {
 function hintSeq(bytes) {
   try {
     const hint = JSON.parse(bytes.toString("utf8"));
-    return hint && Number.isSafeInteger(hint.seq) && hint.seq >= 1 ? hint.seq : null;
+    return hint && Number.isSafeInteger(hint.seq) && hint.seq >= 1
+      ? hint.seq
+      : null;
   } catch (err) {
     return null;
   }
@@ -317,7 +366,10 @@ async function readHint(store) {
   const known = hints.get(store);
   let answer;
   try {
-    answer = await store.get(LATEST_KEY, { maxBytes: MAX_HINT_BYTES, ifNoneMatch: known ? known.etag : null });
+    answer = await store.get(LATEST_KEY, {
+      maxBytes: MAX_HINT_BYTES,
+      ifNoneMatch: known ? known.etag : null,
+    });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof TooLargeError) {
       hints.delete(store);
@@ -325,11 +377,13 @@ async function readHint(store) {
     }
     throw err;
   }
-  if (answer && answer.notModified && known) return { seq: known.seq, unchanged: true };
+  if (answer && answer.notModified && known)
+    return { seq: known.seq, unchanged: true };
 
   const bytes = Buffer.isBuffer(answer) ? answer : answer && answer.bytes;
   const seq = bytes ? hintSeq(bytes) : null;
-  if (answer && answer.etag && bytes) hints.set(store, { etag: answer.etag, seq });
+  if (answer && answer.etag && bytes)
+    hints.set(store, { etag: answer.etag, seq });
   else hints.delete(store);
   return { seq, unchanged: false };
 }
@@ -383,14 +437,19 @@ async function walkFromHint(store, now, serving) {
   let afterKept;
   if (trusting) {
     hint = await readHint(store);
-    if (hint.unchanged && hint.seq === keptSeq) return { seq: keptSeq, trustedAt: last.at };
+    if (hint.unchanged && hint.seq === keptSeq)
+      return { seq: keptSeq, trustedAt: last.at };
   } else {
-    [hint, afterKept] = await Promise.all([readHint(store), keptSeq === null ? null : store.head(manifestKey(keptSeq + 1))]);
+    [hint, afterKept] = await Promise.all([
+      readHint(store),
+      keptSeq === null ? null : store.head(manifestKey(keptSeq + 1)),
+    ]);
   }
 
   if (hint.seq === null) return null;
   if (keptSeq !== null && hint.seq <= keptSeq) {
-    if (afterKept === undefined) afterKept = await store.head(manifestKey(keptSeq + 1));
+    if (afterKept === undefined)
+      afterKept = await store.head(manifestKey(keptSeq + 1));
     if (!afterKept) return { seq: keptSeq };
   }
 
@@ -454,7 +513,8 @@ async function read(store, { clock = Date.now, serving = false } = {}) {
   const hinted = await walkFromHint(store, now, serving);
   if (hinted !== null) {
     try {
-      if (hinted.trustedAt !== undefined) return stamp(await load(store, hinted.seq, now), hinted.trustedAt);
+      if (hinted.trustedAt !== undefined)
+        return stamp(await load(store, hinted.seq, now), hinted.trustedAt);
       let found;
       if (hinted.loading) {
         const settled = await hinted.loading;
@@ -488,7 +548,11 @@ function isFresh(base, clock = Date.now) {
 
 function assertFresh(base, clock) {
   if (!isFresh(base, clock)) {
-    throw new StaleManifestError("The manifest seq " + base.seq + " was read too long ago to build on; read it again");
+    throw new StaleManifestError(
+      "The manifest seq " +
+        base.seq +
+        " was read too long ago to build on; read it again"
+    );
   }
 }
 
@@ -504,7 +568,17 @@ function assertFresh(base, clock) {
 // has refs but no `peeled` was written before the field existed, so which of
 // its refs are annotated tags is not known; it stays without the field (and
 // fetch treats it with care) rather than claim that none are.
-function advance(base, { refs, packs = [], historyPieces = [], head = base.head, history = base.history, peeled = {} }) {
+function advance(
+  base,
+  {
+    refs,
+    packs = [],
+    historyPieces = [],
+    head = base.head,
+    history = base.history,
+    peeled = {},
+  }
+) {
   const seq = base.seq + 1;
   const snapshots = [...base.snapshots, { seq, refs: { ...refs } }];
   const moved = new Set(packs.map((pack) => pack.name));
@@ -515,11 +589,19 @@ function advance(base, { refs, packs = [], historyPieces = [], head = base.head,
     writer: crypto.randomBytes(16).toString("hex"),
     head,
     refs: { ...refs },
-    packs: [...base.packs.filter((pack) => !moved.has(pack.name)), ...packs.map((pack) => ({ ...pack, seq }))],
+    packs: [
+      ...base.packs.filter((pack) => !moved.has(pack.name)),
+      ...packs.map((pack) => ({ ...pack, seq })),
+    ],
     snapshots,
-    ...(records ? { peeled: keepPeeled({ ...base.peeled, ...peeled }, snapshots) } : {}),
+    ...(records
+      ? { peeled: keepPeeled({ ...base.peeled, ...peeled }, snapshots) }
+      : {}),
     history,
-    historyPieces: [...(base.historyPieces || []), ...historyPieces.map((piece) => ({ ...piece, seq }))],
+    historyPieces: [
+      ...(base.historyPieces || []),
+      ...historyPieces.map((piece) => ({ ...piece, seq })),
+    ],
   };
 }
 
@@ -546,16 +628,29 @@ function advance(base, { refs, packs = [], historyPieces = [], head = base.head,
 //
 // Throws StaleManifestError if `base` no longer lists a pack in `remove` or a
 // piece in `removePieces`: someone else compacted them away first.
-function compacted(base, { remove = [], add = null, history, removePieces = [], limits = {} }) {
+function compacted(
+  base,
+  { remove = [], add = null, history, removePieces = [], limits = {} }
+) {
   const listed = new Map(base.packs.map((pack) => [pack.name, pack]));
   const gone = remove.filter((name) => !listed.has(name));
-  if (gone.length) throw new StaleManifestError("The manifest no longer lists " + gone.join(", "));
-  if (remove.length && !add) throw new Error("A compaction which removes packs must add the pack they were merged into");
+  if (gone.length)
+    throw new StaleManifestError(
+      "The manifest no longer lists " + gone.join(", ")
+    );
+  if (remove.length && !add)
+    throw new Error(
+      "A compaction which removes packs must add the pack they were merged into"
+    );
 
   const pieces = base.historyPieces || [];
   const pieceNames = new Set(pieces.map((piece) => piece.name));
   const goneByPiece = removePieces.filter((name) => !pieceNames.has(name));
-  if (goneByPiece.length) throw new StaleManifestError("The manifest no longer lists the history pieces " + goneByPiece.join(", "));
+  if (goneByPiece.length)
+    throw new StaleManifestError(
+      "The manifest no longer lists the history pieces " +
+        goneByPiece.join(", ")
+    );
 
   let packs = base.packs;
   if (add) {
@@ -564,11 +659,26 @@ function compacted(base, { remove = [], add = null, history, removePieces = [], 
     // earlier push or compaction made of the same objects; it is listed once,
     // with the newer seq of the two
     const same = listed.get(add.name);
-    const seq = Math.max(...remove.map((name) => listed.get(name).seq), same ? same.seq : 0);
-    packs = base.packs.filter((pack) => !removed.has(pack.name) && pack.name !== add.name);
+    const seq = Math.max(
+      ...remove.map((name) => listed.get(name).seq),
+      same ? same.seq : 0
+    );
+    packs = base.packs.filter(
+      (pack) => !removed.has(pack.name) && pack.name !== add.name
+    );
     let at = packs.length;
     while (at > 0 && packs[at - 1].seq > seq) at--;
-    packs = [...packs.slice(0, at), { name: add.name, size: add.size, idxSize: add.idxSize, objects: add.objects, seq }, ...packs.slice(at)];
+    packs = [
+      ...packs.slice(0, at),
+      {
+        name: add.name,
+        size: add.size,
+        idxSize: add.idxSize,
+        objects: add.objects,
+        seq,
+      },
+      ...packs.slice(at),
+    ];
   }
 
   const dropped = new Set(removePieces);
@@ -579,7 +689,9 @@ function compacted(base, { remove = [], add = null, history, removePieces = [], 
     writer: crypto.randomBytes(16).toString("hex"),
     packs,
     snapshots,
-    ...(base.peeled !== undefined ? { peeled: keepPeeled(base.peeled, snapshots) } : {}),
+    ...(base.peeled !== undefined
+      ? { peeled: keepPeeled(base.peeled, snapshots) }
+      : {}),
     history: history === undefined ? base.history : history,
     historyPieces: pieces.filter((piece) => !dropped.has(piece.name)),
   };
@@ -611,10 +723,17 @@ function newEpoch() {
 // `epoch` is new (newEpoch()): every cache of objects by ID is keyed by it, so
 // nothing cached before the rewrite stands in for the packs after it.
 function rewritten(base, { epoch, pack = null, history = null, peeled }) {
-  if (typeof epoch !== "string" || !WRITER.test(epoch)) throw new Error("A rewrite needs a new epoch");
-  if (epoch === epochOf(base)) throw new Error("A rewrite needs an epoch other than the one it replaces");
+  if (typeof epoch !== "string" || !WRITER.test(epoch))
+    throw new Error("A rewrite needs a new epoch");
+  if (epoch === epochOf(base))
+    throw new Error("A rewrite needs an epoch other than the one it replaces");
   const seq = base.seq + 1;
-  const entry = (p) => ({ name: p.name, size: p.size, idxSize: p.idxSize, objects: p.objects });
+  const entry = (p) => ({
+    name: p.name,
+    size: p.size,
+    idxSize: p.idxSize,
+    objects: p.objects,
+  });
   const snapshots = [{ seq, refs: { ...base.refs } }];
   const tags = peeled !== undefined ? peeled : base.peeled;
   return {
@@ -656,7 +775,12 @@ function removed(base) {
 // tombstone. An import goes into either, and a host treats both as no copy
 // at all.
 function isEmpty(m) {
-  return !Object.keys(m.refs).length && !m.packs.length && !m.history && !(m.historyPieces || []).length;
+  return (
+    !Object.keys(m.refs).length &&
+    !m.packs.length &&
+    !m.history &&
+    !(m.historyPieces || []).length
+  );
 }
 
 // How many snapshots a manifest keeps, and how many bytes of them, once
@@ -665,7 +789,11 @@ function isEmpty(m) {
 // a repository with many refs, where each snapshot is large. At least `min`
 // are kept whatever their size, so a client a few pushes behind still fetches
 // only what it lacks.
-const SNAPSHOT_LIMITS = { maxSnapshots: 1000, maxSnapshotBytes: 1024 * 1024, minSnapshots: 8 };
+const SNAPSHOT_LIMITS = {
+  maxSnapshots: 1000,
+  maxSnapshotBytes: 1024 * 1024,
+  minSnapshots: 8,
+};
 
 // The bytes a snapshot takes, as JSON without the manifest's indentation
 function snapshotBytes(snapshot) {
@@ -680,11 +808,18 @@ function snapshotBytes(snapshot) {
 // client far behind can prove, which makes it fetch everything (as a clone
 // does); it never makes fetch send too little.
 function trimSnapshots(snapshots, limits = {}) {
-  const { maxSnapshots, maxSnapshotBytes, minSnapshots } = { ...SNAPSHOT_LIMITS, ...limits };
+  const { maxSnapshots, maxSnapshotBytes, minSnapshots } = {
+    ...SNAPSHOT_LIMITS,
+    ...limits,
+  };
   let start = Math.max(0, snapshots.length - maxSnapshots);
   let bytes = 0;
-  for (let i = start; i < snapshots.length; i++) bytes += snapshotBytes(snapshots[i]);
-  while (bytes > maxSnapshotBytes && snapshots.length - start > Math.min(minSnapshots, maxSnapshots)) {
+  for (let i = start; i < snapshots.length; i++)
+    bytes += snapshotBytes(snapshots[i]);
+  while (
+    bytes > maxSnapshotBytes &&
+    snapshots.length - start > Math.min(minSnapshots, maxSnapshots)
+  ) {
     bytes -= snapshotBytes(snapshots[start]);
     start++;
   }
@@ -695,8 +830,11 @@ function trimSnapshots(snapshots, limits = {}) {
 // tag can still be asked for, so it is how long its target is wanted.
 function keepPeeled(peeled, snapshots) {
   const named = new Set();
-  for (const snapshot of snapshots) for (const oid of Object.values(snapshot.refs)) named.add(oid);
-  return Object.fromEntries(Object.entries(peeled).filter(([tag]) => named.has(tag)));
+  for (const snapshot of snapshots)
+    for (const oid of Object.values(snapshot.refs)) named.add(oid);
+  return Object.fromEntries(
+    Object.entries(peeled).filter(([tag]) => named.has(tag))
+  );
 }
 
 // The names of every pack a manifest needs kept: its packs, its history pack
@@ -715,16 +853,33 @@ function packsNamed(m) {
 async function assertUploaded(store, base, next, uploaded) {
   const known = new Set(base.packs.map((pack) => pack.name));
   const added = next.packs.filter((pack) => !known.has(pack.name));
-  const knownPieces = new Set((base.historyPieces || []).map((piece) => piece.name));
-  added.push(...(next.historyPieces || []).filter((piece) => !knownPieces.has(piece.name)));
-  if (next.history && !(base.history && base.history.name === next.history.name)) added.push(next.history);
+  const knownPieces = new Set(
+    (base.historyPieces || []).map((piece) => piece.name)
+  );
+  added.push(
+    ...(next.historyPieces || []).filter(
+      (piece) => !knownPieces.has(piece.name)
+    )
+  );
+  if (
+    next.history &&
+    !(base.history && base.history.name === next.history.name)
+  )
+    added.push(next.history);
 
   for (const pack of added) {
     if (uploaded.has(pack.name)) continue;
-    for (const [key, size] of [[packKey(pack.name), pack.size], [idxKey(pack.name), pack.idxSize]]) {
+    for (const [key, size] of [
+      [packKey(pack.name), pack.size],
+      [idxKey(pack.name), pack.idxSize],
+    ]) {
       const found = await store.head(key);
       if (!found || found.size !== size) {
-        throw new StaleManifestError("The manifest names " + key + " which is not uploaded (or is the wrong size)");
+        throw new StaleManifestError(
+          "The manifest names " +
+            key +
+            " which is not uploaded (or is the wrong size)"
+        );
       }
     }
   }
@@ -750,7 +905,13 @@ function outcomeIsUnknown(err) {
 // OutcomeUnknownError if the read can't say.
 async function confirm(store, next, cause) {
   const unknown = (err) =>
-    new OutcomeUnknownError("Could not tell whether the swap to seq " + next.seq + " happened: " + err.message, cause || err);
+    new OutcomeUnknownError(
+      "Could not tell whether the swap to seq " +
+        next.seq +
+        " happened: " +
+        err.message,
+      cause || err
+    );
 
   let found;
   try {
@@ -758,7 +919,9 @@ async function confirm(store, next, cause) {
   } catch (err) {
     if (!(err instanceof NotFoundError)) throw unknown(err);
     if (cause) throw cause;
-    throw new StaleManifestError("The manifest moved on from seq " + (next.seq - 1));
+    throw new StaleManifestError(
+      "The manifest moved on from seq " + (next.seq - 1)
+    );
   }
 
   let theirs;
@@ -769,7 +932,9 @@ async function confirm(store, next, cause) {
   }
 
   if (theirs.seq !== next.seq || theirs.writer !== next.writer) {
-    throw new StaleManifestError("The manifest moved on from seq " + (next.seq - 1));
+    throw new StaleManifestError(
+      "The manifest moved on from seq " + (next.seq - 1)
+    );
   }
   return found;
 }
@@ -815,18 +980,35 @@ async function confirm(store, next, cause) {
 // what make "since then" more than this read: they count from the read that
 // last fetched or checked them, which is never more than RECONFIRM_AFTER ago,
 // so a kept manifest the sweep has since deleted is found gone, not built on.
-async function swap({ store, lock, base, next, uploaded = [], clock = Date.now, waitForHint = true }) {
-  if (typeof lock !== "function") throw new Error("swap needs the host's lock function");
+async function swap({
+  store,
+  lock,
+  base,
+  next,
+  uploaded = [],
+  clock = Date.now,
+  waitForHint = true,
+}) {
+  if (typeof lock !== "function")
+    throw new Error("swap needs the host's lock function");
   validate(base);
   validate(next);
-  if (next.seq !== base.seq + 1) throw new StaleManifestError("The new manifest does not follow the one it was built on");
+  if (next.seq !== base.seq + 1)
+    throw new StaleManifestError(
+      "The new manifest does not follow the one it was built on"
+    );
   assertFresh(base, clock);
 
   // A manifest is immutable, so one read() would refuse could never be fixed
   // and would leave the repository unreadable: it is never written
   const bytes = serialize(next);
   if (bytes.length > MAX_BYTES) {
-    throw new ManifestTooLargeError("The manifest is " + bytes.length + " bytes; the most that can be read back is " + MAX_BYTES);
+    throw new ManifestTooLargeError(
+      "The manifest is " +
+        bytes.length +
+        " bytes; the most that can be read back is " +
+        MAX_BYTES
+    );
   }
 
   await assertUploaded(store, base, next, new Set(uploaded));
@@ -869,7 +1051,12 @@ async function swap({ store, lock, base, next, uploaded = [], clock = Date.now, 
     // the manifest before.
     const hint = store
       .put(LATEST_KEY, Buffer.from(JSON.stringify({ seq: next.seq }) + "\n"))
-      .catch((err) => console.error("Git store: could not write the hint for seq " + next.seq, err));
+      .catch((err) =>
+        console.error(
+          "Git store: could not write the hint for seq " + next.seq,
+          err
+        )
+      );
     if (waitForHint) await hint;
 
     return next;

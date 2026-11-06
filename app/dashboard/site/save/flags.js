@@ -9,7 +9,9 @@ module.exports = (req, res, next) => {
   const submitted = req.body || {};
 
   const submittedFlags =
-    submitted.flags && typeof submitted.flags === "object" ? submitted.flags : null;
+    submitted.flags && typeof submitted.flags === "object"
+      ? submitted.flags
+      : null;
 
   // `save.flags` runs for every settings POST; only apply updates when the
   // submitted form actually contains any flag fields.

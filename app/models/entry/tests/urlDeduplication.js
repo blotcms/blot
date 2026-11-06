@@ -32,7 +32,6 @@ describe("entry.urlDeduplication", function () {
     expect(result.conflictingEntryPath).toEqual("/original.txt");
   });
 
-
   it("uses mixed-case permalink metadata as first url candidate", async function () {
     const entry = await this.set(
       "/mixed-permalink.txt",
@@ -71,7 +70,10 @@ describe("entry.urlDeduplication", function () {
     await this.set("/multi-a.txt", "Link: multi\nHello, multi A!");
     await this.set("/multi-b.txt", "Link: multi\nHello, multi B!");
 
-    const third = await this.set("/multi-c.txt", "Link: multi\nHello, multi C!");
+    const third = await this.set(
+      "/multi-c.txt",
+      "Link: multi\nHello, multi C!"
+    );
 
     expect(third.url).toEqual("/multi-3");
     expect(third.dependencies).toContain("/multi-a.txt");
@@ -79,11 +81,7 @@ describe("entry.urlDeduplication", function () {
   });
 
   it("publishes a folder post at its plus-stripped path", async function () {
-    await folder.write(
-      this.blog.id,
-      "/album+/one.md",
-      "Link: /album\n\n# One"
-    );
+    await folder.write(this.blog.id, "/album+/one.md", "Link: /album\n\n# One");
 
     const builtEntry = await new Promise((resolve, reject) => {
       build(this.blog, "/album+/one.md", function (err, entry) {

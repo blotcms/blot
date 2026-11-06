@@ -20,7 +20,8 @@ function fail(message, code) {
   process.exit(code || 1);
 }
 
-if (!process.argv[2]) fail("Pass a blog identifier (blog ID) as the first argument");
+if (!process.argv[2])
+  fail("Pass a blog identifier (blog ID) as the first argument");
 
 Blog.get({ id: process.argv[2] }, function (err, blog) {
   if (err || !blog) fail(err ? err.message : "No blog " + process.argv[2]);

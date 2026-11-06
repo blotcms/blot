@@ -14,14 +14,15 @@ export default async (req, res) => {
     console.error(clfdate(), "Missing blogID header for recursiveList request");
     return res.status(400).send("Missing blogID header");
   }
-  
+
   // Validate path
   const basePath = resolve(join(iCloudDriveDirectory, blogID));
   const normalizedPath = path.startsWith("/") ? path.slice(1) : path;
   const dirPath = resolve(join(basePath, normalizedPath));
 
   if (dirPath !== basePath && !dirPath.startsWith(basePath + sep)) {
-    console.error(clfdate(), 
+    console.error(
+      clfdate(),
       `Invalid path: attempted to access parent directory`,
       basePath,
       dirPath
@@ -31,7 +32,8 @@ export default async (req, res) => {
       .send("Invalid path: attempted to access parent directory");
   }
 
-  console.log(clfdate(), 
+  console.log(
+    clfdate(),
     `Received recursiveList request for blogID: ${blogID}, path: ${path}`
   );
 
@@ -39,7 +41,10 @@ export default async (req, res) => {
     await recursiveList(dirPath);
     res.status(200).json({ success: true });
   } catch (error) {
-    console.error(clfdate(), "Error performing recursive list", { dirPath, error });
+    console.error(clfdate(), "Error performing recursive list", {
+      dirPath,
+      error,
+    });
     res.status(500).json({ success: false, error: error.message });
   }
 };

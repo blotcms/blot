@@ -2,9 +2,8 @@ var time = require("helper/time");
 var pandoc = require("util").callbackify(require("build/converters/pandoc"));
 var debug = require("debug")("blot:converters:rtf");
 var cheerio = require("cheerio");
-var normalizeLiteralDollarMath = require(
-  "build/math/normalizeLiteralDollars"
-).normalizeLiteralDollarMath;
+var normalizeLiteralDollarMath =
+  require("build/math/normalizeLiteralDollars").normalizeLiteralDollarMath;
 
 module.exports = function (blog, text, callback) {
   debug("Pre-pandoc", text);

@@ -20,11 +20,20 @@ describe("scheduler/daily/clients buildRows", function () {
   it("buckets blogs with no client under the no client label", function () {
     const rows = buildRows(["no client", "no client"]);
 
-    expect(rows).toEqual([{ client: "no client", sites: 2, percentage: "100.0%" }]);
+    expect(rows).toEqual([
+      { client: "no client", sites: 2, percentage: "100.0%" },
+    ]);
   });
 
   it("sorts rows by site count, most sites first", function () {
-    const siteClients = ["git", "dropbox", "dropbox", "dropbox", "google-drive", "google-drive"];
+    const siteClients = [
+      "git",
+      "dropbox",
+      "dropbox",
+      "dropbox",
+      "google-drive",
+      "google-drive",
+    ];
     const rows = buildRows(siteClients);
 
     expect(rows.map((row) => row.client)).toEqual([

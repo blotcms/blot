@@ -45,14 +45,14 @@ module.exports = function (req, res, next) {
   template = {
     name: name,
     slug: slugForName(req.blog.id, name),
-    cloneFrom: req.body.cloneFrom
+    cloneFrom: req.body.cloneFrom,
   };
 
   Template.create(
     req.blog.id,
     name,
     template,
-    function then (error, newTemplate) {
+    function then(error, newTemplate) {
       // If template name was 'example', deduplicated name
       // will be first 'example 2' then 'example 3' etc...
       // We preserve the original name to ensure that we

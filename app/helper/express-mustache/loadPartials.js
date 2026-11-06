@@ -4,12 +4,12 @@ const { join } = require("path");
 
 const CACHED = {};
 
-module.exports = async function loadPartials (root, options, ext, cache) {
+module.exports = async function loadPartials(root, options, ext, cache) {
   let partials = {};
 
   try {
     // recursively list all files matching ext in root and its subdirectories
-    const list = async dir => {
+    const list = async (dir) => {
       const items = cache
         ? CACHED[dir] || (await fs.readdir(dir))
         : await fs.readdir(dir);

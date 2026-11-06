@@ -67,7 +67,11 @@ module.exports = function (blogID, path, callback) {
                   if (isMissingFile(err)) {
                     log("Dependent no longer exists:", dependent_path);
                   } else {
-                    log("Error rebuilding dependent_path:", dependent_path, err);
+                    log(
+                      "Error rebuilding dependent_path:",
+                      dependent_path,
+                      err
+                    );
                   }
 
                   if (shouldDropDependent(err)) {

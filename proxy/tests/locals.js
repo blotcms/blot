@@ -125,7 +125,11 @@ describe("proxy config locals", function () {
       const partials = readPartials(directory);
 
       expect(
-        unresolved(partials["server.conf"], partials, locals.container({ env, config }))
+        unresolved(
+          partials["server.conf"],
+          partials,
+          locals.container({ env, config })
+        )
       ).toEqual([]);
     });
   });

@@ -18,45 +18,44 @@ describe("create", function () {
     // the number itself could be tuned based on the size of the source
     // image but I'd need to do more research about the meaning:
     // https://github.com/lovell/sharp/issues/1421#issuecomment-514446234
-    require("sharp")(path, { density: 2400 }).metadata(function (
-      err,
-      metadata
-    ) {
-      if (err) return done.fail(err);
-      ratio = Math.floor(metadata.width / metadata.height);
-
-      create(test.blog.id, path, function (err, thumbnails) {
+    require("sharp")(path, { density: 2400 }).metadata(
+      function (err, metadata) {
         if (err) return done.fail(err);
-        expect(thumbnails).toEqual(jasmine.any(Object));
+        ratio = Math.floor(metadata.width / metadata.height);
 
-        // Square thumbnail is square
-        expect(thumbnails.square.width).toEqual(thumbnails.square.height);
+        create(test.blog.id, path, function (err, thumbnails) {
+          if (err) return done.fail(err);
+          expect(thumbnails).toEqual(jasmine.any(Object));
 
-        // Other thumbnails preserve original aspect ratio
-        expect(
-          Math.floor(thumbnails.large.width / thumbnails.large.height)
-        ).toEqual(ratio);
-        expect(
-          Math.floor(thumbnails.medium.width / thumbnails.medium.height)
-        ).toEqual(ratio);
-        expect(
-          Math.floor(thumbnails.small.width / thumbnails.small.height)
-        ).toEqual(ratio);
-        expect(thumbnails.square.name).toEqual("square.jpg");
+          // Square thumbnail is square
+          expect(thumbnails.square.width).toEqual(thumbnails.square.height);
 
-        // Each thumbnail was uploaded
-        Promise.all(
-          Object.keys(thumbnails).map(function (size) {
-            return assets.exists(test.blog.id, thumbnails[size].path);
-          })
-        ).then(function (found) {
-          found.forEach(function (exists) {
-            expect(exists).toBe(true);
-          });
+          // Other thumbnails preserve original aspect ratio
+          expect(
+            Math.floor(thumbnails.large.width / thumbnails.large.height)
+          ).toEqual(ratio);
+          expect(
+            Math.floor(thumbnails.medium.width / thumbnails.medium.height)
+          ).toEqual(ratio);
+          expect(
+            Math.floor(thumbnails.small.width / thumbnails.small.height)
+          ).toEqual(ratio);
+          expect(thumbnails.square.name).toEqual("square.jpg");
 
-          done();
-        }, done.fail);
-      });
-    });
+          // Each thumbnail was uploaded
+          Promise.all(
+            Object.keys(thumbnails).map(function (size) {
+              return assets.exists(test.blog.id, thumbnails[size].path);
+            })
+          ).then(function (found) {
+            found.forEach(function (exists) {
+              expect(exists).toBe(true);
+            });
+
+            done();
+          }, done.fail);
+        });
+      }
+    );
   });
 });

@@ -21,7 +21,10 @@ function apiError(status, tag, extra) {
 describe("dropbox classifyError", function () {
   describe("classify", function () {
     it("maps 401 from any step to REAUTH_REQUIRED", function () {
-      const classified = classify(apiError(401, "invalid_access_token"), SOURCES.DELTA);
+      const classified = classify(
+        apiError(401, "invalid_access_token"),
+        SOURCES.DELTA
+      );
 
       expect(classified.persist).toBe(true);
       expect(classified.healthCode).toBe(health.CODES.REAUTH_REQUIRED);
@@ -64,10 +67,7 @@ describe("dropbox classifyError", function () {
     });
 
     it("maps a delta 409 to SOURCE_MISSING", function () {
-      const classified = classify(
-        apiError(409, "path"),
-        SOURCES.DELTA
-      );
+      const classified = classify(apiError(409, "path"), SOURCES.DELTA);
 
       expect(classified.persist).toBe(true);
       expect(classified.healthCode).toBe(health.CODES.SOURCE_MISSING);

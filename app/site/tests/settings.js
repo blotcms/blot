@@ -48,7 +48,9 @@ describe("Blot dashboard settings", function () {
     await page.click('a[href="/sites/' + handle + '"]');
 
     // verify the client link now says 'Local folder'
-    const client = page.$('a[href^="/sites/' + handle + '/client"] span.center');
+    const client = page.$(
+      'a[href^="/sites/' + handle + '/client"] span.center'
+    );
 
     expect(client.text().replace(/\s+/g, " ").trim()).toMatch(/^Local folder/);
 

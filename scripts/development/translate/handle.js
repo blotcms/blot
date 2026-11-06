@@ -16,20 +16,37 @@ var IGNORED_SUBDOMAINS = ["www", "web", "en", "m", "blog"];
 // Suffixes stripped from the end of a hostname. Longest first so that
 // "co.uk" wins over "uk".
 var IGNORED_SUFFIXES = [
-  "co.uk", "org.uk", "ac.uk", "com.au", "co.nz", "co.jp", "com.br",
-  "github.io", "gitlab.io", "netlify.app", "vercel.app", "pages.dev",
-  "wordpress.com", "substack.com", "medium.com", "blogspot.com",
-  "squarespace.com", "tumblr.com", "blot.im",
+  "co.uk",
+  "org.uk",
+  "ac.uk",
+  "com.au",
+  "co.nz",
+  "co.jp",
+  "com.br",
+  "github.io",
+  "gitlab.io",
+  "netlify.app",
+  "vercel.app",
+  "pages.dev",
+  "wordpress.com",
+  "substack.com",
+  "medium.com",
+  "blogspot.com",
+  "squarespace.com",
+  "tumblr.com",
+  "blot.im",
 ];
 
 function alnum(value) {
-  return String(value || "")
-    .toLowerCase()
-    .normalize("NFKD")
-    // Drop combining marks so accented characters keep their base letter
-    // (José -> jose) rather than vanishing entirely.
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]/g, "");
+  return (
+    String(value || "")
+      .toLowerCase()
+      .normalize("NFKD")
+      // Drop combining marks so accented characters keep their base letter
+      // (José -> jose) rather than vanishing entirely.
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]/g, "")
+  );
 }
 
 function stripSuffix(hostname) {

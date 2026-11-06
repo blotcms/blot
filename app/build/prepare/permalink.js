@@ -70,7 +70,7 @@ var MOMENT_TOKENS = [
   "Z",
   "ZZ",
   "X",
-  "x"
+  "x",
 ];
 var normalize = require("helper/urlNormalizer");
 var allow = [
@@ -84,7 +84,7 @@ var allow = [
   "dateStamp",
   "created",
   "updated",
-  "metadata"
+  "metadata",
 ];
 
 module.exports = function (timeZone, format, entry) {

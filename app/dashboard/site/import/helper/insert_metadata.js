@@ -1,7 +1,7 @@
 var capitalize = require("helper/capitalize");
 const moment = require("moment");
 
-module.exports = function insert_metadata (post, callback) {
+module.exports = function insert_metadata(post, callback) {
   var lines = [];
   var content = post.content;
 

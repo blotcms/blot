@@ -1,6 +1,12 @@
-const paypalButtonContainer = document.getElementById("paypal-button-container");
+const paypalButtonContainer = document.getElementById(
+  "paypal-button-container"
+);
 
-if (paypalButtonContainer && window.paypal && typeof window.paypal.Buttons === "function") {
+if (
+  paypalButtonContainer &&
+  window.paypal &&
+  typeof window.paypal.Buttons === "function"
+) {
   const subscriptionId = paypalButtonContainer.dataset.paypalSubscriptionId;
   const planId = paypalButtonContainer.dataset.paypalPlanId;
   const reviseQuantity = paypalButtonContainer.dataset.paypalReviseQuantity;

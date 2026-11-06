@@ -11,16 +11,19 @@ describe("build", function () {
 
   beforeEach(function () {
     this.buildAndCheck = ({ path, contents }, expectedEntry, cb) => {
-      folder.write(this.blog.id, path, contents).then(() => {
-        build(this.blog, path, function (err, entry) {
-          for (let key in expectedEntry)
-            expect(expectedEntry[key]).toEqual(entry[key]);
+      folder.write(this.blog.id, path, contents).then(
+        () => {
+          build(this.blog, path, function (err, entry) {
+            for (let key in expectedEntry)
+              expect(expectedEntry[key]).toEqual(entry[key]);
+            cb();
+          });
+        },
+        (err) => {
+          fail(err);
           cb();
-        });
-      }, (err) => {
-        fail(err);
-        cb();
-      });
+        }
+      );
     };
   });
 
@@ -28,8 +31,7 @@ describe("build", function () {
     const contents = `![Alt text here](foo.jpg "Title here")`;
     const path = "/hello.txt";
     // foo.jpg isn't in the folder, so it's baked as a pending CDN URL
-    const html =
-      `<p><img src="%%BLOT_CDN%%/folder/v-pending/${this.blog.id}/foo.jpg" title="Title here" alt="Alt text here"><span class="caption">Title here</span></p>`;
+    const html = `<p><img src="%%BLOT_CDN%%/folder/v-pending/${this.blog.id}/foo.jpg" title="Title here" alt="Alt text here"><span class="caption">Title here</span></p>`;
 
     this.blog.plugins.imageCaption = { enabled: true, options: {} };
     this.buildAndCheck({ path, contents }, { html }, done);
@@ -112,7 +114,7 @@ describe("build", function () {
       label: "gdoc",
       path: "/math.gdoc",
       contents:
-        "<html><head><meta content=\"text/html; charset=UTF-8\" http-equiv=\"content-type\"></head><body><p>Inline $$a+b$$ math</p></body></html>",
+        '<html><head><meta content="text/html; charset=UTF-8" http-equiv="content-type"></head><body><p>Inline $$a+b$$ math</p></body></html>',
     },
   ].forEach(({ label, path, contents }) => {
     it(`renders katex for ${label} when plugin is enabled`, async function () {

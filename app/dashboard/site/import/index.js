@@ -4,7 +4,9 @@ const { join } = require("path");
 const tempDir = require("helper/tempDir")();
 const fs = require("fs-extra");
 const list = require("./list");
-const sse = require("helper/sse")({ channel: (req) => `import:status:${req.blog.id}` });
+const sse = require("helper/sse")({
+  channel: (req) => `import:status:${req.blog.id}`,
+});
 
 Import.use((req, res, next) => {
   res.locals.importBase = res.locals.base + "/import";
@@ -81,7 +83,10 @@ Import.post("/cancel/:importID", async function (req, res) {
 Import.post("/delete/:importID", async function (req, res) {
   try {
     if (!(await require("./lifecycle").remove(req.importDirectory))) {
-      return res.message(req.baseUrl, "Cancellation requested; remove the import after it stops");
+      return res.message(
+        req.baseUrl,
+        "Cancellation requested; remove the import after it stops"
+      );
     }
   } catch (e) {
     return res.message(req.baseUrl, new Error("Failed to remove import"));

@@ -120,20 +120,19 @@ describe("blog handles renames", function () {
       content: "Link: /entry\nTitle: Original\n\nContent",
     });
 
-    expect(await this.text(`/entry`)).toBe('Original');
+    expect(await this.text(`/entry`)).toBe("Original");
 
     await this.write({
       path: "/entryrenamed.txt",
       content: "Link: /entry\nTitle: Renamed\n\nContent",
     });
 
-    expect(await this.text(`/entry`)).toBe('Original');
-    expect(await this.text(`/entry-2`)).toBe('Renamed');
+    expect(await this.text(`/entry`)).toBe("Original");
+    expect(await this.text(`/entry-2`)).toBe("Renamed");
 
     await this.remove("/entry.txt");
 
-    expect(await this.text(`/entry`)).toBe('Renamed');
-    expect(await this.text(`/entry-2`)).toBe('Renamed');
-
+    expect(await this.text(`/entry`)).toBe("Renamed");
+    expect(await this.text(`/entry-2`)).toBe("Renamed");
   });
 });

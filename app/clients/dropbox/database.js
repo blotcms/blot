@@ -67,7 +67,10 @@ async function listAccountBlogs(account_id) {
           if (blog && blog.client === "dropbox") {
             blogs.push(blog);
           } else {
-            debug(id, "does not match an extant blog using the Dropbox client.");
+            debug(
+              id,
+              "does not match an extant blog using the Dropbox client."
+            );
           }
 
           resolve();
@@ -138,7 +141,6 @@ async function setAccount(blogID, changes) {
       account[field] = defaultFor(Model[field]);
     }
   });
-
 
   // Verify that the type of new account state
   // matches the expected types declared in Model below.

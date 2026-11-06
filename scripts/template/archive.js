@@ -17,8 +17,8 @@ if (require.main === module) {
   
 ${fs
   .readdirSync(templateDir + "/latest")
-  .filter(name => !name.includes("."))
-  .map(name => `node scripts/template/archive ${name}`)
+  .filter((name) => !name.includes("."))
+  .map((name) => `node scripts/template/archive ${name}`)
   .join("\n")}`);
     process.exit();
   }
@@ -30,7 +30,7 @@ ${fs
   });
 }
 
-function main (name, callback) {
+function main(name, callback) {
   var templateID = "SITE:" + name;
 
   if (!fs.existsSync(templateDir + "/" + name))
@@ -63,7 +63,7 @@ function main (name, callback) {
           name,
           {
             name: name,
-            cloneFrom: blog.template
+            cloneFrom: blog.template,
           },
           function (err, cloneMetadata) {
             if (err) return next(err);
@@ -77,34 +77,40 @@ function main (name, callback) {
               function (err) {
                 if (err) return next(err);
 
-                Template.getMetadata(cloneMetadata.id, function (err, clonedTemplate) {
-                  if (err || !clonedTemplate)
-                    return next(err || new Error("no template"));
+                Template.getMetadata(
+                  cloneMetadata.id,
+                  function (err, clonedTemplate) {
+                    if (err || !clonedTemplate)
+                      return next(err || new Error("no template"));
 
-                  Blog.set(
-                    blog.id,
-                    { template: cloneMetadata.id },
-                    function (err) {
-                      if (err) return next(err);
+                    Blog.set(
+                      blog.id,
+                      { template: cloneMetadata.id },
+                      function (err) {
+                        if (err) return next(err);
 
-                      console.log(
-                        blog.id,
-                        blog.handle,
-                        "used",
-                        templateID,
-                        "so I created a clone",
-                        clonedTemplate.id,
-                        "(deduplicated slug:",
-                        clonedTemplate.slug,
-                        ")",
-                        "\nhttp://" + blog.handle + "." + process.env.BLOT_HOST
-                      );
+                        console.log(
+                          blog.id,
+                          blog.handle,
+                          "used",
+                          templateID,
+                          "so I created a clone",
+                          clonedTemplate.id,
+                          "(deduplicated slug:",
+                          clonedTemplate.slug,
+                          ")",
+                          "\nhttp://" +
+                            blog.handle +
+                            "." +
+                            process.env.BLOT_HOST
+                        );
 
-                      total++;
-                      next();
-                    }
-                  );
-                });
+                        total++;
+                        next();
+                      }
+                    );
+                  }
+                );
               }
             );
           }
@@ -136,16 +142,17 @@ function main (name, callback) {
 
 // Template slugs must be unique per blog, so retry with a suffixed slug when
 // cloning into a namespace that already owns the target slug.
-function createCloneWithUniqueSlug (owner, name, metadata, callback) {
+function createCloneWithUniqueSlug(owner, name, metadata, callback) {
   var baseSlug = makeSlug(name).slice(0, 30);
   var attempt = 1;
 
-  function tryCreate () {
+  function tryCreate() {
     var suffix = attempt === 1 ? "" : "-" + attempt;
-    var trimmedBase = attempt === 1 ? baseSlug : baseSlug.slice(0, 30 - suffix.length);
+    var trimmedBase =
+      attempt === 1 ? baseSlug : baseSlug.slice(0, 30 - suffix.length);
     var attemptSlug = makeSlug((trimmedBase || baseSlug) + suffix).slice(0, 30);
     var attemptMetadata = Object.assign({}, metadata, {
-      slug: attemptSlug
+      slug: attemptSlug,
     });
     var attemptName = attemptSlug;
 

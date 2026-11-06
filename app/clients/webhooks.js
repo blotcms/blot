@@ -10,7 +10,6 @@ const sse = require("helper/sse");
 
 const maxFileSize = config.webhooks.client_max_body_size;
 
-
 /*
 
 
@@ -130,12 +129,12 @@ async function publish(message, body) {
     );
   }
 
-  console.log(clfdate(), `Delivered ${totalChunks} chunks for`, message.requestId);
+  console.log(
+    clfdate(),
+    `Delivered ${totalChunks} chunks for`,
+    message.requestId
+  );
 }
-
-
-
-
 
 /*
 
@@ -145,7 +144,6 @@ Development code
 This section runs locally when I'm developing and testing the webhooks client. It listens for events from the remote server and forwards them to the local server.
 
 */
-
 
 const pendingRequests = new Map();
 
@@ -182,7 +180,10 @@ function listen({ host }) {
       let requestState = pendingRequests.get(requestId);
 
       if (!requestState) {
-        console.error(clfdate(), `No metadata found for requestId: ${requestId}`);
+        console.error(
+          clfdate(),
+          `No metadata found for requestId: ${requestId}`
+        );
         return;
       }
 
@@ -200,10 +201,15 @@ function listen({ host }) {
       );
 
       // Check if all chunks have been received
-      if (requestState.bodyChunks.filter(Boolean).length === parsed.totalChunks) {
+      if (
+        requestState.bodyChunks.filter(Boolean).length === parsed.totalChunks
+      ) {
         const completeBody = requestState.bodyChunks.join("");
 
-        console.log(clfdate(), `Webhooks received complete body for requestId: ${requestId}`);
+        console.log(
+          clfdate(),
+          `Webhooks received complete body for requestId: ${requestId}`
+        );
 
         // Remove the request from the map after completion
         pendingRequests.delete(requestId);
@@ -221,11 +227,18 @@ function listen({ host }) {
       // Handle metadata
       const requestId = parsed.requestId; // Ensure this is part of the metadata
       if (!requestId) {
-        console.error(clfdate(), "Received metadata without a requestId:", parsed);
+        console.error(
+          clfdate(),
+          "Received metadata without a requestId:",
+          parsed
+        );
         return;
       }
 
-      console.log(clfdate(), `Webhooks received metadata for requestId: ${requestId}`);
+      console.log(
+        clfdate(),
+        `Webhooks received metadata for requestId: ${requestId}`
+      );
 
       if (parsed.bodySize === 0) {
         // If there's no body, forward immediately
@@ -236,7 +249,6 @@ function listen({ host }) {
       }
     }
   };
-
 
   async function forwardToLocal(metadata, headers) {
     const path = require("url").parse(metadata.url).path;
@@ -251,7 +263,11 @@ function listen({ host }) {
       options.headers["x-forwarded-host"] = config.host;
       options.headers.host = config.host;
 
-      if (metadata.method !== "HEAD" && metadata.method !== "GET" && metadata.body) {
+      if (
+        metadata.method !== "HEAD" &&
+        metadata.method !== "GET" &&
+        metadata.body
+      ) {
         options.body = Buffer.from(metadata.body, "base64");
       }
 

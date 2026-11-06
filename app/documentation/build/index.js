@@ -136,7 +136,9 @@ function lockTokenIsLive(token) {
 }
 
 async function readLockOwner(lockPath) {
-  return String(await fs.readFile(join(lockPath, "pid"), "utf8").catch(() => "")).trim();
+  return String(
+    await fs.readFile(join(lockPath, "pid"), "utf8").catch(() => "")
+  ).trim();
 }
 
 function releaseDocumentationBuildLock(lockPath) {
@@ -153,14 +155,25 @@ function releaseDocumentationBuildLock(lockPath) {
       return;
     }
 
-    console.log(clfdate(), "Documentation build:", "Releasing build lock", lockPath);
+    console.log(
+      clfdate(),
+      "Documentation build:",
+      "Releasing build lock",
+      lockPath
+    );
     // Move the lock aside before deleting it. A waiter that read the owner as
     // empty mid-removal can otherwise write its claim file into the directory
     // being removed, and the removal's rmdir fails with ENOTEMPTY.
-    const releasingPath = lockPath + ".releasing-" + process.pid + "-" + Date.now();
+    const releasingPath =
+      lockPath + ".releasing-" + process.pid + "-" + Date.now();
     await fs.rename(lockPath, releasingPath);
     await fs.remove(releasingPath);
-    console.log(clfdate(), "Documentation build:", "Released build lock", lockPath);
+    console.log(
+      clfdate(),
+      "Documentation build:",
+      "Released build lock",
+      lockPath
+    );
   };
 }
 
@@ -178,8 +191,11 @@ async function takeOverStaleLock(lockPath, observedToken, observedStat) {
     if (err.code === "ENOENT") return false;
     if (err.code !== "EEXIST") throw err;
     const claimStat = await fs.stat(claimPath).catch(() => null);
-    const claimToken = String(await fs.readFile(claimPath, "utf8").catch(() => "")).trim();
-    const claimFresh = claimStat && Date.now() - claimStat.mtimeMs < BUILD_LOCK_FRESH_MS;
+    const claimToken = String(
+      await fs.readFile(claimPath, "utf8").catch(() => "")
+    ).trim();
+    const claimFresh =
+      claimStat && Date.now() - claimStat.mtimeMs < BUILD_LOCK_FRESH_MS;
     if (!lockTokenIsLive(claimToken) && !claimFresh) {
       await fs.remove(claimPath).catch(() => {});
     }
@@ -215,7 +231,12 @@ async function acquireDocumentationBuildLock() {
   const lockPath = documentationBuildLockPath();
   const startedAt = Date.now();
   let lastWaitLogAt = 0;
-  console.log(clfdate(), "Documentation build:", "Acquiring build lock", lockPath);
+  console.log(
+    clfdate(),
+    "Documentation build:",
+    "Acquiring build lock",
+    lockPath
+  );
   await fs.ensureDir(config.tmp_directory);
   const deadline = Date.now() + BUILD_LOCK_TIMEOUT_MS;
 
@@ -246,7 +267,8 @@ async function acquireDocumentationBuildLock() {
     }
 
     const ownerText = await readLockOwner(lockPath);
-    const freshEmpty = !ownerText && Date.now() - stat.mtimeMs < BUILD_LOCK_FRESH_MS;
+    const freshEmpty =
+      !ownerText && Date.now() - stat.mtimeMs < BUILD_LOCK_FRESH_MS;
     if (!lockTokenIsLive(ownerText) && !freshEmpty) {
       if (await takeOverStaleLock(lockPath, ownerText, stat)) {
         console.log(

@@ -33,7 +33,9 @@ module.exports = async function getViewByURLPattern(templateID, url, callback) {
     debug("Normalized URL:", pathname);
 
     // Fetch all views and their patterns for the given template ID
-    const viewPatternStrings = await client.hGetAll(key.urlPatterns(templateID));
+    const viewPatternStrings = await client.hGetAll(
+      key.urlPatterns(templateID)
+    );
 
     if (viewPatternStrings) {
       const views = parseViewPatterns(viewPatternStrings);

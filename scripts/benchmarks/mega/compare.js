@@ -25,18 +25,42 @@ const METRICS = [
   ["Warm render", "warm_heavy_ms", "heavy: 4 pages, median of 5 passes"],
   ["Warm render", "warm_heavy_block_ms", "heavy: longest event loop block"],
   ["After a cacheID bump", "bump_catalog_ms", "catalog: 5 pages"],
-  ["After a cacheID bump", "bump_catalog_block_ms", "catalog: longest event loop block"],
+  [
+    "After a cacheID bump",
+    "bump_catalog_block_ms",
+    "catalog: longest event loop block",
+  ],
   ["After a cacheID bump", "bump_heavy_ms", "heavy: 4 pages"],
-  ["After a cacheID bump", "bump_heavy_block_ms", "heavy: longest event loop block"],
+  [
+    "After a cacheID bump",
+    "bump_heavy_block_ms",
+    "heavy: longest event loop block",
+  ],
   ["Template previews", "preview_catalog_p50_ms", "catalog: median request"],
   ["Template previews", "preview_catalog_max_ms", "catalog: slowest request"],
-  ["Template previews", "preview_catalog_block_ms", "catalog: longest event loop block"],
+  [
+    "Template previews",
+    "preview_catalog_block_ms",
+    "catalog: longest event loop block",
+  ],
   ["Template previews", "preview_heavy_p50_ms", "heavy: median request"],
   ["Template previews", "preview_heavy_max_ms", "heavy: slowest request"],
   ["Other blogs", "victim_solo_p95_ms", "small sites alone: p95"],
-  ["Other blogs", "victim_busy_p50_ms", "small sites while mega sites resync: p50"],
-  ["Other blogs", "victim_busy_p95_ms", "small sites while mega sites resync: p95"],
-  ["Other blogs", "victim_busy_max_ms", "small sites while mega sites resync: max"],
+  [
+    "Other blogs",
+    "victim_busy_p50_ms",
+    "small sites while mega sites resync: p50",
+  ],
+  [
+    "Other blogs",
+    "victim_busy_p95_ms",
+    "small sites while mega sites resync: p95",
+  ],
+  [
+    "Other blogs",
+    "victim_busy_max_ms",
+    "small sites while mega sites resync: max",
+  ],
   ["Other blogs", "busy_block_ms", "longest event loop block meanwhile"],
   ["Memory", "heap_peak_mb", "peak heap above baseline (MB)"],
   ["Memory", "heap_retained_mb", "heap kept after GC (MB)"],
@@ -88,12 +112,16 @@ function row(label, base, head) {
 
     const apart = Math.min(...head) > Math.max(...base);
     const better = Math.max(...head) < Math.min(...base);
-    if (apart && b > 0 && ((h - b) / b) * 100 >= FLAG_PERCENT) flag = " (worse)";
-    if (better && b > 0 && ((b - h) / b) * 100 >= FLAG_PERCENT) flag = " (better)";
+    if (apart && b > 0 && ((h - b) / b) * 100 >= FLAG_PERCENT)
+      flag = " (worse)";
+    if (better && b > 0 && ((b - h) / b) * 100 >= FLAG_PERCENT)
+      flag = " (better)";
   }
 
   const range = (values) =>
-    values.length > 1 ? ` <sub>${fmt(Math.min(...values))}–${fmt(Math.max(...values))}</sub>` : "";
+    values.length > 1
+      ? ` <sub>${fmt(Math.min(...values))}–${fmt(Math.max(...values))}</sub>`
+      : "";
 
   return `| ${label} | ${fmt(b)}${range(base)} | ${fmt(h)}${range(head)} | ${delta}${flag} |`;
 }
@@ -115,11 +143,9 @@ function table(baseRuns, headRuns) {
     lines.push(line);
   }
 
-  return [
-    "| | base | head | change |",
-    "|---|---:|---:|---:|",
-    ...lines,
-  ].join("\n");
+  return ["| | base | head | change |", "|---|---:|---:|---:|", ...lines].join(
+    "\n"
+  );
 }
 
 function short(sha) {
@@ -156,9 +182,12 @@ function statusBody(status, { headSha, runUrl }) {
     status === "running"
       ? `Running against \`${short(headSha)}\`…`
       : `The run against \`${short(headSha)}\` failed.`;
-  return [MARKER, "### Mega-site benchmark", "", text + (runUrl ? ` [Run](${runUrl}).` : "")].join(
-    "\n"
-  );
+  return [
+    MARKER,
+    "### Mega-site benchmark",
+    "",
+    text + (runUrl ? ` [Run](${runUrl}).` : ""),
+  ].join("\n");
 }
 
 function gh(args, input) {
@@ -176,9 +205,29 @@ function upsert(pr, body) {
   const payload = JSON.stringify({ body });
 
   if (current) {
-    gh(["api", "--method", "PATCH", `repos/${repo}/issues/comments/${current.id}`, "--input", "-"], payload);
+    gh(
+      [
+        "api",
+        "--method",
+        "PATCH",
+        `repos/${repo}/issues/comments/${current.id}`,
+        "--input",
+        "-",
+      ],
+      payload
+    );
   } else {
-    gh(["api", "--method", "POST", `repos/${repo}/issues/${pr}/comments`, "--input", "-"], payload);
+    gh(
+      [
+        "api",
+        "--method",
+        "POST",
+        `repos/${repo}/issues/${pr}/comments`,
+        "--input",
+        "-",
+      ],
+      payload
+    );
   }
 }
 

@@ -1,121 +1,131 @@
 describe("render", function () {
+  require("./util/setup")();
 
-    require('./util/setup')();
+  it("exposes template locals to individual views", async function () {
+    await this.template(
+      {
+        "entries.html": "Hello, {{name}}!",
+      },
+      { locals: { name: "David" } }
+    );
 
-    it("exposes template locals to individual views", async function () {
-        
-        await this.template({
-            'entries.html': 'Hello, {{name}}!'
-        }, { locals: { name: 'David' } });
+    const res = await this.get("/");
+    const body = await res.text();
 
-        const res = await this.get('/');
-        const body = await res.text();
+    expect(res.status).toEqual(200);
+    expect(body.trim()).toEqual("Hello, David!");
+  });
 
-        expect(res.status).toEqual(200);
-        expect(body.trim()).toEqual('Hello, David!');
+  it("overrides view-specific locals with template locals", async function () {
+    await this.template(
+      {
+        "entries.html": "Hello, {{name}}!",
+      },
+      {
+        locals: { name: "David" },
+        views: {
+          "entries.html": {
+            locals: { name: "John" },
+          },
+        },
+      }
+    );
+
+    const res = await this.get("/");
+    const body = await res.text();
+
+    expect(res.status).toEqual(200);
+    expect(body.trim()).toEqual("Hello, John!");
+  });
+
+  it("does not evaluate Mustache tags inside entry HTML", async function () {
+    await this.write({
+      path: "/hello.txt",
+      content:
+        "Title: Hello\n\nThis post mentions {{title}} and {{#entry}}nope{{/entry}}.",
     });
 
-    it("overrides view-specific locals with template locals", async function () {
-        
-        await this.template({
-            'entries.html': 'Hello, {{name}}!'
-        }, { 
-            locals: { name: 'David' },
-            views: { 'entries.html': {
-                locals: { name: 'John' }
-            } }
-        });
-
-        const res = await this.get('/');
-        const body = await res.text();
-
-        expect(res.status).toEqual(200);
-        expect(body.trim()).toEqual('Hello, John!');
+    await this.template({
+      "entry.html": "{{#entry}}{{{html}}}{{/entry}}",
     });
 
-    it("does not evaluate Mustache tags inside entry HTML", async function () {
-        await this.write({
-            path: "/hello.txt",
-            content: "Title: Hello\n\nThis post mentions {{title}} and {{#entry}}nope{{/entry}}.",
-        });
+    const body = await this.text("/hello");
 
-        await this.template({
-            "entry.html": "{{#entry}}{{{html}}}{{/entry}}",
-        });
+    expect(body).toContain("{{title}}");
+    expect(body).toContain("{{#entry}}nope{{/entry}}");
+    expect(body).not.toContain("This post mentions Hello");
+  });
 
-        const body = await this.text("/hello");
-
-        expect(body).toContain("{{title}}");
-        expect(body).toContain("{{#entry}}nope{{/entry}}");
-        expect(body).not.toContain("This post mentions Hello");
+  it("does not evaluate Mustache tags in string locals", async function () {
+    await this.write({
+      path: "/a.txt",
+      content: "Title: DistinctTitle\n\nA body",
     });
 
-    it("does not evaluate Mustache tags in string locals", async function () {
-        await this.write({
-            path: "/a.txt",
-            content: "Title: DistinctTitle\n\nA body",
-        });
+    await this.template(
+      { "entries.html": "{{{snippet}}}" },
+      { locals: { snippet: "{{#entries}}{{title}}{{/entries}}" } }
+    );
 
-        await this.template(
-            { "entries.html": "{{{snippet}}}" },
-            { locals: { snippet: "{{#entries}}{{title}}{{/entries}}" } }
-        );
+    const body = await (await this.get("/")).text();
 
-        const body = await (await this.get("/")).text();
+    expect(body).toContain("{{#entries}}{{title}}{{/entries}}");
+    expect(body).not.toContain("DistinctTitle");
+  });
 
-        expect(body).toContain("{{#entries}}{{title}}{{/entries}}");
-        expect(body).not.toContain("DistinctTitle");
+  it("keeps entry tags intact on entries.html, which aliases {{#entries}} to the same objects as {{#posts}}", async function () {
+    await this.publish({ path: "/a.txt", content: "Tags: Reviews\n\nA body" });
+
+    await this.template({
+      "entries.html":
+        "{{#entries}}{{title}} in {{#tags}} {{name}} {{/tags}}{{/entries}}",
     });
 
-    it("keeps entry tags intact on entries.html, which aliases {{#entries}} to the same objects as {{#posts}}", async function () {
-        await this.publish({ path: "/a.txt", content: "Tags: Reviews\n\nA body" });
+    const body = await (await this.get("/")).text();
 
-        await this.template({
-            "entries.html": "{{#entries}}{{title}} in {{#tags}} {{name}} {{/tags}}{{/entries}}",
-        });
+    expect(body).toContain("Reviews");
+  });
 
-        const body = await (await this.get("/")).text();
+  it("keeps entry tags intact on tagged.html, which aliases {{#entries}} to the same objects as {{#tagged}}", async function () {
+    await this.publish({ path: "/a.txt", content: "Tags: Reviews\n\nA body" });
 
-        expect(body).toContain("Reviews");
+    await this.template({
+      "tagged.html":
+        "{{#entries}}{{title}} in {{#tags}} {{name}} {{/tags}}{{/entries}}",
     });
 
-    it("keeps entry tags intact on tagged.html, which aliases {{#entries}} to the same objects as {{#tagged}}", async function () {
-        await this.publish({ path: "/a.txt", content: "Tags: Reviews\n\nA body" });
+    const body = await this.text("/tagged/reviews");
 
-        await this.template({
-            "tagged.html": "{{#entries}}{{title}} in {{#tags}} {{name}} {{/tags}}{{/entries}}",
-        });
+    expect(body).toContain("Reviews");
+  });
 
-        const body = await this.text("/tagged/reviews");
+  it("keeps entry tags intact on search.html, which aliases {{#entries}} to the same objects as {{#search_results}}", async function () {
+    await this.publish({ path: "/a.txt", content: "Tags: Reviews\n\nBananas" });
 
-        expect(body).toContain("Reviews");
+    await this.template({
+      "search.html":
+        "{{#entries}}{{title}} in {{#tags}} {{name}} {{/tags}}{{/entries}}",
     });
 
-    it("keeps entry tags intact on search.html, which aliases {{#entries}} to the same objects as {{#search_results}}", async function () {
-        await this.publish({ path: "/a.txt", content: "Tags: Reviews\n\nBananas" });
+    const body = await this.text("/search?q=bananas");
 
-        await this.template({
-            "search.html": "{{#entries}}{{title}} in {{#tags}} {{name}} {{/tags}}{{/entries}}",
-        });
+    expect(body).toContain("Reviews");
+  });
 
-        const body = await this.text("/search?q=bananas");
+  it("exposes partials to views, including partials in partials", async function () {
+    await this.template(
+      {
+        "entries.html": "{{> name}}{{> footer}}",
+        "name.html": "{{> greeting}} David",
+        "greeting.html": "Hello",
+      },
+      { views: { "entries.html": { partials: { footer: " FOOTER" } } } }
+    );
 
-        expect(body).toContain("Reviews");
-    });
+    const res = await this.get("/");
+    const body = await res.text();
 
-    it("exposes partials to views, including partials in partials", async function () {
-        
-        await this.template({
-            'entries.html': '{{> name}}{{> footer}}',
-            'name.html': '{{> greeting}} David',
-            'greeting.html': 'Hello',
-        }, { views: { 'entries.html': { partials: { footer: ' FOOTER' } } } });
-
-        const res = await this.get('/');
-        const body = await res.text();
-
-        expect(res.status).toEqual(200);
-        expect(body.trim()).toEqual('Hello David FOOTER');
-    });
-
+    expect(res.status).toEqual(200);
+    expect(body.trim()).toEqual("Hello David FOOTER");
+  });
 });

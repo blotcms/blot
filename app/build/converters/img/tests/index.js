@@ -29,7 +29,11 @@ describe("img converter", function () {
         "utf8"
       );
 
-      await folder.writeFrom(test.blog.id, relativePath, __dirname + relativePath);
+      await folder.writeFrom(
+        test.blog.id,
+        relativePath,
+        __dirname + relativePath
+      );
 
       const [err, result] = await readAll(test.blog, relativePath);
       if (err) throw err;
@@ -128,7 +132,11 @@ describe("img converter", function () {
     const relativePath = "/land.avif";
     const read = promisify(img.read);
 
-    await folder.writeFrom(test.blog.id, relativePath, __dirname + relativePath);
+    await folder.writeFrom(
+      test.blog.id,
+      relativePath,
+      __dirname + relativePath
+    );
 
     const firstResult = await read(test.blog, relativePath);
 

@@ -57,17 +57,13 @@ const dropTemplate = (owner, templateID) =>
 
     Template.drop(owner, slug, (err) => {
       if (err) {
-        console.error(
-          "Failed to roll back uploaded template",
-          templateID,
-          err
-        );
+        console.error("Failed to roll back uploaded template", templateID, err);
       }
       resolve();
     });
   });
 
-module.exports = async function createTemplateFromUpload ({
+module.exports = async function createTemplateFromUpload({
   owner,
   name,
   locals = {},

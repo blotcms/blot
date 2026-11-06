@@ -3,11 +3,7 @@ const html = require("build/converters/html");
 const markdown = require("build/converters/markdown");
 const markdownWithoutPandoc = require("build/converters/markdown-without-pandoc");
 const gdoc = require("build/converters/gdoc");
-const {
-  MARKDOWN,
-  HTML,
-  GDOC,
-} = require("build/converters/post-source-size");
+const { MARKDOWN, HTML, GDOC } = require("build/converters/post-source-size");
 
 describe("post source size limit", function () {
   global.test.blog();
@@ -16,7 +12,9 @@ describe("post source size limit", function () {
   [".txt", ".text", ".md", ".markdown"].forEach((extension) => {
     it(`recognizes ${extension} in lower and mixed case`, function () {
       expect(markdown.is(`/post${extension}`)).toBe(true);
-      expect(markdownWithoutPandoc.is(`/post${mixedCase(extension)}`)).toBe(true);
+      expect(markdownWithoutPandoc.is(`/post${mixedCase(extension)}`)).toBe(
+        true
+      );
     });
   });
 
@@ -39,14 +37,16 @@ describe("post source size limit", function () {
       const entryPath = `/at-limit${extension}`;
       const blog = this.blog;
 
-      folder.write(blog.id, entryPath, Buffer.alloc(limit.bytes, 32)).then(function () {
-        converter.read(blog, entryPath, function (err, output, stat) {
-          if (err) return done.fail(err);
-          expect(typeof output).toBe("string");
-          expect(stat.size).toBe(limit.bytes);
-          done();
-        });
-      }, done.fail);
+      folder
+        .write(blog.id, entryPath, Buffer.alloc(limit.bytes, 32))
+        .then(function () {
+          converter.read(blog, entryPath, function (err, output, stat) {
+            if (err) return done.fail(err);
+            expect(typeof output).toBe("string");
+            expect(stat.size).toBe(limit.bytes);
+            done();
+          });
+        }, done.fail);
     });
   });
 
@@ -71,13 +71,15 @@ describe("post source size limit", function () {
       const entryPath = `/over-limit${extension}`;
       const blog = this.blog;
 
-      folder.write(blog.id, entryPath, Buffer.alloc(limit.bytes + 1, 32)).then(function () {
-        converter.read(blog, entryPath, function (err) {
-          expect(err).toEqual(jasmine.any(Error));
-          expect(err.code).toBe("TOO_LARGE");
-          done();
-        });
-      }, done.fail);
+      folder
+        .write(blog.id, entryPath, Buffer.alloc(limit.bytes + 1, 32))
+        .then(function () {
+          converter.read(blog, entryPath, function (err) {
+            expect(err).toEqual(jasmine.any(Error));
+            expect(err.code).toBe("TOO_LARGE");
+            done();
+          });
+        }, done.fail);
     });
   });
 });

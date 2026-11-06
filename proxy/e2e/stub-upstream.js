@@ -21,13 +21,15 @@ const counts = {};
 // A deterministic ~3 MB body (not compressible as a type, see /large)
 const LARGE = Buffer.alloc(3 * 1024 * 1024, "blot-large-body-");
 
-
 // ---- parity-checks.js helpers ------------------------------------------
 const PARITY = process.env.STUB_PARITY === "1";
 const crypto = require("crypto");
 
 const isSSE = (p) =>
-  p.startsWith("/draft/stream/") || /^\/sites\/[^/]+\/status$/.test(p) || p === "/__blot/preview/reload" || p === "/p/sse";
+  p.startsWith("/draft/stream/") ||
+  /^\/sites\/[^/]+\/status$/.test(p) ||
+  p === "/__blot/preview/reload" ||
+  p === "/p/sse";
 
 const TYPES = {
   css: "text/css; charset=utf-8",
@@ -65,7 +67,9 @@ function echo(req, bodyBuf) {
     url: req.url,
     headers,
     bodyLength: bodyBuf.length,
-    bodySha256: bodyBuf.length ? crypto.createHash("sha256").update(bodyBuf).digest("hex") : null,
+    bodySha256: bodyBuf.length
+      ? crypto.createHash("sha256").update(bodyBuf).digest("hex")
+      : null,
   };
 }
 
@@ -97,8 +101,19 @@ function parityRoute(req, res, url) {
   }
 
   const page = (extra = {}, status = 200, body) => {
-    res.writeHead(status, { "Content-Type": "text/html; charset=utf-8", ...extra });
-    res.end(body === undefined ? "<html><body>" + p + " " + "a repeatable filler sentence. ".repeat(40) + "</body></html>" : body);
+    res.writeHead(status, {
+      "Content-Type": "text/html; charset=utf-8",
+      ...extra,
+    });
+    res.end(
+      body === undefined
+        ? "<html><body>" +
+            p +
+            " " +
+            "a repeatable filler sentence. ".repeat(40) +
+            "</body></html>"
+        : body
+    );
     return true;
   };
 
@@ -107,7 +122,11 @@ function parityRoute(req, res, url) {
     const code = parseInt(m[1], 10);
     const extra = {};
     if ([301, 302, 307, 308].includes(code)) extra.Location = "/p/target";
-    if (code === 503) Object.assign(extra, { "Retry-After": "60", "Cache-Control": "no-store" });
+    if (code === 503)
+      Object.assign(extra, {
+        "Retry-After": "60",
+        "Cache-Control": "no-store",
+      });
     if (code === 304 || code === 204) {
       res.writeHead(code, extra);
       res.end();
@@ -119,18 +138,44 @@ function parityRoute(req, res, url) {
     setTimeout(() => page(), 1500);
     return true;
   }
-  if (p === "/p/set-cookie") return page({ "Set-Cookie": ["a=1; Path=/; HttpOnly", "__Host-b=2; Path=/; Secure; SameSite=Strict"] });
+  if (p === "/p/set-cookie")
+    return page({
+      "Set-Cookie": [
+        "a=1; Path=/; HttpOnly",
+        "__Host-b=2; Path=/; Secure; SameSite=Strict",
+      ],
+    });
   if (p === "/p/cache-control") {
-    return page({ "Cache-Control": "private, no-store, max-age=0", Expires: "Thu, 01 Jan 1970 00:00:00 GMT", Pragma: "no-cache" });
+    return page({
+      "Cache-Control": "private, no-store, max-age=0",
+      Expires: "Thu, 01 Jan 1970 00:00:00 GMT",
+      Pragma: "no-cache",
+    });
   }
-  if (p === "/p/cache-control-long") return page({ "Cache-Control": "public, max-age=31536000, immutable", Expires: "Fri, 01 Jan 2100 00:00:00 GMT" });
+  if (p === "/p/cache-control-long")
+    return page({
+      "Cache-Control": "public, max-age=31536000, immutable",
+      Expires: "Fri, 01 Jan 2100 00:00:00 GMT",
+    });
   if (p === "/p/vary") return page({ Vary: "Cookie, Accept-Language" });
-  if (p === "/p/dup") return page({ Link: ["</a.css>; rel=preload; as=style", "</b.js>; rel=preload; as=script"], "X-Dup": ["one", "two"] });
-  if (p === "/p/last-modified") return page({ "Last-Modified": "Wed, 01 Jan 2020 00:00:00 GMT", ETag: '"lm-1"' });
+  if (p === "/p/dup")
+    return page({
+      Link: [
+        "</a.css>; rel=preload; as=style",
+        "</b.js>; rel=preload; as=script",
+      ],
+      "X-Dup": ["one", "two"],
+    });
+  if (p === "/p/last-modified")
+    return page({
+      "Last-Modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      ETag: '"lm-1"',
+    });
   if (p === "/p/weak-etag") return page({ ETag: 'W/"weak-1"' });
   if (p === "/p/strong-etag") return page({ ETag: '"strong-1"' });
   if (p === "/p/long-header") return page({ "X-Long": "v".repeat(6000) });
-  if (p === "/p/content-disposition") return page({ "Content-Disposition": 'attachment; filename="a b.html"' });
+  if (p === "/p/content-disposition")
+    return page({ "Content-Disposition": 'attachment; filename="a b.html"' });
   if (p === "/p/empty") {
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end();
@@ -143,13 +188,19 @@ function parityRoute(req, res, url) {
   }
   if (p === "/p/chunked") {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    for (let i = 0; i < 3; i++) res.write("<p>chunk " + i + " " + "c".repeat(500) + "</p>\n");
+    for (let i = 0; i < 3; i++)
+      res.write("<p>chunk " + i + " " + "c".repeat(500) + "</p>\n");
     res.end("</body>");
     return true;
   }
   if (p === "/p/large-html") {
-    const body = noise("large-html", 3 * 1024 * 1024).toString("base64").replace(/(.{76})/g, "$1\n");
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Length": Buffer.byteLength(body) });
+    const body = noise("large-html", 3 * 1024 * 1024)
+      .toString("base64")
+      .replace(/(.{76})/g, "$1\n");
+    res.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Content-Length": Buffer.byteLength(body),
+    });
     res.end(body);
     return true;
   }
@@ -158,12 +209,29 @@ function parityRoute(req, res, url) {
     const all = noise("ranged", 10000);
     const r = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || "");
     if (r) {
-      const start = r[1] === "" ? all.length - parseInt(r[2], 10) : parseInt(r[1], 10);
-      const end = r[1] === "" || r[2] === "" ? all.length - 1 : Math.min(parseInt(r[2], 10), all.length - 1);
-      res.writeHead(206, { "Content-Type": "application/octet-stream", "Accept-Ranges": "bytes", ETag: '"ranged-1"', "Last-Modified": "Wed, 01 Jan 2020 00:00:00 GMT", "Content-Range": `bytes ${start}-${end}/${all.length}`, "Content-Length": end - start + 1 });
+      const start =
+        r[1] === "" ? all.length - parseInt(r[2], 10) : parseInt(r[1], 10);
+      const end =
+        r[1] === "" || r[2] === ""
+          ? all.length - 1
+          : Math.min(parseInt(r[2], 10), all.length - 1);
+      res.writeHead(206, {
+        "Content-Type": "application/octet-stream",
+        "Accept-Ranges": "bytes",
+        ETag: '"ranged-1"',
+        "Last-Modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+        "Content-Range": `bytes ${start}-${end}/${all.length}`,
+        "Content-Length": end - start + 1,
+      });
       res.end(all.subarray(start, end + 1));
     } else {
-      res.writeHead(200, { "Content-Type": "application/octet-stream", "Accept-Ranges": "bytes", ETag: '"ranged-1"', "Last-Modified": "Wed, 01 Jan 2020 00:00:00 GMT", "Content-Length": all.length });
+      res.writeHead(200, {
+        "Content-Type": "application/octet-stream",
+        "Accept-Ranges": "bytes",
+        ETag: '"ranged-1"',
+        "Last-Modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+        "Content-Length": all.length,
+      });
       res.end(all);
     }
     return true;
@@ -181,9 +249,16 @@ function parityRoute(req, res, url) {
     if (ext === "jpg" || ext === "woff2" || ext === "pdf" || ext === "mp4") {
       body = noise(req.url, 20000);
     } else {
-      body = Buffer.from(JSON.stringify(echo(req, Buffer.concat(chunks)), null, 1) + "\n" + "padding for compression. ".repeat(60));
+      body = Buffer.from(
+        JSON.stringify(echo(req, Buffer.concat(chunks)), null, 1) +
+          "\n" +
+          "padding for compression. ".repeat(60)
+      );
     }
-    res.writeHead(status, { "Content-Type": type, "Content-Length": body.length });
+    res.writeHead(status, {
+      "Content-Type": type,
+      "Content-Length": body.length,
+    });
     res.end(body);
   });
   return true;
@@ -195,8 +270,17 @@ function matrixRoute(req, res, url) {
   const p = url.pathname;
   // with a Content-Length, as Express sends for a rendered page
   const page = (headers) => {
-    const body = "<html><body>" + p + " " + "a repeatable filler sentence. ".repeat(40) + "</body></html>";
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Length": Buffer.byteLength(body), ...headers });
+    const body =
+      "<html><body>" +
+      p +
+      " " +
+      "a repeatable filler sentence. ".repeat(40) +
+      "</body></html>";
+    res.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Content-Length": Buffer.byteLength(body),
+      ...headers,
+    });
     res.end(body);
     return true;
   };
@@ -207,8 +291,13 @@ function matrixRoute(req, res, url) {
     const chunks = [];
     req.on("data", (d) => chunks.push(d));
     req.on("end", () => {
-      const body = Buffer.from(JSON.stringify(echo(req, Buffer.concat(chunks))));
-      res.writeHead(200, { "Content-Type": "application/json", "Content-Length": body.length });
+      const body = Buffer.from(
+        JSON.stringify(echo(req, Buffer.concat(chunks)))
+      );
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        "Content-Length": body.length,
+      });
       res.end(body);
     });
     return true;
@@ -216,21 +305,36 @@ function matrixRoute(req, res, url) {
 
   // site pages that set the csrf cookie, one value per request
   if (/^\/questions\/[^/]+$/.test(p) && !/^\/questions\/\d+$/.test(p)) {
-    const headers = { "Set-Cookie": "__Host-csrf=token" + ++cookieSeq + "; Path=/; Secure; HttpOnly; SameSite=Strict" };
+    const headers = {
+      "Set-Cookie":
+        "__Host-csrf=token" +
+        ++cookieSeq +
+        "; Path=/; Secure; HttpOnly; SameSite=Strict",
+    };
     if (p === "/questions/search") headers["Cache-Control"] = "private";
     return page(headers);
   }
   // pages Node marks as not for sharing
-  if (p.startsWith("/draft/view/") || p.startsWith("/verify/")) return page({ "Cache-Control": "no-cache" });
+  if (p.startsWith("/draft/view/") || p.startsWith("/verify/"))
+    return page({ "Cache-Control": "no-cache" });
   if (isSSE(p)) {
     sse(req, res);
     return true;
   }
-  if (p.startsWith("/clients/") || p === "/stripe-webhook" || p === "/dashboard" || p === "/sites" || p.startsWith("/sites/")) {
+  if (
+    p.startsWith("/clients/") ||
+    p === "/stripe-webhook" ||
+    p === "/dashboard" ||
+    p === "/sites" ||
+    p.startsWith("/sites/")
+  ) {
     return page({ "Cache-Control": "no-store" });
   }
   if (p === "/tiny") {
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Length": 11 });
+    res.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Content-Length": 11,
+    });
     res.end("<p>tiny</p>");
     return true;
   }
@@ -240,8 +344,15 @@ function matrixRoute(req, res, url) {
   const ext = (p.match(/\.([a-z0-9]+)$/) || [])[1];
   if (TYPES[ext]) {
     const binary = ["jpg", "woff2", "pdf", "mp4"].includes(ext);
-    const body = binary ? noise(p, 20000) : Buffer.from("/* " + p + " */\n" + "a repeatable filler sentence. ".repeat(40));
-    res.writeHead(200, { "Content-Type": TYPES[ext], "Content-Length": body.length });
+    const body = binary
+      ? noise(p, 20000)
+      : Buffer.from(
+          "/* " + p + " */\n" + "a repeatable filler sentence. ".repeat(40)
+        );
+    res.writeHead(200, {
+      "Content-Type": TYPES[ext],
+      "Content-Length": body.length,
+    });
     res.end(body);
     return true;
   }
@@ -271,20 +382,26 @@ const handler = (req, res) => {
 
   // --- routes for proxy/e2e/request-matrix.js and diskcache-checks.js ---
   if (url.pathname === "/etag-page") {
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", ETag: '"node-etag-1"' });
+    res.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      ETag: '"node-etag-1"',
+    });
     res.end("<html><body>" + "an etagged page ".repeat(60) + "</body></html>");
     return;
   }
   if (url.pathname === "/redirect-301" || url.pathname === "/redirect-302") {
     // No body and no Content-Type, as Blot's redirects are
-    res.writeHead(url.pathname === "/redirect-301" ? 301 : 302, { Location: "/redirect-target" });
+    res.writeHead(url.pathname === "/redirect-301" ? 301 : 302, {
+      Location: "/redirect-target",
+    });
     res.end();
     return;
   }
   if (url.pathname.startsWith("/large")) {
     // /large: Content-Length set. /large-chunked: no Content-Length.
     const headers = { "Content-Type": "application/octet-stream" };
-    if (!url.pathname.startsWith("/large-chunked")) headers["Content-Length"] = LARGE.length;
+    if (!url.pathname.startsWith("/large-chunked"))
+      headers["Content-Length"] = LARGE.length;
     res.writeHead(200, headers);
     res.end(LARGE);
     return;
@@ -292,7 +409,10 @@ const handler = (req, res) => {
   if (url.pathname.startsWith("/slow-stream")) {
     // 2 MB with Content-Length, one 100 KB chunk every 200 ms (~4 s)
     const chunk = Buffer.alloc(100 * 1024, "s");
-    res.writeHead(200, { "Content-Type": "application/octet-stream", "Content-Length": chunk.length * 20 });
+    res.writeHead(200, {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": chunk.length * 20,
+    });
     let sent = 0;
     const timer = setInterval(() => {
       res.write(chunk);
@@ -306,7 +426,12 @@ const handler = (req, res) => {
   }
   if (url.pathname.startsWith("/echo-range")) {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ range: req.headers.range || null, pad: "0123456789".repeat(40) }));
+    res.end(
+      JSON.stringify({
+        range: req.headers.range || null,
+        pad: "0123456789".repeat(40),
+      })
+    );
     return;
   }
 
@@ -335,7 +460,12 @@ const handler = (req, res) => {
   }
   if (url.pathname.endsWith(".png")) {
     res.writeHead(200, { "Content-Type": "image/png" });
-    res.end(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64"));
+    res.end(
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+        "base64"
+      )
+    );
     return;
   }
 

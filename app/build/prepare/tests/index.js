@@ -58,7 +58,6 @@ describe("prepare", function () {
     expect(entry.body).toEqual(entry.html);
   });
 
-
   it("uses mixed-case metadata keys for page, menu and permalink", function () {
     var entry = this.entry;
 
@@ -68,7 +67,7 @@ describe("prepare", function () {
     entry.metadata = {
       Page: "yes",
       MENU: "no",
-      Permalink: "/mixed-case"
+      Permalink: "/mixed-case",
     };
 
     prepare(entry);
@@ -78,14 +77,12 @@ describe("prepare", function () {
     expect(entry.permalink).toEqual("/mixed-case");
   });
 
-
-
   it("overwrites titleTag from canonical metadata key", function () {
     var entry = this.entry;
 
     entry.html = "<h1>Generated title</h1><p>Body</p>";
     entry.metadata = {
-      titleTag: "Metadata title tag"
+      titleTag: "Metadata title tag",
     };
 
     prepare(entry);
@@ -98,7 +95,7 @@ describe("prepare", function () {
 
     entry.html = "<h1>Generated title</h1><p>Body</p>";
     entry.metadata = {
-      TitleTag: "Mixed case metadata title tag"
+      TitleTag: "Mixed case metadata title tag",
     };
 
     prepare(entry);
@@ -111,7 +108,7 @@ describe("prepare", function () {
 
     entry.html = "<p>Generated teaser body</p>";
     entry.metadata = {
-      teaserBody: "Metadata teaser body"
+      teaserBody: "Metadata teaser body",
     };
 
     prepare(entry);
@@ -121,18 +118,22 @@ describe("prepare", function () {
 
   it("lists the markup fields front matter overwrites, ignoring text fields and case", function () {
     expect(
-      prepare.overriddenMarkupFields({
-        Teaser: "<p>Teaser</p>",
-        TitleTag: "<h1>Title</h1>",
-        teaserBody: "<p>Body</p>",
-        body: "<p>Whole</p>",
-        summary: "Summary",
-        title: "Title",
-        other: "<p>Unrelated</p>",
-      }).sort()
+      prepare
+        .overriddenMarkupFields({
+          Teaser: "<p>Teaser</p>",
+          TitleTag: "<h1>Title</h1>",
+          teaserBody: "<p>Body</p>",
+          body: "<p>Whole</p>",
+          summary: "Summary",
+          title: "Title",
+          other: "<p>Unrelated</p>",
+        })
+        .sort()
     ).toEqual(["body", "teaser", "teaserBody", "titleTag"]);
 
-    expect(prepare.overriddenMarkupFields({ summary: "Only text" })).toEqual([]);
+    expect(prepare.overriddenMarkupFields({ summary: "Only text" })).toEqual(
+      []
+    );
     // overrides must be strings, like the model's fields
     expect(prepare.overriddenMarkupFields({ teaser: 5 })).toEqual([]);
   });

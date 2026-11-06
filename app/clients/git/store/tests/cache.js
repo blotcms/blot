@@ -12,9 +12,13 @@ function entryBytes(dir) {
   let total = 0;
   const root = path.join(dir, "entries");
   if (!fs.existsSync(root)) return 0;
-  for (const entry of fs.readdirSync(root, { withFileTypes: true, recursive: true })) {
+  for (const entry of fs.readdirSync(root, {
+    withFileTypes: true,
+    recursive: true,
+  })) {
     try {
-      if (entry.isFile()) total += fs.statSync(path.join(entry.parentPath, entry.name)).size;
+      if (entry.isFile())
+        total += fs.statSync(path.join(entry.parentPath, entry.name)).size;
     } catch (err) {
       // deleted while we were counting
     }
@@ -53,7 +57,13 @@ describe("git store cache", function () {
 
   // Fine-grained recency and no rate limits, so specs can see the order
   const open = (options) => {
-    const cache = createCache({ dir, bucketMs: 1, touchEveryMs: 0, walkGapMs: 0, ...options });
+    const cache = createCache({
+      dir,
+      bucketMs: 1,
+      touchEveryMs: 0,
+      walkGapMs: 0,
+      ...options,
+    });
     caches.push(cache);
     return cache;
   };
@@ -123,12 +133,24 @@ describe("git store cache", function () {
   describe("ranges and streams", function () {
     it("reads a range, checking only the blocks it spans", async function () {
       const cache = open({ maxBytes: 10 * 1024 * 1024 });
-      const bytes = Buffer.from(Array.from({ length: 300 * 1024 }, (_, i) => i % 251));
+      const bytes = Buffer.from(
+        Array.from({ length: 300 * 1024 }, (_, i) => i % 251)
+      );
       await cache.put("pack", bytes);
 
-      expect((await cache.read("pack", 70000, 100)).equals(bytes.subarray(70000, 70100))).toBe(true);
-      expect((await cache.read("pack", 0, bytes.length)).equals(bytes)).toBe(true);
-      expect((await cache.read("pack", bytes.length - 10, 100)).equals(bytes.subarray(bytes.length - 10))).toBe(true);
+      expect(
+        (await cache.read("pack", 70000, 100)).equals(
+          bytes.subarray(70000, 70100)
+        )
+      ).toBe(true);
+      expect((await cache.read("pack", 0, bytes.length)).equals(bytes)).toBe(
+        true
+      );
+      expect(
+        (await cache.read("pack", bytes.length - 10, 100)).equals(
+          bytes.subarray(bytes.length - 10)
+        )
+      ).toBe(true);
       expect(await cache.size("pack")).toBe(bytes.length);
 
       // A flipped byte in one block fails a read of that block, and the
@@ -144,20 +166,36 @@ describe("git store cache", function () {
 
     it("writes a stream as it comes, in chunks across blocks", async function () {
       const cache = open({ maxBytes: 10 * 1024 * 1024 });
-      const bytes = Buffer.from(Array.from({ length: 200 * 1024 + 7 }, (_, i) => (i * 7) % 256));
+      const bytes = Buffer.from(
+        Array.from({ length: 200 * 1024 + 7 }, (_, i) => (i * 7) % 256)
+      );
       const chunks = [];
-      for (let at = 0; at < bytes.length; at += 10000) chunks.push(bytes.subarray(at, at + 10000));
+      for (let at = 0; at < bytes.length; at += 10000)
+        chunks.push(bytes.subarray(at, at + 10000));
 
-      expect(await cache.putStream("s", Readable.from(chunks), bytes.length)).toBe(true);
+      expect(
+        await cache.putStream("s", Readable.from(chunks), bytes.length)
+      ).toBe(true);
       expect((await cache.get("s")).equals(bytes)).toBe(true);
-      expect((await cache.read("s", 65530, 20)).equals(bytes.subarray(65530, 65550))).toBe(true);
+      expect(
+        (await cache.read("s", 65530, 20)).equals(bytes.subarray(65530, 65550))
+      ).toBe(true);
 
       // A stream of the wrong length, or which fails, is not stored
-      expect(await cache.putStream("short", Readable.from([data(10)]), 11)).toBe(false);
-      expect(await cache.putStream("long", Readable.from([data(12)]), 11)).toBe(false);
-      const failing = new Readable({ read() { this.destroy(new Error("gone")); } });
+      expect(
+        await cache.putStream("short", Readable.from([data(10)]), 11)
+      ).toBe(false);
+      expect(await cache.putStream("long", Readable.from([data(12)]), 11)).toBe(
+        false
+      );
+      const failing = new Readable({
+        read() {
+          this.destroy(new Error("gone"));
+        },
+      });
       expect(await cache.putStream("failing", failing, 11)).toBe(false);
-      for (const key of ["short", "long", "failing"]) expect(await cache.get(key)).toBeNull();
+      for (const key of ["short", "long", "failing"])
+        expect(await cache.get(key)).toBeNull();
     });
 
     it("is a miss when another process deletes the entry before it is read", async function () {
@@ -194,7 +232,9 @@ describe("git store cache", function () {
     const { keepPack, packSource } = require("../packcache");
     const createMemoryStore = require("../objectStore/memory");
     const name = "pack-" + "ab".repeat(20);
-    const bytes = Buffer.from(Array.from({ length: 100 * 1024 }, (_, i) => (i * 13) % 256));
+    const bytes = Buffer.from(
+      Array.from({ length: 100 * 1024 }, (_, i) => (i * 13) % 256)
+    );
 
     it("reads a kept pack from the cache, and the store once its copy is deleted by another process", async function () {
       const cache = open({ maxBytes: 10 * 1024 * 1024 });
@@ -203,25 +243,55 @@ describe("git store cache", function () {
 
       const file = path.join(dir, "kept.pack");
       fs.writeFileSync(file, bytes);
-      expect(await keepPack({ cache, store, name, size: bytes.length, file })).toBe(true);
+      expect(
+        await keepPack({ cache, store, name, size: bytes.length, file })
+      ).toBe(true);
 
       const source = packSource({ cache, store, name, size: bytes.length });
       expect(await source.local()).toBe(true);
       const reads = store.stats.reads;
-      expect((await source.read(1000, 50)).equals(bytes.subarray(1000, 1050))).toBe(true);
+      expect(
+        (await source.read(1000, 50)).equals(bytes.subarray(1000, 1050))
+      ).toBe(true);
       expect(store.stats.reads).toBe(reads);
 
       entryFiles(dir).forEach((f) => fs.rmSync(f));
-      expect((await source.read(2000, 50)).equals(bytes.subarray(2000, 2050))).toBe(true);
+      expect(
+        (await source.read(2000, 50)).equals(bytes.subarray(2000, 2050))
+      ).toBe(true);
       expect(store.stats.reads).toBe(reads + 1);
     });
 
     it("keeps no pack bigger than an eighth of the cache, and never fails", async function () {
       const cache = open({ maxBytes: 8 * 1024 });
       const store = createMemoryStore();
-      expect(await keepPack({ cache, store, name, size: bytes.length, buffer: bytes })).toBe(false);
-      expect(await keepPack({ cache: null, store, name, size: bytes.length, buffer: bytes })).toBe(false);
-      expect(await keepPack({ cache: open({ maxBytes: 1e9 }), store, name, size: bytes.length, file: path.join(dir, "missing") })).toBe(false);
+      expect(
+        await keepPack({
+          cache,
+          store,
+          name,
+          size: bytes.length,
+          buffer: bytes,
+        })
+      ).toBe(false);
+      expect(
+        await keepPack({
+          cache: null,
+          store,
+          name,
+          size: bytes.length,
+          buffer: bytes,
+        })
+      ).toBe(false);
+      expect(
+        await keepPack({
+          cache: open({ maxBytes: 1e9 }),
+          store,
+          name,
+          size: bytes.length,
+          file: path.join(dir, "missing"),
+        })
+      ).toBe(false);
     });
   });
 
@@ -230,22 +300,32 @@ describe("git store cache", function () {
       ["truncated", (b) => b.subarray(0, b.length - 3)],
       ["cut to nothing", () => Buffer.alloc(0)],
       ["junk", () => Buffer.from("not a cache entry at all")],
-      ["a flipped byte", (b) => Buffer.concat([b.subarray(0, b.length - 1), Buffer.from([b[b.length - 1] ^ 1])])],
+      [
+        "a flipped byte",
+        (b) =>
+          Buffer.concat([
+            b.subarray(0, b.length - 1),
+            Buffer.from([b[b.length - 1] ^ 1]),
+          ]),
+      ],
       ["extended", (b) => Buffer.concat([b, Buffer.from("more")])],
     ]) {
-      it("treats a " + name + " entry as a miss and removes it", async function () {
-        const cache = open({ maxBytes: 10000 });
-        await cache.put("a", Buffer.from("some cached bytes"));
-        const [file] = entryFiles(dir);
-        fs.writeFileSync(file, damage(fs.readFileSync(file)));
+      it(
+        "treats a " + name + " entry as a miss and removes it",
+        async function () {
+          const cache = open({ maxBytes: 10000 });
+          await cache.put("a", Buffer.from("some cached bytes"));
+          const [file] = entryFiles(dir);
+          fs.writeFileSync(file, damage(fs.readFileSync(file)));
 
-        expect(await cache.get("a")).toBeNull();
-        expect(fs.existsSync(file)).toBe(false);
-        expect(cache.stats().corrupt).toBe(1);
+          expect(await cache.get("a")).toBeNull();
+          expect(fs.existsSync(file)).toBe(false);
+          expect(cache.stats().corrupt).toBe(1);
 
-        await cache.put("a", Buffer.from("fresh"));
-        expect((await cache.get("a")).toString()).toBe("fresh");
-      });
+          await cache.put("a", Buffer.from("fresh"));
+          expect((await cache.get("a")).toString()).toBe("fresh");
+        }
+      );
     }
 
     it("never shows a partly written entry to a reader", async function () {
@@ -253,7 +333,12 @@ describe("git store cache", function () {
       const big = data(2 * 1024 * 1024, "z");
       const write = cache.put("big", big);
       let seen = 0;
-      while (!(await Promise.race([write.then(() => true), new Promise((r) => setImmediate(() => r(false)))]))) {
+      while (
+        !(await Promise.race([
+          write.then(() => true),
+          new Promise((r) => setImmediate(() => r(false))),
+        ]))
+      ) {
         const got = await cache.get("big");
         if (got) seen += got.length === big.length ? 0 : 1;
       }
@@ -262,7 +347,10 @@ describe("git store cache", function () {
 
     it("is merely empty when its directory can't be used", async function () {
       fs.writeFileSync(path.join(dir, "file"), "x");
-      const cache = createCache({ dir: path.join(dir, "file", "cache"), maxBytes: 1000 });
+      const cache = createCache({
+        dir: path.join(dir, "file", "cache"),
+        maxBytes: 1000,
+      });
       caches.push(cache);
       expect(await cache.get("a")).toBeNull();
       expect(await cache.put("a", data(1))).toBe(false);
@@ -277,9 +365,15 @@ describe("git store cache", function () {
       const cap = 4 * size(24);
       // No walk but the ones the spec runs, so nothing is evicted before the
       // entries are aged
-      const cache = open({ maxBytes: cap, highWater: 0.9, lowWater: 0.5, walkGapMs: 1e9 });
+      const cache = open({
+        maxBytes: cap,
+        highWater: 0.9,
+        lowWater: 0.5,
+        walkGapMs: 1e9,
+      });
       await cache.settle();
-      for (const key of ["a", "b", "c", "d"]) expect(await cache.put(key, data(24))).toBe(true);
+      for (const key of ["a", "b", "c", "d"])
+        expect(await cache.put(key, data(24))).toBe(true);
       const [a, b, c, d] = ["a", "b", "c", "d"].map((key) => fileOf(dir, key));
       age(a, 4000);
       age(b, 3000);
@@ -318,8 +412,12 @@ describe("git store cache", function () {
     it("never goes past it on disk with many writes at once in one process", async function () {
       const cache = open({ maxBytes: 1000 });
       const writes = [];
-      for (let i = 0; i < 60; i++) writes.push(cache.put("k" + i, data(10 + (i % 7) * 20)));
-      const watcher = setInterval(() => expect(entryBytes(dir)).toBeLessThanOrEqual(1000), 1);
+      for (let i = 0; i < 60; i++)
+        writes.push(cache.put("k" + i, data(10 + (i % 7) * 20)));
+      const watcher = setInterval(
+        () => expect(entryBytes(dir)).toBeLessThanOrEqual(1000),
+        1
+      );
       try {
         await Promise.all(writes);
       } finally {
@@ -346,7 +444,9 @@ describe("git store cache", function () {
 
     it("opens a large directory without walking it first", async function () {
       const first = open({ maxBytes: 1e9 });
-      await Promise.all(Array.from({ length: 300 }, (_, i) => first.put("k" + i, data(10))));
+      await Promise.all(
+        Array.from({ length: 300 }, (_, i) => first.put("k" + i, data(10)))
+      );
       await first.close();
 
       // A walk finds a directory with no usage.json, and opening does not
@@ -391,13 +491,24 @@ describe("git store cache", function () {
       const cap = 200 * 1024;
       const script = path.join(__dirname, "helpers", "cache-writer.js");
       const children = [0, 1, 2].map((n) =>
-        fork(script, [dir, String(cap), "p" + n, "200", "2000"], { stdio: ["ignore", "ignore", "inherit", "ipc"] })
+        fork(script, [dir, String(cap), "p" + n, "200", "2000"], {
+          stdio: ["ignore", "ignore", "inherit", "ipc"],
+        })
       );
-      const results = await Promise.all(children.map((child) => new Promise((resolve, reject) => {
-        let result = null;
-        child.on("message", (message) => (result = message));
-        child.on("exit", (code) => (code === 0 ? resolve(result) : reject(new Error("writer exited " + code))));
-      })));
+      const results = await Promise.all(
+        children.map(
+          (child) =>
+            new Promise((resolve, reject) => {
+              let result = null;
+              child.on("message", (message) => (result = message));
+              child.on("exit", (code) =>
+                code === 0
+                  ? resolve(result)
+                  : reject(new Error("writer exited " + code))
+              );
+            })
+        )
+      );
 
       // Writes past the high water mark were declined or asked for walks; at
       // the end the directory is within the cap
@@ -415,22 +526,36 @@ describe("git store cache", function () {
       for (let round = 0; round < 5; round++) {
         const sub = path.join(dir, "round-" + round);
         const instances = [0, 1, 2].map(() => {
-          const cache = createCache({ dir: sub, maxBytes: 1000, bucketMs: 1, touchEveryMs: 0, walkGapMs: 1e9 });
+          const cache = createCache({
+            dir: sub,
+            maxBytes: 1000,
+            bucketMs: 1,
+            touchEveryMs: 0,
+            walkGapMs: 1e9,
+          });
           caches.push(cache);
           return cache;
         });
         await Promise.all(instances.map((cache) => cache.settle()));
 
         // Each is 400 bytes on disk: any two fit, three do not
-        const stored = await Promise.all(instances.map((cache, i) => cache.put("big" + i, data(380))));
+        const stored = await Promise.all(
+          instances.map((cache, i) => cache.put("big" + i, data(380)))
+        );
         expect(size(380)).toBe(400);
         expect(stored.filter(Boolean).length).toBeLessThanOrEqual(2);
         expect(entryBytes(sub)).toBeLessThanOrEqual(1000);
 
         // and the same through streams, as packs are written through
-        const streamed = await Promise.all(instances.map((cache, i) => cache.putStream("s" + i, Readable.from([data(300)]), 300)));
+        const streamed = await Promise.all(
+          instances.map((cache, i) =>
+            cache.putStream("s" + i, Readable.from([data(300)]), 300)
+          )
+        );
         expect(entryBytes(sub)).toBeLessThanOrEqual(1000);
-        expect(stored.filter(Boolean).length + streamed.filter(Boolean).length).toBeGreaterThan(0);
+        expect(
+          stored.filter(Boolean).length + streamed.filter(Boolean).length
+        ).toBeGreaterThan(0);
       }
     });
 
@@ -448,7 +573,10 @@ describe("git store cache", function () {
     it("takes over a walk lock whose holder stopped refreshing it", async function () {
       const a = open({ maxBytes: 10000, walkLockStaleMs: 50 });
       await a.ready();
-      fs.writeFileSync(path.join(dir, "locks", "walk.lock"), "someone-deadbeef");
+      fs.writeFileSync(
+        path.join(dir, "locks", "walk.lock"),
+        "someone-deadbeef"
+      );
       expect((await a.walk()).walked).toBe(false);
       await sleep(80);
       expect((await a.walk()).walked).toBe(true);
@@ -556,7 +684,10 @@ describe("git store cache", function () {
         const a = open({ maxBytes: 1000 });
         const b = open({ maxBytes: 1000 });
         await Promise.all([a.ready(), b.ready()]);
-        const results = await Promise.allSettled([a.reserve(600), b.reserve(600)]);
+        const results = await Promise.allSettled([
+          a.reserve(600),
+          b.reserve(600),
+        ]);
         const won = results.filter((r) => r.status === "fulfilled");
         expect(won.length).toBeLessThanOrEqual(1);
         for (const r of won) await r.value.release();
@@ -583,12 +714,22 @@ describe("git store cache", function () {
   describe("free space on the disk", function () {
     // A disk of 1000 blocks of 1000 bytes, holding the cache's entries and
     // `other` bytes of something else
-    const fakeDisk = (state) => async () => ({ bsize: 1000, blocks: 1000, bavail: Math.floor((1000 * 1000 - state.other - entryBytes(dir)) / 1000) });
+    const fakeDisk = (state) => async () => ({
+      bsize: 1000,
+      blocks: 1000,
+      bavail: Math.floor((1000 * 1000 - state.other - entryBytes(dir)) / 1000),
+    });
 
     it("declines puts while the disk is under its floor, and a walk evicts to get back over it", async function () {
       const state = { other: 400 * 1000 };
-      const cache = open({ maxBytes: 1e9, minFreePercent: 10, statfs: fakeDisk(state), refreshMs: 0 });
-      for (let i = 0; i < 10; i++) expect(await cache.put("k" + i, data(10000))).toBe(true);
+      const cache = open({
+        maxBytes: 1e9,
+        minFreePercent: 10,
+        statfs: fakeDisk(state),
+        refreshMs: 0,
+      });
+      for (let i = 0; i < 10; i++)
+        expect(await cache.put("k" + i, data(10000))).toBe(true);
       for (let i = 0; i < 10; i++) age(fileOf(dir, "k" + i), 10000 - i * 100);
 
       // The disk fills up from something else: under 5% free
@@ -599,7 +740,9 @@ describe("git store cache", function () {
       // oldest first, and not everything
       await cache.settle();
       expect(cache.stats().evictions).toBeGreaterThanOrEqual(6);
-      expect((await fakeDisk(state)()).bavail * 1000).toBeGreaterThanOrEqual(100 * 1000);
+      expect((await fakeDisk(state)()).bavail * 1000).toBeGreaterThanOrEqual(
+        100 * 1000
+      );
       expect(entryFiles(dir).length).toBeGreaterThan(0);
       expect(await cache.get("k0")).toBeNull();
       expect(await cache.get("k9")).not.toBeNull();
@@ -607,7 +750,11 @@ describe("git store cache", function () {
 
     it("refuses a reservation which would take the disk under its floor", async function () {
       const state = { other: 850 * 1000 };
-      const cache = open({ maxBytes: 1e9, minFreePercent: 10, statfs: fakeDisk(state) });
+      const cache = open({
+        maxBytes: 1e9,
+        minFreePercent: 10,
+        statfs: fakeDisk(state),
+      });
       const ok = await cache.reserve(40 * 1000);
       let error;
       await cache.reserve(60 * 1000).catch((err) => (error = err));
@@ -625,8 +772,18 @@ describe("git store cache", function () {
       // though neither has written anything yet
       const state = { other: 850 * 1000 };
       // Writes of 32 KB and more are claimed as reservations are
-      const a = open({ maxBytes: 1e9, minFreePercent: 10, statfs: fakeDisk(state), claimWritesFrom: 32 * 1024 });
-      const b = open({ maxBytes: 1e9, minFreePercent: 10, statfs: fakeDisk(state), claimWritesFrom: 32 * 1024 });
+      const a = open({
+        maxBytes: 1e9,
+        minFreePercent: 10,
+        statfs: fakeDisk(state),
+        claimWritesFrom: 32 * 1024,
+      });
+      const b = open({
+        maxBytes: 1e9,
+        minFreePercent: 10,
+        statfs: fakeDisk(state),
+        claimWritesFrom: 32 * 1024,
+      });
       const first = await a.reserve(40 * 1000);
 
       let error;

@@ -17,19 +17,22 @@ describe("user validate", function () {
   var extraCleanupKeys = [];
 
   function createUser(overrides) {
-    return Object.assign({
-      uid: uid,
-      email: email,
-      blogs: [],
-      isDisabled: false,
-      lastSession: "",
-      passwordHash: "hash123",
-      created: Date.now(),
-      welcomeEmailSent: true,
-      subscription: {},
-      paypal: {},
-      paymentMethods: []
-    }, overrides);
+    return Object.assign(
+      {
+        uid: uid,
+        email: email,
+        blogs: [],
+        isDisabled: false,
+        lastSession: "",
+        passwordHash: "hash123",
+        created: Date.now(),
+        welcomeEmailSent: true,
+        subscription: {},
+        paypal: {},
+        paymentMethods: [],
+      },
+      overrides
+    );
   }
 
   beforeEach(async function () {
@@ -39,7 +42,9 @@ describe("user validate", function () {
   });
 
   afterEach(async function () {
-    await client.del([key.user(uid), key.email(email)].concat(extraCleanupKeys));
+    await client.del(
+      [key.user(uid), key.email(email)].concat(extraCleanupKeys)
+    );
     extraCleanupKeys = [];
   });
 
@@ -81,8 +86,12 @@ describe("user validate", function () {
   it("rejects invalid type for string field", async function () {
     var user = createUser();
     var error = await validateUser(user, { lastSession: 123 }).then(
-      function () { return null; },
-      function (err) { return err; }
+      function () {
+        return null;
+      },
+      function (err) {
+        return err;
+      }
     );
     expect(error).not.toBeNull();
   });
@@ -90,8 +99,12 @@ describe("user validate", function () {
   it("rejects invalid type for boolean field", async function () {
     var user = createUser();
     var error = await validateUser(user, { isDisabled: "true" }).then(
-      function () { return null; },
-      function (err) { return err; }
+      function () {
+        return null;
+      },
+      function (err) {
+        return err;
+      }
     );
     expect(error).not.toBeNull();
   });
@@ -99,8 +112,12 @@ describe("user validate", function () {
   it("rejects invalid type for array field", async function () {
     var user = createUser();
     var error = await validateUser(user, { blogs: "blog1" }).then(
-      function () { return null; },
-      function (err) { return err; }
+      function () {
+        return null;
+      },
+      function (err) {
+        return err;
+      }
     );
     expect(error).not.toBeNull();
   });
@@ -110,7 +127,7 @@ describe("user validate", function () {
     var result = await validateUser(user, {
       lastSession: "new-session",
       isDisabled: true,
-      blogs: ["blog1"]
+      blogs: ["blog1"],
     });
     expect(result.user.lastSession).toEqual("new-session");
     expect(result.user.isDisabled).toBe(true);
@@ -155,7 +172,7 @@ describe("user validate", function () {
       passwordHash: "hash123",
       subscription: {},
       paypal: {},
-      paymentMethods: []
+      paymentMethods: [],
     };
     await client.set(key.user(otherUid), JSON.stringify(otherUser));
     await client.set(key.email(otherEmail), otherUid);
@@ -163,8 +180,12 @@ describe("user validate", function () {
 
     var user = createUser();
     var error = await validateUser(user, { email: otherEmail }).then(
-      function () { return null; },
-      function (err) { return err; }
+      function () {
+        return null;
+      },
+      function (err) {
+        return err;
+      }
     );
 
     expect(error).not.toBeNull();

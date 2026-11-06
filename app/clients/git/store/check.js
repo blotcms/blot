@@ -43,7 +43,9 @@ async function each(items, limit, fn) {
   const worker = async () => {
     while (next < items.length) await fn(items[next++]);
   };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, worker)
+  );
 }
 
 // An error's message on one line
@@ -64,7 +66,9 @@ function expectedFiles(current) {
     files.push({ key: layout.revKey(pack.name) });
   }
 
-  for (const pack of [current.history, ...(current.historyPieces || [])].filter(Boolean)) {
+  for (const pack of [current.history, ...(current.historyPieces || [])].filter(
+    Boolean
+  )) {
     files.push({ key: layout.packKey(pack.name), size: pack.size });
     files.push({ key: layout.idxKey(pack.name), size: pack.idxSize });
   }
@@ -81,7 +85,8 @@ async function hintedSeq(store) {
   try {
     bytes = await store.get(layout.LATEST_KEY, { maxBytes: MAX_HINT_BYTES });
   } catch (err) {
-    if (err && (err.code === "NOT_FOUND" || err.code === "TOO_LARGE")) return null;
+    if (err && (err.code === "NOT_FOUND" || err.code === "TOO_LARGE"))
+      return null;
     throw err;
   }
   try {
@@ -96,30 +101,65 @@ async function cheapCheck(store) {
   const findings = [];
   const hinted = await hintedSeq(store);
   const current = await manifest.read(store);
-  const counts = { seq: current.seq, refs: Object.keys(current.refs).length, packs: current.packs.length, files: 0, bytes: 0 };
+  const counts = {
+    seq: current.seq,
+    refs: Object.keys(current.refs).length,
+    packs: current.packs.length,
+    files: 0,
+    bytes: 0,
+  };
 
   // A manifest is never deleted while it is the newest (the sweep keeps
   // those), so a hint ahead of what read() found is a manifest lost
-  if (hinted !== null && hinted > current.seq) findings.push({ kind: "missing", detail: layout.manifestKey(hinted) + " (named by " + layout.LATEST_KEY + "; the newest manifest found is " + current.seq + ")" });
+  if (hinted !== null && hinted > current.seq)
+    findings.push({
+      kind: "missing",
+      detail:
+        layout.manifestKey(hinted) +
+        " (named by " +
+        layout.LATEST_KEY +
+        "; the newest manifest found is " +
+        current.seq +
+        ")",
+    });
 
-  if (manifest.isEmpty(current)) return { state: current.seq ? "removed" : "empty", findings, ...counts };
+  if (manifest.isEmpty(current))
+    return { state: current.seq ? "removed" : "empty", findings, ...counts };
 
   const files = expectedFiles(current);
   counts.files = files.length;
 
   await each(files, HEADS_AT_ONCE, async (file) => {
     const found = await store.head(file.key);
-    if (!found) return findings.push({ kind: "missing", detail: file.key + " (named by manifest " + current.seq + ")" });
+    if (!found)
+      return findings.push({
+        kind: "missing",
+        detail: file.key + " (named by manifest " + current.seq + ")",
+      });
     counts.bytes += found.size;
-    if (file.size !== undefined && found.size !== file.size) findings.push({ kind: "mismatch", detail: file.key + " is " + found.size + " bytes; manifest " + current.seq + " says " + file.size });
+    if (file.size !== undefined && found.size !== file.size)
+      findings.push({
+        kind: "mismatch",
+        detail:
+          file.key +
+          " is " +
+          found.size +
+          " bytes; manifest " +
+          current.seq +
+          " says " +
+          file.size,
+      });
   });
 
-  findings.sort((a, b) => (a.detail < b.detail ? -1 : a.detail > b.detail ? 1 : 0));
+  findings.sort((a, b) =>
+    a.detail < b.detail ? -1 : a.detail > b.detail ? 1 : 0
+  );
   return { state: "ok", findings, ...counts };
 }
 
 // What git says when the machine, not the cloned bytes, is the problem
-const LOCAL_TROUBLE = /No space left on device|Permission denied|Too many open files|Read-only file system|Disk quota exceeded|Cannot allocate memory/i;
+const LOCAL_TROUBLE =
+  /No space left on device|Permission denied|Too many open files|Read-only file system|Disk quota exceeded|Cannot allocate memory/i;
 
 // The verdict a failure is about the store: "missing" for a file the store
 // does not have, "mismatch" for bytes or refs that are wrong (the store's
@@ -133,14 +173,24 @@ function verdict(err) {
   if (err.code === "CORRUPT") return "mismatch";
 
   const message = String(err.message || "");
-  if (!err.code && /^git (index-pack|fsck|update-ref|symbolic-ref)\b/.test(message) && !LOCAL_TROUBLE.test(message)) return "mismatch";
+  if (
+    !err.code &&
+    /^git (index-pack|fsck|update-ref|symbolic-ref)\b/.test(message) &&
+    !LOCAL_TROUBLE.test(message)
+  )
+    return "mismatch";
 
   return null;
 }
 
 // `cache` or `scratchDir` as for verifyImport; `gate` decides when each git
 // process starts
-async function deepCheck({ store, cache = null, scratchDir = null, gate = null }) {
+async function deepCheck({
+  store,
+  cache = null,
+  scratchDir = null,
+  gate = null,
+}) {
   try {
     const result = await verifyImport({ store, cache, scratchDir, gate });
     return { findings: [], refs: result.refs, objects: result.objects };

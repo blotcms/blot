@@ -106,7 +106,9 @@ function watchRename(oldName, newPath, blogID) {
       try {
         const exists = await fs.pathExists(newPath);
         const entries = exists ? (await fs.readdir(newPath)).length : 0;
-        const oldBack = await fs.pathExists(join(iCloudDriveDirectory, oldName));
+        const oldBack = await fs.pathExists(
+          join(iCloudDriveDirectory, oldName)
+        );
         const message = `Rename check after ${delay / 1000}s for ${blogID}: folder ${
           exists ? `present (${entries} entries)` : "MISSING"
         }, ${oldName} ${oldBack ? "has reappeared" : "not present"}`;
@@ -137,7 +139,9 @@ function watchLateArrival(blogID, initialDirNames, outcome) {
         withFileTypes: true,
       });
       const arrived = dirs
-        .filter((dir) => dir.isDirectory() && !initialDirNames.includes(dir.name))
+        .filter(
+          (dir) => dir.isDirectory() && !initialDirNames.includes(dir.name)
+        )
         .map((dir) => dir.name);
 
       if (arrived.length) {
@@ -200,7 +204,8 @@ const setupBlog = setupLimiter.wrap(async (blogID, sharingLink) => {
 });
 
 async function setupFolder(blogID, sharingLink) {
-  console.log(clfdate(), 
+  console.log(
+    clfdate(),
     `Waiting for a new folder to set up blogID: ${blogID} using sharingLink: ${sharingLink}`
   );
 
@@ -248,11 +253,15 @@ async function setupFolder(blogID, sharingLink) {
     );
   }
 
-  const otherDirNames = initialDirNames.filter((name) => !name.startsWith("blog_"));
+  const otherDirNames = initialDirNames.filter(
+    (name) => !name.startsWith("blog_")
+  );
   console.log(
     clfdate(),
     `Initial state of iCloud Drive: ${initialDirNames.length} folders` +
-      (otherDirNames.length ? `, not blog_ folders: ${otherDirNames.join(", ")}` : "")
+      (otherDirNames.length
+        ? `, not blog_ folders: ${otherDirNames.join(", ")}`
+        : "")
   );
 
   console.log(clfdate(), "running the acceptSharingLink script");
@@ -348,7 +357,8 @@ async function setupFolder(blogID, sharingLink) {
     await new Promise((resolve) => setTimeout(resolve, checkInterval));
   }
 
-  console.error(clfdate(), 
+  console.error(
+    clfdate(),
     `Timed out waiting for a new folder to set up blogID: ${blogID} after ${timeout}ms`
   );
 
@@ -361,7 +371,7 @@ async function setupFolder(blogID, sharingLink) {
 const escapeAppleScriptString = (value) =>
   String(value)
     .replace(/\\/g, "\\\\")
-    .replace(/"/g, "\\\"")
+    .replace(/"/g, '\\"')
     .replace(/\r\n|\r|\n/g, "\\n");
 
 // Handler shared by the scripts below: if Finder (or a system dialog) is
@@ -629,7 +639,10 @@ return outcome & "|" & dialogText
 `;
 
 async function acceptSharingLink(sharingLink) {
-  console.log(clfdate(), `Running AppleScript to accept sharing link: ${sharingLink}`);
+  console.log(
+    clfdate(),
+    `Running AppleScript to accept sharing link: ${sharingLink}`
+  );
   const escapedSharingLink = escapeAppleScriptString(sharingLink);
 
   let stdout;
@@ -655,7 +668,9 @@ async function acceptSharingLink(sharingLink) {
   }
 
   // The script prints "<outcome>|<text of the dialog it dismissed>"
-  const [outcome, ...detail] = String(stdout || "").trim().split("|");
+  const [outcome, ...detail] = String(stdout || "")
+    .trim()
+    .split("|");
   console.log(
     clfdate(),
     `AppleScript finished: ${outcome}${detail.join("|") ? ` (dialog: ${detail.join("|")})` : ""}`
@@ -695,7 +710,8 @@ export default async (req, res) => {
     return res.status(400).send("Missing sharingLink header");
   }
 
-  console.log(clfdate(),
+  console.log(
+    clfdate(),
     `Received setup request for blogID: ${blogID}, sharingLink: ${sharingLink}`
   );
 

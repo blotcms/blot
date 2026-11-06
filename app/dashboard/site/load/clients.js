@@ -20,7 +20,9 @@ module.exports = function (req, res, next) {
   res.locals.clients = list.slice();
 
   const selectedClient =
-    (req.params && req.params.client) || req.blog.client || res.locals.effectiveClient;
+    (req.params && req.params.client) ||
+    req.blog.client ||
+    res.locals.effectiveClient;
 
   if (selectedClient) {
     res.locals.clients = res.locals.clients.map(function (client) {

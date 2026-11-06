@@ -78,13 +78,7 @@ async function headS3(s3, key) {
     const cache = first(head, ["cacheControl", "CacheControl"]);
 
     return (
-      "s3=yes " +
-      size +
-      "B " +
-      type +
-      ' cache-control="' +
-      (cache || "") +
-      '"'
+      "s3=yes " + size + "B " + type + ' cache-control="' + (cache || "") + '"'
     );
   } catch (err) {
     const code = err && (err.code || err.name || err.status);
@@ -175,7 +169,9 @@ async function inspectEntry(blog, entry, s3) {
 
     const s3Part = s3 ? "  " + (await headS3(s3, blog.id + "/" + relPath)) : "";
 
-    console.log("  asset via=" + via + " disk=" + disk + s3Part + "  " + relPath);
+    console.log(
+      "  asset via=" + via + " disk=" + disk + s3Part + "  " + relPath
+    );
   }
 }
 
@@ -219,10 +215,7 @@ async function main() {
   let entries = [];
 
   if (folderPath) {
-    const entry = await getEntry(
-      blog.id,
-      "/" + folderPath.replace(/^\/+/, "")
-    );
+    const entry = await getEntry(blog.id, "/" + folderPath.replace(/^\/+/, ""));
 
     if (!entry) {
       console.log("entry " + folderPath + " not found");

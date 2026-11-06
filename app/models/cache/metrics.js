@@ -172,7 +172,12 @@ function count(cache, outcome, key) {
 // big to store; undefined when the caller never stores, like a preview).
 // value is what the fill produced, to size it; reason says why a result was
 // not kept when the caller knows (otherwise it is told from the value's size).
-function fill(cache, key, ms, { failed = false, cached, reason, value, bytes } = {}) {
+function fill(
+  cache,
+  key,
+  ms,
+  { failed = false, cached, reason, value, bytes } = {}
+) {
   const state = metrics.get(cache);
   if (!state) return;
 

@@ -7,12 +7,14 @@ const STATES = [
   {
     key: "syncingWithErrors",
     label: "Set up, with a stored sync error",
-    matches: (account) => account.setupComplete === true && Boolean(account.error),
+    matches: (account) =>
+      account.setupComplete === true && Boolean(account.error),
   },
   {
     key: "setupFailed",
     label: "Failed to set up",
-    matches: (account) => account.setupComplete !== true && Boolean(account.error),
+    matches: (account) =>
+      account.setupComplete !== true && Boolean(account.error),
   },
   {
     key: "initialTransfer",

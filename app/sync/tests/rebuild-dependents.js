@@ -63,12 +63,18 @@ describe("rebuild dependents cleanup", function () {
     await this.blog.remove(postPath);
 
     const logged = [];
-    spyOn(console, "log").and.callFake((...args) => logged.push(args.join(" ")));
+    spyOn(console, "log").and.callFake((...args) =>
+      logged.push(args.join(" "))
+    );
 
     await rebuildDependentsOf(this.blog.id, imagePath);
 
-    expect(logged.some((line) => line.includes("Error rebuilding"))).toBe(false);
-    expect(logged.some((line) => line.includes("Dependent no longer exists"))).toBe(true);
+    expect(logged.some((line) => line.includes("Error rebuilding"))).toBe(
+      false
+    );
+    expect(
+      logged.some((line) => line.includes("Dependent no longer exists"))
+    ).toBe(true);
   });
 
   it("rebuilds a folder post via its source folder instead of dropping it", async function () {

@@ -16,24 +16,21 @@ share
     res.render("dashboard/template/share");
   })
 
-  .post(
-    function (req, res, next) {
-      // find the blog which matches the blog property of req.body
-      req.blog = req.blogs.filter(blog => blog.id === req.body.blog)[0];
+  .post(function (req, res, next) {
+    // find the blog which matches the blog property of req.body
+    req.blog = req.blogs.filter((blog) => blog.id === req.body.blog)[0];
 
-      // if no blog is found, use the first blog
-      if (!req.blog) req.blog = req.blogs[0];
+    // if no blog is found, use the first blog
+    if (!req.blog) req.blog = req.blogs[0];
 
-      req.body = {
-        name: req.template.name,
-        cloneFrom: req.template.id,
-        shared: true,
-        redirect: `/sites/${req.blog.handle}/template`
-      };
+    req.body = {
+      name: req.template.name,
+      cloneFrom: req.template.id,
+      shared: true,
+      redirect: `/sites/${req.blog.handle}/template`,
+    };
 
-      next();
-    },
-    require("./save/newTemplate")
-  );
+    next();
+  }, require("./save/newTemplate"));
 
 module.exports = share;

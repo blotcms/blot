@@ -64,7 +64,11 @@ async function read(blog, path, callback) {
 
             await fs.ensureDir(dirname(absolutePath));
             await assets.remove(blog.id, relativePath);
-            const { outputs } = await sandbox.run("to-png", {}, { path: sourcePath });
+            const { outputs } = await sandbox.run(
+              "to-png",
+              {},
+              { path: sourcePath }
+            );
             await fs.writeFile(absolutePath, outputs[0]);
             await assets.commit(blog.id, relativePath);
 

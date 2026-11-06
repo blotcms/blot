@@ -15,7 +15,9 @@ describe("git client remove", function () {
   it("should return an error if the store has no repository", async function () {
     await removeRepo({ store: context.objectStoreFor(this.blog.id) });
 
-    var err = await new Promise((resolve) => remove(this.blog.id, "/path", resolve));
+    var err = await new Promise((resolve) =>
+      remove(this.blog.id, "/path", resolve)
+    );
 
     expect(err.message).toContain("no copy");
   });

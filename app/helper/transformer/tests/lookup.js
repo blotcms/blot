@@ -37,13 +37,17 @@ describe("transformer", function () {
     this.path = "/Hello/new world.txt";
 
     folder.move(this.blog.id, from, this.path).then(function () {
-      test.transformer.lookup('Hello\\new%20World.txt', test.transform, function (err, result) {
-        if (err) return done.fail(err);
+      test.transformer.lookup(
+        "Hello\\new%20World.txt",
+        test.transform,
+        function (err, result) {
+          if (err) return done.fail(err);
 
-        expect(result).toEqual(jasmine.any(Object));
-        expect(result.size).toEqual(jasmine.any(Number));
-        done();
-      });
+          expect(result).toEqual(jasmine.any(Object));
+          expect(result.size).toEqual(jasmine.any(Number));
+          done();
+        }
+      );
     }, done.fail);
   });
 
@@ -55,13 +59,17 @@ describe("transformer", function () {
     folder.move(this.blog.id, from, this.path).then(function () {
       test.path = encodeURI(test.path);
 
-      test.transformer.lookup(test.path, test.transform, function (err, result) {
-        if (err) return done.fail(err);
+      test.transformer.lookup(
+        test.path,
+        test.transform,
+        function (err, result) {
+          if (err) return done.fail(err);
 
-        expect(result).toEqual(jasmine.any(Object));
-        expect(result.size).toEqual(jasmine.any(Number));
-        done();
-      });
+          expect(result).toEqual(jasmine.any(Object));
+          expect(result.size).toEqual(jasmine.any(Number));
+          done();
+        }
+      );
     }, done.fail);
   });
 
@@ -73,16 +81,17 @@ describe("transformer", function () {
     folder.move(this.blog.id, from, this.path).then(function () {
       test.path = encodeURI(test.path);
 
-      test.transformer.lookup(test.path.toLowerCase(), test.transform, function (
-        err,
-        result
-      ) {
-        if (err) return done.fail(err);
+      test.transformer.lookup(
+        test.path.toLowerCase(),
+        test.transform,
+        function (err, result) {
+          if (err) return done.fail(err);
 
-        expect(result).toEqual(jasmine.any(Object));
-        expect(result.size).toEqual(jasmine.any(Number));
-        done();
-      });
+          expect(result).toEqual(jasmine.any(Object));
+          expect(result.size).toEqual(jasmine.any(Number));
+          done();
+        }
+      );
     }, done.fail);
   });
 
@@ -133,7 +142,11 @@ describe("transformer", function () {
     // Generated assets live in the blog's underscore directories
     var path = "/_image_cache/" + Date.now() + "-" + this.path;
 
-    await assets.write(this.blog.id, path, await folder.read(this.blog.id, "/" + this.path));
+    await assets.write(
+      this.blog.id,
+      path,
+      await folder.read(this.blog.id, "/" + this.path)
+    );
 
     await new Promise((resolve, reject) => {
       this.transformer.lookup(path, this.transform, function (err, result) {
@@ -149,11 +162,18 @@ describe("transformer", function () {
   it("transforms a file in the blog's static directory linked with an escaped name", async function () {
     var path = "/_image_cache/" + Date.now() + "/说明.png";
 
-    await assets.write(this.blog.id, path, await folder.read(this.blog.id, "/" + this.path));
+    await assets.write(
+      this.blog.id,
+      path,
+      await folder.read(this.blog.id, "/" + this.path)
+    );
 
     await new Promise((resolve, reject) => {
       this.transformer.lookup(
-        "/_image_cache/" + path.split("/")[2] + "/" + encodeURIComponent("说明.png"),
+        "/_image_cache/" +
+          path.split("/")[2] +
+          "/" +
+          encodeURIComponent("说明.png"),
         this.transform,
         function (err, result) {
           if (err) return reject(err);
@@ -171,49 +191,58 @@ describe("transformer", function () {
     var firstTransform = jasmine.createSpy().and.callFake(test.transform);
     var secondTransform = jasmine.createSpy().and.callFake(test.transform);
 
-    test.transformer.lookup(test.path, firstTransform, function (
-      err,
-      firstResult
-    ) {
-      if (err) return done.fail(err);
-
-      test.transformer.lookup(test.path, secondTransform, function (
-        err,
-        secondResult
-      ) {
+    test.transformer.lookup(
+      test.path,
+      firstTransform,
+      function (err, firstResult) {
         if (err) return done.fail(err);
 
-        expect(firstTransform).toHaveBeenCalled();
-        expect(secondTransform).not.toHaveBeenCalled();
-        expect(firstResult).toEqual(secondResult);
+        test.transformer.lookup(
+          test.path,
+          secondTransform,
+          function (err, secondResult) {
+            if (err) return done.fail(err);
 
-        done();
-      });
-    });
+            expect(firstTransform).toHaveBeenCalled();
+            expect(secondTransform).not.toHaveBeenCalled();
+            expect(firstResult).toEqual(secondResult);
+
+            done();
+          }
+        );
+      }
+    );
   });
 
   it("re-transforms the file if its contents changes", function (done) {
     var test = this;
     var spy = jasmine.createSpy().and.callFake(test.transform);
 
-    test.transformer.lookup(test.path, test.transform, function (
-      err,
-      firstResult
-    ) {
-      if (err) return done.fail(err);
+    test.transformer.lookup(
+      test.path,
+      test.transform,
+      function (err, firstResult) {
+        if (err) return done.fail(err);
 
-      // Modify the file
-      folder.write(test.blog.id, "/" + test.path, Date.now().toString()).then(function () {
-        test.transformer.lookup(test.path, spy, function (err, secondResult) {
-          if (err) return done.fail(err);
+        // Modify the file
+        folder
+          .write(test.blog.id, "/" + test.path, Date.now().toString())
+          .then(function () {
+            test.transformer.lookup(
+              test.path,
+              spy,
+              function (err, secondResult) {
+                if (err) return done.fail(err);
 
-          expect(spy).toHaveBeenCalled();
-          expect(firstResult).not.toEqual(secondResult);
+                expect(spy).toHaveBeenCalled();
+                expect(firstResult).not.toEqual(secondResult);
 
-          done();
-        });
-      }, done.fail);
-    });
+                done();
+              }
+            );
+          }, done.fail);
+      }
+    );
   });
 
   it("transforms a url", function (done) {
@@ -272,13 +301,18 @@ describe("transformer", function () {
       // file), then fell back into the normal network path - it fails
       // for a different reason (connection refused) than a bare local
       // lookup would (ENOENT).
-      var missingURL = "http://localhost/this-file-does-not-exist-" + Date.now();
+      var missingURL =
+        "http://localhost/this-file-does-not-exist-" + Date.now();
 
-      this.ownHostTransformer.lookup(missingURL, this.transform, function (err) {
-        expect(err).toEqual(jasmine.any(Error));
-        expect(err.code).not.toEqual("ENOENT");
-        done();
-      });
+      this.ownHostTransformer.lookup(
+        missingURL,
+        this.transform,
+        function (err) {
+          expect(err).toEqual(jasmine.any(Error));
+          expect(err.code).not.toEqual("ENOENT");
+          done();
+        }
+      );
     });
   });
 
@@ -287,18 +321,26 @@ describe("transformer", function () {
     var firstTransform = jasmine.createSpy().and.callFake(test.transform);
     var secondTransform = jasmine.createSpy().and.callFake(test.transform);
 
-    test.transformer.lookup(test.url, firstTransform, function (err, firstResult) {
-      if (err) return done.fail(err);
-
-      test.transformer.lookup(test.url, secondTransform, function (err, secondResult) {
+    test.transformer.lookup(
+      test.url,
+      firstTransform,
+      function (err, firstResult) {
         if (err) return done.fail(err);
 
-        expect(firstTransform).toHaveBeenCalled();
-        expect(secondTransform).not.toHaveBeenCalled();
-        expect(secondResult).toEqual(firstResult);
-        done();
-      });
-    });
+        test.transformer.lookup(
+          test.url,
+          secondTransform,
+          function (err, secondResult) {
+            if (err) return done.fail(err);
+
+            expect(firstTransform).toHaveBeenCalled();
+            expect(secondTransform).not.toHaveBeenCalled();
+            expect(secondResult).toEqual(firstResult);
+            done();
+          }
+        );
+      }
+    );
   });
 
   it("reuses cached headers when the stored response is still fresh", function (done) {
@@ -309,42 +351,47 @@ describe("transformer", function () {
     var secondTransform = jasmine.createSpy().and.callFake(test.transform);
     var futureExpires = new Date(Date.now() + 60 * 60 * 1000).toUTCString();
 
-    test.transformer.lookup(test.url, firstTransform, function (err, firstResult) {
-      if (err) return done.fail(err);
+    test.transformer.lookup(
+      test.url,
+      firstTransform,
+      function (err, firstResult) {
+        if (err) return done.fail(err);
 
-      client
-        .get(headersKey)
-        .then(function (stringifiedHeaders) {
-          var headers;
+        client
+          .get(headersKey)
+          .then(function (stringifiedHeaders) {
+            var headers;
 
-          try {
-            headers = JSON.parse(stringifiedHeaders) || {};
-          } catch (e) {
-            headers = {};
-          }
+            try {
+              headers = JSON.parse(stringifiedHeaders) || {};
+            } catch (e) {
+              headers = {};
+            }
 
-          headers.expires = futureExpires;
-          headers.url = test.url;
+            headers.expires = futureExpires;
+            headers.url = test.url;
 
-          return client.set(headersKey, JSON.stringify(headers));
-        })
-        .then(function () {
-          test.transformer.lookup(test.url, secondTransform, function (
-            err,
-            secondResult
-          ) {
-            if (err) return done.fail(err);
+            return client.set(headersKey, JSON.stringify(headers));
+          })
+          .then(function () {
+            test.transformer.lookup(
+              test.url,
+              secondTransform,
+              function (err, secondResult) {
+                if (err) return done.fail(err);
 
-            expect(firstTransform).toHaveBeenCalled();
-            expect(secondTransform).not.toHaveBeenCalled();
-            expect(secondResult).toEqual(firstResult);
-            done();
+                expect(firstTransform).toHaveBeenCalled();
+                expect(secondTransform).not.toHaveBeenCalled();
+                expect(secondResult).toEqual(firstResult);
+                done();
+              }
+            );
+          })
+          .catch(function (error) {
+            done.fail(error);
           });
-        })
-        .catch(function (error) {
-          done.fail(error);
-        });
-    });
+      }
+    );
   });
 
   it("treats a response with only Cache-Control: max-age as fresh", function (done) {
@@ -368,18 +415,26 @@ describe("transformer", function () {
       headers: { "Cache-Control": "max-age=3600" },
     });
 
-    test.transformer.lookup(test.sequenceUrl, firstTransform, function (err, firstResult) {
-      if (err) return done.fail(err);
-
-      test.transformer.lookup(test.sequenceUrl, secondTransform, function (err, secondResult) {
+    test.transformer.lookup(
+      test.sequenceUrl,
+      firstTransform,
+      function (err, firstResult) {
         if (err) return done.fail(err);
 
-        expect(firstTransform).toHaveBeenCalled();
-        expect(secondTransform).not.toHaveBeenCalled();
-        expect(secondResult).toEqual(firstResult);
-        done();
-      });
-    });
+        test.transformer.lookup(
+          test.sequenceUrl,
+          secondTransform,
+          function (err, secondResult) {
+            if (err) return done.fail(err);
+
+            expect(firstTransform).toHaveBeenCalled();
+            expect(secondTransform).not.toHaveBeenCalled();
+            expect(secondResult).toEqual(firstResult);
+            done();
+          }
+        );
+      }
+    );
   });
 
   it("revalidates a no-cache response even when it carries a max-age", function (done) {
@@ -404,18 +459,26 @@ describe("transformer", function () {
       headers: { "Cache-Control": "no-cache, max-age=3600" },
     });
 
-    test.transformer.lookup(test.sequenceUrl, firstTransform, function (err, firstResult) {
-      if (err) return done.fail(err);
-
-      test.transformer.lookup(test.sequenceUrl, secondTransform, function (err, secondResult) {
+    test.transformer.lookup(
+      test.sequenceUrl,
+      firstTransform,
+      function (err, firstResult) {
         if (err) return done.fail(err);
 
-        expect(firstTransform).toHaveBeenCalled();
-        expect(secondTransform).toHaveBeenCalled();
-        expect(secondResult.size).not.toEqual(firstResult.size);
-        done();
-      });
-    });
+        test.transformer.lookup(
+          test.sequenceUrl,
+          secondTransform,
+          function (err, secondResult) {
+            if (err) return done.fail(err);
+
+            expect(firstTransform).toHaveBeenCalled();
+            expect(secondTransform).toHaveBeenCalled();
+            expect(secondResult.size).not.toEqual(firstResult.size);
+            done();
+          }
+        );
+      }
+    );
   });
 
   it("accepts a gzip-encoded response whose Content-Length is the encoded size", function (done) {
@@ -432,13 +495,17 @@ describe("transformer", function () {
       lastModified: null,
     });
 
-    test.transformer.lookup(test.sequenceUrl, transform, function (err, result) {
-      if (err) return done.fail(err);
+    test.transformer.lookup(
+      test.sequenceUrl,
+      transform,
+      function (err, result) {
+        if (err) return done.fail(err);
 
-      expect(transform).toHaveBeenCalled();
-      expect(result.size).toEqual(jasmine.any(Number));
-      done();
-    });
+        expect(transform).toHaveBeenCalled();
+        expect(result.size).toEqual(jasmine.any(Number));
+        done();
+      }
+    );
   });
 
   describe("url download caching", function () {
@@ -450,26 +517,39 @@ describe("transformer", function () {
       var firstTransform = jasmine.createSpy().and.callFake(test.transform);
       var secondTransform = jasmine.createSpy().and.callFake(test.transform);
 
-      test.queueRemoteResponse({ body: body, etag: etag, lastModified: lastModified });
-      test.queueRemoteResponse({ status: 304, etag: etag, lastModified: lastModified });
+      test.queueRemoteResponse({
+        body: body,
+        etag: etag,
+        lastModified: lastModified,
+      });
+      test.queueRemoteResponse({
+        status: 304,
+        etag: etag,
+        lastModified: lastModified,
+      });
 
-      test.transformer.lookup(test.sequenceUrl, firstTransform, function (err, firstResult) {
-        if (err) return done.fail(err);
-
-        test.transformer.lookup(test.sequenceUrl, secondTransform, function (
-          err,
-          secondResult
-        ) {
+      test.transformer.lookup(
+        test.sequenceUrl,
+        firstTransform,
+        function (err, firstResult) {
           if (err) return done.fail(err);
 
-          expect(firstTransform).toHaveBeenCalled();
-          expect(secondTransform).not.toHaveBeenCalled();
-          expect(secondResult).toEqual(firstResult);
-          expect(firstResult.size).toEqual(Buffer.byteLength(body));
+          test.transformer.lookup(
+            test.sequenceUrl,
+            secondTransform,
+            function (err, secondResult) {
+              if (err) return done.fail(err);
 
-          done();
-        });
-      });
+              expect(firstTransform).toHaveBeenCalled();
+              expect(secondTransform).not.toHaveBeenCalled();
+              expect(secondResult).toEqual(firstResult);
+              expect(firstResult.size).toEqual(Buffer.byteLength(body));
+
+              done();
+            }
+          );
+        }
+      );
     });
 
     it("overwrites the cached result after a subsequent successful download", function (done) {
@@ -494,23 +574,28 @@ describe("transformer", function () {
         lastModified: secondModified,
       });
 
-      test.transformer.lookup(test.sequenceUrl, firstTransform, function (err, firstResult) {
-        if (err) return done.fail(err);
-
-        test.transformer.lookup(test.sequenceUrl, secondTransform, function (
-          err,
-          secondResult
-        ) {
+      test.transformer.lookup(
+        test.sequenceUrl,
+        firstTransform,
+        function (err, firstResult) {
           if (err) return done.fail(err);
 
-          expect(firstTransform).toHaveBeenCalled();
-          expect(secondTransform).toHaveBeenCalled();
-          expect(secondResult.size).toEqual(Buffer.byteLength(secondBody));
-          expect(secondResult.size).not.toEqual(firstResult.size);
+          test.transformer.lookup(
+            test.sequenceUrl,
+            secondTransform,
+            function (err, secondResult) {
+              if (err) return done.fail(err);
 
-          done();
-        });
-      });
+              expect(firstTransform).toHaveBeenCalled();
+              expect(secondTransform).toHaveBeenCalled();
+              expect(secondResult.size).toEqual(Buffer.byteLength(secondBody));
+              expect(secondResult.size).not.toEqual(firstResult.size);
+
+              done();
+            }
+          );
+        }
+      );
     });
 
     it("returns the last successful result when a download fails", function (done) {
@@ -537,31 +622,39 @@ describe("transformer", function () {
       });
       test.queueRemoteResponse({ status: 500 });
 
-      test.transformer.lookup(test.sequenceUrl, firstTransform, function (err, firstResult) {
-        if (err) return done.fail(err);
-
-        test.transformer.lookup(test.sequenceUrl, secondTransform, function (
-          err,
-          secondResult
-        ) {
+      test.transformer.lookup(
+        test.sequenceUrl,
+        firstTransform,
+        function (err, firstResult) {
           if (err) return done.fail(err);
 
-          test.transformer.lookup(test.sequenceUrl, thirdTransform, function (
-            err,
-            thirdResult
-          ) {
-            if (err) return done.fail(err);
+          test.transformer.lookup(
+            test.sequenceUrl,
+            secondTransform,
+            function (err, secondResult) {
+              if (err) return done.fail(err);
 
-            expect(firstTransform).toHaveBeenCalled();
-            expect(secondTransform).toHaveBeenCalled();
-            expect(thirdTransform).not.toHaveBeenCalled();
-            expect(secondResult.size).toEqual(Buffer.byteLength(secondBody));
-            expect(thirdResult).toEqual(secondResult);
+              test.transformer.lookup(
+                test.sequenceUrl,
+                thirdTransform,
+                function (err, thirdResult) {
+                  if (err) return done.fail(err);
 
-            done();
-          });
-        });
-      });
+                  expect(firstTransform).toHaveBeenCalled();
+                  expect(secondTransform).toHaveBeenCalled();
+                  expect(thirdTransform).not.toHaveBeenCalled();
+                  expect(secondResult.size).toEqual(
+                    Buffer.byteLength(secondBody)
+                  );
+                  expect(thirdResult).toEqual(secondResult);
+
+                  done();
+                }
+              );
+            }
+          );
+        }
+      );
     });
 
     it("errors instead of hanging when the connection drops mid-download", function (done) {
@@ -587,18 +680,26 @@ describe("transformer", function () {
       test.queueRemoteResponse({ body: body, etag: null, lastModified: null });
       test.queueRemoteResponse({ destroy: true });
 
-      test.transformer.lookup(test.sequenceUrl, firstTransform, function (err, firstResult) {
-        if (err) return done.fail(err);
-
-        test.transformer.lookup(test.sequenceUrl, secondTransform, function (err, secondResult) {
+      test.transformer.lookup(
+        test.sequenceUrl,
+        firstTransform,
+        function (err, firstResult) {
           if (err) return done.fail(err);
 
-          expect(firstTransform).toHaveBeenCalled();
-          expect(secondTransform).not.toHaveBeenCalled();
-          expect(secondResult).toEqual(firstResult);
-          done();
-        });
-      });
+          test.transformer.lookup(
+            test.sequenceUrl,
+            secondTransform,
+            function (err, secondResult) {
+              if (err) return done.fail(err);
+
+              expect(firstTransform).toHaveBeenCalled();
+              expect(secondTransform).not.toHaveBeenCalled();
+              expect(secondResult).toEqual(firstResult);
+              done();
+            }
+          );
+        }
+      );
     }, 20000);
   });
 });

@@ -10,7 +10,7 @@ module.exports = async function fetchSubscriptionDuration(host) {
         url: "https://" + host + "/verify/subscription-duration",
         kind: "text",
         maxBytes: 4096,
-        timeoutMs: 5000
+        timeoutMs: 5000,
       },
       { label: "featured/fetchSubscriptionDuration" }
     );

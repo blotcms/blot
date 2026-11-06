@@ -221,7 +221,10 @@ describe("entry scheduled publication", function () {
 
     await withGetter(
       (blogID, path, callback) =>
-        callback({ scheduled: true, dateStamp: reads.length > 1 ? reads.shift() : reads[0] }),
+        callback({
+          scheduled: true,
+          dateStamp: reads.length > 1 ? reads.shift() : reads[0],
+        }),
       () => alarms.poll()
     );
 

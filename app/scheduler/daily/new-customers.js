@@ -23,7 +23,9 @@ async function main(callback) {
         const stripeCreatedMs = toMs(user.subscription?.created);
         const paypalStartMs = toMs(user.paypal?.start_time);
 
-        const isNewStripe = Boolean(stripeCreatedMs && stripeCreatedMs >= cutoff);
+        const isNewStripe = Boolean(
+          stripeCreatedMs && stripeCreatedMs >= cutoff
+        );
         const isNewPaypal = Boolean(paypalStartMs && paypalStartMs >= cutoff);
 
         if (!isNewStripe && !isNewPaypal) continue;

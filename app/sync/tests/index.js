@@ -29,18 +29,22 @@ describe("sync", function () {
     });
   });
 
-  it("will only allow one sync at once", function (testDone) {
-    var blog = this.blog;
+  it(
+    "will only allow one sync at once",
+    function (testDone) {
+      var blog = this.blog;
 
-    sync(blog.id, function (err, folder, done) {
-      if (err) return testDone.fail(err);
+      sync(blog.id, function (err, folder, done) {
+        if (err) return testDone.fail(err);
 
-      sync(blog.id, function (err) {
-        expect(err.message).toContain("Failed to acquire folder lock");
-        done(null, testDone);
+        sync(blog.id, function (err) {
+          expect(err.message).toContain("Failed to acquire folder lock");
+          done(null, testDone);
+        });
       });
-    });
-  }, 15 * 1000);
+    },
+    15 * 1000
+  );
 
   it(
     "will free the lock when the process dies due to an uncaught exception",
@@ -67,30 +71,34 @@ describe("sync", function () {
     40 * 1000
   );
 
-  it("will free the lock when the process is killed", function (testDone) {
-    var child = require("child_process").fork(__dirname + "/kill");
-    var blog = this.blog;
+  it(
+    "will free the lock when the process is killed",
+    function (testDone) {
+      var child = require("child_process").fork(__dirname + "/kill");
+      var blog = this.blog;
 
-    child.send(blog.id);
+      child.send(blog.id);
 
-    // Find out if the child managed to acquire a lock on this blog
-    child.on("message", function (message) {
-      if (message.error) {
-        testDone.fail(message.error);
-      } else {
-        child.kill();
-      }
-    });
-
-    // Did sync release the child's lock on the blog when the child
-    // died (was killed)? We test this by trying to acquire a lock.
-    child.on("close", function () {
-      syncWhenFree(blog.id, function (err, folder, done) {
-        if (err) return testDone.fail(err);
-        done(null, testDone);
+      // Find out if the child managed to acquire a lock on this blog
+      child.on("message", function (message) {
+        if (message.error) {
+          testDone.fail(message.error);
+        } else {
+          child.kill();
+        }
       });
-    });
-  }, 40 * 1000);
+
+      // Did sync release the child's lock on the blog when the child
+      // died (was killed)? We test this by trying to acquire a lock.
+      child.on("close", function () {
+        syncWhenFree(blog.id, function (err, folder, done) {
+          if (err) return testDone.fail(err);
+          done(null, testDone);
+        });
+      });
+    },
+    40 * 1000
+  );
 
   it("will allow you to sync, release and re-sync", function (testDone) {
     var blog = this.blog;
@@ -191,9 +199,7 @@ describe("sync folder lock", function () {
       heartbeat: 100,
     });
     await new Promise((resolve) => setTimeout(resolve, 900));
-    expect((await folderLock.inspect(this.blog.id)).holder).toEqual(
-      lock.token
-    );
+    expect((await folderLock.inspect(this.blog.id)).holder).toEqual(lock.token);
     await lock.release();
   });
 
@@ -228,9 +234,13 @@ describe("sync folder lock", function () {
     });
 
     it("returns null for a lock taken before the timestamp was added", async function () {
-      await client.set(folderLock.key(this.blog.id), "0f8fad5b-d9cb-469f-a165-70867728950e", {
-        PX: 5000,
-      });
+      await client.set(
+        folderLock.key(this.blog.id),
+        "0f8fad5b-d9cb-469f-a165-70867728950e",
+        {
+          PX: 5000,
+        }
+      );
 
       expect(await folderLock.heldSince(this.blog.id)).toBeNull();
 
@@ -290,7 +300,9 @@ describe("sync cacheID", function () {
   it("bumps the cacheID even if releasing the lock fails", function (testDone) {
     const blogID = this.blog.id;
     const lock = folderLock.lock;
-    const releaseError = new Error("NOREPLICAS Not enough good replicas to write.");
+    const releaseError = new Error(
+      "NOREPLICAS Not enough good replicas to write."
+    );
 
     spyOn(folderLock, "lock").and.callFake(async function () {
       const held = await lock.apply(folderLock, arguments);
@@ -413,16 +425,18 @@ describe("sync cacheID", function () {
 
     sync(blogID, function (err, folder, done) {
       if (err) return testDone.fail(err);
-      storage.write(blogID, "/_public/style.css", Buffer.from("a{}")).then(function () {
-        folder.update("/_public/style.css", function (err) {
-          if (err) return testDone.fail(err);
-          done(null, function (err) {
+      storage
+        .write(blogID, "/_public/style.css", Buffer.from("a{}"))
+        .then(function () {
+          folder.update("/_public/style.css", function (err) {
             if (err) return testDone.fail(err);
-            expect(Blog.bumpCacheID).toHaveBeenCalled();
-            testDone();
+            done(null, function (err) {
+              if (err) return testDone.fail(err);
+              expect(Blog.bumpCacheID).toHaveBeenCalled();
+              testDone();
+            });
           });
-        });
-      }, testDone.fail);
+        }, testDone.fail);
     });
   });
 });

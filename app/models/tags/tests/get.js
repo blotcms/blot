@@ -92,11 +92,16 @@ describe("tags.get", function () {
     saveEntries(blogID, entries, function (err) {
       if (err) return done.fail(err);
 
-      get(blogID, "Tag Rev", { rev: false, limit: 2 }, function (err, entryIDs) {
-        if (err) return done.fail(err);
-        expect(entryIDs).toEqual(["old", "mid"]);
-        done();
-      });
+      get(
+        blogID,
+        "Tag Rev",
+        { rev: false, limit: 2 },
+        function (err, entryIDs) {
+          if (err) return done.fail(err);
+          expect(entryIDs).toEqual(["old", "mid"]);
+          done();
+        }
+      );
     });
   });
 

@@ -17,7 +17,12 @@ describe("post sorting across retrieve helpers", function () {
   function run(helper, locals) {
     return new Promise((resolve, reject) => {
       helper(
-        { blog: { id: "b1", cacheID: 1 }, query: { q: "x" }, params: {}, template: { locals } },
+        {
+          blog: { id: "b1", cacheID: 1 },
+          query: { q: "x" },
+          params: {},
+          template: { locals },
+        },
         { locals: {} },
         (err, value) => (err ? reject(err) : resolve(value))
       );
@@ -30,7 +35,9 @@ describe("post sorting across retrieve helpers", function () {
 
     beforeEach(function () {
       cachedRecent._clear();
-      spyOn(Entries, "getRecent").and.callFake((blogID, options, cb) => cb(newestFirst()));
+      spyOn(Entries, "getRecent").and.callFake((blogID, options, cb) =>
+        cb(newestFirst())
+      );
     });
 
     it("stays newest-first regardless of the Post sorting selection", async function () {
@@ -56,19 +63,24 @@ describe("post sorting across retrieve helpers", function () {
 
     beforeEach(function () {
       received = undefined;
-      spyOn(Entry, "search").and.callFake(function (blogID, query, options, cb) {
-        if (typeof options === "function") {
-          cb = options;
-          options = undefined;
+      spyOn(Entry, "search").and.callFake(
+        function (blogID, query, options, cb) {
+          if (typeof options === "function") {
+            cb = options;
+            options = undefined;
+          }
+          received = { blogID, query, options };
+          // Entry.search returns already sorted + capped; the helper passes through.
+          cb(null, newestFirst());
         }
-        received = { blogID, query, options };
-        // Entry.search returns already sorted + capped; the helper passes through.
-        cb(null, newestFirst());
-      });
+      );
     });
 
     it("forwards the resolved selection to Entry.search and passes results through", async function () {
-      const value = await run(searchResults, { sort_by: "id", sort_order: "desc" });
+      const value = await run(searchResults, {
+        sort_by: "id",
+        sort_order: "desc",
+      });
       expect(received.options).toEqual({ sortBy: "id", order: "desc" });
       expect(ids(value)).toEqual(["c.txt", "a.txt", "b.txt"]);
     });

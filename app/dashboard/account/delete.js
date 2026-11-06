@@ -58,23 +58,27 @@ function emailUser(req, res, next) {
   Email.DELETED("", req.user, next);
 }
 function deleteBlogs(req, res, next) {
-  async.each(req.user.blogs || [], function (blogID, cb) {
-    Blog.remove(blogID, function (err) {
-      if (
-        err &&
-        (err.message === "No blog" || err.message === "Invalid blog id")
-      ) {
-        console.warn("Blog cleanup anomaly; continuing account deletion", {
-          uid: req.user && req.user.uid,
-          blogID,
-          reason: err.message,
-        });
-        return cb();
-      }
+  async.each(
+    req.user.blogs || [],
+    function (blogID, cb) {
+      Blog.remove(blogID, function (err) {
+        if (
+          err &&
+          (err.message === "No blog" || err.message === "Invalid blog id")
+        ) {
+          console.warn("Blog cleanup anomaly; continuing account deletion", {
+            uid: req.user && req.user.uid,
+            blogID,
+            reason: err.message,
+          });
+          return cb();
+        }
 
-      cb(err);
-    });
-  }, next);
+        cb(err);
+      });
+    },
+    next
+  );
 }
 
 function deleteUser(req, res, next) {
@@ -149,12 +153,12 @@ async function deleteSubscription(req, res, next) {
       console.log("Stripe customer deleted");
     }
 
-    if (typeof next === 'function') {
+    if (typeof next === "function") {
       next();
     }
   } catch (error) {
     console.error("Error in deleting subscription:", error);
-    if (typeof next === 'function') {
+    if (typeof next === "function") {
       next(error);
     } else {
       throw error;
@@ -170,7 +174,7 @@ async function issueDeletionRefund(req, res, next) {
     recordRefundError(req, undefined, error);
   }
 
-  if (typeof next === 'function') {
+  if (typeof next === "function") {
     next();
   }
 }
@@ -190,14 +194,14 @@ async function ensureIssueDeletionRefund(req) {
 
     const stripeEligible = Boolean(
       req.user.subscription?.customer &&
-        stripeCreatedMs &&
-        now - stripeCreatedMs <= THIRTY_DAYS_MS
+      stripeCreatedMs &&
+      now - stripeCreatedMs <= THIRTY_DAYS_MS
     );
 
     const paypalEligible = Boolean(
       req.user.paypal?.id &&
-        paypalStartMs &&
-        now - paypalStartMs <= THIRTY_DAYS_MS
+      paypalStartMs &&
+      now - paypalStartMs <= THIRTY_DAYS_MS
     );
 
     if (!stripeEligible && !paypalEligible) return;
@@ -264,9 +268,7 @@ async function issueStripeRefund(req, now) {
 
   if (!refund) return false;
 
-  const currency = refund.currency
-    ? refund.currency.toUpperCase()
-    : undefined;
+  const currency = refund.currency ? refund.currency.toUpperCase() : undefined;
   const amount = refund.amount;
 
   req.refund = {
@@ -310,7 +312,10 @@ async function issuePaypalRefund(req, now, startMs) {
   if (!capture) return false;
 
   const captureId =
-    capture.capture_id || capture.id || capture.transaction_id || capture.resource_id;
+    capture.capture_id ||
+    capture.id ||
+    capture.transaction_id ||
+    capture.resource_id;
 
   if (!captureId) return false;
 
@@ -345,7 +350,10 @@ async function issuePaypalRefund(req, now, startMs) {
     req.user.paypal?.currency;
   const currency = rawCurrency ? rawCurrency.toUpperCase() : undefined;
   const amountValue =
-    amountInfo?.value ?? amountInfo?.total ?? amountInfo?.amount ?? amountInfo?.gross;
+    amountInfo?.value ??
+    amountInfo?.total ??
+    amountInfo?.amount ??
+    amountInfo?.gross;
 
   const amountCents = toCents(amountValue);
 
@@ -374,7 +382,9 @@ function selectMostRecentCapture(transactions) {
       return typeof status === "string" && status.toUpperCase() === "COMPLETED";
     })
     .reduce((latest, transaction) => {
-      const transactionTime = toMs(transaction.time || transaction.transaction_time);
+      const transactionTime = toMs(
+        transaction.time || transaction.transaction_time
+      );
       const latestTime = toMs(latest?.time || latest?.transaction_time) || 0;
 
       if (!latest) return transaction;

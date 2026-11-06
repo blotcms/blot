@@ -21,7 +21,6 @@ describe("storage/s3", function () {
         expect(function () {
           s3.assertConfigured();
         }).toThrowError(/BLOT_STORAGE_BUCKET is not set/);
-
       } finally {
         config.storage.bucket = bucket;
       }

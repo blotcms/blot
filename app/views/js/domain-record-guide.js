@@ -1,7 +1,7 @@
-var revalidateButton = document.querySelector('button.revalidate');
+var revalidateButton = document.querySelector("button.revalidate");
 
 if (revalidateButton) {
-    revalidateButton.addEventListener('click', function () {
-        revalidateButton.classList.add('working');
-    });
+  revalidateButton.addEventListener("click", function () {
+    revalidateButton.classList.add("working");
+  });
 }

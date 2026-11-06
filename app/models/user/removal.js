@@ -24,7 +24,10 @@ function overdueFor(user, callback) {
   overdueSince(user, function (err, startedAt) {
     if (err) return callback(err);
 
-    callback(null, subscriptionLifecycle.overdueDetails(user, Date.now(), startedAt));
+    callback(
+      null,
+      subscriptionLifecycle.overdueDetails(user, Date.now(), startedAt)
+    );
   });
 }
 

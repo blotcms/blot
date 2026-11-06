@@ -8,7 +8,12 @@
 
 const FONTS = require("blog/static/fonts");
 const specimen = require("blog/static/fonts/specimen");
-const { isPlainObject, ownKeys, normalizeColor, presetMatches } = require("./preset-utils");
+const {
+  isPlainObject,
+  ownKeys,
+  normalizeColor,
+  presetMatches,
+} = require("./preset-utils");
 
 const FONT_BY_ID = new Map();
 FONTS.forEach((font) => {
@@ -17,7 +22,12 @@ FONTS.forEach((font) => {
 
 function isFontLocal(key, value) {
   const isFontKey = key === "font" || key.indexOf("_font") !== -1;
-  return isFontKey && key !== "syntax_highlighter_font" && isPlainObject(value) && value.id;
+  return (
+    isFontKey &&
+    key !== "syntax_highlighter_font" &&
+    isPlainObject(value) &&
+    value.id
+  );
 }
 
 function colorSwatches(patch) {
@@ -37,14 +47,20 @@ function colorSample(patch) {
 }
 
 function colorFields(patch) {
-  return ownKeys(patch).map((key) => ({ name: "locals." + key, value: patch[key] }));
+  return ownKeys(patch).map((key) => ({
+    name: "locals." + key,
+    value: patch[key],
+  }));
 }
 
 function fontFields(patch) {
   const fields = [];
   ownKeys(patch).forEach((key) => {
     ownKeys(patch[key]).forEach((property) => {
-      fields.push({ name: "locals." + key + "." + property, value: patch[key][property] });
+      fields.push({
+        name: "locals." + key + "." + property,
+        value: patch[key][property],
+      });
     });
   });
   return fields;
@@ -122,7 +138,9 @@ function presentFonts(map, locals) {
   Object.keys(map).forEach((id) => {
     try {
       const patch = map[id];
-      const samples = ownKeys(patch).map((key) => fontPreview(key, patch[key], locals));
+      const samples = ownKeys(patch).map((key) =>
+        fontPreview(key, patch[key], locals)
+      );
       if (!samples.length) return;
       const missing = missingFontIds(patch);
       const error = missing.length ? 'Unknown font "' + missing[0] + '"' : "";
@@ -161,18 +179,27 @@ function presentFonts(map, locals) {
           label: "Custom",
           selected: !selected,
           hidden: selected,
-          samples: ownKeys(current).map((key) => fontPreview(key, current[key], locals)),
+          samples: ownKeys(current).map((key) =>
+            fontPreview(key, current[key], locals)
+          ),
         }
       : null,
   };
 }
 
 function presentPresets(template) {
-  const locals = (template && isPlainObject(template.locals) && template.locals) || {};
+  const locals =
+    (template && isPlainObject(template.locals) && template.locals) || {};
   const presets = isPlainObject(locals.presets) ? locals.presets : {};
   return {
-    colors: presentColors(isPlainObject(presets.colors) ? presets.colors : {}, locals),
-    fonts: presentFonts(isPlainObject(presets.fonts) ? presets.fonts : {}, locals),
+    colors: presentColors(
+      isPlainObject(presets.colors) ? presets.colors : {},
+      locals
+    ),
+    fonts: presentFonts(
+      isPlainObject(presets.fonts) ? presets.fonts : {},
+      locals
+    ),
   };
 }
 

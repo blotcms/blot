@@ -56,7 +56,11 @@ describe("template", function () {
     await folder.mkdir(blogID, to);
 
     for await (const path of folder.walk(blogID, from)) {
-      await folder.write(blogID, to + path.slice(from.length), await folder.read(blogID, path));
+      await folder.write(
+        blogID,
+        to + path.slice(from.length),
+        await folder.read(blogID, path)
+      );
     }
   }
 
@@ -93,7 +97,8 @@ describe("template", function () {
     await installLocalTemplate(this);
     await buildFromFolder(this.blog.id);
 
-    await folder.move(this.blog.id,
+    await folder.move(
+      this.blog.id,
       templatesDir(this) + "/" + this.template.slug,
       templatesDir(this) + "/renamed"
     );
@@ -106,7 +111,8 @@ describe("template", function () {
     await installLocalTemplate(this);
     await buildFromFolder(this.blog.id);
 
-    await folder.move(this.blog.id,
+    await folder.move(
+      this.blog.id,
       templatesDir(this) + "/" + this.template.slug,
       "/.moved"
     );
@@ -115,10 +121,7 @@ describe("template", function () {
     // Nothing is dropped while we wait to see if it was a rename
     expect(await exists(this.template.id)).toEqual(true);
 
-    await folder.move(this.blog.id,
-      "/.moved",
-      templatesDir(this) + "/renamed"
-    );
+    await folder.move(this.blog.id, "/.moved", templatesDir(this) + "/renamed");
     await buildFromFolder(this.blog.id);
 
     await expectRenamed(this, "renamed");
@@ -128,13 +131,17 @@ describe("template", function () {
     await installLocalTemplate(this);
     await buildFromFolder(this.blog.id);
 
-    await copyFolder(this.blog.id,
+    await copyFolder(
+      this.blog.id,
       templatesDir(this) + "/" + this.template.slug,
       templatesDir(this) + "/renamed"
     );
     await buildFromFolder(this.blog.id);
 
-    await folder.remove(this.blog.id, templatesDir(this) + "/" + this.template.slug);
+    await folder.remove(
+      this.blog.id,
+      templatesDir(this) + "/" + this.template.slug
+    );
     await buildFromFolder(this.blog.id);
 
     await expectRenamed(this, "renamed");
@@ -142,15 +149,23 @@ describe("template", function () {
 
   it("migrates when the renamed folder's files were also edited", async function () {
     await installLocalTemplate(this);
-    await setView(this.template.id, { name: "entry.html", content: "<p>Entry</p>" });
+    await setView(this.template.id, {
+      name: "entry.html",
+      content: "<p>Entry</p>",
+    });
     await writeToFolder(this.blog.id, this.template.id);
     await buildFromFolder(this.blog.id);
 
-    await folder.move(this.blog.id,
+    await folder.move(
+      this.blog.id,
       templatesDir(this) + "/" + this.template.slug,
       templatesDir(this) + "/renamed"
     );
-    await folder.write(this.blog.id, templatesDir(this) + "/renamed/index.html", "<h1>Edited</h1>");
+    await folder.write(
+      this.blog.id,
+      templatesDir(this) + "/renamed/index.html",
+      "<h1>Edited</h1>"
+    );
     await buildFromFolder(this.blog.id);
 
     await expectRenamed(this, "renamed");
@@ -160,11 +175,16 @@ describe("template", function () {
     await installLocalTemplate(this);
     await buildFromFolder(this.blog.id);
 
-    await folder.remove(this.blog.id, templatesDir(this) + "/" + this.template.slug);
+    await folder.remove(
+      this.blog.id,
+      templatesDir(this) + "/" + this.template.slug
+    );
     await buildFromFolder(this.blog.id);
 
     // Still installed while we wait
-    expect((await getBlog({ id: this.blog.id })).template).toEqual(this.template.id);
+    expect((await getBlog({ id: this.blog.id })).template).toEqual(
+      this.template.id
+    );
 
     await expireWindow(this.blog.id);
     await buildFromFolder(this.blog.id);
@@ -181,7 +201,10 @@ describe("template", function () {
     await installLocalTemplate(this);
     await buildFromFolder(this.blog.id);
 
-    await folder.remove(this.blog.id, templatesDir(this) + "/" + this.template.slug);
+    await folder.remove(
+      this.blog.id,
+      templatesDir(this) + "/" + this.template.slug
+    );
     await buildFromFolder(this.blog.id);
     expect(await exists(this.template.id)).toEqual(true);
 
@@ -192,19 +215,26 @@ describe("template", function () {
 
     expect(await exists(this.template.id)).toEqual(false);
     expect(blog.template).not.toEqual(this.template.id);
-    expect(await client.hGetAll(folderRenames.pendingKey(this.blog.id))).toEqual({});
+    expect(
+      await client.hGetAll(folderRenames.pendingKey(this.blog.id))
+    ).toEqual({});
 
     // Nothing further happens once the window has passed
     await expireWindow(this.blog.id);
     await buildFromFolder(this.blog.id);
-    expect((await getBlog({ id: this.blog.id })).template).toEqual(blog.template);
+    expect((await getBlog({ id: this.blog.id })).template).toEqual(
+      blog.template
+    );
   });
 
   it("installs the default once the window has passed and the pending record is read back from Redis", async function () {
     await installLocalTemplate(this);
     await buildFromFolder(this.blog.id);
 
-    await folder.remove(this.blog.id, templatesDir(this) + "/" + this.template.slug);
+    await folder.remove(
+      this.blog.id,
+      templatesDir(this) + "/" + this.template.slug
+    );
     await buildFromFolder(this.blog.id);
 
     const pending = await folderRenames.readPending(this.blog.id);
@@ -213,14 +243,19 @@ describe("template", function () {
     await buildFromFolder(this.blog.id);
 
     expect(await exists(this.template.id)).toEqual(false);
-    expect((await getBlog({ id: this.blog.id })).template).not.toEqual(this.template.id);
+    expect((await getBlog({ id: this.blog.id })).template).not.toEqual(
+      this.template.id
+    );
   });
 
   it("keeps the pending record for longer than the rename window", async function () {
     await installLocalTemplate(this);
     await buildFromFolder(this.blog.id);
 
-    await folder.remove(this.blog.id, templatesDir(this) + "/" + this.template.slug);
+    await folder.remove(
+      this.blog.id,
+      templatesDir(this) + "/" + this.template.slug
+    );
     await buildFromFolder(this.blog.id);
 
     const ttl = await client.ttl(folderRenames.pendingKey(this.blog.id));
@@ -232,11 +267,16 @@ describe("template", function () {
     await installLocalTemplate(this);
     await buildFromFolder(this.blog.id);
 
-    await folder.move(this.blog.id,
+    await folder.move(
+      this.blog.id,
       templatesDir(this) + "/" + this.template.slug,
       templatesDir(this) + "/copy-a"
     );
-    await copyFolder(this.blog.id, templatesDir(this) + "/copy-a", templatesDir(this) + "/copy-b");
+    await copyFolder(
+      this.blog.id,
+      templatesDir(this) + "/copy-a",
+      templatesDir(this) + "/copy-b"
+    );
     await buildFromFolder(this.blog.id);
 
     const blog = await getBlog({ id: this.blog.id });
@@ -250,7 +290,8 @@ describe("template", function () {
     const shareID = await createShareID(this.template.id);
     await buildFromFolder(this.blog.id);
 
-    await folder.move(this.blog.id,
+    await folder.move(
+      this.blog.id,
       templatesDir(this) + "/" + this.template.slug,
       templatesDir(this) + "/renamed"
     );
@@ -290,8 +331,15 @@ describe("template", function () {
     await buildFromFolder(this.blog.id);
 
     const saved = "/.saved";
-    await copyFolder(this.blog.id, templatesDir(this) + "/" + this.template.slug, saved);
-    await folder.remove(this.blog.id, templatesDir(this) + "/" + this.template.slug);
+    await copyFolder(
+      this.blog.id,
+      templatesDir(this) + "/" + this.template.slug,
+      saved
+    );
+    await folder.remove(
+      this.blog.id,
+      templatesDir(this) + "/" + this.template.slug
+    );
     await buildFromFolder(this.blog.id);
     await expireWindow(this.blog.id);
 
@@ -307,17 +355,37 @@ describe("template", function () {
 
   it("does not adopt a template that only shares view names", async function () {
     await installLocalTemplate(this);
-    await setView(this.template.id, { name: "entry.html", content: "<p>Entry</p>" });
+    await setView(this.template.id, {
+      name: "entry.html",
+      content: "<p>Entry</p>",
+    });
     await writeToFolder(this.blog.id, this.template.id);
     await buildFromFolder(this.blog.id);
 
-    await folder.remove(this.blog.id, templatesDir(this) + "/" + this.template.slug);
-    await folder.write(this.blog.id, templatesDir(this) + "/other/index.html", "<h1>Different</h1>");
-    await folder.write(this.blog.id, templatesDir(this) + "/other/entry.html", "<p>Different</p>");
-    await folder.write(this.blog.id, templatesDir(this) + "/other/extra.html", "<p>Extra</p>");
+    await folder.remove(
+      this.blog.id,
+      templatesDir(this) + "/" + this.template.slug
+    );
+    await folder.write(
+      this.blog.id,
+      templatesDir(this) + "/other/index.html",
+      "<h1>Different</h1>"
+    );
+    await folder.write(
+      this.blog.id,
+      templatesDir(this) + "/other/entry.html",
+      "<p>Different</p>"
+    );
+    await folder.write(
+      this.blog.id,
+      templatesDir(this) + "/other/extra.html",
+      "<p>Extra</p>"
+    );
     await buildFromFolder(this.blog.id);
 
-    expect((await getBlog({ id: this.blog.id })).template).toEqual(this.template.id);
+    expect((await getBlog({ id: this.blog.id })).template).toEqual(
+      this.template.id
+    );
 
     await expireWindow(this.blog.id);
     await buildFromFolder(this.blog.id);
@@ -334,25 +402,38 @@ describe("template", function () {
 
     const dir = templatesDir(this) + "/" + this.template.slug;
     await folder.move(this.blog.id, dir, dir + "-tmp");
-    await folder.move(this.blog.id, dir + "-tmp", templatesDir(this) + "/" + this.template.slug.toUpperCase());
+    await folder.move(
+      this.blog.id,
+      dir + "-tmp",
+      templatesDir(this) + "/" + this.template.slug.toUpperCase()
+    );
     await buildFromFolder(this.blog.id);
     await expireWindow(this.blog.id);
     await buildFromFolder(this.blog.id);
 
     expect(await exists(this.template.id)).toEqual(true);
-    expect((await getBlog({ id: this.blog.id })).template).toEqual(this.template.id);
-    expect((await getMetadata(this.template.id)).slug).toEqual(this.template.slug.toUpperCase());
+    expect((await getBlog({ id: this.blog.id })).template).toEqual(
+      this.template.id
+    );
+    expect((await getMetadata(this.template.id)).slug).toEqual(
+      this.template.slug.toUpperCase()
+    );
   });
 
   it("migrates when the renamed folder's package.json enables itself", async function () {
     await installLocalTemplate(this);
     await buildFromFolder(this.blog.id);
 
-    await folder.move(this.blog.id,
+    await folder.move(
+      this.blog.id,
       templatesDir(this) + "/" + this.template.slug,
       templatesDir(this) + "/renamed"
     );
-    await folder.write(this.blog.id, templatesDir(this) + "/renamed/package.json", JSON.stringify({ enabled: true }));
+    await folder.write(
+      this.blog.id,
+      templatesDir(this) + "/renamed/package.json",
+      JSON.stringify({ enabled: true })
+    );
     await buildFromFolder(this.blog.id);
 
     await expectRenamed(this, "renamed");
@@ -362,20 +443,36 @@ describe("template", function () {
     await installLocalTemplate(this);
     await buildFromFolder(this.blog.id);
 
-    await folder.remove(this.blog.id, templatesDir(this) + "/" + this.template.slug);
-    await folder.write(this.blog.id, templatesDir(this) + "/other/index.html", "<h1>Different</h1>");
+    await folder.remove(
+      this.blog.id,
+      templatesDir(this) + "/" + this.template.slug
+    );
+    await folder.write(
+      this.blog.id,
+      templatesDir(this) + "/other/index.html",
+      "<h1>Different</h1>"
+    );
     await buildFromFolder(this.blog.id);
 
     // Still waiting: the unrelated template was not adopted
-    expect((await getBlog({ id: this.blog.id })).template).toEqual(this.template.id);
+    expect((await getBlog({ id: this.blog.id })).template).toEqual(
+      this.template.id
+    );
   });
 
   it("does not adopt an unrelated new template as the rename", async function () {
     await installLocalTemplate(this);
     await buildFromFolder(this.blog.id);
 
-    await folder.remove(this.blog.id, templatesDir(this) + "/" + this.template.slug);
-    await folder.write(this.blog.id, templatesDir(this) + "/other/other.html", "<p>Other</p>");
+    await folder.remove(
+      this.blog.id,
+      templatesDir(this) + "/" + this.template.slug
+    );
+    await folder.write(
+      this.blog.id,
+      templatesDir(this) + "/other/other.html",
+      "<p>Other</p>"
+    );
     await buildFromFolder(this.blog.id);
     await expireWindow(this.blog.id);
     await buildFromFolder(this.blog.id);
@@ -390,7 +487,10 @@ describe("template", function () {
     await installLocalTemplate(this, false);
     await buildFromFolder(this.blog.id);
 
-    await folder.remove(this.blog.id, templatesDir(this) + "/" + this.template.slug);
+    await folder.remove(
+      this.blog.id,
+      templatesDir(this) + "/" + this.template.slug
+    );
     await buildFromFolder(this.blog.id);
 
     expect(await exists(this.template.id)).toEqual(false);
@@ -407,7 +507,11 @@ describe("template", function () {
     await buildFromFolder(this.blog.id);
 
     expect(await exists(this.template.id)).toEqual(true);
-    expect(await client.hGetAll(folderRenames.pendingKey(this.blog.id))).toEqual({});
-    expect((await getBlog({ id: this.blog.id })).template).toEqual(this.template.id);
+    expect(
+      await client.hGetAll(folderRenames.pendingKey(this.blog.id))
+    ).toEqual({});
+    expect((await getBlog({ id: this.blog.id })).template).toEqual(
+      this.template.id
+    );
   });
 });

@@ -91,7 +91,7 @@ function main(blog, callback) {
             })
             .filter(function (id) {
               return !removeIDs.has(id);
-            }),
+            })
         );
         const menu = [];
 
@@ -119,7 +119,7 @@ function main(blog, callback) {
           callback(null, report);
         });
       });
-    },
+    }
   );
 }
 

@@ -2,7 +2,10 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
-const { parseStorageOffsite, STORAGE_OFFSITE_KEY } = require("../../../app/scheduler/check-redis-host");
+const {
+  parseStorageOffsite,
+  STORAGE_OFFSITE_KEY,
+} = require("../../../app/scheduler/check-redis-host");
 
 // Runs bin/offsite-sync.sh and bin/offsite-restore-test.sh against a fake
 // root and fake rclone, aws, flock and redis6-cli. The fake rclone answers
@@ -21,9 +24,12 @@ describe("storage offsite", function () {
     fs.writeFileSync(file(name), text);
     if (mode) fs.chmodSync(file(name), mode);
   };
-  const stub = (name, body) => write(`bin/${name}`, `#!/bin/sh\n${body}\n`, 0o755);
-  const read = (name) => (fs.existsSync(file(name)) ? fs.readFileSync(file(name), "utf8") : "");
-  const calls = () => read("rclone-calls").trimEnd().split("\n").filter(Boolean);
+  const stub = (name, body) =>
+    write(`bin/${name}`, `#!/bin/sh\n${body}\n`, 0o755);
+  const read = (name) =>
+    fs.existsSync(file(name)) ? fs.readFileSync(file(name), "utf8") : "";
+  const calls = () =>
+    read("rclone-calls").trimEnd().split("\n").filter(Boolean);
 
   beforeEach(function () {
     root = fs.mkdtempSync(path.join(os.tmpdir(), "offsite-"));
@@ -131,22 +137,34 @@ esac
       const result = sync();
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("quick sync of 2 blogs to B2 (1 gone from the bucket)");
+      expect(result.stdout).toContain(
+        "quick sync of 2 blogs to B2 (1 gone from the bucket)"
+      );
       expect(result.stdout).toContain("hid blog_gone, gone from the bucket");
 
       const syncs = calls().filter((c) => c.startsWith("sync "));
       expect(syncs.length).toBe(2);
       ["blog_a", "blog_b"].forEach((blog) => {
-        const mine = syncs.filter((c) => c.includes(` storage:test-storage/${blog} offsite:test-offsite/storage/${blog} |`));
+        const mine = syncs.filter((c) =>
+          c.includes(
+            ` storage:test-storage/${blog} offsite:test-offsite/storage/${blog} |`
+          )
+        );
         expect(mine.length).toBe(1);
         expect(mine[0]).toContain("--exclude /git/manifests/** ");
       });
-      expect(calls().filter((c) => c.startsWith("delete ") && !c.includes("--files-from-raw"))).toEqual([
+      expect(
+        calls().filter(
+          (c) => c.startsWith("delete ") && !c.includes("--files-from-raw")
+        )
+      ).toEqual([
         jasmine.stringMatching(/ offsite:test-offsite\/storage\/blog_gone \|/),
       ]);
 
       const set = read("redis-calls").trim();
-      expect(set).toMatch(/^SET blot:storage:offsite \d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ 6 2000000000000$/);
+      expect(set).toMatch(
+        /^SET blot:storage:offsite \d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ 6 2000000000000$/
+      );
       expect(STORAGE_OFFSITE_KEY).toBe("blot:storage:offsite");
       const record = parseStorageOffsite(set.split(" ").slice(2).join(" "));
       expect(record.objects).toBe(6);
@@ -158,7 +176,11 @@ esac
     it("copies a git blog's manifests listed before its packs, last, and hides the swept ones", function () {
       expect(sync().status).toBe(0);
       const order = calls()
-        .filter((c) => c.includes("storage/blog_a") || c.includes("storage:test-storage/blog_a"))
+        .filter(
+          (c) =>
+            c.includes("storage/blog_a") ||
+            c.includes("storage:test-storage/blog_a")
+        )
         .map((c) => c.split(" ")[0]);
       // latest.json and the list of manifests before the packs are synced,
       // then only the listed manifests, then latest.json as it was read
@@ -166,15 +188,23 @@ esac
       expect(order.indexOf("lsf")).toBeLessThan(order.indexOf("sync"));
       expect(order.indexOf("sync")).toBeLessThan(order.indexOf("copy"));
       expect(order.indexOf("copy")).toBeLessThan(order.indexOf("rcat"));
-      expect(read("files-from.copy")).toBe("git/manifests/0000000002.json\ngit/manifests/0000000003.json\n");
+      expect(read("files-from.copy")).toBe(
+        "git/manifests/0000000002.json\ngit/manifests/0000000003.json\n"
+      );
       expect(read("rcat")).toBe('{"seq":3}\n');
       expect(read("files-from.delete")).toBe("git/manifests/0000000001.json\n");
       // blog_b has no git store: no manifest copy, upload or hide
-      expect(calls().filter((c) => c.includes("blog_b") && /^(copy|rcat|delete) /.test(c))).toEqual([]);
+      expect(
+        calls().filter(
+          (c) => c.includes("blog_b") && /^(copy|rcat|delete) /.test(c)
+        )
+      ).toEqual([]);
     });
 
     it("leaves latest.json alone when B2's matches", function () {
-      expect(sync([], { S3_MANIFESTS: "0000000002.json\\nlatest.json\\n" }).status).toBe(0);
+      expect(
+        sync([], { S3_MANIFESTS: "0000000002.json\\nlatest.json\\n" }).status
+      ).toBe(0);
       expect(read("files-from.copy")).toBe("git/manifests/0000000002.json\n");
       expect(read("files-from.delete")).toBe("git/manifests/0000000001.json\n");
     });
@@ -209,7 +239,11 @@ esac
       sync(["--quick"]);
       calls()
         .filter((c) => c.startsWith("sync "))
-        .forEach((c) => expect(c).toContain("--fast-list --transfers 4 --checkers 8 --bwlimit 10M"));
+        .forEach((c) =>
+          expect(c).toContain(
+            "--fast-list --transfers 4 --checkers 8 --bwlimit 10M"
+          )
+        );
       calls()
         .filter((c) => c.startsWith("sync "))
         .forEach((c) => expect(c).toContain("--update --use-server-modtime"));
@@ -230,7 +264,9 @@ esac
       fs.rmSync(file("etc/blot/storage-offsite-bucket"));
       let result = sync();
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("off (no bucket in /etc/blot/storage-offsite-bucket)");
+      expect(result.stdout).toContain(
+        "off (no bucket in /etc/blot/storage-offsite-bucket)"
+      );
 
       write("etc/blot/storage-offsite-bucket", "test-offsite\n");
       write("etc/blot/drill", "");
@@ -262,9 +298,15 @@ esac
       const result = sync(["--quick"], { BLOT_STORAGE_OFFSITE_MAX_HIDE: "0" });
 
       expect(result.status).toBe(1);
-      expect(result.stdout).toContain("1 blogs are in B2 but not in the bucket, more than 0: hiding none of them");
+      expect(result.stdout).toContain(
+        "1 blogs are in B2 but not in the bucket, more than 0: hiding none of them"
+      );
       // Only blog_a's swept manifest, never a whole blog
-      expect(calls().filter((c) => c.startsWith("delete ") && !c.includes("--files-from-raw"))).toEqual([]);
+      expect(
+        calls().filter(
+          (c) => c.startsWith("delete ") && !c.includes("--files-from-raw")
+        )
+      ).toEqual([]);
       expect(calls().filter((c) => c.startsWith("sync ")).length).toBe(2);
       expect(read("redis-calls")).toBe("");
     });
@@ -277,7 +319,9 @@ esac
 
       result = sync([], { LIST_FAILS: "1" });
       expect(result.status).toBe(1);
-      expect(result.stdout).toContain("could not list the storage bucket: AccessDenied");
+      expect(result.stdout).toContain(
+        "could not list the storage bucket: AccessDenied"
+      );
       expect(calls().filter((c) => /^(sync|delete) /.test(c))).toEqual([]);
     });
 
@@ -291,7 +335,9 @@ esac
     it("fails without the B2 profile, saying so", function () {
       const result = sync([], { NO_PROFILE: "1" });
       expect(result.status).toBe(1);
-      expect(result.stdout).toContain("WARNING: no blot-b2-storage profile with a key in ~/.aws/credentials");
+      expect(result.stdout).toContain(
+        "WARNING: no blot-b2-storage profile with a key in ~/.aws/credentials"
+      );
       expect(calls()).toEqual([]);
     });
 
@@ -313,9 +359,13 @@ esac
       const result = restore(["blog_a"]);
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("Last recorded sync: 2026-11-05T02:40:00Z 10 1000");
+      expect(result.stdout).toContain(
+        "Last recorded sync: 2026-11-05T02:40:00Z 10 1000"
+      );
       expect(result.stdout).toContain("2 match");
-      expect(result.stdout).toContain("OK: the copy of blog_a/folder matches the bucket");
+      expect(result.stdout).toContain(
+        "OK: the copy of blog_a/folder matches the bucket"
+      );
 
       const copy = calls().find((c) => c.startsWith("copy "));
       expect(copy).toContain("offsite:test-offsite/storage/blog_a/folder ");
@@ -327,25 +377,37 @@ esac
     it("is read-only: no sync, delete or Redis write", function () {
       restore(["blog_a", "git"]);
       calls().forEach((c) => expect(c).toMatch(/^(copy|check|size|lsf) /));
-      expect(calls().find((c) => c.startsWith("copy "))).toContain("offsite:test-offsite/storage/blog_a/git ");
+      expect(calls().find((c) => c.startsWith("copy "))).toContain(
+        "offsite:test-offsite/storage/blog_a/git "
+      );
       expect(read("redis-calls").trim()).toBe("GET blot:storage:offsite");
       // The scratch directory is gone afterwards
-      expect(fs.readdirSync(file("tmp")).filter((f) => f.startsWith("blot-offsite-restore"))).toEqual([]);
+      expect(
+        fs
+          .readdirSync(file("tmp"))
+          .filter((f) => f.startsWith("blot-offsite-restore"))
+      ).toEqual([]);
     });
 
     it("lists each difference with the bucket's time, and fails", function () {
       // rclone check: "+" is missing on the destination (the copy), "-"
       // missing on the source (the bucket)
-      const result = restore(["blog_a"], { CHECK: "= a.txt\\n* b.txt\\n+ c.txt\\n- d.txt\\n" });
+      const result = restore(["blog_a"], {
+        CHECK: "= a.txt\\n* b.txt\\n+ c.txt\\n- d.txt\\n",
+      });
 
       expect(result.status).toBe(1);
       expect(result.stdout).toContain("1 match");
       expect(result.stdout).toContain("1 differ");
       expect(result.stdout).toContain("1 in the bucket but not in the copy");
-      expect(result.stdout).toContain("1 in the copy but no longer in the bucket");
+      expect(result.stdout).toContain(
+        "1 in the copy but no longer in the bucket"
+      );
       expect(result.stdout).toContain("* b.txt  (bucket: 2026-11-05 09:00:00)");
       expect(result.stdout).toContain("+ c.txt");
-      expect(result.stdout).toContain("+ only in the bucket, - only in the copy");
+      expect(result.stdout).toContain(
+        "+ only in the bucket, - only in the copy"
+      );
       expect(result.stdout).toContain("FAILED");
     });
 
@@ -399,14 +461,28 @@ esac
 
         expect(result.status).toBe(0);
         expect(result.stdout).toContain("Sampled 1 git blogs from B2");
-        expect(result.stdout).toContain("OK: the restored repositories pass the store check");
+        expect(result.stdout).toContain(
+          "OK: the restored repositories pass the store check"
+        );
         // blog_a is the only blog in B2 with a git/ directory
-        expect(read("checked").trim().split("\n")).toEqual(["blog_a", "blog_gt", "blog_named"]);
+        expect(read("checked").trim().split("\n")).toEqual([
+          "blog_a",
+          "blog_gt",
+          "blog_named",
+        ]);
         ["blog_a", "blog_gt", "blog_named"].forEach((blog) =>
-          expect(calls().some((c) => c.startsWith(`copy `) && c.includes(` offsite:test-offsite/storage/${blog}/git `))).toBe(true)
+          expect(
+            calls().some(
+              (c) =>
+                c.startsWith(`copy `) &&
+                c.includes(` offsite:test-offsite/storage/${blog}/git `)
+            )
+          ).toBe(true)
         );
         const dir = read("docker-calls").match(/--dir (\S+)/)[1];
-        expect(dir.startsWith(file("var/instance-ssd/tmp/blot-offsite-restore."))).toBe(true);
+        expect(
+          dir.startsWith(file("var/instance-ssd/tmp/blot-offsite-restore."))
+        ).toBe(true);
         expect(dir).toMatch(/\/repos$/);
         // Deep clones go to scratch space beside it, on the instance store
         const scratch = read("docker-calls").match(/--scratch (\S+)/)[1];
@@ -417,7 +493,10 @@ esac
       it("is read-only", function () {
         restore(["--git"]);
         calls().forEach((c) => expect(c).toMatch(/^(copy|lsf) /));
-        expect(read("redis-calls").trim().split("\n")).toEqual(["GET handle:gittest", "GET blot:storage:offsite"]);
+        expect(read("redis-calls").trim().split("\n")).toEqual([
+          "GET handle:gittest",
+          "GET blot:storage:offsite",
+        ]);
       });
 
       it("fails with the checker's findings, saying to rerun after the next sync", function () {
@@ -429,12 +508,16 @@ esac
       it("is skipped, with a message, when the unit has no checker", function () {
         const result = restore(["--git"], { NO_CHECKER: "1" });
         expect(result.status).toBe(0);
-        expect(result.stdout).toContain("Skipped: blot-blue has no scripts/git/check-store.js");
+        expect(result.stdout).toContain(
+          "Skipped: blot-blue has no scripts/git/check-store.js"
+        );
         expect(calls()).toEqual([]);
       });
 
       it("works without a gittest blog or a sample", function () {
-        const result = restore(["--git", "--sample", "0", "blog_named"], { GITTEST: "" });
+        const result = restore(["--git", "--sample", "0", "blog_named"], {
+          GITTEST: "",
+        });
         expect(result.status).toBe(0);
         expect(result.stdout).toContain("No gittest blog in Redis");
         expect(read("checked").trim()).toBe("blog_named");

@@ -13,7 +13,7 @@ var BRAND_NAMES = {
   discover: "Discover",
   diners: "Diners Club",
   jcb: "JCB",
-  unionpay: "UnionPay"
+  unionpay: "UnionPay",
 };
 
 function presentPaymentMethods(req, paymentMethods) {
@@ -23,7 +23,7 @@ function presentPaymentMethods(req, paymentMethods) {
     return Object.assign({}, paymentMethod, {
       brandPretty: BRAND_NAMES[paymentMethod.brand] || "Card",
       defaultUrl: req.baseUrl + "/" + paymentMethod.id + "/default",
-      removeUrl: req.baseUrl + "/" + paymentMethod.id + "/remove"
+      removeUrl: req.baseUrl + "/" + paymentMethod.id + "/remove",
     });
   });
 }
@@ -69,7 +69,7 @@ PaymentMethod.route("/")
       return res.render("dashboard/account/payment-method", {
         breadcrumb: "Payment methods",
         title: "Payment methods",
-        paypal: true
+        paypal: true,
       });
     }
 
@@ -81,7 +81,7 @@ PaymentMethod.route("/")
         breadcrumb: "Payment methods",
         title: "Payment methods",
         paymentMethods: presentPaymentMethods(req, paymentMethods),
-        hasPaymentMethods: paymentMethods.length > 0
+        hasPaymentMethods: paymentMethods.length > 0,
       });
     });
   })
@@ -90,7 +90,8 @@ PaymentMethod.route("/")
   // account-card-form.js). We turn that token into a PaymentMethod and
   // attach it to the customer.
   .post(function (req, res, next) {
-    if (!req.body.stripeToken) return next(new Error("No card details submitted"));
+    if (!req.body.stripeToken)
+      return next(new Error("No card details submitted"));
 
     var stripe = getStripeClient();
     if (!stripe) return next(new Error("Stripe is not configured"));
@@ -141,7 +142,7 @@ PaymentMethod.route("/")
         payment_method: req.newPaymentMethodId,
         invoice_settings: { default_payment_method: req.newPaymentMethodId },
         email: req.user.email,
-        description: "Blot subscription"
+        description: "Blot subscription",
       },
       function (err, customer) {
         if (err) return next(err);
@@ -156,7 +157,7 @@ PaymentMethod.route("/")
           {
             plan: req.user.subscription.plan && req.user.subscription.plan.id,
             quantity: 0,
-            default_payment_method: req.newPaymentMethodId
+            default_payment_method: req.newPaymentMethodId,
           },
           function (err, subscription) {
             if (err) return next(err);
@@ -203,16 +204,21 @@ PaymentMethod.route("/")
         return res.message(req.baseUrl, "Your payment method was added");
       }
 
-      makeDefault(stripe, req.user, { id: req.newPaymentMethodId }, function (err) {
-        if (err) return next(err);
-
-        syncPaymentMethods(req.user, function (err) {
+      makeDefault(
+        stripe,
+        req.user,
+        { id: req.newPaymentMethodId },
+        function (err) {
           if (err) return next(err);
 
-          email.UPDATE_BILLING(req.user.uid);
-          res.message(req.baseUrl, "Your payment method was added");
-        });
-      });
+          syncPaymentMethods(req.user, function (err) {
+            if (err) return next(err);
+
+            email.UPDATE_BILLING(req.user.uid);
+            res.message(req.baseUrl, "Your payment method was added");
+          });
+        }
+      );
     });
   });
 
@@ -220,73 +226,80 @@ PaymentMethod.route("/:id/default").post(function (req, res, next) {
   var stripe = getStripeClient();
   if (!stripe) return next(new Error("Stripe is not configured"));
 
-  findOwnedPaymentMethod(req.user, req.params.id, function (err, paymentMethod) {
-    if (err) return next(err);
-    if (!paymentMethod) return next(new Error("Payment method not found"));
-
-    if (paymentMethod.isDefault)
-      return res.message(req.baseUrl, "That's already your default payment method");
-
-    makeDefault(stripe, req.user, paymentMethod, function (err) {
+  findOwnedPaymentMethod(
+    req.user,
+    req.params.id,
+    function (err, paymentMethod) {
       if (err) return next(err);
+      if (!paymentMethod) return next(new Error("Payment method not found"));
 
-      syncPaymentMethods(req.user, function (err) {
+      if (paymentMethod.isDefault)
+        return res.message(
+          req.baseUrl,
+          "That's already your default payment method"
+        );
+
+      makeDefault(stripe, req.user, paymentMethod, function (err) {
         if (err) return next(err);
 
-        res.message(req.baseUrl, "Updated your default payment method");
+        syncPaymentMethods(req.user, function (err) {
+          if (err) return next(err);
+
+          res.message(req.baseUrl, "Updated your default payment method");
+        });
       });
-    });
-  });
+    }
+  );
 });
 
 PaymentMethod.route("/:id/remove").post(function (req, res, next) {
   var stripe = getStripeClient();
   if (!stripe) return next(new Error("Stripe is not configured"));
 
-  findOwnedPaymentMethod(req.user, req.params.id, function (
-    err,
-    paymentMethod,
-    paymentMethods
-  ) {
-    if (err) return next(err);
-    if (!paymentMethod) return next(new Error("Payment method not found"));
-
-    // Best practice: a default payment method can't be removed directly -
-    // the customer has to choose a different default first. When it's also
-    // their only payment method, removing it would leave nothing on file
-    // to charge their subscription, so we're explicit about that instead.
-    if (paymentMethod.isDefault) {
-      return next(
-        new Error(
-          paymentMethods.length <= 1
-            ? "This is your only payment method. Removing it would cancel your subscription - add another payment method first, or cancel your subscription instead."
-            : "Your default payment method can't be removed. Set a different payment method as default first."
-        )
-      );
-    }
-
-    var detach = paymentMethod.isLegacy
-      ? function (cb) {
-          stripe.customers.deleteCard(
-            req.user.subscription.customer,
-            paymentMethod.id,
-            cb
-          );
-        }
-      : function (cb) {
-          stripe.paymentMethods.detach(paymentMethod.id, cb);
-        };
-
-    detach(function (err) {
+  findOwnedPaymentMethod(
+    req.user,
+    req.params.id,
+    function (err, paymentMethod, paymentMethods) {
       if (err) return next(err);
+      if (!paymentMethod) return next(new Error("Payment method not found"));
 
-      syncPaymentMethods(req.user, function (err) {
+      // Best practice: a default payment method can't be removed directly -
+      // the customer has to choose a different default first. When it's also
+      // their only payment method, removing it would leave nothing on file
+      // to charge their subscription, so we're explicit about that instead.
+      if (paymentMethod.isDefault) {
+        return next(
+          new Error(
+            paymentMethods.length <= 1
+              ? "This is your only payment method. Removing it would cancel your subscription - add another payment method first, or cancel your subscription instead."
+              : "Your default payment method can't be removed. Set a different payment method as default first."
+          )
+        );
+      }
+
+      var detach = paymentMethod.isLegacy
+        ? function (cb) {
+            stripe.customers.deleteCard(
+              req.user.subscription.customer,
+              paymentMethod.id,
+              cb
+            );
+          }
+        : function (cb) {
+            stripe.paymentMethods.detach(paymentMethod.id, cb);
+          };
+
+      detach(function (err) {
         if (err) return next(err);
 
-        res.message(req.baseUrl, "Removed your payment method");
+        syncPaymentMethods(req.user, function (err) {
+          if (err) return next(err);
+
+          res.message(req.baseUrl, "Removed your payment method");
+        });
       });
-    });
-  });
+    }
+  );
 });
 
 // We only ever act on a payment method we've just fetched from Stripe for
@@ -318,7 +331,7 @@ function makeDefault(stripe, user, paymentMethod, callback) {
       user.subscription.customer,
       {
         default_source: paymentMethod.id,
-        invoice_settings: { default_payment_method: "" }
+        invoice_settings: { default_payment_method: "" },
       },
       function (err) {
         if (err) return callback(err);

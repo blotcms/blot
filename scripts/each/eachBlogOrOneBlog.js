@@ -5,7 +5,7 @@ const getConfirmation = require("../util/getConfirmation");
 
 /**
  * Processes either a single blog (if identifier provided) or all blogs (if no identifier).
- * 
+ *
  * @param {Function} processBlog - Async function that takes a blog object and processes it
  * @param {Object} [options]
  * @param {boolean} [options.confirm=true] - Ask before processing all blogs. Pass
@@ -38,7 +38,9 @@ module.exports = function eachBlogOrOneBlog(processBlog, options = {}) {
         }
 
         const blogCount = blogIDs.length;
-        console.log(`Found ${blogCount} blog${blogCount !== 1 ? "s" : ""} to process.`);
+        console.log(
+          `Found ${blogCount} blog${blogCount !== 1 ? "s" : ""} to process.`
+        );
 
         // Ask for confirmation, then process
         const confirmation =
@@ -66,7 +68,10 @@ module.exports = function eachBlogOrOneBlog(processBlog, options = {}) {
                     next();
                   })
                   .catch((err) => {
-                    console.error(`Error processing blog ${blog.id}:`, err.message);
+                    console.error(
+                      `Error processing blog ${blog.id}:`,
+                      err.message
+                    );
                     next();
                   });
               },

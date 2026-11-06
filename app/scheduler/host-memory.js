@@ -10,7 +10,9 @@ const fs = require("fs");
 // { total, available } in bytes, or null if the text has neither.
 function parse(text) {
   const kb = (name) => {
-    const match = new RegExp("^" + name + ":\\s+(\\d+)\\s*kB", "m").exec(String(text));
+    const match = new RegExp("^" + name + ":\\s+(\\d+)\\s*kB", "m").exec(
+      String(text)
+    );
     return match ? Number(match[1]) * 1024 : null;
   };
   const total = kb("MemTotal");

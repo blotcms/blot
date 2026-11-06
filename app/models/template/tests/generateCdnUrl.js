@@ -28,7 +28,9 @@ describe("template", function () {
     const hash = "feedface1234567890feedface12345678";
     const url = generateCdnUrl("robots", hash);
 
-    expect(url).toBe(`${config.cdn.origin}/template/fe/ed/face1234567890feedface12345678/robots`);
+    expect(url).toBe(
+      `${config.cdn.origin}/template/fe/ed/face1234567890feedface12345678/robots`
+    );
   });
 
   it("throws for invalid arguments", function () {
@@ -45,4 +47,3 @@ describe("template", function () {
     );
   });
 });
-

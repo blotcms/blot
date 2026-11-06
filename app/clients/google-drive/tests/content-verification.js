@@ -6,8 +6,8 @@ const vm = require("vm");
 const verify = require("../util/verifyContent");
 const fingerprint = require("../util/contentFingerprint");
 const checksum = require("../util/md5Checksum");
-const digest = value => crypto.createHash("md5").update(value).digest("hex");
-const sha1 = value => crypto.createHash("sha1").update(value).digest("hex");
+const digest = (value) => crypto.createHash("md5").update(value).digest("hex");
+const sha1 = (value) => crypto.createHash("sha1").update(value).digest("hex");
 
 describe("Drive verified content on disk", function () {
   let directory, filename;
@@ -16,7 +16,9 @@ describe("Drive verified content on disk", function () {
     filename = join(directory, "entry.txt");
     await fs.writeFile(filename, "aaaa");
   });
-  afterEach(async function () { await fs.remove(directory); });
+  afterEach(async function () {
+    await fs.remove(directory);
+  });
 
   it("gives a matching checksum with the file's SHA-1, from one read", async function () {
     expect(await verify(filename, digest("aaaa"))).toEqual({
@@ -33,7 +35,10 @@ describe("Drive verified content on disk", function () {
 
   it("hashes a file with both MD5 and SHA-1, or gives null for one it can't read", async function () {
     expect(await checksum(filename)).toBe(digest("aaaa"));
-    expect(await checksum.withSha1(filename)).toEqual({ md5: digest("aaaa"), sha1: sha1("aaaa") });
+    expect(await checksum.withSha1(filename)).toEqual({
+      md5: digest("aaaa"),
+      sha1: sha1("aaaa"),
+    });
     expect(await checksum.withSha1(directory)).toBeNull();
     expect(await checksum(join(directory, "missing"))).toBeNull();
   });
@@ -58,20 +63,24 @@ describe("Drive verified content on disk", function () {
   it("declines verification if the file changes while its checksum is being established", async function () {
     const module = { exports: {} };
     const racingChecksum = {
-      withSha1: async path => {
+      withSha1: async (path) => {
         const result = await checksum.withSha1(path);
         await fs.writeFile(path, "bbbb");
         return result;
       },
     };
-    vm.runInNewContext(fs.readFileSync(require.resolve("../util/verifyContent"), "utf8"), {
-      module,
-      require: name => ({
-        "fs-extra": fs,
-        "./contentFingerprint": fingerprint,
-        "./md5Checksum": racingChecksum,
-      })[name],
-    });
+    vm.runInNewContext(
+      fs.readFileSync(require.resolve("../util/verifyContent"), "utf8"),
+      {
+        module,
+        require: (name) =>
+          ({
+            "fs-extra": fs,
+            "./contentFingerprint": fingerprint,
+            "./md5Checksum": racingChecksum,
+          })[name],
+      }
+    );
     expect(await module.exports(filename, digest("aaaa"))).toBeNull();
   });
 

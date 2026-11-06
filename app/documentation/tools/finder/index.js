@@ -46,9 +46,9 @@ function html_parser($) {
     if ($(el).hasClass("text")) renderer = render_text_editor;
     if ($(el).hasClass("code")) renderer = render_code_editor;
     if ($(el).hasClass("folder")) renderer = render_folder;
-    
+
     if (!renderer) return;
-    
+
     var html = renderer(source.html(), classes, title);
 
     $(el).replaceWith(html);

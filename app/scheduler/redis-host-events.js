@@ -59,7 +59,8 @@ function parseInfo(text) {
     .split(/\r?\n/)
     .forEach((line) => {
       const i = line.indexOf(":");
-      if (i > 0 && line[0] !== "#") fields[line.slice(0, i)] = line.slice(i + 1).trim();
+      if (i > 0 && line[0] !== "#")
+        fields[line.slice(0, i)] = line.slice(i + 1).trim();
     });
   return fields;
 }
@@ -75,7 +76,8 @@ function parseErrors(fields) {
   return errors;
 }
 
-const text = (value) => (Buffer.isBuffer(value) ? value.toString() : String(value));
+const text = (value) =>
+  Buffer.isBuffer(value) ? value.toString() : String(value);
 
 // SLOWLOG GET reply: [[id, unix seconds, microseconds, [command, args...],
 // client address, client name], ...], newest first.
@@ -99,7 +101,9 @@ function parseSlowlog(reply) {
 // COMMAND_CHARS; only commands over SLOWLOG_ALERT_US are reported.
 function describeCommand(args) {
   const shown = args.slice(0, 3).join(" ").replace(/\s+/g, " ");
-  return shown.length > COMMAND_CHARS ? shown.slice(0, COMMAND_CHARS - 1) + "…" : shown;
+  return shown.length > COMMAND_CHARS
+    ? shown.slice(0, COMMAND_CHARS - 1) + "…"
+    : shown;
 }
 
 // The counters to compare with next time.
@@ -141,9 +145,16 @@ function detect(previous, current, { sample = null, now = Date.now() } = {}) {
 
   const reasons = [];
   if (current.uptime < previous.uptime) reasons.push("uptime went backwards");
-  if (current.runId && previous.runId && current.runId !== previous.runId) reasons.push("run_id changed");
-  if (current.version && previous.version && current.version !== previous.version) {
-    reasons.push(`version changed from ${previous.version} to ${current.version}`);
+  if (current.runId && previous.runId && current.runId !== previous.runId)
+    reasons.push("run_id changed");
+  if (
+    current.version &&
+    previous.version &&
+    current.version !== previous.version
+  ) {
+    reasons.push(
+      `version changed from ${previous.version} to ${current.version}`
+    );
   }
 
   // Slowlog ids count up from 0 in each process, and SLOWLOG RESET starts
@@ -180,13 +191,16 @@ function detect(previous, current, { sample = null, now = Date.now() } = {}) {
       if (CRITICAL_ERRORS.includes(type)) critical[type] = delta;
       else if (delta >= ERROR_ALERT_COUNT) other[type] = delta;
     });
-    if (Object.keys(critical).length) events["errors-critical"] = { counts: critical };
+    if (Object.keys(critical).length)
+      events["errors-critical"] = { counts: critical };
     if (Object.keys(other).length) events.errors = { counts: other };
   }
 
   const slow = current.slowlog.filter((entry) => {
     if (entry.id <= lastSlowId) return false;
-    const fork = FORK_COMMANDS.includes(String(entry.args[0] || "").toUpperCase());
+    const fork = FORK_COMMANDS.includes(
+      String(entry.args[0] || "").toUpperCase()
+    );
     return entry.us >= (fork ? FORK_ALERT_US : SLOWLOG_ALERT_US);
   });
   if (slow.length) {
@@ -195,7 +209,11 @@ function detect(previous, current, { sample = null, now = Date.now() } = {}) {
       worst: slow
         .sort((a, b) => b.us - a.us)
         .slice(0, SLOWLOG_LISTED)
-        .map((entry) => ({ us: entry.us, at: entry.at, command: describeCommand(entry.args) })),
+        .map((entry) => ({
+          us: entry.us,
+          at: entry.at,
+          command: describeCommand(entry.args),
+        })),
     };
   }
 
@@ -204,20 +222,30 @@ function detect(previous, current, { sample = null, now = Date.now() } = {}) {
 
 const sumCounts = (a, b) => {
   const counts = { ...a };
-  Object.keys(b).forEach((type) => (counts[type] = (counts[type] || 0) + b[type]));
+  Object.keys(b).forEach(
+    (type) => (counts[type] = (counts[type] || 0) + b[type])
+  );
   return counts;
 };
 
 // How to combine an event waiting for its cooldown with a newer one.
 const merge = {
-  "tcp-pressure": (a, b) => ({ from: Math.min(a.from, b.from), to: Math.max(a.to, b.to) }),
+  "tcp-pressure": (a, b) => ({
+    from: Math.min(a.from, b.from),
+    to: Math.max(a.to, b.to),
+  }),
   "errors-critical": (a, b) => ({ counts: sumCounts(a.counts, b.counts) }),
   errors: (a, b) => ({ counts: sumCounts(a.counts, b.counts) }),
   rejected: (a, b) => ({ count: a.count + b.count }),
-  restart: (a, b) => ({ incidents: a.incidents.concat(b.incidents).slice(-RESTARTS_LISTED) }),
+  restart: (a, b) => ({
+    incidents: a.incidents.concat(b.incidents).slice(-RESTARTS_LISTED),
+  }),
   slowlog: (a, b) => ({
     count: a.count + b.count,
-    worst: a.worst.concat(b.worst).sort((x, y) => y.us - x.us).slice(0, SLOWLOG_LISTED),
+    worst: a.worst
+      .concat(b.worst)
+      .sort((x, y) => y.us - x.us)
+      .slice(0, SLOWLOG_LISTED),
   }),
 };
 

@@ -6,7 +6,9 @@ describe("import download stages", function () {
   const downloadPdfs = require("../download_pdfs");
 
   const run = (stage, post) =>
-    new Promise((resolve, reject) => stage(post, (err, result) => (err ? reject(err) : resolve(result))));
+    new Promise((resolve, reject) =>
+      stage(post, (err, result) => (err ? reject(err) : resolve(result)))
+    );
 
   const image = (format) => (request) => ({
     ok: true,
@@ -61,7 +63,9 @@ describe("import download stages", function () {
 
   it("fetches a lone image by itself, with no batch", async function () {
     post.html = '<img src="https://example.com/one.png">';
-    spyOn(sandboxFetch, "many").and.callFake(async (requests) => requests.map(image("png")));
+    spyOn(sandboxFetch, "many").and.callFake(async (requests) =>
+      requests.map(image("png"))
+    );
 
     await run(downloadImages, post);
 
@@ -76,7 +80,13 @@ describe("import download stages", function () {
       requests.map((request) =>
         request.url.endsWith("b.mp3")
           ? refused()
-          : { ok: true, status: 200, kind: "file", data: Buffer.from("song"), headers: {} }
+          : {
+              ok: true,
+              status: 200,
+              kind: "file",
+              data: Buffer.from("song"),
+              headers: {},
+            }
       )
     );
     spyOn(console, "log");
@@ -85,8 +95,16 @@ describe("import download stages", function () {
 
     expect(sandboxFetch.batch).toHaveBeenCalledTimes(1);
     expect(sandboxFetch.batch.calls.argsFor(0)[0]).toEqual([
-      jasmine.objectContaining({ url: "https://example.com/a.mp3", kind: "file", check: "audio" }),
-      jasmine.objectContaining({ url: "https://example.com/b.mp3", kind: "file", check: "audio" }),
+      jasmine.objectContaining({
+        url: "https://example.com/a.mp3",
+        kind: "file",
+        check: "audio",
+      }),
+      jasmine.objectContaining({
+        url: "https://example.com/b.mp3",
+        kind: "file",
+        check: "audio",
+      }),
     ]);
     expect(result.html).toContain('src="_a.mp3"');
     expect(result.html).toContain('src="https://example.com/b.mp3"');
@@ -96,14 +114,22 @@ describe("import download stages", function () {
     post.html =
       '<a href="https://example.com/a.pdf">a</a><a href="https://example.com/page.html">page</a><a href="https://example.com/b.pdf">b</a>';
     spyOn(sandboxFetch, "batch").and.callFake(async (requests) =>
-      requests.map(() => ({ ok: true, status: 200, kind: "file", data: Buffer.from("%PDF-1"), headers: {} }))
+      requests.map(() => ({
+        ok: true,
+        status: 200,
+        kind: "file",
+        data: Buffer.from("%PDF-1"),
+        headers: {},
+      }))
     );
     spyOn(console, "log");
 
     const result = await run(downloadPdfs, post);
 
     expect(sandboxFetch.batch).toHaveBeenCalledTimes(1);
-    expect(sandboxFetch.batch.calls.argsFor(0)[0].map((r) => [r.url, r.check])).toEqual([
+    expect(
+      sandboxFetch.batch.calls.argsFor(0)[0].map((r) => [r.url, r.check])
+    ).toEqual([
       ["https://example.com/a.pdf", "pdf"],
       ["https://example.com/b.pdf", "pdf"],
     ]);

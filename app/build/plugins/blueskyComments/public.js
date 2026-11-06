@@ -28,7 +28,8 @@ const getPostUrl = (authorDid, rkey) => {
   return `https://bsky.app/profile/${authorDid}/post/${rkey}`;
 };
 
-const sortByLikeCount = (a, b) => (b.post.likeCount || 0) - (a.post.likeCount || 0);
+const sortByLikeCount = (a, b) =>
+  (b.post.likeCount || 0) - (a.post.likeCount || 0);
 
 const getTemplate = (id) => {
   const template = document.getElementById(id);
@@ -39,8 +40,10 @@ const getTemplate = (id) => {
 const renderPostActions = (post) => {
   const fragment = getTemplate("template-post-actions");
   fragment.querySelector("[data-like-count]").textContent = post.likeCount || 0;
-  fragment.querySelector("[data-repost-count]").textContent = post.repostCount || 0;
-  fragment.querySelector("[data-reply-count]").textContent = post.replyCount || 0;
+  fragment.querySelector("[data-repost-count]").textContent =
+    post.repostCount || 0;
+  fragment.querySelector("[data-reply-count]").textContent =
+    post.replyCount || 0;
   return fragment;
 };
 
@@ -70,9 +73,13 @@ const renderCommentContainer = (post) => {
 
 const renderComment = (post) => {
   const fragment = getTemplate("template-comment");
-  const containerPlaceholder = fragment.querySelector("[data-comment-container]");
+  const containerPlaceholder = fragment.querySelector(
+    "[data-comment-container]"
+  );
   const commentContainer = renderCommentContainer(post);
-  containerPlaceholder.replaceWith(commentContainer.querySelector(".comment-container"));
+  containerPlaceholder.replaceWith(
+    commentContainer.querySelector(".comment-container")
+  );
   return fragment;
 };
 
@@ -158,7 +165,8 @@ const loadThread = (uri, container, originalUrl) => {
       // Add "Show More" link if there are more comments
       if (replies.length > 25 && !container.querySelector("#see-more")) {
         const postUrl =
-          originalUrl || getPostUrl(thread.post.author.did, getRkeyFromUri(uri));
+          originalUrl ||
+          getPostUrl(thread.post.author.did, getRkeyFromUri(uri));
         container.appendChild(renderReplyLink(postUrl));
       }
     })

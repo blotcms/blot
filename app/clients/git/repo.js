@@ -33,7 +33,12 @@ function holdRefLock(blogID) {
     retries: 6,
     minTimeout: 250,
     onCompromised: function (err) {
-      console.error(clfdate(), "Git: lost the ref lock of", blogID, err.message);
+      console.error(
+        clfdate(),
+        "Git: lost the ref lock of",
+        blogID,
+        err.message
+      );
     },
   }).then(function (held) {
     return held.release;
@@ -89,7 +94,12 @@ function handleSmartHttp(req, res, blogID, blog) {
 
   return require("./served/reads").handle(req, res, blog || { id: blogID }, {
     receive: function (req, res, blog) {
-      return require("./served/receive").handle(req, res, blog, receiveHooks(blogID));
+      return require("./served/receive").handle(
+        req,
+        res,
+        blog,
+        receiveHooks(blogID)
+      );
     },
   });
 }
@@ -119,7 +129,12 @@ function remove(blogID, callback) {
   try {
     removeBlog = require("./served/remove").removeBlog;
   } catch (err) {
-    console.error(clfdate(), "[git-store-served] blog=" + blogID, "could not remove the store copy:", err.message);
+    console.error(
+      clfdate(),
+      "[git-store-served] blog=" + blogID,
+      "could not remove the store copy:",
+      err.message
+    );
     return process.nextTick(callback);
   }
 

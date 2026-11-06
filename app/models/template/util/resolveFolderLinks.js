@@ -46,7 +46,8 @@ const {
 // Returns the original string (the same value) when nothing qualifies.
 
 // Cheap pre-check: whether the text could contain a link to rewrite at all.
-const CANDIDATE = /(?:\b(?:href|src|poster|srcset|content|style)\s*=|url\s*\()/i;
+const CANDIDATE =
+  /(?:\b(?:href|src|poster|srcset|content|style)\s*=|url\s*\()/i;
 
 // {{=<% %>=}} changes what a tag looks like for the rest of the template, so
 // the {{#cdn}} we'd insert would render as literal text. Such views are left
@@ -80,7 +81,8 @@ function viewKind(options) {
 }
 
 function normalizeAbsolute(path) {
-  if (/(?:^|\/)\.{1,2}(?:\/|$)|\/\//.test(path)) return posix.resolve("/", path);
+  if (/(?:^|\/)\.{1,2}(?:\/|$)|\/\//.test(path))
+    return posix.resolve("/", path);
 
   return path;
 }
@@ -652,7 +654,9 @@ function mapFolderLocals(locals, hosts, fn) {
 
       if (mapped !== value[k]) {
         if (!copy)
-          copy = Array.isArray(value) ? value.slice() : Object.assign({}, value);
+          copy = Array.isArray(value)
+            ? value.slice()
+            : Object.assign({}, value);
         copy[k] = mapped;
       }
     }

@@ -1,9 +1,6 @@
 const sandbox = require("sandbox");
 const UploadValidationError = require("./upload-validation-error");
-const {
-  UPLOAD_MAX_RAW_FILES,
-  UPLOAD_MAX_TOTAL_BYTES,
-} = require("./constants");
+const { UPLOAD_MAX_RAW_FILES, UPLOAD_MAX_TOTAL_BYTES } = require("./constants");
 
 // Reads an uploaded zip into the same { relativePath, buffer } records a
 // folder drop produces, so everything downstream is identical.
@@ -19,7 +16,9 @@ const {
 const MAX_RATIO = 200;
 
 const problem = (reason, message, path) =>
-  new UploadValidationError([path ? { path, reason, message } : { reason, message }]);
+  new UploadValidationError([
+    path ? { path, reason, message } : { reason, message },
+  ]);
 
 // Why the sandbox refused an archive, in the words this upload has always used
 const REFUSALS = {
@@ -52,7 +51,7 @@ const FILE_FAILURES = {
   SANDBOX_TIMEOUT: () => REFUSALS.read(),
 };
 
-module.exports = async function unzipUpload (zipPath) {
+module.exports = async function unzipUpload(zipPath) {
   let result;
 
   try {

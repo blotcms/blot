@@ -1,5 +1,5 @@
 var fs = require("fs-extra");
-var join = require('path').join;
+var join = require("path").join;
 
 module.exports = function walk(dir) {
   var results = [];

@@ -11,10 +11,7 @@ var { isRedisUnavailableError } = require("helper/redisUnavailable");
 var config = require("config");
 var stripe = require("stripe")(config.stripe.secret);
 var User = require("models/user");
-var {
-  emailIsTooLong,
-  passwordIsTooLong,
-} = require("models/user/auth-limits");
+var { emailIsTooLong, passwordIsTooLong } = require("models/user/auth-limits");
 var signup = Express.Router();
 
 signup.use(function (req, res, next) {
@@ -60,7 +57,7 @@ alreadyPaid.post(validateEmail, function (req, res, next) {
   });
 });
 
-function validateEmail (req, res, next) {
+function validateEmail(req, res, next) {
   var email = req.body && req.body.email;
 
   if (typeof email !== "string" || !email.trim()) {
@@ -95,7 +92,7 @@ paymentForm.get(function (req, res, next) {
 
   if (!config.stripe.key) {
     console.error("Warning: Stripe key is not set");
-    return res.redirect('/');
+    return res.redirect("/");
   }
 
   res.locals.title = "Sign up";
@@ -117,7 +114,7 @@ paymentForm.post(validateEmail, function (req, res, next) {
     card,
     email,
     plan: config.stripe.plan,
-    description: "Blot subscription"
+    description: "Blot subscription",
   };
 
   stripe.customers.create(info, function (err, customer) {
@@ -150,7 +147,6 @@ passwordForm.all(function (req, res, next) {
     (!req.session.subscription && !req.session.paypal)
   )
     return res.redirect(req.baseUrl + paymentForm.path);
-
 
   next();
 });
@@ -223,14 +219,14 @@ passwordForm.post(function (req, res, next) {
           secure: true,
           httpOnly: false,
           maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-          sameSite: "Lax"
+          sameSite: "Lax",
         });
 
         User.scheduleWelcomeEmail(user.uid, function (err) {
           if (err) console.log(err);
         });
 
-        req.session.uid = user.uid;        
+        req.session.uid = user.uid;
         res.redirect("/sites/account/create-site");
       }
     );
@@ -250,6 +246,5 @@ signup.use(function (err, req, res, next) {
 
   next();
 });
-
 
 module.exports = signup;

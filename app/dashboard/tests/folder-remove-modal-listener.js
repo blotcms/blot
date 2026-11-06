@@ -1,6 +1,6 @@
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
+const fs = require("fs");
+const path = require("path");
+const vm = require("vm");
 
 function extractNamedFunction(source, functionName) {
   const signature = `function ${functionName}(`;
@@ -9,14 +9,14 @@ function extractNamedFunction(source, functionName) {
     throw new Error(`Could not find ${functionName} in template`);
   }
 
-  const braceStart = source.indexOf('{', start);
+  const braceStart = source.indexOf("{", start);
   let depth = 0;
   let end = braceStart;
 
   for (; end < source.length; end += 1) {
     const char = source[end];
-    if (char === '{') depth += 1;
-    if (char === '}') {
+    if (char === "{") depth += 1;
+    if (char === "}") {
       depth -= 1;
       if (depth === 0) {
         end += 1;
@@ -34,15 +34,15 @@ function extractInlineFunction(source, signature) {
     throw new Error(`Could not find signature: ${signature}`);
   }
 
-  const functionStart = source.indexOf('function', start);
-  const braceStart = source.indexOf('{', functionStart);
+  const functionStart = source.indexOf("function", start);
+  const braceStart = source.indexOf("{", functionStart);
   let depth = 0;
   let end = braceStart;
 
   for (; end < source.length; end += 1) {
     const char = source[end];
-    if (char === '{') depth += 1;
-    if (char === '}') {
+    if (char === "{") depth += 1;
+    if (char === "}") {
       depth -= 1;
       if (depth === 0) {
         end += 1;
@@ -54,32 +54,74 @@ function extractInlineFunction(source, signature) {
   return source.slice(functionStart, end);
 }
 
-describe('folder directory remove modal behavior', function () {
-  it('opens remove modal from menu, closes on cancel without fetch, submits remove and refreshes content', async function () {
-    const templatePath = path.join(__dirname, '../../views/dashboard/folder/directory.html');
-    const templateSource = fs.readFileSync(templatePath, 'utf8');
+describe("folder directory remove modal behavior", function () {
+  it("opens remove modal from menu, closes on cancel without fetch, submits remove and refreshes content", async function () {
+    const templatePath = path.join(
+      __dirname,
+      "../../views/dashboard/folder/directory.html"
+    );
+    const templateSource = fs.readFileSync(templatePath, "utf8");
 
-    const decodePathSegmentsSource = extractNamedFunction(templateSource, 'decodePathSegments');
-    const encodePathSegmentsSource = extractNamedFunction(templateSource, 'encodePathSegments');
-    const resolveMenuRemovePathSource = extractNamedFunction(templateSource, 'resolveMenuRemovePath');
-    const openRemoveModalSource = extractNamedFunction(templateSource, 'openRemoveModal');
-    const closeRemoveModalSource = extractNamedFunction(templateSource, 'closeRemoveModal');
-    const resetRemoveModalButtonStateSource = extractNamedFunction(templateSource, 'resetRemoveModalButtonState');
-    const setRemoveModalButtonsDisabledSource = extractNamedFunction(templateSource, 'setRemoveModalButtonsDisabled');
-    const removeFileSource = extractNamedFunction(templateSource, 'removeFile');
-    const handleRemoveMenuClickSource = extractNamedFunction(templateSource, 'handleRemoveMenuClick');
-    const handleRemoveModalClickSource = extractNamedFunction(templateSource, 'handleRemoveModalClick');
+    const decodePathSegmentsSource = extractNamedFunction(
+      templateSource,
+      "decodePathSegments"
+    );
+    const encodePathSegmentsSource = extractNamedFunction(
+      templateSource,
+      "encodePathSegments"
+    );
+    const resolveMenuRemovePathSource = extractNamedFunction(
+      templateSource,
+      "resolveMenuRemovePath"
+    );
+    const openRemoveModalSource = extractNamedFunction(
+      templateSource,
+      "openRemoveModal"
+    );
+    const closeRemoveModalSource = extractNamedFunction(
+      templateSource,
+      "closeRemoveModal"
+    );
+    const resetRemoveModalButtonStateSource = extractNamedFunction(
+      templateSource,
+      "resetRemoveModalButtonState"
+    );
+    const setRemoveModalButtonsDisabledSource = extractNamedFunction(
+      templateSource,
+      "setRemoveModalButtonsDisabled"
+    );
+    const removeFileSource = extractNamedFunction(templateSource, "removeFile");
+    const handleRemoveMenuClickSource = extractNamedFunction(
+      templateSource,
+      "handleRemoveMenuClick"
+    );
+    const handleRemoveModalClickSource = extractNamedFunction(
+      templateSource,
+      "handleRemoveModalClick"
+    );
 
     const modalButtons = [
-      { disabled: false, classList: { remove: () => {} }, getAttribute: (name) => (name === 'data-remove-action' ? 'remove' : null) },
-      { disabled: false, classList: { remove: () => {} }, getAttribute: (name) => (name === 'data-remove-action' ? 'cancel' : null) },
+      {
+        disabled: false,
+        classList: { remove: () => {} },
+        getAttribute: (name) =>
+          name === "data-remove-action" ? "remove" : null,
+      },
+      {
+        disabled: false,
+        classList: { remove: () => {} },
+        getAttribute: (name) =>
+          name === "data-remove-action" ? "cancel" : null,
+      },
     ];
 
-    const pathLabel = { textContent: '' };
+    const pathLabel = { textContent: "" };
     const removeModal = {
       hidden: true,
-      querySelector: (selector) => (selector === '[data-remove-path-label]' ? pathLabel : null),
-      querySelectorAll: (selector) => (selector === '[data-remove-action]' ? modalButtons : []),
+      querySelector: (selector) =>
+        selector === "[data-remove-path-label]" ? pathLabel : null,
+      querySelectorAll: (selector) =>
+        selector === "[data-remove-action]" ? modalButtons : [],
     };
 
     const fetchCalls = [];
@@ -90,15 +132,18 @@ describe('folder directory remove modal behavior', function () {
       removeModal,
       removeTargetPath: null,
       removeTargetFile: null,
-      csrfToken: 'token',
+      csrfToken: "token",
       fetch: (url, options) => {
         fetchCalls.push({ url, options });
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true }),
+        });
       },
       refreshFolderContents: () => {
         refreshCount += 1;
       },
-      '{{{base}}}': '',
+      "{{{base}}}": "",
     };
 
     vm.runInNewContext(
@@ -117,16 +162,16 @@ this.handleRemoveModalClick = handleRemoveModalClick;`,
       context
     );
 
-    const preventDefault = jasmine.createSpy('preventDefault');
+    const preventDefault = jasmine.createSpy("preventDefault");
     context.handleRemoveMenuClick({
       preventDefault,
       target: {
         closest: (selector) => {
           if (selector === '[data-menu-link="remove"]') {
             return {
-              getAttribute: () => 'action:remove-file:posts%2Fhello.md',
+              getAttribute: () => "action:remove-file:posts%2Fhello.md",
               classList: { contains: () => false },
-              dataset: { entry: 'false', name: 'posts/hello.md' },
+              dataset: { entry: "false", name: "posts/hello.md" },
             };
           }
           return null;
@@ -136,14 +181,14 @@ this.handleRemoveModalClick = handleRemoveModalClick;`,
 
     expect(preventDefault).toHaveBeenCalled();
     expect(removeModal.hidden).toBe(false);
-    expect(pathLabel.textContent).toBe('posts/hello.md');
+    expect(pathLabel.textContent).toBe("posts/hello.md");
 
     context.handleRemoveModalClick({
       target: {
         closest: (selector) => {
-          if (selector === '[data-remove-modal-close]') return null;
-          if (selector === '[data-remove-action]') {
-            return { disabled: false, getAttribute: () => 'cancel' };
+          if (selector === "[data-remove-modal-close]") return null;
+          if (selector === "[data-remove-action]") {
+            return { disabled: false, getAttribute: () => "cancel" };
           }
           return null;
         },
@@ -159,9 +204,9 @@ this.handleRemoveModalClick = handleRemoveModalClick;`,
         closest: (selector) => {
           if (selector === '[data-menu-link="remove"]') {
             return {
-              getAttribute: () => 'action:remove-file:posts%2Fhello.md',
+              getAttribute: () => "action:remove-file:posts%2Fhello.md",
               classList: { contains: () => false },
-              dataset: { entry: 'false', name: 'posts/hello.md' },
+              dataset: { entry: "false", name: "posts/hello.md" },
             };
           }
           return null;
@@ -172,9 +217,9 @@ this.handleRemoveModalClick = handleRemoveModalClick;`,
     context.handleRemoveModalClick({
       target: {
         closest: (selector) => {
-          if (selector === '[data-remove-modal-close]') return null;
-          if (selector === '[data-remove-action]') {
-            return { disabled: false, getAttribute: () => 'remove' };
+          if (selector === "[data-remove-modal-close]") return null;
+          if (selector === "[data-remove-action]") {
+            return { disabled: false, getAttribute: () => "remove" };
           }
           return null;
         },
@@ -186,30 +231,56 @@ this.handleRemoveModalClick = handleRemoveModalClick;`,
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(fetchCalls.length).toBe(1);
-    expect(fetchCalls[0].url).toBe('{{{base}}}/folder/remove/posts/hello.md');
+    expect(fetchCalls[0].url).toBe("{{{base}}}/folder/remove/posts/hello.md");
     expect(refreshCount).toBe(1);
     expect(removeModal.hidden).toBe(true);
   });
 
-  it('locks remove modal buttons during in-flight request and unlocks on failure', async function () {
+  it("locks remove modal buttons during in-flight request and unlocks on failure", async function () {
     const flush = () => new Promise((resolve) => setImmediate(resolve));
-    const templatePath = path.join(__dirname, '../../views/dashboard/folder/directory.html');
-    const templateSource = fs.readFileSync(templatePath, 'utf8');
+    const templatePath = path.join(
+      __dirname,
+      "../../views/dashboard/folder/directory.html"
+    );
+    const templateSource = fs.readFileSync(templatePath, "utf8");
 
-    const setRemoveModalButtonsDisabledSource = extractNamedFunction(templateSource, 'setRemoveModalButtonsDisabled');
-    const resetRemoveModalButtonStateSource = extractNamedFunction(templateSource, 'resetRemoveModalButtonState');
-    const openRemoveModalSource = extractNamedFunction(templateSource, 'openRemoveModal');
-    const handleRemoveModalClickSource = extractNamedFunction(templateSource, 'handleRemoveModalClick');
+    const setRemoveModalButtonsDisabledSource = extractNamedFunction(
+      templateSource,
+      "setRemoveModalButtonsDisabled"
+    );
+    const resetRemoveModalButtonStateSource = extractNamedFunction(
+      templateSource,
+      "resetRemoveModalButtonState"
+    );
+    const openRemoveModalSource = extractNamedFunction(
+      templateSource,
+      "openRemoveModal"
+    );
+    const handleRemoveModalClickSource = extractNamedFunction(
+      templateSource,
+      "handleRemoveModalClick"
+    );
 
     const modalButtons = [
-      { disabled: false, classList: { remove: () => {} }, getAttribute: (name) => (name === 'data-remove-action' ? 'remove' : null) },
-      { disabled: false, classList: { remove: () => {} }, getAttribute: (name) => (name === 'data-remove-action' ? 'cancel' : null) },
+      {
+        disabled: false,
+        classList: { remove: () => {} },
+        getAttribute: (name) =>
+          name === "data-remove-action" ? "remove" : null,
+      },
+      {
+        disabled: false,
+        classList: { remove: () => {} },
+        getAttribute: (name) =>
+          name === "data-remove-action" ? "cancel" : null,
+      },
     ];
 
     const removeModal = {
       hidden: true,
-      querySelector: () => ({ textContent: '' }),
-      querySelectorAll: (selector) => (selector === '[data-remove-action]' ? modalButtons : []),
+      querySelector: () => ({ textContent: "" }),
+      querySelectorAll: (selector) =>
+        selector === "[data-remove-action]" ? modalButtons : [],
     };
 
     let rejectRemove;
@@ -235,13 +306,13 @@ this.handleRemoveModalClick = handleRemoveModalClick;`,
       context
     );
 
-    context.openRemoveModal({ path: 'drafts/a.md', name: 'a.md' });
+    context.openRemoveModal({ path: "drafts/a.md", name: "a.md" });
     context.handleRemoveModalClick({
       target: {
         closest: (selector) => {
-          if (selector === '[data-remove-modal-close]') return null;
-          if (selector === '[data-remove-action]') {
-            return { disabled: false, getAttribute: () => 'remove' };
+          if (selector === "[data-remove-modal-close]") return null;
+          if (selector === "[data-remove-action]") {
+            return { disabled: false, getAttribute: () => "remove" };
           }
           return null;
         },
@@ -252,7 +323,7 @@ this.handleRemoveModalClick = handleRemoveModalClick;`,
       expect(button.disabled).toBe(true);
     });
 
-    rejectRemove(new Error('boom'));
+    rejectRemove(new Error("boom"));
     await flush();
 
     modalButtons.forEach((button) => {
@@ -261,10 +332,13 @@ this.handleRemoveModalClick = handleRemoveModalClick;`,
   });
 });
 
-describe('folder directory remove action state', function () {
-  it('keeps remove action enabled for entry rows', function () {
-    const templatePath = path.join(__dirname, '../../views/dashboard/folder/directory.html');
-    const templateSource = fs.readFileSync(templatePath, 'utf8');
+describe("folder directory remove action state", function () {
+  it("keeps remove action enabled for entry rows", function () {
+    const templatePath = path.join(
+      __dirname,
+      "../../views/dashboard/folder/directory.html"
+    );
+    const templateSource = fs.readFileSync(templatePath, "utf8");
 
     const removeLinkResolverSource = extractInlineFunction(
       templateSource,
@@ -275,7 +349,8 @@ describe('folder directory remove action state', function () {
       folderFileActionMenu: {
         querySelector: () => ({ dataset: {} }),
       },
-      encodePathSegments: (value) => encodeURIComponent(String(value || '')).replace(/%2F/g, '/'),
+      encodePathSegments: (value) =>
+        encodeURIComponent(String(value || "")).replace(/%2F/g, "/"),
     };
 
     vm.runInNewContext(
@@ -284,20 +359,20 @@ describe('folder directory remove action state', function () {
     );
 
     const entryResult = context.removeResolver({
-      directory: 'false',
-      entry: 'true',
-      url: '/entry.md',
+      directory: "false",
+      entry: "true",
+      url: "/entry.md",
     });
 
     const fileResult = context.removeResolver({
-      directory: 'false',
-      entry: 'false',
-      url: '/plain.md',
+      directory: "false",
+      entry: "false",
+      url: "/plain.md",
     });
 
     expect(entryResult.disabled).toBe(false);
-    expect(entryResult.href).toContain('action:remove-file:');
+    expect(entryResult.href).toContain("action:remove-file:");
     expect(fileResult.disabled).toBe(false);
-    expect(fileResult.href).toContain('action:remove-file:');
+    expect(fileResult.href).toContain("action:remove-file:");
   });
 });

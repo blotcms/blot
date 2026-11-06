@@ -64,7 +64,7 @@ function imageCache(blog, entry, callback) {
                 .catch(next);
             })
             .catch(next);
-      },
+        },
         callback
       );
     })
@@ -87,7 +87,8 @@ function thumbnails(blog, entry, callback) {
             .then(function (res) {
               try {
                 res = JSON.parse(res);
-                if (res.small.name !== entry.thumbnail.small.name) return next();
+                if (res.small.name !== entry.thumbnail.small.name)
+                  return next();
               } catch (e) {
                 console.log("Error", key, e.message);
                 return next();
@@ -107,7 +108,7 @@ function thumbnails(blog, entry, callback) {
                 .catch(next);
             })
             .catch(next);
-      },
+        },
         callback
       );
     })

@@ -27,19 +27,12 @@ const IGNORED_SYSTEM_FILES = new Set([
   ".dropbox.cache",
 ]);
 
-const IGNORED_SUFFIXES = [
-  ".tmp",
-  "~",
-  ".orig",
-  ".rej",
-  ".swp",
-  ".swo",
-];
+const IGNORED_SUFFIXES = [".tmp", "~", ".orig", ".rej", ".swp", ".swo"];
 
 const IGNORED_PREFIXES = [
-  "~$",      // Office temp
-  ".#",      // Emacs lockfiles
-  "._",      // AppleDouble
+  "~$", // Office temp
+  ".#", // Emacs lockfiles
+  "._", // AppleDouble
   ".trash-", // macOS trash variants
 ];
 
@@ -53,7 +46,8 @@ const shouldIgnoreFile = (inputPath) => {
 
   for (const rawComponent of components) {
     // macOS Icon file with CR
-    if (rawComponent === "Icon\r" || rawComponent.startsWith("Icon\r")) return true;
+    if (rawComponent === "Icon\r" || rawComponent.startsWith("Icon\r"))
+      return true;
 
     const component = rawComponent.trim();
     if (!component || component === "." || component === "..") continue;

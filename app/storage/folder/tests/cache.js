@@ -14,7 +14,9 @@ describe("storage/folder cache", function () {
 
   beforeEach(async function () {
     await fs.ensureDir(config.tmp_directory);
-    dir = await fs.mkdtemp(join(config.tmp_directory, "storage-folder-cache-spec-"));
+    dir = await fs.mkdtemp(
+      join(config.tmp_directory, "storage-folder-cache-spec-")
+    );
     caches = [];
   });
 
@@ -28,7 +30,12 @@ describe("storage/folder cache", function () {
   // No periodic check and no grace period unless a spec asks, so evictions
   // happen exactly when the budget says
   function open(options) {
-    var cache = createCache(Object.assign({ dir: dir, maxBytes: 1000, graceMs: 0, checkIntervalMs: 0 }, options));
+    var cache = createCache(
+      Object.assign(
+        { dir: dir, maxBytes: 1000, graceMs: 0, checkIntervalMs: 0 },
+        options
+      )
+    );
     caches.push(cache);
     return cache;
   }
@@ -38,7 +45,13 @@ describe("storage/folder cache", function () {
   }
 
   function spec(path, text, blogID) {
-    return { blogID: blogID || "blog_a", path: path, version: sha1(text), size: Buffer.byteLength(text), sha1: sha1(text) };
+    return {
+      blogID: blogID || "blog_a",
+      path: path,
+      version: sha1(text),
+      size: Buffer.byteLength(text),
+      sha1: sha1(text),
+    };
   }
 
   // Stands in for S3: counts the opens of each path
@@ -53,7 +66,9 @@ describe("storage/folder cache", function () {
     var found = [];
 
     async function visit(current) {
-      for (var entry of await fs.readdir(current, { withFileTypes: true }).catch(() => [])) {
+      for (var entry of await fs
+        .readdir(current, { withFileTypes: true })
+        .catch(() => [])) {
         var full = join(current, entry.name);
         if (entry.isDirectory()) await visit(full);
         else found.push(full);
@@ -89,13 +104,23 @@ describe("storage/folder cache", function () {
     expect(first.indexOf(dir)).toEqual(0);
     expect(await fs.readFile(first, "utf8")).toEqual("hello");
     expect(a.calls.count()).toEqual(1);
-    expect(cache.stats()).toEqual(jasmine.objectContaining({ hits: 1, misses: 1, entries: 1, bytes: 5, fetchedBytes: 5 }));
+    expect(cache.stats()).toEqual(
+      jasmine.objectContaining({
+        hits: 1,
+        misses: 1,
+        entries: 1,
+        bytes: 5,
+        fetchedBytes: 5,
+      })
+    );
   });
 
   it("keeps the file's own name, so its extension still means something", async function () {
     var cache = open();
 
-    expect(await cache.get(spec("/photos/cat.JPG", "jpeg"), source("jpeg"))).toMatch(/\/cat\.JPG$/);
+    expect(
+      await cache.get(spec("/photos/cat.JPG", "jpeg"), source("jpeg"))
+    ).toMatch(/\/cat\.JPG$/);
   });
 
   it("uses a new key when the file's SHA-1 changes", async function () {
@@ -135,7 +160,9 @@ describe("storage/folder cache", function () {
     expect(await fs.pathExists(a)).toBe(true);
     expect(await fs.pathExists(b)).toBe(false);
     expect(await fs.pathExists(c)).toBe(true);
-    expect(cache.stats()).toEqual(jasmine.objectContaining({ entries: 2, bytes: 8, evictions: 1 }));
+    expect(cache.stats()).toEqual(
+      jasmine.objectContaining({ entries: 2, bytes: 8, evictions: 1 })
+    );
   });
 
   it("stores a file bigger than the budget, and evicts it next", async function () {
@@ -223,13 +250,20 @@ describe("storage/folder cache", function () {
     expect(cache.stats().entries).toEqual(0);
 
     // The next try downloads it again
-    expect(await fs.readFile(await cache.get(spec("/p.txt", "partial"), source("partial")), "utf8")).toEqual("partial");
+    expect(
+      await fs.readFile(
+        await cache.get(spec("/p.txt", "partial"), source("partial")),
+        "utf8"
+      )
+    ).toEqual("partial");
   });
 
   it("refuses bytes which are not the version the index describes", async function () {
     var cache = open();
 
-    var err = await rejection(cache.get(spec("/a.txt", "index"), source("other")));
+    var err = await rejection(
+      cache.get(spec("/a.txt", "index"), source("other"))
+    );
 
     expect(err.code).toEqual("ECHANGED");
     expect(await files()).toEqual([]);
@@ -238,10 +272,27 @@ describe("storage/folder cache", function () {
 
   it("checks only the size where the index has no hash", async function () {
     var cache = open();
-    var noHash = { blogID: "blog_a", path: "/a.txt", version: "5-1000", size: 5, sha1: "" };
+    var noHash = {
+      blogID: "blog_a",
+      path: "/a.txt",
+      version: "5-1000",
+      size: 5,
+      sha1: "",
+    };
 
-    expect(await fs.readFile(await cache.get(noHash, source("hello")), "utf8")).toEqual("hello");
-    expect((await rejection(cache.get(Object.assign({}, noHash, { version: "4-1000", size: 4 }), source("hello")))).code).toEqual("ECHANGED");
+    expect(
+      await fs.readFile(await cache.get(noHash, source("hello")), "utf8")
+    ).toEqual("hello");
+    expect(
+      (
+        await rejection(
+          cache.get(
+            Object.assign({}, noHash, { version: "4-1000", size: 4 }),
+            source("hello")
+          )
+        )
+      ).code
+    ).toEqual("ECHANGED");
   });
 
   it("rebuilds its recency list from the directory when opened", async function () {
@@ -259,7 +310,9 @@ describe("storage/folder cache", function () {
     var second = open({ maxBytes: 8 });
     await second.ready();
 
-    expect(second.stats()).toEqual(jasmine.objectContaining({ entries: 2, bytes: 8 }));
+    expect(second.stats()).toEqual(
+      jasmine.objectContaining({ entries: 2, bytes: 8 })
+    );
 
     var c = source("cccc");
     await second.get(spec("/c.txt", "cccc"), c);
@@ -293,7 +346,9 @@ describe("storage/folder cache", function () {
 
     var opener = source("gone");
 
-    expect(await fs.readFile(await cache.get(spec("/a.txt", "gone"), opener), "utf8")).toEqual("gone");
+    expect(
+      await fs.readFile(await cache.get(spec("/a.txt", "gone"), opener), "utf8")
+    ).toEqual("gone");
     expect(opener.calls.count()).toEqual(1);
   });
 
@@ -317,14 +372,18 @@ describe("storage/folder cache", function () {
     var cache = open({ maxBytes: 4 });
     var a;
 
-    await cache.use(spec("/a.txt", "aaaa"), source("aaaa"), async function (local) {
-      a = local;
+    await cache.use(
+      spec("/a.txt", "aaaa"),
+      source("aaaa"),
+      async function (local) {
+        a = local;
 
-      await cache.get(spec("/b.txt", "bbbb"), source("bbbb"));
-      await cache.get(spec("/c.txt", "cccc"), source("cccc"));
+        await cache.get(spec("/b.txt", "bbbb"), source("bbbb"));
+        await cache.get(spec("/c.txt", "cccc"), source("cccc"));
 
-      expect(await fs.readFile(local, "utf8")).toEqual("aaaa");
-    });
+        expect(await fs.readFile(local, "utf8")).toEqual("aaaa");
+      }
+    );
 
     // Unpinned, it goes like anything else
     await cache.get(spec("/d.txt", "dddd"), source("dddd"));
@@ -414,12 +473,16 @@ describe("storage/folder cache", function () {
     it("lets the cache run over its budget rather than refuse a fill", async function () {
       var cache = open({ maxBytes: 4, graceMs: GRACE });
 
-      await cache.use(spec("/a.txt", "aaaa"), source("aaaa"), async function () {
-        var b = await cache.get(spec("/b.txt", "bbbb"), source("bbbb"));
+      await cache.use(
+        spec("/a.txt", "aaaa"),
+        source("aaaa"),
+        async function () {
+          var b = await cache.get(spec("/b.txt", "bbbb"), source("bbbb"));
 
-        expect(await fs.readFile(b, "utf8")).toEqual("bbbb");
-        expect(cache.stats().bytes).toBeGreaterThan(4);
-      });
+          expect(await fs.readFile(b, "utf8")).toEqual("bbbb");
+          expect(cache.stats().bytes).toBeGreaterThan(4);
+        }
+      );
     });
   });
 
@@ -435,7 +498,11 @@ describe("storage/folder cache", function () {
     await age(b, 1000);
 
     // 3 bytes short of 10% free: the least recent entry goes, the other stays
-    spyOn(require("fs").promises, "statfs").and.callFake(async () => ({ blocks: 100, bavail: 7, bsize: 1 }));
+    spyOn(require("fs").promises, "statfs").and.callFake(async () => ({
+      blocks: 100,
+      bavail: 7,
+      bsize: 1,
+    }));
 
     await cache.check();
 
@@ -454,7 +521,16 @@ describe("storage/folder cache", function () {
 
       expect(await fs.readFile(local, "utf8")).toEqual("written");
       expect(s3).not.toHaveBeenCalled();
-      expect(cache.stats()).toEqual(jasmine.objectContaining({ filled: 1, hits: 1, misses: 0, fetchedBytes: 0, entries: 1, bytes: 7 }));
+      expect(cache.stats()).toEqual(
+        jasmine.objectContaining({
+          filled: 1,
+          hits: 1,
+          misses: 0,
+          fetchedBytes: 0,
+          entries: 1,
+          bytes: 7,
+        })
+      );
     });
 
     it("doesn't pass its failure to a get which joined it: the get downloads", async function () {
@@ -494,19 +570,25 @@ describe("storage/folder cache", function () {
       await cache.put(spec("/a.txt", "same"), again);
 
       expect(again).not.toHaveBeenCalled();
-      expect(cache.stats()).toEqual(jasmine.objectContaining({ filled: 0, entries: 1 }));
+      expect(cache.stats()).toEqual(
+        jasmine.objectContaining({ filled: 0, entries: 1 })
+      );
     });
 
     it("refuses bytes which are not the version it was given", async function () {
       var cache = open();
 
-      var err = await rejection(cache.put(spec("/a.txt", "recorded"), source("changed since")));
+      var err = await rejection(
+        cache.put(spec("/a.txt", "recorded"), source("changed since"))
+      );
 
       expect(err.code).toEqual("ECHANGED");
       expect(await files()).toEqual([]);
 
       // Not S3 holding the wrong version, so not counted as that
-      expect(cache.stats()).toEqual(jasmine.objectContaining({ changed: 0, filled: 0, entries: 0 }));
+      expect(cache.stats()).toEqual(
+        jasmine.objectContaining({ changed: 0, filled: 0, entries: 0 })
+      );
     });
 
     it("counts towards the budget like any other entry", async function () {
@@ -515,11 +597,15 @@ describe("storage/folder cache", function () {
       await cache.put(spec("/a.txt", "aaaa"), source("aaaa"));
       await cache.put(spec("/b.txt", "bbbb"), source("bbbb"));
 
-      expect(cache.stats()).toEqual(jasmine.objectContaining({ entries: 2, bytes: 8 }));
+      expect(cache.stats()).toEqual(
+        jasmine.objectContaining({ entries: 2, bytes: 8 })
+      );
 
       await cache.get(spec("/c.txt", "cccc"), source("cccc"));
 
-      expect(cache.stats()).toEqual(jasmine.objectContaining({ entries: 2, bytes: 8, evictions: 1 }));
+      expect(cache.stats()).toEqual(
+        jasmine.objectContaining({ entries: 2, bytes: 8, evictions: 1 })
+      );
     });
   });
 
@@ -533,6 +619,8 @@ describe("storage/folder cache", function () {
 
     expect(await fs.pathExists(a)).toBe(false);
     expect(await fs.pathExists(b)).toBe(true);
-    expect(cache.stats()).toEqual(jasmine.objectContaining({ entries: 1, bytes: 1 }));
+    expect(cache.stats()).toEqual(
+      jasmine.objectContaining({ entries: 1, bytes: 1 })
+    );
   });
 });

@@ -15,7 +15,7 @@ describe("user getByCustomerId", function () {
     lastSession: "",
     passwordHash: "hash123",
     subscription: { customer: customerId },
-    paypal: {}
+    paypal: {},
   };
 
   beforeEach(async function () {

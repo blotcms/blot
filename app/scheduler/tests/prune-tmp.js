@@ -23,8 +23,7 @@ describe("scheduler prune-tmp", function () {
     this.root = await fs.mkdtemp(os.tmpdir() + "/prune-tmp-");
     this.tmp = this.root + "/tmp";
     await fs.ensureDir(this.tmp);
-    this.run = (options) =>
-      pruneTmp({ tmpDirectory: this.tmp, ...options });
+    this.run = (options) => pruneTmp({ tmpDirectory: this.tmp, ...options });
   });
 
   afterEach(async function () {
@@ -66,12 +65,19 @@ describe("scheduler prune-tmp", function () {
     config.git_store.cache_directory = this.tmp + "/git-store";
 
     try {
-      await write(this.tmp, "git-store/main/entries/ab/entry", 3 * DAY, "git-store");
+      await write(
+        this.tmp,
+        "git-store/main/entries/ab/entry",
+        3 * DAY,
+        "git-store"
+      );
       await write(this.tmp, "old-upload", 2 * DAY);
 
       await this.run();
 
-      expect(await exists(this.tmp + "/git-store/main/entries/ab/entry")).toBe(true);
+      expect(await exists(this.tmp + "/git-store/main/entries/ab/entry")).toBe(
+        true
+      );
       expect(await exists(this.tmp + "/old-upload")).toBe(false);
     } finally {
       config.git_store.cache_directory = saved;
@@ -85,12 +91,19 @@ describe("scheduler prune-tmp", function () {
     config.git_store.cache_directory = this.tmp + "/cache/git-store";
 
     try {
-      await write(this.tmp, "cache/git-store/main/entries/ab/entry", 3 * DAY, "cache");
+      await write(
+        this.tmp,
+        "cache/git-store/main/entries/ab/entry",
+        3 * DAY,
+        "cache"
+      );
       await write(this.tmp, "cache-other/old", 2 * DAY, "cache-other");
 
       await this.run();
 
-      expect(await exists(this.tmp + "/cache/git-store/main/entries/ab/entry")).toBe(true);
+      expect(
+        await exists(this.tmp + "/cache/git-store/main/entries/ab/entry")
+      ).toBe(true);
       expect(await exists(this.tmp + "/cache-other")).toBe(false);
     } finally {
       config.git_store.cache_directory = saved;
@@ -102,7 +115,12 @@ describe("scheduler prune-tmp", function () {
 
     // An import directory holding a result.zip, last modified `ageMs` ago
     async function importDirectory(root, importID, ageMs) {
-      await write(root, "import/blog_1/" + importID + "/result.zip", ageMs, "import/blog_1/" + importID);
+      await write(
+        root,
+        "import/blog_1/" + importID + "/result.zip",
+        ageMs,
+        "import/blog_1/" + importID
+      );
     }
 
     it("keeps a finished import for longer than other files", async function () {
@@ -115,7 +133,9 @@ describe("scheduler prune-tmp", function () {
 
       await this.run();
 
-      expect(await exists(importPath(this.tmp, "recent-1") + "/result.zip")).toBe(true);
+      expect(
+        await exists(importPath(this.tmp, "recent-1") + "/result.zip")
+      ).toBe(true);
       expect(await exists(importPath(this.tmp, "old-2"))).toBe(false);
       expect(await exists(this.tmp + "/import/blog_1")).toBe(true);
     });
@@ -148,8 +168,16 @@ describe("scheduler prune-tmp", function () {
       root + "/storage-assets-staging/blog_1/" + relative;
 
     it("keeps files being staged for a week, judging each file and not its directory", async function () {
-      await write(this.tmp, "storage-assets-staging/blog_1/_thumbnails/a/small.jpg", 3 * DAY);
-      await write(this.tmp, "storage-assets-staging/blog_1/_thumbnails/b/small.jpg", 8 * DAY);
+      await write(
+        this.tmp,
+        "storage-assets-staging/blog_1/_thumbnails/a/small.jpg",
+        3 * DAY
+      );
+      await write(
+        this.tmp,
+        "storage-assets-staging/blog_1/_thumbnails/b/small.jpg",
+        8 * DAY
+      );
 
       // neither the staging root nor the blog's directory is judged on its own age
       const then = new Date(Date.now() - 30 * DAY);
@@ -158,8 +186,12 @@ describe("scheduler prune-tmp", function () {
 
       await this.run();
 
-      expect(await exists(staged(this.tmp, "_thumbnails/a/small.jpg"))).toBe(true);
-      expect(await exists(staged(this.tmp, "_thumbnails/b/small.jpg"))).toBe(false);
+      expect(await exists(staged(this.tmp, "_thumbnails/a/small.jpg"))).toBe(
+        true
+      );
+      expect(await exists(staged(this.tmp, "_thumbnails/b/small.jpg"))).toBe(
+        false
+      );
     });
 
     it("removes old empty directories but not new ones or the root", async function () {
@@ -188,8 +220,12 @@ describe("scheduler prune-tmp", function () {
 
       await this.run();
 
-      expect(await exists(this.tmp + "/storage-folder-staging/blog_1/a/new.txt")).toBe(true);
-      expect(await exists(this.tmp + "/storage-folder-staging/blog_1/a/old.txt")).toBe(false);
+      expect(
+        await exists(this.tmp + "/storage-folder-staging/blog_1/a/new.txt")
+      ).toBe(true);
+      expect(
+        await exists(this.tmp + "/storage-folder-staging/blog_1/a/old.txt")
+      ).toBe(false);
       expect(await exists(this.tmp + "/storage-folder-staging")).toBe(true);
     });
 
@@ -200,7 +236,11 @@ describe("scheduler prune-tmp", function () {
       config.folder_cache.directory = this.tmp + "/storage-folder-cache";
 
       try {
-        await write(this.tmp, "storage-folder-cache/blogs/blog_1/abc/old.jpg", 30 * DAY);
+        await write(
+          this.tmp,
+          "storage-folder-cache/blogs/blog_1/abc/old.jpg",
+          30 * DAY
+        );
 
         const then = new Date(Date.now() - 30 * DAY);
         await fs.utimes(this.tmp + "/storage-folder-cache", then, then);
@@ -210,7 +250,11 @@ describe("scheduler prune-tmp", function () {
         config.folder_cache.directory = directory;
       }
 
-      expect(await exists(this.tmp + "/storage-folder-cache/blogs/blog_1/abc/old.jpg")).toBe(true);
+      expect(
+        await exists(
+          this.tmp + "/storage-folder-cache/blogs/blog_1/abc/old.jpg"
+        )
+      ).toBe(true);
     });
 
     it("leaves alone a directory the content cache is configured inside", async function () {
@@ -230,7 +274,9 @@ describe("scheduler prune-tmp", function () {
         config.folder_cache.directory = directory;
       }
 
-      expect(await exists(this.tmp + "/caches/folder/blogs/blog_1/abc/new.jpg")).toBe(true);
+      expect(
+        await exists(this.tmp + "/caches/folder/blogs/blog_1/abc/new.jpg")
+      ).toBe(true);
     });
   });
 

@@ -51,7 +51,8 @@ class Refusal extends Error {
 }
 
 function limit(value, max) {
-  if (!Number.isInteger(value) || value < 1 || value > max) throw new Error("invalid limits");
+  if (!Number.isInteger(value) || value < 1 || value > max)
+    throw new Error("invalid limits");
   return value;
 }
 
@@ -110,7 +111,15 @@ function next(zipfile) {
     // yauzl refuses these names itself, before checkPath sees them
     const onError = (err) => {
       cleanup();
-      reject(new Refusal(/^(invalid characters|absolute path|invalid relative path)/.test(err.message) ? "path" : "read"));
+      reject(
+        new Refusal(
+          /^(invalid characters|absolute path|invalid relative path)/.test(
+            err.message
+          )
+            ? "path"
+            : "read"
+        )
+      );
     };
     const cleanup = () => {
       zipfile.removeListener("entry", onEntry);
@@ -136,7 +145,8 @@ async function extract(input, { maxEntries, maxBytes, maxRatio }) {
   // byte cap, or the ratio against this archive, which is never under the floor
   const over = (size) => {
     if (total + size > maxBytes) return "size";
-    if (total + size > Math.max(RATIO_FLOOR, input.length * maxRatio)) return "ratio";
+    if (total + size > Math.max(RATIO_FLOOR, input.length * maxRatio))
+      return "ratio";
     return null;
   };
 

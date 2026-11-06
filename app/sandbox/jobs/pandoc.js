@@ -41,7 +41,8 @@ function pandocPath() {
 function checkFile(file) {
   if (file === null || file === undefined) return null;
   if (!file || typeof file !== "object") throw new Error("invalid file");
-  if (!Number.isSafeInteger(file.length) || file.length < 0) throw new Error("invalid file length");
+  if (!Number.isSafeInteger(file.length) || file.length < 0)
+    throw new Error("invalid file length");
   if (typeof file.extension !== "string" || !EXTENSION.test(file.extension)) {
     throw new Error("invalid file extension");
   }
@@ -52,7 +53,13 @@ function check(args) {
   if (!args || typeof args !== "object") throw new Error("invalid arguments");
   if (!FORMATS.includes(args.from)) throw new Error("invalid format");
 
-  const checked = { from: args.from, katex: false, callouts: false, bibliography: null, csl: null };
+  const checked = {
+    from: args.from,
+    katex: false,
+    callouts: false,
+    bibliography: null,
+    csl: null,
+  };
   if (args.from !== "markdown") return checked;
 
   for (const flag of ["katex", "callouts"]) {
@@ -66,7 +73,8 @@ function check(args) {
 
 // Splits the input into the document and the files after it
 function split(input, { bibliography, csl }) {
-  const extra = (bibliography ? bibliography.length : 0) + (csl ? csl.length : 0);
+  const extra =
+    (bibliography ? bibliography.length : 0) + (csl ? csl.length : 0);
   if (extra > input.length) throw new Error("invalid file lengths");
   let offset = input.length - extra;
   const document = input.subarray(0, offset);
@@ -116,10 +124,13 @@ function markdownArgs({ katex, callouts }, citations) {
   if (!citations) extensions += "-citations";
 
   const args = [
-    "-f", "markdown" + extensions,
-    "-t", "html5",
+    "-f",
+    "markdown" + extensions,
+    "-t",
+    "html5",
     // Don't declare widths for tables: https://github.com/jgm/pandoc/issues/2574
-    "--columns", "1000",
+    "--columns",
+    "1000",
     // we use our own highlighting library (hljs) later
     "--no-highlight",
     "--email-obfuscation=none",
@@ -140,8 +151,10 @@ function pandocArgs(options, dir, files) {
     return [
       path.join(dir, "input." + from),
       "--extract-media=" + path.join(dir, "media"),
-      "-f", from,
-      "-t", "html5",
+      "-f",
+      from,
+      "-t",
+      "html5",
       // Standalone, for the title block the docx and odt converters read
       // ("header h1"), with a template of only that and the body: pandoc's
       // default one adds 10-25ms of head and CSS that the converters throw away
@@ -151,8 +164,10 @@ function pandocArgs(options, dir, files) {
 
   if (from === "rtf" || from === "org") {
     return [
-      "-f", from,
-      "-t", "html5",
+      "-f",
+      from,
+      "-t",
+      "html5",
       "--no-highlight",
       // Keep this aligned with the other pandoc converters. The RTF reader
       // does not create Math nodes from dollar-delimited TeX, so the rtf
@@ -163,8 +178,14 @@ function pandocArgs(options, dir, files) {
   }
 
   const args = markdownArgs(options, Boolean(files.bibliography || files.csl));
-  if (files.bibliography) args.push("-M", "bibliography=" + path.join(dir, "bibliography" + options.bibliography.extension));
-  if (files.csl) args.push("-M", "csl=" + path.join(dir, "style" + options.csl.extension));
+  if (files.bibliography)
+    args.push(
+      "-M",
+      "bibliography=" +
+        path.join(dir, "bibliography" + options.bibliography.extension)
+    );
+  if (files.csl)
+    args.push("-M", "csl=" + path.join(dir, "style" + options.csl.extension));
   if (files.bibliography || files.csl) args.push("--citeproc");
   return args;
 }
@@ -174,9 +195,13 @@ function pandoc(args, stdin) {
     const started = Date.now();
     // A pipe for every stream: "ignore" opens /dev/null, which the jail doesn't
     // have. The environment is the jail's, or the app's in-process.
-    const child = spawn(pandocPath(), ["+RTS", "-M" + MAX_HEAP, "-RTS"].concat(args), {
-      stdio: "pipe",
-    });
+    const child = spawn(
+      pandocPath(),
+      ["+RTS", "-M" + MAX_HEAP, "-RTS"].concat(args),
+      {
+        stdio: "pipe",
+      }
+    );
     const stdout = [];
     let stdoutSize = 0;
     let stderr = "";
@@ -200,11 +225,13 @@ function pandoc(args, stdin) {
     child.stdin.on("error", () => {});
     child.stdout.on("data", (chunk) => {
       stdoutSize += chunk.length;
-      if (stdoutSize > MAX_OUTPUT) return fail(new Error("pandoc output too large"));
+      if (stdoutSize > MAX_OUTPUT)
+        return fail(new Error("pandoc output too large"));
       stdout.push(chunk);
     });
     child.stderr.on("data", (chunk) => {
-      if (stderr.length < MAX_STDERR) stderr += chunk.toString().slice(0, MAX_STDERR - stderr.length);
+      if (stderr.length < MAX_STDERR)
+        stderr += chunk.toString().slice(0, MAX_STDERR - stderr.length);
     });
     child.on("close", (code, signal) => {
       if (failed) return;
@@ -222,7 +249,9 @@ async function walk(dir, prefix = "") {
   const found = [];
   let entries;
   try {
-    entries = await fs.promises.readdir(path.join(dir, prefix), { withFileTypes: true });
+    entries = await fs.promises.readdir(path.join(dir, prefix), {
+      withFileTypes: true,
+    });
   } catch (err) {
     if (err.code === "ENOENT") return found;
     throw err;
@@ -243,20 +272,35 @@ async function run(args, input) {
 
   try {
     if (files.bibliography) {
-      await fs.promises.writeFile(path.join(dir, "bibliography" + options.bibliography.extension), files.bibliography);
+      await fs.promises.writeFile(
+        path.join(dir, "bibliography" + options.bibliography.extension),
+        files.bibliography
+      );
     }
-    if (files.csl) await fs.promises.writeFile(path.join(dir, "style" + options.csl.extension), files.csl);
+    if (files.csl)
+      await fs.promises.writeFile(
+        path.join(dir, "style" + options.csl.extension),
+        files.csl
+      );
 
     const isFile = options.from === "docx" || options.from === "odt";
-    if (isFile) await fs.promises.writeFile(path.join(dir, "input." + options.from), document);
+    if (isFile)
+      await fs.promises.writeFile(
+        path.join(dir, "input." + options.from),
+        document
+      );
 
-    const result = await pandoc(pandocArgs(options, dir, files), isFile ? "" : document);
+    const result = await pandoc(
+      pandocArgs(options, dir, files),
+      isFile ? "" : document
+    );
     if (result.error) return { meta: { error: result.error }, outputs: [] };
 
     const mediaDir = path.join(dir, "media");
     const media = await walk(mediaDir);
     const outputs = [result.html];
-    for (const name of media) outputs.push(await fs.promises.readFile(path.join(mediaDir, name)));
+    for (const name of media)
+      outputs.push(await fs.promises.readFile(path.join(mediaDir, name)));
     return { meta: { dir: mediaDir, media }, outputs };
   } finally {
     await fs.promises.rm(dir, { recursive: true, force: true });

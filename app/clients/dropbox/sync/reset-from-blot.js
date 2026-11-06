@@ -90,14 +90,20 @@ async function getFreeSpaceBytes(client) {
   try {
     ({ result } = await client.usersGetSpaceUsage());
   } catch (e) {
-    log("Failed to check Dropbox space usage, skipping pre-flight check", e.message);
+    log(
+      "Failed to check Dropbox space usage, skipping pre-flight check",
+      e.message
+    );
     return null;
   }
 
   const { used, allocation } = result || {};
   if (typeof used !== "number" || !allocation) return null;
 
-  if (allocation[".tag"] === "individual" && typeof allocation.allocated === "number") {
+  if (
+    allocation[".tag"] === "individual" &&
+    typeof allocation.allocated === "number"
+  ) {
     return allocation.allocated - used;
   }
 
@@ -158,7 +164,10 @@ async function listRemoteSizes(client, root, dir, signal, sizes = new Map()) {
   } catch (e) {
     // Best-effort, same as getFreeSpaceBytes above: if we can't list what's
     // already there, treat it as nothing (the conservative choice).
-    log("Failed to list existing Dropbox folder contents for quota check", e.message);
+    log(
+      "Failed to list existing Dropbox folder contents for quota check",
+      e.message
+    );
     return sizes;
   }
 

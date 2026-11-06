@@ -2,7 +2,9 @@ const photoMaskOptions = require("../load/photo-mask-options");
 
 describe("photo mask options", function () {
   it("selects the saved shape", function () {
-    const selected = photoMaskOptions("squircle").filter((option) => option.selected);
+    const selected = photoMaskOptions("squircle").filter(
+      (option) => option.selected
+    );
     expect(selected.map((option) => option.value)).toEqual(["squircle"]);
   });
 
@@ -14,7 +16,9 @@ describe("photo mask options", function () {
 
   it("falls back to circle for missing or unknown shapes", function () {
     for (const mask of [undefined, "", "star"]) {
-      expect(photoMaskOptions(mask).find((option) => option.selected).value).toBe("circle");
+      expect(
+        photoMaskOptions(mask).find((option) => option.selected).value
+      ).toBe("circle");
     }
   });
 

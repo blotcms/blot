@@ -49,9 +49,14 @@ describe("git client dashboard: a setup in progress", function () {
 
   // Where GET / sends the dashboard: "create", or "page" if it shows the page
   async function landing(ctx) {
-    var response = await fetch("http://127.0.0.1:" + ctx.listener.address().port + "/", { redirect: "manual" });
+    var response = await fetch(
+      "http://127.0.0.1:" + ctx.listener.address().port + "/",
+      { redirect: "manual" }
+    );
     if (response.status >= 300 && response.status < 400) {
-      return /\/create$/.test(response.headers.get("location")) ? "create" : response.headers.get("location");
+      return /\/create$/.test(response.headers.get("location"))
+        ? "create"
+        : response.headers.get("location");
     }
     return response.status === 200 ? "page" : "status " + response.status;
   }

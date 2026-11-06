@@ -16,18 +16,18 @@ describe("drafts work", function () {
     const firstContents = guid();
     const secondContents = guid();
 
-    this.writeDraft(path, firstContents, err => {
+    this.writeDraft(path, firstContents, (err) => {
       if (err) return done.fail(err);
 
       const { Readable } = require("stream");
 
       fetch(this.origin + "/draft/stream" + path)
-        .then(res => {
+        .then((res) => {
           if (!res.ok) {
             throw new Error(`HTTP error! status: ${res.status}`);
           }
           return new Promise((resolve, reject) => {
-            this.writeDraft(path, secondContents, err => {
+            this.writeDraft(path, secondContents, (err) => {
               if (err) {
                 reject(err);
               } else {
@@ -36,10 +36,10 @@ describe("drafts work", function () {
             });
           });
         })
-        .then(body => {
+        .then((body) => {
           // The response body is a stream. Create a readable stream to consume it.
           const readableStream = new Readable().wrap(body);
-          readableStream.on("data", chunk => {
+          readableStream.on("data", (chunk) => {
             const data = chunk.toString().trim();
             // SSE comment heartbeats keep preview proxies from timing out.
             if (!data || data.startsWith(":")) return;
@@ -50,7 +50,7 @@ describe("drafts work", function () {
             done();
           });
         })
-        .catch(err => {
+        .catch((err) => {
           done.fail(err);
         });
     });
@@ -61,16 +61,16 @@ describe("drafts work", function () {
 
     const view = {
       name: "entry.html",
-      content: `<html><head></head><body>{{{entry.html}}}</body></html>`
+      content: `<html><head></head><body>{{{entry.html}}}</body></html>`,
     };
 
-    Template.create(this.blog.id, templateName, {}, err => {
+    Template.create(this.blog.id, templateName, {}, (err) => {
       if (err) return done(err);
       Template.getTemplateList(this.blog.id, (err, templates) => {
         let templateId = templates.filter(
           ({ name }) => name === templateName
         )[0].id;
-        Template.setView(templateId, view, err => {
+        Template.setView(templateId, view, (err) => {
           if (err) return done(err);
           Blog.set(
             this.blog.id,
@@ -88,7 +88,7 @@ describe("drafts work", function () {
     server = Express();
     server.use((req, res, next) => {
       const _get = req.get;
-      req.get = arg => {
+      req.get = (arg) => {
         if (arg === "host") {
           return `${this.blog.handle}.${config.host}`;
         } else return _get(arg);

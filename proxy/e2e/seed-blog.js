@@ -46,7 +46,10 @@ if (!email) {
   try {
     await buildTemplates({ watch: false });
   } catch (err) {
-    console.error("seed-blog: template build failed (continuing):", err.message);
+    console.error(
+      "seed-blog: template build failed (continuing):",
+      err.message
+    );
   }
 
   const post =

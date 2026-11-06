@@ -94,7 +94,9 @@ describe("user disable/enable with blogs", function () {
   global.test.blogs(2);
 
   it("disable propagates isDisabled to all blogs", async function () {
-    var blogIds = this.blogs.map(function (blog) { return blog.id; });
+    var blogIds = this.blogs.map(function (blog) {
+      return blog.id;
+    });
     var user = await getUser(this.user.uid);
     user.blogs = blogIds;
     await setUser(user.uid, { blogs: blogIds });
@@ -112,7 +114,9 @@ describe("user disable/enable with blogs", function () {
   });
 
   it("enable propagates isDisabled=false to all blogs", async function () {
-    var blogIds = this.blogs.map(function (blog) { return blog.id; });
+    var blogIds = this.blogs.map(function (blog) {
+      return blog.id;
+    });
     var user = await getUser(this.user.uid);
     user.blogs = blogIds;
     await setUser(user.uid, { blogs: blogIds });

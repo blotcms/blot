@@ -1,5 +1,4 @@
 module.exports = function (blogID, plugins, callback) {
-  
   // For some reason (perhaps Disqus UI) we ran into an
   // issue where people's shortname included the Disqus
   // domain. This validator will strip the domain.

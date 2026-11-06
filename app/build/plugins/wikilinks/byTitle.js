@@ -19,7 +19,9 @@ async function loadTitles(blogID) {
 
   for (const list of ["entries", "pages"]) {
     const ids = await new Promise((resolve, reject) =>
-      getListIDs(blogID, list, {}, (err, ids) => (err ? reject(err) : resolve(ids)))
+      getListIDs(blogID, list, {}, (err, ids) =>
+        err ? reject(err) : resolve(ids)
+      )
     );
 
     for (let i = 0; i < ids.length; i += BATCH_SIZE) {
@@ -29,7 +31,8 @@ async function loadTitles(blogID) {
         )
       );
 
-      for (const { title, url, path } of entries) titles.push({ title, url, path });
+      for (const { title, url, path } of entries)
+        titles.push({ title, url, path });
     }
   }
 
@@ -59,7 +62,9 @@ function byTitle(titles, href, done) {
 
       // Will trim, lowercase, remove punctuation, etc.
       const slug = makeSlug(href);
-      const roughMatch = allEntries.find((entry) => makeSlug(entry.title) === slug);
+      const roughMatch = allEntries.find(
+        (entry) => makeSlug(entry.title) === slug
+      );
 
       if (roughMatch) {
         return done(null, {

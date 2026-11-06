@@ -67,36 +67,34 @@ module.exports = function byFilename(
           if (dirent.isDirectory) enqueue(join(current, dirent.name));
         });
 
-        folder
-          .resolveCaseInsensitive(blogID, join(current, targetName))
-          .then(
-            async function (resolvedPath) {
-              // We don't want to match directories, only files
-              try {
-                const stat = await folder.stat(blogID, resolvedPath);
-                if (stat && stat.isDirectory) {
-                  return searchNext();
-                }
-              } catch (e) {}
+        folder.resolveCaseInsensitive(blogID, join(current, targetName)).then(
+          async function (resolvedPath) {
+            // We don't want to match directories, only files
+            try {
+              const stat = await folder.stat(blogID, resolvedPath);
+              if (stat && stat.isDirectory) {
+                return searchNext();
+              }
+            } catch (e) {}
 
-              debug("Found match at", resolvedPath);
+            debug("Found match at", resolvedPath);
 
-              return getEntry(blogID, resolvedPath, function (entry) {
-                if (entry) {
-                  debug("Entry found for", resolvedPath, entry);
-                  return callback(null, entry);
-                } else {
-                  debug("No entry for", resolvedPath);
-                  return callback(null, {
-                    url: resolvedPath,
-                    title: targetName,
-                    path: resolvedPath,
-                  });
-                }
-              });
-            },
-            () => searchNext()
-          );
+            return getEntry(blogID, resolvedPath, function (entry) {
+              if (entry) {
+                debug("Entry found for", resolvedPath, entry);
+                return callback(null, entry);
+              } else {
+                debug("No entry for", resolvedPath);
+                return callback(null, {
+                  url: resolvedPath,
+                  title: targetName,
+                  path: resolvedPath,
+                });
+              }
+            });
+          },
+          () => searchNext()
+        );
       });
   }
 

@@ -88,13 +88,17 @@ describe("getAllCached", function () {
 
     it("keeps no heavy field when the locals only reference light fields", function () {
       expect(
-        getAllCached._heavyFieldsToKeep(retrieveWith({ title: true, url: true }))
+        getAllCached._heavyFieldsToKeep(
+          retrieveWith({ title: true, url: true })
+        )
       ).toEqual([]);
     });
 
     it("keeps the heavy fields a local references", function () {
       expect(
-        getAllCached._heavyFieldsToKeep(retrieveWith({ title: true, html: true }))
+        getAllCached._heavyFieldsToKeep(
+          retrieveWith({ title: true, html: true })
+        )
       ).toEqual(["html"]);
     });
 
@@ -176,11 +180,19 @@ describe("getAllCached", function () {
     const entries = await getAllCached(blog, { retrieve: NARROW });
     const expected = catalog()[0];
 
-    ["id", "path", "url", "title", "dateStamp", "tags", "thumbnail", "metadata", "backlinks"].forEach(
-      function (field) {
-        expect(entries[0][field]).toEqual(expected[field]);
-      }
-    );
+    [
+      "id",
+      "path",
+      "url",
+      "title",
+      "dateStamp",
+      "tags",
+      "thumbnail",
+      "metadata",
+      "backlinks",
+    ].forEach(function (field) {
+      expect(entries[0][field]).toEqual(expected[field]);
+    });
   });
 
   it("returns complete entries when no retrieve option is passed", async function () {

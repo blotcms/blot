@@ -28,7 +28,10 @@ module.exports = function getFullView(blogID, templateID, viewName, callback) {
     //                     which need to be fetched.
     // - partials (object) partials in view
 
-    var partialContexts = parseTemplate.getPartialContexts(view.content || "", "");
+    var partialContexts = parseTemplate.getPartialContexts(
+      view.content || "",
+      ""
+    );
 
     folderLinkOptions(blogID, templateID, function (err, wrapOptions) {
       if (err) return callback(err);

@@ -34,10 +34,7 @@ module.exports = async (blogID, publish, update) => {
   const startedAt = Date.now();
 
   const checkWeCanContinue = CheckWeCanContinue(blogID);
-  const progress = createProgress(
-    await countLocalFiles(blogID, "/"),
-    publish
-  );
+  const progress = createProgress(await countLocalFiles(blogID, "/"), publish);
   const summary = {
     downloaded: 0,
     removed: 0,
@@ -281,7 +278,10 @@ module.exports = async (blogID, publish, update) => {
       account.setupComplete &&
       account.error &&
       resolveCode(account) !== health.CODES.SOURCE_MISSING &&
-      !(typeof account.errorSince === "number" && account.errorSince >= startedAt)
+      !(
+        typeof account.errorSince === "number" &&
+        account.errorSince >= startedAt
+      )
     ) {
       await database.store(blogID, { error: null });
     }

@@ -2,28 +2,37 @@ const assert = require("assert");
 // Exercise the real downloader with controlled streams and no Drive account.
 const fs = require("fs");
 const vm = require("vm");
-const {
-  Readable,
-  Writable,
-  PassThrough
-} = require("stream");
+const { Readable, Writable, PassThrough } = require("stream");
 
 function load(stubs) {
   const module = {
-    exports: {}
+    exports: {},
   };
-  vm.runInNewContext(fs.readFileSync(require.resolve("../util/download"), "utf8"), {
-    module,
-    exports: module.exports,
-    Buffer,
-    console,
-    require: name => Object.prototype.hasOwnProperty.call(stubs, name) ? stubs[name] : require(name),
-  });
+  vm.runInNewContext(
+    fs.readFileSync(require.resolve("../util/download"), "utf8"),
+    {
+      module,
+      exports: module.exports,
+      Buffer,
+      console,
+      require: (name) =>
+        Object.prototype.hasOwnProperty.call(stubs, name)
+          ? stubs[name]
+          : require(name),
+    }
+  );
   return module.exports;
 }
-describe("Drive download completion", function() {
-  let moved, removed, source, writer, finishWrite, download, mismatchTemp, failAfterPublish;
-  beforeEach(function() {
+describe("Drive download completion", function () {
+  let moved,
+    removed,
+    source,
+    writer,
+    finishWrite,
+    download,
+    mismatchTemp,
+    failAfterPublish;
+  beforeEach(function () {
     finishWrite = undefined;
     mismatchTemp = false;
     failAfterPublish = false;
@@ -33,7 +42,7 @@ describe("Drive download completion", function() {
     writer = new Writable({
       write(chunk, encoding, callback) {
         finishWrite = callback;
-      }
+      },
     });
     download = load({
       "fs-extra": {
@@ -48,25 +57,36 @@ describe("Drive download completion", function() {
         },
         // Nothing at the path until the download is published
         stat: async (blogID, path, options) => {
-          if (!moved) throw Object.assign(new Error("missing"), { code: "ENOENT" });
+          if (!moved)
+            throw Object.assign(new Error("missing"), { code: "ENOENT" });
           if (failAfterPublish) throw Error("stat failed after publication");
-          return { isDirectory: false, size: 12, modified: 1000, sha1: options && options.sha1 ? "sha" : undefined };
+          return {
+            isDirectory: false,
+            size: 12,
+            modified: 1000,
+            sha1: options && options.sha1 ? "sha" : undefined,
+          };
         },
       },
       "./localFile": async () => "/test-blog/file.txt",
       "./localState": require("../util/localState"),
       "colors/safe": {
-        green: x => x
+        green: (x) => x,
       },
       debug: () => () => {},
       "helper/tempDir": () => "/test-temp",
       "helper/guid": () => "download",
-      "./verifyContent": async filename => {
-        if (filename.startsWith("/test-temp")) return mismatchTemp ? null : {
-          checksum: "new",
-          sha1: "sha"
-        };
-        throw Error("the published file is checked by its SHA-1, not read again");
+      "./verifyContent": async (filename) => {
+        if (filename.startsWith("/test-temp"))
+          return mismatchTemp
+            ? null
+            : {
+                checksum: "new",
+                sha1: "sha",
+              };
+        throw Error(
+          "the published file is checked by its SHA-1, not read again"
+        );
       },
       config: {},
       "helper/hash": () => {},
@@ -78,25 +98,30 @@ describe("Drive download completion", function() {
   });
 
   function start() {
-    return download("blog", {
-      files: {
-        get: async () => ({
-          data: source
-        })
+    return download(
+      "blog",
+      {
+        files: {
+          get: async () => ({
+            data: source,
+          }),
+        },
+      },
+      "/file.txt",
+      {
+        id: "file",
+        mimeType: "text/plain",
+        md5Checksum: "new",
+        modifiedTime: "2026-01-01T00:00:00Z",
       }
-    }, "/file.txt", {
-      id: "file",
-      mimeType: "text/plain",
-      md5Checksum: "new",
-      modifiedTime: "2026-01-01T00:00:00Z",
-    });
+    );
   }
   async function writing() {
-    while (!finishWrite) await new Promise(resolve => setImmediate(resolve));
+    while (!finishWrite) await new Promise((resolve) => setImmediate(resolve));
   }
-  it("publishes only after the destination finishes", async function() {
+  it("publishes only after the destination finishes", async function () {
     let resolved = false;
-    const pending = start().then(result => {
+    const pending = start().then((result) => {
       resolved = true;
       return result;
     });
@@ -110,12 +135,12 @@ describe("Drive download completion", function() {
         checksum: "new",
         sha1: "sha",
         size: 12,
-        modified: 1000
-      }
+        modified: 1000,
+      },
     });
     expect(moved).toBe(true);
   });
-  it("does not publish media whose bytes disagree with the listed checksum", async function() {
+  it("does not publish media whose bytes disagree with the listed checksum", async function () {
     mismatchTemp = true;
     const pending = start();
     const rejected = assert.rejects(pending, /does not match/);
@@ -125,18 +150,18 @@ describe("Drive download completion", function() {
     expect(moved).toBe(false);
     expect(removed).toBe(true);
   });
-  it("still requests a rebuild when post-publication verification fails", async function() {
+  it("still requests a rebuild when post-publication verification fails", async function () {
     failAfterPublish = true;
     const pending = start();
     await writing();
     finishWrite();
     expect(await pending).toEqual({
       updated: true,
-      verifiedContent: null
+      verifiedContent: null,
     });
     expect(moved).toBe(true);
   });
-  it("rejects a late writer failure and cleans up without publishing", async function() {
+  it("rejects a late writer failure and cleans up without publishing", async function () {
     const pending = start();
     const rejection = assert.rejects(pending, /disk full/);
     await writing();
@@ -146,7 +171,7 @@ describe("Drive download completion", function() {
     expect(removed).toBe(true);
     expect(source.destroyed).toBe(true);
   });
-  it("rejects a source failure and cleans up", async function() {
+  it("rejects a source failure and cleans up", async function () {
     source = new PassThrough();
     source.write("partial");
     const pending = start();
@@ -160,10 +185,10 @@ describe("Drive download completion", function() {
   });
 });
 
-describe("Drive download checksum optimization", function() {
+describe("Drive download checksum optimization", function () {
   let stats, requested, download;
 
-  beforeEach(function() {
+  beforeEach(function () {
     requested = false;
     stats = [];
     download = load({
@@ -177,14 +202,14 @@ describe("Drive download checksum optimization", function() {
       "./localFile": async () => "/test-blog/file.txt",
       "./localState": require("../util/localState"),
       "colors/safe": {
-        green: x => x
+        green: (x) => x,
       },
       debug: () => () => {},
       "helper/tempDir": () => "/test-temp",
       "helper/guid": () => "download",
       "./verifyContent": async () => ({
         checksum: "same",
-        sha1: "sha"
+        sha1: "sha",
       }),
       config: {},
       "helper/hash": () => {},
@@ -196,21 +221,26 @@ describe("Drive download checksum optimization", function() {
   });
 
   function start() {
-    return download("blog", {
-      files: {
-        get: async () => {
-          requested = true;
-          throw Error("requested");
-        }
+    return download(
+      "blog",
+      {
+        files: {
+          get: async () => {
+            requested = true;
+            throw Error("requested");
+          },
+        },
+      },
+      "/file.txt",
+      {
+        id: "file",
+        mimeType: "text/plain",
+        md5Checksum: "same",
       }
-    }, "/file.txt", {
-      id: "file",
-      mimeType: "text/plain",
-      md5Checksum: "same",
-    });
+    );
   }
 
-  it("does not request content when the local checksum matches", async function() {
+  it("does not request content when the local checksum matches", async function () {
     const stat = { isDirectory: false, size: 4, modified: 1000.4 };
     stats = [stat, stat];
     expect(await start()).toEqual({
@@ -219,13 +249,13 @@ describe("Drive download checksum optimization", function() {
         checksum: "same",
         sha1: "sha",
         size: 4,
-        modified: 1000
-      }
+        modified: 1000,
+      },
     });
     expect(requested).toBe(false);
   });
 
-  it("does not vouch for a file which changed while it was hashed", async function() {
+  it("does not vouch for a file which changed while it was hashed", async function () {
     stats = [
       { isDirectory: false, size: 4, modified: 1000 },
       { isDirectory: false, size: 4, modified: 2000 },

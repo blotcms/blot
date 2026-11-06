@@ -45,7 +45,15 @@ module.exports = function ($) {
 
     let code = $code.html();
     // Unescape entities that may have been encoded by cheerio/HTML
-    code = code.split("&quot;").join('"').split("&lt;").join("<").split("&gt;").join(">").split("&amp;").join("&");
+    code = code
+      .split("&quot;")
+      .join('"')
+      .split("&lt;")
+      .join("<")
+      .split("&gt;")
+      .join(">")
+      .split("&amp;")
+      .join("&");
 
     let highlighted;
     try {

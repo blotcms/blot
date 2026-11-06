@@ -33,7 +33,10 @@ const QUOTA_REASONS = {
 function driveReasons(err) {
   const nested =
     (err && err.errors) ||
-    (err && err.response && err.response.data && err.response.data.error &&
+    (err &&
+      err.response &&
+      err.response.data &&
+      err.response.data.error &&
       err.response.data.error.errors) ||
     [];
 

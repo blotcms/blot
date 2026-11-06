@@ -130,7 +130,9 @@ const getOverwriteSet = (body = {}) => {
   if (Array.isArray(payload)) {
     payload.forEach((item) => {
       if (typeof item === "string" && item.trim()) {
-        overwriteSet.add(item.normalize("NFC").replace(/\\/g, "/").replace(/^\/+/, ""));
+        overwriteSet.add(
+          item.normalize("NFC").replace(/\\/g, "/").replace(/^\/+/, "")
+        );
       }
     });
   }

@@ -1,10 +1,7 @@
 const fs = require("fs-extra");
 const unzipUpload = require("./unzip-upload");
 const UploadValidationError = require("./upload-validation-error");
-const {
-  UPLOAD_MAX_RAW_FILES,
-  UPLOAD_MAX_TOTAL_BYTES,
-} = require("./constants");
+const { UPLOAD_MAX_RAW_FILES, UPLOAD_MAX_TOTAL_BYTES } = require("./constants");
 
 // Reads what multiparty left in req.files into { relativePath, buffer }
 // records for parse-uploaded-template.
@@ -82,11 +79,13 @@ const badRequest = (message) => {
   return err;
 };
 
-module.exports = async function collectUploadEntries (req) {
+module.exports = async function collectUploadEntries(req) {
   const files = req.files || {};
   const body = req.body || {};
 
-  const zipFiles = toArray(files[ZIP_FIELD]).filter((file) => file && file.path);
+  const zipFiles = toArray(files[ZIP_FIELD]).filter(
+    (file) => file && file.path
+  );
   const otherFiles = collectFiles(files).filter(
     (upload) => upload.field !== ZIP_FIELD
   );

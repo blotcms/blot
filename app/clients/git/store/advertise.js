@@ -23,7 +23,14 @@ const { packet, FLUSH } = require("./pktline");
 
 const ZERO = "0".repeat(40);
 
-const CAPABILITIES = ["multi_ack_detailed", "no-done", "side-band-64k", "ofs-delta", "no-progress", "object-format=sha1"];
+const CAPABILITIES = [
+  "multi_ack_detailed",
+  "no-done",
+  "side-band-64k",
+  "ofs-delta",
+  "no-progress",
+  "object-format=sha1",
+];
 
 const CONTENT_TYPE = "application/x-git-upload-pack-advertisement";
 
@@ -42,10 +49,13 @@ function advertise(manifest, { agent = "blot-git-store" } = {}) {
     capabilities.push("symref=HEAD:" + manifest.head);
   }
 
-  const names = Object.keys(manifest.refs).sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
+  const names = Object.keys(manifest.refs).sort((a, b) =>
+    Buffer.compare(Buffer.from(a), Buffer.from(b))
+  );
   for (const name of names) {
     lines.push(manifest.refs[name] + " " + name);
-    if (peeled[manifest.refs[name]]) lines.push(peeled[manifest.refs[name]] + " " + name + "^{}");
+    if (peeled[manifest.refs[name]])
+      lines.push(peeled[manifest.refs[name]] + " " + name + "^{}");
   }
 
   capabilities.push("agent=" + agent);
@@ -53,7 +63,9 @@ function advertise(manifest, { agent = "blot-git-store" } = {}) {
   // A repository with no refs is advertised the way git does it
   if (!lines.length) lines.push(ZERO + " capabilities^{}");
 
-  const packets = lines.map((line, index) => packet(line + (index === 0 ? "\0" + capabilities.join(" ") : "") + "\n"));
+  const packets = lines.map((line, index) =>
+    packet(line + (index === 0 ? "\0" + capabilities.join(" ") : "") + "\n")
+  );
   return Buffer.concat([SERVICE, ...packets, FLUSH]);
 }
 

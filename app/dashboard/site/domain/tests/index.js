@@ -122,10 +122,7 @@ describe("domain verifier", function () {
       throw new Error("expected an error");
     } catch (e) {
       expect(e.message).toBe("MULTIPLE_ADDRESS_BUT_ONE_IS_CORRECT");
-      expect(e.recordToRemove).toEqual([
-        "2001:db8::dead",
-        "2001:db8::beef",
-      ]);
+      expect(e.recordToRemove).toEqual(["2001:db8::dead", "2001:db8::beef"]);
       expect(e.nameservers).toEqual(["ns1.stray.com", "ns2.stray.com"]);
     }
   });
@@ -310,17 +307,23 @@ describe("domain verifier", function () {
     const hostname = "pinned-request.com";
     const handle = "example";
 
-    resolver.resolveCname.and.returnValue(Promise.reject(new Error("ENOTFOUND")));
+    resolver.resolveCname.and.returnValue(
+      Promise.reject(new Error("ENOTFOUND"))
+    );
     resolver.resolve4.and.returnValue(Promise.resolve(["1.2.3.4", "5.6.7.8"]));
     dns.resolveNs.and.returnValue(Promise.resolve(["ns1.pinned.com"]));
 
     const sandboxFetch = require("sandbox/fetch");
-    spyOn(sandboxFetch, "one").and.returnValue(Promise.resolve({ text: handle }));
+    spyOn(sandboxFetch, "one").and.returnValue(
+      Promise.resolve({ text: handle })
+    );
 
     delete require.cache[verifyPath];
     verify = require(verifyPath);
 
-    expect(await verify({ hostname, handle, ourIP, ourIPv6, ourHost })).toBe(true);
+    expect(await verify({ hostname, handle, ourIP, ourIPv6, ourHost })).toBe(
+      true
+    );
     expect(sandboxFetch.one).toHaveBeenCalledTimes(1);
     expect(sandboxFetch.one.calls.argsFor(0)[0]).toEqual(
       jasmine.objectContaining({
@@ -337,14 +340,23 @@ describe("domain verifier", function () {
     const hostname = "error-page.com";
     const handle = "example";
 
-    resolver.resolveCname.and.returnValue(Promise.reject(new Error("ENOTFOUND")));
+    resolver.resolveCname.and.returnValue(
+      Promise.reject(new Error("ENOTFOUND"))
+    );
     resolver.resolve4.and.returnValue(Promise.resolve(["1.2.3.4"]));
     dns.resolveNs.and.returnValue(Promise.resolve(["ns1.error-page.com"]));
 
-    nock(`http://${hostname}`).get(`/verify/domain-setup`).reply(404, "Not found here");
+    nock(`http://${hostname}`)
+      .get(`/verify/domain-setup`)
+      .reply(404, "Not found here");
 
-    await expectAsync(verify({ hostname, handle, ourIP, ourIPv6, ourHost })).toBeRejectedWith(
-      jasmine.objectContaining({ message: "HANDLE_MISMATCH", received: "Not found here" })
+    await expectAsync(
+      verify({ hostname, handle, ourIP, ourIPv6, ourHost })
+    ).toBeRejectedWith(
+      jasmine.objectContaining({
+        message: "HANDLE_MISMATCH",
+        received: "Not found here",
+      })
     );
   });
 
@@ -353,7 +365,9 @@ describe("domain verifier", function () {
     // timeout the client marks as one
     const sandboxFetch = require("sandbox/fetch");
     spyOn(sandboxFetch, "one").and.callFake(() =>
-      Promise.reject(Object.assign(new Error("timed out"), { type: "request-timeout" }))
+      Promise.reject(
+        Object.assign(new Error("timed out"), { type: "request-timeout" })
+      )
     );
 
     delete require.cache[verifyPath];

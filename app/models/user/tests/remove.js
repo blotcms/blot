@@ -33,7 +33,7 @@ describe("user remove", function () {
       await client.del([
         key.user(createdUid),
         "sync:lease:" + createdUid,
-        "sync:again:" + createdUid
+        "sync:again:" + createdUid,
       ]);
       await client.sRem(key.uids, createdUid);
     }
@@ -42,7 +42,7 @@ describe("user remove", function () {
     await client.del([
       key.email(email),
       key.customer(customerId),
-      key.paypal(paypalId)
+      key.paypal(paypalId),
     ]);
   });
 
@@ -57,9 +57,9 @@ describe("user remove", function () {
     var user = await createTestUser();
     var beforeMembers = await client.sMembers(key.uids);
     expect(beforeMembers).toContain(user.uid);
-    
+
     await remove(user.uid);
-    
+
     var afterMembers = await client.sMembers(key.uids);
     expect(afterMembers).not.toContain(user.uid);
   });
@@ -68,9 +68,9 @@ describe("user remove", function () {
     var user = await createTestUser();
     var beforeEmail = await client.get(key.email(user.email));
     expect(beforeEmail).toEqual(user.uid);
-    
+
     await remove(user.uid);
-    
+
     var afterEmail = await client.get(key.email(user.email));
     expect(afterEmail).toBeNull();
   });
@@ -79,9 +79,9 @@ describe("user remove", function () {
     var user = await createTestUser({ subscription: { customer: customerId } });
     var beforeCustomer = await client.get(key.customer(customerId));
     expect(beforeCustomer).toEqual(user.uid);
-    
+
     await remove(user.uid);
-    
+
     var afterCustomer = await client.get(key.customer(customerId));
     expect(afterCustomer).toBeNull();
   });
@@ -90,9 +90,9 @@ describe("user remove", function () {
     var user = await createTestUser({ paypal: { id: paypalId } });
     var beforePaypal = await client.get(key.paypal(paypalId));
     expect(beforePaypal).toEqual(user.uid);
-    
+
     await remove(user.uid);
-    
+
     var afterPaypal = await client.get(key.paypal(paypalId));
     expect(afterPaypal).toBeNull();
   });
@@ -101,9 +101,9 @@ describe("user remove", function () {
     var user = await createTestUser();
     await client.set("sync:lease:" + user.uid, "value");
     await client.set("sync:again:" + user.uid, "value");
-    
+
     await remove(user.uid);
-    
+
     var leaseAfter = await client.get("sync:lease:" + user.uid);
     var againAfter = await client.get("sync:again:" + user.uid);
     expect(leaseAfter).toBeNull();
@@ -112,8 +112,12 @@ describe("user remove", function () {
 
   it("returns error for non-existent user", async function () {
     var error = await remove("user_nonexistent").then(
-      function () { return null; },
-      function (err) { return err; }
+      function () {
+        return null;
+      },
+      function (err) {
+        return err;
+      }
     );
     expect(error).not.toBeNull();
     expect(error.message).toEqual("No user");
@@ -122,11 +126,11 @@ describe("user remove", function () {
   it("handles user with both Stripe and PayPal subscriptions", async function () {
     var user = await createTestUser({
       subscription: { customer: customerId },
-      paypal: { id: paypalId }
+      paypal: { id: paypalId },
     });
-    
+
     await remove(user.uid);
-    
+
     expect(await client.get(key.customer(customerId))).toBeNull();
     expect(await client.get(key.paypal(paypalId))).toBeNull();
     expect(await getById(user.uid)).toBeNull();
@@ -134,9 +138,9 @@ describe("user remove", function () {
 
   it("handles user with no subscriptions", async function () {
     var user = await createTestUser({ subscription: {}, paypal: {} });
-    
+
     await remove(user.uid);
-    
+
     expect(await getById(user.uid)).toBeNull();
   });
 });

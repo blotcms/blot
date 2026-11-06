@@ -61,7 +61,9 @@ function initSidebarActionMenu(options) {
 
   function isUnavailable(link) {
     var menuItem = link.closest("li");
-    return link.classList.contains("is-disabled") || !!(menuItem && menuItem.hidden);
+    return (
+      link.classList.contains("is-disabled") || !!(menuItem && menuItem.hidden)
+    );
   }
 
   function applyLinkState(link, href, disabled, hidden) {
@@ -91,7 +93,8 @@ function initSidebarActionMenu(options) {
 
     linkEntries.forEach(function (entry) {
       var resolver = linkMap[entry.key];
-      var value = typeof resolver === "function" ? resolver(dataset, trigger) : resolver;
+      var value =
+        typeof resolver === "function" ? resolver(dataset, trigger) : resolver;
       var href;
       var disabled = false;
       var hidden = false;

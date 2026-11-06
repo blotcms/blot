@@ -3,7 +3,7 @@ describe("bluesky plugin", function () {
   const cheerio = require("cheerio");
 
   global.test.timeout(10000); // 10 seconds
-  
+
   it("works", function (done) {
     // html bare link to a post on bluesky
     const html =
@@ -14,9 +14,8 @@ describe("bluesky plugin", function () {
     replaceURLsWithEmbeds($, function () {
       console.log("html:", $.html());
       expect(
-        $(
-          "a[href='https://bsky.app/profile/emilyliu.me/post/3jzn6g7ixgq2y']"
-        ).length
+        $("a[href='https://bsky.app/profile/emilyliu.me/post/3jzn6g7ixgq2y']")
+          .length
       ).toBe(0);
       expect($("blockquote").length).toBe(1);
       done();

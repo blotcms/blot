@@ -42,7 +42,7 @@ describe("tags.set", function () {
             done();
           });
         });
-      },
+      }
     );
   });
 

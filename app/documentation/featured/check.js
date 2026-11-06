@@ -21,23 +21,25 @@ if (require.main === module) {
 // Should only run in production, will pull in live whether
 // or not domain is still connected to Blot. In future we
 
-async function check () {
+async function check() {
   const featured = await fs.readJSON(__dirname + "/featured.json");
 
   featured.sites = await filter(featured.sites);
 
-  await fs.outputJSON(config.data_directory + "/featured/featured.json", featured, {
-    spaces: 2
-  });
+  await fs.outputJSON(
+    config.data_directory + "/featured/featured.json",
+    featured,
+    {
+      spaces: 2,
+    }
+  );
 
   await flush();
-
-
 }
 
-async function filter (sites) {
+async function filter(sites) {
   return await Promise.all(
-    sites.map(async site => {
+    sites.map(async (site) => {
       const isOnline = await verifySiteIsOnline(site.host);
       try {
         const joined = await determineYearJoined(site.host);
@@ -47,10 +49,10 @@ async function filter (sites) {
       }
       return isOnline ? site : null;
     })
-  ).then(sites => sites.filter(i => i));
+  ).then((sites) => sites.filter((i) => i));
 }
 
-const determineYearJoined = domain =>
+const determineYearJoined = (domain) =>
   new Promise((resolve, reject) => {
     // If we are in dev we cannot access production db info so return a random year
     if (config.environment === "development")

@@ -24,12 +24,12 @@ const smallWords = [
   "v.",
   "via",
   "vs",
-  "vs."
+  "vs.",
 ];
 
 const containers = ["(", "[", "{", '"', `'`, "_"];
 
-function isUrl (text) {
+function isUrl(text) {
   try {
     const parsedUrl = new URL(text);
     return Boolean(parsedUrl.hostname);
@@ -38,7 +38,7 @@ function isUrl (text) {
   }
 }
 
-function capitalize (string) {
+function capitalize(string) {
   if (string.length === 0) {
     return string;
   }
@@ -53,7 +53,7 @@ function capitalize (string) {
   return `${firstLetter.toUpperCase()}${letters.join("")}`;
 }
 
-function titlecase (
+function titlecase(
   string = "",
   { excludedWords = [], useDefaultExcludedWords = true } = {}
 ) {
@@ -70,11 +70,11 @@ function titlecase (
   let previousWord = "";
   // skip any 'words' which do not contain any letters
   // e.g. emojis, punctuation, etc.
-  const firstWordIndex = words.findIndex(word => word.match(/[a-z]/i));
+  const firstWordIndex = words.findIndex((word) => word.match(/[a-z]/i));
   const lastWordIndex = words
     .slice()
     .reverse()
-    .findIndex(word => word.match(/[a-z]/i));
+    .findIndex((word) => word.match(/[a-z]/i));
 
   const re = {
     isEmail: /.+@.+\..+/,
@@ -82,7 +82,7 @@ function titlecase (
     isFileName: /^\w+\.\w{1,3}$/,
     hasInternalCapital: /(?![-‑–—])[a-z]+[A-Z].*/,
 
-    hasHyphen: /[-‑–—]/g
+    hasHyphen: /[-‑–—]/g,
   };
   const capitalizedWords = words.map((word, index) => {
     if (word.match(/\s+/)) {
@@ -112,7 +112,7 @@ function titlecase (
 
       return word
         .split(hyphenCharacter)
-        .map(subWord => {
+        .map((subWord) => {
           if (
             isMultiPart &&
             excludedWords.indexOf(subWord.toLowerCase()) !== -1

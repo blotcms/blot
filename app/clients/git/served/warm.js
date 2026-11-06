@@ -66,7 +66,14 @@ async function run({ ids = null, force = false, now = Date.now } = {}) {
       return { outcome: "skipped", reason: "warm" };
     }
 
-    const totals = { blogs: 0, fetched: 0, cached: 0, bytes: 0, full: false, errors: 0 };
+    const totals = {
+      blogs: 0,
+      fetched: 0,
+      cached: 0,
+      bytes: 0,
+      full: false,
+      errors: 0,
+    };
     const budget = Math.floor(cache.maxBytes / BUDGET_SHARE);
     const blogs = ids || (await require("./maintenance").gitBlogs());
 
@@ -77,7 +84,11 @@ async function run({ ids = null, force = false, now = Date.now } = {}) {
           const blogID = blogs[next++];
           try {
             const result = await limiter.run("background", () =>
-              warmRepo({ store: context.storeFor(blogID), cache, maxBytes: totals.full ? 0 : budget - totals.bytes })
+              warmRepo({
+                store: context.storeFor(blogID),
+                cache,
+                maxBytes: totals.full ? 0 : budget - totals.bytes,
+              })
             );
             totals.blogs++;
             totals.fetched += result.fetched;
@@ -103,7 +114,11 @@ async function run({ ids = null, force = false, now = Date.now } = {}) {
     });
     return { outcome: "warmed", ...totals, requests: measured.counts.requests };
   } catch (err) {
-    log({ op: "warm", outcome: "error", detail: (err && (err.code || err.message)) || "error" });
+    log({
+      op: "warm",
+      outcome: "error",
+      detail: (err && (err.code || err.message)) || "error",
+    });
     return { outcome: "error", error: err };
   } finally {
     clearInterval(beat);
@@ -147,7 +162,10 @@ const PAUSE = 250;
 const BUSY_WAIT = 500;
 const BUSY_MAX = 20 * 1000;
 
-const sleep = (ms) => (ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve());
+const sleep = (ms) =>
+  ms > 0
+    ? new Promise((resolve) => setTimeout(resolve, ms))
+    : Promise.resolve();
 
 // { blogID, store, manifest, time } for a blog, or null if it has no repository
 async function loadRepo(blogID) {
@@ -186,8 +204,16 @@ async function runPacks({
     }
 
     await cache.ready();
-    const ceiling = limit === null ? Math.floor(cache.maxBytes * PACK_SHARE) : limit;
-    const totals = { repos: 0, packs: 0, cached: 0, skipped: 0, failed: 0, stopped: "done" };
+    const ceiling =
+      limit === null ? Math.floor(cache.maxBytes * PACK_SHARE) : limit;
+    const totals = {
+      repos: 0,
+      packs: 0,
+      cached: 0,
+      skipped: 0,
+      failed: 0,
+      stopped: "done",
+    };
     const blogs = ids || (await require("./maintenance").gitBlogs());
     const order = [];
 
@@ -206,10 +232,14 @@ async function runPacks({
         }
       };
       await Promise.all(Array.from({ length: CONCURRENCY }, loader));
-      repos.sort((a, b) => b.time - a.time || String(a.blogID).localeCompare(String(b.blogID)));
+      repos.sort(
+        (a, b) =>
+          b.time - a.time || String(a.blogID).localeCompare(String(b.blogID))
+      );
 
       const queue = [];
-      for (const repo of repos) for (const pack of packList(repo.manifest)) queue.push({ repo, pack });
+      for (const repo of repos)
+        for (const pack of packList(repo.manifest)) queue.push({ repo, pack });
 
       const touched = new Set();
       let at = 0;
@@ -223,7 +253,10 @@ async function runPacks({
             continue;
           }
 
-          if (cache.stats().entryBytes + pack.size > ceiling && (await cache.size(cacheKeyOf(repo.store, pack.name))) !== pack.size) {
+          if (
+            cache.stats().entryBytes + pack.size > ceiling &&
+            (await cache.size(cacheKeyOf(repo.store, pack.name))) !== pack.size
+          ) {
             totals.stopped = "threshold";
             return;
           }
@@ -232,7 +265,13 @@ async function runPacks({
 
           let outcome;
           try {
-            outcome = await warmPack({ store: repo.store, cache, pack, bytesPerSecond: MAX_RATE, between: () => yieldToGit(busyWait) });
+            outcome = await warmPack({
+              store: repo.store,
+              cache,
+              pack,
+              bytesPerSecond: MAX_RATE,
+              between: () => yieldToGit(busyWait),
+            });
           } catch (err) {
             outcome = "failed";
           }
@@ -263,9 +302,19 @@ async function runPacks({
       bytesDown: measured.counts.bytesDown,
       ...totals,
     });
-    return { outcome: "warmed", ...totals, order, requests: measured.counts.requests, bytesDown: measured.counts.bytesDown };
+    return {
+      outcome: "warmed",
+      ...totals,
+      order,
+      requests: measured.counts.requests,
+      bytesDown: measured.counts.bytesDown,
+    };
   } catch (err) {
-    log({ op: "warm-packs", outcome: "error", detail: (err && (err.code || err.message)) || "error" });
+    log({
+      op: "warm-packs",
+      outcome: "error",
+      detail: (err && (err.code || err.message)) || "error",
+    });
     return { outcome: "error", error: err };
   } finally {
     clearInterval(beat);
@@ -277,7 +326,9 @@ async function runPacks({
 // Blot's own commits
 function busy() {
   const lanes = limiter.stats();
-  return ["interactive", "background"].some((name) => lanes[name].running + lanes[name].waiting > 0);
+  return ["interactive", "background"].some(
+    (name) => lanes[name].running + lanes[name].waiting > 0
+  );
 }
 
 // Waits while the host is doing git work, for at most BUSY_MAX at a time, then
@@ -302,15 +353,26 @@ async function removeLegacy({ now = Date.now } = {}) {
   for (const name of await fs.readdir(root).catch(() => [])) {
     if (name === shared) continue;
     const dir = path.join(root, name);
-    const stats = await Promise.all(["", "tmp", "scratch"].map((sub) => fs.stat(path.join(dir, sub)).catch(() => null)));
+    const stats = await Promise.all(
+      ["", "tmp", "scratch"].map((sub) =>
+        fs.stat(path.join(dir, sub)).catch(() => null)
+      )
+    );
     if (!stats[0] || !stats[0].isDirectory()) continue;
-    const newest = Math.max(...stats.filter(Boolean).map((stat) => stat.mtimeMs));
+    const newest = Math.max(
+      ...stats.filter(Boolean).map((stat) => stat.mtimeMs)
+    );
     if (now() - newest < LEGACY_IDLE) continue;
     await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
     removed.push(name);
   }
 
-  if (removed.length) log({ op: "warm", outcome: "legacy-removed", detail: removed.length + " directories" });
+  if (removed.length)
+    log({
+      op: "warm",
+      outcome: "legacy-removed",
+      detail: removed.length + " directories",
+    });
   return removed;
 }
 

@@ -8,13 +8,15 @@ module.exports = async (serviceAccountId) => {
   );
 
   if (!credentials) {
-    throw new Error(`No credentials found for service account ${serviceAccountId}`);
+    throw new Error(
+      `No credentials found for service account ${serviceAccountId}`
+    );
   }
 
   const auth = new googleAuth.GoogleAuth({
     credentials,
-    scopes: ['https://www.googleapis.com/auth/drive'],
+    scopes: ["https://www.googleapis.com/auth/drive"],
   });
 
-  return drive({ version: 'v3', auth, retryConfig });
-}
+  return drive({ version: "v3", auth, retryConfig });
+};

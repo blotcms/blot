@@ -15,10 +15,7 @@ function truncate(value) {
   for (const character of value) {
     const characterBytes = Buffer.byteLength(character, "utf8");
 
-    if (
-      characters + 1 > MAX_CHARACTERS ||
-      bytes + characterBytes > MAX_BYTES
-    ) {
+    if (characters + 1 > MAX_CHARACTERS || bytes + characterBytes > MAX_BYTES) {
       break;
     }
 
@@ -37,7 +34,10 @@ function clean(value, extensions) {
   for (const extension of extensions) {
     const suffix = String(extension || "").replace(/^\.?/, ".");
 
-    if (suffix !== "." && identifier.toLowerCase().endsWith(suffix.toLowerCase())) {
+    if (
+      suffix !== "." &&
+      identifier.toLowerCase().endsWith(suffix.toLowerCase())
+    ) {
       identifier = identifier.slice(0, -suffix.length);
       break;
     }
@@ -56,9 +56,9 @@ function clean(value, extensions) {
 function isValid(identifier) {
   return Boolean(
     identifier &&
-      identifier !== "." &&
-      identifier !== ".." &&
-      !WINDOWS_RESERVED_NAME.test(identifier)
+    identifier !== "." &&
+    identifier !== ".." &&
+    !WINDOWS_RESERVED_NAME.test(identifier)
   );
 }
 

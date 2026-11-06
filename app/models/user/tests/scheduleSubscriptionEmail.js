@@ -109,7 +109,9 @@ describe("scheduleSubscriptionEmail", function () {
     afterEach(async function () {
       for (var periodEnd of this.periodEnds) {
         await client.del(subscriptionEmail.sentKey(this.user.uid, periodEnd));
-        await client.del(subscriptionEmail.sendingKey(this.user.uid, periodEnd));
+        await client.del(
+          subscriptionEmail.sendingKey(this.user.uid, periodEnd)
+        );
       }
     });
 
@@ -204,11 +206,19 @@ describe("scheduleSubscriptionEmail", function () {
       await setUser(uid, { subscription: sub });
       // Simulate a process that sent, then died before setting the durable
       // marker: only a (short-lived) claim remains.
-      await client.set(subscriptionEmail.sendingKey(uid, sub.current_period_end), "1", { PX: 150 });
+      await client.set(
+        subscriptionEmail.sendingKey(uid, sub.current_period_end),
+        "1",
+        { PX: 150 }
+      );
 
       expect(await subscriptionEmail.sendForUser(uid, now)).toBe(null);
-      await new Promise(function (r) { setTimeout(r, 250); });
-      expect(await subscriptionEmail.sendForUser(uid, now)).toBe("UPCOMING_RENEWAL");
+      await new Promise(function (r) {
+        setTimeout(r, 250);
+      });
+      expect(await subscriptionEmail.sendForUser(uid, now)).toBe(
+        "UPCOMING_RENEWAL"
+      );
       expect(await subscriptionEmail.sendForUser(uid, now)).toBe(null);
     });
 

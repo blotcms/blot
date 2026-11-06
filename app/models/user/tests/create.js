@@ -55,21 +55,15 @@ describe("user", function () {
 
           if (execCalls === 1) return [1, false, "OK", "OK"];
           return [1, true, "OK", "OK"];
-        }
+        },
       };
     });
 
-    create(
-      "retry-false@gmail.com",
-      "hash",
-      {},
-      {},
-      function (err, user) {
-        expect(err).toBe(null);
-        expect(user).toEqual(jasmine.any(Object));
-        expect(execCalls).toBe(2);
-        done();
-      }
-    );
+    create("retry-false@gmail.com", "hash", {}, {}, function (err, user) {
+      expect(err).toBe(null);
+      expect(user).toEqual(jasmine.any(Object));
+      expect(execCalls).toBe(2);
+      done();
+    });
   });
 });

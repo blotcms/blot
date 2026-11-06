@@ -32,11 +32,11 @@ module.exports = function (anno) {
     { season: "spring", date: julianIntToDate(jd1) },
     { season: "summer", date: julianIntToDate(jd2) },
     { season: "autumn", date: julianIntToDate(jd3) },
-    { season: "winter", date: julianIntToDate(jd4) }
+    { season: "winter", date: julianIntToDate(jd4) },
   ];
 };
 
-function julianIntToDate (JD) {
+function julianIntToDate(JD) {
   var y = 4716;
   var v = 3;
   var j = 1401;

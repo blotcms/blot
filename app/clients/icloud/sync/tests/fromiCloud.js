@@ -174,9 +174,9 @@ describe("icloud fromiCloud sync", function () {
     it("registers a newly written placeholder with update", async () => {
       const { summary, updated } = await run();
 
-      expect(
-        (await folder.stat(blogID, join("/", remoteFile.name))).size
-      ).toBe(0);
+      expect((await folder.stat(blogID, join("/", remoteFile.name))).size).toBe(
+        0
+      );
       expect(summary.placeholdersCreated).toBe(1);
       expect(updated).toEqual(["/huge.mov"]);
     });
@@ -234,7 +234,9 @@ describe("icloud fromiCloud sync", function () {
 
     mockModule(remoteRecursiveListPath, async () => {});
     mockModule(remoteReaddirPath, async () => {
-      throw new Error("Directory listing unavailable: iCloud has not synced it yet");
+      throw new Error(
+        "Directory listing unavailable: iCloud has not synced it yet"
+      );
     });
     mockModule(checkWeCanContinuePath, () => async () => {});
     mockModule(databasePath, {
@@ -275,7 +277,11 @@ describe("icloud fromiCloud sync", function () {
     });
 
     const fromiCloud = require(fromiCloudPath);
-    await fromiCloud(blogID, () => {}, async () => {});
+    await fromiCloud(
+      blogID,
+      () => {},
+      async () => {}
+    );
 
     expect(store).toHaveBeenCalledWith(blogID, { error: null });
   });
@@ -290,7 +296,11 @@ describe("icloud fromiCloud sync", function () {
     mockModule(databasePath, { store, get: async () => account });
 
     const fromiCloud = require(fromiCloudPath);
-    await fromiCloud(blogID, () => {}, async () => {});
+    await fromiCloud(
+      blogID,
+      () => {},
+      async () => {}
+    );
 
     return store;
   }
@@ -333,7 +343,11 @@ describe("icloud fromiCloud sync", function () {
     });
 
     const fromiCloud = require(fromiCloudPath);
-    await fromiCloud(blogID, () => {}, async () => {});
+    await fromiCloud(
+      blogID,
+      () => {},
+      async () => {}
+    );
 
     expect(store).not.toHaveBeenCalled();
   });
@@ -356,7 +370,11 @@ describe("icloud fromiCloud sync", function () {
     });
 
     const fromiCloud = require(fromiCloudPath);
-    await fromiCloud(blogID, () => {}, async () => {});
+    await fromiCloud(
+      blogID,
+      () => {},
+      async () => {}
+    );
 
     expect(store).not.toHaveBeenCalled();
   });
@@ -377,7 +395,11 @@ describe("icloud fromiCloud sync", function () {
     mockModule(databasePath, { store: async () => {} });
 
     const fromiCloud = require(fromiCloudPath);
-    const summary = await fromiCloud(blogID, () => {}, async () => {});
+    const summary = await fromiCloud(
+      blogID,
+      () => {},
+      async () => {}
+    );
 
     expect(summary.downloaded).toBe(1);
     expect(summary.modifiedDuringWalk).toBe(1);
@@ -398,7 +420,11 @@ describe("icloud fromiCloud sync", function () {
     mockModule(databasePath, { store: async () => {} });
 
     const fromiCloud = require(fromiCloudPath);
-    const summary = await fromiCloud(blogID, () => {}, async () => {});
+    const summary = await fromiCloud(
+      blogID,
+      () => {},
+      async () => {}
+    );
 
     expect(summary.downloaded).toBe(1);
     expect(summary.modifiedDuringWalk).toBe(0);
@@ -418,7 +444,11 @@ describe("icloud fromiCloud sync", function () {
     it("reports no failures for a clean walk", async () => {
       mockWalk([]);
 
-      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+      const summary = await require(fromiCloudPath)(
+        blogID,
+        () => {},
+        async () => {}
+      );
 
       expect(summary.failed).toBe(0);
       expect(summary.firstError).toBeNull();
@@ -431,7 +461,11 @@ describe("icloud fromiCloud sync", function () {
       });
       spyOn(console, "error");
 
-      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+      const summary = await require(fromiCloudPath)(
+        blogID,
+        () => {},
+        async () => {}
+      );
 
       expect(summary.failed).toBe(1);
       expect(summary.firstError).toBe("macserver unreachable");
@@ -445,7 +479,11 @@ describe("icloud fromiCloud sync", function () {
         if (calls < 3) throw new Error("download " + calls + " failed");
       });
 
-      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+      const summary = await require(fromiCloudPath)(
+        blogID,
+        () => {},
+        async () => {}
+      );
 
       expect(summary.failed).toBe(2);
       expect(summary.firstError).toBe("download 1 failed");
@@ -460,7 +498,11 @@ describe("icloud fromiCloud sync", function () {
         throw new Error("disk full");
       });
 
-      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+      const summary = await require(fromiCloudPath)(
+        blogID,
+        () => {},
+        async () => {}
+      );
 
       expect(summary.placeholdersCreated).toBe(0);
       expect(summary.failed).toBe(1);
@@ -473,7 +515,11 @@ describe("icloud fromiCloud sync", function () {
         throw new Error("Directory listing unavailable");
       });
 
-      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+      const summary = await require(fromiCloudPath)(
+        blogID,
+        () => {},
+        async () => {}
+      );
 
       expect(summary.failed).toBe(1);
       expect(summary.firstError).toBe("Directory listing unavailable");
@@ -482,7 +528,11 @@ describe("icloud fromiCloud sync", function () {
   describe("removals and created directories in a directory modified around the walk", () => {
     const recent = () => new Date(Date.now() - 3000).toISOString();
     const anHourAgo = () => new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    const dir = (name, modifiedTime) => ({ name, isDirectory: true, modifiedTime });
+    const dir = (name, modifiedTime) => ({
+      name,
+      isDirectory: true,
+      modifiedTime,
+    });
 
     // listings maps a directory path to what the macserver reports for it
     async function walk(listings) {
@@ -490,9 +540,16 @@ describe("icloud fromiCloud sync", function () {
       mockModule(remoteReaddirPath, async (_, path) => listings[path] || []);
       mockModule(downloadPath, async () => {});
       mockModule(checkWeCanContinuePath, () => async () => {});
-      mockModule(databasePath, { store: async () => {}, get: async () => ({}) });
+      mockModule(databasePath, {
+        store: async () => {},
+        get: async () => ({}),
+      });
 
-      return require(fromiCloudPath)(blogID, () => {}, async () => {});
+      return require(fromiCloudPath)(
+        blogID,
+        () => {},
+        async () => {}
+      );
     }
 
     // A rename (untitled folder -> inactive) in /pages/projects, which
@@ -552,7 +609,10 @@ describe("icloud fromiCloud sync", function () {
       const summary = await walk({
         "/": [dir("pages", anHourAgo())],
         "/pages": [dir("projects", recent())],
-        "/pages/projects": [dir("untitled folder", anHourAgo()), dir("inactive", recent())],
+        "/pages/projects": [
+          dir("untitled folder", anHourAgo()),
+          dir("inactive", recent()),
+        ],
       });
 
       expect(summary.removed).toBe(1);
@@ -576,7 +636,12 @@ describe("icloud fromiCloud sync", function () {
     });
 
     describe("a non-empty directory renamed into the directory", () => {
-      const file = (name, modifiedTime) => ({ name, isDirectory: false, size: 1, modifiedTime });
+      const file = (name, modifiedTime) => ({
+        name,
+        isDirectory: false,
+        size: 1,
+        modifiedTime,
+      });
 
       // Renaming old -> new touches neither new's own mtime nor its files'
       const renamedTree = (pagesModifiedTime, aModifiedTime = anHourAgo()) => ({
@@ -620,5 +685,4 @@ describe("icloud fromiCloud sync", function () {
       });
     });
   });
-
 });

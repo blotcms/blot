@@ -2,7 +2,7 @@ const trace = require("helper/trace");
 const config = require("config");
 const express = require("express");
 const message = require("dashboard/util/message");
-const cookieParser = require('cookie-parser');
+const cookieParser = require("cookie-parser");
 
 const dashboard = express.Router();
 const logout = require("dashboard/account/util/logout");
@@ -39,9 +39,9 @@ dashboard.get("/deleted", logout, (req, res) => {
 });
 
 // Everything afterwards should be authenticated
-dashboard.use(require('dashboard/util/require-authentication'));
+dashboard.use(require("dashboard/util/require-authentication"));
 
-dashboard.use((req, res, next)=>{
+dashboard.use((req, res, next) => {
   res.locals.selected = { dashboard: "selected" };
   next();
 });
@@ -142,7 +142,7 @@ dashboard.use(function (err, req, res, next) {
 
   if (config.environment === "development") {
     res.locals.error = {
-      stack: err.stack
+      stack: err.stack,
     };
   }
 

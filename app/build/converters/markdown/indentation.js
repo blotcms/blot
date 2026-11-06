@@ -24,7 +24,7 @@
 var cheerio = require("cheerio");
 var $ = cheerio.load("", null, false);
 
-function indentation (text) {
+function indentation(text) {
   // Ensure the text contains the ingredients
   // needed for a complete HTML tag! (<,>,/)
   if (!/<|>|\//.test(text)) return text;
@@ -87,7 +87,7 @@ function indentation (text) {
 
 // ensure the only thing that has changed
 // is whitespace...
-function verify (before, after) {
+function verify(before, after) {
   before = before.replace(/\s/g, "");
   after = after.replace("/s/g", "");
 
@@ -96,11 +96,11 @@ function verify (before, after) {
   return after;
 }
 
-function hasPreTag (line) {
+function hasPreTag(line) {
   return line.indexOf("```") > -1;
 }
 
-function hasClosingTag (line, name) {
+function hasClosingTag(line, name) {
   return line.indexOf("</" + name + ">") > -1;
 }
 
@@ -109,13 +109,15 @@ function hasClosingTag (line, name) {
 // tag. Anything else (html/head/body/td/tr/image/custom elements...) is
 // handled by the parser, since it can drop or rename those.
 var SIMPLE = new Set(
-  ("div p span a img br hr ul ol li pre blockquote section article " +
+  (
+    "div p span a img br hr ul ol li pre blockquote section article " +
     "aside nav header footer figure figcaption em strong b i u code h1 h2 " +
-    "h3 h4 h5 h6 form iframe video audio button label small sup sub").split(" ")
+    "h3 h4 h5 h6 form iframe video audio button label small sup sub"
+  ).split(" ")
 );
 var SIMPLE_TAG = /^<([a-zA-Z][a-zA-Z0-9]*)[\s/>]/;
 
-function firstTag (str) {
+function firstTag(str) {
   str = str.trim();
   if (str[0] !== "<" || !(str.indexOf(">") > 0)) return false;
 
@@ -129,11 +131,11 @@ function firstTag (str) {
   return $(str)[0].name;
 }
 
-function leadingWhitespace (str) {
+function leadingWhitespace(str) {
   return /^\s/.test(str);
 }
 
-function trimLeading (str) {
+function trimLeading(str) {
   return str.slice(str.indexOf(str.trim()));
 }
 

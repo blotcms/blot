@@ -71,13 +71,17 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
   }
 
   const drive = await createDriveClient(serviceAccountId);
-  const { getByPath, getApplied, setApplied, set, remove, getVerifiedContents, setVerifiedContent } =
-    database.folder(folderId, blogID);
+  const {
+    getByPath,
+    getApplied,
+    setApplied,
+    set,
+    remove,
+    getVerifiedContents,
+    setVerifiedContent,
+  } = database.folder(folderId, blogID);
   const checkWeCanContinue = CheckWeCanContinue(blogID, account);
-  const progress = createProgress(
-    await countLocalFiles(blogID, "/"),
-    publish
-  );
+  const progress = createProgress(await countLocalFiles(blogID, "/"), publish);
 
   const markSourceMissing = async (message) => {
     publish("Error syncing with Google Drive");
@@ -141,13 +145,19 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     // next to a shortcut to it) would otherwise take that item's name.
     const remoteContents = transformDriveItems(
       driveItems.filter((item) => item.mimeType !== SHORTCUT)
-    )
-      .sort((a, b) => comparePaths(a.name, b.name));
-    const regularFiles = remoteContents.filter(item =>
-      !item.isDirectory && !item.mimeType.startsWith("application/vnd.google-apps.") &&
-      item.md5Checksum);
-    const verifiedRecords = await getVerifiedContents(regularFiles.map(item => item.id));
-    const verifiedById = new Map(regularFiles.map((item, i) => [item.id, verifiedRecords[i]]));
+    ).sort((a, b) => comparePaths(a.name, b.name));
+    const regularFiles = remoteContents.filter(
+      (item) =>
+        !item.isDirectory &&
+        !item.mimeType.startsWith("application/vnd.google-apps.") &&
+        item.md5Checksum
+    );
+    const verifiedRecords = await getVerifiedContents(
+      regularFiles.map((item) => item.id)
+    );
+    const verifiedById = new Map(
+      regularFiles.map((item, i) => [item.id, verifiedRecords[i]])
+    );
 
     for (const { name, isDirectory: isLocalDirectory } of localContents) {
       const path = join(dir, name);
@@ -254,9 +264,18 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
 
         if (isGoogleAppFile || !md5Checksum) {
           const isModifiedTimeCurrent = applied
-            ? truncateToSecond(applied.modifiedTime) === truncateToSecond(modifiedTime) &&
-              Boolean(appliedState = await localState.unchanged(blogID, path, applied, existsLocally))
-            : truncateToSecond(existsLocally?.modifiedTime) === truncateToSecond(modifiedTime);
+            ? truncateToSecond(applied.modifiedTime) ===
+                truncateToSecond(modifiedTime) &&
+              Boolean(
+                (appliedState = await localState.unchanged(
+                  blogID,
+                  path,
+                  applied,
+                  existsLocally
+                ))
+              )
+            : truncateToSecond(existsLocally?.modifiedTime) ===
+              truncateToSecond(modifiedTime);
 
           identical = isGoogleAppFile
             ? isModifiedTimeCurrent
@@ -267,10 +286,10 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
           // no read. Anything else falls back to download(), which compares
           // the file's md5 with Drive's before it downloads anything.
           const cached = verifiedById.get(id);
-          verifiedState = cached && cached.path === path &&
-            cached.checksum === md5Checksum
-            ? await localState.unchanged(blogID, path, cached, existsLocally)
-            : null;
+          verifiedState =
+            cached && cached.path === path && cached.checksum === md5Checksum
+              ? await localState.unchanged(blogID, path, cached, existsLocally)
+              : null;
           identical = Boolean(verifiedState);
         }
 
@@ -327,7 +346,10 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
                 summary.modifiedDuringWalk += 1;
               }
             }
-            if (result?.updated || (!isGoogleAppFile && result?.verifiedContent)) {
+            if (
+              result?.updated ||
+              (!isGoogleAppFile && result?.verifiedContent)
+            ) {
               await update(path);
             }
             if (!isGoogleAppFile && result?.verifiedContent) {
@@ -350,7 +372,8 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
             publish("Download failed", path);
             console.error("Download failed for", path, err);
             summary.failed += 1;
-            if (!summary.firstError) summary.firstError = path + ": " + err.message;
+            if (!summary.firstError)
+              summary.firstError = path + ": " + err.message;
           }
         } else {
           progress.publishThrottled("Checking", path);

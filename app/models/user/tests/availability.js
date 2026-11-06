@@ -54,7 +54,7 @@ describe("retryable account availability transitions", function () {
     async function prepare(context) {
       await setUser(context.user.uid, {
         isDisabled: !targetDisabled,
-        blogs: context.blogs.map(blog => blog.id),
+        blogs: context.blogs.map((blog) => blog.id),
       });
       for (const blog of context.blogs) {
         await setBlog(blog.id, { isDisabled: !targetDisabled });
@@ -67,36 +67,56 @@ describe("retryable account availability transitions", function () {
       expect(saved.isDisabled).toBe(targetDisabled);
       expect(saved.lastSession).toBe("transition-complete");
       for (const blog of context.blogs) {
-        expect((await getBlog({ id: blog.id })).isDisabled).toBe(targetDisabled);
+        expect((await getBlog({ id: blog.id })).isDisabled).toBe(
+          targetDisabled
+        );
       }
     }
 
-    it(operation + " keeps the account eligible for retry after a blog write fails", async function () {
-      const user = await prepare(this);
-      failCommitOnce(blogKey.info(this.blogs[1].id));
-      const error = await transition(user, { lastSession: "transition-complete" })
-        .then(() => null, err => err);
-      expect(error.message).toBe("Temporary write failure");
-      const pending = await getUser(user.uid);
-      expect(pending.isDisabled).toBe(!targetDisabled);
-      expect(pending.lastSession).not.toBe("transition-complete");
-      await transition(pending, { lastSession: "transition-complete" });
-      await expectCompleted(this);
-    });
-
-    it(operation + " keeps the account eligible for retry after the final account write fails", async function () {
-      const user = await prepare(this);
-      failCommitOnce(userKey.user(user.uid));
-      const error = await transition(user, { lastSession: "transition-complete" })
-        .then(() => null, err => err);
-      expect(error.message).toBe("Temporary write failure");
-      const pending = await getUser(user.uid);
-      expect(pending.isDisabled).toBe(!targetDisabled);
-      for (const blog of this.blogs) {
-        expect((await getBlog({ id: blog.id })).isDisabled).toBe(targetDisabled);
+    it(
+      operation +
+        " keeps the account eligible for retry after a blog write fails",
+      async function () {
+        const user = await prepare(this);
+        failCommitOnce(blogKey.info(this.blogs[1].id));
+        const error = await transition(user, {
+          lastSession: "transition-complete",
+        }).then(
+          () => null,
+          (err) => err
+        );
+        expect(error.message).toBe("Temporary write failure");
+        const pending = await getUser(user.uid);
+        expect(pending.isDisabled).toBe(!targetDisabled);
+        expect(pending.lastSession).not.toBe("transition-complete");
+        await transition(pending, { lastSession: "transition-complete" });
+        await expectCompleted(this);
       }
-      await transition(pending, { lastSession: "transition-complete" });
-      await expectCompleted(this);
-    });
+    );
+
+    it(
+      operation +
+        " keeps the account eligible for retry after the final account write fails",
+      async function () {
+        const user = await prepare(this);
+        failCommitOnce(userKey.user(user.uid));
+        const error = await transition(user, {
+          lastSession: "transition-complete",
+        }).then(
+          () => null,
+          (err) => err
+        );
+        expect(error.message).toBe("Temporary write failure");
+        const pending = await getUser(user.uid);
+        expect(pending.isDisabled).toBe(!targetDisabled);
+        for (const blog of this.blogs) {
+          expect((await getBlog({ id: blog.id })).isDisabled).toBe(
+            targetDisabled
+          );
+        }
+        await transition(pending, { lastSession: "transition-complete" });
+        await expectCompleted(this);
+      }
+    );
   });
 });

@@ -1,7 +1,7 @@
-function truncateAll (node) {
+function truncateAll(node) {
   var nodes = Array.from(node.children);
 
-  const width  = node.getBoundingClientRect().width;
+  const width = node.getBoundingClientRect().width;
 
   const styles = window.getComputedStyle(node);
 
@@ -13,16 +13,15 @@ function truncateAll (node) {
 
   const trueWidth = width - paddingWidth - borderWidth;
 
-
   nodes.forEach(
-    node => (node.style.maxWidth = Math.floor(trueWidth / nodes.length) + "px")
+    (node) =>
+      (node.style.maxWidth = Math.floor(trueWidth / nodes.length) + "px")
   );
-  nodes.forEach(n => truncate(n, trueWidth / nodes.length));
+  nodes.forEach((n) => truncate(n, trueWidth / nodes.length));
 }
 
 // crops any given text to the size of the given target
-function truncate (target) {
-
+function truncate(target) {
   // ensure the target has either display: block or display: inline-block
   // or the text will not be truncated
   if (
@@ -60,7 +59,7 @@ function truncate (target) {
   const ellipsisWidth = measure("...");
   const textWidth = measure(text);
 
-  const  width  = target.getBoundingClientRect().width;
+  const width = target.getBoundingClientRect().width;
 
   const styles = window.getComputedStyle(target);
 
@@ -101,13 +100,13 @@ function truncate (target) {
   target.innerHTML = result;
 }
 
-function getTextWidth (fontStyle) {
+function getTextWidth(fontStyle) {
   const range = document.createRange();
   const span = document.createElement("span");
   span.style.font = fontStyle;
   span.style.whiteSpace = "nowrap";
 
-  return function measure (text) {
+  return function measure(text) {
     span.textContent = text;
     document.body.appendChild(span);
     range.selectNode(span);
@@ -121,14 +120,11 @@ function getTextWidth (fontStyle) {
 }
 // once the document is loaded, truncate all truncate elements
 document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll(".truncate").forEach(function (node) {
+    truncate(node);
+  });
 
-
-document.querySelectorAll(".truncate").forEach(function (node) {
-  truncate(node);
-});
-
-document.querySelectorAll(".truncate-all").forEach(function (node) {
-  truncateAll(node);
-});
-
+  document.querySelectorAll(".truncate-all").forEach(function (node) {
+    truncateAll(node);
+  });
 });

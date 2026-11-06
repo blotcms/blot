@@ -46,8 +46,8 @@ module.exports = async function (req, res) {
     const incomingContents = isPlaceholderUpload
       ? Buffer.alloc(0)
       : Buffer.isBuffer(req.body)
-      ? req.body
-      : Buffer.from(req.body);
+        ? req.body
+        : Buffer.from(req.body);
 
     const isFileAlreadyCurrent = async () => {
       if (!(await storage.exists(blogID, filePath))) {

@@ -64,7 +64,9 @@ function parseArgs(argv) {
     }
 
     if (part === "--help") {
-      console.log(`Usage: node scripts/util/redis-latency-profile.js [options]\n\nOptions:\n  --host <host>                Redis host (default: BLOT_REDIS_HOST or 127.0.0.1)\n  --socket <path>              Redis Unix socket, used instead of host and port (default: BLOT_REDIS_SOCKET)\n  --port <port>                Redis port (default: BLOT_REDIS_PORT or 6379)\n  --interval-ms <ms>           Delay between polls (default: 3000)\n  --samples-per-poll <n>       Number of ping samples per poll (default: 5)\n  --report-every-ms <ms>       How often to print recommendations (default: 60000)\n  --max-samples <n>            Max rolling sample count retained (default: 2000)\n  --help                       Show this help message\n`);
+      console.log(
+        `Usage: node scripts/util/redis-latency-profile.js [options]\n\nOptions:\n  --host <host>                Redis host (default: BLOT_REDIS_HOST or 127.0.0.1)\n  --socket <path>              Redis Unix socket, used instead of host and port (default: BLOT_REDIS_SOCKET)\n  --port <port>                Redis port (default: BLOT_REDIS_PORT or 6379)\n  --interval-ms <ms>           Delay between polls (default: 3000)\n  --samples-per-poll <n>       Number of ping samples per poll (default: 5)\n  --report-every-ms <ms>       How often to print recommendations (default: 60000)\n  --max-samples <n>            Max rolling sample count retained (default: 2000)\n  --help                       Show this help message\n`
+      );
       process.exit(0);
     }
 
@@ -86,7 +88,10 @@ function parseArgs(argv) {
 
 function percentile(sorted, p) {
   if (!sorted.length) return 0;
-  const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1));
+  const idx = Math.min(
+    sorted.length - 1,
+    Math.max(0, Math.ceil(p * sorted.length) - 1)
+  );
   return sorted[idx];
 }
 
@@ -143,7 +148,9 @@ function formatMs(value) {
 
 function pingSample(client) {
   const start = process.hrtime.bigint();
-  return client.ping().then(() => Number(process.hrtime.bigint() - start) / 1e6);
+  return client
+    .ping()
+    .then(() => Number(process.hrtime.bigint() - start) / 1e6);
 }
 
 async function collectSamples(client, count) {

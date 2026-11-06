@@ -119,7 +119,10 @@ async function useLocalClient(blog) {
   // from here would start one in this short-lived process and lose it on exit.
   // app/clients/local/init.js:46 does JSON.parse on the message, so a bare blog
   // ID throws in the server log and the watcher silently never starts.
-  await client.publish(LOCAL_CLIENT_CHANNEL, JSON.stringify({ blogID: blog.id }));
+  await client.publish(
+    LOCAL_CLIENT_CHANNEL,
+    JSON.stringify({ blogID: blog.id })
+  );
 }
 
 // -------------------------------------------------------------- template
@@ -231,10 +234,7 @@ async function establishRepository(blog) {
 
   // Screenshots and agent notes are regenerated every run; keeping them out of
   // the history stops it filling with large binaries.
-  await fs.outputFile(
-    join(folder, ".gitignore"),
-    ".verification/\n"
-  );
+  await fs.outputFile(join(folder, ".gitignore"), ".verification/\n");
 
   await git(folder, ["init", "--quiet"]);
   await git(folder, ["add", "-A"]);

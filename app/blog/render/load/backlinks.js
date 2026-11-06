@@ -65,7 +65,8 @@ function createBacklinks(blogID, { project } = {}) {
       const seen = new Set();
 
       return linked.filter((other) => {
-        if (!other || other.scheduled || other.path === entry.path) return false;
+        if (!other || other.scheduled || other.path === entry.path)
+          return false;
         if (seen.has(other.path)) return false;
         seen.add(other.path);
         return true;

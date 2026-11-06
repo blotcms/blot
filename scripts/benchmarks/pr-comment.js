@@ -22,7 +22,11 @@
 const fs = require("fs");
 const { spawnSync } = require("child_process");
 
-const { compareToBaseline, markdownTable, hasRegression } = require("./lib/report");
+const {
+  compareToBaseline,
+  markdownTable,
+  hasRegression,
+} = require("./lib/report");
 const { loadHistory, computeBaseline } = require("./lib/history");
 const { BENCHMARK_DEFAULTS } = require("./spec/util/defaults");
 
@@ -47,7 +51,11 @@ function readJson(file) {
 }
 
 function gh(args, input) {
-  const res = spawnSync("gh", args, { encoding: "utf8", input, env: process.env });
+  const res = spawnSync("gh", args, {
+    encoding: "utf8",
+    input,
+    env: process.env,
+  });
   if (res.status !== 0) {
     throw new Error(`gh ${args.join(" ")} failed: ${res.stderr || res.stdout}`);
   }
@@ -145,7 +153,16 @@ function callout({ result, baseline, excludePhases }) {
   return "> No metric moved outside the noise band.";
 }
 
-function doneBody({ arch, result, baseline, sha, prevSha, marker, title, excludePhases }) {
+function doneBody({
+  arch,
+  result,
+  baseline,
+  sha,
+  prevSha,
+  marker,
+  title,
+  excludePhases,
+}) {
   return [
     `### ${title || "Benchmark"} — \`${arch}\``,
     "",
@@ -198,14 +215,27 @@ function failedBody({ arch, sha, prevBlock, prevSha, marker, title }) {
   );
 
   if (prevBlock) {
-    lines.push("", prevBlock, "", `<!-- bench:sha:${short(prevSha) || "none"} -->`);
+    lines.push(
+      "",
+      prevBlock,
+      "",
+      `<!-- bench:sha:${short(prevSha) || "none"} -->`
+    );
   }
 
   lines.push(marker);
   return lines.join("\n");
 }
 
-function skippedBody({ arch, sha, prevBlock, prevSha, marker, title, message }) {
+function skippedBody({
+  arch,
+  sha,
+  prevBlock,
+  prevSha,
+  marker,
+  title,
+  message,
+}) {
   const lines = [`### ${title || "Benchmark"} — \`${arch}\` — skipped`, ""];
 
   lines.push(
@@ -216,7 +246,12 @@ function skippedBody({ arch, sha, prevBlock, prevSha, marker, title, message }) 
   );
 
   if (prevBlock) {
-    lines.push("", prevBlock, "", `<!-- bench:sha:${short(prevSha) || "none"} -->`);
+    lines.push(
+      "",
+      prevBlock,
+      "",
+      `<!-- bench:sha:${short(prevSha) || "none"} -->`
+    );
   }
 
   lines.push(marker);
@@ -230,13 +265,27 @@ function upsert(repo, pr, current, body) {
 
   if (current) {
     gh(
-      ["api", "--method", "PATCH", `repos/${repo}/issues/comments/${current.id}`, "--input", "-"],
+      [
+        "api",
+        "--method",
+        "PATCH",
+        `repos/${repo}/issues/comments/${current.id}`,
+        "--input",
+        "-",
+      ],
       payload
     );
     console.log(`[pr-comment] updated comment ${current.id}`);
   } else {
     gh(
-      ["api", "--method", "POST", `repos/${repo}/issues/${pr}/comments`, "--input", "-"],
+      [
+        "api",
+        "--method",
+        "POST",
+        `repos/${repo}/issues/${pr}/comments`,
+        "--input",
+        "-",
+      ],
       payload
     );
     console.log("[pr-comment] created comment");
@@ -262,7 +311,10 @@ function main() {
   // are meaningless near-zero process-startup noise (see build-render.spec.js).
   const excludePhaseArg = arg("--exclude-phase");
   const excludePhases = excludePhaseArg
-    ? excludePhaseArg.split(",").map((s) => s.trim()).filter(Boolean)
+    ? excludePhaseArg
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
     : [];
   const repo = process.env.GITHUB_REPOSITORY;
 
@@ -298,17 +350,29 @@ function main() {
     } else if (status === "failed") {
       body = failedBody({ arch, sha, prevBlock, prevSha, marker, title });
     } else if (status === "skipped") {
-      body = skippedBody({ arch, sha, prevBlock, prevSha, marker, title, message });
+      body = skippedBody({
+        arch,
+        sha,
+        prevBlock,
+        prevSha,
+        marker,
+        title,
+        message,
+      });
     } else {
       const result = readJson(resultFile);
       if (!result) {
-        console.error(`[pr-comment] no usable result at ${resultFile}; skipping`);
+        console.error(
+          `[pr-comment] no usable result at ${resultFile}; skipping`
+        );
         return;
       }
       let baseline = readJson(baselineFile);
       if (!baseline && historyDir) {
         const history = loadHistory(historyDir, arch);
-        baseline = history.length ? computeBaseline(history, { excludePhases }) : null;
+        baseline = history.length
+          ? computeBaseline(history, { excludePhases })
+          : null;
       }
       body = doneBody({
         arch,

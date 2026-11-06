@@ -1,10 +1,9 @@
-const Sortable = require('./sortable.js');
+const Sortable = require("./sortable.js");
 const sortEl = document.querySelector(".sortable");
 const redirectsContainer = document.getElementById("redirects");
 
 if (redirectsContainer) {
-
-new Sortable(sortEl, {
+  new Sortable(sortEl, {
     handle: ".handle",
     ghostClass: "sortable-ghost",
     onUpdate: function () {
@@ -45,9 +44,7 @@ new Sortable(sortEl, {
 
     const index = redirectsContainer.querySelectorAll("section").length;
     const linkID = new Date().getTime();
-    const newlink = document
-      .getElementById("new_redirect")
-      .cloneNode(true);
+    const newlink = document.getElementById("new_redirect").cloneNode(true);
     newlink.removeAttribute("style");
 
     newlink.id += linkID;
@@ -93,56 +90,49 @@ new Sortable(sortEl, {
     window.history.replaceState({}, "", url.toString());
     createRedirect(create);
   }
-
 }
 
-const bulk = document.getElementById('bulk_redirects');
+const bulk = document.getElementById("bulk_redirects");
 
-if (bulk)  {
-
-
-
-// Remove inline onclick handlers from all buttons
-document.querySelectorAll("button").forEach(btn => {
-  btn.removeAttribute("onclick");
-});
-
-// Attach submit handler to the form
-document.querySelectorAll("form").forEach(form => {
-  form.addEventListener("submit", event => {
-    const textarea = form.querySelector("textarea");
-    if (!textarea) return;
-
-    const redirects = textarea.value.trim();
-    if (!redirects) return;
-
-    redirects.split("\n").forEach((line, index) => {
-      const fromTo = line.split(" ");
-      const from = fromTo[0];
-      const to = fromTo[1];
-
-
-      const inputFrom = document.createElement("input");
-      inputFrom.className = "lab";
-      inputFrom.type = "text";
-      inputFrom.placeholder = "from";
-      inputFrom.name = `redirects.${index}.from`;
-      inputFrom.value = from || "";
-
-      const inputTo = document.createElement("input");
-      inputTo.className = "val";
-      inputTo.type = "text";
-      inputTo.placeholder = "to";
-      inputTo.name = `redirects.${index}.to`;
-      inputTo.value = to || "";
-
-      form.appendChild(inputFrom);
-      form.appendChild(inputTo);
-    });
-
-    textarea.remove();
-
-    
+if (bulk) {
+  // Remove inline onclick handlers from all buttons
+  document.querySelectorAll("button").forEach((btn) => {
+    btn.removeAttribute("onclick");
   });
-});
+
+  // Attach submit handler to the form
+  document.querySelectorAll("form").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      const textarea = form.querySelector("textarea");
+      if (!textarea) return;
+
+      const redirects = textarea.value.trim();
+      if (!redirects) return;
+
+      redirects.split("\n").forEach((line, index) => {
+        const fromTo = line.split(" ");
+        const from = fromTo[0];
+        const to = fromTo[1];
+
+        const inputFrom = document.createElement("input");
+        inputFrom.className = "lab";
+        inputFrom.type = "text";
+        inputFrom.placeholder = "from";
+        inputFrom.name = `redirects.${index}.from`;
+        inputFrom.value = from || "";
+
+        const inputTo = document.createElement("input");
+        inputTo.className = "val";
+        inputTo.type = "text";
+        inputTo.placeholder = "to";
+        inputTo.name = `redirects.${index}.to`;
+        inputTo.value = to || "";
+
+        form.appendChild(inputFrom);
+        form.appendChild(inputTo);
+      });
+
+      textarea.remove();
+    });
+  });
 }

@@ -77,7 +77,8 @@ function failure(code, message) {
 function checkBlogID(blogID) {
   ensure(blogID, "string");
 
-  if (!blogID) throw new Error("storage/folder: blogID must be a non-empty string");
+  if (!blogID)
+    throw new Error("storage/folder: blogID must be a non-empty string");
 
   if (blogID === "." || blogID === ".." || /[/\\\0]/.test(blogID)) {
     throw new Error("storage/folder: invalid blogID: " + blogID);
@@ -93,7 +94,8 @@ function locate(blogID, relPath) {
 
   ensure(relPath, "string");
 
-  if (relPath.indexOf("\0") !== -1) throw new Error("storage/folder: path contains a null byte");
+  if (relPath.indexOf("\0") !== -1)
+    throw new Error("storage/folder: path contains a null byte");
 
   return posix.resolve("/", pathNormalizer(relPath) || "/");
 }
@@ -107,7 +109,8 @@ function ancestorsOf(path) {
   var parts = path.split("/").slice(1, -1);
   var result = [];
 
-  for (var i = 1; i <= parts.length; i++) result.push("/" + parts.slice(0, i).join("/"));
+  for (var i = 1; i <= parts.length; i++)
+    result.push("/" + parts.slice(0, i).join("/"));
 
   return result;
 }
@@ -131,7 +134,8 @@ function prefixOf(blogID, path) {
 function isRangeError(err) {
   return !!(
     err &&
-    (err.name === "InvalidRange" || (err.$metadata && err.$metadata.httpStatusCode === 416))
+    (err.name === "InvalidRange" ||
+      (err.$metadata && err.$metadata.httpStatusCode === 416))
   );
 }
 
@@ -154,7 +158,9 @@ function encodeCursor(name) {
 
 function decodeCursor(cursor) {
   try {
-    var after = JSON.parse(Buffer.from(String(cursor), "base64url").toString()).after;
+    var after = JSON.parse(
+      Buffer.from(String(cursor), "base64url").toString()
+    ).after;
     if (typeof after === "string") return after;
   } catch (e) {}
 
@@ -173,19 +179,24 @@ async function checkWritable(blogID, path, kind) {
   );
 
   records.slice(0, -1).forEach(function (record, i) {
-    if (record && record.type !== "dir") throw failure("ENOTDIR", "Not a directory: " + paths[i]);
+    if (record && record.type !== "dir")
+      throw failure("ENOTDIR", "Not a directory: " + paths[i]);
   });
 
   var own = records[records.length - 1];
 
-  if (own && own.type === "dir" && kind === "file") throw failure("EISDIR", "Is a directory: " + path);
-  if (own && own.type !== "dir" && kind === "dir") throw failure("EEXIST", "File exists: " + path);
+  if (own && own.type === "dir" && kind === "file")
+    throw failure("EISDIR", "Is a directory: " + path);
+  if (own && own.type !== "dir" && kind === "dir")
+    throw failure("EEXIST", "File exists: " + path);
 
   return own;
 }
 
 async function writeMarker(blogID, path) {
-  await s3.putBuffer(prefixOf(blogID, path), Buffer.alloc(0), { contentType: MARKER_TYPE });
+  await s3.putBuffer(prefixOf(blogID, path), Buffer.alloc(0), {
+    contentType: MARKER_TYPE,
+  });
 }
 
 // When a remove or a move has emptied a directory, it gets a marker so it
@@ -197,7 +208,8 @@ async function keepParent(blogID, path) {
 
   var page = await File.list(blogID, parent, { limit: 1 });
 
-  if (page && !page.entries.length && page.next === null) await writeMarker(blogID, parent);
+  if (page && !page.entries.length && page.next === null)
+    await writeMarker(blogID, parent);
 }
 
 // Resolves to the record written
@@ -246,7 +258,8 @@ function opener(blogID, path) {
 async function smallFile(blogID, path, relPath) {
   var found = path === "/" ? null : await File.get(blogID, path);
 
-  if (!found || found.type === "dir") throw new NotFoundError("Not a file: " + relPath);
+  if (!found || found.type === "dir")
+    throw new NotFoundError("Not a file: " + relPath);
 
   if (found.size <= config.folder_cache.max_file_bytes) return found;
 
@@ -255,7 +268,14 @@ async function smallFile(blogID, path, relPath) {
 
 // Errors from the cache's own disk, which mean the cache can't hold the file
 // right now, not that the file is unreadable
-var CACHE_DISK_ERRORS = new Set(["ENOSPC", "EDQUOT", "EROFS", "EIO", "EACCES", "EPERM"]);
+var CACHE_DISK_ERRORS = new Set([
+  "ENOSPC",
+  "EDQUOT",
+  "EROFS",
+  "EIO",
+  "EACCES",
+  "EPERM",
+]);
 
 // Runs fn with the cached copy of a small file. S3 holding bytes the index
 // doesn't describe (ECHANGED: the index is behind a write), or the cache's
@@ -279,7 +299,11 @@ async function throughCache(blogID, path, found, fn) {
       }
     );
   } catch (err) {
-    if (!failedInside && (err.code === "ECHANGED" || CACHE_DISK_ERRORS.has(err.code))) return undefined;
+    if (
+      !failedInside &&
+      (err.code === "ECHANGED" || CACHE_DISK_ERRORS.has(err.code))
+    )
+      return undefined;
     throw err;
   }
 }
@@ -307,14 +331,19 @@ async function writeThrough(blogID, path, written, open) {
   } catch (err) {
     if (err.code === "ECHANGED" || warnedWriteThrough) return;
     warnedWriteThrough = true;
-    console.error("storage/folder: could not fill the content cache after a write (logged once)", err);
+    console.error(
+      "storage/folder: could not fill the content cache after a write (logged once)",
+      err
+    );
   }
 }
 
 async function read(blogID, relPath) {
   var path = locate(blogID, relPath);
   var found = await smallFile(blogID, path, relPath);
-  var data = found && (await throughCache(blogID, path, found, (local) => fs.readFile(local)));
+  var data =
+    found &&
+    (await throughCache(blogID, path, found, (local) => fs.readFile(local)));
 
   if (data) return data;
 
@@ -336,10 +365,16 @@ function createReadStream(blogID, relPath, options) {
   if (start !== undefined || end !== undefined) {
     start = start === undefined ? 0 : start;
 
-    if (!Number.isInteger(start) || start < 0 || (end !== undefined && (!Number.isInteger(end) || end < start))) {
+    if (
+      !Number.isInteger(start) ||
+      start < 0 ||
+      (end !== undefined && (!Number.isInteger(end) || end < start))
+    ) {
       // fs.createReadStream throws this straight away; here it is the
       // stream's error, like every other failure
-      var err = new RangeError("storage/folder: invalid range " + start + "-" + end);
+      var err = new RangeError(
+        "storage/folder: invalid range " + start + "-" + end
+      );
       err.code = "ERR_OUT_OF_RANGE";
       process.nextTick(function () {
         stream.destroy(err);
@@ -402,7 +437,8 @@ async function serve(req, res, blogID, relPath, options) {
   var path = locate(blogID, relPath);
 
   // A trailing slash is the directory's index.html, as it is for sendFile
-  if (!relPath || relPath.slice(-1) === "/") path = posix.join(path, "index.html");
+  if (!relPath || relPath.slice(-1) === "/")
+    path = posix.join(path, "index.html");
 
   if (
     options.dotfiles === "ignore" &&
@@ -414,7 +450,11 @@ async function serve(req, res, blogID, relPath, options) {
   }
 
   var found = await smallFile(blogID, path, relPath);
-  var sent = found && (await throughCache(blogID, path, found, (local) => sendCached(res, local, found, options, objectKey(blogID, path))));
+  var sent =
+    found &&
+    (await throughCache(blogID, path, found, (local) =>
+      sendCached(res, local, found, options, objectKey(blogID, path))
+    ));
 
   if (sent) return;
 
@@ -435,7 +475,12 @@ function sendCached(res, local, found, options, key) {
   // so a cached copy is served as the S3 one would be. options.headers can
   // still override it.
   res.setHeader("Content-Type", contentTypeFor(key));
-  res.setHeader("ETag", found.sha1 ? '"' + found.sha1 + '"' : 'W/"' + found.size + "-" + found.modified + '"');
+  res.setHeader(
+    "ETag",
+    found.sha1
+      ? '"' + found.sha1 + '"'
+      : 'W/"' + found.size + "-" + found.modified + '"'
+  );
   res.setHeader("Last-Modified", new Date(found.modified).toUTCString());
 
   return new Promise(function (resolve, reject) {
@@ -449,7 +494,8 @@ function sendCached(res, local, found, options, key) {
       },
       function (err) {
         if (!err) return resolve(true);
-        if (err.status === 404 || err.code === "ENOENT") return reject(new NotFoundError(err.message));
+        if (err.status === 404 || err.code === "ENOENT")
+          return reject(new NotFoundError(err.message));
         reject(err);
       }
     );
@@ -463,15 +509,23 @@ async function write(blogID, relPath, data) {
 
   var path = locate(blogID, relPath);
 
-  if (path === "/") throw new Error("storage/folder: write needs a path inside the folder");
+  if (path === "/")
+    throw new Error("storage/folder: write needs a path inside the folder");
 
   await checkWritable(blogID, path, "file");
 
   if (!(data instanceof Readable)) {
     var body = Buffer.isBuffer(data) ? data : Buffer.from(data);
-    var written = await record(blogID, path, await s3.putBuffer(objectKey(blogID, path), body), Date.now());
+    var written = await record(
+      blogID,
+      path,
+      await s3.putBuffer(objectKey(blogID, path), body),
+      Date.now()
+    );
 
-    return writeThrough(blogID, path, written, async () => Readable.from([body]));
+    return writeThrough(blogID, path, written, async () =>
+      Readable.from([body])
+    );
   }
 
   if (data.errored) throw data.errored;
@@ -491,7 +545,9 @@ async function write(blogID, relPath, data) {
     var uploaded = await s3.uploadFile(objectKey(blogID, path), spool);
     var recorded = await record(blogID, path, uploaded, Date.now());
 
-    await writeThrough(blogID, path, recorded, async () => fs.createReadStream(spool));
+    await writeThrough(blogID, path, recorded, async () =>
+      fs.createReadStream(spool)
+    );
   } finally {
     await fs.remove(spool).catch(noop);
   }
@@ -508,12 +564,18 @@ async function writeFrom(blogID, relPath, srcPath, options) {
   var given = options && options.modified;
   var path = locate(blogID, relPath);
 
-  if (path === "/") throw new Error("storage/folder: write needs a path inside the folder");
+  if (path === "/")
+    throw new Error("storage/folder: write needs a path inside the folder");
 
   await checkWritable(blogID, path, "file");
 
   try {
-    var modified = given !== undefined ? given : move ? (await fs.stat(srcPath)).mtimeMs : Date.now();
+    var modified =
+      given !== undefined
+        ? given
+        : move
+          ? (await fs.stat(srcPath)).mtimeMs
+          : Date.now();
     var uploaded = await s3.uploadFile(objectKey(blogID, path), srcPath);
   } catch (err) {
     if (err.code === "ENOENT") throw new NotFoundError(err.message);
@@ -522,7 +584,9 @@ async function writeFrom(blogID, relPath, srcPath, options) {
 
   var written = await record(blogID, path, uploaded, modified);
 
-  await writeThrough(blogID, path, written, async () => fs.createReadStream(srcPath));
+  await writeThrough(blogID, path, written, async () =>
+    fs.createReadStream(srcPath)
+  );
 
   if (move) await fs.remove(srcPath);
 }
@@ -532,7 +596,12 @@ async function writeFrom(blogID, relPath, srcPath, options) {
 async function path(blogID, relPath) {
   var p = locate(blogID, relPath);
 
-  return join(config.tmp_directory, STAGING_DIRECTORY, blogID, ...p.split("/").filter(Boolean));
+  return join(
+    config.tmp_directory,
+    STAGING_DIRECTORY,
+    blogID,
+    ...p.split("/").filter(Boolean)
+  );
 }
 
 // Uploads the file a tool wrote to path(blogID, relPath), or every file
@@ -570,7 +639,8 @@ async function fileAt(blogID, path, relPath) {
   var found = await File.get(blogID, path);
 
   if (!found) throw new NotFoundError("No such file: " + relPath);
-  if (found.type === "dir") throw failure("EISDIR", "Is a directory: " + relPath);
+  if (found.type === "dir")
+    throw failure("EISDIR", "Is a directory: " + relPath);
 
   return found;
 }
@@ -587,7 +657,10 @@ async function ensureLocal(blogID, relPath) {
     var found = await fileAt(blogID, path, relPath);
 
     try {
-      return await contentCache().get(cached(blogID, path, found), opener(blogID, path));
+      return await contentCache().get(
+        cached(blogID, path, found),
+        opener(blogID, path)
+      );
     } catch (err) {
       if (err.code !== "ECHANGED" || attempt) throw err;
     }
@@ -607,14 +680,18 @@ async function withLocal(blogID, relPath, fn) {
     var failedInside = false;
 
     try {
-      return await contentCache().use(cached(blogID, path, found), opener(blogID, path), async function (local) {
-        try {
-          return await fn(local);
-        } catch (err) {
-          failedInside = true;
-          throw err;
+      return await contentCache().use(
+        cached(blogID, path, found),
+        opener(blogID, path),
+        async function (local) {
+          try {
+            return await fn(local);
+          } catch (err) {
+            failedInside = true;
+            throw err;
+          }
         }
-      });
+      );
     } catch (err) {
       if (failedInside || err.code !== "ECHANGED" || attempt) throw err;
     }
@@ -638,7 +715,8 @@ async function mkdir(blogID, relPath) {
 // Deletes from S3 everything at and below path, whatever the index says, so
 // nothing it missed is left behind, then forgets it in the index
 async function removePath(blogID, path, found) {
-  if (found && found.type === "file") await s3.deleteKeys([objectKey(blogID, path)]);
+  if (found && found.type === "file")
+    await s3.deleteKeys([objectKey(blogID, path)]);
   else await s3.remove(objectKey(blogID, path));
 
   await File.remove(blogID, path);
@@ -648,7 +726,8 @@ async function removeOne(blogID, relPath, onlyDirectory) {
   var path = locate(blogID, relPath);
 
   // Emptying the folder is not a remove: removeAll deletes the blog
-  if (path === "/") throw new Error("storage/folder: remove needs a path inside the folder");
+  if (path === "/")
+    throw new Error("storage/folder: remove needs a path inside the folder");
 
   var found = await File.get(blogID, path);
 
@@ -719,13 +798,20 @@ async function move(blogID, from, to) {
 
   // Replacing the destination would delete the source along with it
   if (source.indexOf(destination + "/") === 0) {
-    throw failure("EINVAL", "Cannot move " + from + " over its own ancestor " + to);
+    throw failure(
+      "EINVAL",
+      "Cannot move " + from + " over its own ancestor " + to
+    );
   }
 
   // Whatever is at the destination is replaced, but not anything above it
   var replaced = await File.get(blogID, destination);
 
-  await checkWritable(blogID, destination, replaced ? replaced.type : found.type);
+  await checkWritable(
+    blogID,
+    destination,
+    replaced ? replaced.type : found.type
+  );
 
   if (replaced) await removePath(blogID, destination, replaced);
 
@@ -751,7 +837,14 @@ async function move(blogID, from, to) {
       copied++;
       // A file's type follows its new name; a marker stays a marker
       await pool.add(
-        s3.copy.bind(null, entry.key, target, target.slice(-1) === "/" ? {} : { contentType: contentTypeFor(target) })
+        s3.copy.bind(
+          null,
+          entry.key,
+          target,
+          target.slice(-1) === "/"
+            ? {}
+            : { contentType: contentTypeFor(target) }
+        )
       );
     }
 
@@ -774,7 +867,9 @@ async function move(blogID, from, to) {
           return item.record;
         })
         .map(function (item) {
-          return Object.assign({}, item.record, { path: destination + item.path.slice(source.length) });
+          return Object.assign({}, item.record, {
+            path: destination + item.path.slice(source.length),
+          });
         })
     );
   }
@@ -806,7 +901,8 @@ async function stat(blogID, relPath, options) {
 
   // Free from the index, unless a rebuild without hashing left it out
   if (options && options.sha1 && !isDirectory) {
-    result.sha1 = found.sha1 || (await sha1File(await ensureLocal(blogID, path)));
+    result.sha1 =
+      found.sha1 || (await sha1File(await ensureLocal(blogID, path)));
   }
 
   return result;
@@ -903,7 +999,8 @@ async function* walk(blogID, relDir, options) {
       if (page.done) return;
 
       for (var entry of page.value) {
-        var full = current === "/" ? "/" + entry.name : current + "/" + entry.name;
+        var full =
+          current === "/" ? "/" + entry.name : current + "/" + entry.name;
 
         if (entry.type === "dir") {
           if (directories) yield full;
@@ -935,7 +1032,9 @@ async function removeAll(blogID) {
   await s3.removePrefix(root(blogID));
   await File.removeAll(blogID);
   await contentCache().removeBlog(blogID).catch(noop);
-  await fs.remove(join(config.tmp_directory, STAGING_DIRECTORY, blogID)).catch(noop);
+  await fs
+    .remove(join(config.tmp_directory, STAGING_DIRECTORY, blogID))
+    .catch(noop);
 }
 
 async function sha1Of(key) {
@@ -966,7 +1065,12 @@ async function* indexRecords(blogID, options) {
     if (!rel || rel === "/") continue;
 
     if (rel.slice(-1) === "/") {
-      yield { path: "/" + rel.slice(0, -1), type: "dir", size: 0, modified: modified };
+      yield {
+        path: "/" + rel.slice(0, -1),
+        type: "dir",
+        size: 0,
+        modified: modified,
+      };
     } else {
       yield {
         path: "/" + rel,

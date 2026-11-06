@@ -1,7 +1,10 @@
 const User = require("models/user");
 const checkEmail = require("../checkEmail");
 const checkPassword = require("../checkPassword");
-const { MAX_EMAIL_LENGTH, MAX_PASSWORD_LENGTH } = require("models/user/auth-limits");
+const {
+  MAX_EMAIL_LENGTH,
+  MAX_PASSWORD_LENGTH,
+} = require("models/user/auth-limits");
 
 describe("log in authentication limits", function () {
   it("rejects an email that is too long before looking it up", function (done) {

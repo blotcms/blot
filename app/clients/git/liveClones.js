@@ -41,11 +41,15 @@ const MASTER = "refs/heads/master";
 const MAX_WALK = 100000;
 
 function getBlog(id) {
-  return new Promise((resolve, reject) => Blog.get({ id }, (err, blog) => (err ? reject(err) : resolve(blog || null))));
+  return new Promise((resolve, reject) =>
+    Blog.get({ id }, (err, blog) => (err ? reject(err) : resolve(blog || null)))
+  );
 }
 
 function allBlogIDs() {
-  return new Promise((resolve, reject) => Blog.getAllIDs((err, ids) => (err ? reject(err) : resolve(ids || []))));
+  return new Promise((resolve, reject) =>
+    Blog.getAllIDs((err, ids) => (err ? reject(err) : resolve(ids || [])))
+  );
 }
 
 async function readText(blogID, path) {
@@ -80,7 +84,11 @@ function originOf(config) {
 function isOwnBareRepo(url, handle) {
   if (!url || !handle || /^[a-z][a-z0-9+.-]*:/i.test(url)) return false;
   const parts = url.replace(/\/+$/, "").split("/");
-  return parts.length >= 2 && parts[parts.length - 1] === handle + ".git" && parts[parts.length - 2] === "git";
+  return (
+    parts.length >= 2 &&
+    parts[parts.length - 1] === handle + ".git" &&
+    parts[parts.length - 2] === "git"
+  );
 }
 
 // The commit HEAD names, or null if it can't be read
@@ -121,7 +129,12 @@ async function reachable(blogID, oid) {
   const master = current.refs[MASTER];
   if (!master) return false;
 
-  const reader = createReader({ store, cache, manifest: current, scratch: cache });
+  const reader = createReader({
+    store,
+    cache,
+    manifest: current,
+    scratch: cache,
+  });
   const seen = new Set();
   const queue = [master];
 
@@ -141,7 +154,8 @@ async function reachable(blogID, oid) {
       throw err;
     }
 
-    if (next === oid) return !!object && object.type === "commit" ? true : "unreadable";
+    if (next === oid)
+      return !!object && object.type === "commit" ? true : "unreadable";
     if (!object || object.type !== "commit") continue;
 
     queue.push(...parseCommit(object.data).parents);
@@ -157,10 +171,16 @@ async function check(blogID, { apply = false } = {}) {
   try {
     blog = await getBlog(blogID);
   } catch (err) {
-    return { blog: blogID, outcome: "kept", reason: "unreadable", detail: err.message };
+    return {
+      blog: blogID,
+      outcome: "kept",
+      reason: "unreadable",
+      detail: err.message,
+    };
   }
 
-  if (!blog || blog.client !== "git") return { blog: blogID, outcome: "kept", reason: "not-git" };
+  if (!blog || blog.client !== "git")
+    return { blog: blogID, outcome: "kept", reason: "not-git" };
 
   try {
     let found;
@@ -172,19 +192,44 @@ async function check(blogID, { apply = false } = {}) {
     if (!found) return { blog: blogID, outcome: "kept", reason: "no-clone" };
 
     const config = await readText(blogID, "/.git/config");
-    if (config === null) return { blog: blogID, outcome: "kept", reason: "unreadable", detail: "no .git/config" };
+    if (config === null)
+      return {
+        blog: blogID,
+        outcome: "kept",
+        reason: "unreadable",
+        detail: "no .git/config",
+      };
 
-    if (!isOwnBareRepo(originOf(config), blog.handle)) return { blog: blogID, outcome: "kept", reason: "other-origin" };
+    if (!isOwnBareRepo(originOf(config), blog.handle))
+      return { blog: blogID, outcome: "kept", reason: "other-origin" };
 
     const head = await headOf(blogID);
-    if (!head) return { blog: blogID, outcome: "kept", reason: "unreadable", detail: "no HEAD commit" };
+    if (!head)
+      return {
+        blog: blogID,
+        outcome: "kept",
+        reason: "unreadable",
+        detail: "no HEAD commit",
+      };
 
     const onMaster = await reachable(blogID, head);
-    if (onMaster === "no-store") return { blog: blogID, outcome: "kept", reason: "no-store" };
-    if (onMaster === "unreadable") return { blog: blogID, outcome: "kept", reason: "unreadable", detail: "the store cannot read the clone's HEAD commit" };
+    if (onMaster === "no-store")
+      return { blog: blogID, outcome: "kept", reason: "no-store" };
+    if (onMaster === "unreadable")
+      return {
+        blog: blogID,
+        outcome: "kept",
+        reason: "unreadable",
+        detail: "the store cannot read the clone's HEAD commit",
+      };
     if (!onMaster) return { blog: blogID, outcome: "kept", reason: "ahead" };
   } catch (err) {
-    return { blog: blogID, outcome: "kept", reason: "unreadable", detail: err.message };
+    return {
+      blog: blogID,
+      outcome: "kept",
+      reason: "unreadable",
+      detail: err.message,
+    };
   }
 
   if (!apply) return { blog: blogID, outcome: "removable" };
@@ -205,7 +250,8 @@ async function run({ apply = false, ids = null, onResult = () => {} } = {}) {
   for (const blogID of ids || (await allBlogIDs())) {
     const result = await check(blogID, { apply });
     counts.blogs++;
-    if (result.outcome === "kept") counts.kept[result.reason] = (counts.kept[result.reason] || 0) + 1;
+    if (result.outcome === "kept")
+      counts.kept[result.reason] = (counts.kept[result.reason] || 0) + 1;
     else counts[result.outcome]++;
     onResult(result);
   }

@@ -71,7 +71,10 @@ async function uploadInChunks(
     let contents = await read(0, first);
     check();
     const start = await retryRequest(
-      () => (check(), client.filesUploadSessionStart({ close: false, contents })),
+      () => (
+        check(),
+        client.filesUploadSessionStart({ close: false, contents })
+      ),
       "uploadSessionStart"
     );
     const session_id = start.result.session_id;
@@ -85,7 +88,11 @@ async function uploadInChunks(
         await retryRequest(
           () => (
             check(),
-            client.filesUploadSessionAppendV2({ cursor, close: false, contents })
+            client.filesUploadSessionAppendV2({
+              cursor,
+              close: false,
+              contents,
+            })
           ),
           "uploadSessionAppend"
         );
@@ -164,7 +171,14 @@ async function upload(client, source, destination, callback) {
     const { size } = await fs.stat(source);
 
     if (size > options.threshold) {
-      await uploadInChunks(client, source, destination, size, touch, () => cancelled);
+      await uploadInChunks(
+        client,
+        source,
+        destination,
+        size,
+        touch,
+        () => cancelled
+      );
       return cleanup();
     }
 

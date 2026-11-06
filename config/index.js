@@ -33,8 +33,8 @@ const BLOT_CDN = BLOT_PROTOCOL + "://cdn." + BLOT_HOST;
 const reverse_proxies = process.env.BLOT_REVERSE_PROXY_URLS
   ? process.env.BLOT_REVERSE_PROXY_URLS.split(",")
   : environment === "production"
-  ? ["http://127.0.0.1:80"]
-  : [];
+    ? ["http://127.0.0.1:80"]
+    : [];
 
 // See the "egress" and "sandbox" config blocks below. This is a warning, not a
 // thrown error: a unit deployed without the sandbox must not crash on boot. It
@@ -88,7 +88,8 @@ module.exports = {
   // (blog/lib/cacheMetrics); 1 when unset. A forked worker child gets a small
   // one unless BLOT_WORKER_CACHE_SCALE says otherwise (helper/workerChild).
   cache_scale: parseFloat(process.env.BLOT_CACHE_SCALE) || 1,
-  worker_max_old_space_size: parseInt(process.env.BLOT_WORKER_MAX_OLD_SPACE_SIZE) || null,
+  worker_max_old_space_size:
+    parseInt(process.env.BLOT_WORKER_MAX_OLD_SPACE_SIZE) || null,
 
   webhooks: {
     client_max_body_size: 1e8, // 100MB
@@ -98,7 +99,7 @@ module.exports = {
     secret: process.env.BLOT_WEBHOOKS_SECRET,
     // we have to hard-code these so the redirects
     // for oauth2 work correctly – the production server
-    // needs to know the development server's host and 
+    // needs to know the development server's host and
     // the development server needs to know the production
     // server's host. This let's us use the same code
     relay_host: "webhooks.blot.im",
@@ -194,8 +195,10 @@ module.exports = {
   // store's compaction and the import of a new repository. So about 600 MB a
   // process at the very worst.
   git: {
-    interactive_processes: parseInt(process.env.BLOT_GIT_INTERACTIVE_PROCESSES) || 4,
-    background_processes: parseInt(process.env.BLOT_GIT_BACKGROUND_PROCESSES) || 2,
+    interactive_processes:
+      parseInt(process.env.BLOT_GIT_INTERACTIVE_PROCESSES) || 4,
+    background_processes:
+      parseInt(process.env.BLOT_GIT_BACKGROUND_PROCESSES) || 2,
   },
 
   // Untrusted, user-supplied URLs (remote images in posts, imports, domain
@@ -321,7 +324,8 @@ module.exports = {
       process.env.BLOT_FOLDER_CACHE_DIRECTORY ||
       BLOT_TMP_DIRECTORY + "/storage-folder-cache",
     max_bytes:
-      Number(process.env.BLOT_FOLDER_CACHE_MAX_BYTES) || 50 * 1024 * 1024 * 1024,
+      Number(process.env.BLOT_FOLDER_CACHE_MAX_BYTES) ||
+      50 * 1024 * 1024 * 1024,
     max_file_bytes:
       Number(process.env.BLOT_FOLDER_CACHE_MAX_FILE_BYTES) || 4 * 1024 * 1024,
     min_free_percent: 10,
@@ -362,9 +366,7 @@ module.exports = {
                   Buffer.from(service_account, "base64").toString()
                 );
               } else {
-                console.warn(
-                  "A service account is missing or undefined."
-                );
+                console.warn("A service account is missing or undefined.");
                 return null; // Return null for missing service accounts
               }
             } catch (err) {
@@ -387,7 +389,7 @@ module.exports = {
       }
     })(),
   },
-  
+
   icloud: {
     secret: process.env.BLOT_ICLOUD_SERVER_SECRET,
     server_address: process.env.BLOT_ICLOUD_SERVER_ADDRESS,

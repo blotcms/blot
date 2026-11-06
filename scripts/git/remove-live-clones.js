@@ -16,7 +16,9 @@
 //   docker exec -u 1000 blot-blue node scripts/git/remove-live-clones.js
 function usage(message) {
   if (message) console.error(message + "\n");
-  console.error("Usage: node scripts/git/remove-live-clones.js [--apply] [--blogs <id,id,...>]");
+  console.error(
+    "Usage: node scripts/git/remove-live-clones.js [--apply] [--blogs <id,id,...>]"
+  );
   process.exit(2);
 }
 
@@ -28,7 +30,14 @@ function parse(argv) {
     else if (argv[i] === "--blogs") {
       const value = argv[++i];
       if (!value) usage("--blogs needs a value");
-      options.ids = [...new Set(value.split(",").map((id) => id.trim()).filter(Boolean))];
+      options.ids = [
+        ...new Set(
+          value
+            .split(",")
+            .map((id) => id.trim())
+            .filter(Boolean)
+        ),
+      ];
     } else usage("Unknown argument " + argv[i]);
   }
 
@@ -39,16 +48,31 @@ async function main() {
   const options = parse(process.argv.slice(2));
   const liveClones = require("clients/git/liveClones");
 
-  console.log(options.apply ? "Removing live clones" : "Dry run: nothing is removed (pass --apply to remove)");
+  console.log(
+    options.apply
+      ? "Removing live clones"
+      : "Dry run: nothing is removed (pass --apply to remove)"
+  );
 
   const counts = await liveClones.run({
     apply: options.apply,
     ids: options.ids,
     onResult: function (result) {
       // Blogs with nothing to do are only counted
-      if (result.outcome === "kept" && (result.reason === "not-git" || result.reason === "no-clone")) return;
+      if (
+        result.outcome === "kept" &&
+        (result.reason === "not-git" || result.reason === "no-clone")
+      )
+        return;
       console.log(
-        [result.blog, result.outcome, result.reason, result.detail && JSON.stringify(result.detail)].filter(Boolean).join(" ")
+        [
+          result.blog,
+          result.outcome,
+          result.reason,
+          result.detail && JSON.stringify(result.detail),
+        ]
+          .filter(Boolean)
+          .join(" ")
       );
     },
   });

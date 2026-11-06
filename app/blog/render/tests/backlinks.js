@@ -37,7 +37,9 @@ describe("backlinks", function () {
     const backlinks = createBacklinks("blog", { project });
 
     await backlinks.resolve(entryWith("/a.txt", ["/target"]));
-    const [resolved] = await backlinks.resolve(entryWith("/b.txt", ["/target"]));
+    const [resolved] = await backlinks.resolve(
+      entryWith("/b.txt", ["/target"])
+    );
 
     expect(project.calls.count()).toBe(1);
     expect(resolved.html).toBeUndefined();
@@ -52,7 +54,14 @@ describe("backlinks", function () {
     });
 
     const resolved = await createBacklinks("blog").resolve(
-      entryWith("/me.txt", ["/missing", "/scheduled", "/self", "/one", "/one-again", 7])
+      entryWith("/me.txt", [
+        "/missing",
+        "/scheduled",
+        "/self",
+        "/one",
+        "/one-again",
+        7,
+      ])
     );
 
     expect(resolved.map((entry) => entry.path)).toEqual(["/one.txt"]);
@@ -78,11 +87,16 @@ describe("backlinks", function () {
 
   it("looks nothing up, and resolves to none, when the view never uses backlinks", async function () {
     const getByUrl = stubLookups({ "/target": { path: "/target.txt" } });
-    const backlinks = backlinksFor({ blog: { id: "blog" }, usesBacklinks: false });
+    const backlinks = backlinksFor({
+      blog: { id: "blog" },
+      usesBacklinks: false,
+    });
 
     expect(Object.isFrozen(backlinks)).toBe(true);
     expect(backlinks.failed).toBe(false);
-    expect(await backlinks.resolve(entryWith("/a.txt", ["/target"]))).toEqual([]);
+    expect(await backlinks.resolve(entryWith("/a.txt", ["/target"]))).toEqual(
+      []
+    );
     expect(getByUrl).not.toHaveBeenCalled();
   });
 
@@ -98,8 +112,8 @@ describe("backlinks", function () {
 
   it("shares one lookup between spellings of a URL that decode the same", async function () {
     const target = { path: "/a b.txt" };
-    const getByUrl = spyOn(Entry, "getByUrl").and.callFake((blogID, url, callback) =>
-      callback(target)
+    const getByUrl = spyOn(Entry, "getByUrl").and.callFake(
+      (blogID, url, callback) => callback(target)
     );
     const backlinks = createBacklinks("blog");
 

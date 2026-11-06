@@ -8,7 +8,8 @@ module.exports = function setup(options = {}) {
 
   const blogCount = Math.max(1, Number(options.blogs) || 1);
   const skipTeardown = options.skipTeardown === true;
-  const templateBuildTimeoutMs = Number(options.templateBuildTimeoutMs) || 30 * 1000;
+  const templateBuildTimeoutMs =
+    Number(options.templateBuildTimeoutMs) || 30 * 1000;
   const templateBuildJasmineTimeoutMs =
     Number(options.templateBuildJasmineTimeoutMs) || 35 * 1000;
 
@@ -34,31 +35,28 @@ module.exports = function setup(options = {}) {
 
   global.test.server(router);
 
-  beforeAll(
-    function (done) {
-      let settled = false;
+  beforeAll(function (done) {
+    let settled = false;
 
-      const timer = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        done.fail(
-          new Error(
-            `templates({ watch: false }) did not finish within ${templateBuildTimeoutMs}ms`
-          )
-        );
-      }, templateBuildTimeoutMs);
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      done.fail(
+        new Error(
+          `templates({ watch: false }) did not finish within ${templateBuildTimeoutMs}ms`
+        )
+      );
+    }, templateBuildTimeoutMs);
 
-      templates({ watch: false }, (err) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
+    templates({ watch: false }, (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
 
-        if (err) return done.fail(err);
-        done();
-      });
-    },
-    templateBuildJasmineTimeoutMs
-  );
+      if (err) return done.fail(err);
+      done();
+    });
+  }, templateBuildJasmineTimeoutMs);
 
   beforeEach(function () {
     if (!this.blog && Array.isArray(this.blogs) && this.blogs.length) {
@@ -104,7 +102,8 @@ module.exports = function setup(options = {}) {
     this.getForBlog = (blogOrIndex, path, options = {}) =>
       this.fetch(resolveURL(path, this.blogOrigin(blogOrIndex)), options);
 
-    this.get = (path, options = {}) => this.getForBlog(this.blog, path, options);
+    this.get = (path, options = {}) =>
+      this.getForBlog(this.blog, path, options);
 
     this.textForBlog = async (blogOrIndex, path, options = {}) => {
       const res = await this.getForBlog(blogOrIndex, path, options);
@@ -116,7 +115,8 @@ module.exports = function setup(options = {}) {
       return res.text();
     };
 
-    this.text = async (path, options = {}) => this.textForBlog(this.blog, path, options);
+    this.text = async (path, options = {}) =>
+      this.textForBlog(this.blog, path, options);
 
     this.cdnText = (path, options = {}) =>
       this.text(resolveURL(path, config.cdn.origin), options);
@@ -235,7 +235,9 @@ module.exports = function setup(options = {}) {
 
       try {
         const res = await this.get(path, { signal });
-        const reader = res.body?.pipeThrough(new TextDecoderStream()).getReader();
+        const reader = res.body
+          ?.pipeThrough(new TextDecoderStream())
+          .getReader();
 
         if (!reader) {
           throw new Error("Failed to get reader from response body");

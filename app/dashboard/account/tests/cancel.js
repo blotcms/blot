@@ -7,21 +7,21 @@ const config = require("config");
 // The POST handlers of /cancel, in order
 function postHandlers() {
   const layer = Subscription.stack.find(
-    layer => layer.route && layer.route.path === "/cancel"
+    (layer) => layer.route && layer.route.path === "/cancel"
   );
   return layer.route.stack
-    .filter(layer => layer.method === "post")
-    .map(layer => layer.handle);
+    .filter((layer) => layer.method === "post")
+    .map((layer) => layer.handle);
 }
 
 function post(user) {
   const req = { user, baseUrl: "/account/subscription" };
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     const res = { message: () => resolve({}) };
     const handlers = postHandlers();
-    const run = i => {
+    const run = (i) => {
       if (i === handlers.length - 1) return handlers[i](req, res);
-      handlers[i](req, res, err => (err ? resolve({ err }) : run(i + 1)));
+      handlers[i](req, res, (err) => (err ? resolve({ err }) : run(i + 1)));
     };
     run(0);
   });
@@ -31,7 +31,7 @@ describe("dashboard subscription cancel", function () {
   const paypalDefaults = {
     client_id: config.paypal.client_id,
     secret: config.paypal.secret,
-    api_base: config.paypal.api_base
+    api_base: config.paypal.api_base,
   };
 
   beforeEach(function () {
@@ -48,10 +48,10 @@ describe("dashboard subscription cancel", function () {
     Object.assign(config.paypal, paypalDefaults);
   });
 
-  const paypalUser = status => ({
+  const paypalUser = (status) => ({
     uid: "uid",
     subscription: {},
-    paypal: { id: "I-TEST", status, start_time: "2001-01-01T00:00:00Z" }
+    paypal: { id: "I-TEST", status, start_time: "2001-01-01T00:00:00Z" },
   });
 
   it("cancels a PayPal subscription, then re-fetches it, without emailing itself", async function () {
@@ -91,7 +91,9 @@ describe("dashboard subscription cancel", function () {
 
   it("reconciles by re-fetching when the cancel request fails in transport", async function () {
     fetch.and.returnValue(Promise.reject(new Error("socket hang up")));
-    paypal.updateSubscription.and.returnValue(Promise.resolve({ status: "CANCELLED" }));
+    paypal.updateSubscription.and.returnValue(
+      Promise.resolve({ status: "CANCELLED" })
+    );
 
     const result = await post(paypalUser("ACTIVE"));
 
@@ -101,7 +103,9 @@ describe("dashboard subscription cancel", function () {
 
   it("reconciles after an indeterminate 5xx from PayPal", async function () {
     fetch.and.returnValue(Promise.resolve({ status: 502 }));
-    paypal.updateSubscription.and.returnValue(Promise.resolve({ status: "CANCELLED" }));
+    paypal.updateSubscription.and.returnValue(
+      Promise.resolve({ status: "CANCELLED" })
+    );
 
     const result = await post(paypalUser("ACTIVE"));
 
@@ -110,7 +114,9 @@ describe("dashboard subscription cancel", function () {
 
   it("still fails when a transport failure left the subscription active", async function () {
     fetch.and.returnValue(Promise.reject(new Error("socket hang up")));
-    paypal.updateSubscription.and.returnValue(Promise.resolve({ status: "ACTIVE" }));
+    paypal.updateSubscription.and.returnValue(
+      Promise.resolve({ status: "ACTIVE" })
+    );
 
     const result = await post(paypalUser("ACTIVE"));
 
@@ -119,7 +125,9 @@ describe("dashboard subscription cancel", function () {
 
   it("still succeeds when the re-fetch fails after PayPal cancelled", async function () {
     spyOn(console, "log");
-    paypal.updateSubscription.and.returnValue(Promise.reject(new Error("boom")));
+    paypal.updateSubscription.and.returnValue(
+      Promise.reject(new Error("boom"))
+    );
 
     const result = await post(paypalUser("ACTIVE"));
 
@@ -143,7 +151,7 @@ describe("dashboard subscription cancel", function () {
     const result = await post({
       uid: "uid",
       subscription: { id: "sub_1", customer: "cus_1", created: 1 },
-      paypal: { id: "I-OLD", status: "CANCELLED" }
+      paypal: { id: "I-OLD", status: "CANCELLED" },
     });
 
     expect(result.err).toBeUndefined();
@@ -165,7 +173,7 @@ describe("dashboard subscription cancel", function () {
 
     const result = await post({
       uid: "uid",
-      subscription: { id: "sub_1", customer: "cus_1", created: 1 }
+      subscription: { id: "sub_1", customer: "cus_1", created: 1 },
     });
 
     expect(result.err).toBeUndefined();
@@ -188,13 +196,13 @@ describe("dashboard subscription cancel", function () {
   describe("restart guard", function () {
     function guard(user) {
       const layer = Subscription.stack.find(
-        layer => layer.route && layer.route.path === "/restart/pay"
+        (layer) => layer.route && layer.route.path === "/restart/pay"
       );
       const handle = layer.route.stack[0].handle;
-      return new Promise(resolve => {
+      return new Promise((resolve) => {
         handle(
           { user },
-          { redirect: location => resolve({ redirected: location }) },
+          { redirect: (location) => resolve({ redirected: location }) },
           () => resolve({ allowed: true })
         );
       });
@@ -204,7 +212,7 @@ describe("dashboard subscription cancel", function () {
       const result = await guard({
         isSubscribed: false,
         subscription: { customer: "cus_1" },
-        paypal: { id: "I-OLD", status: "CANCELLED" }
+        paypal: { id: "I-OLD", status: "CANCELLED" },
       });
       expect(result.allowed).toBe(true);
     });
@@ -213,7 +221,7 @@ describe("dashboard subscription cancel", function () {
       const result = await guard({
         isSubscribed: false,
         subscription: {},
-        paypal: { id: "I-TEST", status: "CANCELLED" }
+        paypal: { id: "I-TEST", status: "CANCELLED" },
       });
       expect(result.redirected).toBe("/account/subscription");
     });
@@ -221,7 +229,7 @@ describe("dashboard subscription cancel", function () {
     it("redirects a subscribed user", async function () {
       const result = await guard({
         isSubscribed: true,
-        subscription: { customer: "cus_1" }
+        subscription: { customer: "cus_1" },
       });
       expect(result.redirected).toBe("/account/subscription");
     });

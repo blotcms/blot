@@ -1,7 +1,14 @@
-const paypalButtonContainer = document.getElementById('paypal-button-container');
-const createSitePaypalContainer = document.getElementById('create-site-paypal');
+const paypalButtonContainer = document.getElementById(
+  "paypal-button-container"
+);
+const createSitePaypalContainer = document.getElementById("create-site-paypal");
 
-if (paypalButtonContainer && createSitePaypalContainer && window.paypal && window.paypal.Buttons) {
+if (
+  paypalButtonContainer &&
+  createSitePaypalContainer &&
+  window.paypal &&
+  window.paypal.Buttons
+) {
   const subscriptionId = createSitePaypalContainer.dataset.paypalSubscriptionId;
   const planId = createSitePaypalContainer.dataset.paypalPlanId;
   const newQuantity = createSitePaypalContainer.dataset.paypalNewQuantity;
@@ -17,10 +24,10 @@ if (paypalButtonContainer && createSitePaypalContainer && window.paypal && windo
           });
         },
         onApprove: function () {
-          createSitePaypalContainer.innerHTML = '<p>Loading...</p>';
+          createSitePaypalContainer.innerHTML = "<p>Loading...</p>";
           window.location.href = redirectUrl;
         },
       })
-      .render('#paypal-button-container');
+      .render("#paypal-button-container");
   }
 }

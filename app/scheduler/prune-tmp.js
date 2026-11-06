@@ -7,7 +7,10 @@ const fs = require("fs-extra");
 const config = require("config");
 const path = require("path");
 const lifecycle = require("../dashboard/site/import/lifecycle");
-const { STAGING_DIRECTORY, FOLDER_STAGING_DIRECTORY } = require("../storage/util");
+const {
+  STAGING_DIRECTORY,
+  FOLDER_STAGING_DIRECTORY,
+} = require("../storage/util");
 
 // Nothing the app puts in tmp is meant to last this long: uploads are
 // consumed by the request that made them, and conversions by the build.
@@ -95,7 +98,10 @@ async function pruneFiles(directory, maxAgeMs, now, report) {
       if (stat.isDirectory()) {
         await pruneFiles(entryPath, maxAgeMs, now, report);
 
-        if (now - stat.mtimeMs > maxAgeMs && !(await readdir(entryPath)).length) {
+        if (
+          now - stat.mtimeMs > maxAgeMs &&
+          !(await readdir(entryPath)).length
+        ) {
           await fs.rmdir(entryPath);
         }
 
@@ -122,11 +128,16 @@ module.exports = async function pruneTmp(options) {
 
   const tmpDirectory = options.tmpDirectory || config.tmp_directory;
   const now = options.now === undefined ? Date.now() : options.now;
-  const maxAgeMs = options.maxAgeMs === undefined ? MAX_AGE_MS : options.maxAgeMs;
+  const maxAgeMs =
+    options.maxAgeMs === undefined ? MAX_AGE_MS : options.maxAgeMs;
   const importMaxAgeMs =
-    options.importMaxAgeMs === undefined ? IMPORT_MAX_AGE_MS : options.importMaxAgeMs;
+    options.importMaxAgeMs === undefined
+      ? IMPORT_MAX_AGE_MS
+      : options.importMaxAgeMs;
   const stagingMaxAgeMs =
-    options.stagingMaxAgeMs === undefined ? STAGING_MAX_AGE_MS : options.stagingMaxAgeMs;
+    options.stagingMaxAgeMs === undefined
+      ? STAGING_MAX_AGE_MS
+      : options.stagingMaxAgeMs;
   const report = { removed: 0, bytes: 0, errors: 0 };
 
   // Everything in tmp except imports, which are one level further down and
@@ -142,7 +153,8 @@ module.exports = async function pruneTmp(options) {
   // about them, so pruning it by age would empty a cache in use. That goes
   // for any directory above it too, if it is configured deeper in tmp.
   const folderCache = path.resolve(config.folder_cache.directory);
-  const holds = (dir, inside) => inside === dir || inside.startsWith(dir + path.sep);
+  const holds = (dir, inside) =>
+    inside === dir || inside.startsWith(dir + path.sep);
 
   // The git store's cache (config.git_store) is in tmp too, but it is in use
   // for as long as the process which owns it runs, and keeps to its budget:
@@ -166,10 +178,16 @@ module.exports = async function pruneTmp(options) {
   for (const blogID of await readdir(importRoot)) {
     // An import with a live lease (running.txt) has a worker on it. Imports
     // whose worker died leave an expired lease behind, which only ages out.
-    await prune(path.join(importRoot, blogID), importMaxAgeMs, now, report, (importPath) => {
-      const expiresAt = lifecycle.leaseExpiry(importPath);
-      return expiresAt !== undefined && expiresAt > now;
-    });
+    await prune(
+      path.join(importRoot, blogID),
+      importMaxAgeMs,
+      now,
+      report,
+      (importPath) => {
+        const expiresAt = lifecycle.leaseExpiry(importPath);
+        return expiresAt !== undefined && expiresAt > now;
+      }
+    );
   }
 
   return report;

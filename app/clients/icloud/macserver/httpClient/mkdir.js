@@ -21,16 +21,23 @@ export default async (...args) => {
   }
 
   if (args.length !== 2) {
-    console.error(clfdate(), "Invalid argument count for mkdir client request", {
-      argsLength: args.length,
-    });
+    console.error(
+      clfdate(),
+      "Invalid argument count for mkdir client request",
+      {
+        argsLength: args.length,
+      }
+    );
     throw new Error("Invalid number of arguments: expected 2");
   }
 
-  console.log(clfdate(), `Issuing external mkdir for blogID: ${blogID}, path: ${path}`);
+  console.log(
+    clfdate(),
+    `Issuing external mkdir for blogID: ${blogID}, path: ${path}`
+  );
 
   const pathBase64 = Buffer.from(path).toString("base64");
-  
+
   let response;
 
   try {

@@ -2,9 +2,7 @@ const express = require("express");
 const Importer = express.Router();
 const arena = require("./index");
 const init = require("dashboard/site/import/init");
-const normalizeIdentifier = require(
-  "dashboard/site/import/helper/normalize_identifier"
-);
+const normalizeIdentifier = require("dashboard/site/import/helper/normalize_identifier");
 const fs = require("fs-extra");
 const { join } = require("path");
 const URL = require("url");
@@ -49,17 +47,23 @@ Importer.route("/arena")
 
     const { importDirectory, outputDirectory, status } = job;
     res.message(req.baseUrl, "Began import");
-    await job.run(async () => {
-      const { data } = await download(`https://api.are.na/v2/channels/${slug}`, { kind: "text", maxBytes: 8 * 1024 * 1024 });
-      const { title } = JSON.parse(data.toString("utf8"));
-      await fs.outputFile(
-        join(importDirectory, "identifier.txt"),
-        normalizeIdentifier(title, { fallback: "Are.na channel" }),
-        "utf8"
+    await job
+      .run(async () => {
+        const { data } = await download(
+          `https://api.are.na/v2/channels/${slug}`,
+          { kind: "text", maxBytes: 8 * 1024 * 1024 }
+        );
+        const { title } = JSON.parse(data.toString("utf8"));
+        await fs.outputFile(
+          join(importDirectory, "identifier.txt"),
+          normalizeIdentifier(title, { fallback: "Are.na channel" }),
+          "utf8"
+        );
+        await arena({ slug, outputDirectory, status });
+      })
+      .catch((error) =>
+        console.error("Failed to clean up Are.na import", error)
       );
-      await arena({ slug, outputDirectory, status });
-    }).catch(error => console.error("Failed to clean up Are.na import", error));
-
   });
 
 module.exports = Importer;

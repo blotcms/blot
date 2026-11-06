@@ -6,7 +6,11 @@ describe("sandbox fetch job", function () {
   const sandbox = require("../");
   const sandboxFetch = require("../fetch");
   const { MAX_REDIRECTS } = require("../jobs/fetching");
-  const { MAX_REQUESTS, BATCH_BYTES, TEXT_MAX_BYTES } = require("../jobs/fetch");
+  const {
+    MAX_REQUESTS,
+    BATCH_BYTES,
+    TEXT_MAX_BYTES,
+  } = require("../jobs/fetch");
 
   const MiB = 1024 * 1024;
   const empty = Buffer.alloc(0);
@@ -45,20 +49,32 @@ describe("sandbox fetch job", function () {
     config.sandbox.socket = socket;
   });
 
-  const send = (body, headers = {}) => (req, res) => {
-    res.writeHead(200, headers);
-    res.end(body);
-  };
+  const send =
+    (body, headers = {}) =>
+    (req, res) => {
+      res.writeHead(200, headers);
+      res.end(body);
+    };
   const png = (width, height) =>
-    sharp({ create: { width, height, channels: 3, background: { r: 200, g: 50, b: 50 } } })
+    sharp({
+      create: {
+        width,
+        height,
+        channels: 3,
+        background: { r: 200, g: 50, b: 50 },
+      },
+    })
       .png()
       .toBuffer();
 
   describe("a batch", function () {
     it("answers every URL in order, with its own body", async function () {
-      for (const name of ["a", "b", "c"]) routes["/" + name] = send(name.repeat(3));
+      for (const name of ["a", "b", "c"])
+        routes["/" + name] = send(name.repeat(3));
 
-      const { meta, outputs } = await batch(["a", "b", "c"].map((name) => ({ url: `${origin}/${name}` })));
+      const { meta, outputs } = await batch(
+        ["a", "b", "c"].map((name) => ({ url: `${origin}/${name}` }))
+      );
 
       expect(meta.results.map((r) => r.status)).toEqual([200, 200, 200]);
       expect(outputs.map(String)).toEqual(["aaa", "bbb", "ccc"]);
@@ -83,10 +99,14 @@ describe("sandbox fetch job", function () {
         { url: origin + "/ok" },
       ]);
 
-      expect(meta.results[0]).toEqual(jasmine.objectContaining({ error: "500", status: 500 }));
+      expect(meta.results[0]).toEqual(
+        jasmine.objectContaining({ error: "500", status: 500 })
+      );
       expect(meta.results[1].error).toBe("URL is not allowed");
       expect(meta.results[2].error).toBe("URL must not contain credentials");
-      expect(meta.results[3]).toEqual(jasmine.objectContaining({ error: "404", status: 404 }));
+      expect(meta.results[3]).toEqual(
+        jasmine.objectContaining({ error: "404", status: 404 })
+      );
       expect(meta.results[4].code).toBe("ECONNREFUSED");
       expect(meta.results[5].status).toBe(200);
       expect(outputs.map((o) => o.length)).toEqual([0, 0, 0, 0, 0, 4]);
@@ -99,20 +119,36 @@ describe("sandbox fetch job", function () {
         res.end("it is gone");
       };
 
-      const { meta, outputs } = await batch([{ url: origin + "/gone", anyStatus: true }]);
+      const { meta, outputs } = await batch([
+        { url: origin + "/gone", anyStatus: true },
+      ]);
 
       expect(meta.results[0].status).toBe(410);
       expect(String(outputs[0])).toBe("it is gone");
     });
 
     it("refuses a list that is empty, too long or not a list", async function () {
-      const tooMany = Array.from({ length: MAX_REQUESTS + 1 }, () => ({ url: origin + "/" }));
-      for (const requests of [[], tooMany, "http://example.com", null, undefined]) {
-        const { meta, outputs } = await sandbox.run("fetch", { requests }, empty);
+      const tooMany = Array.from({ length: MAX_REQUESTS + 1 }, () => ({
+        url: origin + "/",
+      }));
+      for (const requests of [
+        [],
+        tooMany,
+        "http://example.com",
+        null,
+        undefined,
+      ]) {
+        const { meta, outputs } = await sandbox.run(
+          "fetch",
+          { requests },
+          empty
+        );
         expect(meta.error).toMatch(/requests must be a list/);
         expect(outputs).toEqual([]);
       }
-      expect((await sandbox.run("fetch", null, empty)).meta.error).toMatch(/requests must be a list/);
+      expect((await sandbox.run("fetch", null, empty)).meta.error).toMatch(
+        /requests must be a list/
+      );
     });
 
     it("checks each request's options", async function () {
@@ -139,7 +175,12 @@ describe("sandbox fetch job", function () {
       const { outputs } = await batch([
         {
           url: origin + "/headers",
-          headers: { userAgent: "Blot (+https://blot.im)", referer: "https://www.are.na/", accept: "image/*", cookie: "a=b" },
+          headers: {
+            userAgent: "Blot (+https://blot.im)",
+            referer: "https://www.are.na/",
+            accept: "image/*",
+            cookie: "a=b",
+          },
         },
         { url: origin + "/headers" },
       ]);
@@ -170,13 +211,17 @@ describe("sandbox fetch job", function () {
       expect(meta.results[0].status).toBe(200);
       expect(outputs[0].length).toBe(big.length);
       expect(meta.results[1].status).toBe(200);
-      expect(meta.results[2]).toEqual(jasmine.objectContaining({ error: "batch is full", deferred: true }));
+      expect(meta.results[2]).toEqual(
+        jasmine.objectContaining({ error: "batch is full", deferred: true })
+      );
       expect(outputs[2].length).toBe(0);
     });
 
     it("gives a first body larger than the others' room all of its own limit", async function () {
       routes["/large"] = send(Buffer.alloc(BATCH_BYTES + MiB, "z"));
-      const { meta, outputs } = await batch([{ url: origin + "/large", kind: "file" }]);
+      const { meta, outputs } = await batch([
+        { url: origin + "/large", kind: "file" },
+      ]);
       expect(meta.results[0].error).toBeUndefined();
       expect(outputs[0].length).toBe(BATCH_BYTES + MiB);
     });
@@ -200,7 +245,9 @@ describe("sandbox fetch job", function () {
       ]);
 
       expect(String(outputs[0])).toBe("first");
-      expect(meta.results[1]).toEqual(jasmine.objectContaining({ deferred: true, error: "batch timed out" }));
+      expect(meta.results[1]).toEqual(
+        jasmine.objectContaining({ deferred: true, error: "batch timed out" })
+      );
       expect(meta.results[1].timedOut).toBeUndefined();
       // one that fits in what is left is fetched
       expect(meta.results[2].status).toBe(200);
@@ -242,23 +289,38 @@ describe("sandbox fetch job", function () {
       const { meta, outputs } = await batch([{ url: origin + "/page" }]);
 
       expect(String(outputs[0])).toBe("<p>hello</p>");
-      expect(meta.results[0].headers).toEqual({ etag: '"abc"', contentType: "text/html; charset=utf-8" });
+      expect(meta.results[0].headers).toEqual({
+        etag: '"abc"',
+        contentType: "text/html; charset=utf-8",
+      });
     });
 
     it("stops a gzip bomb once it has inflated past its limit", async function () {
-      routes["/bomb"] = send(zlib.gzipSync(Buffer.alloc(3 * MiB)), { "Content-Encoding": "gzip" });
-      routes["/brotli"] = send(zlib.brotliCompressSync(Buffer.alloc(3 * MiB)), { "Content-Encoding": "br" });
-      routes["/deflate"] = send(zlib.deflateSync(Buffer.alloc(3 * MiB)), { "Content-Encoding": "deflate" });
-      routes["/fine"] = send(zlib.gzipSync(Buffer.alloc(0.5 * MiB, "a")), { "Content-Encoding": "gzip" });
+      routes["/bomb"] = send(zlib.gzipSync(Buffer.alloc(3 * MiB)), {
+        "Content-Encoding": "gzip",
+      });
+      routes["/brotli"] = send(zlib.brotliCompressSync(Buffer.alloc(3 * MiB)), {
+        "Content-Encoding": "br",
+      });
+      routes["/deflate"] = send(zlib.deflateSync(Buffer.alloc(3 * MiB)), {
+        "Content-Encoding": "deflate",
+      });
+      routes["/fine"] = send(zlib.gzipSync(Buffer.alloc(0.5 * MiB, "a")), {
+        "Content-Encoding": "gzip",
+      });
 
       const { meta, outputs } = await batch(
-        ["/bomb", "/brotli", "/deflate"].map((path) => ({ url: origin + path, maxBytes: 1 * MiB })).concat({
-          url: origin + "/fine",
-          maxBytes: 1 * MiB,
-        })
+        ["/bomb", "/brotli", "/deflate"]
+          .map((path) => ({ url: origin + path, maxBytes: 1 * MiB }))
+          .concat({
+            url: origin + "/fine",
+            maxBytes: 1 * MiB,
+          })
       );
 
-      expect(meta.results.slice(0, 3).map((r) => r.error)).toEqual(Array(3).fill("response is too large"));
+      expect(meta.results.slice(0, 3).map((r) => r.error)).toEqual(
+        Array(3).fill("response is too large")
+      );
       expect(meta.results[3].error).toBeUndefined();
       expect(outputs[3].length).toBe(0.5 * MiB);
     });
@@ -272,7 +334,9 @@ describe("sandbox fetch job", function () {
         res.on("close", () => {});
       };
 
-      const { meta } = await batch([{ url: origin + "/declared", maxBytes: 1 * MiB }]);
+      const { meta } = await batch([
+        { url: origin + "/declared", maxBytes: 1 * MiB },
+      ]);
 
       expect(meta.results[0].error).toBe("response is too large");
       expect(sent).toBe(1024);
@@ -280,13 +344,19 @@ describe("sandbox fetch job", function () {
 
     it("never reads more than its hard limit, whatever it is asked for", async function () {
       routes["/huge"] = send(Buffer.alloc(TEXT_MAX_BYTES + 1, "a"));
-      const { meta } = await batch([{ url: origin + "/huge", maxBytes: 1024 * MiB }]);
+      const { meta } = await batch([
+        { url: origin + "/huge", maxBytes: 1024 * MiB },
+      ]);
       expect(meta.results[0].error).toBe("response is too large");
     });
 
     it("can stop at its limit and keep what it has read", async function () {
-      routes["/long"] = send("0123456789".repeat(100), { "Content-Encoding": "identity" });
-      routes["/longgz"] = send(zlib.gzipSync("0123456789".repeat(100)), { "Content-Encoding": "gzip" });
+      routes["/long"] = send("0123456789".repeat(100), {
+        "Content-Encoding": "identity",
+      });
+      routes["/longgz"] = send(zlib.gzipSync("0123456789".repeat(100)), {
+        "Content-Encoding": "gzip",
+      });
 
       const { meta, outputs } = await batch([
         { url: origin + "/long", maxBytes: 25, truncate: true },
@@ -307,7 +377,9 @@ describe("sandbox fetch job", function () {
         res.end();
       };
 
-      const { meta, outputs } = await batch([{ url: origin + "/head", method: "HEAD" }]);
+      const { meta, outputs } = await batch([
+        { url: origin + "/head", method: "HEAD" },
+      ]);
 
       expect(requests[0].method).toBe("HEAD");
       expect(meta.results[0].status).toBe(200);
@@ -321,12 +393,17 @@ describe("sandbox fetch job", function () {
       routes["/end"] = send("arrived");
       for (let i = 0; i < MAX_REDIRECTS + 1; i++) {
         routes["/hop" + i] = (req, res) => {
-          res.writeHead(302, { Location: i === MAX_REDIRECTS ? "/end" : "/hop" + (i + 1) });
+          res.writeHead(302, {
+            Location: i === MAX_REDIRECTS ? "/end" : "/hop" + (i + 1),
+          });
           res.end();
         };
       }
 
-      const { meta, outputs } = await batch([{ url: origin + "/hop1" }, { url: origin + "/hop0" }]);
+      const { meta, outputs } = await batch([
+        { url: origin + "/hop1" },
+        { url: origin + "/hop0" },
+      ]);
 
       expect(String(outputs[0])).toBe("arrived");
       expect(meta.results[1].error).toBe("too many redirects");
@@ -342,7 +419,10 @@ describe("sandbox fetch job", function () {
         res.end();
       };
 
-      const { meta } = await batch([{ url: origin + "/ftp" }, { url: origin + "/creds" }]);
+      const { meta } = await batch([
+        { url: origin + "/ftp" },
+        { url: origin + "/creds" },
+      ]);
 
       expect(meta.results[0].error).toBe("URL is not allowed");
       expect(meta.results[1].error).toBe("URL must not contain credentials");
@@ -373,7 +453,10 @@ describe("sandbox fetch job", function () {
       const { port } = server.address();
 
       const { meta, outputs } = await batch([
-        { url: `http://blog.example.test:${port}/verify/domain-setup`, ip: "127.0.0.1" },
+        {
+          url: `http://blog.example.test:${port}/verify/domain-setup`,
+          ip: "127.0.0.1",
+        },
       ]);
 
       expect(meta.results[0].error).toBeUndefined();
@@ -384,7 +467,11 @@ describe("sandbox fetch job", function () {
       const { port } = server.address();
       const { meta } = await batch([
         { url: `http://no-such-name.invalid:${port}/` },
-        { url: `http://no-such-name.invalid:${port}/`, ip: "127.0.0.1", anyStatus: true },
+        {
+          url: `http://no-such-name.invalid:${port}/`,
+          ip: "127.0.0.1",
+          anyStatus: true,
+        },
       ]);
 
       expect(meta.results[0].code).toMatch(/ENOTFOUND|EAI_AGAIN/);
@@ -394,31 +481,46 @@ describe("sandbox fetch job", function () {
     it("pins only the first request: a redirect goes where the server says", async function () {
       const { port } = server.address();
       routes["/start"] = (req, res) => {
-        res.writeHead(302, { Location: `http://elsewhere.invalid:${port}/next` });
+        res.writeHead(302, {
+          Location: `http://elsewhere.invalid:${port}/next`,
+        });
         res.end();
       };
       routes["/next"] = send("never");
 
-      const { meta } = await batch([{ url: `http://pinned.example.test:${port}/start`, ip: "127.0.0.1" }]);
+      const { meta } = await batch([
+        { url: `http://pinned.example.test:${port}/start`, ip: "127.0.0.1" },
+      ]);
 
       expect(meta.results[0].code).toMatch(/ENOTFOUND|EAI_AGAIN/);
       expect(requests.map((r) => r.url)).toEqual(["/start"]);
     });
 
     it("reports a pinned address that refuses the connection with its code", async function () {
-      const { meta } = await batch([{ url: "http://blog.example.test:1/", ip: "127.0.0.1" }]);
+      const { meta } = await batch([
+        { url: "http://blog.example.test:1/", ip: "127.0.0.1" },
+      ]);
       expect(meta.results[0].code).toBe("ECONNREFUSED");
     });
   });
 
   describe("files", function () {
-    const pdf = Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(200, "x")]);
+    const pdf = Buffer.concat([
+      Buffer.from("%PDF-1.4\n"),
+      Buffer.alloc(200, "x"),
+    ]);
 
     it("returns the bytes of a PDF or audio file, and refuses what is not one", async function () {
       routes["/doc.pdf"] = send(pdf, { "Content-Type": "application/pdf" });
-      routes["/fake.pdf"] = send("<html>log in</html>", { "Content-Type": "application/pdf" });
-      routes["/song.mp3"] = send(Buffer.concat([Buffer.from("ID3"), Buffer.alloc(300, 1)]));
-      routes["/page.mp3"] = send("  <!doctype html><title>no</title>", { "Content-Type": "audio/mpeg" });
+      routes["/fake.pdf"] = send("<html>log in</html>", {
+        "Content-Type": "application/pdf",
+      });
+      routes["/song.mp3"] = send(
+        Buffer.concat([Buffer.from("ID3"), Buffer.alloc(300, 1)])
+      );
+      routes["/page.mp3"] = send("  <!doctype html><title>no</title>", {
+        "Content-Type": "audio/mpeg",
+      });
 
       const { meta, outputs } = await batch([
         { url: origin + "/doc.pdf", kind: "file", check: "pdf" },
@@ -443,30 +545,46 @@ describe("sandbox fetch job", function () {
         late: "x".repeat(100) + "<html><body>hi</body></html>",
         json: '{"login":"required"}',
       };
-      for (const [name, body] of Object.entries(bodies)) routes["/" + name] = send(body);
+      for (const [name, body] of Object.entries(bodies))
+        routes["/" + name] = send(body);
 
-      const { meta } = await batch(Object.keys(bodies).map((name) => ({ url: `${origin}/${name}`, kind: "file" })));
+      const { meta } = await batch(
+        Object.keys(bodies).map((name) => ({
+          url: `${origin}/${name}`,
+          kind: "file",
+        }))
+      );
 
-      expect(meta.results.map((r) => r.error)).toEqual(Array(Object.keys(bodies).length).fill("not a file"));
+      expect(meta.results.map((r) => r.error)).toEqual(
+        Array(Object.keys(bodies).length).fill("not a file")
+      );
     });
 
     it("stops a file at its limit, compressed or not", async function () {
       routes["/long"] = send(Buffer.alloc(2048, 1));
-      routes["/longgz"] = send(zlib.gzipSync(Buffer.alloc(1 * MiB, 1)), { "Content-Encoding": "gzip" });
+      routes["/longgz"] = send(zlib.gzipSync(Buffer.alloc(1 * MiB, 1)), {
+        "Content-Encoding": "gzip",
+      });
 
       const { meta } = await batch([
         { url: origin + "/long", kind: "file", maxBytes: 1024 },
         { url: origin + "/longgz", kind: "file", maxBytes: 4096 },
       ]);
 
-      expect(meta.results.map((r) => r.error)).toEqual(["file is too large", "file is too large"]);
+      expect(meta.results.map((r) => r.error)).toEqual([
+        "file is too large",
+        "file is too large",
+      ]);
     });
   });
 
   describe("images", function () {
     it("re-encodes an image, with its format and size", async function () {
       const image = await png(40, 30);
-      routes["/image"] = send(image, { "Content-Type": "application/octet-stream", "Content-Disposition": 'inline; filename="x.png"' });
+      routes["/image"] = send(image, {
+        "Content-Type": "application/octet-stream",
+        "Content-Disposition": 'inline; filename="x.png"',
+      });
       routes["/page"] = send("<p>not an image</p>");
       routes["/wide"] = send(await png(6000, 10));
 
@@ -477,31 +595,52 @@ describe("sandbox fetch job", function () {
       ]);
 
       expect(meta.results[0]).toEqual(
-        jasmine.objectContaining({ kind: "image", format: "png", width: 40, height: 30 })
+        jasmine.objectContaining({
+          kind: "image",
+          format: "png",
+          width: 40,
+          height: 30,
+        })
       );
-      expect(meta.results[0].headers.contentDisposition).toBe('inline; filename="x.png"');
+      expect(meta.results[0].headers.contentDisposition).toBe(
+        'inline; filename="x.png"'
+      );
       const info = await sharp(outputs[0]).metadata();
       expect([info.format, info.width, info.height]).toEqual(["png", 40, 30]);
       expect(meta.results[1].error).toBe("not an image");
-      expect([meta.results[2].width, meta.results[2].height]).toEqual([3000, 5]);
+      expect([meta.results[2].width, meta.results[2].height]).toEqual([
+        3000, 5,
+      ]);
     });
 
     it("refuses an SVG, which would stay an SVG", async function () {
-      routes["/vector"] = send('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>');
-      const { meta } = await batch([{ url: origin + "/vector", kind: "image" }]);
+      routes["/vector"] = send(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>'
+      );
+      const { meta } = await batch([
+        { url: origin + "/vector", kind: "image" },
+      ]);
       expect(meta.results[0].error).toBeTruthy();
     });
   });
 
   describe("html pages", function () {
-    const page = (tags, body = "") => `<!doctype html><html><head>${tags}</head><body>${body}</body></html>`;
+    const page = (tags, body = "") =>
+      `<!doctype html><html><head>${tags}</head><body>${body}</body></html>`;
     const player =
       '<meta property="og:video" content="https://bandcamp.com/EmbeddedPlayer/v=2/album=1/">' +
       '<meta property="og:video:width" content="400"><meta property="og:video:height" content="120">';
-    const html = (url, extra) => ({ url, kind: "html", extract: "og-video", ...extra });
+    const html = (url, extra) => ({
+      url,
+      kind: "html",
+      extract: "og-video",
+      ...extra,
+    });
 
     it("returns the named extraction of the page, never the page", async function () {
-      routes["/album"] = send(page(player, "<p>" + "x".repeat(1000) + "</p>"), { "content-type": "text/html" });
+      routes["/album"] = send(page(player, "<p>" + "x".repeat(1000) + "</p>"), {
+        "content-type": "text/html",
+      });
 
       const { meta, outputs } = await batch([html(origin + "/album")]);
 
@@ -509,7 +648,11 @@ describe("sandbox fetch job", function () {
         status: 200,
         kind: "html",
         headers: { contentType: "text/html" },
-        extracted: { src: "https://bandcamp.com/EmbeddedPlayer/v=2/album=1/", width: 400, height: 120 },
+        extracted: {
+          src: "https://bandcamp.com/EmbeddedPlayer/v=2/album=1/",
+          width: 400,
+          height: 120,
+        },
       });
       expect(outputs[0].length).toBe(0);
     });
@@ -533,8 +676,17 @@ describe("sandbox fetch job", function () {
 
     it("needs a named extraction, and no other", async function () {
       routes["/album"] = send(page(player));
-      for (const extract of [undefined, "", "meta", "constructor", "__proto__", "og-video; x"]) {
-        const { meta } = await batch([{ url: origin + "/album", kind: "html", extract }]);
+      for (const extract of [
+        undefined,
+        "",
+        "meta",
+        "constructor",
+        "__proto__",
+        "og-video; x",
+      ]) {
+        const { meta } = await batch([
+          { url: origin + "/album", kind: "html", extract },
+        ]);
         expect(meta.results[0].error).toBe("unknown extraction");
       }
       expect(requests.length).toBe(0);
@@ -552,16 +704,27 @@ describe("sandbox fetch job", function () {
 
     it("does not fetch more than the extraction's limit, whatever maxBytes says", async function () {
       routes["/long"] = send(page(player, "x".repeat(3 * MiB)));
-      const { meta } = await batch([html(origin + "/long", { maxBytes: 64 * MiB })]);
+      const { meta } = await batch([
+        html(origin + "/long", { maxBytes: 64 * MiB }),
+      ]);
       expect(meta.results[0].error).toBe("response is too large");
     });
 
     it("answers a page that is too large, deep or full of tags to parse as an error of the fetch", async function () {
       routes["/deep"] = send(page(player, "<div>".repeat(29000)));
       routes["/tags"] = send(page(player, "<a></a>".repeat(30000)));
-      routes["/attributes"] = send(page(player, "<img " + Array.from({ length: 50000 }, (_, i) => "a" + i).join(" ") + ">"));
+      routes["/attributes"] = send(
+        page(
+          player,
+          "<img " +
+            Array.from({ length: 50000 }, (_, i) => "a" + i).join(" ") +
+            ">"
+        )
+      );
 
-      const { meta } = await batch(["deep", "tags", "attributes"].map((name) => html(origin + "/" + name)));
+      const { meta } = await batch(
+        ["deep", "tags", "attributes"].map((name) => html(origin + "/" + name))
+      );
 
       expect(meta.results.map((r) => r.error)).toEqual([
         "markup is nested too deeply",
@@ -573,7 +736,10 @@ describe("sandbox fetch job", function () {
     it("keeps the rest of the batch going after a page it can't parse", async function () {
       routes["/deep"] = send("<div>".repeat(29000));
       routes["/album"] = send(page(player));
-      const { meta } = await batch([html(origin + "/deep"), html(origin + "/album")]);
+      const { meta } = await batch([
+        html(origin + "/deep"),
+        html(origin + "/album"),
+      ]);
       expect(meta.results[0].error).toBeTruthy();
       expect(meta.results[1].extracted.height).toBe(120);
     });
@@ -589,9 +755,15 @@ describe("sandbox fetch job", function () {
       };
       routes["/album"] = send(page(player));
 
-      const { meta } = await batch([html(origin + "/gone"), html(origin + "/moved", { redirect: "manual" })]);
+      const { meta } = await batch([
+        html(origin + "/gone"),
+        html(origin + "/moved", { redirect: "manual" }),
+      ]);
 
-      expect(meta.results[0]).toEqual({ error: jasmine.any(String), status: 404 });
+      expect(meta.results[0]).toEqual({
+        error: jasmine.any(String),
+        status: 404,
+      });
       expect(meta.results[1].status).toBe(302);
       expect(meta.results[1].error).toBeTruthy();
       expect(requests.map((r) => r.url)).toEqual(["/gone", "/moved"]);
@@ -599,7 +771,9 @@ describe("sandbox fetch job", function () {
 
     it("has nothing to extract from a HEAD", async function () {
       routes["/album"] = send(page(player));
-      const { meta } = await batch([html(origin + "/album", { method: "HEAD" })]);
+      const { meta } = await batch([
+        html(origin + "/album", { method: "HEAD" }),
+      ]);
       expect(meta.results[0].status).toBe(200);
       expect(meta.results[0].extracted).toBeUndefined();
     });
@@ -608,7 +782,11 @@ describe("sandbox fetch job", function () {
       routes["/album"] = send(page(player));
       const result = await sandboxFetch.one(html(origin + "/album"));
       expect(result.kind).toBe("html");
-      expect(result.extracted).toEqual({ src: "https://bandcamp.com/EmbeddedPlayer/v=2/album=1/", width: 400, height: 120 });
+      expect(result.extracted).toEqual({
+        src: "https://bandcamp.com/EmbeddedPlayer/v=2/album=1/",
+        width: 400,
+        height: 120,
+      });
       expect(result.data.length).toBe(0);
     });
   });
@@ -624,7 +802,14 @@ describe("sandbox fetch job", function () {
         { url: origin + "/image", kind: "image" },
       ]);
 
-      expect(results[0]).toEqual(jasmine.objectContaining({ ok: true, status: 200, text: "1", kind: "text" }));
+      expect(results[0]).toEqual(
+        jasmine.objectContaining({
+          ok: true,
+          status: 200,
+          text: "1",
+          kind: "text",
+        })
+      );
       expect(results[0].data.toString()).toBe("1");
       expect(results[0].headers).toEqual({ etag: '"1"' });
       expect(results[1].ok).toBe(false);
@@ -682,12 +867,16 @@ describe("sandbox fetch job", function () {
       spyOn(sandbox, "run").and.callThrough();
 
       const results = await sandboxFetch.many(
-        Array.from({ length: MAX_REQUESTS * 2 + 1 }, () => ({ url: origin + "/n" }))
+        Array.from({ length: MAX_REQUESTS * 2 + 1 }, () => ({
+          url: origin + "/n",
+        }))
       );
 
       expect(results.length).toBe(MAX_REQUESTS * 2 + 1);
       expect(results.every((r) => r.ok && r.text === "n")).toBe(true);
-      expect(sandbox.run.calls.allArgs().map(([, args]) => args.requests.length)).toEqual([MAX_REQUESTS, MAX_REQUESTS, 1]);
+      expect(
+        sandbox.run.calls.allArgs().map(([, args]) => args.requests.length)
+      ).toEqual([MAX_REQUESTS, MAX_REQUESTS, 1]);
     });
 
     it("starts no more jails once the signal aborts", async function () {
@@ -722,15 +911,24 @@ describe("sandbox fetch job", function () {
       const aborted = new AbortController();
       aborted.abort();
       sandbox.run.calls.reset();
-      await expectAsync(sandboxFetch.many([{ url: origin + "/small" }], { signal: aborted.signal })).toBeRejected();
+      await expectAsync(
+        sandboxFetch.many([{ url: origin + "/small" }], {
+          signal: aborted.signal,
+        })
+      ).toBeRejected();
       expect(sandbox.run).not.toHaveBeenCalled();
     });
 
     it("gives every request the sandbox's error when the sandbox fails", async function () {
-      const failure = Object.assign(new Error("sandbox: busy"), { code: "SANDBOX_BUSY" });
+      const failure = Object.assign(new Error("sandbox: busy"), {
+        code: "SANDBOX_BUSY",
+      });
       spyOn(sandbox, "run").and.returnValue(Promise.reject(failure));
 
-      const results = await sandboxFetch.many([{ url: origin + "/a" }, { url: origin + "/b" }]);
+      const results = await sandboxFetch.many([
+        { url: origin + "/a" },
+        { url: origin + "/b" },
+      ]);
 
       expect(results.map((r) => r.ok)).toEqual([false, false]);
       expect(results[0].error.code).toBe("SANDBOX_BUSY");

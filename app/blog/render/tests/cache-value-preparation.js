@@ -53,7 +53,9 @@ describe("warnIfTooLargeToCache", function () {
   // The warnings are remembered for the life of the process, so each test
   // uses a blog id no other test has.
   function makeReq(cacheID) {
-    return { blog: { id: "warn-blog-" + process.pid + "-" + uniqueBlog, cacheID } };
+    return {
+      blog: { id: "warn-blog-" + process.pid + "-" + uniqueBlog, cacheID },
+    };
   }
 
   beforeEach(function () {

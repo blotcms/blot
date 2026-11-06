@@ -1,7 +1,11 @@
 describe("git store: reads", function () {
   // A blog on the git client with a clone, a memory store per blog, and the
   // store's log lines kept
-  require("clients/git/tests/setup")({ clone: false, client: true, lines: true });
+  require("clients/git/tests/setup")({
+    clone: false,
+    client: true,
+    lines: true,
+  });
 
   var Client = require("clients/git/tests/setup/client");
   var http = require("http");
@@ -30,10 +34,13 @@ describe("git store: reads", function () {
 
     var parsed = new URL(ctx.repoUrl);
     var user = decodeURIComponent(parsed.username);
-    var token = options.auth === "wrong" ? "wrong" : decodeURIComponent(parsed.password);
+    var token =
+      options.auth === "wrong" ? "wrong" : decodeURIComponent(parsed.password);
     var headers = Object.assign({}, options.headers);
 
-    if (options.auth !== "none") headers.Authorization = "Basic " + Buffer.from(user + ":" + token).toString("base64");
+    if (options.auth !== "none")
+      headers.Authorization =
+        "Basic " + Buffer.from(user + ":" + token).toString("base64");
 
     return new Promise(function (resolve, reject) {
       var req = http.request(
@@ -50,7 +57,11 @@ describe("git store: reads", function () {
             chunks.push(chunk);
           });
           res.on("end", function () {
-            resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString("latin1") });
+            resolve({
+              status: res.statusCode,
+              headers: res.headers,
+              body: Buffer.concat(chunks).toString("latin1"),
+            });
           });
         }
       );
@@ -65,7 +76,9 @@ describe("git store: reads", function () {
   }
 
   function pktLine(text) {
-    return ("0000" + (Buffer.byteLength(text) + 4).toString(16)).slice(-4) + text;
+    return (
+      ("0000" + (Buffer.byteLength(text) + 4).toString(16)).slice(-4) + text
+    );
   }
 
   // Leaves the blog with an empty store
@@ -82,28 +95,49 @@ describe("git store: reads", function () {
 
     var head = await this.local.head();
     var light = (await this.local.git(["rev-parse", "light"])).stdout.trim();
-    var annotated = (await this.local.git(["rev-parse", "annotated"])).stdout.trim();
+    var annotated = (
+      await this.local.git(["rev-parse", "annotated"])
+    ).stdout.trim();
 
     var advertised = (await this.local.git(["ls-remote", this.repoUrl])).stdout;
     expect(advertised).toBe(
-      [head + "\tHEAD", head + "\trefs/heads/master", annotated + "\trefs/tags/annotated", head + "\trefs/tags/annotated^{}", light + "\trefs/tags/light", ""].join("\n")
+      [
+        head + "\tHEAD",
+        head + "\trefs/heads/master",
+        annotated + "\trefs/tags/annotated",
+        head + "\trefs/tags/annotated^{}",
+        light + "\trefs/tags/light",
+        "",
+      ].join("\n")
     );
 
     // The receive-pack advertisement: sorted refs, the capabilities on the
     // first, no HEAD and no peeled tags
-    var receiving = await request(this, "GET", "/info/refs?service=git-receive-pack");
+    var receiving = await request(
+      this,
+      "GET",
+      "/info/refs?service=git-receive-pack"
+    );
     expect(receiving.status).toBe(200);
-    expect(receiving.headers["content-type"]).toBe("application/x-git-receive-pack-advertisement");
+    expect(receiving.headers["content-type"]).toBe(
+      "application/x-git-receive-pack-advertisement"
+    );
     expect(receiving.body).toBe(
       pktLine("# service=git-receive-pack\n") +
         "0000" +
-        pktLine(head + " refs/heads/master\0report-status delete-refs side-band-64k quiet ofs-delta agent=blot\n") +
+        pktLine(
+          head +
+            " refs/heads/master\0report-status delete-refs side-band-64k quiet ofs-delta agent=blot\n"
+        ) +
         pktLine(annotated + " refs/tags/annotated\n") +
         pktLine(light + " refs/tags/light\n") +
         "0000"
     );
 
-    var clone = await Client.clone({ url: this.repoUrl, directory: directory(this, "clone") });
+    var clone = await Client.clone({
+      url: this.repoUrl,
+      directory: directory(this, "clone"),
+    });
 
     expect(await clone.head()).toBe(head);
     expect((await clone.try(["fsck", "--strict"])).code).toBe(0);
@@ -112,17 +146,29 @@ describe("git store: reads", function () {
     await this.local.writeAndPush("/b.txt", "B");
 
     await clone.git(["-c", "transfer.fsckObjects=true", "fetch", "origin"]);
-    expect((await clone.git(["rev-parse", "origin/master"])).stdout.trim()).toBe(await this.local.head());
+    expect(
+      (await clone.git(["rev-parse", "origin/master"])).stdout.trim()
+    ).toBe(await this.local.head());
     expect((await clone.try(["fsck", "--strict"])).code).toBe(0);
 
     var id = this.blog.id;
 
     expect((await lineMatching(this, / op=advertise /))[0]).toMatch(
-      new RegExp("blog=" + id + " op=advertise outcome=ok ms=\\d+ firstByteMs=\\d+ requests=\\d+ bytesDown=\\d+ bytesSent=\\d+$")
+      new RegExp(
+        "blog=" +
+          id +
+          " op=advertise outcome=ok ms=\\d+ firstByteMs=\\d+ requests=\\d+ bytesDown=\\d+ bytesSent=\\d+$"
+      )
     );
-    expect((await lineMatching(this, / op=receive-advertise outcome=ok /)).length).toBeGreaterThan(0);
-    expect((await lineMatching(this, / op=clone outcome=ok /)).length).toBeGreaterThan(0);
-    expect((await lineMatching(this, / op=fetch outcome=ok /)).length).toBeGreaterThan(0);
+    expect(
+      (await lineMatching(this, / op=receive-advertise outcome=ok /)).length
+    ).toBeGreaterThan(0);
+    expect(
+      (await lineMatching(this, / op=clone outcome=ok /)).length
+    ).toBeGreaterThan(0);
+    expect(
+      (await lineMatching(this, / op=fetch outcome=ok /)).length
+    ).toBeGreaterThan(0);
 
     // IDs only
     var handle = this.blog.handle;
@@ -142,7 +188,10 @@ describe("git store: reads", function () {
     var earlier = lines(ctx, / op=advertise outcome=ok /).length;
 
     for (var i = 0; i < 2; i++) {
-      expect((await request(this, "GET", "/info/refs?service=git-upload-pack")).status).toBe(200);
+      expect(
+        (await request(this, "GET", "/info/refs?service=git-upload-pack"))
+          .status
+      ).toBe(200);
     }
 
     var advertised = [];
@@ -170,7 +219,11 @@ describe("git store: reads", function () {
   it("refuses a shallow clone with a remote error", async function () {
     await this.local.writeAndPush("/a.txt", "A");
 
-    var shallow = await Client.clone({ url: this.repoUrl, directory: directory(this, "shallow"), args: ["--depth", "1"] }).then(
+    var shallow = await Client.clone({
+      url: this.repoUrl,
+      directory: directory(this, "shallow"),
+      args: ["--depth", "1"],
+    }).then(
       function () {
         return null;
       },
@@ -192,9 +245,23 @@ describe("git store: reads", function () {
     var want = pktLine("want " + head + " ofs-delta side-band-64k\n");
     var cases = [
       ["shallow", want + pktLine("deepen 1\n") + "0000" + pktLine("done\n")],
-      ["shallow", want + pktLine("deepen-since 1700000000\n") + "0000" + pktLine("done\n")],
-      ["filter", want + pktLine("filter blob:none\n") + "0000" + pktLine("done\n")],
-      ["other", pktLine("want " + "1".repeat(40) + " ofs-delta\n") + "0000" + pktLine("done\n")],
+      [
+        "shallow",
+        want +
+          pktLine("deepen-since 1700000000\n") +
+          "0000" +
+          pktLine("done\n"),
+      ],
+      [
+        "filter",
+        want + pktLine("filter blob:none\n") + "0000" + pktLine("done\n"),
+      ],
+      [
+        "other",
+        pktLine("want " + "1".repeat(40) + " ofs-delta\n") +
+          "0000" +
+          pktLine("done\n"),
+      ],
     ];
 
     for (var [reason, body] of cases) {
@@ -208,11 +275,15 @@ describe("git store: reads", function () {
 
       var line = undefined;
       for (var i = 0; i < 100 && !line; i++) {
-        line = this.storeLines().slice(before).find((l) => / outcome=refused /.test(l));
+        line = this.storeLines()
+          .slice(before)
+          .find((l) => / outcome=refused /.test(l));
         if (!line) await new Promise((resolve) => setTimeout(resolve, 20));
       }
 
-      expect(line).toMatch(new RegExp(" outcome=refused .*reason=" + reason + "( |$)"));
+      expect(line).toMatch(
+        new RegExp(" outcome=refused .*reason=" + reason + "( |$)")
+      );
     }
   });
 
@@ -220,10 +291,26 @@ describe("git store: reads", function () {
     var { refusalReason } = require("clients/git/served/reads");
     var want = pktLine("want " + "a".repeat(40) + "\n");
 
-    expect(refusalReason(Buffer.from(want + pktLine("shallow " + "b".repeat(40) + "\n") + "0000"))).toBe("shallow");
-    expect(refusalReason(Buffer.from(want + pktLine("deepen-not refs/heads/x\n") + "0000"))).toBe("shallow");
-    expect(refusalReason(Buffer.from(want + pktLine("filter tree:0\n") + pktLine("deepen 2\n") + "0000"))).toBe("shallow");
-    expect(refusalReason(Buffer.from(want + pktLine("filter tree:0\n") + "0000"))).toBe("filter");
+    expect(
+      refusalReason(
+        Buffer.from(want + pktLine("shallow " + "b".repeat(40) + "\n") + "0000")
+      )
+    ).toBe("shallow");
+    expect(
+      refusalReason(
+        Buffer.from(want + pktLine("deepen-not refs/heads/x\n") + "0000")
+      )
+    ).toBe("shallow");
+    expect(
+      refusalReason(
+        Buffer.from(
+          want + pktLine("filter tree:0\n") + pktLine("deepen 2\n") + "0000"
+        )
+      )
+    ).toBe("shallow");
+    expect(
+      refusalReason(Buffer.from(want + pktLine("filter tree:0\n") + "0000"))
+    ).toBe("filter");
     expect(refusalReason(Buffer.from(want + "0000"))).toBe("other");
     expect(refusalReason(Buffer.from("not git"))).toBe("other");
   });
@@ -231,14 +318,25 @@ describe("git store: reads", function () {
   it("says so when the store has no copy, and never serves an empty repository", async function () {
     emptyStore(this);
 
-    var advertised = await request(this, "GET", "/info/refs?service=git-upload-pack");
+    var advertised = await request(
+      this,
+      "GET",
+      "/info/refs?service=git-upload-pack"
+    );
     expect(advertised.status).toBe(503);
     expect(advertised.body).toContain("no copy");
 
-    var receiving = await request(this, "GET", "/info/refs?service=git-receive-pack");
+    var receiving = await request(
+      this,
+      "GET",
+      "/info/refs?service=git-receive-pack"
+    );
     expect(receiving.status).toBe(503);
 
-    var clone = await Client.clone({ url: this.repoUrl, directory: directory(this, "nothing") }).then(
+    var clone = await Client.clone({
+      url: this.repoUrl,
+      directory: directory(this, "nothing"),
+    }).then(
       function () {
         return null;
       },
@@ -253,10 +351,18 @@ describe("git store: reads", function () {
     await this.local.writeAndPush("/a.txt", "A");
 
     for (var auth of ["wrong", "none"]) {
-      var response = await request(this, "GET", "/info/refs?service=git-upload-pack", { auth: auth });
+      var response = await request(
+        this,
+        "GET",
+        "/info/refs?service=git-upload-pack",
+        { auth: auth }
+      );
       expect(response.status).toBe(401);
 
-      var post = await request(this, "POST", "/git-upload-pack", { auth: auth, body: "0000" });
+      var post = await request(this, "POST", "/git-upload-pack", {
+        auth: auth,
+        body: "0000",
+      });
       expect(post.status).toBe(401);
     }
   });
@@ -265,9 +371,13 @@ describe("git store: reads", function () {
     await this.local.writeAndPush("/a.txt", "A");
 
     expect((await request(this, "GET", "/info/refs")).status).toBe(400);
-    expect((await request(this, "GET", "/info/refs?service=git-other")).status).toBe(405);
+    expect(
+      (await request(this, "GET", "/info/refs?service=git-other")).status
+    ).toBe(405);
     // Not a git route at all (routes.js)
     expect((await request(this, "POST", "/git-other-pack")).status).toBe(404);
-    expect((await request(this, "PUT", "/info/refs?service=git-upload-pack")).status).toBe(405);
+    expect(
+      (await request(this, "PUT", "/info/refs?service=git-upload-pack")).status
+    ).toBe(405);
   });
 });

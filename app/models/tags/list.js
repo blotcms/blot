@@ -1,6 +1,9 @@
 const client = require("models/client");
 const ensure = require("helper/ensure");
-const { normalizePathPrefix, filterEntryIDsByPathPrefix } = require("helper/pathPrefix");
+const {
+  normalizePathPrefix,
+  filterEntryIDsByPathPrefix,
+} = require("helper/pathPrefix");
 const key = require("./key");
 
 module.exports = async function getAll(blogID, options, callback) {
@@ -13,7 +16,9 @@ module.exports = async function getAll(blogID, options, callback) {
     ensure(blogID, "string").and(callback, "function");
 
     options = options || {};
-    const pathPrefix = normalizePathPrefix(options.pathPrefix || options.path_prefix);
+    const pathPrefix = normalizePathPrefix(
+      options.pathPrefix || options.path_prefix
+    );
 
     const allTags = (await client.sMembers(key.all(blogID))) || [];
 

@@ -38,7 +38,10 @@ function main() {
   fs.mkdirSync(historyDir, { recursive: true });
 
   if (fs.existsSync(file) && fs.statSync(file).size > 0) {
-    const lines = fs.readFileSync(file, "utf8").split("\n").filter(Boolean).length;
+    const lines = fs
+      .readFileSync(file, "utf8")
+      .split("\n")
+      .filter(Boolean).length;
     console.log(`[seed] ${arch}: cache hit (${lines} records); nothing to do.`);
     return;
   }
@@ -87,8 +90,10 @@ function main() {
       fs.rmSync(tmpZip, { force: true });
 
       if (unzip.status === 0 && fs.existsSync(file)) {
-        const lines = fs.readFileSync(file, "utf8").split("\n").filter(Boolean)
-          .length;
+        const lines = fs
+          .readFileSync(file, "utf8")
+          .split("\n")
+          .filter(Boolean).length;
         console.log(
           `[seed] ${arch}: recovered ${lines} records from run ${runId}.`
         );

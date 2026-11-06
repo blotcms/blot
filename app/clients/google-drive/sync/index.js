@@ -6,7 +6,6 @@ const database = require("../database");
 // "Failed to acquire folder lock" error instead of resolving false, for
 // callers that queue a follow-up (see clients/util/followUpSync).
 module.exports = async function (blogID, { rethrowLocked = false } = {}) {
-
   const sync = require("./sync.js");
 
   try {
@@ -23,7 +22,12 @@ module.exports = async function (blogID, { rethrowLocked = false } = {}) {
     await database.blog
       .store(blogID, { lastSync: Date.now() })
       .catch((err) =>
-        console.log(clfdate(), "Google Drive Sync:", "Error stamping lastSync", err)
+        console.log(
+          clfdate(),
+          "Google Drive Sync:",
+          "Error stamping lastSync",
+          err
+        )
       );
 
     const { done, folder } = await establishSyncLock(blogID);
@@ -38,7 +42,8 @@ module.exports = async function (blogID, { rethrowLocked = false } = {}) {
       await done();
     }
   } catch (err) {
-    if (rethrowLocked && err.message === "Failed to acquire folder lock") throw err;
+    if (rethrowLocked && err.message === "Failed to acquire folder lock")
+      throw err;
     console.log(clfdate(), "Google Drive Sync:", "Sync init failed", err);
     return false;
   }

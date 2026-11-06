@@ -1,141 +1,160 @@
 describe("entries", function () {
+  require("./util/setup")();
 
-    require('./util/setup')();
+  it("lists the entries on an index page", async function () {
+    await this.write({ path: "/a.txt", content: "Hello, A!" });
+    await this.write({ path: "/b.txt", content: "Hello, B!" });
+    await this.write({ path: "/c.txt", content: "Hello, C!" });
 
-    it("lists the entries on an index page", async function () {
-
-        await this.write({path: '/a.txt', content: 'Hello, A!'});
-        await this.write({path: '/b.txt', content: 'Hello, B!'});
-        await this.write({path: '/c.txt', content: 'Hello, C!'});
-
-        await this.template({ "entries.html": "{{#entries}}{{{html}}}{{/entries}}" });
-
-        const body = await this.text('/');
-        expect(body).toContain('Hello, A!');
-        expect(body).toContain('Hello, B!');
-        expect(body).toContain('Hello, C!');
+    await this.template({
+      "entries.html": "{{#entries}}{{{html}}}{{/entries}}",
     });
 
-    it("respects the page_size property in templates", async function () {
+    const body = await this.text("/");
+    expect(body).toContain("Hello, A!");
+    expect(body).toContain("Hello, B!");
+    expect(body).toContain("Hello, C!");
+  });
 
-        await this.write({path: '/c.txt', content: 'Hello, C!'});
-        await this.write({path: '/b.txt', content: 'Hello, B!'});
-        await this.write({path: '/a.txt', content: 'Hello, A!'});
+  it("respects the page_size property in templates", async function () {
+    await this.write({ path: "/c.txt", content: "Hello, C!" });
+    await this.write({ path: "/b.txt", content: "Hello, B!" });
+    await this.write({ path: "/a.txt", content: "Hello, A!" });
 
-        await this.template({ "entries.html": "{{#entries}}{{{html}}}{{/entries}}" }, {
-            locals: {page_size: 2}
-        });
+    await this.template(
+      { "entries.html": "{{#entries}}{{{html}}}{{/entries}}" },
+      {
+        locals: { page_size: 2 },
+      }
+    );
 
-        const body = await this.text('/');
-        expect(body).toContain('Hello, A!');
-        expect(body).toContain('Hello, B!');
-        expect(body).not.toContain('Hello, C!');
+    const body = await this.text("/");
+    expect(body).toContain("Hello, A!");
+    expect(body).toContain("Hello, B!");
+    expect(body).not.toContain("Hello, C!");
 
-        const body2 = await this.text('/page/2');
-        expect(body2).not.toContain('Hello, A!');
-        expect(body2).not.toContain('Hello, B!');
-        expect(body2).toContain('Hello, C!');
-    });
+    const body2 = await this.text("/page/2");
+    expect(body2).not.toContain("Hello, A!");
+    expect(body2).not.toContain("Hello, B!");
+    expect(body2).toContain("Hello, C!");
+  });
 
-    it("respects the sort_order property in templates", async function () {
+  it("respects the sort_order property in templates", async function () {
+    await this.write({ path: "/c.txt", content: "Hello, C!" });
+    await this.write({ path: "/b.txt", content: "Hello, B!" });
+    await this.write({ path: "/a.txt", content: "Hello, A!" });
 
-        await this.write({path: '/c.txt', content: 'Hello, C!'});
-        await this.write({path: '/b.txt', content: 'Hello, B!'});
-        await this.write({path: '/a.txt', content: 'Hello, A!'});
+    await this.template(
+      { "entries.html": "{{#entries}}{{{html}}}{{/entries}}" },
+      {
+        locals: { sort_order: "desc" },
+      }
+    );
 
-        await this.template({ "entries.html": "{{#entries}}{{{html}}}{{/entries}}" }, {
-            locals: {sort_order: 'desc'}
-        });
+    const body = await this.text("/");
 
-        const body = await this.text('/');
+    expect(body).toEqual("<p>Hello, C!</p><p>Hello, B!</p><p>Hello, A!</p>");
 
-        expect(body).toEqual('<p>Hello, C!</p><p>Hello, B!</p><p>Hello, A!</p>');
+    await this.template(
+      { "entries.html": "{{#entries}}{{{html}}}{{/entries}}" },
+      {
+        locals: { sort_order: "asc" },
+      }
+    );
 
-        await this.template({ "entries.html": "{{#entries}}{{{html}}}{{/entries}}" }, {
-            locals: {sort_order: 'asc'}
-        });
+    const body2 = await this.text("/");
+    expect(body2).toEqual("<p>Hello, A!</p><p>Hello, B!</p><p>Hello, C!</p>");
+  });
 
-        const body2 = await this.text('/');
-        expect(body2).toEqual('<p>Hello, A!</p><p>Hello, B!</p><p>Hello, C!</p>');
-    });
+  it("respects the sort_by property in templates", async function () {
+    await this.write({ path: "/a.txt", content: "Hello, A!" });
+    await this.write({ path: "/b.txt", content: "Hello, B!" });
+    await this.write({ path: "/c.txt", content: "Hello, C!" });
 
+    await this.template(
+      { "entries.html": "{{#entries}}{{{html}}}{{/entries}}" },
+      {
+        locals: { sort_by: "date" },
+      }
+    );
 
-    it("respects the sort_by property in templates", async function () {
+    const body = await this.text("/");
 
-        await this.write({path: '/a.txt', content: 'Hello, A!'});
-        await this.write({path: '/b.txt', content: 'Hello, B!'});
-        await this.write({path: '/c.txt', content: 'Hello, C!'});
+    expect(body).toEqual("<p>Hello, C!</p><p>Hello, B!</p><p>Hello, A!</p>");
 
-        await this.template({ "entries.html": "{{#entries}}{{{html}}}{{/entries}}" }, {
-            locals: {sort_by: 'date'}
-        });
+    await this.template(
+      { "entries.html": "{{#entries}}{{{html}}}{{/entries}}" },
+      {
+        locals: { sort_by: "id" },
+      }
+    );
 
-        const body = await this.text('/');
+    const body2 = await this.text("/");
+    expect(body2).toEqual("<p>Hello, A!</p><p>Hello, B!</p><p>Hello, C!</p>");
+  });
 
-        expect(body).toEqual('<p>Hello, C!</p><p>Hello, B!</p><p>Hello, A!</p>');
+  it("supports sort config nested under locals.sort", async function () {
+    await this.write({ path: "/a.txt", content: "Hello, A!" });
+    await this.write({ path: "/b.txt", content: "Hello, B!" });
+    await this.write({ path: "/c.txt", content: "Hello, C!" });
 
-        await this.template({ "entries.html": "{{#entries}}{{{html}}}{{/entries}}" }, {
-            locals: {sort_by: 'id'}
-        });
+    await this.template(
+      { "entries.html": "{{#entries}}{{{html}}}{{/entries}}" },
+      {
+        locals: { sort: { by: "id", direction: "desc" } },
+      }
+    );
 
-        const body2 = await this.text('/');
-        expect(body2).toEqual('<p>Hello, A!</p><p>Hello, B!</p><p>Hello, C!</p>');
-    });
+    const res = await this.get("/");
+    const body = await res.text();
 
-    it("supports sort config nested under locals.sort", async function () {
+    expect(body).toEqual("<p>Hello, C!</p><p>Hello, B!</p><p>Hello, A!</p>");
+  });
 
-        await this.write({path: '/a.txt', content: 'Hello, A!'});
-        await this.write({path: '/b.txt', content: 'Hello, B!'});
-        await this.write({path: '/c.txt', content: 'Hello, C!'});
+  it("paginates sort_by=id lexicographically when publish dates are out of order", async function () {
+    await this.write({ path: "/b.txt", content: "Hello, B!" });
+    await this.write({ path: "/a.txt", content: "Hello, A!" });
+    await this.write({ path: "/c.txt", content: "Hello, C!" });
 
-        await this.template({ "entries.html": "{{#entries}}{{{html}}}{{/entries}}" }, {
-            locals: {sort: {by: 'id', direction: 'desc'}}
-        });
+    await this.template(
+      { "entries.html": "{{#entries}}{{{html}}}{{/entries}}" },
+      {
+        locals: { sort_by: "id", sort_order: "asc", page_size: 1 },
+      }
+    );
 
-        const res = await this.get('/');
-        const body = await res.text();
+    const page1Asc = await this.text("/page/1");
+    const page2Asc = await this.text("/page/2");
 
-        expect(body).toEqual('<p>Hello, C!</p><p>Hello, B!</p><p>Hello, A!</p>');
-    });
+    expect(page1Asc).toEqual("<p>Hello, A!</p>");
+    expect(page2Asc).toEqual("<p>Hello, B!</p>");
 
-    it("paginates sort_by=id lexicographically when publish dates are out of order", async function () {
+    await this.template(
+      { "entries.html": "{{#entries}}{{{html}}}{{/entries}}" },
+      {
+        locals: { sort_by: "id", sort_order: "desc", page_size: 1 },
+      }
+    );
 
-        await this.write({path: '/b.txt', content: 'Hello, B!'});
-        await this.write({path: '/a.txt', content: 'Hello, A!'});
-        await this.write({path: '/c.txt', content: 'Hello, C!'});
+    const page1Desc = await this.text("/page/1");
+    const page2Desc = await this.text("/page/2");
 
-        await this.template({ "entries.html": "{{#entries}}{{{html}}}{{/entries}}" }, {
-            locals: {sort_by: 'id', sort_order: 'asc', page_size: 1}
-        });
+    expect(page1Desc).toEqual("<p>Hello, C!</p>");
+    expect(page2Desc).toEqual("<p>Hello, B!</p>");
+  });
 
-        const page1Asc = await this.text('/page/1');
-        const page2Asc = await this.text('/page/2');
+  it("generates pagination properly", async function () {
+    const numberOfEntries = 10;
+    const page_size = 3;
 
-        expect(page1Asc).toEqual('<p>Hello, A!</p>');
-        expect(page2Asc).toEqual('<p>Hello, B!</p>');
+    // create 10 entries
+    for (let i = numberOfEntries; i > 0; i--) {
+      await this.write({ path: `/${i}.txt`, content: `Hello, ${i}!` });
+    }
 
-        await this.template({ "entries.html": "{{#entries}}{{{html}}}{{/entries}}" }, {
-            locals: {sort_by: 'id', sort_order: 'desc', page_size: 1}
-        });
-
-        const page1Desc = await this.text('/page/1');
-        const page2Desc = await this.text('/page/2');
-
-        expect(page1Desc).toEqual('<p>Hello, C!</p>');
-        expect(page2Desc).toEqual('<p>Hello, B!</p>');
-    });
-
-    it("generates pagination properly", async function () {
-
-        const numberOfEntries = 10;
-        const page_size = 3;
-
-        // create 10 entries
-        for (let i = numberOfEntries; i > 0; i--) {
-            await this.write({path: `/${i}.txt`, content: `Hello, ${i}!`});
-        }
-
-        await this.template({ "entries.html": `
+    await this.template(
+      {
+        "entries.html": `
             {{#entries}}
             {{{html}}}
             {{/entries}}
@@ -144,76 +163,93 @@ describe("entries", function () {
                 Page {{current}} of {{total}}
                 {{#previous}}<a href="/page/{{previous}}">Prev</a>{{/previous}}
             {{/pagination}}
-            `}, { locals: {page_size} });
-        
-        for (let i = 1; i <= 4; i++) {
-            const body = await this.text(`/page/${i}`);
-            expect(body).toContain('Page ' + i + ' of ' + Math.ceil(numberOfEntries / page_size));
-            if (i === 4) {
-                expect(body).not.toContain('Next');
-                expect(body).toContain('Prev');
-                expect(body).toContain(`Hello, ${(i - 1) * 3 + 1}!`);
-            } else if (i === 1) {
-                expect(body).toContain(`Hello, ${(i - 1) * 3 + 1}!`);
-                expect(body).toContain(`Hello, ${(i - 1) * 3 + 2}!`);
-                expect(body).toContain(`Hello, ${(i - 1) * 3 + 3}!`);    
-                expect(body).toContain('Next'); 
-                expect(body).not.toContain('Prev');                
-            } else {
-                expect(body).toContain(`Hello, ${(i - 1) * 3 + 1}!`);
-                expect(body).toContain(`Hello, ${(i - 1) * 3 + 2}!`);
-                expect(body).toContain(`Hello, ${(i - 1) * 3 + 3}!`);    
-                expect(body).toContain('Next');
-                expect(body).toContain('Prev');
-            }
-        }
-    });
+            `,
+      },
+      { locals: { page_size } }
+    );
 
-    it("exposes total_entries in pagination data", async function () {
+    for (let i = 1; i <= 4; i++) {
+      const body = await this.text(`/page/${i}`);
+      expect(body).toContain(
+        "Page " + i + " of " + Math.ceil(numberOfEntries / page_size)
+      );
+      if (i === 4) {
+        expect(body).not.toContain("Next");
+        expect(body).toContain("Prev");
+        expect(body).toContain(`Hello, ${(i - 1) * 3 + 1}!`);
+      } else if (i === 1) {
+        expect(body).toContain(`Hello, ${(i - 1) * 3 + 1}!`);
+        expect(body).toContain(`Hello, ${(i - 1) * 3 + 2}!`);
+        expect(body).toContain(`Hello, ${(i - 1) * 3 + 3}!`);
+        expect(body).toContain("Next");
+        expect(body).not.toContain("Prev");
+      } else {
+        expect(body).toContain(`Hello, ${(i - 1) * 3 + 1}!`);
+        expect(body).toContain(`Hello, ${(i - 1) * 3 + 2}!`);
+        expect(body).toContain(`Hello, ${(i - 1) * 3 + 3}!`);
+        expect(body).toContain("Next");
+        expect(body).toContain("Prev");
+      }
+    }
+  });
 
-        const totalEntries = 5;
-        const page_size = 2;
+  it("exposes total_entries in pagination data", async function () {
+    const totalEntries = 5;
+    const page_size = 2;
 
-        for (let i = totalEntries; i > 0; i--) {
-            await this.write({path: `/${i}.txt`, content: `Hello, ${i}!`});
-        }
+    for (let i = totalEntries; i > 0; i--) {
+      await this.write({ path: `/${i}.txt`, content: `Hello, ${i}!` });
+    }
 
-        await this.template({ "entries.html": "{{pagination.current}}/{{pagination.total}}/{{pagination.page_size}}/{{pagination.total_entries}}" }, {
-            locals: {page_size}
-        });
+    await this.template(
+      {
+        "entries.html":
+          "{{pagination.current}}/{{pagination.total}}/{{pagination.page_size}}/{{pagination.total_entries}}",
+      },
+      {
+        locals: { page_size },
+      }
+    );
 
-        const body = await this.text('/page/1');
-        expect(body).toContain('1/3/2/5');
+    const body = await this.text("/page/1");
+    expect(body).toContain("1/3/2/5");
 
-        const body2 = await this.text('/page/3');
-        expect(body2).toContain('3/3/2/5');
-    });
+    const body2 = await this.text("/page/3");
+    expect(body2).toContain("3/3/2/5");
+  });
 
-    it("does not populate {{#entries}} on a non-listing custom view", async function () {
+  it("does not populate {{#entries}} on a non-listing custom view", async function () {
+    await this.write({ path: "/a.txt", content: "Hello, A!" });
 
-        await this.write({path: '/a.txt', content: 'Hello, A!'});
+    await this.template(
+      {
+        "foo.html": "{{#entries}}{{{html}}}{{/entries}}",
+      },
+      {
+        views: {
+          "foo.html": { url: "/foo" },
+        },
+      }
+    );
 
-        await this.template({
-            "foo.html": "{{#entries}}{{{html}}}{{/entries}}"
-        }, {
-            views: {
-                "foo.html": { url: "/foo" }
-            }
-        });
+    const body = await this.text("/foo");
+    expect(body).not.toContain("Hello, A!");
+  });
 
-        const body = await this.text('/foo');
-        expect(body).not.toContain('Hello, A!');
-    });
+  it("keeps pagination object available on single-page blogs", async function () {
+    await this.write({ path: "/only.txt", content: "Hello, only!" });
 
-    it("keeps pagination object available on single-page blogs", async function () {
+    await this.template(
+      {
+        "entries.html":
+          "{{pagination.current}}/{{pagination.total}}/{{pagination.previous}}/{{pagination.next}}/{{pagination.page_size}}/{{pagination.total_entries}}",
+      },
+      {
+        locals: { page_size: 10 },
+      }
+    );
 
-        await this.write({path: '/only.txt', content: 'Hello, only!'});
-
-        await this.template({ "entries.html": "{{pagination.current}}/{{pagination.total}}/{{pagination.previous}}/{{pagination.next}}/{{pagination.page_size}}/{{pagination.total_entries}}" }, {
-            locals: {page_size: 10}
-        });
-
-        const body = await this.text('/');
-        expect(body).toContain('1/1///10/1');
-    });
+    const body = await this.text("/");
+    expect(body).toContain("1/1///10/1");
+  });
 });

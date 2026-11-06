@@ -46,7 +46,8 @@ function ancestorsOf(path) {
   var parts = path.split("/").slice(1, -1);
   var result = [];
 
-  for (var i = 1; i <= parts.length; i++) result.push("/" + parts.slice(0, i).join("/"));
+  for (var i = 1; i <= parts.length; i++)
+    result.push("/" + parts.slice(0, i).join("/"));
 
   return result;
 }
@@ -69,7 +70,8 @@ function failure(code, message) {
 
 function check(blogID) {
   ensure(blogID, "string");
-  if (!blogID) throw new Error("models/file: blogID must be a non-empty string");
+  if (!blogID)
+    throw new Error("models/file: blogID must be a non-empty string");
 }
 
 // The names of a directory's lowercased-name field, with name added or taken
@@ -110,7 +112,9 @@ async function get(blogID, path) {
 
   if (path === "/") return Object.assign({}, ROOT);
 
-  return parse(await client.hGet(key.dir(blogID, parentOf(path)), nameOf(path)));
+  return parse(
+    await client.hGet(key.dir(blogID, parentOf(path)), nameOf(path))
+  );
 }
 
 // Every entry of a directory's hash, a HSCAN page at a time, unsorted
@@ -119,9 +123,12 @@ async function scan(blogID, dir) {
   var cursor = "0";
 
   do {
-    var reply = await client.hScan(key.dir(blogID, dir), cursor, { COUNT: PAGE });
+    var reply = await client.hScan(key.dir(blogID, dir), cursor, {
+      COUNT: PAGE,
+    });
 
-    for (var entry of reply.entries) entries.push(Object.assign({ name: entry.field }, parse(entry.value)));
+    for (var entry of reply.entries)
+      entries.push(Object.assign({ name: entry.field }, parse(entry.value)));
 
     cursor = String(reply.cursor);
   } while (cursor !== "0");
@@ -145,9 +152,13 @@ async function list(blogID, dir, options) {
   dir = normalize(dir);
 
   var limit = options.limit === undefined ? PAGE : options.limit;
-  var after = options.after === undefined || options.after === null ? null : String(options.after);
+  var after =
+    options.after === undefined || options.after === null
+      ? null
+      : String(options.after);
 
-  if (!Number.isInteger(limit) || limit < 1) throw new Error("models/file: limit must be a positive integer");
+  if (!Number.isInteger(limit) || limit < 1)
+    throw new Error("models/file: limit must be a positive integer");
 
   var namesKey = key.names(blogID, dir);
 
@@ -155,9 +166,14 @@ async function list(blogID, dir, options) {
   var [record, sorted, members] = await Promise.all([
     get(blogID, dir),
     client.exists(namesKey),
-    client.zRangeByLex(namesKey, after === null ? "-" : "(" + key.member(after), "+", {
-      LIMIT: { offset: 0, count: limit + 1 },
-    }),
+    client.zRangeByLex(
+      namesKey,
+      after === null ? "-" : "(" + key.member(after),
+      "+",
+      {
+        LIMIT: { offset: 0, count: limit + 1 },
+      }
+    ),
   ]);
 
   if (!record || record.type !== "dir") return null;
@@ -167,20 +183,29 @@ async function list(blogID, dir, options) {
       return after === null || entry.name > after;
     });
 
-    return { entries: all.slice(0, limit), next: all.length > limit ? all[limit - 1].name : null };
+    return {
+      entries: all.slice(0, limit),
+      next: all.length > limit ? all[limit - 1].name : null,
+    };
   }
 
   var names = members.slice(0, limit).map(key.nameOf);
-  var packed = names.length ? await client.hmGet(key.dir(blogID, dir), names) : [];
+  var packed = names.length
+    ? await client.hmGet(key.dir(blogID, dir), names)
+    : [];
   var entries = [];
 
   // A name with no record would mean the set and the hash disagree, which
   // the writes below never leave behind; it is skipped rather than invented
   names.forEach(function (name, i) {
-    if (packed[i] !== null && packed[i] !== undefined) entries.push(Object.assign({ name: name }, parse(packed[i])));
+    if (packed[i] !== null && packed[i] !== undefined)
+      entries.push(Object.assign({ name: name }, parse(packed[i])));
   });
 
-  return { entries: entries, next: members.length > limit ? names[names.length - 1] : null };
+  return {
+    entries: entries,
+    next: members.length > limit ? names[names.length - 1] : null,
+  };
 }
 
 // An async iterator of the pages of a directory, in order: arrays of
@@ -192,9 +217,13 @@ async function* pages(blogID, dir, options) {
   dir = normalize(dir);
 
   var limit = (options && options.limit) || PAGE;
-  var [record, sorted] = await Promise.all([get(blogID, dir), client.exists(key.names(blogID, dir))]);
+  var [record, sorted] = await Promise.all([
+    get(blogID, dir),
+    client.exists(key.names(blogID, dir)),
+  ]);
 
-  if (!record || record.type !== "dir") throw failure("ENOENT", "Not a directory: " + dir);
+  if (!record || record.type !== "dir")
+    throw failure("ENOENT", "Not a directory: " + dir);
 
   if (!sorted) {
     var all = (await scan(blogID, dir)).sort(byName);
@@ -269,7 +298,9 @@ async function resolveCaseInsensitive(blogID, path) {
   for (var segment of path.split("/").slice(1)) {
     // Only a directory has a lookup, so a path below a file finds nothing
     var joined = await client.hGet(key.lower(blogID, current), fold(segment));
-    var match = joined ? caseSensitivePath.pick(joined.split("/"), segment) : undefined;
+    var match = joined
+      ? caseSensitivePath.pick(joined.split("/"), segment)
+      : undefined;
 
     if (match === undefined) return null;
 
@@ -283,7 +314,10 @@ async function resolveCaseInsensitive(blogID, path) {
 async function totals(blogID) {
   check(blogID);
 
-  var [bytes, files] = await client.hmGet(key.totals(blogID), ["bytes", "files"]);
+  var [bytes, files] = await client.hmGet(key.totals(blogID), [
+    "bytes",
+    "files",
+  ]);
 
   return { bytes: parseInt(bytes, 10) || 0, files: parseInt(files, 10) || 0 };
 }
@@ -303,14 +337,18 @@ async function setMany(blogID, items) {
   for (const item of items) {
     var path = normalize(item.path);
 
-    if (path === "/") throw new Error("models/file: the folder itself has no record");
+    if (path === "/")
+      throw new Error("models/file: the folder itself has no record");
 
     // Packed now so a bad record fails before anything is read
     pack(item);
 
     // A file and a directory at one path, as a listing could hold
     if (wanted.has(path) && wanted.get(path).type !== item.type) {
-      throw failure(item.type === "dir" ? "EEXIST" : "EISDIR", "A file and a directory at: " + path);
+      throw failure(
+        item.type === "dir" ? "EEXIST" : "EISDIR",
+        "A file and a directory at: " + path
+      );
     }
 
     wanted.set(path, item);
@@ -345,8 +383,10 @@ async function setMany(blogID, items) {
   for (const ancestor of ancestors) {
     const found = existing.get(ancestor);
 
-    if (found && found.type !== "dir") throw failure("ENOTDIR", "Not a directory: " + ancestor);
-    if (!found) writes.set(ancestor, { type: "dir", size: 0, modified: now, sha1: "" });
+    if (found && found.type !== "dir")
+      throw failure("ENOTDIR", "Not a directory: " + ancestor);
+    if (!found)
+      writes.set(ancestor, { type: "dir", size: 0, modified: now, sha1: "" });
   }
 
   for (const [path, item] of wanted) {
@@ -373,7 +413,8 @@ async function setMany(blogID, items) {
     var folded = fold(nameOf(path));
     var id = lowerKey + "\n" + folded;
 
-    if (!added.has(id)) added.set(id, { lowerKey: lowerKey, folded: folded, names: [] });
+    if (!added.has(id))
+      added.set(id, { lowerKey: lowerKey, folded: folded, names: [] });
 
     added.get(id).names.push(nameOf(path));
   }
@@ -410,13 +451,15 @@ async function setMany(blogID, items) {
     older.map(async function (dir) {
       if (await client.exists(key.names(blogID, dir))) return;
 
-      for (const entry of await scan(blogID, dir)) named.get(dir).push(entry.name);
+      for (const entry of await scan(blogID, dir))
+        named.get(dir).push(entry.name);
     })
   );
 
   var multi = client.multi();
 
-  for (const [dir, children] of named) addNames(multi, key.names(blogID, dir), children);
+  for (const [dir, children] of named)
+    addNames(multi, key.names(blogID, dir), children);
   var bytes = 0;
   var files = 0;
 
@@ -485,7 +528,11 @@ async function removeBelow(blogID, dir) {
         bytes += record.size;
         files += 1;
       } else {
-        multi.del([key.dir(blogID, path), key.lower(blogID, path), key.names(blogID, path)]);
+        multi.del([
+          key.dir(blogID, path),
+          key.lower(blogID, path),
+          key.names(blogID, path),
+        ]);
       }
 
       // ZREM never creates a key, so a parent without a names set stays
@@ -509,7 +556,8 @@ async function remove(blogID, path) {
   check(blogID);
   path = normalize(path);
 
-  if (path === "/") throw new Error("models/file: remove needs a path inside the folder");
+  if (path === "/")
+    throw new Error("models/file: remove needs a path inside the folder");
 
   var record = await get(blogID, path);
 
@@ -530,7 +578,11 @@ async function remove(blogID, path) {
   setNames(multi, lowerKey, folded, updateNames(joined, name, false));
 
   if (record.type === "dir") {
-    multi.del([key.dir(blogID, path), key.lower(blogID, path), key.names(blogID, path)]);
+    multi.del([
+      key.dir(blogID, path),
+      key.lower(blogID, path),
+      key.names(blogID, path),
+    ]);
   } else {
     if (record.size) multi.hIncrBy(key.totals(blogID), "bytes", -record.size);
     multi.hIncrBy(key.totals(blogID), "files", -1);
@@ -555,7 +607,12 @@ async function removeAll(blogID) {
 
     // A file has no keys of its own, and deleting a missing key costs little
     // next to looking up which paths are directories
-    for (var path of page) keys.push(key.dir(blogID, path), key.lower(blogID, path), key.names(blogID, path));
+    for (var path of page)
+      keys.push(
+        key.dir(blogID, path),
+        key.lower(blogID, path),
+        key.names(blogID, path)
+      );
 
     multi.del(keys);
     multi.zRem(key.paths(blogID), page);
@@ -592,7 +649,8 @@ async function addMissingNames(blogID, options) {
 
     counts.dirs++;
 
-    for (var entry of entries) if (entry.type === "dir") queue.push(child(dir, entry.name));
+    for (var entry of entries)
+      if (entry.type === "dir") queue.push(child(dir, entry.name));
 
     if (!entries.length || (await client.exists(namesKey))) continue;
 
@@ -651,7 +709,11 @@ async function rebuild(blogID, records) {
           await setMany(blogID, [record]);
         } catch (err) {
           if (CONFLICTS.indexOf(err.code) === -1) throw err;
-          counts.skipped.push({ path: normalize(record.path), type: record.type, code: err.code });
+          counts.skipped.push({
+            path: normalize(record.path),
+            type: record.type,
+            code: err.code,
+          });
         }
       }
     }

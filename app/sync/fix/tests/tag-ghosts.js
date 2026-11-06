@@ -172,11 +172,13 @@ describe("sync/fix/tag-ghosts", function () {
       expect(entryID).toBe("/old-path");
       callback(entry);
     });
-    spyOn(Entry, "set").and.callFake(function (blogID, id, updatedEntry, callback) {
-      expect(id).toBe("/new-path");
-      expect(updatedEntry).toBe(entry);
-      callback(null);
-    });
+    spyOn(Entry, "set").and.callFake(
+      function (blogID, id, updatedEntry, callback) {
+        expect(id).toBe("/new-path");
+        expect(updatedEntry).toBe(entry);
+        callback(null);
+      }
+    );
 
     var multi = fakeMulti();
     spyOn(client, "multi").and.returnValue(multi);
@@ -234,7 +236,11 @@ describe("sync/fix/tag-ghosts", function () {
 
   it("fetches an entry referenced by several tags from Redis only once", function (done) {
     spyOn(Tags, "list").and.callFake(function (_blogID, callback) {
-      callback(null, [{ slug: "chairs" }, { slug: "furniture" }, { slug: "sale" }]);
+      callback(null, [
+        { slug: "chairs" },
+        { slug: "furniture" },
+        { slug: "sale" },
+      ]);
     });
     spyOn(Tags, "get").and.callFake(function (_blogID, slug, callback) {
       // The same entry, "/chair", is a member of all three tags.

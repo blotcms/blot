@@ -28,7 +28,8 @@ const MAX_DECODED_BYTES = MAX_BODY_BYTES;
 
 async function run(args) {
   try {
-    if (!args || typeof args !== "object") throw new FetchError("URL is not allowed");
+    if (!args || typeof args !== "object")
+      throw new FetchError("URL is not allowed");
     const url = checkURL(args.url);
     const conditional = {
       etag: checkHeader(args.etag, "conditional header"),
@@ -41,7 +42,8 @@ async function run(args) {
       "Accept-Encoding": "gzip, deflate, br",
     };
     if (conditional.etag) headers["If-None-Match"] = conditional.etag;
-    if (conditional.lastModified) headers["If-Modified-Since"] = conditional.lastModified;
+    if (conditional.lastModified)
+      headers["If-Modified-Since"] = conditional.lastModified;
 
     const response = await fetchURL(url, {
       headers,
@@ -73,4 +75,10 @@ async function run(args) {
   }
 }
 
-module.exports = { run, MAX_REDIRECTS, MAX_BODY_BYTES, MAX_DECODED_BYTES, MAX_DIMENSION };
+module.exports = {
+  run,
+  MAX_REDIRECTS,
+  MAX_BODY_BYTES,
+  MAX_DECODED_BYTES,
+  MAX_DIMENSION,
+};

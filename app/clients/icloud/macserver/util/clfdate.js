@@ -54,7 +54,7 @@ export default function clfdate() {
     pad2(secs) +
     " " +
     offset +
-    "]" + 
+    "]" +
     (CONTAINER_NAME ? " [" + CONTAINER_NAME + "]" : "")
   );
 }

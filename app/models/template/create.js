@@ -52,7 +52,9 @@ module.exports = function create(owner, name, metadata, callback) {
       var stat = await client.exists(key.metadata(id));
 
       if (stat) {
-        var err = new Error("A template called " + name + " name already exists");
+        var err = new Error(
+          "A template called " + name + " name already exists"
+        );
         err.code = "EEXISTS";
         return callback(err);
       }

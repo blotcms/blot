@@ -123,7 +123,6 @@ describe("entry.backlinks", function () {
 
     const entryAfterRestore = await this.get(pathLinked);
 
-
     expect(entry.backlinks).toEqual(["/linker"]);
     expect(entryAfterDrop.deleted).toEqual(true);
     expect(entryAfterRestore.backlinks).toEqual([]);
@@ -164,7 +163,8 @@ describe("entry.backlinks", function () {
 
     const entry = await this.get(pathTarget);
 
-    const updatedContentsLinker = "Permalink: über-uns-neu\n\n[linked](/linked)";
+    const updatedContentsLinker =
+      "Permalink: über-uns-neu\n\n[linked](/linked)";
     await this.set(pathLinker, updatedContentsLinker);
 
     const entryAfterUpdate = await this.get(pathTarget);

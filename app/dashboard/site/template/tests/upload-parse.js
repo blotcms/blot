@@ -11,7 +11,9 @@ describe("parseUploadedTemplate", function () {
   // Build the entry shape the route hands the parser
   const entry = (relativePath, contents = "") => ({
     relativePath,
-    buffer: Buffer.isBuffer(contents) ? contents : Buffer.from(contents, "utf8"),
+    buffer: Buffer.isBuffer(contents)
+      ? contents
+      : Buffer.from(contents, "utf8"),
   });
 
   const parse = (entries, options) => parseUploadedTemplate(entries, options);
@@ -113,7 +115,9 @@ describe("parseUploadedTemplate", function () {
     });
 
     it("rejects windows absolute paths", function () {
-      const problems = problemsFrom([entry("C:\\theme\\index.html", "<h1>Hi</h1>")]);
+      const problems = problemsFrom([
+        entry("C:\\theme\\index.html", "<h1>Hi</h1>"),
+      ]);
 
       expect(problems[0].reason).toEqual("invalid-path");
     });
@@ -376,7 +380,10 @@ describe("parseUploadedTemplate", function () {
     it("returns no presets when locals does not declare them", function () {
       const result = parse([
         entry("index.html", "<h1>Hi</h1>"),
-        entry("package.json", JSON.stringify({ locals: { background_color: "#fff" } })),
+        entry(
+          "package.json",
+          JSON.stringify({ locals: { background_color: "#fff" } })
+        ),
       ]);
 
       expect(result.locals.presets).toBeUndefined();
@@ -400,8 +407,12 @@ describe("parseUploadedTemplate", function () {
         ),
       ]);
 
-      expect(result.locals.presets.colors.Classic.background_color).toEqual("#ffffff");
-      expect(result.locals.presets.fonts.Missing.font.id).toEqual("not-a-real-font");
+      expect(result.locals.presets.colors.Classic.background_color).toEqual(
+        "#ffffff"
+      );
+      expect(result.locals.presets.fonts.Missing.font.id).toEqual(
+        "not-a-real-font"
+      );
     });
 
     it("warns about settings for files which were not uploaded", function () {
@@ -450,7 +461,9 @@ describe("parseUploadedTemplate", function () {
     it("accepts multi-byte UTF-8", function () {
       const result = parse([entry("index.html", "<h1>café 🎉</h1>")]);
 
-      expect(viewNamed(result, "index.html").content).toEqual("<h1>café 🎉</h1>");
+      expect(viewNamed(result, "index.html").content).toEqual(
+        "<h1>café 🎉</h1>"
+      );
     });
 
     it("rejects files over the per-view limit", function () {
@@ -520,7 +533,9 @@ describe("parseUploadedTemplate", function () {
         entry("feed.rss", "<rss></rss>"),
         entry(
           "package.json",
-          JSON.stringify({ views: { "feed.rss": { url: ["/feed.rss", "/rss"] } } })
+          JSON.stringify({
+            views: { "feed.rss": { url: ["/feed.rss", "/rss"] } },
+          })
         ),
       ]);
 

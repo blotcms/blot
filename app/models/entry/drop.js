@@ -2,12 +2,14 @@ var ensure = require("helper/ensure");
 
 var set = require("./set");
 var get = require("./get");
-var isRedisUnavailableError = require("helper/redisUnavailable").isRedisUnavailableError;
+var isRedisUnavailableError =
+  require("helper/redisUnavailable").isRedisUnavailableError;
 
 function sanitize(entry) {
   var now = Date.now();
   var created = typeof entry.created === "number" ? entry.created : now;
-  var dateStamp = typeof entry.dateStamp === "number" ? entry.dateStamp : created;
+  var dateStamp =
+    typeof entry.dateStamp === "number" ? entry.dateStamp : created;
   var updated = typeof entry.updated === "number" ? entry.updated : created;
 
   return {

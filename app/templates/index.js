@@ -82,7 +82,9 @@ const BUILD_INPUTS = [
   __filename,
   require("path").resolve(__dirname + "/../models/template"),
   require("path").resolve(__dirname + "/../blog/static/fonts/index.json"),
-  require("path").resolve(__dirname + "/../blog/static/syntax-highlighter/index.json"),
+  require("path").resolve(
+    __dirname + "/../blog/static/syntax-highlighter/index.json"
+  ),
 ];
 
 async function buildIfChanged(options, callback) {
@@ -453,7 +455,12 @@ function buildViews(id, definitions, callback) {
 // two representations directly would never match, so every startup would take
 // the Template.drop/recreate path and flush the cache for every blog using a
 // template that declares a syntax highlighter. Normalise both sides first.
-var SYNTAX_HIGHLIGHTER_VOLATILE_PROPS = ["background", "tags", "name", "colors"];
+var SYNTAX_HIGHLIGHTER_VOLATILE_PROPS = [
+  "background",
+  "tags",
+  "name",
+  "colors",
+];
 
 // injectLocals overwrites every `font`/`*_font` local's `styles` with the
 // canonical @font-face CSS from blog/static/fonts/index.json, Mustache-rendered
@@ -479,7 +486,10 @@ function renderFontStylesFromRegistry(fontStyles) {
 function normalizeLocalsForComparison(locals, renderFontStyles) {
   var normalized = _.cloneDeep(locals || {});
 
-  if (normalized.syntax_highlighter && typeof normalized.syntax_highlighter === "object") {
+  if (
+    normalized.syntax_highlighter &&
+    typeof normalized.syntax_highlighter === "object"
+  ) {
     SYNTAX_HIGHLIGHTER_VOLATILE_PROPS.forEach(function (prop) {
       delete normalized.syntax_highlighter[prop];
     });
@@ -495,7 +505,8 @@ function normalizeLocalsForComparison(locals, renderFontStyles) {
       var registryFont = fonts.find(function (f) {
         return f.id === local.id;
       });
-      if (registryFont) local.styles = renderFontStylesFromRegistry(registryFont.styles);
+      if (registryFont)
+        local.styles = renderFontStylesFromRegistry(registryFont.styles);
     });
   }
 
@@ -731,7 +742,12 @@ function bumpCacheIDForEveryBlog(templateID, callback) {
 
 var DELETED_PACKAGE_VALUE = { developmentRefreshDeleted: true };
 
-function collectDevelopmentForks(templateID, baseMetadata, baseViews, callback) {
+function collectDevelopmentForks(
+  templateID,
+  baseMetadata,
+  baseViews,
+  callback
+) {
   if (config.environment !== "development") return callback(null, []);
 
   var basePackage = packageConfiguration(baseMetadata, baseViews);

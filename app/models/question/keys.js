@@ -1,4 +1,4 @@
-const prefix = 'blot:questions:';
+const prefix = "blot:questions:";
 
 module.exports = {
   // integer which we INCR to get a new question or reply id
@@ -13,14 +13,14 @@ module.exports = {
   // of replies. For a reply, this is a list
   // of comments.
   children: (id) => prefix + `id:${id}:children`,
-  
+
   // sets
-  all_questions: prefix + 'all',
-  all_tags: prefix + 'tags',
+  all_questions: prefix + "all",
+  all_tags: prefix + "tags",
 
   // sorted sets which we use as indexes
-  by_last_reply: prefix + 'by_last_reply',
-  by_created: prefix + 'by_created',
+  by_last_reply: prefix + "by_last_reply",
+  by_created: prefix + "by_created",
   by_tag: (tag) => prefix + `by_tag:${tag}`,
-  by_number_of_replies: prefix + 'by_number_of_replies'
+  by_number_of_replies: prefix + "by_number_of_replies",
 };

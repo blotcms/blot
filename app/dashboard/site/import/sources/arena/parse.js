@@ -113,8 +113,7 @@ async function image(item, outputDirectory) {
   const { data, format } = await download(item.image.original.url, {
     kind: "image",
     headers: {
-      "User-Agent":
-        "Mozilla/5.0 (compatible; Blot/1.0; +https://blot.im)",
+      "User-Agent": "Mozilla/5.0 (compatible; Blot/1.0; +https://blot.im)",
       Referer: "https://www.are.na/",
       Accept: "image/*,*/*;q=0.8",
     },
@@ -129,9 +128,7 @@ async function image(item, outputDirectory) {
   const created = createdDate.valueOf();
   const draft = item.visibility !== "public";
 
-  const extension =
-    extname(item.image.filename) ||
-    "." + format;
+  const extension = extname(item.image.filename) || "." + format;
 
   const name = sanitize(title) + extension;
 

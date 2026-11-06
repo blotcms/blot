@@ -154,7 +154,10 @@ function bake($, options) {
       (task, next) => task().then(() => next(), next),
       (err) => {
         if (err) return reject(err);
-        resolve({ dependencies: Array.from(dependencies), changed: ctx.changed });
+        resolve({
+          dependencies: Array.from(dependencies),
+          changed: ctx.changed,
+        });
       }
     );
   });
@@ -268,8 +271,8 @@ function isPendingImage(path) {
     PENDING_EXT_REGEX.test(path) &&
     !path.startsWith("//") &&
     !isReservedStaticPath(path) &&
-    !BLOG_STATIC_PATHS.some(
-      (dir) => path.toLowerCase().startsWith(dir + "/")
+    !BLOG_STATIC_PATHS.some((dir) =>
+      path.toLowerCase().startsWith(dir + "/")
     ) &&
     !path.split("/").some((segment) => segment.charAt(0) === ".")
   );

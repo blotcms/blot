@@ -47,7 +47,9 @@ async function download(client, source, blogID, destination, callback) {
   });
 
   try {
-    const { result: metadata } = await client.filesGetMetadata({ path: source });
+    const { result: metadata } = await client.filesGetMetadata({
+      path: source,
+    });
     if (timedOut) return;
 
     const metadataPath = metadata.path_display || source;

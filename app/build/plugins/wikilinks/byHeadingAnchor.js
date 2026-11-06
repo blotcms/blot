@@ -205,17 +205,15 @@ function findFirstAttribute($, $element, attribute) {
 
   let found = null;
 
-  $element
-    .find(`[${attribute}]`)
-    .each((_, node) => {
-      if (found) return false;
+  $element.find(`[${attribute}]`).each((_, node) => {
+    if (found) return false;
 
-      const value = $(node).attr(attribute);
-      if (value) {
-        found = value;
-        return false;
-      }
-    });
+    const value = $(node).attr(attribute);
+    if (value) {
+      found = value;
+      return false;
+    }
+  });
 
   return found;
 }

@@ -24,7 +24,9 @@ function isEmoji(ch) {
   return PICTOGRAPHIC.test(ch) && !ALLOWED.has(ch.codePointAt(0));
 }
 
-const files = execFileSync("git", ["ls-files", "-z", "--", ...DIRS], { cwd: root })
+const files = execFileSync("git", ["ls-files", "-z", "--", ...DIRS], {
+  cwd: root,
+})
   .toString("utf8")
   .split("\0")
   .filter(Boolean);
@@ -42,13 +44,17 @@ for (const file of files) {
 
   text.split("\n").forEach((line, i) => {
     const found = [...line].filter(isEmoji);
-    if (found.length) hits.push({ file, line: i + 1, found: [...new Set(found)].join(" ") });
+    if (found.length)
+      hits.push({ file, line: i + 1, found: [...new Set(found)].join(" ") });
   });
 }
 
 if (hits.length) {
-  console.error("Emoji found in scripts/ or .github/ (use plain text instead):");
-  for (const { file, line, found } of hits) console.error(`  ${file}:${line}: ${found}`);
+  console.error(
+    "Emoji found in scripts/ or .github/ (use plain text instead):"
+  );
+  for (const { file, line, found } of hits)
+    console.error(`  ${file}:${line}: ${found}`);
   process.exit(1);
 }
 

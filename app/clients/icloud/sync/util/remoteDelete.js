@@ -5,7 +5,7 @@ const fetch = require("../../util/rateLimitedFetchWithRetriesAndTimeout");
 
 module.exports = async (blogID, path) => {
   const pathBase64 = Buffer.from(path).toString("base64");
-  
+
   // rateLimitedFetchWithRetriesAndTimeout throws on non-OK responses
   await fetch(MAC_SERVER_ADDRESS + "/delete", {
     method: "POST",

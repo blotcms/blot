@@ -5,11 +5,15 @@ describe("template image crop controls", function () {
     const listeners = {};
     const input = {
       files: [],
-      addEventListener(name, callback) { listeners[`input:${name}`] = callback; },
+      addEventListener(name, callback) {
+        listeners[`input:${name}`] = callback;
+      },
     };
     const selection = {
       style: {},
-      addEventListener(name, callback) { listeners[`selection:${name}`] = callback; },
+      addEventListener(name, callback) {
+        listeners[`selection:${name}`] = callback;
+      },
       setAttribute() {},
     };
     const fields = {

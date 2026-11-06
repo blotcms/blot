@@ -20,7 +20,8 @@ const copy = (offset, length) => {
   return [op, ...bytes];
 };
 const insert = (text) => [text.length, ...Buffer.from(text)];
-const delta = (baseSize, size, ...instructions) => Buffer.from([baseSize, size, ...instructions.flat()]);
+const delta = (baseSize, size, ...instructions) =>
+  Buffer.from([baseSize, size, ...instructions.flat()]);
 
 describe("git store delta", function () {
   const base = Buffer.from("0123456789");
@@ -31,7 +32,9 @@ describe("git store delta", function () {
   });
 
   it("copies the whole base", function () {
-    expect(applyDelta(base, delta(10, 10, copy(0, 10))).toString()).toBe("0123456789");
+    expect(applyDelta(base, delta(10, 10, copy(0, 10))).toString()).toBe(
+      "0123456789"
+    );
   });
 
   it("reads the size of what a delta produces", function () {
@@ -49,9 +52,11 @@ describe("git store delta", function () {
     "a different base size": () => applyDelta(base, delta(11, 3, copy(0, 3))),
     "a copy outside the base": () => applyDelta(base, delta(10, 5, copy(8, 5))),
     "a copy past the result": () => applyDelta(base, delta(10, 2, copy(0, 5))),
-    "an insert past the end": () => applyDelta(base, Buffer.from([10, 5, 5, 65])),
+    "an insert past the end": () =>
+      applyDelta(base, Buffer.from([10, 5, 5, 65])),
     "a reserved instruction": () => applyDelta(base, Buffer.from([10, 1, 0])),
-    "a result of the wrong size": () => applyDelta(base, delta(10, 9, copy(0, 3))),
+    "a result of the wrong size": () =>
+      applyDelta(base, delta(10, 9, copy(0, 3))),
     "a truncated header": () => applyDelta(base, Buffer.from([10])),
     "a truncated copy": () => applyDelta(base, Buffer.from([10, 3, 0x81])),
     "an endless size": () => applyDelta(base, Buffer.alloc(20, 0xff)),
@@ -64,7 +69,11 @@ describe("git store delta", function () {
   }
 
   it("refuses a result bigger than the limit before making it", function () {
-    expect(() => applyDelta(base, delta(10, 10, copy(0, 10)), 9)).toThrowError(TooLargeError);
-    expect(() => applyDelta(base, Buffer.from([10, 0xff, 0xff, 0xff, 0x7f]), 1000)).toThrowError(TooLargeError);
+    expect(() => applyDelta(base, delta(10, 10, copy(0, 10)), 9)).toThrowError(
+      TooLargeError
+    );
+    expect(() =>
+      applyDelta(base, Buffer.from([10, 0xff, 0xff, 0xff, 0x7f]), 1000)
+    ).toThrowError(TooLargeError);
   });
 });

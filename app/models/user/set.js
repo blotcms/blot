@@ -33,7 +33,8 @@ function indexes(user) {
   return [
     user.email ? key.email(user.email) : "",
     user.subscription && user.subscription.customer
-      ? key.customer(user.subscription.customer) : "",
+      ? key.customer(user.subscription.customer)
+      : "",
     user.paypal && user.paypal.id ? key.paypal(user.paypal.id) : "",
   ];
 }
@@ -69,8 +70,11 @@ module.exports = function save(uid, updates, callback) {
 
       if (status === 0) continue;
       if (status < 0) {
-        var conflict = new Error(status === -2
-          ? "This email is in use." : "This subscription is in use.");
+        var conflict = new Error(
+          status === -2
+            ? "This email is in use."
+            : "This subscription is in use."
+        );
         conflict.code = "EEXISTS";
         throw conflict;
       }
@@ -79,7 +83,8 @@ module.exports = function save(uid, updates, callback) {
       // from an abandoned validation attempt.
       if (former.email && former.email !== result.user.email) {
         updateBillingEmail(result.user, function (err) {
-          if (err) console.log("Error updating email for customer on Stripe:", err);
+          if (err)
+            console.log("Error updating email for customer on Stripe:", err);
         });
       }
       return result.changes;

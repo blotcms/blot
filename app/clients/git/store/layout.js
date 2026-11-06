@@ -21,7 +21,9 @@ const LATEST_KEY = MANIFEST_PREFIX + "latest.json";
 
 // Wide enough that no repository will reach the end of it
 const SEQ_DIGITS = 10;
-const MANIFEST_NAME = new RegExp("^" + MANIFEST_PREFIX + "(\\d{" + SEQ_DIGITS + "})\\.json$");
+const MANIFEST_NAME = new RegExp(
+  "^" + MANIFEST_PREFIX + "(\\d{" + SEQ_DIGITS + "})\\.json$"
+);
 
 const PACK_PREFIX = "packs/";
 const PACK_NAME = /^pack-[0-9a-f]{40}$/;
@@ -49,7 +51,8 @@ function revKey(name) {
 }
 
 function manifestKey(seq) {
-  if (!Number.isSafeInteger(seq) || seq < 1 || String(seq).length > SEQ_DIGITS) throw new Error("Invalid manifest seq: " + seq);
+  if (!Number.isSafeInteger(seq) || seq < 1 || String(seq).length > SEQ_DIGITS)
+    throw new Error("Invalid manifest seq: " + seq);
   return MANIFEST_PREFIX + String(seq).padStart(SEQ_DIGITS, "0") + ".json";
 }
 

@@ -25,7 +25,8 @@ describe("Git sync when Redis is unavailable", function () {
   // The commits the store has
   const known = ["old", "new"];
   const EMPTY_TREE = "nothing";
-  const unavailable = () => new SimpleError("NOREPLICAS Not enough good replicas to write.");
+  const unavailable = () =>
+    new SimpleError("NOREPLICAS Not enough good replicas to write.");
 
   beforeEach(function () {
     updates = [];

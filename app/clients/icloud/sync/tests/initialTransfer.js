@@ -2,11 +2,11 @@ const initialTransferPath = require.resolve("../initialTransfer");
 const databasePath = require.resolve("../../database");
 const toiCloudPath = require.resolve("../toiCloud");
 const fromiCloudPath = require.resolve("../fromiCloud");
-const resolveCaseConflictsPath = require.resolve("../../../util/resolveCaseConflicts");
+const resolveCaseConflictsPath =
+  require.resolve("../../../util/resolveCaseConflicts");
 const establishSyncLockPath = require.resolve("sync/establishSyncLock");
-const fetchPath = require.resolve(
-  "../../util/rateLimitedFetchWithRetriesAndTimeout"
-);
+const fetchPath =
+  require.resolve("../../util/rateLimitedFetchWithRetriesAndTimeout");
 
 describe("icloud initialTransfer", function () {
   const originals = new Map();
@@ -14,7 +14,8 @@ describe("icloud initialTransfer", function () {
   let done;
 
   function mockModule(modulePath, exportsValue) {
-    if (!originals.has(modulePath)) originals.set(modulePath, require.cache[modulePath]);
+    if (!originals.has(modulePath))
+      originals.set(modulePath, require.cache[modulePath]);
     require.cache[modulePath] = {
       id: modulePath,
       filename: modulePath,

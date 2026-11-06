@@ -29,7 +29,8 @@ const LARGE_BLOCKS = 40960;
 function largeBody(host, path, gen) {
   const seed = `${host}|${path}|${gen}|`;
   const out = Buffer.alloc(LARGE_BLOCKS * 64);
-  for (let i = 0; i < LARGE_BLOCKS; i++) out.write(sha256(seed + i), i * 64, "ascii");
+  for (let i = 0; i < LARGE_BLOCKS; i++)
+    out.write(sha256(seed + i), i * 64, "ascii");
   return out;
 }
 
@@ -49,4 +50,13 @@ const genOfEtag = (etag) => {
 // Server-sent events the stub's status stream sends before ending
 const SSE_EVENTS = 30;
 
-module.exports = { sha256, pageBody, largeBody, isLarge, bodyFor, etagFor, genOfEtag, SSE_EVENTS };
+module.exports = {
+  sha256,
+  pageBody,
+  largeBody,
+  isLarge,
+  bodyFor,
+  etagFor,
+  genOfEtag,
+  SSE_EVENTS,
+};

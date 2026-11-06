@@ -38,7 +38,11 @@ function flag(name) {
 }
 
 function gh(args, input) {
-  const res = spawnSync("gh", args, { encoding: "utf8", input, env: process.env });
+  const res = spawnSync("gh", args, {
+    encoding: "utf8",
+    input,
+    env: process.env,
+  });
   if (res.status !== 0) {
     throw new Error(`gh ${args.join(" ")} failed: ${res.stderr || res.stdout}`);
   }
@@ -77,7 +81,10 @@ function loadHistory(historyDir, name) {
 
 function appendHistory(historyDir, name, record) {
   fs.mkdirSync(historyDir, { recursive: true });
-  fs.appendFileSync(historyFile(historyDir, name), JSON.stringify(record) + "\n");
+  fs.appendFileSync(
+    historyFile(historyDir, name),
+    JSON.stringify(record) + "\n"
+  );
 }
 
 function median(values) {
@@ -97,7 +104,11 @@ function baselineFor(historyDir, name) {
 }
 
 function deltaPercent(current, baseline) {
-  if (!Number.isFinite(current) || !Number.isFinite(baseline) || baseline === 0) {
+  if (
+    !Number.isFinite(current) ||
+    !Number.isFinite(baseline) ||
+    baseline === 0
+  ) {
     return null;
   }
   return ((current - baseline) / baseline) * 100;
@@ -118,7 +129,9 @@ function buildTable(converters, historyDir, thresholdPercent) {
     }
 
     const baseline = historyDir ? baselineFor(historyDir, conv.name) : null;
-    const delta = baseline ? deltaPercent(conv.timing_ms.p50, baseline.p50) : null;
+    const delta = baseline
+      ? deltaPercent(conv.timing_ms.p50, baseline.p50)
+      : null;
     const isRegression = delta !== null && delta > thresholdPercent;
     if (isRegression) anyRegression = true;
 
@@ -190,7 +203,9 @@ function main() {
   ].join("\n");
 
   if (!pr || !repo) {
-    console.log("[converter-pr-comment] no --pr/$GITHUB_REPOSITORY; printing only:\n");
+    console.log(
+      "[converter-pr-comment] no --pr/$GITHUB_REPOSITORY; printing only:\n"
+    );
     console.log(summary);
     return;
   }
@@ -222,7 +237,17 @@ function main() {
       );
       console.log(`[converter-pr-comment] updated comment ${current.id}`);
     } else {
-      gh(["api", "--method", "POST", `repos/${repo}/issues/${pr}/comments`, "--input", "-"], payload);
+      gh(
+        [
+          "api",
+          "--method",
+          "POST",
+          `repos/${repo}/issues/${pr}/comments`,
+          "--input",
+          "-",
+        ],
+        payload
+      );
       console.log("[converter-pr-comment] created comment");
     }
   } catch (err) {

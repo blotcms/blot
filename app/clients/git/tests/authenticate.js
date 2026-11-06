@@ -35,7 +35,7 @@ describe("git client authenticate", function () {
         otherBlog = null;
         otherUser = null;
         done(err);
-      },
+      }
     );
   });
 
@@ -99,9 +99,9 @@ describe("git client authenticate", function () {
             function () {
               expect(res.statusCode).toBe(401, path);
               next.call(this);
-            }.bind(this),
+            }.bind(this)
           );
-        }.bind(this),
+        }.bind(this)
       );
 
       req.on("error", done.fail);
@@ -125,7 +125,7 @@ describe("git client authenticate", function () {
           status: testCase[2],
           handled: testCase[3],
         },
-        done,
+        done
       );
     });
   });
@@ -156,13 +156,7 @@ describe("git client authenticate", function () {
           User.hashPassword("other-users-password", next);
         },
         function (passwordHash, next) {
-          User.create(
-            "other-git-user@example.com",
-            passwordHash,
-            {},
-            {},
-            next
-          );
+          User.create("other-git-user@example.com", passwordHash, {}, {}, next);
         },
         function (user, next) {
           otherUser = user;

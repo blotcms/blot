@@ -17,7 +17,15 @@ const sweep = require("../sweep");
 const createCache = require("../cache");
 const createMemoryStore = require("../objectStore/memory");
 const createReader = require("../reader");
-const { LATEST_KEY, SWEEP_KEY, manifestKey, manifestSeq, packKey, idxKey, revKey } = require("../layout");
+const {
+  LATEST_KEY,
+  SWEEP_KEY,
+  manifestKey,
+  manifestSeq,
+  packKey,
+  idxKey,
+  revKey,
+} = require("../layout");
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -26,7 +34,8 @@ const MASTER = "refs/heads/master";
 
 const oid = (n) => String(n % 10).repeat(40);
 const lock = (fn) => fn();
-const dropped = () => Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" });
+const dropped = () =>
+  Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" });
 
 async function fails(promise) {
   try {
@@ -68,14 +77,25 @@ describe("git store sweep", function () {
 
   // Uploads the same bytes again, as a push of the same pack would
   async function reupload(entry) {
-    await store.put(packKey(entry.name), Buffer.alloc(entry.size, Number(entry.name.slice(5))));
-    await store.put(idxKey(entry.name), Buffer.alloc(entry.idxSize, Number(entry.name.slice(5))));
+    await store.put(
+      packKey(entry.name),
+      Buffer.alloc(entry.size, Number(entry.name.slice(5)))
+    );
+    await store.put(
+      idxKey(entry.name),
+      Buffer.alloc(entry.idxSize, Number(entry.name.slice(5)))
+    );
   }
 
   // A push naming `packs`, or of refs alone
   async function pushOf(packs = [], historyPieces = []) {
     const base = await manifest.read(store, { clock: () => clock });
-    const next = manifest.advance(base, { refs: { [MASTER]: oid(base.seq + 1) }, head: MASTER, packs, historyPieces });
+    const next = manifest.advance(base, {
+      refs: { [MASTER]: oid(base.seq + 1) },
+      head: MASTER,
+      packs,
+      historyPieces,
+    });
     await manifest.swap({ store, lock, base, next, clock: () => clock });
     return next;
   }
@@ -83,15 +103,29 @@ describe("git store sweep", function () {
   // A compaction of `remove` into `add`
   async function compaction(remove, add, { history, removePieces } = {}) {
     const base = await manifest.read(store, { clock: () => clock });
-    const next = manifest.compacted(base, { remove: remove.map((p) => p.name), add, history, removePieces });
+    const next = manifest.compacted(base, {
+      remove: remove.map((p) => p.name),
+      add,
+      history,
+      removePieces,
+    });
     await manifest.swap({ store, lock, base, next, clock: () => clock });
     return next;
   }
 
-  const exists = (entry) => inner.objects.has(packKey(entry.name)) || inner.objects.has(idxKey(entry.name)) || inner.objects.has(revKey(entry.name));
-  const whole = (entry) => inner.objects.has(packKey(entry.name)) && inner.objects.has(idxKey(entry.name));
-  const manifestSeqs = () => [...inner.objects.keys()].map(manifestSeq).filter((seq) => seq !== null);
-  const record = async () => (inner.objects.has(SWEEP_KEY) ? JSON.parse(await inner.get(SWEEP_KEY)) : null);
+  const exists = (entry) =>
+    inner.objects.has(packKey(entry.name)) ||
+    inner.objects.has(idxKey(entry.name)) ||
+    inner.objects.has(revKey(entry.name));
+  const whole = (entry) =>
+    inner.objects.has(packKey(entry.name)) &&
+    inner.objects.has(idxKey(entry.name));
+  const manifestSeqs = () =>
+    [...inner.objects.keys()].map(manifestSeq).filter((seq) => seq !== null);
+  const record = async () =>
+    inner.objects.has(SWEEP_KEY)
+      ? JSON.parse(await inner.get(SWEEP_KEY))
+      : null;
 
   describe("packs", function () {
     let named;
@@ -131,7 +165,9 @@ describe("git store sweep", function () {
       expect(await record()).toBe(null);
 
       expect(whole(named)).toBe(true);
-      expect((await manifest.read(store)).packs.map((p) => p.name)).toEqual([named.name]);
+      expect((await manifest.read(store)).packs.map((p) => p.name)).toEqual([
+        named.name,
+      ]);
     });
 
     it("never deletes a pack a push has uploaded and not yet swapped in, within the grace", async function () {
@@ -203,8 +239,17 @@ describe("git store sweep", function () {
         get: async (key, ...args) => {
           if (key === SWEEP_KEY) {
             const base = await manifest.read(store);
-            const next = manifest.advance(base, { refs: base.refs, packs: [orphan] });
-            await manifest.swap({ store, lock, base, next, uploaded: [orphan.name] });
+            const next = manifest.advance(base, {
+              refs: base.refs,
+              packs: [orphan],
+            });
+            await manifest.swap({
+              store,
+              lock,
+              base,
+              next,
+              uploaded: [orphan.name],
+            });
           }
           return store.get(key, ...args);
         },
@@ -245,7 +290,10 @@ describe("git store sweep", function () {
       const piece = await upload({ rev: false });
       await pushOf([], [piece]);
       const history = await upload({ rev: false });
-      await compaction([], null, { history: { ...history, through: 2 }, removePieces: [piece.name] });
+      await compaction([], null, {
+        history: { ...history, through: 2 },
+        removePieces: [piece.name],
+      });
 
       at(10 * DAY);
       await run({ keepManifests: 1 });
@@ -262,8 +310,19 @@ describe("git store sweep", function () {
       at(25 * HOUR);
       // A record which marks a named pack, as a bug might write it
       const keys = {};
-      for (const ext of ["pack", "idx", "rev"]) keys[ext] = (await inner.head("packs/" + named.name + "." + ext)).lastModified;
-      await store.put(SWEEP_KEY, Buffer.from(JSON.stringify({ version: 1, marked: { [named.name]: { at: T0, keys } } })));
+      for (const ext of ["pack", "idx", "rev"])
+        keys[ext] = (
+          await inner.head("packs/" + named.name + "." + ext)
+        ).lastModified;
+      await store.put(
+        SWEEP_KEY,
+        Buffer.from(
+          JSON.stringify({
+            version: 1,
+            marked: { [named.name]: { at: T0, keys } },
+          })
+        )
+      );
       const result = await run();
       expect(result.packsDeleted).toBe(0);
       expect(result.packsSpared).toBe(1);
@@ -271,14 +330,26 @@ describe("git store sweep", function () {
 
       // The last check before a DELETE is an assertion
       const newest = await manifest.read(store);
-      const error = await fails(sweep.deleteMarked(store, { name: named.name, mark: { at: T0, keys }, newest }));
+      const error = await fails(
+        sweep.deleteMarked(store, {
+          name: named.name,
+          mark: { at: T0, keys },
+          newest,
+        })
+      );
       expect(error.code).toBe("SWEEP_REFERENCED");
       expect(whole(named)).toBe(true);
       expect(inner.objects.has(revKey(named.name))).toBe(true);
     });
 
     it("leaves keys it does not recognise alone", async function () {
-      const others = ["packs/notes.txt", "packs/pack-abc.pack", "packs/" + named.name + ".keep", "other/thing", "manifests/old.json"];
+      const others = [
+        "packs/notes.txt",
+        "packs/pack-abc.pack",
+        "packs/" + named.name + ".keep",
+        "other/thing",
+        "manifests/old.json",
+      ];
       for (const key of others) await store.put(key, Buffer.from("x"));
       at(30 * DAY);
       await run({ keepManifests: 1 });
@@ -356,7 +427,9 @@ describe("git store sweep", function () {
       expect(exists(second)).toBe(false);
       expect(result.pending).toBe(0);
       expect(await record()).toBe(null);
-      expect((await manifest.read(store)).packs.map((p) => p.name)).toEqual([named.name]);
+      expect((await manifest.read(store)).packs.map((p) => p.name)).toEqual([
+        named.name,
+      ]);
     });
 
     it("throws when its record cannot be written, deleting nothing it should not", async function () {
@@ -383,8 +456,12 @@ describe("git store sweep", function () {
 
     it("refuses options which would delete too soon", async function () {
       expect((await fails(run({ grace: 60 * 1000 }))).message).toMatch(/grace/);
-      expect((await fails(run({ keepManifests: 0 }))).message).toMatch(/keepManifests/);
-      expect((await fails(run({ recoveryWindow: -1 }))).message).toMatch(/recoveryWindow/);
+      expect((await fails(run({ keepManifests: 0 }))).message).toMatch(
+        /keepManifests/
+      );
+      expect((await fails(run({ recoveryWindow: -1 }))).message).toMatch(
+        /recoveryWindow/
+      );
       expect(exists(orphan)).toBe(true);
     });
   });
@@ -406,21 +483,27 @@ describe("git store sweep", function () {
       at(8 * DAY);
       const result = await run({ keepManifests: 5 });
       expect(result.manifestsDeleted).toBe(10);
-      expect(manifestSeqs().sort((a, b) => a - b)).toEqual(Array.from({ length: 20 }, (_, i) => i + 11));
+      expect(manifestSeqs().sort((a, b) => a - b)).toEqual(
+        Array.from({ length: 20 }, (_, i) => i + 11)
+      );
       expect(inner.objects.has(LATEST_KEY)).toBe(true);
 
       // Every pack is still named by the newest
       at(20 * DAY);
       const later = await run({ keepManifests: 5 });
       expect(later.manifestsDeleted).toBe(20 - 5);
-      expect(manifestSeqs().sort((a, b) => a - b)).toEqual([26, 27, 28, 29, 30]);
+      expect(manifestSeqs().sort((a, b) => a - b)).toEqual([
+        26, 27, 28, 29, 30,
+      ]);
       for (const entry of packs) expect(whole(entry)).toBe(true);
     });
 
     it("keeps the newest keepManifests however old", async function () {
       at(100 * DAY);
       await run();
-      expect(manifestSeqs().sort((a, b) => a - b)).toEqual(Array.from({ length: 20 }, (_, i) => i + 11));
+      expect(manifestSeqs().sort((a, b) => a - b)).toEqual(
+        Array.from({ length: 20 }, (_, i) => i + 11)
+      );
       expect(inner.objects.has(manifestKey(10))).toBe(false);
     });
 
@@ -448,7 +531,8 @@ describe("git store sweep", function () {
       const deleting = await run({ keepManifests: 1 });
       expect(deleting.packsDeleted).toBe(20);
       for (const entry of packs.slice(0, 20)) expect(exists(entry)).toBe(false);
-      for (const entry of [...packs.slice(20), merged]) expect(whole(entry)).toBe(true);
+      for (const entry of [...packs.slice(20), merged])
+        expect(whole(entry)).toBe(true);
       expect(manifestSeqs()).toEqual([31]);
     });
 
@@ -489,7 +573,15 @@ describe("git store sweep", function () {
 
       // The writer wakes: its base is too old, so nothing is written, and the
       // newest manifest is untouched
-      const error = await fails(manifest.swap({ store, lock: lockOf, base: stalled, next: theirs, clock: () => clock }));
+      const error = await fails(
+        manifest.swap({
+          store,
+          lock: lockOf,
+          base: stalled,
+          next: theirs,
+          clock: () => clock,
+        })
+      );
       expect(error && error.name).toBe("StaleManifestError");
       expect(inner.objects.has(manifestKey(2))).toBe(false);
       expect((await manifest.read(store)).seq).toBe(31);
@@ -500,7 +592,13 @@ describe("git store sweep", function () {
       // Process A writes seq 1 and keeps its bytes
       const a = { ...inner };
       const first = await manifest.read(a, clocked);
-      await manifest.swap({ store: a, lock, base: first, next: manifest.advance(first, { refs: { [MASTER]: oid(1) } }), ...clocked });
+      await manifest.swap({
+        store: a,
+        lock,
+        base: first,
+        next: manifest.advance(first, { refs: { [MASTER]: oid(1) } }),
+        ...clocked,
+      });
 
       // Others push 30 times; the hint lags at 1
       for (let i = 0; i < 30; i++) await pushOf();
@@ -513,7 +611,13 @@ describe("git store sweep", function () {
       // A reads again: seq 1 is in its memory, but gone from the store
       const base = await manifest.read(a, clocked);
       expect(base.seq).toBe(31);
-      await manifest.swap({ store: a, lock, base, next: manifest.advance(base, { refs: { [MASTER]: oid(2) } }), ...clocked });
+      await manifest.swap({
+        store: a,
+        lock,
+        base,
+        next: manifest.advance(base, { refs: { [MASTER]: oid(2) } }),
+        ...clocked,
+      });
       expect(inner.objects.has(manifestKey(2))).toBe(false);
       expect((await manifest.read(createMemoryStoreCopy())).seq).toBe(32);
     });
@@ -526,8 +630,12 @@ describe("git store sweep", function () {
     }
 
     it("requires a recovery window well over the age a swap allows its base", async function () {
-      expect(sweep.MIN_RECOVERY_WINDOW).toBeGreaterThanOrEqual(2 * manifest.MAX_BASE_AGE);
-      expect((await fails(run({ recoveryWindow: manifest.MAX_BASE_AGE }))).message).toMatch(/recoveryWindow/);
+      expect(sweep.MIN_RECOVERY_WINDOW).toBeGreaterThanOrEqual(
+        2 * manifest.MAX_BASE_AGE
+      );
+      expect(
+        (await fails(run({ recoveryWindow: manifest.MAX_BASE_AGE }))).message
+      ).toMatch(/recoveryWindow/);
       await run({ recoveryWindow: sweep.MIN_RECOVERY_WINDOW });
     });
   });
@@ -537,8 +645,14 @@ describe("git store sweep", function () {
       const named = await upload();
       const top = await pushOf([named]);
       // Stand-ins for the manifests below; only the newest is read
-      for (let seq = 2; seq <= 150000; seq++) inner.objects.set(manifestKey(seq), Buffer.from("{}"));
-      const newest = { ...top, seq: 150001, snapshots: [{ seq: 150001, refs: top.refs }], packs: top.packs.map((p) => ({ ...p, seq: 150001 })) };
+      for (let seq = 2; seq <= 150000; seq++)
+        inner.objects.set(manifestKey(seq), Buffer.from("{}"));
+      const newest = {
+        ...top,
+        seq: 150001,
+        snapshots: [{ seq: 150001, refs: top.refs }],
+        packs: top.packs.map((p) => ({ ...p, seq: 150001 })),
+      };
       await store.put(manifestKey(150001), manifest.serialize(newest));
 
       at(30 * HOUR);
@@ -556,8 +670,16 @@ describe("git store sweep", function () {
       await run();
 
       const result = await run();
-      expect(result.requests).toEqual({ lists: 1, gets: 1, heads: 0, puts: 0, deletes: 0 });
-      expect(result.manifestsDeleted + result.packsMarked + result.packsDeleted).toBe(0);
+      expect(result.requests).toEqual({
+        lists: 1,
+        gets: 1,
+        heads: 0,
+        puts: 0,
+        deletes: 0,
+      });
+      expect(
+        result.manifestsDeleted + result.packsMarked + result.packsDeleted
+      ).toBe(0);
     });
 
     it("reads the older kept manifests, newest first, only until the unnamed packs are found", async function () {
@@ -572,7 +694,13 @@ describe("git store sweep", function () {
       at(2 * DAY);
       const result = await run();
       // The newest, then 16 down to 11, which names it
-      expect(result.requests).toEqual({ lists: 1, gets: 7, heads: 0, puts: 0, deletes: 0 });
+      expect(result.requests).toEqual({
+        lists: 1,
+        gets: 7,
+        heads: 0,
+        puts: 0,
+        deletes: 0,
+      });
       expect(result.packsMarked).toBe(0);
     });
 
@@ -583,14 +711,26 @@ describe("git store sweep", function () {
       await upload();
       at(25 * HOUR);
       const marking = await run();
-      expect(marking.requests).toEqual({ lists: 1, gets: 1, heads: 0, puts: 1, deletes: 0 });
+      expect(marking.requests).toEqual({
+        lists: 1,
+        gets: 1,
+        heads: 0,
+        puts: 1,
+        deletes: 0,
+      });
 
       at(50 * HOUR);
       const deleting = await run();
       expect(deleting.packsDeleted).toBe(2);
       // The record's GET, then for each: a HEAD forward, 3 HEADs, 3 DELETEs;
       // and the record's DELETE
-      expect(deleting.requests).toEqual({ lists: 1, gets: 2, heads: 8, puts: 0, deletes: 7 });
+      expect(deleting.requests).toEqual({
+        lists: 1,
+        gets: 2,
+        heads: 8,
+        puts: 0,
+        deletes: 7,
+      });
     });
   });
 });
@@ -628,8 +768,14 @@ describe("git store sweep, after compacting a real repository", function () {
   async function pushes(n) {
     for (let i = 0; i < n; i++) {
       const id = ++counter;
-      fs.appendFileSync(path.join(work, "docs", "big.txt"), "Edited in push " + id + "\n");
-      fs.writeFileSync(path.join(work, "posts", "new-" + id + ".md"), "# Post " + id + "\n");
+      fs.appendFileSync(
+        path.join(work, "docs", "big.txt"),
+        "Edited in push " + id + "\n"
+      );
+      fs.writeFileSync(
+        path.join(work, "posts", "new-" + id + ".md"),
+        "# Post " + id + "\n"
+      );
       fx.git(work, ["add", "-A"]);
       fx.git(work, ["commit", "-q", "-m", "Push " + id]);
       ok(await push(work, ["-q", received.url, "master"]));
@@ -645,17 +791,30 @@ describe("git store sweep, after compacting a real repository", function () {
     fx.buildFixture(work, { commits: 5, large: false });
     inner = createMemoryStore({ now: () => clock });
     store = faults(inner);
-    cache = createCache({ dir: path.join(dir, "cache"), maxBytes: 64 * 1024 * 1024 });
+    cache = createCache({
+      dir: path.join(dir, "cache"),
+      maxBytes: 64 * 1024 * 1024,
+    });
     received = await createReceiveServer({ store, cache, lock: createLock() });
     server = await startServer({ store, cache, manifest: () => latest });
     ok(await push(work, ["-q", received.url, "master"]));
     await pushes(6);
     for (let i = 0; i < 2; i++) {
-      const result = await commit({ store, cache, lock, path: "/drafts/draft-" + i + ".md", contents: Buffer.from("# Draft " + i + "\n") });
+      const result = await commit({
+        store,
+        cache,
+        lock,
+        path: "/drafts/draft-" + i + ".md",
+        contents: Buffer.from("# Draft " + i + "\n"),
+      });
       expect(result.changed).toBe(true);
     }
     await refresh();
-    ok(await runGit(["pull", "-q", "--ff-only", server.url, "master"], { cwd: work }));
+    ok(
+      await runGit(["pull", "-q", "--ff-only", server.url, "master"], {
+        cwd: work,
+      })
+    );
     await pushes(4);
   });
 
@@ -691,14 +850,24 @@ describe("git store sweep, after compacting a real repository", function () {
     expect(deleting.packsDeleted).toBe(gone.length);
     expect(deleting.bytesFreed).toBeGreaterThan(0);
 
-    for (const name of gone) expect(inner.objects.has(packKey(name)) || inner.objects.has(idxKey(name))).toBe(false, name);
-    const left = new Set([...inner.objects.keys()].filter((key) => key.startsWith("packs/")).map((key) => key.slice(6, 51)));
+    for (const name of gone)
+      expect(
+        inner.objects.has(packKey(name)) || inner.objects.has(idxKey(name))
+      ).toBe(false, name);
+    const left = new Set(
+      [...inner.objects.keys()]
+        .filter((key) => key.startsWith("packs/"))
+        .map((key) => key.slice(6, 51))
+    );
     expect([...left].sort()).toEqual(manifest.packsNamed(latest).sort());
 
     // Everything git has reads back through the store as git has it
     await cache.clear();
     const reader = createReader({ store, cache, packs: latest.packs });
-    const oids = fx.text(work, ["rev-list", "--objects", "master"]).split("\n").map((line) => line.slice(0, 40));
+    const oids = fx
+      .text(work, ["rev-list", "--objects", "master"])
+      .split("\n")
+      .map((line) => line.slice(0, 40));
     for (const [id, { type, data }] of fx.catAll(work, oids)) {
       const found = await reader.read(id);
       expect(found && found.type).toBe(type, id);
@@ -706,9 +875,20 @@ describe("git store sweep, after compacting a real repository", function () {
     }
 
     const target = path.join(dir, "clone");
-    ok(await runGit(["-c", "transfer.fsckObjects=true", "clone", "-q", server.url, target]));
+    ok(
+      await runGit([
+        "-c",
+        "transfer.fsckObjects=true",
+        "clone",
+        "-q",
+        server.url,
+        target,
+      ])
+    );
     fx.git(target, ["fsck", "--strict", "--no-dangling"]);
-    expect(fx.text(target, ["rev-parse", "origin/master"])).toBe(latest.refs[MASTER]);
+    expect(fx.text(target, ["rev-parse", "origin/master"])).toBe(
+      latest.refs[MASTER]
+    );
 
     // And a push after it all still works, and is not swept
     await pushes(1);
@@ -717,7 +897,20 @@ describe("git store sweep, after compacting a real repository", function () {
     clock = T0 + 21 * DAY;
     const quiet = await sweep({ store, now: clock, keepManifests: 1 });
     expect(quiet.packsDeleted).toBe(0);
-    ok(await runGit(["-c", "gc.auto=0", "-c", "maintenance.auto=false", "pull", "-q", "--ff-only"], { cwd: target }));
+    ok(
+      await runGit(
+        [
+          "-c",
+          "gc.auto=0",
+          "-c",
+          "maintenance.auto=false",
+          "pull",
+          "-q",
+          "--ff-only",
+        ],
+        { cwd: target }
+      )
+    );
     fx.git(target, ["fsck", "--strict", "--no-dangling"]);
   });
 });

@@ -95,7 +95,9 @@ const countMissing = async (folderId, blogID) => {
     ids.forEach((id, i) => {
       let isDirectory = false;
       try {
-        isDirectory = Boolean(metadata[i] && JSON.parse(metadata[i]).isDirectory);
+        isDirectory = Boolean(
+          metadata[i] && JSON.parse(metadata[i]).isDirectory
+        );
       } catch (_) {}
 
       if (isDirectory) return;
@@ -115,7 +117,9 @@ const resync = async (blog) => {
   try {
     lock = await establishSyncLock(blog.id);
   } catch (err) {
-    throw new Error(`could not acquire sync lock: ${formatError(err)}`, { cause: err });
+    throw new Error(`could not acquire sync lock: ${formatError(err)}`, {
+      cause: err,
+    });
   }
 
   const { folder, done } = lock;
@@ -189,7 +193,11 @@ const processBlog = async (blog) => {
         `[FAIL] Google Drive resync failed for ${label(blog)}:`,
         formatError(err)
       );
-      errors.push({ blogID: blog.id, handle: blog.handle, error: formatError(err) });
+      errors.push({
+        blogID: blog.id,
+        handle: blog.handle,
+        error: formatError(err),
+      });
       return;
     }
 
@@ -206,7 +214,11 @@ const processBlog = async (blog) => {
   } catch (err) {
     failedResyncs++;
     console.error(`[FAIL] Failed to process ${label(blog)}:`, formatError(err));
-    errors.push({ blogID: blog.id, handle: blog.handle, error: formatError(err) });
+    errors.push({
+      blogID: blog.id,
+      handle: blog.handle,
+      error: formatError(err),
+    });
   }
 };
 
@@ -216,7 +228,9 @@ const summarize = () => {
     `Google Drive applied modifiedTime backfill${apply ? "" : " (dry run)"}:`
   );
   console.log(`  Google Drive blogs checked: ${totalGoogleDriveBlogs}`);
-  console.log(`  Files missing applied modifiedTime: ${totalMissing} of ${totalFiles}`);
+  console.log(
+    `  Files missing applied modifiedTime: ${totalMissing} of ${totalFiles}`
+  );
   console.log(`  Files with an old fingerprint record: ${totalOld}`);
   console.log(`  Blogs needing a resync: ${needsResync.length}`);
 
@@ -226,7 +240,9 @@ const summarize = () => {
     console.log(`  Successful resyncs: ${successfulResyncs}`);
     console.log(`  Failed: ${failedResyncs}`);
     console.log(`  Files still missing after resync: ${totalRemaining}`);
-    console.log(`  Old fingerprint records left after resync: ${totalOldRemaining}`);
+    console.log(
+      `  Old fingerprint records left after resync: ${totalOldRemaining}`
+    );
     if (totalRemaining) {
       console.log(
         "  (A residue is expected for old md5 files deferred by sync's verification budget; their change detection doesn't use the applied record. Re-run to reduce it.)"

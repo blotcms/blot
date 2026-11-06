@@ -35,20 +35,27 @@ describe("redisSubscriber", function () {
       client.isReady = false;
     };
     client.listeners = {};
-    client.subscribe = jasmine.createSpy("subscribe").and.callFake(async function (channel, listener) {
-      client.listeners[channel] = listener;
-    });
-    client.unsubscribe = jasmine.createSpy("unsubscribe").and.callFake(async function (channel) {
-      delete client.listeners[channel];
-    });
+    client.subscribe = jasmine
+      .createSpy("subscribe")
+      .and.callFake(async function (channel, listener) {
+        client.listeners[channel] = listener;
+      });
+    client.unsubscribe = jasmine
+      .createSpy("unsubscribe")
+      .and.callFake(async function (channel) {
+        delete client.listeners[channel];
+      });
     client.publish = function (channel, message) {
-      if (client.listeners[channel]) client.listeners[channel](message, channel);
+      if (client.listeners[channel])
+        client.listeners[channel](message, channel);
     };
     return client;
   }
 
   function load(client) {
-    createRedisClient = jasmine.createSpy("createRedisClient").and.returnValue(client);
+    createRedisClient = jasmine
+      .createSpy("createRedisClient")
+      .and.returnValue(client);
     createRedisClient.BOOT_QUEUE_MS = 10 * 1000;
     require.cache[redisPath] = { exports: createRedisClient };
     delete require.cache[subscriberPath];
@@ -87,11 +94,12 @@ describe("redisSubscriber", function () {
 
     expect(createRedisClient).toHaveBeenCalledTimes(1);
     expect(client.connect).toHaveBeenCalledTimes(1);
-    expect(client.subscribe.calls.allArgs().map((args) => args[0]).sort()).toEqual([
-      "channel:0",
-      "channel:1",
-      "channel:2",
-    ]);
+    expect(
+      client.subscribe.calls
+        .allArgs()
+        .map((args) => args[0])
+        .sort()
+    ).toEqual(["channel:0", "channel:1", "channel:2"]);
     subscriptions.forEach(function (subscription) {
       expect(subscription.client).toBe(client);
     });
@@ -203,7 +211,10 @@ describe("redisSubscriber", function () {
       const client = fakeClient();
       const redisSubscriber = load(client);
 
-      const waiting = redisSubscriber({ channel: "test", onError: function () {} });
+      const waiting = redisSubscriber({
+        channel: "test",
+        onError: function () {},
+      });
       let settled = false;
       waiting.setupPromise.then(
         () => (settled = true),
@@ -234,7 +245,9 @@ describe("redisSubscriber", function () {
     await left.setupPromise;
     await flush();
 
-    expect(client.subscribe.calls.allArgs().map((args) => args[0])).toEqual(["stayed"]);
+    expect(client.subscribe.calls.allArgs().map((args) => args[0])).toEqual([
+      "stayed",
+    ]);
     expect(client.unsubscribe).not.toHaveBeenCalled();
   });
 
@@ -245,7 +258,9 @@ describe("redisSubscriber", function () {
     const subscription = redisSubscriber({ channel: "test" });
     await subscription.setupPromise;
 
-    client.unsubscribe.and.returnValue(Promise.reject(new Error("Socket closed")));
+    client.unsubscribe.and.returnValue(
+      Promise.reject(new Error("Socket closed"))
+    );
     await subscription.cleanup();
     await flush();
     expect(client.unsubscribe).toHaveBeenCalledTimes(1);

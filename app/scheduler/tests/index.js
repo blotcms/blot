@@ -69,9 +69,7 @@ describe("scheduler", function () {
   });
 
   describe("notifyLowDisk", function () {
-    const KEYS = [
-      "notify:low-disk-space",
-    ];
+    const KEYS = ["notify:low-disk-space"];
     const GB = 1024 * 1024;
     const disk = (label, available_k, used_percent) => ({
       label,

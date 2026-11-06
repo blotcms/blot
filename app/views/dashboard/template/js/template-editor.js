@@ -40,10 +40,7 @@ var templateSidebarCollapsedWidth = getTemplateSidebarCssValue(
 );
 var clampTemplateSidebarWidth = function (width) {
   return Math.round(
-    Math.max(
-      templateSidebarMinWidth,
-      Math.min(templateSidebarMaxWidth, width)
-    )
+    Math.max(templateSidebarMinWidth, Math.min(templateSidebarMaxWidth, width))
   );
 };
 var templateSidebarDefaultWidth = getTemplateSidebarCssValue(
@@ -63,7 +60,9 @@ try {
     window.localStorage.getItem(templateSidebarWidthStorageKey)
   );
   if (isFinite(storedTemplateSidebarWidth)) {
-    templateSidebarWidth = clampTemplateSidebarWidth(storedTemplateSidebarWidth);
+    templateSidebarWidth = clampTemplateSidebarWidth(
+      storedTemplateSidebarWidth
+    );
   }
 } catch (err) {}
 
@@ -121,10 +120,7 @@ var setTemplateSidebarCollapsed = function (collapsed, persist) {
   if (templateSidebar) {
     templateSidebar.classList.toggle("is-collapsed", collapsed);
   }
-  setTemplateEditorStateClass(
-    "template-editor-sidebar-collapsed",
-    collapsed
-  );
+  setTemplateEditorStateClass("template-editor-sidebar-collapsed", collapsed);
 
   if (templateSidebarToggle) {
     templateSidebarToggle.setAttribute(
@@ -349,7 +345,7 @@ if (template_list) {
           var baseUrl = cleanTemplateBase(dataset);
           return baseUrl ? baseUrl + "/rename" : null;
         },
-        "delete": function (dataset) {
+        delete: function (dataset) {
           var baseUrl = cleanTemplateBase(dataset);
           return {
             href: baseUrl ? baseUrl + "/delete" : null,

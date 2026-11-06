@@ -8,7 +8,7 @@ const toArray = (value) => {
   return [value];
 };
 
-module.exports = async function cleanupFiles (files = {}) {
+module.exports = async function cleanupFiles(files = {}) {
   const removals = [];
 
   for (const key of Object.keys(files)) {

@@ -52,9 +52,7 @@ async function main(blog) {
   console.log(colors.cyan("Found the following keys:"));
   console.log(JSON.stringify(keys, null, 2));
 
-  const confirmed = await getConfirmation(
-    `Delete ${keys.length} keys`
-  );
+  const confirmed = await getConfirmation(`Delete ${keys.length} keys`);
 
   if (!confirmed) {
     console.log(colors.yellow("Aborted without deleting any keys."));
@@ -68,7 +66,10 @@ async function main(blog) {
       .exec()
       .then((results) => {
         const deleted = Array.isArray(results)
-          ? results.reduce((sum, value) => sum + (typeof value === "number" ? value : 0), 0)
+          ? results.reduce(
+              (sum, value) => sum + (typeof value === "number" ? value : 0),
+              0
+            )
           : 0;
         console.log(
           colors.green(

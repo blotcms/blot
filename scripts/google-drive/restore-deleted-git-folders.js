@@ -85,7 +85,7 @@ const listTrashedChildren = async (drive, parentId) => {
         if (file.trashed) {
           trashed.push(file);
         }
-        
+
         // Push ALL folders onto the stack (trashed or not) so we can explore them
         // This allows us to find trashed files inside non-trashed subfolders
         if (file.mimeType === FOLDER_MIME_TYPE) {
@@ -181,7 +181,8 @@ const restoreFiles = async (drive, files) => {
 };
 
 const processBlog = async (blog) => {
-  if (blog.client !== "google-drive") return { gitFoldersFound: 0, filesRestored: 0 };
+  if (blog.client !== "google-drive")
+    return { gitFoldersFound: 0, filesRestored: 0 };
 
   console.log(`Processing blog ${blog.id} (${blog.handle})`);
 
@@ -211,28 +212,38 @@ const processBlog = async (blog) => {
     const templateFolderId = await folder.getByPath(templatePath);
 
     if (!templateFolderId) {
-      console.log(`  Missing template folder in Drive for ${templatePath}; skipping.`);
+      console.log(
+        `  Missing template folder in Drive for ${templatePath}; skipping.`
+      );
       continue;
     }
 
     const corrupted = await isGitFolderCorrupted(blog.id, base, name);
 
     if (!corrupted) {
-      console.log(`  Local .git for ${templatePath} is healthy or missing; skipping.`);
+      console.log(
+        `  Local .git for ${templatePath} is healthy or missing; skipping.`
+      );
       continue;
     }
 
     const gitFolderId = await findGitFolderId(drive, templateFolderId);
 
     if (!gitFolderId) {
-      console.log(`  No .git folder found in Drive for ${templatePath}; skipping.`);
+      console.log(
+        `  No .git folder found in Drive for ${templatePath}; skipping.`
+      );
       continue;
     }
 
     gitFoldersFound += 1;
 
     const localGitFiles = await walkLocalGitFolder(blog.id, base, name);
-    const deletedFiles = await findDeletedGitFiles(drive, gitFolderId, localGitFiles);
+    const deletedFiles = await findDeletedGitFiles(
+      drive,
+      gitFolderId,
+      localGitFiles
+    );
 
     if (!deletedFiles.length) {
       console.log(`  No deleted files found for ${templatePath}/.git.`);

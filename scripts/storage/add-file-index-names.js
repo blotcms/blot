@@ -22,7 +22,9 @@ const { promisify } = require("util");
 function usage(message) {
   if (message) console.error(message + "\n");
 
-  console.error("Usage: node scripts/storage/add-file-index-names.js [--apply] [--blog <blogID>]");
+  console.error(
+    "Usage: node scripts/storage/add-file-index-names.js [--apply] [--blog <blogID>]"
+  );
   process.exit(2);
 }
 
@@ -40,18 +42,26 @@ function parse(argv) {
 
 async function main() {
   const options = parse(process.argv.slice(2));
-  const ids = options.blog ? [options.blog] : (await promisify(Blog.getAllIDs)()).slice().sort();
+  const ids = options.blog
+    ? [options.blog]
+    : (await promisify(Blog.getAllIDs)()).slice().sort();
   const totals = { blogs: 0, dirs: 0, missing: 0, names: 0 };
   const skipped = [];
 
-  console.log((options.apply ? "Adding names sets for " : "Dry run over ") + ids.length + " blogs");
+  console.log(
+    (options.apply ? "Adding names sets for " : "Dry run over ") +
+      ids.length +
+      " blogs"
+  );
 
   for (const blogID of ids) {
     let counts;
 
     try {
       counts = options.apply
-        ? await hold(blogID, () => File.addMissingNames(blogID, { apply: true }))
+        ? await hold(blogID, () =>
+            File.addMissingNames(blogID, { apply: true })
+          )
         : await File.addMissingNames(blogID);
     } catch (err) {
       if (err.code !== "ELOCKED") throw err;
@@ -69,8 +79,16 @@ async function main() {
   }
 
   console.log(
-    "Looked at " + totals.dirs + " directories in " + totals.blogs + " blogs: " + totals.missing +
-      " without a names set, holding " + totals.names + " names" + (options.apply ? ", now added" : "")
+    "Looked at " +
+      totals.dirs +
+      " directories in " +
+      totals.blogs +
+      " blogs: " +
+      totals.missing +
+      " without a names set, holding " +
+      totals.names +
+      " names" +
+      (options.apply ? ", now added" : "")
   );
 
   if (skipped.length) console.log("Skipped, locked: " + skipped.join(" "));

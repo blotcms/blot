@@ -52,7 +52,9 @@ async function main(callback) {
     // directional number. Each percentile is averaged independently, skipping
     // NaN, so legacy entries (p95 only) still count towards p95.
     const average = (key) => {
-      const values = windows.map((window) => window[key]).filter((n) => !isNaN(n));
+      const values = windows
+        .map((window) => window[key])
+        .filter((n) => !isNaN(n));
       if (values.length === 0) return NaN;
       return Math.round(values.reduce((sum, n) => sum + n, 0) / values.length);
     };

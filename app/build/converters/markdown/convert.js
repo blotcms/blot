@@ -52,8 +52,8 @@ module.exports = function (blog, text, options, callback) {
       katex: katexEnabled,
       callouts: Boolean(
         blog.plugins &&
-          blog.plugins.callouts &&
-          blog.plugins.callouts.enabled === true
+        blog.plugins.callouts &&
+        blog.plugins.callouts.enabled === true
       ),
     },
     Buffer.from(text, "utf8"),

@@ -34,7 +34,7 @@ xdescribe("scheduled posts", function () {
             }, done.fail);
         }, MINUTE);
         storageFolder.write(this.blog.id, path, contents).then(() => {
-          folder.update(path, err => {
+          folder.update(path, (err) => {
             if (err) return done.fail(err);
             finish(null, () => {
               fetch(this.origin)
@@ -55,16 +55,16 @@ xdescribe("scheduled posts", function () {
 
     const view = {
       name: "entries.html",
-      content: `<html><head></head><body>{{#entries}}{{{html}}}{{/entries}}</body></html>`
+      content: `<html><head></head><body>{{#entries}}{{{html}}}{{/entries}}</body></html>`,
     };
 
-    Template.create(this.blog.id, templateName, {}, err => {
+    Template.create(this.blog.id, templateName, {}, (err) => {
       if (err) return done(err);
       Template.getTemplateList(this.blog.id, (err, templates) => {
         let templateId = templates.filter(
           ({ name }) => name === templateName
         )[0].id;
-        Template.setView(templateId, view, err => {
+        Template.setView(templateId, view, (err) => {
           if (err) return done(err);
           Blog.set(
             this.blog.id,
@@ -81,7 +81,7 @@ xdescribe("scheduled posts", function () {
     this.server = Express()
       .use((req, res, next) => {
         const _get = req.get;
-        req.get = arg => {
+        req.get = (arg) => {
           if (arg === "host") {
             return `${this.blog.handle}.${config.host}`;
           } else return _get(arg);

@@ -16,14 +16,18 @@ function normalizeColor(value) {
 
 function numericValue(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value !== "string" || !/^-?\d+(\.\d+)?$/.test(value.trim())) return null;
+  if (typeof value !== "string" || !/^-?\d+(\.\d+)?$/.test(value.trim()))
+    return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
 
 function scalarMatches(declared, current, property) {
   if (property === "id") {
-    return String(declared == null ? "" : declared) === String(current == null ? "" : current);
+    return (
+      String(declared == null ? "" : declared) ===
+      String(current == null ? "" : current)
+    );
   }
 
   if (property === "font_size" || property === "line_height") {
@@ -41,14 +45,20 @@ function valuesMatch(declared, current) {
   if (!isPlainObject(declared)) return scalarMatches(declared, current);
   if (!isPlainObject(current)) return false;
   const properties = ownKeys(declared);
-  return properties.length > 0 && properties.every((property) =>
-    scalarMatches(declared[property], current[property], property)
+  return (
+    properties.length > 0 &&
+    properties.every((property) =>
+      scalarMatches(declared[property], current[property], property)
+    )
   );
 }
 
 function presetMatches(patch, locals) {
   const keys = ownKeys(patch);
-  return keys.length > 0 && keys.every((key) => valuesMatch(patch[key], locals && locals[key]));
+  return (
+    keys.length > 0 &&
+    keys.every((key) => valuesMatch(patch[key], locals && locals[key]))
+  );
 }
 
 module.exports = {

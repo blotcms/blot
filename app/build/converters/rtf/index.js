@@ -10,14 +10,12 @@ var convert = require("./convert");
 var folderStat = callbackify(require("build/converters/folderStat"));
 var readFile = callbackify(folder.read);
 
-function is (path) {
+function is(path) {
   return [".rtf"].indexOf(extname(path).toLowerCase()) > -1;
 }
 
-function read (blog, path, callback) {
-  ensure(blog, "object")
-    .and(path, "string")
-    .and(callback, "function");
+function read(blog, path, callback) {
+  ensure(blog, "object").and(path, "string").and(callback, "function");
 
   time("stat");
 
@@ -84,4 +82,4 @@ function read (blog, path, callback) {
   });
 }
 
-module.exports = { read: read, is: is, id: "rtf"};
+module.exports = { read: read, is: is, id: "rtf" };

@@ -23,10 +23,12 @@ function currentLocals(group) {
   const locals = {};
 
   if (group === "colors") {
-    document.querySelectorAll("form.color-picker input.value").forEach((input) => {
-      const key = String(input.name || "").replace(/^locals\./, "");
-      if (key) locals[key] = input.value;
-    });
+    document
+      .querySelectorAll("form.color-picker input.value")
+      .forEach((input) => {
+        const key = String(input.name || "").replace(/^locals\./, "");
+        if (key) locals[key] = input.value;
+      });
     return locals;
   }
 
@@ -35,8 +37,12 @@ function currentLocals(group) {
     if (!key) return;
     const value = {};
     const idInput = form.querySelector("[data-font-picker-value]");
-    const size = form.querySelector('input[name="locals.' + key + '.font_size"]');
-    const line = form.querySelector('input[name="locals.' + key + '.line_height"]');
+    const size = form.querySelector(
+      'input[name="locals.' + key + '.font_size"]'
+    );
+    const line = form.querySelector(
+      'input[name="locals.' + key + '.line_height"]'
+    );
     if (idInput) value.id = idInput.value;
     if (size && size.value !== "") value.font_size = size.value;
     if (line && line.value !== "") value.line_height = line.value;
@@ -111,12 +117,16 @@ function applyMatchToControls(group, match) {
     }
 
     if (patch.font_size != null) {
-      const size = form.querySelector('input[name="locals.' + key + '.font_size"]');
+      const size = form.querySelector(
+        'input[name="locals.' + key + '.font_size"]'
+      );
       if (size) size.value = patch.font_size;
     }
 
     if (patch.line_height != null) {
-      const line = form.querySelector('input[name="locals.' + key + '.line_height"]');
+      const line = form.querySelector(
+        'input[name="locals.' + key + '.line_height"]'
+      );
       if (line) line.value = patch.line_height;
     }
   });

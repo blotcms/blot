@@ -53,7 +53,9 @@ describe("local client init", function () {
   });
 
   it("subscribes through redisSubscriber and quits on SIGTERM", async function () {
-    const cleanup = jasmine.createSpy("cleanup").and.returnValue(Promise.resolve());
+    const cleanup = jasmine
+      .createSpy("cleanup")
+      .and.returnValue(Promise.resolve());
     const setup = jasmine.createSpy("setup");
     let captured;
 

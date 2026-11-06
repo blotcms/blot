@@ -17,7 +17,10 @@ function lines(body) {
   expect(packets[0].data.toString()).toBe("# service=git-upload-pack");
   return packets.slice(1).map((p) => {
     const [line, capabilities] = p.data.toString("latin1").split("\0");
-    return { line, capabilities: capabilities ? capabilities.split(" ") : null };
+    return {
+      line,
+      capabilities: capabilities ? capabilities.split(" ") : null,
+    };
   });
 }
 
@@ -26,7 +29,9 @@ describe("git store ref advertisement", function () {
 
   it("starts with the service line and a flush, and ends with a flush", function () {
     const body = advertise(manifestOf([], A));
-    expect(body.subarray(0, 4 + 26 + 4).toString()).toBe("001e# service=git-upload-pack\n0000");
+    expect(body.subarray(0, 4 + 26 + 4).toString()).toBe(
+      "001e# service=git-upload-pack\n0000"
+    );
     expect(body.subarray(body.length - 4).toString()).toBe("0000");
   });
 
@@ -64,15 +69,37 @@ describe("git store ref advertisement", function () {
     const found = lines(advertise(manifestOf([], null)));
     expect(found.length).toBe(1);
     expect(found[0].line).toBe("0".repeat(40) + " capabilities^{}");
-    expect(found[0].capabilities).toEqual(jasmine.arrayContaining(CAPABILITIES));
+    expect(found[0].capabilities).toEqual(
+      jasmine.arrayContaining(CAPABILITIES)
+    );
   });
 
   it("offers only what the clone implements", function () {
     const [first] = lines(advertise(manifestOf([], A)));
     const names = first.capabilities.map((c) => c.split("=")[0]);
 
-    expect(names).toEqual(jasmine.arrayContaining(["multi_ack_detailed", "no-done", "side-band-64k", "ofs-delta", "agent"]));
-    for (const not of ["shallow", "deepen-since", "deepen-not", "deepen-relative", "filter", "multi_ack", "thin-pack", "include-tag", "allow-tip-sha1-in-want", "allow-reachable-sha1-in-want", "side-band"]) {
+    expect(names).toEqual(
+      jasmine.arrayContaining([
+        "multi_ack_detailed",
+        "no-done",
+        "side-band-64k",
+        "ofs-delta",
+        "agent",
+      ])
+    );
+    for (const not of [
+      "shallow",
+      "deepen-since",
+      "deepen-not",
+      "deepen-relative",
+      "filter",
+      "multi_ack",
+      "thin-pack",
+      "include-tag",
+      "allow-tip-sha1-in-want",
+      "allow-reachable-sha1-in-want",
+      "side-band",
+    ]) {
       expect(names).not.toContain(not);
     }
     expect(first.capabilities).toContain("object-format=sha1");
@@ -92,8 +119,14 @@ describe("git store ref advertisement", function () {
   it("is read by git, which lists the refs", async function () {
     const dir = fx.tempDir();
     try {
-      const fixture = fx.buildFixture(dir + "/repo", { commits: 3, large: false });
-      const server = await startServer({ store: createMemoryStore(), manifest: () => manifestOf([], fixture.head, { v1: fixture.tag }) });
+      const fixture = fx.buildFixture(dir + "/repo", {
+        commits: 3,
+        large: false,
+      });
+      const server = await startServer({
+        store: createMemoryStore(),
+        manifest: () => manifestOf([], fixture.head, { v1: fixture.tag }),
+      });
       try {
         const listed = await runGit(["ls-remote", server.url]);
         expect(listed.code).toBe(0);

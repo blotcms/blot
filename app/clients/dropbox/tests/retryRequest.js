@@ -48,7 +48,9 @@ describe("dropbox retryRequest", function () {
 
   it("retries a network error", async function () {
     const networkError = Object.assign(
-      new Error("request to https://api.dropboxapi.com/2/files/list_folder failed, reason: "),
+      new Error(
+        "request to https://api.dropboxapi.com/2/files/list_folder failed, reason: "
+      ),
       { name: "FetchError", type: "system", code: "ETIMEDOUT" }
     );
     let calls = 0;

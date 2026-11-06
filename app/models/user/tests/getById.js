@@ -14,7 +14,7 @@ describe("user getById", function () {
     lastSession: "",
     passwordHash: "hash123",
     subscription: {},
-    paypal: {}
+    paypal: {},
   };
 
   beforeEach(async function () {
@@ -41,7 +41,7 @@ describe("user getById", function () {
   it("preserves existing created and welcomeEmailSent values", async function () {
     var userWithValues = Object.assign({}, validUser, {
       created: 1234567890,
-      welcomeEmailSent: false
+      welcomeEmailSent: false,
     });
     await client.set(key.user(uid), JSON.stringify(userWithValues));
     var result = await get(uid);
@@ -52,8 +52,12 @@ describe("user getById", function () {
   it("returns error for invalid JSON", async function () {
     await client.set(key.user(uid), "not valid json");
     var error = await get(uid).then(
-      function () { return null; },
-      function (err) { return err; }
+      function () {
+        return null;
+      },
+      function (err) {
+        return err;
+      }
     );
     expect(error).not.toBeNull();
     expect(error.message).toEqual("BADJSON");
@@ -62,8 +66,12 @@ describe("user getById", function () {
   it("returns error for JSON that is not an object", async function () {
     await client.set(key.user(uid), JSON.stringify("string value"));
     var error = await get(uid).then(
-      function () { return null; },
-      function (err) { return err; }
+      function () {
+        return null;
+      },
+      function (err) {
+        return err;
+      }
     );
     expect(error).not.toBeNull();
   });

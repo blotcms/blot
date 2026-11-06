@@ -9,9 +9,18 @@ const SOURCES_DIR = path.resolve(__dirname, "../../data/local-sources");
 
 // Map client types to their folder paths in development
 const CLIENT_FOLDERS = {
-  dropbox: path.join(os.homedir(), "/Library/CloudStorage/Dropbox/Apps/Blot test"),
-  "google-drive": path.join(os.homedir(), "/Library/CloudStorage/GoogleDrive-dmerfield@gmail.com/My Drive/Sites"),
-  icloud: path.join(os.homedir(), "/Library/Mobile Documents/com~apple~CloudDocs/Sites"),
+  dropbox: path.join(
+    os.homedir(),
+    "/Library/CloudStorage/Dropbox/Apps/Blot test"
+  ),
+  "google-drive": path.join(
+    os.homedir(),
+    "/Library/CloudStorage/GoogleDrive-dmerfield@gmail.com/My Drive/Sites"
+  ),
+  icloud: path.join(
+    os.homedir(),
+    "/Library/Mobile Documents/com~apple~CloudDocs/Sites"
+  ),
 };
 
 http
@@ -40,13 +49,14 @@ http
       // For the local client (or no client specified), open its source
       // directory (app/clients/local/source.js), named for the handle
       const handle = (url.searchParams.get("handle") || "").trim();
-      const source = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(handle) && !handle.includes("..")
-        ? path.join(SOURCES_DIR, handle)
-        : null;
+      const source =
+        /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(handle) && !handle.includes("..")
+          ? path.join(SOURCES_DIR, handle)
+          : null;
       folderPath = source && fs.existsSync(source) ? source : SOURCES_DIR;
     }
 
-    spawn("open", ['-R',folderPath], {
+    spawn("open", ["-R", folderPath], {
       detached: true,
       stdio: "ignore",
     }).unref();

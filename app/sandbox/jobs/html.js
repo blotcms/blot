@@ -59,7 +59,13 @@ function tooLarge(html) {
     }
 
     // The tag's name, then its attributes up to the ">"
-    while (i < end && !SPACE.test(html[i]) && html[i] !== "/" && html[i] !== ">") i++;
+    while (
+      i < end &&
+      !SPACE.test(html[i]) &&
+      html[i] !== "/" &&
+      html[i] !== ">"
+    )
+      i++;
     let attributes = 0;
     while (i < end) {
       while (i < end && (SPACE.test(html[i]) || html[i] === "/")) i++;
@@ -68,11 +74,19 @@ function tooLarge(html) {
         i++;
         break;
       }
-      if (++attributes > MAX_ATTRIBUTES) return "markup has a tag with too many attributes";
+      if (++attributes > MAX_ATTRIBUTES)
+        return "markup has a tag with too many attributes";
 
       // A name, which may start with "="
       i++;
-      while (i < end && !SPACE.test(html[i]) && html[i] !== "/" && html[i] !== ">" && html[i] !== "=") i++;
+      while (
+        i < end &&
+        !SPACE.test(html[i]) &&
+        html[i] !== "/" &&
+        html[i] !== ">" &&
+        html[i] !== "="
+      )
+        i++;
       while (i < end && SPACE.test(html[i])) i++;
       if (html[i] !== "=") continue;
 
@@ -106,7 +120,8 @@ function treeAdapter() {
   const check = (parent) => {
     let node = parent;
     for (let depth = 0; node; depth++) {
-      if (depth > MAX_DEPTH) throw new MarkupError("markup is nested too deeply");
+      if (depth > MAX_DEPTH)
+        throw new MarkupError("markup is nested too deeply");
       node = node.parent;
     }
   };
@@ -131,12 +146,17 @@ function parseDocument(html) {
   if (typeof html !== "string") throw new MarkupError("markup is not text");
   const reason = tooLarge(html);
   if (reason) throw new MarkupError(reason);
-  return require("parse5").parse(html, { scriptingEnabled: true, treeAdapter: treeAdapter() });
+  return require("parse5").parse(html, {
+    scriptingEnabled: true,
+    treeAdapter: treeAdapter(),
+  });
 }
 
 // cheerio, which is only loaded when something is parsed
 function load(html) {
-  return require("cheerio").load(parseDocument(html), { decodeEntities: false });
+  return require("cheerio").load(parseDocument(html), {
+    decodeEntities: false,
+  });
 }
 
 // Runs an operation, turning what hostile markup does to the parser and the
@@ -147,13 +167,15 @@ function guard(operation) {
     return operation();
   } catch (err) {
     if (err instanceof MarkupError) throw err;
-    if (err instanceof RangeError) throw new MarkupError("markup is nested too deeply");
+    if (err instanceof RangeError)
+      throw new MarkupError("markup is nested too deeply");
     throw err;
   }
 }
 
 function isHTTP(value) {
-  if (typeof value !== "string" || !value || value.length > MAX_URL_LENGTH) return false;
+  if (typeof value !== "string" || !value || value.length > MAX_URL_LENGTH)
+    return false;
   try {
     const { protocol } = new URL(value);
     return protocol === "http:" || protocol === "https:";
@@ -213,12 +235,17 @@ function pdfLink(href) {
 
 const KINDS = {
   images: { tag: "img", attribute: "src", wanted: isHTTP },
-  pdfs: { tag: "a", attribute: "href", wanted: (href) => isHTTP(href) && pdfLink(href) },
+  pdfs: {
+    tag: "a",
+    attribute: "href",
+    wanted: (href) => isHTTP(href) && pdfLink(href),
+  },
   audio: { tag: "audio", attribute: "src", wanted: isHTTP },
 };
 
 function kindOf(kind) {
-  if (!Object.prototype.hasOwnProperty.call(KINDS, kind)) throw new MarkupError("unknown kind");
+  if (!Object.prototype.hasOwnProperty.call(KINDS, kind))
+    throw new MarkupError("unknown kind");
   return KINDS[kind];
 }
 

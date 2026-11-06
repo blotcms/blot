@@ -6,7 +6,6 @@ const config = require("config");
 const build = require("documentation/build");
 
 describe("Blot's documentation'", function () {
-
   global.test.site();
   global.test.timeout(5 * 60 * 1000); // Set timeout to 5 minutes
 
@@ -78,7 +77,9 @@ describe("Blot's documentation'", function () {
     expect(
       logged.calls
         .allArgs()
-        .some((args) => args.join(" ").includes("Generated views are up to date"))
+        .some((args) =>
+          args.join(" ").includes("Generated views are up to date")
+        )
     ).toBe(true);
   });
 
@@ -182,7 +183,10 @@ describe("Blot's documentation'", function () {
       expect(await fs.readFile(probeBuilt, "utf8")).toEqual(probeContents);
 
       for (const name of ["fonts.html", "search.html", "template-list.html"]) {
-        const source = await fs.readFile(path.join(sourceDirectory, name), "utf8");
+        const source = await fs.readFile(
+          path.join(sourceDirectory, name),
+          "utf8"
+        );
         const built = await fs.readFile(
           path.join(config.views_directory, "templates", name),
           "utf8"
@@ -292,7 +296,9 @@ describe("Blot's documentation'", function () {
         build({ watch: false, skipZip: true }),
         build({ watch: false, skipZip: true }),
       ]);
-      const rejected = overlapped.filter((result) => result.status === "rejected");
+      const rejected = overlapped.filter(
+        (result) => result.status === "rejected"
+      );
       if (rejected.length) throw rejected[0].reason;
 
       await expectFingerprintRecorded();
@@ -320,7 +326,10 @@ describe("Blot's documentation'", function () {
       // check would treat the lock as live and wait out the ten-minute timeout.
       const lockPath = path.join(tmpDirectory, "documentation-build.lock");
       await fs.ensureDir(lockPath);
-      await fs.writeFile(path.join(lockPath, "pid"), process.pid + ":bogus-start");
+      await fs.writeFile(
+        path.join(lockPath, "pid"),
+        process.pid + ":bogus-start"
+      );
       const past = new Date(Date.now() - 60 * 1000);
       await fs.utimes(lockPath, past, past);
 
@@ -357,7 +366,11 @@ describe("Blot's documentation'", function () {
     expect(flat).toContain("a.html");
     expect(flat).toContain("b.html");
     expect(flat).toContain("c.html");
-    expect(batches[batches.length - 1].sort()).toEqual(["a.html", "b.html", "c.html"]);
+    expect(batches[batches.length - 1].sort()).toEqual([
+      "a.html",
+      "b.html",
+      "c.html",
+    ]);
   });
 
   it("updates changed tool pages", async function () {
@@ -384,10 +397,7 @@ describe("Blot's documentation'", function () {
       await fs.outputFile(sourcePath, "<h1>Change Test Tool</h1>");
       await build.rebuildTools();
 
-      await fs.outputFile(
-        sourcePath,
-        "<h1>Updated Change Test Tool</h1>"
-      );
+      await fs.outputFile(sourcePath, "<h1>Updated Change Test Tool</h1>");
       await build.rebuildTools();
 
       expect(await fs.readFile(generatedPath, "utf8")).toContain(

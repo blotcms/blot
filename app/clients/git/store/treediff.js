@@ -63,8 +63,12 @@ async function load(reader, oid) {
   if (!oid) return new Map();
 
   const tree = await reader.read(oid);
-  if (!tree) throw new NotFoundError("Tree " + oid + " is not in the repository");
-  if (tree.type !== "tree") throw new CorruptError("Object " + oid + " is a " + tree.type + ", not a tree");
+  if (!tree)
+    throw new NotFoundError("Tree " + oid + " is not in the repository");
+  if (tree.type !== "tree")
+    throw new CorruptError(
+      "Object " + oid + " is a " + tree.type + ", not a tree"
+    );
 
   return entriesOf(tree.data);
 }
@@ -78,7 +82,10 @@ function readAhead(reader, pairs, concurrency) {
 
   function start(i) {
     if (i >= pairs.length || started[i]) return;
-    started[i] = Promise.all([load(reader, pairs[i][0]), load(reader, pairs[i][1])]);
+    started[i] = Promise.all([
+      load(reader, pairs[i][0]),
+      load(reader, pairs[i][1]),
+    ]);
     started[i].catch(function () {});
   }
 
@@ -115,17 +122,32 @@ async function* walk(reader, left, right, prefix, valid, concurrency) {
     if (l && r && l.mode === r.mode && l.oid === r.oid) continue;
 
     if (isTree(l) && !isTree(r)) gone.push(l);
-    else if (l && !isTree(l) && (!r || isTree(r))) yield change(prefix, valid, l, null);
+    else if (l && !isTree(l) && (!r || isTree(r)))
+      yield change(prefix, valid, l, null);
 
     if (isTree(r)) later.push({ pair: [isTree(l) ? l.oid : null, r.oid, r] });
-    else if (r) later.push({ file: change(prefix, valid, l && !isTree(l) ? l : null, r) });
+    else if (r)
+      later.push({
+        file: change(prefix, valid, l && !isTree(l) ? l : null, r),
+      });
   }
 
   // Directories which go away, with everything in them, before anything else
-  const goneAhead = readAhead(reader, gone.map((entry) => [entry.oid, null]), concurrency);
+  const goneAhead = readAhead(
+    reader,
+    gone.map((entry) => [entry.oid, null]),
+    concurrency
+  );
   for (let i = 0; i < gone.length; i++) {
     const [l, r] = await goneAhead(i);
-    yield* walk(reader, l, r, prefix + gone[i].name + "/", valid && gone[i].valid, concurrency);
+    yield* walk(
+      reader,
+      l,
+      r,
+      prefix + gone[i].name + "/",
+      valid && gone[i].valid,
+      concurrency
+    );
   }
 
   const pairs = later.filter((item) => item.pair).map((item) => item.pair);
@@ -140,11 +162,23 @@ async function* walk(reader, left, right, prefix, valid, concurrency) {
 
     const entry = item.pair[2];
     const [l, r] = await ahead(next++);
-    yield* walk(reader, l, r, prefix + entry.name + "/", valid && entry.valid, concurrency);
+    yield* walk(
+      reader,
+      l,
+      r,
+      prefix + entry.name + "/",
+      valid && entry.valid,
+      concurrency
+    );
   }
 }
 
-async function* diffTrees({ reader, a = null, b = null, concurrency = DEFAULT_CONCURRENCY }) {
+async function* diffTrees({
+  reader,
+  a = null,
+  b = null,
+  concurrency = DEFAULT_CONCURRENCY,
+}) {
   if (normalize(a) === normalize(b)) return;
 
   const [left, right] = await Promise.all([load(reader, a), load(reader, b)]);

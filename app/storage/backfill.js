@@ -26,8 +26,9 @@ const STALE_AFTER_MS = 2000;
 // Keys which may not survive a trip from a CDN URL to the bucket unchanged:
 // characters which are special in URLs, control characters, spaces at the
 // ends of a path segment, and anything non-ASCII.
-// eslint-disable-next-line no-control-regex
-const ODD_KEY = /[+%#?\\\u0000-\u001f\u007f]|[^\u0000-\u007f]|(^|\/)\s|\s(\/|$)/;
+const ODD_KEY =
+  // eslint-disable-next-line no-control-regex
+  /[+%#?\\\u0000-\u001f\u007f]|[^\u0000-\u007f]|(^|\/)\s|\s(\/|$)/;
 
 const MAX_LISTED = {
   keys: 50,
@@ -114,7 +115,9 @@ async function backfill(options) {
     log(
       "[backfill] blogs=" + stats.blogs,
       "scanned=" + stats.scanned,
-      (readonly ? "to-upload=" + (stats.missing + stats.mismatched + stats.stale) : "uploaded=" + stats.uploaded),
+      readonly
+        ? "to-upload=" + (stats.missing + stats.mismatched + stats.stale)
+        : "uploaded=" + stats.uploaded,
       "bytes=" + formatBytes(stats.bytes),
       "errors=" + stats.errors,
       "rate=" + (stats.scanned / seconds).toFixed(0) + " files/s",
@@ -139,7 +142,12 @@ async function backfill(options) {
     const name = rel.indexOf("/") === -1 ? "(top level)" : rel.split("/")[0];
 
     if (!stats.bySubdirectory[name]) {
-      stats.bySubdirectory[name] = { scanned: 0, missing: 0, mismatched: 0, stale: 0 };
+      stats.bySubdirectory[name] = {
+        scanned: 0,
+        missing: 0,
+        mismatched: 0,
+        stale: 0,
+      };
     }
 
     return stats.bySubdirectory[name];
@@ -150,7 +158,8 @@ async function backfill(options) {
   const ignored = [];
 
   for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
-    if (entry.isDirectory() && /^blog_/.test(entry.name)) names.push(entry.name);
+    if (entry.isDirectory() && /^blog_/.test(entry.name))
+      names.push(entry.name);
     else ignored.push(entry.name);
   }
 
@@ -158,7 +167,9 @@ async function backfill(options) {
   stats.ignored = ignored.length;
 
   log(
-    "[backfill] ignoring " + ignored.length + " entries which aren't blog_* directories" +
+    "[backfill] ignoring " +
+      ignored.length +
+      " entries which aren't blog_* directories" +
       (ignored.length
         ? ", e.g. " + ignored.slice(0, MAX_LISTED.ignored).join(", ")
         : "")
@@ -176,7 +187,9 @@ async function backfill(options) {
   log(
     "[backfill] " +
       (verify ? "verifying" : dryRun ? "dry run over" : "uploading") +
-      " " + blogs.length + " blogs"
+      " " +
+      blogs.length +
+      " blogs"
   );
 
   const pool = createPool(concurrency);
@@ -187,7 +200,10 @@ async function backfill(options) {
 
     try {
       for await (const object of s3.listScope(blogID)) {
-        remote.set(object.key, { size: object.size, modified: object.modified });
+        remote.set(object.key, {
+          size: object.size,
+          modified: object.modified,
+        });
       }
     } catch (err) {
       return fail("listing " + blogID, err);
@@ -230,7 +246,10 @@ async function backfill(options) {
       } else if (object.size !== size) {
         stats.mismatched++;
         subdirectory(rel).mismatched++;
-      } else if (object.modified && mtimeMs > object.modified.getTime() + STALE_AFTER_MS) {
+      } else if (
+        object.modified &&
+        mtimeMs > object.modified.getTime() + STALE_AFTER_MS
+      ) {
         stats.stale++;
         subdirectory(rel).stale++;
       } else {
@@ -286,8 +305,15 @@ function summarise(stats, options) {
 
   lines.push("");
   lines.push(
-    "Scanned " + stats.scanned + " files in " + stats.blogs + " blogs in " +
-      stats.seconds.toFixed(1) + "s (" + stats.ignored + " entries ignored)"
+    "Scanned " +
+      stats.scanned +
+      " files in " +
+      stats.blogs +
+      " blogs in " +
+      stats.seconds.toFixed(1) +
+      "s (" +
+      stats.ignored +
+      " entries ignored)"
   );
 
   if (options.verify) {
@@ -296,23 +322,44 @@ function summarise(stats, options) {
     lines.push("Stale in the bucket (changed on disk since): " + stats.stale);
   } else if (options.dryRun) {
     lines.push(
-      "Would upload " + (stats.missing + stats.mismatched + stats.stale) + " files (" +
-        stats.missing + " missing, " + stats.mismatched + " different size, " +
-        stats.stale + " stale), " +
+      "Would upload " +
+        (stats.missing + stats.mismatched + stats.stale) +
+        " files (" +
+        stats.missing +
+        " missing, " +
+        stats.mismatched +
+        " different size, " +
+        stats.stale +
+        " stale), " +
         formatBytes(stats.bytes)
     );
   } else {
-    lines.push("Uploaded " + stats.uploaded + " files, " + formatBytes(stats.bytes));
+    lines.push(
+      "Uploaded " + stats.uploaded + " files, " + formatBytes(stats.bytes)
+    );
   }
 
   if (names.length) {
     lines.push("");
-    lines.push("By directory (scanned / " + (readonly ? "" : "had been ") + "missing / different size / stale):");
+    lines.push(
+      "By directory (scanned / " +
+        (readonly ? "" : "had been ") +
+        "missing / different size / stale):"
+    );
 
     for (const name of names) {
       const entry = stats.bySubdirectory[name];
       lines.push(
-        "  " + name + ": " + entry.scanned + " / " + entry.missing + " / " + entry.mismatched + " / " + entry.stale
+        "  " +
+          name +
+          ": " +
+          entry.scanned +
+          " / " +
+          entry.missing +
+          " / " +
+          entry.mismatched +
+          " / " +
+          entry.stale
       );
     }
   }
@@ -325,10 +372,15 @@ function summarise(stats, options) {
       count +
         " keys may not survive a plain CDN to bucket URL (+ % # ? \\ control" +
         " characters, spaces at the ends of a name, non-ASCII)" +
-        (count > stats.oddKeys.keys.length ? "; the first " + stats.oddKeys.keys.length + ":" : count ? ":" : "")
+        (count > stats.oddKeys.keys.length
+          ? "; the first " + stats.oddKeys.keys.length + ":"
+          : count
+            ? ":"
+            : "")
     );
 
-    for (const key of stats.oddKeys.keys) lines.push("  " + JSON.stringify(key));
+    for (const key of stats.oddKeys.keys)
+      lines.push("  " + JSON.stringify(key));
   }
 
   lines.push("");
@@ -341,7 +393,11 @@ function summarise(stats, options) {
 function failed(stats, options) {
   if (stats.errors) return true;
 
-  return !!(options && options.verify && (stats.missing || stats.mismatched || stats.stale));
+  return !!(
+    options &&
+    options.verify &&
+    (stats.missing || stats.mismatched || stats.stale)
+  );
 }
 
 module.exports = { backfill, summarise, failed, isOddKey };

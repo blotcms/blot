@@ -26,7 +26,9 @@ describe("cdn serving a blog's assets", function () {
   it("serves a file with a year of caching and CORS", async function () {
     await assets.write(this.blog.id, "_image_cache/a/photo.png", "png-bytes");
 
-    const res = await fetch(origin + "/" + this.blog.id + "/_image_cache/a/photo.png");
+    const res = await fetch(
+      origin + "/" + this.blog.id + "/_image_cache/a/photo.png"
+    );
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("png-bytes");
@@ -39,7 +41,9 @@ describe("cdn serving a blog's assets", function () {
   it("decodes the path", async function () {
     await assets.write(this.blog.id, "_template_assets/a b.png", "spaced");
 
-    const res = await fetch(origin + "/" + this.blog.id + "/_template_assets/a%20b.png");
+    const res = await fetch(
+      origin + "/" + this.blog.id + "/_template_assets/a%20b.png"
+    );
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("spaced");
@@ -107,21 +111,24 @@ describe("cdn serving a blog's assets", function () {
     await assets.write(other, "_assets/secret.txt", "secret");
 
     try {
-      const status = await new Promise(function (resolve, reject) {
-        http
-          .get(
-            {
-              host: "127.0.0.1",
-              port: server.address().port,
-              path: "/" + this.blog.id + "/../" + other + "/_assets/secret.txt",
-            },
-            function (res) {
-              res.resume();
-              resolve(res.statusCode);
-            }
-          )
-          .on("error", reject);
-      }.bind(this));
+      const status = await new Promise(
+        function (resolve, reject) {
+          http
+            .get(
+              {
+                host: "127.0.0.1",
+                port: server.address().port,
+                path:
+                  "/" + this.blog.id + "/../" + other + "/_assets/secret.txt",
+              },
+              function (res) {
+                res.resume();
+                resolve(res.statusCode);
+              }
+            )
+            .on("error", reject);
+        }.bind(this)
+      );
 
       expect(status).toBe(403);
     } finally {

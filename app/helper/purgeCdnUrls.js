@@ -110,7 +110,8 @@ async function purgeCdnUrls(urls) {
 
   for (const urlToPurge of urls) {
     try {
-      if (!(await limiter.schedule(() => purgeUrlWithRetries(urlToPurge)))) ok = false;
+      if (!(await limiter.schedule(() => purgeUrlWithRetries(urlToPurge))))
+        ok = false;
     } catch (err) {
       ok = false;
       console.error(`Error purging Bunny CDN: ${urlToPurge}`, err);

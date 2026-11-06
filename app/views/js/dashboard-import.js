@@ -49,7 +49,8 @@ function renderImportStatus(statusNode, message) {
     statusContainer.classList.add("has-progress");
     if (progress) progress.style.display = "block";
     if (progressBar) progressBar.style.width = roundedPercent + "%";
-    if (progressLabel) progressLabel.textContent = roundedPercent + "% complete";
+    if (progressLabel)
+      progressLabel.textContent = roundedPercent + "% complete";
   } else if (statusContainer) {
     statusContainer.classList.remove("has-progress");
     if (progress) progress.style.display = "none";

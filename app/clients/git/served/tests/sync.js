@@ -20,7 +20,8 @@ describe("git store: the blog folder from the store", function () {
 
   // How many times the sync wrote the file (Blot's own build may write others)
   function writesTo(file) {
-    return storage.write.calls.allArgs().filter((args) => args[1] === file).length;
+    return storage.write.calls.allArgs().filter((args) => args[1] === file)
+      .length;
   }
 
   function syncAgain(ctx) {
@@ -35,8 +36,11 @@ describe("git store: the blog folder from the store", function () {
     await this.local.writeAndPush("/a.txt", "A");
     await this.local.writeAndPush("/gone.txt", "Gone");
 
-
-    await this.local.commitFiles({ "/a.txt": "A, changed", "/b/c/d.txt": "D", "/Ünïcode.txt": "U" });
+    await this.local.commitFiles({
+      "/a.txt": "A, changed",
+      "/b/c/d.txt": "D",
+      "/Ünïcode.txt": "U",
+    });
     await this.local.remove("/gone.txt");
     await this.local.commit("Remove gone.txt");
     await this.local.push();
@@ -58,7 +62,10 @@ describe("git store: the blog folder from the store", function () {
 
     await this.local.expectSynced();
     expect(storage.move).toHaveBeenCalledTimes(1);
-    expect(storage.move.calls.argsFor(0).slice(1)).toEqual(["/old/place.txt", "/new-place.txt"]);
+    expect(storage.move.calls.argsFor(0).slice(1)).toEqual([
+      "/old/place.txt",
+      "/new-place.txt",
+    ]);
     expect(writesTo("/new-place.txt")).toBe(0);
     expect(await folder.has(this.blog.id, "/old")).toBe(false);
   });
@@ -80,8 +87,12 @@ describe("git store: the blog folder from the store", function () {
 
     await this.local.expectSynced();
     expect(storage.move).not.toHaveBeenCalled();
-    expect((await folder.read(this.blog.id, "/a")).toString()).toBe("Same bytes");
-    expect((await folder.read(this.blog.id, "/c/d.txt")).toString()).toBe("Other bytes");
+    expect((await folder.read(this.blog.id, "/a")).toString()).toBe(
+      "Same bytes"
+    );
+    expect((await folder.read(this.blog.id, "/c/d.txt")).toString()).toBe(
+      "Other bytes"
+    );
   });
 
   it("writes a renamed file from the store when the folder's copy is not the old blob", async function () {
@@ -89,7 +100,11 @@ describe("git store: the blog folder from the store", function () {
 
     // A sync which wrote other bytes there and failed before moving the
     // applied commit on
-    await folder.write(this.blog.id, "/old.txt", "Bytes from a sync that failed");
+    await folder.write(
+      this.blog.id,
+      "/old.txt",
+      "Bytes from a sync that failed"
+    );
 
     spyOn(storage, "move").and.callThrough();
 
@@ -99,7 +114,9 @@ describe("git store: the blog folder from the store", function () {
 
     await this.local.expectSynced();
     expect(storage.move).not.toHaveBeenCalled();
-    expect((await folder.read(this.blog.id, "/new.txt")).toString()).toBe("The committed bytes");
+    expect((await folder.read(this.blog.id, "/new.txt")).toString()).toBe(
+      "The committed bytes"
+    );
     expect(await folder.has(this.blog.id, "/old.txt")).toBe(false);
   });
 
@@ -114,7 +131,9 @@ describe("git store: the blog folder from the store", function () {
     await this.local.commit("NFD to NFC");
     await this.local.push();
 
-    expect((await folder.read(this.blog.id, nfc)).toString()).toBe("Same bytes");
+    expect((await folder.read(this.blog.id, nfc)).toString()).toBe(
+      "Same bytes"
+    );
     await this.local.expectSynced();
   });
 
@@ -123,7 +142,11 @@ describe("git store: the blog folder from the store", function () {
     await this.local.push();
 
     // As if nothing had been applied: everything is compared again
-    await new Promise((resolve, reject) => database.setApplied(this.blog.id, EMPTY_TREE, (err) => (err ? reject(err) : resolve())));
+    await new Promise((resolve, reject) =>
+      database.setApplied(this.blog.id, EMPTY_TREE, (err) =>
+        err ? reject(err) : resolve()
+      )
+    );
 
     spyOn(storage, "write").and.callThrough();
     await syncAgain(this);
@@ -148,7 +171,8 @@ describe("git store: the blog folder from the store", function () {
     await this.local.writeAndPush("/a.txt", "A");
     var before = await applied(this.blog.id);
 
-    this.stores[this.blog.id] = require("clients/git/store").createMemoryStore();
+    this.stores[this.blog.id] =
+      require("clients/git/store").createMemoryStore();
     require("clients/git/served/context")._reset();
 
     var failed = await syncAgain(this).then(

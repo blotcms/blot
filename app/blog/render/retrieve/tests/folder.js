@@ -86,7 +86,9 @@ describe("folder", function () {
     const byName = (name) => result.contents.find((item) => item.name === name);
 
     expect(byName("photo.jpg").url).toMatch(
-      new RegExp("^%%BLOT_CDN%%/folder/v-[^/]+/" + this.blog.id + "/photo\\.jpg$")
+      new RegExp(
+        "^%%BLOT_CDN%%/folder/v-[^/]+/" + this.blog.id + "/photo\\.jpg$"
+      )
     );
     expect(byName("sub").url).toEqual("/sub");
     expect(byName("page.html").url).toEqual("/page.html");
@@ -99,7 +101,7 @@ describe("folder", function () {
     await this.write({ path: "/sub/b.txt", content: "World" });
     await this.template({
       "entries.html":
-        "{{#folder}}{{#contents}}<a href=\"{{{url}}}\">{{name}}</a>{{/contents}}{{/folder}}",
+        '{{#folder}}{{#contents}}<a href="{{{url}}}">{{name}}</a>{{/contents}}{{/folder}}',
     });
 
     const html = await this.text("/");
@@ -109,7 +111,11 @@ describe("folder", function () {
 
     expect(html).toMatch(
       new RegExp(
-        '<a href="https?://' + escaped + "/folder/v-[^/]+/" + this.blog.id + '/photo\\.jpg">photo.jpg</a>'
+        '<a href="https?://' +
+          escaped +
+          "/folder/v-[^/]+/" +
+          this.blog.id +
+          '/photo\\.jpg">photo.jpg</a>'
       )
     );
     expect(html).toContain('<a href="/sub">sub</a>');
@@ -129,7 +135,11 @@ describe("folder", function () {
     const item = result.contents.find((item) => item.name === "photo.jpg");
 
     expect(item.url).toEqual(
-      "%%BLOT_CDN%%/folder/v-" + contentVersion.fromFolderStat(stat) + "/" + this.blog.id + "/photo.jpg"
+      "%%BLOT_CDN%%/folder/v-" +
+        contentVersion.fromFolderStat(stat) +
+        "/" +
+        this.blog.id +
+        "/photo.jpg"
     );
     expect(item.updated).toEqual(new Date(Math.round(stat.modified)));
     expect(item.updated instanceof Date).toBe(true);

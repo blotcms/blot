@@ -27,7 +27,16 @@
 // objects) is passed through.
 const { Readable } = require("stream");
 
-const OPS = ["head", "read", "get", "stream", "put", "putIfAbsent", "delete", "list"];
+const OPS = [
+  "head",
+  "read",
+  "get",
+  "stream",
+  "put",
+  "putIfAbsent",
+  "delete",
+  "list",
+];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -37,12 +46,20 @@ function matches(want, key) {
 }
 
 function cut(body, truncate) {
-  return body.subarray(0, typeof truncate === "function" ? truncate(body) : truncate);
+  return body.subarray(
+    0,
+    typeof truncate === "function" ? truncate(body) : truncate
+  );
 }
 
 function createFaultyStore(inner) {
   const schedule = [];
-  const wrapped = { ...inner, calls: [], inject, pending: () => schedule.length };
+  const wrapped = {
+    ...inner,
+    calls: [],
+    inject,
+    pending: () => schedule.length,
+  };
 
   function inject(op, fault) {
     if (!OPS.includes(op)) throw new Error("No such operation: " + op);
@@ -79,12 +96,14 @@ function createFaultyStore(inner) {
       const out = await inner[op](key, ...args);
       if (fault.after) throw fault.after;
       if ("result" in fault) return fault.result;
-      if (fault.truncate !== undefined && Buffer.isBuffer(out)) return cut(out, fault.truncate);
+      if (fault.truncate !== undefined && Buffer.isBuffer(out))
+        return cut(out, fault.truncate);
       return out;
     };
   }
 
-  for (const op of ["head", "read", "get", "put", "putIfAbsent", "delete"]) wrap(op);
+  for (const op of ["head", "read", "get", "put", "putIfAbsent", "delete"])
+    wrap(op);
 
   wrapped.stream = (key, ...args) => {
     const fault = take("stream", key);
@@ -99,7 +118,8 @@ function createFaultyStore(inner) {
       } else {
         // The body is read whole so a function can decide where to cut it
         const whole = [];
-        for await (const chunk of inner.stream(key, ...args)) whole.push(Buffer.from(chunk));
+        for await (const chunk of inner.stream(key, ...args))
+          whole.push(Buffer.from(chunk));
         yield cut(Buffer.concat(whole), fault.truncate);
       }
       if (fault.after) throw fault.after;

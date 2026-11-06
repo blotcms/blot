@@ -80,10 +80,14 @@ module.exports = function clone(fromID, toID, metadata, callback) {
           // Its views and metadata were saved with new template cacheIDs, so
           // no cached full views are reused; the blog's own is bumped first
           // if it has the clone installed.
-          cacheID.bumpBlogIfInstalled(metadata.owner, toID, function (cacheErr) {
-            if (cacheErr) return callback(cacheErr);
-            updateCdnManifest(toID, callback);
-          });
+          cacheID.bumpBlogIfInstalled(
+            metadata.owner,
+            toID,
+            function (cacheErr) {
+              if (cacheErr) return callback(cacheErr);
+              updateCdnManifest(toID, callback);
+            }
+          );
         });
       });
     });

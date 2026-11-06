@@ -23,11 +23,10 @@ module.exports = async function (req, res, next) {
 
             // Fetch template metadata
             Template.getMetadata(blog.template, (err, metadata) => {
-
               if (metadata) {
                 // Assign the metadata and construct the previewURL
                 blog.template = metadata;
-                blog.previewURL = `https://preview-of-${metadata.owner === blog.id ? 'my-' : ''}${metadata.slug}-on-${blog.handle}.${config.host}?screenshot=true`;
+                blog.previewURL = `https://preview-of-${metadata.owner === blog.id ? "my-" : ""}${metadata.slug}-on-${blog.handle}.${config.host}?screenshot=true`;
               }
 
               resolve(blog);
@@ -37,12 +36,12 @@ module.exports = async function (req, res, next) {
       })
     );
 
-    const existing = blogs.filter(blog => blog !== null);
+    const existing = blogs.filter((blog) => blog !== null);
 
     await Promise.all(existing.map(getBlogHealth));
 
     req.blogs = res.locals.blogs = existing;
-    
+
     next();
   } catch (error) {
     next(error);

@@ -78,7 +78,6 @@ const startServer = async () => {
 // Main entry point
 (async () => {
   try {
-
     // Test connectivity with the remote server
     console.log(clfdate(), "Pinging remote server...");
     try {
@@ -92,13 +91,16 @@ const startServer = async () => {
     await startServer();
 
     // Initialize the file watcher
-    console.log(clfdate(), "Initializing file watchers for existing folders...");
+    console.log(
+      clfdate(),
+      "Initializing file watchers for existing folders..."
+    );
     await initialize();
 
     // Start the monitorer to keep iCloud in sync
     console.log(clfdate(), "Starting iCloud monitorer...");
     monitorer();
-    
+
     console.log(clfdate(), "Macserver started successfully");
   } catch (error) {
     console.error(clfdate(), "Error starting macserver:", error);

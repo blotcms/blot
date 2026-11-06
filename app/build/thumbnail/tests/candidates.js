@@ -15,16 +15,15 @@ describe("candidates", function () {
       "/first-image.jpg",
       "https://i.ytimg.com/vi/YaT_5KoGh1Q/maxresdefault.jpg",
       "http://img.youtube.com/vi/YaT_5KoGh1Q/mqdefault.jpg",
-      "/second-image.jpg"
+      "/second-image.jpg",
     ]);
   });
-
 
   it("uses mixed-case thumbnail metadata", function () {
     var metadata = { ThUmBnAiL: "http://example.com/mixed.jpg" };
 
     expect(candidates(metadata, "<p>Hello</p>")).toEqual([
-      "http://example.com/mixed.jpg"
+      "http://example.com/mixed.jpg",
     ]);
   });
 

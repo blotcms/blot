@@ -41,7 +41,6 @@ describe("plugin runner", function () {
     expect(dependencies).toContain("/target");
   });
 
-
   it("does not treat user-authored .wikilink classes as generated markers", async function () {
     const plugins = { wikilinks: { enabled: true, options: {} } };
     const contents = '<a href="target" class="wikilink">wikilink</a>';
@@ -64,7 +63,8 @@ describe("plugin runner", function () {
 
   it("ignores plugins that return no result", async function () {
     const plugins = { autoImage: { enabled: true, options: {} } };
-    const contents = "<p><a href='https://elsewhere.test/image.jpg'>https://elsewhere.test/image.jpg</a></p>";
+    const contents =
+      "<p><a href='https://elsewhere.test/image.jpg'>https://elsewhere.test/image.jpg</a></p>";
 
     const { dependencies } = await runPlugins(plugins, contents);
 

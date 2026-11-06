@@ -23,7 +23,10 @@ describe("git store objects", function () {
 
   beforeAll(function () {
     dir = fx.tempDir();
-    fixture = fx.buildFixture(path.join(dir, "src"), { commits: 4, large: false });
+    fixture = fx.buildFixture(path.join(dir, "src"), {
+      commits: 4,
+      large: false,
+    });
   });
 
   afterAll(() => fx.remove(dir));
@@ -31,12 +34,22 @@ describe("git store objects", function () {
   const src = () => path.join(dir, "src");
 
   it("parses a commit", function () {
-    const commit = objects.parseCommit(fx.git(src(), ["cat-file", "commit", fixture.head]));
-    expect(commit.tree).toBe(fx.text(src(), ["rev-parse", fixture.head + "^{tree}"]));
-    expect(commit.parents).toEqual([fixture.commits[fixture.commits.length - 2]]);
+    const commit = objects.parseCommit(
+      fx.git(src(), ["cat-file", "commit", fixture.head])
+    );
+    expect(commit.tree).toBe(
+      fx.text(src(), ["rev-parse", fixture.head + "^{tree}"])
+    );
+    expect(commit.parents).toEqual([
+      fixture.commits[fixture.commits.length - 2],
+    ]);
     expect(commit.author).toMatch(/^Test <test@example.com> \d+ /);
     expect(commit.message).toBe("Commit 4\n");
-    expect(objects.parseCommit(fx.git(src(), ["cat-file", "commit", fixture.commits[0]])).parents).toEqual([]);
+    expect(
+      objects.parseCommit(
+        fx.git(src(), ["cat-file", "commit", fixture.commits[0]])
+      ).parents
+    ).toEqual([]);
   });
 
   it("parses a merge and a signature header", function () {
@@ -67,44 +80,83 @@ describe("git store objects", function () {
         const [mode, , oid, name] = line.split(/[\t ]/);
         return { mode: String(Number(mode)), oid, name };
       });
-    const tree = objects.parseTree(fx.git(src(), ["cat-file", "tree", fixture.head + "^{tree}"]));
+    const tree = objects.parseTree(
+      fx.git(src(), ["cat-file", "tree", fixture.head + "^{tree}"])
+    );
 
-    expect(tree.map((e) => ({ mode: e.mode, oid: e.oid, name: e.name }))).toEqual(listing);
+    expect(
+      tree.map((e) => ({ mode: e.mode, oid: e.oid, name: e.name }))
+    ).toEqual(listing);
     expect(tree.some(objects.isDirectory)).toBe(true);
     expect(tree.some(objects.isGitlink)).toBe(false);
     expect(objects.parseTree(Buffer.alloc(0))).toEqual([]);
   });
 
   it("parses a tag", function () {
-    const tag = objects.parseTag(fx.git(src(), ["cat-file", "tag", fixture.tag]));
-    expect(tag).toEqual(jasmine.objectContaining({ object: fixture.head, type: "commit", tag: "v1", message: "Version 1\n" }));
+    const tag = objects.parseTag(
+      fx.git(src(), ["cat-file", "tag", fixture.tag])
+    );
+    expect(tag).toEqual(
+      jasmine.objectContaining({
+        object: fixture.head,
+        type: "commit",
+        tag: "v1",
+        message: "Version 1\n",
+      })
+    );
   });
 
   it("rejects what is not an object of that kind", function () {
-    expect(fails(() => objects.parseCommit(Buffer.from("hello\n")))).toEqual(jasmine.any(CorruptError));
-    expect(fails(() => objects.parseCommit(Buffer.from("tree xyz\nauthor a\ncommitter a\n\nm")))).toEqual(jasmine.any(CorruptError));
-    expect(fails(() => objects.parseTree(Buffer.from("100644 name\0short")))).toEqual(jasmine.any(CorruptError));
-    expect(fails(() => objects.parseTree(Buffer.from("junk"))))
-      .toEqual(jasmine.any(CorruptError));
-    expect(fails(() => objects.parseTag(Buffer.from("object " + "a".repeat(40) + "\n\nno type")))).toEqual(jasmine.any(CorruptError));
+    expect(fails(() => objects.parseCommit(Buffer.from("hello\n")))).toEqual(
+      jasmine.any(CorruptError)
+    );
+    expect(
+      fails(() =>
+        objects.parseCommit(Buffer.from("tree xyz\nauthor a\ncommitter a\n\nm"))
+      )
+    ).toEqual(jasmine.any(CorruptError));
+    expect(
+      fails(() => objects.parseTree(Buffer.from("100644 name\0short")))
+    ).toEqual(jasmine.any(CorruptError));
+    expect(fails(() => objects.parseTree(Buffer.from("junk")))).toEqual(
+      jasmine.any(CorruptError)
+    );
+    expect(
+      fails(() =>
+        objects.parseTag(
+          Buffer.from("object " + "a".repeat(40) + "\n\nno type")
+        )
+      )
+    ).toEqual(jasmine.any(CorruptError));
   });
 
   describe("reverse index", function () {
     for (const refDeltas of [false, true]) {
-      it("matches git's own, for a pack with " + (refDeltas ? "REF_DELTA" : "OFS_DELTA") + " entries", function () {
-        fx.repackAll(src(), { refDeltas });
-        const [pack] = fx.readPacks(src());
+      it(
+        "matches git's own, for a pack with " +
+          (refDeltas ? "REF_DELTA" : "OFS_DELTA") +
+          " entries",
+        function () {
+          fx.repackAll(src(), { refDeltas });
+          const [pack] = fx.readPacks(src());
 
-        const work = fx.tempDir();
-        try {
-          fs.writeFileSync(path.join(work, "in.pack"), pack.pack);
-          fx.git(work, ["index-pack", "--rev-index", "in.pack"]);
-          expect(buildRev(fs.readFileSync(path.join(work, "in.idx"))).equals(fs.readFileSync(path.join(work, "in.rev")))).toBe(true);
-          expect(buildRev(pack.idx).length).toBe(12 + 4 * fx.listEntries(pack).length + 40);
-        } finally {
-          fx.remove(work);
+          const work = fx.tempDir();
+          try {
+            fs.writeFileSync(path.join(work, "in.pack"), pack.pack);
+            fx.git(work, ["index-pack", "--rev-index", "in.pack"]);
+            expect(
+              buildRev(fs.readFileSync(path.join(work, "in.idx"))).equals(
+                fs.readFileSync(path.join(work, "in.rev"))
+              )
+            ).toBe(true);
+            expect(buildRev(pack.idx).length).toBe(
+              12 + 4 * fx.listEntries(pack).length + 40
+            );
+          } finally {
+            fx.remove(work);
+          }
         }
-      });
+      );
     }
 
     it("reads offsets from the table for packs over 2 GB", function () {
@@ -124,25 +176,45 @@ describe("git store objects", function () {
     afterEach(() => fx.remove(path.dirname(file)));
 
     it("finds the bases a thin pack needs and does not contain", async function () {
-      fs.writeFileSync(path.join(src(), "docs", "big.txt"), fs.readFileSync(path.join(src(), "docs", "big.txt"), "utf8").replace("line 3 ", "line 3 more "));
+      fs.writeFileSync(
+        path.join(src(), "docs", "big.txt"),
+        fs
+          .readFileSync(path.join(src(), "docs", "big.txt"), "utf8")
+          .replace("line 3 ", "line 3 more ")
+      );
       fx.git(src(), ["commit", "-q", "-am", "Edit"]);
       const tip = fx.text(src(), ["rev-parse", "HEAD"]);
 
-      fs.writeFileSync(file, fx.packRevs(src(), [tip], [fixture.head], { thin: true }));
+      fs.writeFileSync(
+        file,
+        fx.packRevs(src(), [tip], [fixture.head], { thin: true })
+      );
       const scanned = await scanPack(file);
 
-      expect(scanned.count).toBe(fx.text(src(), ["rev-list", "--objects", tip, "^" + fixture.head]).split("\n").length);
+      expect(scanned.count).toBe(
+        fx
+          .text(src(), ["rev-list", "--objects", tip, "^" + fixture.head])
+          .split("\n").length
+      );
       expect(scanned.whole.has(tip)).toBe(true);
-      const outside = [...scanned.bases].filter((oid) => !scanned.whole.has(oid));
+      const outside = [...scanned.bases].filter(
+        (oid) => !scanned.whole.has(oid)
+      );
       expect(outside.length).toBeGreaterThan(0);
-      for (const oid of outside) expect(fx.text(src(), ["cat-file", "-t", oid])).toMatch(/blob|tree/);
+      for (const oid of outside)
+        expect(fx.text(src(), ["cat-file", "-t", oid])).toMatch(/blob|tree/);
     });
 
     it("names only objects of the pack as bases, in one which is complete", async function () {
       // Without ofs-delta a delta against another delta in the pack is named by ID too
       fs.writeFileSync(file, fx.packRevs(src(), [fixture.head], []));
       const scanned = await scanPack(file);
-      const inPack = new Set(fx.text(src(), ["rev-list", "--objects", fixture.head]).split("\n").map((line) => line.split(" ")[0]));
+      const inPack = new Set(
+        fx
+          .text(src(), ["rev-list", "--objects", fixture.head])
+          .split("\n")
+          .map((line) => line.split(" ")[0])
+      );
 
       expect(scanned.whole.has(fixture.head)).toBe(true);
       for (const oid of scanned.bases) expect(inPack.has(oid)).toBe(true);
@@ -156,7 +228,11 @@ describe("git store objects", function () {
     it("rejects a pack which is cut short, padded, or not a pack", async function () {
       const pack = fx.packRevs(src(), [fixture.head], []);
 
-      for (const bad of [pack.subarray(0, pack.length - 30), Buffer.concat([pack, Buffer.from("extra")]), Buffer.from("not a pack at all, no, not even close")]) {
+      for (const bad of [
+        pack.subarray(0, pack.length - 30),
+        Buffer.concat([pack, Buffer.from("extra")]),
+        Buffer.from("not a pack at all, no, not even close"),
+      ]) {
         fs.writeFileSync(file, bad);
         let error;
         try {

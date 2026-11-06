@@ -52,7 +52,11 @@ function downloadAll(post, scanned, prefetched, callback) {
         })
         .catch(function (err) {
           console.log("Audio error:", href, err && err.message);
-          next(lifecycle.current() && lifecycle.current().signal.aborted ? err : null);
+          next(
+            lifecycle.current() && lifecycle.current().signal.aborted
+              ? err
+              : null
+          );
         });
     },
     function (err) {
@@ -64,7 +68,9 @@ function downloadAll(post, scanned, prefetched, callback) {
         return callback(null, post);
       }
 
-      htmlAssets.rewrite("audio", post.html, replacements).then(function (html) {
+      htmlAssets.rewrite("audio", post.html, replacements).then(function (
+        html
+      ) {
         post.html = html;
         callback(null, post);
       }, callback);

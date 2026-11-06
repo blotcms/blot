@@ -53,7 +53,9 @@ const PURGE_MS = parseInt(process.env.PURGE_MS || "500", 10);
 const WORKERS = parseInt(process.env.WORKERS || "24", 10);
 const UA = "Mozilla/5.0 (compatible; swap-load-e2e)";
 
-const BLOG_HOSTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => `b${i}.${BLOT_HOST}`);
+const BLOG_HOSTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(
+  (i) => `b${i}.${BLOT_HOST}`
+);
 const PAGE_HOSTS = [...BLOG_HOSTS, BLOT_HOST];
 const PAGES = ["/", ...Array.from({ length: 10 }, (_, i) => `/p/${i + 1}`)];
 const LARGE = "/large/1";
@@ -63,7 +65,8 @@ const LARGE = "/large/1";
 // listen queue of a socket that was then closed (a container stopping), unless
 // net.ipv4.tcp_migrate_req=1 hands it to the other listener (swap-load.sh).
 // Nothing accepted it, so its TLS handshake never finished.
-const isHandshakeReset = (e) => e.code === "ECONNRESET" && !e.reusedSocket && !e.secured && !e.gotResponse;
+const isHandshakeReset = (e) =>
+  e.code === "ECONNRESET" && !e.reusedSocket && !e.secured && !e.gotResponse;
 const ALLOW_RESETS = process.env.ALLOW_RESETS === "1";
 
 // A request a container had accepted and was still working on when its drain
@@ -73,7 +76,8 @@ const ALLOW_RESETS = process.env.ALLOW_RESETS === "1";
 // and reported, not a failure. One cut sooner than the shortest drain is a
 // failure.
 const DRAIN_CUT_MS = parseInt(process.env.DRAIN_CUT_MS || "10000", 10);
-const isDrainCut = (e, ms) => e.code === "ECONNRESET" && e.secured && !e.gotResponse && ms >= DRAIN_CUT_MS;
+const isDrainCut = (e, ms) =>
+  e.code === "ECONNRESET" && e.secured && !e.gotResponse && ms >= DRAIN_CUT_MS;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -91,7 +95,12 @@ const races = { keepAliveRetries: 0 };
 
 function request(options) {
   return attempt(options).catch((e) => {
-    if (options.reuse && e.reusedSocket && !e.gotResponse && (options.method || "GET") !== "POST") {
+    if (
+      options.reuse &&
+      e.reusedSocket &&
+      !e.gotResponse &&
+      (options.method || "GET") !== "POST"
+    ) {
       races.keepAliveRetries++;
       return attempt({ ...options, reuse: false });
     }
@@ -99,13 +108,22 @@ function request(options) {
   });
 }
 
-function attempt({ method = "GET", host, path, headers = {}, body, reuse = false, timeout = 30000 }) {
+function attempt({
+  method = "GET",
+  host,
+  path,
+  headers = {},
+  body,
+  reuse = false,
+  timeout = 30000,
+}) {
   const started = Date.now();
   return new Promise((resolve, reject) => {
     let reused = false;
     let secured = false;
     let gotResponse = false;
-    const fail = (e) => reject(Object.assign(e, { reusedSocket: reused, secured, gotResponse }));
+    const fail = (e) =>
+      reject(Object.assign(e, { reusedSocket: reused, secured, gotResponse }));
     const r = https.request(
       {
         method,
@@ -122,10 +140,20 @@ function attempt({ method = "GET", host, path, headers = {}, body, reuse = false
         const chunks = [];
         res.on("data", (d) => chunks.push(d));
         res.on("end", () =>
-          resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks), ms: Date.now() - started, complete: res.complete })
+          resolve({
+            status: res.statusCode,
+            headers: res.headers,
+            body: Buffer.concat(chunks),
+            ms: Date.now() - started,
+            complete: res.complete,
+          })
         );
         res.on("error", fail);
-        res.on("aborted", () => fail(Object.assign(new Error("response aborted"), { code: "ABORTED" })));
+        res.on("aborted", () =>
+          fail(
+            Object.assign(new Error("response aborted"), { code: "ABORTED" })
+          )
+        );
       }
     );
     r.on("socket", (socket) => {
@@ -133,7 +161,9 @@ function attempt({ method = "GET", host, path, headers = {}, body, reuse = false
       if (reused) secured = true;
       else socket.once("secureConnect", () => (secured = true));
     });
-    r.setTimeout(timeout, () => r.destroy(Object.assign(new Error("timeout"), { code: "ETIMEDOUT" })));
+    r.setTimeout(timeout, () =>
+      r.destroy(Object.assign(new Error("timeout"), { code: "ETIMEDOUT" }))
+    );
     r.on("error", fail);
     r.end(body);
   });
@@ -141,19 +171,30 @@ function attempt({ method = "GET", host, path, headers = {}, body, reuse = false
 
 function plain(url, method = "GET") {
   return new Promise((resolve, reject) => {
-    const r = http.request(url, { method, agent: false, timeout: 10000 }, (res) => {
-      const chunks = [];
-      res.on("data", (d) => chunks.push(d));
-      res.on("end", () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString() }));
-    });
+    const r = http.request(
+      url,
+      { method, agent: false, timeout: 10000 },
+      (res) => {
+        const chunks = [];
+        res.on("data", (d) => chunks.push(d));
+        res.on("end", () =>
+          resolve({
+            status: res.statusCode,
+            body: Buffer.concat(chunks).toString(),
+          })
+        );
+      }
+    );
     r.on("timeout", () => r.destroy(new Error("timeout")));
     r.on("error", reject);
     r.end();
   });
 }
 
-const stubGen = async (host) => parseInt((await plain(`${STUB_URL}/__gen?host=${host}`)).body, 10);
-const stubBump = async (host) => parseInt((await plain(`${STUB_URL}/__gen?host=${host}`, "POST")).body, 10);
+const stubGen = async (host) =>
+  parseInt((await plain(`${STUB_URL}/__gen?host=${host}`)).body, 10);
+const stubBump = async (host) =>
+  parseInt((await plain(`${STUB_URL}/__gen?host=${host}`, "POST")).body, 10);
 
 // Decode what the proxy sent, as a client that asked for it would
 function decode(res) {
@@ -170,7 +211,9 @@ function decode(res) {
 async function purge(host, stats) {
   for (let attempt = 1; attempt <= 40; attempt++) {
     try {
-      const res = await plain(`${PURGE_URL}/purge?host=${encodeURIComponent(host)}`);
+      const res = await plain(
+        `${PURGE_URL}/purge?host=${encodeURIComponent(host)}`
+      );
       if (res.status === 200) return attempt;
       if (stats) stats.purgeRetries++;
     } catch (e) {
@@ -201,11 +244,30 @@ async function load() {
     maxMs: 0,
     startedAt: Date.now(),
   };
-  const problems = { error: [], status: [], wrong: [], stale: [], sse: [], purge: [], reset: [], drainCut: [] };
-  const counts = { error: 0, status: 0, wrong: 0, stale: 0, sse: 0, purge: 0, reset: 0, drainCut: 0 };
+  const problems = {
+    error: [],
+    status: [],
+    wrong: [],
+    stale: [],
+    sse: [],
+    purge: [],
+    reset: [],
+    drainCut: [],
+  };
+  const counts = {
+    error: 0,
+    status: 0,
+    wrong: 0,
+    stale: 0,
+    sse: 0,
+    purge: 0,
+    reset: 0,
+    drainCut: 0,
+  };
   const problem = (type, detail) => {
     counts[type]++;
-    if (problems[type].length < 15) problems[type].push({ at: Date.now(), ...detail });
+    if (problems[type].length < 15)
+      problems[type].push({ at: Date.now(), ...detail });
   };
   let stopping = false;
 
@@ -223,7 +285,8 @@ async function load() {
   const largeFor = (host, gen) => {
     const k = `${host}|${gen}`;
     if (!largeCache.has(k)) {
-      if (largeCache.size > 8) largeCache.delete(largeCache.keys().next().value);
+      if (largeCache.size > 8)
+        largeCache.delete(largeCache.keys().next().value);
       largeCache.set(k, lib.largeBody(host, LARGE, gen));
     }
     return largeCache.get(k);
@@ -244,25 +307,58 @@ async function load() {
   // its X-Gen names, within [lo, hi]. Returns { gen, cache } or null (problem noted).
   function checkBody(kind, host, path, lo, res, body) {
     if (res.status !== 200) {
-      problem("status", { kind, host, path, status: res.status, cache: res.headers["blot-cache"] });
+      problem("status", {
+        kind,
+        host,
+        path,
+        status: res.status,
+        cache: res.headers["blot-cache"],
+      });
       return null;
     }
     const gen = parseInt(res.headers["x-gen"], 10);
     if (!(gen >= 1)) {
-      problem("wrong", { kind, host, path, why: "no X-Gen", body: body.slice(0, 80).toString() });
+      problem("wrong", {
+        kind,
+        host,
+        path,
+        why: "no X-Gen",
+        body: body.slice(0, 80).toString(),
+      });
       return null;
     }
     const expected = lib.bodyFor(host, path, gen);
     if (!body.equals(expected) || lib.sha256(body) !== res.headers["x-sum"]) {
-      problem("wrong", { kind, host, path, why: "body differs from the upstream's for X-Gen " + gen, got: body.length, expected: expected.length, head: body.slice(0, 100).toString() });
+      problem("wrong", {
+        kind,
+        host,
+        path,
+        why: "body differs from the upstream's for X-Gen " + gen,
+        got: body.length,
+        expected: expected.length,
+        head: body.slice(0, 100).toString(),
+      });
       return null;
     }
     if (gen > upper(host)) {
-      problem("wrong", { kind, host, path, why: `generation ${gen} has not been made yet (upstream at ${upper(host)})` });
+      problem("wrong", {
+        kind,
+        host,
+        path,
+        why: `generation ${gen} has not been made yet (upstream at ${upper(host)})`,
+      });
       return null;
     }
     if (gen < lo) {
-      problem("stale", { kind, host, path, gen, purgedGen: lo, cache: res.headers["blot-cache"], server: res.headers["blot-server"] });
+      problem("stale", {
+        kind,
+        host,
+        path,
+        gen,
+        purgedGen: lo,
+        cache: res.headers["blot-cache"],
+        server: res.headers["blot-server"],
+      });
       return null;
     }
     return { gen, cache: res.headers["blot-cache"] };
@@ -276,7 +372,12 @@ async function load() {
       const path = pick(PAGES);
       await slot(host);
       const { lo } = bounds(host);
-      const res = await request({ host, path, reuse, headers: { "Accept-Encoding": pick(encodings) || "identity" } });
+      const res = await request({
+        host,
+        path,
+        reuse,
+        headers: { "Accept-Encoding": pick(encodings) || "identity" },
+      });
       noteCache(res);
       checkBody("page", host, path, lo, res, decode(res));
       return res;
@@ -289,8 +390,22 @@ async function load() {
       const res = await request({ method: "HEAD", host, path, reuse });
       noteCache(res);
       const gen = parseInt(res.headers["x-gen"], 10);
-      if (res.status !== 200 || res.body.length) problem("status", { kind: "head", host, path, status: res.status, body: res.body.length });
-      else if (!(gen >= lo && gen <= upper(host))) problem(gen < lo ? "stale" : "wrong", { kind: "head", host, path, gen, purgedGen: lo });
+      if (res.status !== 200 || res.body.length)
+        problem("status", {
+          kind: "head",
+          host,
+          path,
+          status: res.status,
+          body: res.body.length,
+        });
+      else if (!(gen >= lo && gen <= upper(host)))
+        problem(gen < lo ? "stale" : "wrong", {
+          kind: "head",
+          host,
+          path,
+          gen,
+          purgedGen: lo,
+        });
       return res;
     },
     async conditional(reuse) {
@@ -300,16 +415,41 @@ async function load() {
       let { lo } = bounds(host);
       const first = await request({ host, path, reuse });
       noteCache(first);
-      const got = checkBody("conditional-first", host, path, lo, first, first.body);
+      const got = checkBody(
+        "conditional-first",
+        host,
+        path,
+        lo,
+        first,
+        first.body
+      );
       if (!got || !first.headers.etag) return first;
       await slot(host);
       lo = bounds(host).lo;
-      const res = await request({ host, path, reuse, headers: { "If-None-Match": first.headers.etag } });
+      const res = await request({
+        host,
+        path,
+        reuse,
+        headers: { "If-None-Match": first.headers.etag },
+      });
       noteCache(res);
       if (res.status === 304) {
         const gen = lib.genOfEtag(res.headers.etag);
-        if (res.body.length || gen === null || gen > upper(host)) problem("wrong", { kind: "conditional", host, path, etag: res.headers.etag });
-        else if (gen < lo) problem("stale", { kind: "conditional-304", host, path, gen, purgedGen: lo });
+        if (res.body.length || gen === null || gen > upper(host))
+          problem("wrong", {
+            kind: "conditional",
+            host,
+            path,
+            etag: res.headers.etag,
+          });
+        else if (gen < lo)
+          problem("stale", {
+            kind: "conditional-304",
+            host,
+            path,
+            gen,
+            purgedGen: lo,
+          });
       } else {
         checkBody("conditional", host, path, lo, res, decode(res));
       }
@@ -322,15 +462,35 @@ async function load() {
       const size = 64 * 40960;
       const a = Math.floor(Math.random() * (size - 5000));
       const b = a + 1 + Math.floor(Math.random() * 4000);
-      const res = await request({ host, path: LARGE, reuse, headers: { Range: `bytes=${a}-${b}` } });
+      const res = await request({
+        host,
+        path: LARGE,
+        reuse,
+        headers: { Range: `bytes=${a}-${b}` },
+      });
       noteCache(res);
       if (res.status !== 206 && res.status !== 200) {
-        problem("status", { kind: "range", host, path: LARGE, status: res.status });
+        problem("status", {
+          kind: "range",
+          host,
+          path: LARGE,
+          status: res.status,
+        });
         return res;
       }
       const slice = res.status === 206 ? [a, b + 1] : [0, size];
-      if (res.status === 206 && !new RegExp(`^bytes ${a}-${b}/${size}$`).test(res.headers["content-range"] || "")) {
-        problem("wrong", { kind: "range", host, why: "content-range " + res.headers["content-range"], wanted: `${a}-${b}` });
+      if (
+        res.status === 206 &&
+        !new RegExp(`^bytes ${a}-${b}/${size}$`).test(
+          res.headers["content-range"] || ""
+        )
+      ) {
+        problem("wrong", {
+          kind: "range",
+          host,
+          why: "content-range " + res.headers["content-range"],
+          wanted: `${a}-${b}`,
+        });
         return res;
       }
       // the slice must be that of some generation between the last purge and now
@@ -342,8 +502,17 @@ async function load() {
           break;
         }
       }
-      if (!matched) problem("wrong", { kind: "range", host, status: res.status, got: res.body.length, range: [a, b], x_gen: res.headers["x-gen"] });
-      else if (matched < lo) problem("stale", { kind: "range", host, gen: matched, purgedGen: lo });
+      if (!matched)
+        problem("wrong", {
+          kind: "range",
+          host,
+          status: res.status,
+          got: res.body.length,
+          range: [a, b],
+          x_gen: res.headers["x-gen"],
+        });
+      else if (matched < lo)
+        problem("stale", { kind: "range", host, gen: matched, purgedGen: lo });
       return res;
     },
     async large(reuse) {
@@ -376,30 +545,65 @@ async function load() {
       } catch (e) {
         ok = false;
       }
-      if (!ok) problem("wrong", { kind: "random", host, status: res.status, cache: c, body: res.body.slice(0, 80).toString() });
+      if (!ok)
+        problem("wrong", {
+          kind: "random",
+          host,
+          status: res.status,
+          cache: c,
+          body: res.body.slice(0, 80).toString(),
+        });
       return res;
     },
     async post() {
       const size = pick([0, 100, 4096, 65536, 1 << 20, 5 << 20, 24 << 20]);
       const off = Math.floor(Math.random() * 1000);
       const body = POST_DATA.subarray(off, off + size);
-      const res = await request({ method: "POST", host: BLOT_HOST, path: "/sites/e2e/upload", body, headers: { "Content-Type": "application/octet-stream", "Content-Length": body.length }, timeout: 60000 }).catch((e) => {
+      const res = await request({
+        method: "POST",
+        host: BLOT_HOST,
+        path: "/sites/e2e/upload",
+        body,
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "Content-Length": body.length,
+        },
+        timeout: 60000,
+      }).catch((e) => {
         throw Object.assign(e, { size });
       });
       noteCache(res);
       let ok = res.status === 200;
       try {
         const j = JSON.parse(res.body.toString());
-        ok = ok && j.len === body.length && j.sha256 === crypto.createHash("sha256").update(body).digest("hex");
+        ok =
+          ok &&
+          j.len === body.length &&
+          j.sha256 === crypto.createHash("sha256").update(body).digest("hex");
       } catch (e) {
         ok = false;
       }
-      if (!ok) problem("wrong", { kind: "post", size, status: res.status, body: res.body.slice(0, 120).toString() });
+      if (!ok)
+        problem("wrong", {
+          kind: "post",
+          size,
+          status: res.status,
+          body: res.body.slice(0, 120).toString(),
+        });
       return res;
     },
   };
   const POST_DATA = crypto.randomBytes((24 << 20) + 1000);
-  const mix = [["page", 40], ["head", 5], ["conditional", 6], ["range", 9], ["large", 3], ["slow", 4], ["random", 5], ["post", 8]];
+  const mix = [
+    ["page", 40],
+    ["head", 5],
+    ["conditional", 6],
+    ["range", 9],
+    ["large", 3],
+    ["slow", 4],
+    ["random", 5],
+    ["post", 8],
+  ];
   const total = mix.reduce((n, [, w]) => n + w, 0);
   const choose = () => {
     let r = Math.random() * total;
@@ -420,8 +624,18 @@ async function load() {
       } catch (e) {
         const ms = Date.now() - t0;
         if (isHandshakeReset(e)) problem("reset", { kind, size: e.size, ms });
-        else if (isDrainCut(e, ms)) problem("drainCut", { kind, size: e.size, ms });
-        else problem("error", { kind, error: e.code || e.message, syscall: e.syscall, reused: e.reusedSocket, gotResponse: e.gotResponse, ms: Date.now() - t0, size: e.size });
+        else if (isDrainCut(e, ms))
+          problem("drainCut", { kind, size: e.size, ms });
+        else
+          problem("error", {
+            kind,
+            error: e.code || e.message,
+            syscall: e.syscall,
+            reused: e.reusedSocket,
+            gotResponse: e.gotResponse,
+            ms: Date.now() - t0,
+            size: e.size,
+          });
       }
       await sleep(20 + Math.random() * 60);
     }
@@ -433,16 +647,37 @@ async function load() {
       stats.sse++;
       const started = Date.now();
       try {
-        const res = await request({ host: BLOT_HOST, path: "/sites/e2e/status", reuse: false, timeout: 30000 });
+        const res = await request({
+          host: BLOT_HOST,
+          path: "/sites/e2e/status",
+          reuse: false,
+          timeout: 30000,
+        });
         const text = res.body.toString();
-        const events = text.split("\n").filter((l) => l.startsWith("data: ") && l !== "data: done").map((l) => l.slice(6));
-        const ok = res.status === 200 && events.length === lib.SSE_EVENTS && events.every((e, i) => e === String(i + 1)) && text.endsWith("event: done\ndata: done\n\n");
-        if (!ok) problem("sse", { status: res.status, events: events.length, ms: Date.now() - started });
+        const events = text
+          .split("\n")
+          .filter((l) => l.startsWith("data: ") && l !== "data: done")
+          .map((l) => l.slice(6));
+        const ok =
+          res.status === 200 &&
+          events.length === lib.SSE_EVENTS &&
+          events.every((e, i) => e === String(i + 1)) &&
+          text.endsWith("event: done\ndata: done\n\n");
+        if (!ok)
+          problem("sse", {
+            status: res.status,
+            events: events.length,
+            ms: Date.now() - started,
+          });
       } catch (e) {
         const ms = Date.now() - started;
         if (isHandshakeReset(e)) problem("reset", { kind: "sse", ms });
         else if (isDrainCut(e, ms)) problem("drainCut", { kind: "sse", ms });
-        else problem("sse", { error: e.code || e.message, ms: Date.now() - started });
+        else
+          problem("sse", {
+            error: e.code || e.message,
+            ms: Date.now() - started,
+          });
       }
     }
   }
@@ -456,7 +691,11 @@ async function load() {
       const s = state.get(host);
       s.hi++;
       const gen = await stubBump(host);
-      if (gen !== s.hi) problem("wrong", { kind: "stub", why: `generation ${gen}, expected ${s.hi}` });
+      if (gen !== s.hi)
+        problem("wrong", {
+          kind: "stub",
+          why: `generation ${gen}, expected ${s.hi}`,
+        });
       const attempts = await purge(host, stats);
       if (attempts) {
         s.lo = Math.max(s.lo, gen);
@@ -469,8 +708,14 @@ async function load() {
     }
   }
 
-  const tasks = [purger(), sse(), sse(), ...Array.from({ length: WORKERS }, (_, i) => worker(i))];
-  if (process.env.READY_FILE) fs.writeFileSync(process.env.READY_FILE, "ready\n");
+  const tasks = [
+    purger(),
+    sse(),
+    sse(),
+    ...Array.from({ length: WORKERS }, (_, i) => worker(i)),
+  ];
+  if (process.env.READY_FILE)
+    fs.writeFileSync(process.env.READY_FILE, "ready\n");
   await new Promise((resolve) => {
     const stop = () => {
       stopping = true;
@@ -484,9 +729,23 @@ async function load() {
   const resets = counts.reset;
   const drainCuts = counts.drainCut;
   if (ALLOW_RESETS) counts.reset = 0;
-  const failures = counts.error + counts.status + counts.wrong + counts.stale + counts.sse + counts.purge + counts.reset;
+  const failures =
+    counts.error +
+    counts.status +
+    counts.wrong +
+    counts.stale +
+    counts.sse +
+    counts.purge +
+    counts.reset;
   stats.keepAliveRetries = races.keepAliveRetries;
-  const summary = { ...stats, seconds: Math.round((Date.now() - stats.startedAt) / 1000), counts, handshakeResets: resets, drainCuts, problems: failures || resets || drainCuts ? problems : undefined };
+  const summary = {
+    ...stats,
+    seconds: Math.round((Date.now() - stats.startedAt) / 1000),
+    counts,
+    handshakeResets: resets,
+    drainCuts,
+    problems: failures || resets || drainCuts ? problems : undefined,
+  };
   console.log(JSON.stringify(summary, null, 1));
   process.exit(failures ? 1 : 0);
 }
@@ -496,7 +755,13 @@ async function load() {
 async function one(host, path) {
   const res = await request({ host, path });
   const gen = parseInt(res.headers["x-gen"], 10);
-  return { status: res.status, gen, cache: res.headers["blot-cache"], body: res.body, headers: res.headers };
+  return {
+    status: res.status,
+    gen,
+    cache: res.headers["blot-cache"],
+    body: res.body,
+    headers: res.headers,
+  };
 }
 
 const settle = () => sleep(250); // a miss is published just after the response ends
@@ -505,9 +770,11 @@ const settle = () => sleep(250); // a miss is published just after the response 
 // settle must follow its own request); only different hosts overlap.
 async function perHost(fn, width = 4) {
   const queue = [...PAGE_HOSTS];
-  await Promise.all(Array.from({ length: width }, async () => {
-    for (let h; (h = queue.shift()); ) await fn(h);
-  }));
+  await Promise.all(
+    Array.from({ length: width }, async () => {
+      for (let h; (h = queue.shift());) await fn(h);
+    })
+  );
 }
 
 async function main() {
@@ -526,7 +793,10 @@ async function main() {
           await settle();
           if (r.status === 200 && r.cache === "HIT") break;
         }
-        if (r.status !== 200 || r.cache !== "HIT") fail(`${h}${p} was not a HIT after warming (status ${r.status}, cache ${r.cache})`);
+        if (r.status !== 200 || r.cache !== "HIT")
+          fail(
+            `${h}${p} was not a HIT after warming (status ${r.status}, cache ${r.cache})`
+          );
       }
     });
     console.log(`warmed ${PAGE_HOSTS.length * (PAGES.length + 1)} pages`);
@@ -541,12 +811,20 @@ async function main() {
       for (const p of [...PAGES, LARGE]) {
         const r = await one(h, p);
         if (r.status !== 200) fail(`${h}${p} answered ${r.status}`);
-        if (!r.body.equals(lib.bodyFor(h, p, r.gen))) fail(`${h}${p}: body does not match the upstream's for generation ${r.gen}`);
-        if (r.gen !== gen) fail(`${h}${p}: generation ${r.gen} served, the upstream is at ${gen}: STALE (cache ${r.cache})`);
+        if (!r.body.equals(lib.bodyFor(h, p, r.gen)))
+          fail(
+            `${h}${p}: body does not match the upstream's for generation ${r.gen}`
+          );
+        if (r.gen !== gen)
+          fail(
+            `${h}${p}: generation ${r.gen} served, the upstream is at ${gen}: STALE (cache ${r.cache})`
+          );
         n++;
       }
     });
-    console.log(`verified ${n} pages: all of the upstream's current generation`);
+    console.log(
+      `verified ${n} pages: all of the upstream's current generation`
+    );
     return;
   }
   if (cmd === "get") {
@@ -569,9 +847,16 @@ async function main() {
     const r = await one(host, path);
     const gen = await stubGen(host);
     if (r.status !== 200) fail(`${host}${path} answered ${r.status}`);
-    if (!r.body.equals(lib.bodyFor(host, path, r.gen))) fail(`${host}${path}: body does not match the upstream's for generation ${r.gen}`);
-    if (r.gen !== gen) fail(`${host}${path}: generation ${r.gen} served, the upstream is at ${gen}: STALE (cache ${r.cache})`);
-    if (cmd === "hit" && r.cache !== "HIT") fail(`${host}${path}: expected a HIT, got ${r.cache}`);
+    if (!r.body.equals(lib.bodyFor(host, path, r.gen)))
+      fail(
+        `${host}${path}: body does not match the upstream's for generation ${r.gen}`
+      );
+    if (r.gen !== gen)
+      fail(
+        `${host}${path}: generation ${r.gen} served, the upstream is at ${gen}: STALE (cache ${r.cache})`
+      );
+    if (cmd === "hit" && r.cache !== "HIT")
+      fail(`${host}${path}: expected a HIT, got ${r.cache}`);
     console.log(`${host}${path}: generation ${r.gen}, ${r.cache}`);
     return;
   }
@@ -582,15 +867,24 @@ async function main() {
       await settle();
     }
     const before = await one(host, p);
-    if (before.cache !== "HIT") fail(`${host}${p} was not a HIT before the purge (${before.cache})`);
+    if (before.cache !== "HIT")
+      fail(`${host}${p} was not a HIT before the purge (${before.cache})`);
     const gen = await stubBump(host);
     if (!(await purge(host))) fail("the purge was refused");
     const after = await one(host, p);
-    if (after.status !== 200 || after.cache !== "MISS" || after.gen !== gen) fail(`${host}${p} after a purge: status ${after.status}, ${after.cache}, generation ${after.gen}; wanted a MISS of generation ${gen}`);
+    if (after.status !== 200 || after.cache !== "MISS" || after.gen !== gen)
+      fail(
+        `${host}${p} after a purge: status ${after.status}, ${after.cache}, generation ${after.gen}; wanted a MISS of generation ${gen}`
+      );
     await settle();
     const again = await one(host, p);
-    if (again.cache !== "HIT" || again.gen !== gen) fail(`${host}${p} after the refill: ${again.cache}, generation ${again.gen}; wanted a HIT of generation ${gen}`);
-    console.log(`purge works: ${host}${p} HIT, then after the purge MISS and HIT of generation ${gen}`);
+    if (again.cache !== "HIT" || again.gen !== gen)
+      fail(
+        `${host}${p} after the refill: ${again.cache}, generation ${again.gen}; wanted a HIT of generation ${gen}`
+      );
+    console.log(
+      `purge works: ${host}${p} HIT, then after the purge MISS and HIT of generation ${gen}`
+    );
     return;
   }
   if (cmd === "fill" || cmd === "change-fill" || cmd === "check-fill") {
@@ -616,13 +910,20 @@ async function main() {
         const [h, p] = line.split(" ");
         if (!gens.has(h)) gens.set(h, await stubGen(h));
         const r = await one(h, p);
-        if (r.status !== 200 || !r.body.equals(lib.bodyFor(h, p, r.gen))) wrong++;
+        if (r.status !== 200 || !r.body.equals(lib.bodyFor(h, p, r.gen)))
+          wrong++;
         else if (r.gen !== gens.get(h)) {
           stale++;
-          if (sample.length < 5) sample.push(`${h}${p} gen ${r.gen} (upstream ${gens.get(h)}, ${r.cache})`);
+          if (sample.length < 5)
+            sample.push(
+              `${h}${p} gen ${r.gen} (upstream ${gens.get(h)}, ${r.cache})`
+            );
         }
       }
-      console.log(`${lines.length} pages checked: ${stale} stale, ${wrong} wrong or failed` + (sample.length ? `; e.g. ${sample.join("; ")}` : ""));
+      console.log(
+        `${lines.length} pages checked: ${stale} stale, ${wrong} wrong or failed` +
+          (sample.length ? `; e.g. ${sample.join("; ")}` : "")
+      );
       process.exit(stale || wrong ? 2 : 0);
     }
     let stopping = false;

@@ -20,10 +20,7 @@ function publish(blogID) {
       }
     );
   } catch (err) {
-    console.error(
-      "Failed to publish preview reload event",
-      err && err.message
-    );
+    console.error("Failed to publish preview reload event", err && err.message);
     return Promise.resolve();
   }
 }

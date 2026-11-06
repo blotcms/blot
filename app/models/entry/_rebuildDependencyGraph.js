@@ -52,9 +52,12 @@ module.exports = function (blogID, entry, previous_dependencies, callback) {
     multi.sAdd(key, entry.path);
   });
 
-  multi.exec().then(function () {
-    return callback();
-  }).catch(function (err) {
-    return callback(err);
-  });
+  multi
+    .exec()
+    .then(function () {
+      return callback();
+    })
+    .catch(function (err) {
+      return callback(err);
+    });
 };

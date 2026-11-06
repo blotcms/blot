@@ -5,9 +5,9 @@ const specimen = require("blog/static/fonts/specimen");
 module.exports = (key, value) => {
   return {
     key,
-    options: FONTS.map(option => {
+    options: FONTS.map((option) => {
       return {
-        tags: option.tags.map(i => {
+        tags: option.tags.map((i) => {
           return { tag: i };
         }),
         tagsString: option.tags.join(" "),
@@ -15,7 +15,7 @@ module.exports = (key, value) => {
         name: option.name,
         ...specimen(option),
         stack: option.stack,
-        id: option.id
+        id: option.id,
       };
     }),
     font_size: value.font_size || 16,
@@ -24,6 +24,6 @@ module.exports = (key, value) => {
       const found = FONTS.find(({ id }) => id === value.id);
       return { ...(found || {}), ...specimen(found), ...value };
     })(),
-    label: key ? desnake(key).replace(/ font$/i, "") : ""
+    label: key ? desnake(key).replace(/ font$/i, "") : "",
   };
 };

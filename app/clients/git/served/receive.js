@@ -63,9 +63,14 @@ function readMaxInputSize() {
   if (!maxInputSize) {
     maxInputSize = limiter.run("interactive", function () {
       return new Promise(function (resolve) {
-        execFile("git", ["config", "--get", "receive.maxInputSize"], { timeout: 30 * 1000 }, function (err, stdout) {
-          resolve(err ? 0 : receivePack.parseSize(String(stdout).trim()));
-        });
+        execFile(
+          "git",
+          ["config", "--get", "receive.maxInputSize"],
+          { timeout: 30 * 1000 },
+          function (err, stdout) {
+            resolve(err ? 0 : receivePack.parseSize(String(stdout).trim()));
+          }
+        );
       });
     });
   }
@@ -75,7 +80,10 @@ function readMaxInputSize() {
 
 // The most bytes of pack a push to the store may carry
 async function pushLimit(cache) {
-  const share = Math.min(MAX_PUSH, Math.floor(cache.maxBytes * PUSH_CACHE_SHARE));
+  const share = Math.min(
+    MAX_PUSH,
+    Math.floor(cache.maxBytes * PUSH_CACHE_SHARE)
+  );
   const configured = await readMaxInputSize();
 
   return configured > 0 ? Math.min(configured, share) : share;
@@ -102,7 +110,10 @@ function bodyOf(req) {
 }
 
 function isBadRequest(err) {
-  return !!(err && (err.badRequest || (typeof err.code === "string" && /^Z_/.test(err.code))));
+  return !!(
+    err &&
+    (err.badRequest || (typeof err.code === "string" && /^Z_/.test(err.code)))
+  );
 }
 
 async function handle(req, res, blog, hooks) {
@@ -127,7 +138,13 @@ async function handle(req, res, blog, hooks) {
       res.destroy();
     }
 
-    if (!isBadRequest(err)) console.error(clfdate(), "[git-store-served] blog=" + blog.id, "push failed:", err && err.message);
+    if (!isBadRequest(err))
+      console.error(
+        clfdate(),
+        "[git-store-served] blog=" + blog.id,
+        "push failed:",
+        err && err.message
+      );
   } finally {
     fields.ms = Date.now() - started;
     log(fields);
@@ -159,15 +176,20 @@ async function push(req, res, blog, hooks, fields) {
     req.headers["x-request-id"] || "no-request-id",
     "Git: push-client",
     req.gitHandle,
-    "agent=" + JSON.stringify(typeof agent === "string" ? agent.slice(0, 100) : "")
+    "agent=" +
+      JSON.stringify(typeof agent === "string" ? agent.slice(0, 100) : "")
   );
 
   const store = context.storeFor(blogID);
   const cache = context.cache();
   const limit = await pushLimit(cache);
-  const master = commands.find((command) => command.ref === MASTER && command.old !== command.new) || null;
+  const master =
+    commands.find(
+      (command) => command.ref === MASTER && command.old !== command.new
+    ) || null;
   const length = Number(req.headers["content-length"]);
-  const sizeHint = req.headers["content-encoding"] !== "gzip" && length > 0 ? length : 0;
+  const sizeHint =
+    req.headers["content-encoding"] !== "gzip" && length > 0 ? length : 0;
 
   let armed;
   let readied = false;
@@ -182,8 +204,12 @@ async function push(req, res, blog, hooks, fields) {
     try {
       release = await hooks.lock();
     } catch (err) {
-      if (err && err.code === "ELOCKED") err.pushStatus = "another change to this repository is being applied; please try again in a few seconds";
-      else if (err) err.pushStatus = "Blot could not accept the push right now; please try again in a moment";
+      if (err && err.code === "ELOCKED")
+        err.pushStatus =
+          "another change to this repository is being applied; please try again in a few seconds";
+      else if (err)
+        err.pushStatus =
+          "Blot could not accept the push right now; please try again in a moment";
       throw err;
     }
 
@@ -192,10 +218,21 @@ async function push(req, res, blog, hooks, fields) {
         try {
           armed = await limiter.outside(() => hooks.prepare(master));
         } catch (err) {
-          console.error(clfdate(), "Git: could not record push", blogID, err && err.message);
-          throw Object.assign(new Error("Could not record the push: " + ((err && err.message) || err)), {
-            pushStatus: "Blot could not record the push; please try again in a moment",
-          });
+          console.error(
+            clfdate(),
+            "Git: could not record push",
+            blogID,
+            err && err.message
+          );
+          throw Object.assign(
+            new Error(
+              "Could not record the push: " + ((err && err.message) || err)
+            ),
+            {
+              pushStatus:
+                "Blot could not record the push; please try again in a moment",
+            }
+          );
         }
         readied = true;
       }
@@ -205,7 +242,12 @@ async function push(req, res, blog, hooks, fields) {
       await Promise.resolve()
         .then(release)
         .catch(function (err) {
-          console.error(clfdate(), "Git: could not release the ref lock of", blogID, err && err.message);
+          console.error(
+            clfdate(),
+            "Git: could not release the ref lock of",
+            blogID,
+            err && err.message
+          );
         });
     }
   }
@@ -250,7 +292,8 @@ async function push(req, res, blog, hooks, fields) {
   fields.objects = stats.objects;
   fields.basesFetched = stats.basesFetched;
   fields.seq = result && result.seq;
-  if (result && result.error) fields.detail = result.error.code || result.error.name || "error";
+  if (result && result.error)
+    fields.detail = result.error.code || result.error.name || "error";
 
   if (result && result.outcome === "ok") {
     if (master) {
@@ -270,7 +313,9 @@ async function push(req, res, blog, hooks, fields) {
   if (outcome !== "ok" && outcome !== "unknown" && readied) {
     // Did not land: the alarm goes. An unknown outcome keeps it, so a sync
     // applies whatever master turned out to be.
-    await Promise.resolve(limiter.outside(() => hooks.abandoned(master, armed))).catch(function () {});
+    await Promise.resolve(
+      limiter.outside(() => hooks.abandoned(master, armed))
+    ).catch(function () {});
   }
 }
 

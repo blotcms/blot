@@ -9,7 +9,8 @@ const { register } = require("module");
 const { pathToFileURL } = require("url");
 
 const macserverDir = path.join(__dirname, "../macserver");
-const load = (file) => import(pathToFileURL(path.join(macserverDir, file)).href);
+const load = (file) =>
+  import(pathToFileURL(path.join(macserverDir, file)).href);
 
 const hooks = `
 export async function resolve(specifier, context, nextResolve) {
@@ -87,10 +88,18 @@ describe("icloud macserver disconnect handling", function () {
   beforeEach(function () {
     requests = 0;
     respond = () => 200;
-    globalThis.__macserverMocks.upload = jasmine.createSpy("upload").and.callFake(async () => {});
-    globalThis.__macserverMocks.remove = jasmine.createSpy("remove").and.callFake(async () => {});
-    globalThis.__macserverMocks.mkdir = jasmine.createSpy("mkdir").and.callFake(async () => true);
-    globalThis.__macserverMocks.resync = jasmine.createSpy("resync").and.callFake(async () => {});
+    globalThis.__macserverMocks.upload = jasmine
+      .createSpy("upload")
+      .and.callFake(async () => {});
+    globalThis.__macserverMocks.remove = jasmine
+      .createSpy("remove")
+      .and.callFake(async () => {});
+    globalThis.__macserverMocks.mkdir = jasmine
+      .createSpy("mkdir")
+      .and.callFake(async () => true);
+    globalThis.__macserverMocks.resync = jasmine
+      .createSpy("resync")
+      .and.callFake(async () => {});
     spyOn(console, "log");
     spyOn(console, "warn");
     spyOn(console, "error");
@@ -194,7 +203,11 @@ describe("icloud macserver disconnect handling", function () {
       // (after the 1s backoff) would make six
       expect(requests).toBe(3);
       const logged = console.log.calls.allArgs().map((args) => args.join(" "));
-      expect(logged.some((line) => /Resync not needed: blog .* is no longer connected/.test(line))).toBe(true);
+      expect(
+        logged.some((line) =>
+          /Resync not needed: blog .* is no longer connected/.test(line)
+        )
+      ).toBe(true);
     });
 
     [409, 423, 500].forEach(function (status) {

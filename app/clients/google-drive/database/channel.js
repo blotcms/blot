@@ -23,7 +23,9 @@ const channel = {
     const { type, serviceAccountId, fileId } = data;
 
     if (!type || !serviceAccountId) {
-      throw new Error("type and serviceAccountId are required to associate a channel.");
+      throw new Error(
+        "type and serviceAccountId are required to associate a channel."
+      );
     }
 
     const key = this._key(channelId);
@@ -106,7 +108,10 @@ const channel = {
     const globalSetKey = this._globalSetKey();
     let cursor = "0";
     do {
-      const { cursor: nextCursor, members: channelIds } = await client.sScan(globalSetKey, cursor);
+      const { cursor: nextCursor, members: channelIds } = await client.sScan(
+        globalSetKey,
+        cursor
+      );
       for (const channelId of channelIds) {
         const data = await this.get(channelId);
         if (data && Object.keys(data).length) {
@@ -122,7 +127,10 @@ const channel = {
     const serviceAccountKey = this._serviceAccountKey(serviceAccountId);
     let cursor = "0";
     do {
-      const { cursor: nextCursor, members: channelIds } = await client.sScan(serviceAccountKey, cursor);
+      const { cursor: nextCursor, members: channelIds } = await client.sScan(
+        serviceAccountKey,
+        cursor
+      );
       for (const channelId of channelIds) {
         const data = await this.get(channelId);
         if (data && Object.keys(data).length) {
@@ -138,7 +146,10 @@ const channel = {
     const fileKey = this._fileKey(serviceAccountId, fileId);
     let cursor = "0";
     do {
-      const { cursor: nextCursor, members: channelIds } = await client.sScan(fileKey, cursor);
+      const { cursor: nextCursor, members: channelIds } = await client.sScan(
+        fileKey,
+        cursor
+      );
       for (const channelId of channelIds) {
         const data = await this.get(channelId);
         if (data && Object.keys(data).length) {

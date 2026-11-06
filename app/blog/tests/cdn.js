@@ -3,7 +3,7 @@ const config = require("config");
 describe("cdn template function", function () {
   require("./util/setup")();
 
-  const { cdnRegex, extractHash, validate } = require('./util/cdn');
+  const { cdnRegex, extractHash, validate } = require("./util/cdn");
 
   it("renders origin", async function () {
     await this.template({
@@ -185,7 +185,9 @@ describe("cdn template function", function () {
     });
 
     expect(hash).not.toBe(extractHash(await this.text("/")));
-    expect(await this.text("/style.css")).toBe("a {color: blue} body { color: red; }");
+    expect(await this.text("/style.css")).toBe(
+      "a {color: blue} body { color: red; }"
+    );
   });
 
   it("changes when a deeply nested referenced view changes", async function () {

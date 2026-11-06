@@ -68,22 +68,24 @@ function format() {
     prefix = percentage + "%  ";
   }
 
-  return prefix + frames
-    .map(function (f) {
-      var displayIndex =
-        f.context.index == null ? f.index : f.context.index;
-      var detail = f.context.detail ? " " + f.context.detail : "";
-      return (
-        f.label +
-        detail +
-        " (" +
-        displayIndex +
-        "/" +
-        (f.total == null ? "?" : f.total) +
-        ")"
-      );
-    })
-    .join("  ");
+  return (
+    prefix +
+    frames
+      .map(function (f) {
+        var displayIndex = f.context.index == null ? f.index : f.context.index;
+        var detail = f.context.detail ? " " + f.context.detail : "";
+        return (
+          f.label +
+          detail +
+          " (" +
+          displayIndex +
+          "/" +
+          (f.total == null ? "?" : f.total) +
+          ")"
+        );
+      })
+      .join("  ")
+  );
 }
 
 function writeRaw(str) {

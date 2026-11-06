@@ -70,7 +70,10 @@ function collectDroppedFiles(dataTransfer) {
   if (!items.length) {
     return Promise.resolve(
       files.map(function (file) {
-        return { file: file, relativePath: file.webkitRelativePath || file.name };
+        return {
+          file: file,
+          relativePath: file.webkitRelativePath || file.name,
+        };
       })
     );
   }
@@ -86,7 +89,10 @@ function collectDroppedFiles(dataTransfer) {
   if (!hasEntrySupport) {
     return Promise.resolve(
       files.map(function (file) {
-        return { file: file, relativePath: file.webkitRelativePath || file.name };
+        return {
+          file: file,
+          relativePath: file.webkitRelativePath || file.name,
+        };
       })
     );
   }
@@ -99,7 +105,9 @@ function collectDroppedFiles(dataTransfer) {
     if (item.kind !== "file") return Promise.resolve([]);
 
     var entry =
-      typeof item.webkitGetAsEntry === "function" ? item.webkitGetAsEntry() : null;
+      typeof item.webkitGetAsEntry === "function"
+        ? item.webkitGetAsEntry()
+        : null;
 
     if (entry) return collectDroppedFilesFromEntry(entry, "");
 

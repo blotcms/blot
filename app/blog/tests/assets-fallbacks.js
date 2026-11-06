@@ -76,7 +76,10 @@ describe("blog asset fallbacks", function () {
     await write("PIC.txt", "two");
     await write("pIC.txt", "three");
     const expected = (
-      await folder.read(blogID, await folder.resolveCaseInsensitive(blogID, "/pic.TXT"))
+      await folder.read(
+        blogID,
+        await folder.resolveCaseInsensitive(blogID, "/pic.TXT")
+      )
     ).toString();
     expect(await text("/pic.TXT")).toBe(expected);
   });

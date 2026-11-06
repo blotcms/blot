@@ -23,8 +23,8 @@ module.exports = {
     title: "The Cartography of Solitude",
     template: "SITE:event",
     menu: [
-      { url: "/", label: "Information",  id: "/Landing page.txt" },
-      { url: "/speakers", label: "Speakers",  id: "/Speakers.txt" },
+      { url: "/", label: "Information", id: "/Landing page.txt" },
+      { url: "/speakers", label: "Speakers", id: "/Speakers.txt" },
       { url: "/faqs", label: "FAQs", id: "/FAQs.txt" },
       { url: "/page/1", label: "Announcements", id: "/Announcements.txt" },
       { url: "/tickets", label: "Tickets", id: "/Tickets.txt" },
@@ -48,20 +48,20 @@ module.exports = {
     plugins: {
       injectTitle: {
         enabled: true,
-        options: {}
+        options: {},
       },
       linebreaks: {
         enabled: true,
-        options: {}
+        options: {},
       },
       wikilinks: {
         enabled: true,
-        options: {}
+        options: {},
       },
       zoom: {
         enabled: true,
-        options: {}
-      }
-    }
+        options: {},
+      },
+    },
   },
 };

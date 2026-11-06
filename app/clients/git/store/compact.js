@@ -85,7 +85,12 @@ const fsp = require("fs/promises");
 const path = require("path");
 const { pipeline } = require("stream/promises");
 const { spawn } = require("child_process");
-const { StaleManifestError, OutcomeUnknownError, CorruptError, NoRoomError } = require("./errors");
+const {
+  StaleManifestError,
+  OutcomeUnknownError,
+  CorruptError,
+  NoRoomError,
+} = require("./errors");
 const { packKey, idxKey, revKey } = require("./layout");
 const { keepPack } = require("./packcache");
 const { rememberWhole } = require("./idx");
@@ -96,7 +101,14 @@ const { buildRev } = require("./rev");
 
 const MiB = 1024 * 1024;
 
-const DEFAULTS = { keepRecent: 4, maxPacks: 32, factor: 2, minPieces: 16, maxBytes: 256 * MiB, snapshotSlack: 1.1 };
+const DEFAULTS = {
+  keepRecent: 4,
+  maxPacks: 32,
+  factor: 2,
+  minPieces: 16,
+  maxBytes: 256 * MiB,
+  snapshotSlack: 1.1,
+};
 
 // compact() takes no more than this share of the cache's budget for the inputs
 // of a merge, unless maxBytes is given. Scratch holds them and the output.
@@ -151,14 +163,19 @@ const INDEX_CONFIG = {
 };
 
 // INDEX_CONFIG as git's leading -c arguments
-const indexArgs = () => Object.entries(INDEX_CONFIG).flatMap(([key, value]) => ["-c", key + "=" + value]);
+const indexArgs = () =>
+  Object.entries(INDEX_CONFIG).flatMap(([key, value]) => [
+    "-c",
+    key + "=" + value,
+  ]);
 
 // The command a failure is named by, without git's leading options (-c
 // settings), so an error reads "git index-pack ... failed" whatever settings
 // it ran with: the verifier tells a bad store copy from local trouble by it
 function commandOf(args) {
   let i = 0;
-  while (i < args.length && args[i].startsWith("-")) i += args[i] === "-c" ? 2 : 1;
+  while (i < args.length && args[i].startsWith("-"))
+    i += args[i] === "-c" ? 2 : 1;
   return args.slice(i).join(" ");
 }
 
@@ -201,22 +218,33 @@ function commandOf(args) {
 // the limits by `snapshotSlack` (10%): a manifest-only swap, about one in a
 // hundred pushes at the count limit.
 function plan(m, options = {}) {
-  const { keepRecent, maxPacks, factor, minPieces, maxBytes, snapshotSlack } = { ...DEFAULTS, ...options };
+  const { keepRecent, maxPacks, factor, minPieces, maxBytes, snapshotSlack } = {
+    ...DEFAULTS,
+    ...options,
+  };
 
   // Only packs that can still be merged count towards maxPacks. One whose
   // .pack and .idx are half of maxBytes or more stays as it is from then on
   // (two such never fit in one merge), so a repository much larger than
   // maxBytes always has many of them, and counting them would drop keepRecent
   // on every run and send a client one push behind a merged pack every time.
-  const mergeable = m.packs.filter((pack) => pack.size + pack.idxSize < maxBytes / 2).length;
+  const mergeable = m.packs.filter(
+    (pack) => pack.size + pack.idxSize < maxBytes / 2
+  ).length;
 
   let candidates = m.packs;
   if (mergeable <= maxPacks && keepRecent > 0) {
-    const recent = new Set([...new Set(m.packs.map((pack) => pack.seq))].sort((a, b) => b - a).slice(0, keepRecent));
+    const recent = new Set(
+      [...new Set(m.packs.map((pack) => pack.seq))]
+        .sort((a, b) => b - a)
+        .slice(0, keepRecent)
+    );
     candidates = m.packs.filter((pack) => !recent.has(pack.seq));
   }
 
-  const sorted = [...candidates].sort((a, b) => a.size - b.size || (a.name < b.name ? -1 : 1));
+  const sorted = [...candidates].sort(
+    (a, b) => a.size - b.size || (a.name < b.name ? -1 : 1)
+  );
   let split = 0;
   let below = 0;
   sorted.forEach((pack, i) => {
@@ -228,7 +256,9 @@ function plan(m, options = {}) {
   // .pack and .idx together (what the cap counts; an .idx can be large next
   // to its pack) whose sum fits in maxBytes are taken
   const bytes = (pack) => pack.size + pack.idxSize;
-  const byBytes = sorted.slice(0, split).sort((a, b) => bytes(a) - bytes(b) || (a.name < b.name ? -1 : 1));
+  const byBytes = sorted
+    .slice(0, split)
+    .sort((a, b) => bytes(a) - bytes(b) || (a.name < b.name ? -1 : 1));
   const taken = [];
   let total = 0;
   for (const pack of byBytes) {
@@ -248,7 +278,12 @@ function plan(m, options = {}) {
 // manifest it already holds, to skip compact() when there is nothing to do,
 // passes these so the two agree.
 function planOptions(cache, options = {}) {
-  const maxBytes = options.maxBytes !== undefined ? options.maxBytes : cache && cache.maxBytes > 0 ? Math.max(0, Math.floor((cache.maxBytes - SLACK) / CACHE_SHARE)) : DEFAULTS.maxBytes;
+  const maxBytes =
+    options.maxBytes !== undefined
+      ? options.maxBytes
+      : cache && cache.maxBytes > 0
+        ? Math.max(0, Math.floor((cache.maxBytes - SLACK) / CACHE_SHARE))
+        : DEFAULTS.maxBytes;
   return { ...options, maxBytes };
 }
 
@@ -256,7 +291,8 @@ function planOptions(cache, options = {}) {
 // those not given)
 function snapshotLimits(options) {
   const limits = { ...manifest.SNAPSHOT_LIMITS };
-  for (const name of Object.keys(limits)) if (options[name] !== undefined) limits[name] = options[name];
+  for (const name of Object.keys(limits))
+    if (options[name] !== undefined) limits[name] = options[name];
   return limits;
 }
 
@@ -276,47 +312,72 @@ function snapshotsDue(m, options, slack) {
 // The environment for git here: nothing from the host's own configuration
 function gitEnvironment(gitDir) {
   const env = {};
-  for (const [name, value] of Object.entries(process.env)) if (!name.startsWith("GIT_")) env[name] = value;
-  return { ...env, GIT_DIR: gitDir, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null", GIT_TERMINAL_PROMPT: "0" };
+  for (const [name, value] of Object.entries(process.env))
+    if (!name.startsWith("GIT_")) env[name] = value;
+  return {
+    ...env,
+    GIT_DIR: gitDir,
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_SYSTEM: "/dev/null",
+    GIT_TERMINAL_PROMPT: "0",
+  };
 }
 
 // Runs git, once the host's gate lets it start (limit.js, createChildren);
 // resolves with its stdout, or rejects with git's stderr
 function runGit(children, args, { gitDir, input = "" }) {
-  return children.start(() => new Promise((resolve, reject) => {
-    const child = spawn("git", args, { env: gitEnvironment(gitDir), stdio: ["pipe", "pipe", "pipe"] });
-    const stdout = [];
-    const stderr = [];
-    const timer = setTimeout(() => child.kill("SIGKILL"), GIT_TIMEOUT_MS);
+  return children.start(
+    () =>
+      new Promise((resolve, reject) => {
+        const child = spawn("git", args, {
+          env: gitEnvironment(gitDir),
+          stdio: ["pipe", "pipe", "pipe"],
+        });
+        const stdout = [];
+        const stderr = [];
+        const timer = setTimeout(() => child.kill("SIGKILL"), GIT_TIMEOUT_MS);
 
-    children.add(child);
-    child.stdout.on("data", (chunk) => stdout.push(chunk));
-    child.stderr.on("data", (chunk) => stderr.push(chunk));
-    child.stdin.on("error", () => {});
-    child.on("error", (err) => {
-      clearTimeout(timer);
-      children.delete(child);
-      reject(err);
-    });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      children.delete(child);
-      if (code === 0) return resolve(Buffer.concat(stdout).toString());
-      reject(new Error("git " + commandOf(args) + " failed: " + Buffer.concat(stderr).toString().trim().slice(-1000)));
-    });
-    child.stdin.end(input);
-  }));
+        children.add(child);
+        child.stdout.on("data", (chunk) => stdout.push(chunk));
+        child.stderr.on("data", (chunk) => stderr.push(chunk));
+        child.stdin.on("error", () => {});
+        child.on("error", (err) => {
+          clearTimeout(timer);
+          children.delete(child);
+          reject(err);
+        });
+        child.on("close", (code) => {
+          clearTimeout(timer);
+          children.delete(child);
+          if (code === 0) return resolve(Buffer.concat(stdout).toString());
+          reject(
+            new Error(
+              "git " +
+                commandOf(args) +
+                " failed: " +
+                Buffer.concat(stderr).toString().trim().slice(-1000)
+            )
+          );
+        });
+        child.stdin.end(input);
+      })
+  );
 }
 
 // ---- Inputs, outputs and proofs --------------------------------------
 
 // The object IDs an .idx lists, as one Buffer of sorted 20-byte IDs
 function idsOf(idx, name) {
-  if (idx.length < FANOUT_END + 40 || idx.readUInt32BE(0) !== 0xff744f63 || idx.readUInt32BE(4) !== 2) {
+  if (
+    idx.length < FANOUT_END + 40 ||
+    idx.readUInt32BE(0) !== 0xff744f63 ||
+    idx.readUInt32BE(4) !== 2
+  ) {
     throw new CorruptError(name + " is not a version 2 pack index");
   }
   const count = idx.readUInt32BE(FANOUT_END - 4);
-  if (idx.length < FANOUT_END + count * 28 + 40) throw new CorruptError(name + " is shorter than its fanout says");
+  if (idx.length < FANOUT_END + count * 28 + 40)
+    throw new CorruptError(name + " is shorter than its fanout says");
   return { count, ids: idx.subarray(FANOUT_END, FANOUT_END + count * 20) };
 }
 
@@ -325,9 +386,15 @@ function assertContains(outer, inner, what) {
   let at = 0;
   for (let i = 0; i < inner.length; i += 20) {
     const id = inner.subarray(i, i + 20);
-    while (at < outer.length && Buffer.compare(outer.subarray(at, at + 20), id) < 0) at += 20;
+    while (
+      at < outer.length &&
+      Buffer.compare(outer.subarray(at, at + 20), id) < 0
+    )
+      at += 20;
     if (at >= outer.length || !outer.subarray(at, at + 20).equals(id)) {
-      throw new CorruptError("The merged pack lacks " + id.toString("hex") + " from " + what);
+      throw new CorruptError(
+        "The merged pack lacks " + id.toString("hex") + " from " + what
+      );
     }
   }
 }
@@ -341,15 +408,24 @@ async function fetchInput(store, entry, dir, downloads) {
   const packFile = path.join(dir, entry.name + ".pack");
   const idxFile = path.join(dir, entry.name + ".idx");
   const copy = (key, file) =>
-    pipeline(store.stream(key), fs.createWriteStream(file), { signal: downloads.controller.signal }).catch((err) => {
+    pipeline(store.stream(key), fs.createWriteStream(file), {
+      signal: downloads.controller.signal,
+    }).catch((err) => {
       if (!downloads.error) downloads.error = err;
       downloads.controller.abort();
       throw err;
     });
-  const copies = await Promise.allSettled([copy(packKey(entry.name), packFile), copy(idxKey(entry.name), idxFile)]);
-  if (copies.some((settled) => settled.status === "rejected")) throw downloads.error;
+  const copies = await Promise.allSettled([
+    copy(packKey(entry.name), packFile),
+    copy(idxKey(entry.name), idxFile),
+  ]);
+  if (copies.some((settled) => settled.status === "rejected"))
+    throw downloads.error;
 
-  const [packStat, idx] = await Promise.all([fsp.stat(packFile), fsp.readFile(idxFile)]);
+  const [packStat, idx] = await Promise.all([
+    fsp.stat(packFile),
+    fsp.readFile(idxFile),
+  ]);
   if (packStat.size !== entry.size || idx.length !== entry.idxSize) {
     throw new CorruptError(entry.name + " is not the size the manifest says");
   }
@@ -360,7 +436,8 @@ async function fetchInput(store, entry, dir, downloads) {
   } finally {
     await handle.close();
   }
-  if (!idx.subarray(idx.length - 40, idx.length - 20).equals(trailer)) throw new CorruptError(entry.name + ".idx is not the index of its pack");
+  if (!idx.subarray(idx.length - 40, idx.length - 20).equals(trailer))
+    throw new CorruptError(entry.name + ".idx is not the index of its pack");
   return { entry, idx };
 }
 
@@ -371,9 +448,24 @@ async function fetchInput(store, entry, dir, downloads) {
 async function merge({ children, gitDir, outDir, inputs, packConfig, label }) {
   await fsp.mkdir(outDir, { recursive: true });
   const base = path.join(outDir, label);
-  const config = Object.entries(packConfig).flatMap(([key, value]) => ["-c", key + "=" + value]);
-  const args = [...config, "pack-objects", "--stdin-packs", "--delta-base-offset", "-q", base];
-  const hash = (await runGit(children, args, { gitDir, input: inputs.map(({ entry }) => entry.name + ".pack").join("\n") + "\n" })).trim();
+  const config = Object.entries(packConfig).flatMap(([key, value]) => [
+    "-c",
+    key + "=" + value,
+  ]);
+  const args = [
+    ...config,
+    "pack-objects",
+    "--stdin-packs",
+    "--delta-base-offset",
+    "-q",
+    base,
+  ];
+  const hash = (
+    await runGit(children, args, {
+      gitDir,
+      input: inputs.map(({ entry }) => entry.name + ".pack").join("\n") + "\n",
+    })
+  ).trim();
 
   const packFile = base + "-" + hash + ".pack";
   const idx = await fsp.readFile(base + "-" + hash + ".idx");
@@ -391,18 +483,38 @@ async function merge({ children, gitDir, outDir, inputs, packConfig, label }) {
 
   // Nothing was lost: every object of every input is in the output
   const out = idsOf(idx, label);
-  for (const { entry, idx: inputIdx } of inputs) assertContains(out.ids, idsOf(inputIdx, entry.name).ids, entry.name);
-  if (head.readUInt32BE(8) !== out.count) throw new CorruptError("The merged pack's header does not count what its index lists");
-  if (!idx.subarray(idx.length - 40, idx.length - 20).equals(trailer)) throw new CorruptError("The merged pack's index is not of the pack");
+  for (const { entry, idx: inputIdx } of inputs)
+    assertContains(out.ids, idsOf(inputIdx, entry.name).ids, entry.name);
+  if (head.readUInt32BE(8) !== out.count)
+    throw new CorruptError(
+      "The merged pack's header does not count what its index lists"
+    );
+  if (!idx.subarray(idx.length - 40, idx.length - 20).equals(trailer))
+    throw new CorruptError("The merged pack's index is not of the pack");
 
   // Self-contained: every delta base the pack names is in it
   const scanned = await scanPack(packFile);
   for (const oid of scanned.bases) {
-    assertContains(out.ids, Buffer.from(oid, "hex"), "the pack's own delta bases (it is not self-contained)");
+    assertContains(
+      out.ids,
+      Buffer.from(oid, "hex"),
+      "the pack's own delta bases (it is not self-contained)"
+    );
   }
-  if (scanned.count !== out.count) throw new CorruptError("The merged pack holds a different number of entries than its index lists");
+  if (scanned.count !== out.count)
+    throw new CorruptError(
+      "The merged pack holds a different number of entries than its index lists"
+    );
 
-  return { name: "pack-" + trailer.toString("hex"), size, idxSize: idx.length, objects: out.count, packFile, idx, rev: buildRev(idx) };
+  return {
+    name: "pack-" + trailer.toString("hex"),
+    size,
+    idxSize: idx.length,
+    objects: out.count,
+    packFile,
+    idx,
+    rev: buildRev(idx),
+  };
 }
 
 // Uploads a pack, its index and (unless it is the history pack, which is read
@@ -415,22 +527,54 @@ async function merge({ children, gitDir, outDir, inputs, packConfig, label }) {
 async function upload(store, pack, { rev = true, cache = null } = {}) {
   const stream = fs.createReadStream(pack.packFile);
   stream.on("error", () => {}); // the upload sees it too
-  const puts = [store.put(packKey(pack.name), stream).finally(() => stream.destroy()), store.put(idxKey(pack.name), pack.idx)];
+  const puts = [
+    store.put(packKey(pack.name), stream).finally(() => stream.destroy()),
+    store.put(idxKey(pack.name), pack.idx),
+  ];
   if (rev) puts.push(store.put(revKey(pack.name), pack.rev));
-  const kept = keepPack({ cache, store, name: pack.name, size: pack.size, file: pack.packFile });
-  const failed = (await Promise.allSettled(puts)).find((put) => put.status === "rejected");
+  const kept = keepPack({
+    cache,
+    store,
+    name: pack.name,
+    size: pack.size,
+    file: pack.packFile,
+  });
+  const failed = (await Promise.allSettled(puts)).find(
+    (put) => put.status === "rejected"
+  );
   await kept;
   if (failed) throw failed.reason;
-  if (rev) await rememberWhole({ cache, namespace: store.id, key: idxKey(pack.name), idx: pack.idx });
+  if (rev)
+    await rememberWhole({
+      cache,
+      namespace: store.id,
+      key: idxKey(pack.name),
+      idx: pack.idx,
+    });
 }
 
-const entryOf = ({ name, size, idxSize, objects }) => ({ name, size, idxSize, objects });
+const entryOf = ({ name, size, idxSize, objects }) => ({
+  name,
+  size,
+  idxSize,
+  objects,
+});
 
 // ---- Compaction -------------------------------------------------------
 
-async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, clock = Date.now, gate = null, ...options }) {
+async function compact({
+  store,
+  cache,
+  lock,
+  pack = {},
+  attempts = ATTEMPTS,
+  clock = Date.now,
+  gate = null,
+  ...options
+}) {
   const packConfig = { ...PACK_CONFIG, ...pack };
-  if (typeof lock !== "function") throw new Error("compact needs the host's lock function");
+  if (typeof lock !== "function")
+    throw new Error("compact needs the host's lock function");
 
   const started = Date.now();
   const stats = {
@@ -449,7 +593,15 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, clo
     snapshotsTrimmed: 0,
   };
   const limits = snapshotLimits(options);
-  const result = (outcome, extra) => ({ outcome, seq: null, merged: [], into: null, history: null, ...extra, stats: { ...stats, ms: Date.now() - started } });
+  const result = (outcome, extra) => ({
+    outcome,
+    seq: null,
+    merged: [],
+    into: null,
+    history: null,
+    ...extra,
+    stats: { ...stats, ms: Date.now() - started },
+  });
 
   const base = await manifest.read(store, { clock });
   const planned = planOptions(cache, options);
@@ -460,8 +612,11 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, clo
   const byName = new Map(base.packs.map((pack) => [pack.name, pack]));
   const packInputs = chosen.packs.map((name) => byName.get(name));
   let pieceInputs = chosen.history ? [...base.historyPieces] : [];
-  let historyInputs = chosen.history ? [...(base.history ? [base.history] : []), ...pieceInputs] : [];
-  const inputBytes = (inputs) => inputs.reduce((sum, pack) => sum + pack.size + pack.idxSize, 0);
+  let historyInputs = chosen.history
+    ? [...(base.history ? [base.history] : []), ...pieceInputs]
+    : [];
+  const inputBytes = (inputs) =>
+    inputs.reduce((sum, pack) => sum + pack.size + pack.idxSize, 0);
   const skipHistory = (reason) => {
     stats.historySkipped = reason;
     pieceInputs = [];
@@ -471,7 +626,8 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, clo
   // The history is rewritten whole, so it is budgeted on its own and never
   // holds up the packs: past maxBytes, or with no room left in the cache once
   // the packs have theirs, it is skipped this run
-  if (historyInputs.length && inputBytes(historyInputs) > maxBytes) skipHistory("too large");
+  if (historyInputs.length && inputBytes(historyInputs) > maxBytes)
+    skipHistory("too large");
 
   // Swaps in the manifest with `merged` (the merged pack, or null) in place of
   // `packInputs`, and `history` (or null) in place of the old history pack and
@@ -484,7 +640,10 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, clo
       history: history ? history.name : null,
     };
     const uploaded = [merged, history].filter(Boolean).map((pack) => pack.name);
-    const through = Math.max(base.history ? base.history.through : 0, ...pieceInputs.map((piece) => piece.seq));
+    const through = Math.max(
+      base.history ? base.history.through : 0,
+      ...pieceInputs.map((piece) => piece.seq)
+    );
 
     // Whether `current` still lists everything this compaction merged: pushes
     // and commits only add packs and pieces, so a manifest that has moved on is
@@ -494,35 +653,63 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, clo
       // uploaded
       if (manifest.epochOf(current) !== manifest.epochOf(base)) return false;
       const packs = new Set(current.packs.map((pack) => pack.name));
-      const pieces = new Set((current.historyPieces || []).map((piece) => piece.name));
-      const sameHistory = (current.history && current.history.name) === (base.history && base.history.name);
-      return names.merged.every((name) => packs.has(name)) && (!history || (sameHistory && pieceInputs.every((piece) => pieces.has(piece.name))));
+      const pieces = new Set(
+        (current.historyPieces || []).map((piece) => piece.name)
+      );
+      const sameHistory =
+        (current.history && current.history.name) ===
+        (base.history && base.history.name);
+      return (
+        names.merged.every((name) => packs.has(name)) &&
+        (!history ||
+          (sameHistory && pieceInputs.every((piece) => pieces.has(piece.name))))
+      );
     };
 
     let current = base;
     for (let attempt = 1; ; attempt++) {
       stats.attempts = attempt;
-      if (!stillListed(current)) return result("superseded", { seq: current.seq });
+      if (!stillListed(current))
+        return result("superseded", { seq: current.seq });
 
       const next = manifest.compacted(current, {
         remove: names.merged,
         add: merged ? entryOf(merged) : null,
-        ...(history ? { history: { ...entryOf(history), through }, removePieces: pieceInputs.map((piece) => piece.name) } : {}),
+        ...(history
+          ? {
+              history: { ...entryOf(history), through },
+              removePieces: pieceInputs.map((piece) => piece.name),
+            }
+          : {}),
         limits,
       });
       stats.snapshotsTrimmed = current.snapshots.length - next.snapshots.length;
 
       // A trim alone which another compaction has already made
-      if (!merged && !history && !stats.snapshotsTrimmed) return result("nothing", { seq: current.seq });
+      if (!merged && !history && !stats.snapshotsTrimmed)
+        return result("nothing", { seq: current.seq });
 
       try {
-        await manifest.swap({ store, lock, base: current, next, uploaded, clock });
+        await manifest.swap({
+          store,
+          lock,
+          base: current,
+          next,
+          uploaded,
+          clock,
+        });
         return result("compacted", { seq: next.seq, ...names });
       } catch (err) {
-        if (err instanceof OutcomeUnknownError) return result("unknown", { seq: next.seq, ...names, error: err });
+        if (err instanceof OutcomeUnknownError)
+          return result("unknown", { seq: next.seq, ...names, error: err });
         if (!(err instanceof StaleManifestError)) throw err;
         if (attempt >= attempts) {
-          throw Object.assign(new Error("The manifest moved " + attempts + " times while compacting"), { code: "EMOVED" });
+          throw Object.assign(
+            new Error(
+              "The manifest moved " + attempts + " times while compacting"
+            ),
+            { code: "EMOVED" }
+          );
         }
       }
       current = await manifest.read(store, { clock });
@@ -531,7 +718,9 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, clo
 
   // Only the snapshots to trim: a swap of the manifest, with nothing to fetch
   const trimOnly = () =>
-    chosen.trim ? swapIn({ merged: null, history: null, packInputs: [], pieceInputs: [] }) : result("nothing", { seq: base.seq });
+    chosen.trim
+      ? swapIn({ merged: null, history: null, packInputs: [], pieceInputs: [] })
+      : result("nothing", { seq: base.seq });
 
   if (!packInputs.length && !historyInputs.length) return trimOnly();
 
@@ -554,7 +743,10 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, clo
     stats.bytesIn = packInputs.reduce((sum, pack) => sum + pack.size, 0);
     stats.objectsIn = packInputs.reduce((sum, pack) => sum + pack.objects, 0);
     stats.piecesIn = pieceInputs.length;
-    stats.historyBytesIn = historyInputs.reduce((sum, pack) => sum + pack.size, 0);
+    stats.historyBytesIn = historyInputs.reduce(
+      (sum, pack) => sum + pack.size,
+      0
+    );
 
     const gitDir = path.join(reservation.dir, "repo.git");
     const packDir = path.join(gitDir, "objects", "pack");
@@ -563,17 +755,41 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, clo
 
     // A pack can be both, after a push that brought only commits; it is
     // fetched once
-    const unique = [...new Map([...packInputs, ...historyInputs].map((entry) => [entry.name, entry])).values()];
+    const unique = [
+      ...new Map(
+        [...packInputs, ...historyInputs].map((entry) => [entry.name, entry])
+      ).values(),
+    ];
     // mapLimit waits for every fetch in flight before it rejects
     const downloads = { controller: new AbortController(), error: null };
-    const fetched = new Map((await mapLimit(unique, CONCURRENCY, (entry) => fetchInput(store, entry, packDir, downloads))).map((input) => [input.entry.name, input]));
+    const fetched = new Map(
+      (
+        await mapLimit(unique, CONCURRENCY, (entry) =>
+          fetchInput(store, entry, packDir, downloads)
+        )
+      ).map((input) => [input.entry.name, input])
+    );
 
     const outDir = path.join(reservation.dir, "out");
     const merged = packInputs.length
-      ? await merge({ children, gitDir, outDir, inputs: packInputs.map((entry) => fetched.get(entry.name)), packConfig, label: "merged" })
+      ? await merge({
+          children,
+          gitDir,
+          outDir,
+          inputs: packInputs.map((entry) => fetched.get(entry.name)),
+          packConfig,
+          label: "merged",
+        })
       : null;
     const history = historyInputs.length
-      ? await merge({ children, gitDir, outDir, inputs: historyInputs.map((entry) => fetched.get(entry.name)), packConfig, label: "history" })
+      ? await merge({
+          children,
+          gitDir,
+          outDir,
+          inputs: historyInputs.map((entry) => fetched.get(entry.name)),
+          packConfig,
+          label: "history",
+        })
       : null;
 
     if (merged) {
@@ -585,14 +801,21 @@ async function compact({ store, cache, lock, pack = {}, attempts = ATTEMPTS, clo
       stats.commits = history.objects;
     }
 
-    const uploads = await Promise.allSettled([...(merged ? [upload(store, merged, { cache })] : []), ...(history ? [upload(store, history, { rev: false, cache })] : [])]);
+    const uploads = await Promise.allSettled([
+      ...(merged ? [upload(store, merged, { cache })] : []),
+      ...(history ? [upload(store, history, { rev: false, cache })] : []),
+    ]);
     const failed = uploads.find((upload) => upload.status === "rejected");
     if (failed) throw failed.reason;
 
     return await swapIn({ merged, history, packInputs, pieceInputs });
   } finally {
     for (const child of children) child.kill("SIGKILL");
-    await reservation.release().catch((err) => console.error("Git store: could not remove scratch space", err));
+    await reservation
+      .release()
+      .catch((err) =>
+        console.error("Git store: could not remove scratch space", err)
+      );
   }
 }
 

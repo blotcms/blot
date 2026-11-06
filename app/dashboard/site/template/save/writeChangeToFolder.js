@@ -2,7 +2,13 @@ const clfdate = require("helper/clfdate");
 const { getMetadata, writeToFolder } = require("models/template");
 
 module.exports = function (blog, template, view, callback) {
-  console.log(clfdate(), "writeChangeToFolder", blog.id, template.id, view.name);
+  console.log(
+    clfdate(),
+    "writeChangeToFolder",
+    blog.id,
+    template.id,
+    view.name
+  );
 
   const ensureMetadata = (metadata) => {
     if (!metadata || !metadata.localEditing) {

@@ -35,7 +35,9 @@ const { promisify } = require("util");
 function usage(message) {
   if (message) console.error(message + "\n");
 
-  console.error("Usage: node scripts/storage/rebuild-file-index.js <blogID> [--apply --live] [--no-hash]");
+  console.error(
+    "Usage: node scripts/storage/rebuild-file-index.js <blogID> [--apply --live] [--no-hash]"
+  );
   process.exit(2);
 }
 
@@ -53,7 +55,9 @@ function parse(argv) {
 
   if (!options.blogID) usage();
   if (options.apply && !options.live) {
-    usage("--apply empties the index while it is rewritten, and reads in that window see part of the folder. Pass --live too (see the header).");
+    usage(
+      "--apply empties the index while it is rewritten, and reads in that window see part of the folder. Pass --live too (see the header)."
+    );
   }
 
   return options;
@@ -72,7 +76,8 @@ async function count(blogID, options) {
     const parts = record.path.split("/").slice(1);
     const ancestors = [];
 
-    for (let i = 1; i < parts.length; i++) ancestors.push("/" + parts.slice(0, i).join("/"));
+    for (let i = 1; i < parts.length; i++)
+      ancestors.push("/" + parts.slice(0, i).join("/"));
 
     let code = null;
 
@@ -106,8 +111,14 @@ function report(label, counts) {
   console.log(label, totals);
 
   if (skipped.length) {
-    console.log(skipped.length + " objects skipped, which conflict with one listed before them:");
-    for (const item of skipped) console.log("  " + item.code + " " + item.type + " " + JSON.stringify(item.path));
+    console.log(
+      skipped.length +
+        " objects skipped, which conflict with one listed before them:"
+    );
+    for (const item of skipped)
+      console.log(
+        "  " + item.code + " " + item.type + " " + JSON.stringify(item.path)
+      );
   }
 }
 
@@ -121,7 +132,9 @@ async function rebuild(blogID, options) {
   return hold(blogID, async function () {
     const records = [];
 
-    for await (const record of backend.indexRecords(blogID, { hash: options.hash !== false })) {
+    for await (const record of backend.indexRecords(blogID, {
+      hash: options.hash !== false,
+    })) {
       records.push(record);
     }
 

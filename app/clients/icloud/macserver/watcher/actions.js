@@ -54,87 +54,92 @@ const withRetries = async (label, operation, options = {}) => {
     }
   }
 
-  console.error(clfdate(), `${label} failed after ${attempts} attempts:`, lastError);
+  console.error(
+    clfdate(),
+    `${label} failed after ${attempts} attempts:`,
+    lastError
+  );
   throw lastError;
 };
 
 const performAction = async (blogID, pathInBlogDirectory, action) => {
+  const validActions = ["upload", "remove", "mkdir"];
 
-  const validActions = ['upload', 'remove', 'mkdir'];
-  
   if (!validActions.includes(action)) {
-    throw new Error(`Invalid action: ${action}. Must be one of: ${validActions.join(', ')}`);
+    throw new Error(
+      `Invalid action: ${action}. Must be one of: ${validActions.join(", ")}`
+    );
   }
 
   const limiter = getLimiterForBlogID(blogID);
 
   // resolves to the result of the action; mkdir reports whether Blot created the directory
-  return limiter.schedule(async () => {
-    try {
-      if (action === "upload") {
-        await withRetries(
-          `upload ${blogID}/${pathInBlogDirectory}`,
-          () => upload(blogID, pathInBlogDirectory)
-        );
-      } else if (action === "remove") {
-        // forgotten even if the remove fails, so the file is pushed again
-        // if it comes back with the same size and mtime
-        forgetPath(blogID, pathInBlogDirectory);
-        await withRetries(
-          `remove ${blogID}/${pathInBlogDirectory}`,
-          () => remove(blogID, pathInBlogDirectory)
-        );
-      } else if (action === "mkdir") {
-        const created = await withRetries(
-          `mkdir ${blogID}/${pathInBlogDirectory}`,
-          () => mkdir(blogID, pathInBlogDirectory)
-        );
-        recordDirectory(blogID, pathInBlogDirectory);
-        return created;
-      }
-    } catch (error) {
-      if (isFileMissingError(error)) {
-        console.log(clfdate(), "Skipping upload: file no longer exists", {
-          blogID,
-          pathInBlogDirectory,
-        });
-        return;
-      }
-
-      if (isFileTooLargeError(error)) {
-        console.warn(
-          clfdate(),
-          "Oversized file recorded as placeholder; upload skipped intentionally",
-          {
+  return limiter
+    .schedule(async () => {
+      try {
+        if (action === "upload") {
+          await withRetries(`upload ${blogID}/${pathInBlogDirectory}`, () =>
+            upload(blogID, pathInBlogDirectory)
+          );
+        } else if (action === "remove") {
+          // forgotten even if the remove fails, so the file is pushed again
+          // if it comes back with the same size and mtime
+          forgetPath(blogID, pathInBlogDirectory);
+          await withRetries(`remove ${blogID}/${pathInBlogDirectory}`, () =>
+            remove(blogID, pathInBlogDirectory)
+          );
+        } else if (action === "mkdir") {
+          const created = await withRetries(
+            `mkdir ${blogID}/${pathInBlogDirectory}`,
+            () => mkdir(blogID, pathInBlogDirectory)
+          );
+          recordDirectory(blogID, pathInBlogDirectory);
+          return created;
+        }
+      } catch (error) {
+        if (isFileMissingError(error)) {
+          console.log(clfdate(), "Skipping upload: file no longer exists", {
             blogID,
             pathInBlogDirectory,
-            size: error.size,
-            maxFileSize: error.maxFileSize,
-            mtime: error.mtime,
-          }
-        );
-        return;
-      }
+          });
+          return;
+        }
 
-      resync(
-        blogID,
-        `${action} for ${pathInBlogDirectory} failed after retries`
-      ).catch((resyncError) => {
-        console.error(
-          clfdate(),
-          `Unexpected error requesting resync for blogID: ${blogID}`,
-          resyncError
-        );
-      });
+        if (isFileTooLargeError(error)) {
+          console.warn(
+            clfdate(),
+            "Oversized file recorded as placeholder; upload skipped intentionally",
+            {
+              blogID,
+              pathInBlogDirectory,
+              size: error.size,
+              maxFileSize: error.maxFileSize,
+              mtime: error.mtime,
+            }
+          );
+          return;
+        }
+
+        resync(
+          blogID,
+          `${action} for ${pathInBlogDirectory} failed after retries`
+        ).catch((resyncError) => {
+          console.error(
+            clfdate(),
+            `Unexpected error requesting resync for blogID: ${blogID}`,
+            resyncError
+          );
+        });
+        throw error;
+      }
+    })
+    .catch((error) => {
+      // The blog was disconnected (or its folder deleted) while this action was
+      // queued. removeLimiterForBlogID logged how many were dropped; there is
+      // nothing to do and no point asking Blot for a resync.
+      if (isLimiterStoppedError(error)) return;
       throw error;
-    }
-  }).catch((error) => {
-    // The blog was disconnected (or its folder deleted) while this action was
-    // queued. removeLimiterForBlogID logged how many were dropped; there is
-    // nothing to do and no point asking Blot for a resync.
-    if (isLimiterStoppedError(error)) return;
-    throw error;
-  });
+    });
 };
 
 export { performAction };

@@ -34,10 +34,19 @@ describe("upload favicon", function () {
     };
     if (withFile) {
       const source = join(test.tmp, `src-${Date.now()}-${Math.random()}.png`);
-      await sharp({ create: { width: withFile.width || 200, height: withFile.height || 100, channels: 4, background: "#2244ff" } })
+      await sharp({
+        create: {
+          width: withFile.width || 200,
+          height: withFile.height || 100,
+          channels: 4,
+          background: "#2244ff",
+        },
+      })
         .png()
         .toFile(source);
-      req.files = { favicon: [{ path: source, size: (await fs.stat(source)).size }] };
+      req.files = {
+        favicon: [{ path: source, size: (await fs.stat(source)).size }],
+      };
     }
     return req;
   };
@@ -45,8 +54,13 @@ describe("upload favicon", function () {
   const run = async function (req) {
     const result = {};
     const res = {
-      json: (body) => { result.body = body; },
-      message: (redirect, message) => { result.redirect = redirect; result.message = message; },
+      json: (body) => {
+        result.body = body;
+      },
+      message: (redirect, message) => {
+        result.redirect = redirect;
+        result.message = message;
+      },
     };
     const next = jasmine.createSpy("next");
     await uploadFavicon(req, res, next);
@@ -54,7 +68,11 @@ describe("upload favicon", function () {
   };
 
   it("stores generated favicon URLs in the template locals", async function () {
-    const req = await makeReq(this, { crop_x: "0.25", crop_y: "0", crop_size: "1" }, { withFile: {} });
+    const req = await makeReq(
+      this,
+      { crop_x: "0.25", crop_y: "0", crop_size: "1" },
+      { withFile: {} }
+    );
 
     const { result, next } = await run(req);
 
@@ -66,15 +84,26 @@ describe("upload favicon", function () {
 
     // Persisted, and the generated files are on disk.
     const templates = await new Promise((resolve, reject) =>
-      Template.getTemplateList(this.blog.id, (err, list) => (err ? reject(err) : resolve(list)))
+      Template.getTemplateList(this.blog.id, (err, list) =>
+        err ? reject(err) : resolve(list)
+      )
     );
     const saved = templates.find((t) => t.id === this.template.id);
     expect(saved.locals.favicon.prefix).toEqual(result.body.favicon.prefix);
-    expect(await storage.exists(this.blog.id, asset(`${result.body.favicon.prefix}.ico`))).toBe(true);
+    expect(
+      await storage.exists(
+        this.blog.id,
+        asset(`${result.body.favicon.prefix}.ico`)
+      )
+    ).toBe(true);
   });
 
   it("falls back to a centered crop when the crop fields are blank", async function () {
-    const req = await makeReq(this, { crop_x: "", crop_y: "", crop_size: "" }, { withFile: { width: 200, height: 100 } });
+    const req = await makeReq(
+      this,
+      { crop_x: "", crop_y: "", crop_size: "" },
+      { withFile: { width: 200, height: 100 } }
+    );
 
     const { result, next } = await run(req);
 
@@ -83,37 +112,65 @@ describe("upload favicon", function () {
   });
 
   it("keeps the existing favicon when 'Save changes' is clicked without a file", async function () {
-    const first = await run(await makeReq(this, { crop_x: "", crop_y: "", crop_size: "" }, { withFile: {} }));
+    const first = await run(
+      await makeReq(
+        this,
+        { crop_x: "", crop_y: "", crop_size: "" },
+        { withFile: {} }
+      )
+    );
     const favicon = first.result.body.favicon;
 
     const { result, next } = await run(await makeReq(this, {}));
 
     expect(next).not.toHaveBeenCalled();
     expect(result.body).toEqual({ favicon });
-    expect(await storage.exists(this.blog.id, asset(`${favicon.prefix}.ico`))).toBe(true);
+    expect(
+      await storage.exists(this.blog.id, asset(`${favicon.prefix}.ico`))
+    ).toBe(true);
   });
 
   it("removes the favicon and its assets only when the delete button is used", async function () {
-    const first = await run(await makeReq(this, { crop_x: "", crop_y: "", crop_size: "" }, { withFile: {} }));
+    const first = await run(
+      await makeReq(
+        this,
+        { crop_x: "", crop_y: "", crop_size: "" },
+        { withFile: {} }
+      )
+    );
     const favicon = first.result.body.favicon;
 
     const { result, next } = await run(await makeReq(this, { remove: "1" }));
 
     expect(next).not.toHaveBeenCalled();
     expect(result.body).toEqual({ favicon: null });
-    expect(await storage.exists(this.blog.id, asset(`${favicon.prefix}.ico`))).toBe(false);
+    expect(
+      await storage.exists(this.blog.id, asset(`${favicon.prefix}.ico`))
+    ).toBe(false);
 
     const templates = await new Promise((resolve, reject) =>
-      Template.getTemplateList(this.blog.id, (err, list) => (err ? reject(err) : resolve(list)))
+      Template.getTemplateList(this.blog.id, (err, list) =>
+        err ? reject(err) : resolve(list)
+      )
     );
-    expect(templates.find((t) => t.id === this.template.id).locals.favicon).toBeUndefined();
+    expect(
+      templates.find((t) => t.id === this.template.id).locals.favicon
+    ).toBeUndefined();
   });
 
   it("retains favicon assets when template references cannot be listed", async function () {
-    const first = await run(await makeReq(this, { crop_x: "", crop_y: "", crop_size: "" }, { withFile: {} }));
+    const first = await run(
+      await makeReq(
+        this,
+        { crop_x: "", crop_y: "", crop_size: "" },
+        { withFile: {} }
+      )
+    );
     const favicon = first.result.body.favicon;
     const path = asset(`${favicon.prefix}.ico`);
-    spyOn(Template, "getTemplateList").and.callFake((id, callback) => callback(new Error("redis unavailable")));
+    spyOn(Template, "getTemplateList").and.callFake((id, callback) =>
+      callback(new Error("redis unavailable"))
+    );
 
     await uploadFavicon.removeAssetsIfUnreferenced(this.blog, favicon);
 

@@ -52,7 +52,7 @@ function fromMetadata(dateString, userFormat) {
         "YYYY-MM-DD[T]HH:mm:ss.SSSZ",
         "YYYY-MM-DD[T]HH:mm:ss.SSS",
       ],
-      true,
+      true
     );
 
     if (rfcNormalized.isValid()) {

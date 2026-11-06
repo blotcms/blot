@@ -32,7 +32,11 @@ describe("sandbox pandoc job", function () {
   }
 
   it("converts markdown to HTML, with no media", async function () {
-    const { meta, outputs } = await sandbox.run("pandoc", markdown, Buffer.from("Hello *world*"));
+    const { meta, outputs } = await sandbox.run(
+      "pandoc",
+      markdown,
+      Buffer.from("Hello *world*")
+    );
 
     expect(meta.media).toEqual([]);
     expect(outputs.length).toEqual(1);
@@ -40,12 +44,20 @@ describe("sandbox pandoc job", function () {
   });
 
   it("returns a docx's media as outputs, named under the directory its HTML points at", async function () {
-    const input = await fs.readFile(path.join(converters, "docx/tests/image.docx"));
-    const { meta, outputs } = await sandbox.run("pandoc", { from: "docx" }, input);
+    const input = await fs.readFile(
+      path.join(converters, "docx/tests/image.docx")
+    );
+    const { meta, outputs } = await sandbox.run(
+      "pandoc",
+      { from: "docx" },
+      input
+    );
 
     expect(meta.media.sort()).toEqual(["media/rId20.png", "media/rId23.png"]);
     expect(outputs.length).toEqual(3);
-    expect(outputs[0].toString()).toContain('src="' + meta.dir + "/media/rId20.png");
+    expect(outputs[0].toString()).toContain(
+      'src="' + meta.dir + "/media/rId20.png"
+    );
     expect(outputs[1].subarray(1, 4).toString()).toEqual("PNG");
   });
 
@@ -58,13 +70,21 @@ describe("sandbox pandoc job", function () {
       csl: { length: csl.length, extension: ".csl" },
     });
 
-    const { outputs } = await sandbox.run("pandoc", args, Buffer.concat([document, bib, csl]));
+    const { outputs } = await sandbox.run(
+      "pandoc",
+      args,
+      Buffer.concat([document, bib, csl])
+    );
 
     expect(outputs[0].toString()).toContain("First book");
   });
 
   it("returns a document pandoc can't convert as meta.error", async function () {
-    const { meta, outputs } = await sandbox.run("pandoc", { from: "docx" }, Buffer.from("not a docx"));
+    const { meta, outputs } = await sandbox.run(
+      "pandoc",
+      { from: "docx" },
+      Buffer.from("not a docx")
+    );
 
     expect(meta.error.code).not.toEqual(0);
     expect(meta.error.stderr).toContain("docx");
@@ -78,26 +98,38 @@ describe("sandbox pandoc job", function () {
       { from: "html" },
       { from: "markdown" },
       { from: "markdown", katex: "yes", callouts: false },
-      Object.assign({}, markdown, { bibliography: { length: 1, extension: "/../x" } }),
+      Object.assign({}, markdown, {
+        bibliography: { length: 1, extension: "/../x" },
+      }),
       Object.assign({}, markdown, { csl: { length: -1, extension: ".csl" } }),
-      Object.assign({}, markdown, { bibliography: { length: 100, extension: ".bib" } }),
+      Object.assign({}, markdown, {
+        bibliography: { length: 100, extension: ".bib" },
+      }),
     ];
 
     for (const args of bad) {
-      expect(await rejection(sandbox.run("pandoc", args, Buffer.from("x")))).toEqual(jasmine.any(Error));
+      expect(
+        await rejection(sandbox.run("pandoc", args, Buffer.from("x")))
+      ).toEqual(jasmine.any(Error));
     }
   });
 
   it("ignores options other than its own", async function () {
     const args = { from: "rtf", katex: true, args: ["--lua-filter", "/x.lua"] };
-    const { outputs } = await sandbox.run("pandoc", args, Buffer.from("{\\rtf1 hi}"));
+    const { outputs } = await sandbox.run(
+      "pandoc",
+      args,
+      Buffer.from("{\\rtf1 hi}")
+    );
 
     expect(outputs[0].toString()).toContain("hi");
   });
 
   describe("caller", function () {
     it("rejects with pandoc's error", async function () {
-      const err = await rejection(pandoc({ from: "docx" }, Buffer.from("not a docx")));
+      const err = await rejection(
+        pandoc({ from: "docx" }, Buffer.from("not a docx"))
+      );
       expect(err.message).toMatch(/^Pandoc exited with code \d+/);
     });
 
@@ -116,13 +148,25 @@ describe("sandbox pandoc job", function () {
       const run = spyOn(sandbox, "run");
       const error = { code: null, signal: "SIGKILL", ms: 5, stderr: "" };
 
-      run.and.returnValue(Promise.resolve({ meta: { error: Object.assign({ timedOut: false }, error) }, outputs: [] }));
+      run.and.returnValue(
+        Promise.resolve({
+          meta: { error: Object.assign({ timedOut: false }, error) },
+          outputs: [],
+        })
+      );
       const killed = await rejection(pandoc({ from: "docx" }, Buffer.from("")));
       expect(killed.code).toEqual("SANDBOX_KILLED");
       expect(alerts.jobFailed).toHaveBeenCalledWith("pandoc", killed);
 
-      run.and.returnValue(Promise.resolve({ meta: { error: Object.assign({}, error, { timedOut: true }) }, outputs: [] }));
-      const timedOut = await rejection(pandoc({ from: "docx" }, Buffer.from("")));
+      run.and.returnValue(
+        Promise.resolve({
+          meta: { error: Object.assign({}, error, { timedOut: true }) },
+          outputs: [],
+        })
+      );
+      const timedOut = await rejection(
+        pandoc({ from: "docx" }, Buffer.from(""))
+      );
       expect(timedOut.code).toBeUndefined();
       expect(alerts.jobFailed.calls.count()).toEqual(1);
     });
@@ -134,7 +178,9 @@ describe("sandbox pandoc job", function () {
         return Promise.reject(err);
       });
       const err = await rejection(pandoc({ from: "docx" }, Buffer.from("")));
-      expect(err.message).toMatch(/^Pandoc exited with code null \(SIGKILL\) \(timed out\)/);
+      expect(err.message).toMatch(
+        /^Pandoc exited with code null \(SIGKILL\) \(timed out\)/
+      );
       expect(err.code).toBeUndefined();
     });
 
@@ -142,7 +188,10 @@ describe("sandbox pandoc job", function () {
       const run = spyOn(sandbox, "run");
       for (const name of ["../x.png", "/x.png", "a//b.png", "a/./b.png", ""]) {
         run.and.returnValue(
-          Promise.resolve({ meta: { dir: "/tmp/x", media: [name] }, outputs: [Buffer.from(""), Buffer.from("")] })
+          Promise.resolve({
+            meta: { dir: "/tmp/x", media: [name] },
+            outputs: [Buffer.from(""), Buffer.from("")],
+          })
         );
         const err = await rejection(pandoc({ from: "docx" }, Buffer.from("")));
         expect(err.message).toEqual("pandoc: invalid reply");

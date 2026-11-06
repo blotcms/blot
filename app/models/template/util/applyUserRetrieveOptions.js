@@ -19,54 +19,54 @@ var parseTemplate = require("../parseTemplate");
 var USER_RETRIEVE_KEYS = ["includeDraft", "filters"];
 
 module.exports = function applyUserRetrieveOptions(
-	parsedRetrieve,
-	requestedRetrieve,
-	existingRetrieve
+  parsedRetrieve,
+  requestedRetrieve,
+  existingRetrieve
 ) {
-	var result = {};
+  var result = {};
 
-	extend(result).and(parsedRetrieve || {});
+  extend(result).and(parsedRetrieve || {});
 
-	[requestedRetrieve, existingRetrieve].forEach(function (source) {
-		if (!source) return;
-		Object.keys(source).forEach(function (key) {
-			if (!parseTemplate.isSystemRetrieveLocal(key)) return;
+  [requestedRetrieve, existingRetrieve].forEach(function (source) {
+    if (!source) return;
+    Object.keys(source).forEach(function (key) {
+      if (!parseTemplate.isSystemRetrieveLocal(key)) return;
 
-			var sourceVal = source[key];
+      var sourceVal = source[key];
 
-			if (result[key] === undefined) {
-				result[key] = sourceVal;
-			} else if (type(result[key], "array") && type(sourceVal, "array")) {
-				// `cdn` is an array dependency - union the targets so an
-				// explicit/stored entry (e.g. a target reached indirectly)
-				// survives alongside the parser's. updateCdnManifest builds
-				// the manifest purely from this persisted array.
-				result[key] = [...new Set(result[key].concat(sourceVal))].sort();
-			} else if (type(result[key], "object") && type(sourceVal, "object")) {
-				// Both structured (e.g. plugin.katex.css from content plus an
-				// explicit plugin.zoom.js needed by a local): keep the parser's
-				// leaves, fold in the extra nested requests.
-				extend(result[key]).and(sourceVal);
-			}
-			// else: parser produced a value and the explicit one is a bare
-			// boolean (or vice versa) - the parser wins (see the setView
-			// stale-boolean tests).
-		});
-	});
+      if (result[key] === undefined) {
+        result[key] = sourceVal;
+      } else if (type(result[key], "array") && type(sourceVal, "array")) {
+        // `cdn` is an array dependency - union the targets so an
+        // explicit/stored entry (e.g. a target reached indirectly)
+        // survives alongside the parser's. updateCdnManifest builds
+        // the manifest purely from this persisted array.
+        result[key] = [...new Set(result[key].concat(sourceVal))].sort();
+      } else if (type(result[key], "object") && type(sourceVal, "object")) {
+        // Both structured (e.g. plugin.katex.css from content plus an
+        // explicit plugin.zoom.js needed by a local): keep the parser's
+        // leaves, fold in the extra nested requests.
+        extend(result[key]).and(sourceVal);
+      }
+      // else: parser produced a value and the explicit one is a bare
+      // boolean (or vice versa) - the parser wins (see the setView
+      // stale-boolean tests).
+    });
+  });
 
-	USER_RETRIEVE_KEYS.forEach(function (key) {
-		var value;
+  USER_RETRIEVE_KEYS.forEach(function (key) {
+    var value;
 
-		if (requestedRetrieve && requestedRetrieve[key] !== undefined) {
-			value = requestedRetrieve[key];
-		} else if (existingRetrieve && existingRetrieve[key] !== undefined) {
-			value = existingRetrieve[key];
-		}
+    if (requestedRetrieve && requestedRetrieve[key] !== undefined) {
+      value = requestedRetrieve[key];
+    } else if (existingRetrieve && existingRetrieve[key] !== undefined) {
+      value = existingRetrieve[key];
+    }
 
-		if (value !== undefined) {
-			result[key] = value;
-		}
-	});
+    if (value !== undefined) {
+      result[key] = value;
+    }
+  });
 
-	return result;
+  return result;
 };

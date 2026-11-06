@@ -251,10 +251,12 @@ describe("google drive database.blog", function () {
       }
     );
 
-    expect(result.sort((a, b) => a.blogID.localeCompare(b.blogID))).toEqual([
-      { blogID: blogID1, blogData: { foo: "bar", serviceAccountId } },
-      { blogID: blogID2, blogData: { baz: "bat", serviceAccountId } },
-    ].sort((a, b) => a.blogID.localeCompare(b.blogID)));
+    expect(result.sort((a, b) => a.blogID.localeCompare(b.blogID))).toEqual(
+      [
+        { blogID: blogID1, blogData: { foo: "bar", serviceAccountId } },
+        { blogID: blogID2, blogData: { baz: "bat", serviceAccountId } },
+      ].sort((a, b) => a.blogID.localeCompare(b.blogID))
+    );
   });
 
   it("should remove a blog from the old serviceAccountId set when the serviceAccountId changes", async function () {
@@ -407,7 +409,7 @@ describe("google drive database.blog", function () {
     const blogIDs = [];
 
     await database.blog.iterateByServiceAccountId(serviceAccountId, (id) => {
-        blogIDs.push(id);
+      blogIDs.push(id);
     });
 
     expect(blogIDs).toContain(blogID);
@@ -417,20 +419,19 @@ describe("google drive database.blog", function () {
     const updatedBlogIDs = [];
 
     await database.blog.iterateByServiceAccountId(serviceAccountId, (id) => {
-        updatedBlogIDs.push(id);
+      updatedBlogIDs.push(id);
     });
 
     expect(updatedBlogIDs).toContain(blogID);
   });
 
-
-
   it("propagates client promise failures", async function () {
     const error = new Error("boom");
     spyOn(client, "hSet").and.callFake(() => Promise.reject(error));
 
-    await expectAsync(database.blog.store("blog_failure", { foo: "bar" })).toBeRejectedWith(error);
+    await expectAsync(
+      database.blog.store("blog_failure", { foo: "bar" })
+    ).toBeRejectedWith(error);
     expect(client.hSet).toHaveBeenCalled();
   });
-
 });

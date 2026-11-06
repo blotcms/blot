@@ -21,7 +21,10 @@ describe("draft stream route", function () {
     require.cache[subscriberPath] = {
       exports: function (options) {
         captured = options;
-        return { cleanup: jasmine.createSpy("cleanup"), setupPromise: Promise.resolve() };
+        return {
+          cleanup: jasmine.createSpy("cleanup"),
+          setupPromise: Promise.resolve(),
+        };
       },
     };
     delete require.cache[routePath];
@@ -95,7 +98,10 @@ describe("draft stream route", function () {
     try {
       require.cache[subscriberPath] = {
         exports: function () {
-          return { cleanup: jasmine.createSpy("cleanup"), setupPromise: Promise.resolve() };
+          return {
+            cleanup: jasmine.createSpy("cleanup"),
+            setupPromise: Promise.resolve(),
+          };
         },
       };
       delete require.cache[routePath];

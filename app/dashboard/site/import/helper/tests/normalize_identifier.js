@@ -2,8 +2,12 @@ const normalizeIdentifier = require("../normalize_identifier");
 
 describe("import identifier normalization", function () {
   it("strips POSIX and Windows path components", function () {
-    expect(normalizeIdentifier("../../exports/site.xml", { extension: ".xml" })).toBe("site");
-    expect(normalizeIdentifier("C:\\Users\\name\\site.xml", { extension: ".xml" })).toBe("site");
+    expect(
+      normalizeIdentifier("../../exports/site.xml", { extension: ".xml" })
+    ).toBe("site");
+    expect(
+      normalizeIdentifier("C:\\Users\\name\\site.xml", { extension: ".xml" })
+    ).toBe("site");
   });
 
   it("rejects dot segments and empty names with source-specific fallbacks", function () {
@@ -35,7 +39,9 @@ describe("import identifier normalization", function () {
   });
 
   it("preserves and normalizes Unicode without splitting code points", function () {
-    expect(normalizeIdentifier("Cafe\u0301-東京.xml", { extension: ".xml" })).toBe("Café-東京");
+    expect(
+      normalizeIdentifier("Cafe\u0301-東京.xml", { extension: ".xml" })
+    ).toBe("Café-東京");
 
     const result = normalizeIdentifier("😀".repeat(100));
     expect(Buffer.byteLength(result, "utf8")).toBeLessThanOrEqual(
@@ -62,6 +68,8 @@ describe("import identifier normalization", function () {
     expect(
       normalizeIdentifier("blogger-export.ATOM", { extension: ".atom" })
     ).toBe("blogger-export");
-    expect(normalizeIdentifier("notes.txt", { extension: ".xml" })).toBe("notes.txt");
+    expect(normalizeIdentifier("notes.txt", { extension: ".xml" })).toBe(
+      "notes.txt"
+    );
   });
 });

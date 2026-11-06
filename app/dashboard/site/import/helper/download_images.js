@@ -16,12 +16,19 @@ function download(url, prefetched, callback) {
   boundedDownload(url, { kind: "image", prefetched })
     .then(({ data, format, headers }) => {
       lifecycle.check();
-      return { data, format, headers: {
-        contentType: headers.get("content-type"),
-        contentDisposition: headers.get("content-disposition"),
-      }};
+      return {
+        data,
+        format,
+        headers: {
+          contentType: headers.get("content-type"),
+          contentDisposition: headers.get("content-disposition"),
+        },
+      };
     })
-    .then(result => callback(null, result.data, result.format, result.headers), callback);
+    .then(
+      (result) => callback(null, result.data, result.format, result.headers),
+      callback
+    );
 }
 
 function download_thumbnail(post, prefetched, callback) {
@@ -32,7 +39,10 @@ function download_thumbnail(post, prefetched, callback) {
   if (!thumbnail) return callback();
 
   download(thumbnail, prefetched, function (err, data, format, headers) {
-    if (err || !data) return callback(lifecycle.current() && lifecycle.current().signal.aborted ? err : null);
+    if (err || !data)
+      return callback(
+        lifecycle.current() && lifecycle.current().signal.aborted ? err : null
+      );
 
     var name = nameFrom(thumbnail, headers, format);
 
@@ -76,7 +86,11 @@ function downloadAll(post, scanned, prefetched, callback) {
       function (src, next) {
         download(src, prefetched, function (err, data, format, headers) {
           if (err || !data) {
-            return next(lifecycle.current() && lifecycle.current().signal.aborted ? err : null);
+            return next(
+              lifecycle.current() && lifecycle.current().signal.aborted
+                ? err
+                : null
+            );
           }
 
           var name = nameFrom(src, headers, format);
@@ -105,7 +119,9 @@ function downloadAll(post, scanned, prefetched, callback) {
         // Changes the src of each downloaded image, and the link around it
         // if that went to the same URL. From the post's own HTML, so it is
         // parsed and written once, as it was when Node did it.
-        htmlAssets.rewrite("images", post.html, replacements).then(function (html) {
+        htmlAssets.rewrite("images", post.html, replacements).then(function (
+          html
+        ) {
           post.html = html;
           callback(null, post);
         }, callback);

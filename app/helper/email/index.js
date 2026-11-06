@@ -16,7 +16,7 @@ const mailgunClient = (() => {
 
     return mailgun.client({
       username: (config.mailgun && config.mailgun.username) || "api",
-      key: config.mailgun.key
+      key: config.mailgun.key,
     });
   }
 
@@ -103,11 +103,11 @@ var MESSAGES = [
   "WARNING_LOW_DISK_SPACE",
   "WELCOME",
   "WORKER_ERROR",
-  "ZOMBIE_PROCESS"
+  "ZOMBIE_PROCESS",
 ];
 
 var globals = {
-  site: "https://" + config.host
+  site: "https://" + config.host,
 };
 
 var EMAIL_MODEL = {
@@ -115,10 +115,10 @@ var EMAIL_MODEL = {
   from: "string",
   subject: "string",
   html: "string",
-  "h:Reply-To": "string"
+  "h:Reply-To": "string",
 };
 
-function loadUser (uid, callback) {
+function loadUser(uid, callback) {
   if (!uid) return callback(null, {});
 
   const User = require("models/user");
@@ -134,9 +134,9 @@ function loadUser (uid, callback) {
   });
 }
 
-function init (method) {
+function init(method) {
   ensure(method, "string");
-  return function build (uid = "", locals = {}, callback = function () {}) {
+  return function build(uid = "", locals = {}, callback = function () {}) {
     loadUser(uid, function (err, user) {
       if (err) return callback(err);
 
@@ -160,7 +160,7 @@ function init (method) {
   };
 }
 
-function send (locals, messageFile, to, callback) {
+function send(locals, messageFile, to, callback) {
   ensure(locals, "object")
     .and(messageFile, "string")
     .and(to, "string")
@@ -180,7 +180,7 @@ function send (locals, messageFile, to, callback) {
       subject: subject,
       from: locals.from || FROM,
       to: to,
-      'h:Reply-To': locals.replyTo || locals.from || FROM
+      "h:Reply-To": locals.replyTo || locals.from || FROM,
     };
 
     try {
@@ -194,7 +194,7 @@ function send (locals, messageFile, to, callback) {
       fs.outputFileSync(previewPath, email.html, "utf-8");
       console.log(clfdate(), "Email: unsent in development environment:", {
         ...email,
-        preview: previewPath
+        preview: previewPath,
       });
       return callback();
     }

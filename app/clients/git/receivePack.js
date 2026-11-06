@@ -35,7 +35,10 @@ function pktLine(content) {
   var body = Buffer.isBuffer(content) ? content : Buffer.from(content);
   var length = (4 + body.length).toString(16);
 
-  return Buffer.concat([Buffer.from("0000".slice(length.length) + length), body]);
+  return Buffer.concat([
+    Buffer.from("0000".slice(length.length) + length),
+    body,
+  ]);
 }
 
 function badRequest(message) {
@@ -58,12 +61,14 @@ async function readPackets(iterator) {
     while (buffer.length >= 4) {
       var header = buffer.toString("latin1", 0, 4);
 
-      if (!/^[0-9a-fA-F]{4}$/.test(header)) throw badRequest("not a git request");
+      if (!/^[0-9a-fA-F]{4}$/.test(header))
+        throw badRequest("not a git request");
 
       var length = parseInt(header, 16);
 
       if (length === 0) return { lines: lines, rest: buffer.subarray(4) };
-      if (length < 4 || length > MAX_PACKET) throw badRequest("invalid packet length");
+      if (length < 4 || length > MAX_PACKET)
+        throw badRequest("invalid packet length");
       if (buffer.length < length) break;
 
       lines.push(buffer.subarray(4, length));
@@ -77,7 +82,8 @@ async function readPackets(iterator) {
 
     var next = await iterator.next();
 
-    if (next.done) throw badRequest("the request ended before its commands did");
+    if (next.done)
+      throw badRequest("the request ended before its commands did");
 
     buffer = Buffer.concat([buffer, next.value]);
   }
@@ -122,7 +128,8 @@ function parseCommands(lines) {
 function capability(capabilities, name) {
   for (var i = 0; i < capabilities.length; i++) {
     if (capabilities[i] === name) return true;
-    if (capabilities[i].indexOf(name + "=") === 0) return capabilities[i].slice(name.length + 1);
+    if (capabilities[i].indexOf(name + "=") === 0)
+      return capabilities[i].slice(name.length + 1);
   }
 
   return false;
@@ -134,7 +141,10 @@ function parseSize(value) {
 
   if (!match) return 0;
 
-  return Number(match[1]) * Math.pow(1024, " kmg".indexOf((match[2] || " ").toLowerCase()));
+  return (
+    Number(match[1]) *
+    Math.pow(1024, " kmg".indexOf((match[2] || " ").toLowerCase()))
+  );
 }
 
 module.exports = {

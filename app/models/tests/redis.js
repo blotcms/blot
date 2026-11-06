@@ -43,7 +43,10 @@ describe("models/redis", function () {
   it("commands hang without failFast while redis is unreachable", async function () {
     const client = unreachableClient();
     const outcome = await Promise.race([
-      client.get("x").then(() => "settled", () => "settled"),
+      client.get("x").then(
+        () => "settled",
+        () => "settled"
+      ),
       new Promise((resolve) => setTimeout(() => resolve("hung"), 500)),
     ]);
     await client.destroy();
@@ -104,7 +107,9 @@ describe("models/redis", function () {
 
   it("uses a socket timeout and ping interval to detect a stalled connection", function () {
     const client = createRedisClient();
-    expect(client.options.pingInterval).toBe(createRedisClient.PING_INTERVAL_MS);
+    expect(client.options.pingInterval).toBe(
+      createRedisClient.PING_INTERVAL_MS
+    );
     expect(client.options.socket.socketTimeout).toBe(
       createRedisClient.SOCKET_TIMEOUT_MS
     );
@@ -124,7 +129,8 @@ describe("models/redis", function () {
       socket.on("error", function () {});
       socket.on("data", function (data) {
         if (silent) return;
-        const commands = (data.toString().match(/\*\d+\r\n/g) || []).length || 1;
+        const commands =
+          (data.toString().match(/\*\d+\r\n/g) || []).length || 1;
         socket.write("+OK\r\n".repeat(commands));
       });
     });
@@ -180,7 +186,10 @@ describe("models/redis", function () {
     const config = require("config");
     const { isRedisUnavailableError } = require("helper/redisUnavailable");
 
-    const socketPath = path.join(os.tmpdir(), "blot-redis-" + process.pid + ".sock");
+    const socketPath = path.join(
+      os.tmpdir(),
+      "blot-redis-" + process.pid + ".sock"
+    );
     let original, server, connections;
 
     // The test Redis listens on TCP in another container, so this stands in
@@ -219,7 +228,9 @@ describe("models/redis", function () {
       expect(client.options.socket.reconnectStrategy).toBe(
         createRedisClient.reconnectStrategy
       );
-      expect(client.options.pingInterval).toBe(createRedisClient.PING_INTERVAL_MS);
+      expect(client.options.pingInterval).toBe(
+        createRedisClient.PING_INTERVAL_MS
+      );
 
       const key = "test:redis-socket:" + Date.now();
       await client.connect();

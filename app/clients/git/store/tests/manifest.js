@@ -1,13 +1,23 @@
 const manifest = require("../manifest");
 const createMemoryStore = require("../objectStore/memory");
-const { CorruptError, StaleManifestError, ManifestTooLargeError } = require("../errors");
+const {
+  CorruptError,
+  StaleManifestError,
+  ManifestTooLargeError,
+} = require("../errors");
 const { LATEST_KEY, manifestKey, manifestSeq } = require("../layout");
 
 const oid = (n) => String(n).repeat(40).slice(0, 40);
 const packName = (n) => "pack-" + oid(n);
 
 function packEntry(n, extra = {}) {
-  return { name: packName(n), size: 1000 + n, idxSize: 500 + n, objects: 10 + n, ...extra };
+  return {
+    name: packName(n),
+    size: 1000 + n,
+    idxSize: 500 + n,
+    objects: 10 + n,
+    ...extra,
+  };
 }
 
 // What the host's lock does: one swap at a time
@@ -26,7 +36,10 @@ function createLock() {
 async function uploaded(store, ...entries) {
   for (const entry of entries) {
     await store.put("packs/" + entry.name + ".pack", Buffer.alloc(entry.size));
-    await store.put("packs/" + entry.name + ".idx", Buffer.alloc(entry.idxSize));
+    await store.put(
+      "packs/" + entry.name + ".idx",
+      Buffer.alloc(entry.idxSize)
+    );
   }
 }
 
@@ -64,16 +77,24 @@ describe("git store manifest", function () {
     it("advances by one, with a snapshot of the refs after each push", function () {
       const m = sample();
       expect(m.seq).toBe(2);
-      expect(m.packs.map((p) => [p.name, p.seq])).toEqual([[packName(1), 1], [packName(2), 2]]);
+      expect(m.packs.map((p) => [p.name, p.seq])).toEqual([
+        [packName(1), 1],
+        [packName(2), 2],
+      ]);
       expect(m.snapshots).toEqual([
         { seq: 1, refs: { "refs/heads/master": oid(1) } },
-        { seq: 2, refs: { "refs/heads/master": oid(2), "refs/tags/v1": oid(3) } },
+        {
+          seq: 2,
+          refs: { "refs/heads/master": oid(2), "refs/tags/v1": oid(3) },
+        },
       ]);
       expect(m.history.through).toBe(1);
     });
 
     it("keeps the head and history it already has unless told otherwise", function () {
-      const next = manifest.advance(sample(), { refs: { "refs/heads/master": oid(4) } });
+      const next = manifest.advance(sample(), {
+        refs: { "refs/heads/master": oid(4) },
+      });
       expect(next.head).toBe("refs/heads/master");
       expect(next.history.name).toBe(packName(9));
     });
@@ -85,12 +106,17 @@ describe("git store manifest", function () {
 
     it("serialises the same manifest to the same bytes whatever order its refs are in", function () {
       const a = sample();
-      const b = { ...a, refs: { "refs/tags/v1": oid(3), "refs/heads/master": oid(2) } };
+      const b = {
+        ...a,
+        refs: { "refs/tags/v1": oid(3), "refs/heads/master": oid(2) },
+      };
       expect(manifest.serialize(a).equals(manifest.serialize(b))).toBe(true);
     });
 
     it("carries a version", function () {
-      expect(JSON.parse(manifest.serialize(sample())).version).toBe(manifest.VERSION);
+      expect(JSON.parse(manifest.serialize(sample())).version).toBe(
+        manifest.VERSION
+      );
     });
 
     const invalid = {
@@ -106,7 +132,8 @@ describe("git store manifest", function () {
       "a ref name with a space": (m) => (m.refs["refs/heads/a b"] = oid(1)),
       "a ref name with ..": (m) => (m.refs["refs/heads/a..b"] = oid(1)),
       "a short object ID": (m) => (m.refs["refs/heads/master"] = "abc"),
-      "an uppercase object ID": (m) => (m.refs["refs/heads/master"] = "A".repeat(40)),
+      "an uppercase object ID": (m) =>
+        (m.refs["refs/heads/master"] = "A".repeat(40)),
       "a head which is not a ref": (m) => (m.head = "master"),
       "a pack with a bad name": (m) => (m.packs[0].name = "pack-xyz"),
       "a pack listed twice": (m) => m.packs.push({ ...m.packs[0] }),
@@ -114,7 +141,8 @@ describe("git store manifest", function () {
       "a pack with no size": (m) => delete m.packs[0].size,
       "snapshots out of order": (m) => m.snapshots.reverse(),
       "a snapshot newer than the manifest": (m) => (m.snapshots[1].seq = 3),
-      "a snapshot with a bad ref": (m) => (m.snapshots[0].refs["refs/heads/master"] = "nope"),
+      "a snapshot with a bad ref": (m) =>
+        (m.snapshots[0].refs["refs/heads/master"] = "nope"),
       "packs which are not a list": (m) => (m.packs = {}),
       "a history newer than the manifest": (m) => (m.history.through = 3),
     };
@@ -124,18 +152,28 @@ describe("git store manifest", function () {
         const m = JSON.parse(JSON.stringify(sample()));
         damage(m);
         expect(() => manifest.validate(m)).toThrowError(CorruptError);
-        expect(() => manifest.parse(Buffer.from(JSON.stringify(m)))).toThrowError(CorruptError);
+        expect(() =>
+          manifest.parse(Buffer.from(JSON.stringify(m)))
+        ).toThrowError(CorruptError);
       });
     }
 
     it("rejects bytes which are not JSON", function () {
-      expect(() => manifest.parse(Buffer.from("{nope"))).toThrowError(CorruptError);
-      expect(() => manifest.parse(Buffer.from("[]"))).toThrowError(CorruptError);
-      expect(() => manifest.parse(Buffer.from("null"))).toThrowError(CorruptError);
+      expect(() => manifest.parse(Buffer.from("{nope"))).toThrowError(
+        CorruptError
+      );
+      expect(() => manifest.parse(Buffer.from("[]"))).toThrowError(
+        CorruptError
+      );
+      expect(() => manifest.parse(Buffer.from("null"))).toThrowError(
+        CorruptError
+      );
     });
 
     it("refuses to serialise an invalid manifest", function () {
-      expect(() => manifest.serialize({ ...sample(), seq: -3 })).toThrowError(CorruptError);
+      expect(() => manifest.serialize({ ...sample(), seq: -3 })).toThrowError(
+        CorruptError
+      );
     });
   });
 
@@ -151,7 +189,10 @@ describe("git store manifest", function () {
     async function push(base, n) {
       const pack = packEntry(n);
       await uploaded(store, pack);
-      return manifest.advance(base, { refs: { "refs/heads/master": oid(n) }, packs: [pack] });
+      return manifest.advance(base, {
+        refs: { "refs/heads/master": oid(n) },
+        packs: [pack],
+      });
     }
 
     it("reads a repository which has no manifest as an empty one", async function () {
@@ -201,7 +242,12 @@ describe("git store manifest", function () {
         during = held;
         return spy.and.callThrough()(...args);
       });
-      await manifest.swap({ store, lock: watching, base: manifest.empty(), next });
+      await manifest.swap({
+        store,
+        lock: watching,
+        base: manifest.empty(),
+        next,
+      });
       expect(during).toBe(true);
     });
 
@@ -214,7 +260,9 @@ describe("git store manifest", function () {
       const theirs = await push(first, 3);
       await manifest.swap({ store, lock, base: first, next: theirs });
 
-      const error = await fails(manifest.swap({ store, lock, base: first, next: mine }));
+      const error = await fails(
+        manifest.swap({ store, lock, base: first, next: mine })
+      );
       expect(error).toEqual(jasmine.any(StaleManifestError));
       expect(await manifest.read(store)).toEqual(theirs);
     });
@@ -238,13 +286,22 @@ describe("git store manifest", function () {
     it("rejects a manifest which does not follow its base", async function () {
       const first = await push(manifest.empty(), 1);
       const skipped = { ...(await push(first, 2)), seq: 5 };
-      expect(await fails(manifest.swap({ store, lock, base: first, next: skipped }))).toEqual(jasmine.any(StaleManifestError));
-      expect(await fails(manifest.swap({ store, lock, base: first, next: first }))).toEqual(jasmine.any(StaleManifestError));
+      expect(
+        await fails(manifest.swap({ store, lock, base: first, next: skipped }))
+      ).toEqual(jasmine.any(StaleManifestError));
+      expect(
+        await fails(manifest.swap({ store, lock, base: first, next: first }))
+      ).toEqual(jasmine.any(StaleManifestError));
     });
 
     it("rejects a manifest naming a pack which is not uploaded, and writes nothing", async function () {
-      const next = manifest.advance(manifest.empty(), { refs: { "refs/heads/master": oid(1) }, packs: [packEntry(1)] });
-      const error = await fails(manifest.swap({ store, lock, base: manifest.empty(), next }));
+      const next = manifest.advance(manifest.empty(), {
+        refs: { "refs/heads/master": oid(1) },
+        packs: [packEntry(1)],
+      });
+      const error = await fails(
+        manifest.swap({ store, lock, base: manifest.empty(), next })
+      );
       expect(error).toEqual(jasmine.any(StaleManifestError));
       expect(error.message).toMatch(/not uploaded/);
       expect(await store.head(manifestKey(1))).toBeNull();
@@ -253,19 +310,41 @@ describe("git store manifest", function () {
 
     it("rejects a pack which has only its index uploaded, or the wrong size", async function () {
       const pack = packEntry(1);
-      await store.put("packs/" + pack.name + ".idx", Buffer.alloc(pack.idxSize));
-      const next = manifest.advance(manifest.empty(), { refs: {}, packs: [pack] });
-      expect(await fails(manifest.swap({ store, lock, base: manifest.empty(), next }))).toEqual(jasmine.any(StaleManifestError));
+      await store.put(
+        "packs/" + pack.name + ".idx",
+        Buffer.alloc(pack.idxSize)
+      );
+      const next = manifest.advance(manifest.empty(), {
+        refs: {},
+        packs: [pack],
+      });
+      expect(
+        await fails(
+          manifest.swap({ store, lock, base: manifest.empty(), next })
+        )
+      ).toEqual(jasmine.any(StaleManifestError));
 
-      await store.put("packs/" + pack.name + ".pack", Buffer.alloc(pack.size - 1));
-      expect(await fails(manifest.swap({ store, lock, base: manifest.empty(), next }))).toEqual(jasmine.any(StaleManifestError));
+      await store.put(
+        "packs/" + pack.name + ".pack",
+        Buffer.alloc(pack.size - 1)
+      );
+      expect(
+        await fails(
+          manifest.swap({ store, lock, base: manifest.empty(), next })
+        )
+      ).toEqual(jasmine.any(StaleManifestError));
     });
 
     it("checks a new history pack is uploaded too", async function () {
       const first = await push(manifest.empty(), 1);
       await manifest.swap({ store, lock, base: manifest.empty(), next: first });
-      const next = manifest.advance(first, { refs: first.refs, history: { ...packEntry(8), through: 1 } });
-      expect(await fails(manifest.swap({ store, lock, base: first, next }))).toEqual(jasmine.any(StaleManifestError));
+      const next = manifest.advance(first, {
+        refs: first.refs,
+        history: { ...packEntry(8), through: 1 },
+      });
+      expect(
+        await fails(manifest.swap({ store, lock, base: first, next }))
+      ).toEqual(jasmine.any(StaleManifestError));
 
       await uploaded(store, packEntry(8));
       await manifest.swap({ store, lock, base: first, next });
@@ -276,13 +355,17 @@ describe("git store manifest", function () {
       await manifest.swap({ store, lock, base: manifest.empty(), next: first });
       await store.delete("packs/" + packName(1) + ".pack");
 
-      const next = manifest.advance(first, { refs: { "refs/heads/master": oid(5) } });
+      const next = manifest.advance(first, {
+        refs: { "refs/heads/master": oid(5) },
+      });
       await manifest.swap({ store, lock, base: first, next });
     });
 
     it("needs a lock", async function () {
       const next = await push(manifest.empty(), 1);
-      const error = await fails(manifest.swap({ store, base: manifest.empty(), next }));
+      const error = await fails(
+        manifest.swap({ store, base: manifest.empty(), next })
+      );
       expect(error.message).toMatch(/lock/);
     });
 
@@ -291,21 +374,27 @@ describe("git store manifest", function () {
       const broken = async () => {
         throw new Error("could not get the lock");
       };
-      const error = await fails(manifest.swap({ store, lock: broken, base: manifest.empty(), next }));
+      const error = await fails(
+        manifest.swap({ store, lock: broken, base: manifest.empty(), next })
+      );
       expect(error.message).toBe("could not get the lock");
       expect(await store.head(manifestKey(1))).toBeNull();
     });
 
     it("reads a damaged manifest as an error, not an empty repository", async function () {
       await store.put(manifestKey(1), Buffer.from("{"));
-      expect(await fails(manifest.read(store))).toEqual(jasmine.any(CorruptError));
+      expect(await fails(manifest.read(store))).toEqual(
+        jasmine.any(CorruptError)
+      );
     });
 
     it("reads a manifest which says it is some other seq as an error", async function () {
       const first = await push(manifest.empty(), 1);
       await store.put(manifestKey(2), manifest.serialize(first));
       await store.put(LATEST_KEY, Buffer.from('{"seq":2}'));
-      expect(await fails(manifest.read(store))).toEqual(jasmine.any(CorruptError));
+      expect(await fails(manifest.read(store))).toEqual(
+        jasmine.any(CorruptError)
+      );
     });
   });
 
@@ -321,7 +410,10 @@ describe("git store manifest", function () {
     async function push(base, n) {
       const pack = packEntry(n);
       await uploaded(store, pack);
-      return manifest.advance(base, { refs: { "refs/heads/master": oid(n) }, packs: [pack] });
+      return manifest.advance(base, {
+        refs: { "refs/heads/master": oid(n) },
+        packs: [pack],
+      });
     }
 
     describe("a base held too long", function () {
@@ -331,7 +423,13 @@ describe("git store manifest", function () {
       beforeEach(async function () {
         now = 1000;
         const first = await push(await manifest.read(store, { clock }), 1);
-        await manifest.swap({ store, lock, base: (await manifest.read(store, { clock })), next: first, clock });
+        await manifest.swap({
+          store,
+          lock,
+          base: await manifest.read(store, { clock }),
+          next: first,
+          clock,
+        });
       });
 
       it("is refused, before any request, once it was read more than MAX_BASE_AGE ago", async function () {
@@ -340,14 +438,22 @@ describe("git store manifest", function () {
 
         now += manifest.MAX_BASE_AGE + 1;
         const before = { ...store.stats };
-        const error = await fails(manifest.swap({ store, lock, base, next, clock }));
+        const error = await fails(
+          manifest.swap({ store, lock, base, next, clock })
+        );
         expect(error).toEqual(jasmine.any(StaleManifestError));
         expect(store.stats).toEqual(before);
         expect(lock.calls).toBe(1);
 
         // Read again, it goes through
         const fresh = await manifest.read(store, { clock });
-        await manifest.swap({ store, lock, base: fresh, next: await push(fresh, 2), clock });
+        await manifest.swap({
+          store,
+          lock,
+          base: fresh,
+          next: await push(fresh, 2),
+          clock,
+        });
         expect((await manifest.read(store)).seq).toBe(2);
       });
 
@@ -367,7 +473,9 @@ describe("git store manifest", function () {
           return lock(fn);
         };
         const before = store.stats.putIfAbsents;
-        expect(await fails(manifest.swap({ store, lock: slow, base, next, clock }))).toEqual(jasmine.any(StaleManifestError));
+        expect(
+          await fails(manifest.swap({ store, lock: slow, base, next, clock }))
+        ).toEqual(jasmine.any(StaleManifestError));
         expect(store.stats.putIfAbsents).toBe(before);
         expect(await store.head(manifestKey(2))).toBe(null);
       });
@@ -375,27 +483,68 @@ describe("git store manifest", function () {
       it("counts from the swap for the manifest a swap returns", async function () {
         const base = await manifest.read(store, { clock });
         now += manifest.MAX_BASE_AGE - 10;
-        const next = await manifest.swap({ store, lock, base, next: await push(base, 2), clock });
+        const next = await manifest.swap({
+          store,
+          lock,
+          base,
+          next: await push(base, 2),
+          clock,
+        });
         now += manifest.MAX_BASE_AGE - 10;
-        await manifest.swap({ store, lock, base: next, next: await push(next, 3), clock });
+        await manifest.swap({
+          store,
+          lock,
+          base: next,
+          next: await push(next, 3),
+          clock,
+        });
         now += manifest.MAX_BASE_AGE + 1;
-        expect(await fails(manifest.swap({ store, lock, base: next, next: await push(next, 3), clock }))).toEqual(jasmine.any(StaleManifestError));
+        expect(
+          await fails(
+            manifest.swap({
+              store,
+              lock,
+              base: next,
+              next: await push(next, 3),
+              clock,
+            })
+          )
+        ).toEqual(jasmine.any(StaleManifestError));
       });
 
       it("makes no request for the manifest it keeps in memory within 12 hours, and one HEAD after", async function () {
         const stats = () => ({ ...store.stats });
-        const diff = (before) => Object.fromEntries(Object.entries(store.stats).map(([k, v]) => [k, v - before[k]]).filter(([, v]) => v));
+        const diff = (before) =>
+          Object.fromEntries(
+            Object.entries(store.stats)
+              .map(([k, v]) => [k, v - before[k]])
+              .filter(([, v]) => v)
+          );
 
         now += 11 * 60 * 60 * 1000;
         let before = stats();
         const warm = await manifest.read(store, { clock });
         expect(warm.seq).toBe(1);
         // The hint, and a HEAD for the next seq
-        expect(diff(before)).toEqual({ gets: 1, bytesRead: jasmine.any(Number), heads: 1 });
+        expect(diff(before)).toEqual({
+          gets: 1,
+          bytesRead: jasmine.any(Number),
+          heads: 1,
+        });
 
         // Its time is the read that last asked the store, not this one
         now += manifest.MAX_BASE_AGE - 11 * 60 * 60 * 1000 + 1;
-        expect(await fails(manifest.swap({ store, lock, base: warm, next: await push(warm, 2), clock }))).toEqual(jasmine.any(StaleManifestError));
+        expect(
+          await fails(
+            manifest.swap({
+              store,
+              lock,
+              base: warm,
+              next: await push(warm, 2),
+              clock,
+            })
+          )
+        ).toEqual(jasmine.any(StaleManifestError));
 
         // Past 12 hours it is checked with a HEAD, and counts from then (the
         // hint is unchanged now, so it is a 304)
@@ -403,7 +552,13 @@ describe("git store manifest", function () {
         const checked = await manifest.read(store, { clock });
         expect(diff(before)).toEqual({ gets: 1, notModified: 1, heads: 2 });
         now += manifest.MAX_BASE_AGE - 1;
-        await manifest.swap({ store, lock, base: checked, next: await push(checked, 2), clock });
+        await manifest.swap({
+          store,
+          lock,
+          base: checked,
+          next: await push(checked, 2),
+          clock,
+        });
         expect((await manifest.read(store)).seq).toBe(2);
       });
 
@@ -411,13 +566,27 @@ describe("git store manifest", function () {
         const fresh = createMemoryStore();
         const empty = await manifest.read(fresh, { clock });
         expect(empty.seq).toBe(0);
-        const first = manifest.advance(empty, { refs: { "refs/heads/master": oid(1) } });
-        await manifest.swap({ store: fresh, lock, base: empty, next: first, clock });
+        const first = manifest.advance(empty, {
+          refs: { "refs/heads/master": oid(1) },
+        });
+        await manifest.swap({
+          store: fresh,
+          lock,
+          base: empty,
+          next: first,
+          clock,
+        });
 
         // Built by hand: no read time, so it is not timed
         const byHand = { ...(await manifest.read(fresh)) };
         now += 10 * manifest.MAX_BASE_AGE;
-        await manifest.swap({ store: fresh, lock, base: byHand, next: manifest.advance(byHand, { refs: byHand.refs }), clock });
+        await manifest.swap({
+          store: fresh,
+          lock,
+          base: byHand,
+          next: manifest.advance(byHand, { refs: byHand.refs }),
+          clock,
+        });
         expect((await manifest.read(fresh)).seq).toBe(2);
       });
     });
@@ -435,12 +604,19 @@ describe("git store manifest", function () {
       spyOn(store, "putIfAbsent").and.callFake(async (...args) => {
         if (!stalledOnce) {
           stalledOnce = true;
-          await manifest.swap({ store, lock: (fn) => fn(), base: first, next: winner });
+          await manifest.swap({
+            store,
+            lock: (fn) => fn(),
+            base: first,
+            next: winner,
+          });
         }
         return real(...args);
       });
 
-      const error = await fails(manifest.swap({ store, lock: (fn) => fn(), base: first, next: stalled }));
+      const error = await fails(
+        manifest.swap({ store, lock: (fn) => fn(), base: first, next: stalled })
+      );
       expect(error).toEqual(jasmine.any(StaleManifestError));
       expect(await manifest.read(store)).toEqual(winner);
       expect(manifest.parse(await store.get(manifestKey(2)))).toEqual(winner);
@@ -465,8 +641,12 @@ describe("git store manifest", function () {
 
     it("refuses a manifest too big to be read back, and writes nothing", async function () {
       // One ref with a name of 64 MiB is the cheapest way to make one
-      const huge = manifest.advance(manifest.empty(), { refs: { ["refs/heads/" + "a".repeat(64 * 1024 * 1024)]: oid(1) } });
-      const error = await fails(manifest.swap({ store, lock, base: manifest.empty(), next: huge }));
+      const huge = manifest.advance(manifest.empty(), {
+        refs: { ["refs/heads/" + "a".repeat(64 * 1024 * 1024)]: oid(1) },
+      });
+      const error = await fails(
+        manifest.swap({ store, lock, base: manifest.empty(), next: huge })
+      );
       expect(error).toEqual(jasmine.any(ManifestTooLargeError));
       expect(error.code).toBe("MANIFEST_TOO_LARGE");
       expect(store.stats.putIfAbsents).toBe(0);
@@ -474,7 +654,6 @@ describe("git store manifest", function () {
       expect(lock.calls).toBe(0);
       expect(await manifest.read(store)).toEqual(manifest.empty());
     });
-
   });
 
   describe("finding the newest manifest", function () {
@@ -488,7 +667,12 @@ describe("git store manifest", function () {
       for (let i = 1; i <= n; i++) {
         const pack = packEntry(i);
         await uploaded(store, pack);
-        out.push(manifest.advance(out[i - 1], { refs: { "refs/heads/master": oid(i) }, packs: [pack] }));
+        out.push(
+          manifest.advance(out[i - 1], {
+            refs: { "refs/heads/master": oid(i) },
+            packs: [pack],
+          })
+        );
       }
       return out;
     }
@@ -496,10 +680,17 @@ describe("git store manifest", function () {
     // Writes manifests 1 to n as another process would have: this one's cache doesn't know them
     async function writeAll(n) {
       chain = await build(n);
-      for (let i = 1; i <= n; i++) await store.putIfAbsent(manifestKey(i), manifest.serialize(chain[i]));
+      for (let i = 1; i <= n; i++)
+        await store.putIfAbsent(manifestKey(i), manifest.serialize(chain[i]));
     }
 
-    const hint = (value) => store.put(LATEST_KEY, Buffer.from(typeof value === "string" ? value : JSON.stringify({ seq: value })));
+    const hint = (value) =>
+      store.put(
+        LATEST_KEY,
+        Buffer.from(
+          typeof value === "string" ? value : JSON.stringify({ seq: value })
+        )
+      );
 
     function reset() {
       for (const key of Object.keys(store.stats)) store.stats[key] = 0;
@@ -557,7 +748,9 @@ describe("git store manifest", function () {
       await writeAll(1);
       await hint(1);
       (await manifest.read(store)).refs["refs/heads/other"] = oid(9);
-      expect((await manifest.read(store)).refs).toEqual({ "refs/heads/master": oid(1) });
+      expect((await manifest.read(store)).refs).toEqual({
+        "refs/heads/master": oid(1),
+      });
     });
 
     it("looks forward from a stale hint", async function () {
@@ -624,7 +817,8 @@ describe("git store manifest", function () {
 
       const real = store.put;
       spyOn(store, "put").and.callFake(async (key, body) => {
-        if (key === LATEST_KEY) throw new Error("the hint could not be written");
+        if (key === LATEST_KEY)
+          throw new Error("the hint could not be written");
         return real(key, body);
       });
       await manifest.swap({ store, lock, base: chain[1], next: chain[2] });
@@ -646,14 +840,16 @@ describe("git store manifest", function () {
       // process's memory of them, which is kept by store object
       let other;
 
-      const counts = () => Object.fromEntries(Object.entries(store.stats).filter(([, v]) => v));
+      const counts = () =>
+        Object.fromEntries(Object.entries(store.stats).filter(([, v]) => v));
       const serve = () => manifest.read(store, { clock, serving: true });
 
       beforeEach(async function () {
         now = 1e12;
         other = { ...store };
         chain = await build(5);
-        for (let i = 1; i <= 3; i++) await store.putIfAbsent(manifestKey(i), manifest.serialize(chain[i]));
+        for (let i = 1; i <= 3; i++)
+          await store.putIfAbsent(manifestKey(i), manifest.serialize(chain[i]));
         await hint(3);
         // The first read fetches the hint and the manifest, with the HEAD
         expect(await manifest.read(store, { clock })).toEqual(chain[3]);
@@ -700,12 +896,21 @@ describe("git store manifest", function () {
       });
 
       it("sees a swap whose hint landed at once", async function () {
-        await manifest.swap({ store: other, lock, base: chain[3], next: chain[4] });
+        await manifest.swap({
+          store: other,
+          lock,
+          base: chain[3],
+          next: chain[4],
+        });
         now += 1;
         reset();
         expect(await serve()).toEqual(chain[4]);
         // The changed hint, then the new manifest and the HEAD after it
-        expect(counts()).toEqual({ gets: 2, heads: 1, bytesRead: jasmine.any(Number) });
+        expect(counts()).toEqual({
+          gets: 2,
+          heads: 1,
+          bytesRead: jasmine.any(Number),
+        });
 
         // Which is then trusted in turn
         reset();
@@ -723,7 +928,12 @@ describe("git store manifest", function () {
 
       it("sees a removal's tombstone at once, and within a few seconds when its hint was lost", async function () {
         const tombstone = manifest.removed(chain[3]);
-        await manifest.swap({ store: other, lock, base: chain[3], next: tombstone });
+        await manifest.swap({
+          store: other,
+          lock,
+          base: chain[3],
+          next: tombstone,
+        });
         now += 1;
         const seen = await serve();
         expect(seen).toEqual(tombstone);
@@ -743,7 +953,11 @@ describe("git store manifest", function () {
         reset();
         expect(await serve()).toEqual(chain[4]);
         // The hint (changed) and the HEAD beside it, as before
-        expect(counts()).toEqual({ gets: 1, heads: 1, bytesRead: jasmine.any(Number) });
+        expect(counts()).toEqual({
+          gets: 1,
+          heads: 1,
+          bytesRead: jasmine.any(Number),
+        });
         reset();
         expect(await serve()).toEqual(chain[4]);
         expect(counts()).toEqual({ gets: 1, notModified: 1 });
@@ -761,16 +975,30 @@ describe("git store manifest", function () {
         now += W;
         const served = await serve();
         now += manifest.MAX_BASE_AGE - W + 1;
-        expect(await fails(manifest.swap({ store, lock, base: served, next: chain[4], clock }))).toEqual(jasmine.any(StaleManifestError));
+        expect(
+          await fails(
+            manifest.swap({ store, lock, base: served, next: chain[4], clock })
+          )
+        ).toEqual(jasmine.any(StaleManifestError));
       });
 
       it("works with a store which ignores the condition", async function () {
         const real = store.get;
-        const plain = { ...store, get: (key, options) => real(key, { maxBytes: options && options.maxBytes }) };
-        expect(await manifest.read(plain, { clock, serving: true })).toEqual(chain[3]);
-        expect(await manifest.read(plain, { clock, serving: true })).toEqual(chain[3]);
+        const plain = {
+          ...store,
+          get: (key, options) =>
+            real(key, { maxBytes: options && options.maxBytes }),
+        };
+        expect(await manifest.read(plain, { clock, serving: true })).toEqual(
+          chain[3]
+        );
+        expect(await manifest.read(plain, { clock, serving: true })).toEqual(
+          chain[3]
+        );
         await other.putIfAbsent(manifestKey(4), manifest.serialize(chain[4]));
-        expect(await manifest.read(plain, { clock, serving: true })).toEqual(chain[4]);
+        expect(await manifest.read(plain, { clock, serving: true })).toEqual(
+          chain[4]
+        );
       });
     });
   });
@@ -782,7 +1010,8 @@ describe("git store manifest", function () {
       let m = manifest.empty();
       for (let i = 1; i <= n; i++) {
         const next = { "refs/heads/master": oid((i % 9) + 1) };
-        for (let r = 1; r < refs; r++) next["refs/heads/branch-" + r] = oid(((i + r) % 9) + 1);
+        for (let r = 1; r < refs; r++)
+          next["refs/heads/branch-" + r] = oid(((i + r) % 9) + 1);
         const peeled = {};
         if (i >= tagAt) next["refs/tags/v1"] = "a".repeat(40);
         if (i === tagAt) peeled["a".repeat(40)] = oid(1);
@@ -800,7 +1029,9 @@ describe("git store manifest", function () {
       const kept = manifest.trimSnapshots(m.snapshots, { maxSnapshots: 10 });
       expect(kept.length).toBe(10);
       expect(kept).toEqual(m.snapshots.slice(20));
-      expect(manifest.trimSnapshots(m.snapshots, { maxSnapshots: 30 })).toBe(m.snapshots);
+      expect(manifest.trimSnapshots(m.snapshots, { maxSnapshots: 30 })).toBe(
+        m.snapshots
+      );
     });
 
     it("trims by bytes too, but never below minSnapshots", function () {
@@ -808,20 +1039,37 @@ describe("git store manifest", function () {
       const each = manifest.snapshotBytes(m.snapshots[10]);
       expect(each).toBeGreaterThan(40 * 50);
 
-      const kept = manifest.trimSnapshots(m.snapshots, { maxSnapshotBytes: 5.5 * each, minSnapshots: 2 });
+      const kept = manifest.trimSnapshots(m.snapshots, {
+        maxSnapshotBytes: 5.5 * each,
+        minSnapshots: 2,
+      });
       expect(kept.length).toBe(5);
       expect(kept[kept.length - 1]).toBe(m.snapshots[29]);
 
-      expect(manifest.trimSnapshots(m.snapshots, { maxSnapshotBytes: 10, minSnapshots: 3 }).length).toBe(3);
+      expect(
+        manifest.trimSnapshots(m.snapshots, {
+          maxSnapshotBytes: 10,
+          minSnapshots: 3,
+        }).length
+      ).toBe(3);
       // minSnapshots never keeps more than maxSnapshots
-      expect(manifest.trimSnapshots(m.snapshots, { maxSnapshots: 2, maxSnapshotBytes: 10, minSnapshots: 8 }).length).toBe(2);
+      expect(
+        manifest.trimSnapshots(m.snapshots, {
+          maxSnapshots: 2,
+          maxSnapshotBytes: 10,
+          minSnapshots: 8,
+        }).length
+      ).toBe(2);
     });
 
     it("keeps about 100 KB of snapshots for a blog with one ref, by default", function () {
       const m = pushed(1500, { tagAt: Infinity });
       const kept = manifest.trimSnapshots(m.snapshots);
       expect(kept.length).toBe(1000);
-      const bytes = kept.reduce((sum, snapshot) => sum + manifest.snapshotBytes(snapshot), 0);
+      const bytes = kept.reduce(
+        (sum, snapshot) => sum + manifest.snapshotBytes(snapshot),
+        0
+      );
       expect(bytes).toBeLessThan(120 * 1024);
     });
 
@@ -830,15 +1078,26 @@ describe("git store manifest", function () {
       // The tag pushed at 3 is in the snapshots of 3 to 6, then deleted
       m.refs = { ...m.snapshots[11].refs };
       delete m.refs["refs/tags/v1"];
-      m.snapshots = m.snapshots.map((snapshot, i) => (i >= 6 ? { ...snapshot, refs: { ...snapshot.refs } } : snapshot));
-      for (const snapshot of m.snapshots.slice(6)) delete snapshot.refs["refs/tags/v1"];
+      m.snapshots = m.snapshots.map((snapshot, i) =>
+        i >= 6 ? { ...snapshot, refs: { ...snapshot.refs } } : snapshot
+      );
+      for (const snapshot of m.snapshots.slice(6))
+        delete snapshot.refs["refs/tags/v1"];
       manifest.validate(m);
-      expect(Object.keys(m.peeled).sort()).toEqual(["a".repeat(40), "b".repeat(40)]);
+      expect(Object.keys(m.peeled).sort()).toEqual([
+        "a".repeat(40),
+        "b".repeat(40),
+      ]);
 
       // The newest 8 include 5 and 6, which still name v1's tag
       const eight = manifest.compacted(m, { limits: { maxSnapshots: 8 } });
-      expect(eight.snapshots.map((s) => s.seq)).toEqual([5, 6, 7, 8, 9, 10, 11, 12]);
-      expect(Object.keys(eight.peeled).sort()).toEqual(["a".repeat(40), "b".repeat(40)]);
+      expect(eight.snapshots.map((s) => s.seq)).toEqual([
+        5, 6, 7, 8, 9, 10, 11, 12,
+      ]);
+      expect(Object.keys(eight.peeled).sort()).toEqual([
+        "a".repeat(40),
+        "b".repeat(40),
+      ]);
 
       // The newest 6 do not, so its peeled entry goes; the current refs' stays
       const six = manifest.compacted(m, { limits: { maxSnapshots: 6 } });
@@ -849,7 +1108,9 @@ describe("git store manifest", function () {
       // A manifest from before peeled existed stays without it
       const old = { ...m };
       delete old.peeled;
-      expect("peeled" in manifest.compacted(old, { limits: { maxSnapshots: 6 } })).toBe(false);
+      expect(
+        "peeled" in manifest.compacted(old, { limits: { maxSnapshots: 6 } })
+      ).toBe(false);
     });
 
     it("leaves the snapshots alone in advance, so a push never trims", function () {
@@ -869,7 +1130,9 @@ describe("git store manifest", function () {
       lock = createLock();
       chain = [manifest.empty()];
       for (let i = 1; i <= 30; i++) {
-        const next = manifest.advance(chain[i - 1], { refs: { "refs/heads/master": oid((i % 9) + 1) } });
+        const next = manifest.advance(chain[i - 1], {
+          refs: { "refs/heads/master": oid((i % 9) + 1) },
+        });
         await manifest.swap({ store, lock, base: chain[i - 1], next });
         chain.push(next);
       }

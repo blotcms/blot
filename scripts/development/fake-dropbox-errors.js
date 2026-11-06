@@ -38,7 +38,8 @@ const MODES = {
       error_summary: "path/insufficient_space/..",
       error: { ".tag": "path", reason: { ".tag": "insufficient_space" } },
     },
-    expect: "QUOTA_EXCEEDED (uploads only: try a dashboard save or reset from Blot)",
+    expect:
+      "QUOTA_EXCEEDED (uploads only: try a dashboard save or reset from Blot)",
   },
   revoked: {
     match: API,
@@ -68,7 +69,8 @@ const MODES = {
     match: FOLDER_CONTINUE,
     status: 409,
     body: { error_summary: "reset/..", error: { ".tag": "reset" } },
-    expect: "healthy: folder moved, sync drops the cursor and lists from scratch",
+    expect:
+      "healthy: folder moved, sync drops the cursor and lists from scratch",
   },
   "file-conflict": {
     match: (url) => DOWNLOAD.test(url) || DELETE.test(url),
@@ -105,7 +107,9 @@ function activeMode() {
 }
 
 function matches(fake, url) {
-  return typeof fake.match === "function" ? fake.match(url) : fake.match.test(url);
+  return typeof fake.match === "function"
+    ? fake.match(url)
+    : fake.match.test(url);
 }
 
 function install() {

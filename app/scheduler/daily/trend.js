@@ -37,7 +37,9 @@ function parse(value) {
   try {
     const points = JSON.parse(value);
 
-    return Array.isArray(points) ? points.filter((point) => point && point.time > 0 && point.used >= 0) : [];
+    return Array.isArray(points)
+      ? points.filter((point) => point && point.time > 0 && point.used >= 0)
+      : [];
   } catch (e) {
     return [];
   }
@@ -61,7 +63,10 @@ function trend({ history, now, used, limit, action = "resize", scope, over }) {
   if (used >= limit) return over || action + " now";
 
   const oldest = history.find(
-    (point) => point.scope === scope && now - point.time >= MIN_GAP_MS && now - point.time <= WINDOW_MS
+    (point) =>
+      point.scope === scope &&
+      now - point.time >= MIN_GAP_MS &&
+      now - point.time <= WINDOW_MS
   );
 
   if (!oldest) return "";
@@ -88,8 +93,21 @@ async function save(client, key, history, reading) {
   try {
     await client.sendCommand(["SET", key, JSON.stringify(updated)]);
   } catch (err) {
-    console.log("Daily update: could not store the history for " + key + ":", err.message);
+    console.log(
+      "Daily update: could not store the history for " + key + ":",
+      err.message
+    );
   }
 }
 
-module.exports = { compact, parse, record, trend, status, save, size, MIN_GAP_MS, MAX_POINTS };
+module.exports = {
+  compact,
+  parse,
+  record,
+  trend,
+  status,
+  save,
+  size,
+  MIN_GAP_MS,
+  MAX_POINTS,
+};

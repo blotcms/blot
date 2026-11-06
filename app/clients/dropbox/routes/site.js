@@ -53,16 +53,16 @@ site.get("/authenticate", cookieParser(), function (req, res, next) {
 // accepted a push but before we've sent the response.
 var activeSyncs = {};
 
-function started (blogID) {
+function started(blogID) {
   if (activeSyncs[blogID] === undefined) activeSyncs[blogID] = 0;
   activeSyncs[blogID]++;
 }
 
-function finished (blogID) {
+function finished(blogID) {
   activeSyncs[blogID]--;
 }
 
-function finishedAllSyncs (blogID) {
+function finishedAllSyncs(blogID) {
   return activeSyncs[blogID] === 0;
 }
 
@@ -155,7 +155,12 @@ site.post("/webhook", function (req, res) {
               followUps
                 .run(blog.id)
                 .catch(function (err) {
-                  console.error(clfdate(), "Dropbox: Webhook sync error", blog.id, err);
+                  console.error(
+                    clfdate(),
+                    "Dropbox: Webhook sync error",
+                    blog.id,
+                    err
+                  );
                 })
                 .then(function () {
                   debug("Finish sync for", blog.id);

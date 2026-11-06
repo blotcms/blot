@@ -5,7 +5,7 @@ var config = require("config");
 var subscriptionLifecycle = require("./subscriptionLifecycle");
 var markPaymentMethodExpiry = require("./paymentMethodExpiry");
 
-module.exports = function extend (user) {
+module.exports = function extend(user) {
   // True if the user has set a password, false otherwise
   user.hasPassword = !!user.passwordHash;
 
@@ -52,9 +52,7 @@ module.exports = function extend (user) {
 
     if (subscription.status === "past_due") user.isPastDue = true;
 
-    if (
-      subscriptionLifecycle.shouldDisableFromStripeSubscription(subscription)
-    )
+    if (subscriptionLifecycle.shouldDisableFromStripeSubscription(subscription))
       user.isDisabled = true;
 
     if (user.isUnpaid || user.isPastDue) user.needsToPay = true;
@@ -81,13 +79,11 @@ module.exports = function extend (user) {
       user.cancel_at_period_end = true;
     }
 
-    if (
-      subscriptionLifecycle.shouldDisableFromPaypalSubscription(user.paypal)
-    )
+    if (subscriptionLifecycle.shouldDisableFromPaypalSubscription(user.paypal))
       user.isDisabled = true;
 
     const plan_identifier = Object.keys(config.paypal.plans).find(
-      identifier => config.paypal.plans[identifier] === user.paypal.plan_id
+      (identifier) => config.paypal.plans[identifier] === user.paypal.plan_id
     );
 
     const amount = parseInt(plan_identifier.split("_")[1]) * 100;
@@ -129,7 +125,8 @@ module.exports = function extend (user) {
 
     user.paymentMethods.forEach(function (paymentMethod) {
       if (paymentMethod.isExpired) user.hasExpiredPaymentMethod = true;
-      if (paymentMethod.isExpiringSoon) user.hasExpiringSoonPaymentMethod = true;
+      if (paymentMethod.isExpiringSoon)
+        user.hasExpiringSoonPaymentMethod = true;
     });
   }
 

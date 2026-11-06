@@ -169,10 +169,9 @@ describe("template upload client", function () {
         ],
       };
 
-      expect(collect.collectSelectedFiles(input).map((c) => c.relativePath)).toEqual([
-        "my-theme/index.html",
-        "my-theme/style.css",
-      ]);
+      expect(
+        collect.collectSelectedFiles(input).map((c) => c.relativePath)
+      ).toEqual(["my-theme/index.html", "my-theme/style.css"]);
     });
 
     it("falls back to the file name", function () {
@@ -360,8 +359,12 @@ describe("template upload client", function () {
     it("recognises a zip by extension and by type", function () {
       expect(panel.isZip({ name: "theme.zip", type: "" })).toBe(true);
       expect(panel.isZip({ name: "THEME.ZIP", type: "" })).toBe(true);
-      expect(panel.isZip({ name: "theme", type: "application/zip" })).toBe(true);
-      expect(panel.isZip({ name: "index.html", type: "text/html" })).toBe(false);
+      expect(panel.isZip({ name: "theme", type: "application/zip" })).toBe(
+        true
+      );
+      expect(panel.isZip({ name: "index.html", type: "text/html" })).toBe(
+        false
+      );
     });
 
     it("highlights only while a file drag is over the dropzone", function () {

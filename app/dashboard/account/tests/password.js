@@ -12,9 +12,15 @@ function request(hasPassword, token, method) {
       body: { newPasswordA: "new-password", newPasswordB: "new-password" },
     };
     var res = {
-      redirect: function (location) { resolve({ redirect: location }); },
-      message: function (location) { resolve({ saved: location }); },
-      render: function (view) { resolve({ view: view }); },
+      redirect: function (location) {
+        resolve({ redirect: location });
+      },
+      message: function (location) {
+        resolve({ saved: location });
+      },
+      render: function (view) {
+        resolve({ view: view });
+      },
     };
     Password.handle(req, res, function (err) {
       if (err) return resolve({ error: err });
@@ -46,21 +52,30 @@ describe("password setting authorization", function () {
   it("allows a passwordless account to set its first password", async function () {
     expect((await request(false)).saved).toEqual("/sites");
     expect(User.checkAccessToken).not.toHaveBeenCalled();
-    expect(User.set).toHaveBeenCalledWith("password-route-user", {
-      passwordHash: "hashed-password",
-    }, jasmine.any(Function));
+    expect(User.set).toHaveBeenCalledWith(
+      "password-route-user",
+      {
+        passwordHash: "hashed-password",
+      },
+      jasmine.any(Function)
+    );
   });
 
   it("allows a valid token for this account", async function () {
     expect((await request(true, "valid-token")).saved).toEqual("/sites");
-    expect(User.checkAccessToken).toHaveBeenCalledWith("valid-token", jasmine.any(Function));
+    expect(User.checkAccessToken).toHaveBeenCalledWith(
+      "valid-token",
+      jasmine.any(Function)
+    );
   });
 
   it("rejects expired or consumed tokens", async function () {
     User.checkAccessToken.and.callFake(function (token, callback) {
       callback(new Error("Invalid access token"));
     });
-    expect((await request(true, "expired-token")).error.message).toEqual("Invalid access token");
+    expect((await request(true, "expired-token")).error.message).toEqual(
+      "Invalid access token"
+    );
     expect(User.set).not.toHaveBeenCalled();
   });
 
@@ -68,7 +83,9 @@ describe("password setting authorization", function () {
     User.checkAccessToken.and.callFake(function (token, callback) {
       callback(null, "another-user");
     });
-    expect((await request(true, "other-token")).error.message).toEqual("Your token was invalid.");
+    expect((await request(true, "other-token")).error.message).toEqual(
+      "Your token was invalid."
+    );
     expect(User.set).not.toHaveBeenCalled();
   });
 
@@ -83,14 +100,24 @@ describe("password setting authorization", function () {
       body: { newPasswordA: tooLong, newPasswordB: tooLong },
     };
     var result = await new Promise(function (resolve, reject) {
-      Password.handle(req, {
-        redirect: function (location) { resolve({ redirect: location }); },
-        message: function (location) { resolve({ saved: location }); },
-        render: function (view) { resolve({ view: view }); },
-      }, function (err) {
-        if (err) return resolve({ error: err });
-        reject(new Error("Password route did not respond"));
-      });
+      Password.handle(
+        req,
+        {
+          redirect: function (location) {
+            resolve({ redirect: location });
+          },
+          message: function (location) {
+            resolve({ saved: location });
+          },
+          render: function (view) {
+            resolve({ view: view });
+          },
+        },
+        function (err) {
+          if (err) return resolve({ error: err });
+          reject(new Error("Password route did not respond"));
+        }
+      );
     });
 
     expect(result.error.message).toEqual("Your new password is too long.");

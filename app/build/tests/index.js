@@ -28,7 +28,8 @@ describe("build", function () {
 
   // Writes a file into the blog's folder with the given modified time (ms)
   var put = async (blogID, path, contents, modified) => {
-    var local = os.tmpdir() + "/build-tests-" + blogID + "-" + Date.now() + Math.random();
+    var local =
+      os.tmpdir() + "/build-tests-" + blogID + "-" + Date.now() + Math.random();
     await fs.outputFile(local, contents);
     try {
       await folder.writeFrom(blogID, path, local, { modified: modified });
@@ -215,7 +216,11 @@ describe("build", function () {
     var pathToImage = "/test.jpg";
 
     await folder.write(this.blog.id, path, contents);
-    await folder.writeFrom(this.blog.id, pathToImage, __dirname + "/too-small.jpg");
+    await folder.writeFrom(
+      this.blog.id,
+      pathToImage,
+      __dirname + "/too-small.jpg"
+    );
 
     var entry = await buildEntry(this.blog, path);
 
@@ -292,9 +297,18 @@ describe("build", function () {
 
       // Simulate this entry having first been created earlier today,
       // at a specific time, by directly setting its 'created' field.
-      var createdAt = moment.utc().startOf("day").add(15, "hours").add(30, "minutes").valueOf();
+      var createdAt = moment
+        .utc()
+        .startOf("day")
+        .add(15, "hours")
+        .add(30, "minutes")
+        .valueOf();
 
-      await setEntry(blog.id, path, Object.assign({}, entry, { created: createdAt }));
+      await setEntry(
+        blog.id,
+        path,
+        Object.assign({}, entry, { created: createdAt })
+      );
 
       var dateOnly = moment.utc().format("M/D/YYYY");
       await folder.write(
@@ -305,9 +319,9 @@ describe("build", function () {
 
       var rebuiltEntry = await buildEntry(blog, path);
 
-      expect(moment.utc(rebuiltEntry.dateStamp).format("YYYY-MM-DD HH:mm")).toEqual(
-        moment.utc(createdAt).format("YYYY-MM-DD HH:mm")
-      );
+      expect(
+        moment.utc(rebuiltEntry.dateStamp).format("YYYY-MM-DD HH:mm")
+      ).toEqual(moment.utc(createdAt).format("YYYY-MM-DD HH:mm"));
     });
 
     it("does not use the entry's creation time when the metadata date is a different day", async function () {
@@ -318,9 +332,17 @@ describe("build", function () {
 
       var entry = await buildEntry(blog, path);
 
-      var createdAt = moment.utc().subtract(10, "days").add(15, "hours").valueOf();
+      var createdAt = moment
+        .utc()
+        .subtract(10, "days")
+        .add(15, "hours")
+        .valueOf();
 
-      await setEntry(blog.id, path, Object.assign({}, entry, { created: createdAt }));
+      await setEntry(
+        blog.id,
+        path,
+        Object.assign({}, entry, { created: createdAt })
+      );
 
       var dateOnly = moment.utc().format("M/D/YYYY");
       await folder.write(
@@ -488,10 +510,15 @@ describe("build", function () {
       var sourceHash = crypto.createHash("sha1").update(contents).digest("hex");
 
       expect(entry.contentHash).toEqual(
-        crypto.createHash("sha1").update(path + ":" + sourceHash).digest("hex")
+        crypto
+          .createHash("sha1")
+          .update(path + ":" + sourceHash)
+          .digest("hex")
       );
       expect(
-        read.calls.allArgs().filter((args) => args[0] === blogID && args[1] === path).length
+        read.calls
+          .allArgs()
+          .filter((args) => args[0] === blogID && args[1] === path).length
       ).toEqual(1);
     });
 

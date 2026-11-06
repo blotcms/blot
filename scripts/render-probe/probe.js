@@ -30,20 +30,42 @@ const MAX_CONCURRENCY = 8;
 const MAX_REPLAY_SPEED = 4;
 
 const OPTIONS = {
-  concurrency: { value: "N", help: `parallel requests (default 1, max ${MAX_CONCURRENCY})` },
+  concurrency: {
+    value: "N",
+    help: `parallel requests (default 1, max ${MAX_CONCURRENCY})`,
+  },
   repeat: { value: "N", help: "send each URL N times" },
-  stats: { value: "URL|HANDLE", help: "catalog size, bytes per field, backlink facts and catalog read timings, no rendering" },
-  experiment: { help: "with --stats: repeat the catalog read, other batch sizes, pipelined GETs (~35MB of reads)" },
-  sweep: { help: "with --stats: catalog read at batch sizes 10/25/50/100, interleaved, 2 passes each (~42MB of reads)" },
-  replay: { value: "FILE", help: "replay blog requests from an access log (.gz too)" },
-  from: { value: "TIME", help: "replay window start, UTC (YYYY-MM-DDTHH:MM:SS)" },
+  stats: {
+    value: "URL|HANDLE",
+    help: "catalog size, bytes per field, backlink facts and catalog read timings, no rendering",
+  },
+  experiment: {
+    help: "with --stats: repeat the catalog read, other batch sizes, pipelined GETs (~35MB of reads)",
+  },
+  sweep: {
+    help: "with --stats: catalog read at batch sizes 10/25/50/100, interleaved, 2 passes each (~42MB of reads)",
+  },
+  replay: {
+    value: "FILE",
+    help: "replay blog requests from an access log (.gz too)",
+  },
+  from: {
+    value: "TIME",
+    help: "replay window start, UTC (YYYY-MM-DDTHH:MM:SS)",
+  },
   to: { value: "TIME", help: "replay window end, UTC" },
-  speed: { value: "N", help: `replay speed multiplier (default 1, max ${MAX_REPLAY_SPEED})` },
+  speed: {
+    value: "N",
+    help: `replay speed multiplier (default 1, max ${MAX_REPLAY_SPEED})`,
+  },
   "max-inflight": {
     value: "N",
     help: `replay: skip requests while N are in flight (default and max ${MAX_CONCURRENCY})`,
   },
-  upstream: { value: "HOST:PORT", help: "replay: the container's upstream (default the old yellow port, for logs from before the units)" },
+  upstream: {
+    value: "HOST:PORT",
+    help: "replay: the container's upstream (default the old yellow port, for logs from before the units)",
+  },
   timeout: { value: "S", help: "per-request timeout (default 120)" },
   verbose: { help: "print each request's render steps" },
   out: { value: "DIR" },
@@ -87,8 +109,14 @@ function timed(name, fn) {
     const finish = () => {
       const ms = Math.round(performance.now() - start);
       const record = { t: now(), req: store ? store.id : null, name, ms };
-      if (heapBefore !== null && inflight <= 1 && requestCounter === requestsBefore) {
-        record.soleRequestHeapDeltaMB = mb(process.memoryUsage().heapUsed - heapBefore);
+      if (
+        heapBefore !== null &&
+        inflight <= 1 &&
+        requestCounter === requestsBefore
+      ) {
+        record.soleRequestHeapDeltaMB = mb(
+          process.memoryUsage().heapUsed - heapBefore
+        );
       }
       // Most calls are trivial; keep the file to the ones that cost something.
       if (ms < 1 && !(Math.abs(record.soleRequestHeapDeltaMB) >= 1)) return;
@@ -126,7 +154,10 @@ const wrappedExports = [];
 
 function wrapExport(moduleName, key, label) {
   const resolved = tryResolve(moduleName);
-  if (!resolved) return console.warn(`probe: ${moduleName} not in this release, not instrumented`);
+  if (!resolved)
+    return console.warn(
+      `probe: ${moduleName} not in this release, not instrumented`
+    );
   const exported = require(resolved);
   if (key === null) {
     const wrapped = timed(label, exported);
@@ -155,13 +186,24 @@ function instrumentRender() {
         "template/fullViewCache",
       ].some((name) => file.endsWith(`/app/models/${name}.js`))
   );
-  if (early.length) console.warn("probe: blog modules loaded before instrumenting:", early);
+  if (early.length)
+    console.warn("probe: blog modules loaded before instrumenting:", early);
 
-  const clone = tryResolve("models/cache/clone") ? "models/cache/clone" : "blog/lib/clone";
+  const clone = tryResolve("models/cache/clone")
+    ? "models/cache/clone"
+    : "blog/lib/clone";
   wrapExport(clone, "prepareCacheValue", "prepareCacheValue");
   wrapExport(clone, "cloneDeep", "cloneDeep");
-  wrapExport("blog/render/load/augmentedEntries", "augmentEntries", "augmentEntries");
-  wrapExport("blog/render/load/augmentedEntries", "shareEntries", "shareEntries");
+  wrapExport(
+    "blog/render/load/augmentedEntries",
+    "augmentEntries",
+    "augmentEntries"
+  );
+  wrapExport(
+    "blog/render/load/augmentedEntries",
+    "shareEntries",
+    "shareEntries"
+  );
   wrapExport("blog/render/retrieve/helpers/getAllCached", null, "getAllCached");
   wrapExport("blog/render/load", null, "loadView");
   wrapExport("blog/render/main", null, "mustache");
@@ -179,7 +221,9 @@ function checkInstrumentation() {
     const exported = require(moduleName);
     const value = key === null ? exported : exported[key];
     if (!value || !value[WRAPPED]) {
-      console.warn(`probe: ${moduleName}${key ? "." + key : ""} is no longer instrumented`);
+      console.warn(
+        `probe: ${moduleName}${key ? "." + key : ""} is no longer instrumented`
+      );
     }
   }
 }
@@ -217,7 +261,9 @@ function startServer() {
   app.use(redisUnavailableHandler);
 
   return new Promise((resolve) => {
-    const server = app.listen(0, "127.0.0.1", () => resolve(server.address().port));
+    const server = app.listen(0, "127.0.0.1", () =>
+      resolve(server.address().port)
+    );
   });
 }
 
@@ -278,7 +324,8 @@ function request(port, url) {
 // Modes.
 
 async function runUrls(port, urls) {
-  if (!urls.length) throw new Error("Pass at least one URL (or --replay, or --stats)");
+  if (!urls.length)
+    throw new Error("Pass at least one URL (or --replay, or --stats)");
   const concurrency = Math.min(Number(args.concurrency) || 1, MAX_CONCURRENCY);
   const repeat = Number(args.repeat) || 1;
   const queue = [];
@@ -286,7 +333,9 @@ async function runUrls(port, urls) {
 
   console.log(
     `probe: ${queue.length} request(s), concurrency ${concurrency}` +
-      (Number(args.concurrency) > MAX_CONCURRENCY ? ` (capped from ${args.concurrency})` : "")
+      (Number(args.concurrency) > MAX_CONCURRENCY
+        ? ` (capped from ${args.concurrency})`
+        : "")
   );
 
   const results = [];
@@ -300,16 +349,21 @@ async function runUrls(port, urls) {
 
 // Access log lines look like:
 // [01/Oct/2026:10:03:27 +0000] <id> <status> <secs> <bytes> <url>  cache=... up=127.0.0.1:8090 ...
-const ACCESS_LINE = /^\[(\d\d)\/(\w{3})\/(\d{4}):(\d\d:\d\d:\d\d) [+-]\d{4}\] \S+ \S+ (\S+) \S+ (https?:\/\/\S+)/;
+const ACCESS_LINE =
+  /^\[(\d\d)\/(\w{3})\/(\d{4}):(\d\d:\d\d:\d\d) [+-]\d{4}\] \S+ \S+ (\S+) \S+ (https?:\/\/\S+)/;
 const MONTHS = "JanFebMarAprMayJunJulAugSepOctNovDec";
 
 async function readReplay(file) {
   const upstream = args.upstream || "127.0.0.1:8090";
   const { from, to } = args;
-  if (!from || !to) throw new Error("--replay needs --from and --to (YYYY-MM-DDTHH:MM:SS, UTC)");
+  if (!from || !to)
+    throw new Error(
+      "--replay needs --from and --to (YYYY-MM-DDTHH:MM:SS, UTC)"
+    );
   const fromMs = Date.parse(from.replace(/Z$/, "") + "Z");
   const toMs = Date.parse(to.replace(/Z$/, "") + "Z");
-  if (isNaN(fromMs) || isNaN(toMs)) throw new Error("--from/--to must look like 2026-10-01T10:03:30");
+  if (isNaN(fromMs) || isNaN(toMs))
+    throw new Error("--from/--to must look like 2026-10-01T10:03:30");
 
   // Rotated logs are gzipped.
   let input = fs.createReadStream(file);
@@ -344,7 +398,10 @@ async function readReplay(file) {
 async function runReplay(port) {
   const requests = await readReplay(args.replay);
   const speed = Math.min(Number(args.speed) || 1, MAX_REPLAY_SPEED);
-  const maxInflight = Math.min(Number(args["max-inflight"]) || MAX_CONCURRENCY, MAX_CONCURRENCY);
+  const maxInflight = Math.min(
+    Number(args["max-inflight"]) || MAX_CONCURRENCY,
+    MAX_CONCURRENCY
+  );
   let skipped = 0;
   console.log(
     `probe: replaying ${requests.length} request(s) at ${speed}x, at most ${maxInflight} in flight`
@@ -362,14 +419,19 @@ async function runReplay(port) {
     pending.push(request(port, url));
   }
   const results = await Promise.all(pending);
-  if (skipped) console.log(`probe: skipped ${skipped} request(s) while ${maxInflight} were in flight`);
+  if (skipped)
+    console.log(
+      `probe: skipped ${skipped} request(s) while ${maxInflight} were in flight`
+    );
   return results;
 }
 
 // Where the catalog's bytes are: the JSON size of each entry field, summed
 // over every entry. Shows how much of the catalog a skinnier read could drop.
 function fieldBreakdown(entries) {
-  const { HEAVY_FIELDS } = require("blog/render/retrieve/helpers/projectEntryFields");
+  const {
+    HEAVY_FIELDS,
+  } = require("blog/render/retrieve/helpers/projectEntryFields");
   const bytesByField = {};
   let total = 0;
   for (const entry of entries) {
@@ -380,7 +442,9 @@ function fieldBreakdown(entries) {
     }
   }
   const fields = Object.entries(bytesByField).sort((a, b) => b[1] - a[1]);
-  const heavy = fields.filter(([key]) => HEAVY_FIELDS.includes(key)).reduce((n, [, b]) => n + b, 0);
+  const heavy = fields
+    .filter(([key]) => HEAVY_FIELDS.includes(key))
+    .reduce((n, [, b]) => n + b, 0);
   return {
     totalMB: mb(total),
     heavyFields: HEAVY_FIELDS,
@@ -413,8 +477,13 @@ async function catalogTimings(blog, entries) {
     const value = await fn();
     return [value, elapsed(start)];
   };
-  const median = (list) => [...list].sort((a, b) => a - b)[Math.floor(list.length / 2)];
-  const spread = (list) => ({ min: Math.min(...list), median: median(list), max: Math.max(...list) });
+  const median = (list) =>
+    [...list].sort((a, b) => a - b)[Math.floor(list.length / 2)];
+  const spread = (list) => ({
+    min: Math.min(...list),
+    median: median(list),
+    max: Math.max(...list),
+  });
   const repeat = async (n, fn) => {
     const times = [];
     for (let i = 0; i < n; i++) times.push((await timed(fn))[1]);
@@ -432,7 +501,9 @@ async function catalogTimings(blog, entries) {
   const [ids, idsMs] = await timed(
     () =>
       new Promise((resolve, reject) =>
-        Entries.getListIDs(blog.id, "entries", {}, (err, list) => (err ? reject(err) : resolve(list)))
+        Entries.getListIDs(blog.id, "entries", {}, (err, list) =>
+          err ? reject(err) : resolve(list)
+        )
       )
   );
   timings.listIDsMs = idsMs;
@@ -462,25 +533,43 @@ async function catalogTimings(blog, entries) {
     if (i > 0) await new Promise(setImmediate);
     const keys = ids.slice(i, i + BATCH).map((id) => entryKey(blog.id, id));
     const [values, mgetMs] = await timed(() => redisClient.mGet(keys));
-    const bytes = values.reduce((n, value) => n + (value ? value.length : 0), 0);
+    const bytes = values.reduce(
+      (n, value) => n + (value ? value.length : 0),
+      0
+    );
     const [, parseMs] = await timed(async () => {
       for (const value of values) if (value) parsed.push(JSON.parse(value));
     });
     batches.push({ keys: keys.length, bytes, mgetMs, parseMs });
   }
-  const sum = (key) => Math.round(batches.reduce((n, batch) => n + batch[key], 0) * 10) / 10;
-  timings.batches = batches.map((batch) => ({ ...batch, bytes: undefined, KB: Math.round(batch.bytes / 1024) }));
+  const sum = (key) =>
+    Math.round(batches.reduce((n, batch) => n + batch[key], 0) * 10) / 10;
+  timings.batches = batches.map((batch) => ({
+    ...batch,
+    bytes: undefined,
+    KB: Math.round(batch.bytes / 1024),
+  }));
   timings.mgetTotalMs = sum("mgetMs");
   timings.parseTotalMs = sum("parseMs");
-  timings.transferMBPerSecond = Math.round((sum("bytes") / 1024 / 1024 / (sum("mgetMs") / 1000)) * 10) / 10;
+  timings.transferMBPerSecond =
+    Math.round((sum("bytes") / 1024 / 1024 / (sum("mgetMs") / 1000)) * 10) / 10;
 
   // What getAllCached does around the read.
   timings.getAllMs = (await timed(() => getAll(blog.id)))[1];
   timings.getAllAgainMs = (await timed(() => getAll(blog.id)))[1];
-  timings.prepareCacheValueMs = (await timed(async () => prepareCacheValue(entries, { preserveEntryInstances: true })))[1];
-  timings.cloneDeepMs = (await timed(async () => cloneDeep(entries, { preserveEntryInstances: true })))[1];
+  timings.prepareCacheValueMs = (
+    await timed(async () =>
+      prepareCacheValue(entries, { preserveEntryInstances: true })
+    )
+  )[1];
+  timings.cloneDeepMs = (
+    await timed(async () =>
+      cloneDeep(entries, { preserveEntryInstances: true })
+    )
+  )[1];
 
-  if (args.experiment) timings.experiment = await catalogExperiment(blog, ids, redisClient);
+  if (args.experiment)
+    timings.experiment = await catalogExperiment(blog, ids, redisClient);
   if (args.sweep) timings.sweep = await catalogSweep(blog, ids, redisClient);
 
   return timings;
@@ -506,7 +595,9 @@ async function catalogExperiment(blog, ids, redisClient) {
       const values = await read(slice);
       batches.push({
         ms: round1(performance.now() - at),
-        KB: Math.round(values.reduce((n, value) => n + (value ? value.length : 0), 0) / 1024),
+        KB: Math.round(
+          values.reduce((n, value) => n + (value ? value.length : 0), 0) / 1024
+        ),
       });
     }
     return { totalMs: round1(performance.now() - start), batches };
@@ -527,10 +618,16 @@ async function catalogExperiment(blog, ids, redisClient) {
   }
   for (const size of [25, 400]) {
     const result = await pass(size, mget);
-    experiment[`mget${size}`] = { totalMs: result.totalMs, batchMs: result.batches.map((batch) => batch.ms) };
+    experiment[`mget${size}`] = {
+      totalMs: result.totalMs,
+      batchMs: result.batches.map((batch) => batch.ms),
+    };
   }
   const pipelined = await pass(100, gets);
-  experiment.pipelinedGet100 = { totalMs: pipelined.totalMs, batchMs: pipelined.batches.map((batch) => batch.ms) };
+  experiment.pipelinedGet100 = {
+    totalMs: pipelined.totalMs,
+    batchMs: pipelined.batches.map((batch) => batch.ms),
+  };
 
   // Whether the same batch index is slow in every pass.
   const slow = (ms) => ms > 100;
@@ -543,7 +640,12 @@ async function catalogExperiment(blog, ids, redisClient) {
 // Batch size against stalls: the whole catalog read at each size, the sizes
 // interleaved pass by pass so a slow minute on Redis or the network hits all of
 // them alike. A batch over 100ms counts as a stall (a healthy one is 2-20ms).
-async function catalogSweep(blog, ids, redisClient, { sizes = [10, 25, 50, 100], passes = 2 } = {}) {
+async function catalogSweep(
+  blog,
+  ids,
+  redisClient,
+  { sizes = [10, 25, 50, 100], passes = 2 } = {}
+) {
   const { entry: entryKey } = require("models/entry/key");
   const round1 = (n) => Math.round(n * 10) / 10;
   const keys = ids.map((id) => entryKey(blog.id, id));
@@ -561,7 +663,10 @@ async function catalogSweep(blog, ids, redisClient, { sizes = [10, 25, 50, 100],
         const at = performance.now();
         const values = await redisClient.mGet(keys.slice(i, i + size));
         batchMs.push(round1(performance.now() - at));
-        const bytes = values.reduce((n, value) => n + (value ? value.length : 0), 0);
+        const bytes = values.reduce(
+          (n, value) => n + (value ? value.length : 0),
+          0
+        );
         maxKB = Math.max(maxKB, Math.round(bytes / 1024));
       }
       results[size].push({
@@ -593,8 +698,10 @@ async function redisDiagnostics() {
 
   const wanted = {
     server: /^(redis_version|uptime_in_seconds|io_threads_active|process_id):/,
-    clients: /^(connected_clients|blocked_clients|tracking_clients|clients_in_timeout_table|maxclients):/,
-    memory: /^(used_memory_human|used_memory_rss_human|maxmemory_human|maxmemory_policy|mem_fragmentation_ratio|allocator_frag_ratio):/,
+    clients:
+      /^(connected_clients|blocked_clients|tracking_clients|clients_in_timeout_table|maxclients):/,
+    memory:
+      /^(used_memory_human|used_memory_rss_human|maxmemory_human|maxmemory_policy|mem_fragmentation_ratio|allocator_frag_ratio):/,
     persistence:
       /^(loading|rdb_changes_since_last_save|rdb_bgsave_in_progress|rdb_last_bgsave_status|rdb_last_bgsave_time_sec|aof_enabled|aof_rewrite_in_progress|aof_last_bgrewrite_status|aof_delayed_fsync|latest_fork_usec):/,
     stats:
@@ -609,7 +716,9 @@ async function redisDiagnostics() {
     });
   }
 
-  await attempt("slowlogLength", () => redisClient.sendCommand(["SLOWLOG", "LEN"]));
+  await attempt("slowlogLength", () =>
+    redisClient.sendCommand(["SLOWLOG", "LEN"])
+  );
   await attempt("slowlog", async () => {
     const rows = await redisClient.sendCommand(["SLOWLOG", "GET", "25"]);
     return rows.map((row) => ({
@@ -620,7 +729,9 @@ async function redisDiagnostics() {
       args: row[3].length - 1,
     }));
   });
-  await attempt("latencyLatest", () => redisClient.sendCommand(["LATENCY", "LATEST"]));
+  await attempt("latencyLatest", () =>
+    redisClient.sendCommand(["LATENCY", "LATEST"])
+  );
   return out;
 }
 
@@ -628,7 +739,8 @@ async function redisDiagnostics() {
 async function runStats(identifier) {
   const { getBlog, getAll } = require("blog/lib/models");
   let lookup = { handle: identifier };
-  if (/^https?:\/\//.test(identifier)) lookup = { domain: new URL(identifier).hostname };
+  if (/^https?:\/\//.test(identifier))
+    lookup = { domain: new URL(identifier).hostname };
   else if (identifier.includes(".")) lookup = { domain: identifier };
   else if (identifier.startsWith("blog_")) lookup = { id: identifier };
 
@@ -658,16 +770,22 @@ async function runStats(identifier) {
   // what one augmented copy weighs.
   let backlinkBytes = 0;
   for (const row of rows) {
-    row.backlinkBytes = row.backlinkUrls.reduce((n, url) => n + (sizeByUrl.get(url) || 0), 0);
+    row.backlinkBytes = row.backlinkUrls.reduce(
+      (n, url) => n + (sizeByUrl.get(url) || 0),
+      0
+    );
     backlinkBytes += row.backlinkBytes;
     delete row.backlinkUrls;
   }
 
   const top = (key) =>
-    [...rows].sort((a, b) => b[key] - a[key]).slice(0, 10).map((row) => ({
-      path: row.path,
-      [key]: row[key],
-    }));
+    [...rows]
+      .sort((a, b) => b[key] - a[key])
+      .slice(0, 10)
+      .map((row) => ({
+        path: row.path,
+        [key]: row[key],
+      }));
 
   const stats = {
     blogID: blog.id,
@@ -703,7 +821,11 @@ async function main() {
   instrumentRedis();
   instrumentRender();
   const sampler = instrument.startSampler(out, {
-    extra: () => ({ inflight, completed, redisCommands: redis.totals.commands }),
+    extra: () => ({
+      inflight,
+      completed,
+      redisCommands: redis.totals.commands,
+    }),
     print: (() => {
       let lastRedis = 0;
       return (sample) => {
@@ -717,17 +839,28 @@ async function main() {
       };
     })(),
     onGC(ms, kind) {
-      if (ms > 100) out.append("phases.ndjson", { t: now(), name: "gc", ms: Math.round(ms), kind });
+      if (ms > 100)
+        out.append("phases.ndjson", {
+          t: now(),
+          name: "gc",
+          ms: Math.round(ms),
+          kind,
+        });
     },
   });
 
-  const summary = { args: process.argv.slice(2), release: process.env.BLOT_RELEASE_ID };
+  const summary = {
+    args: process.argv.slice(2),
+    release: process.env.BLOT_RELEASE_ID,
+  };
   try {
     if (args.stats) {
       summary.stats = await runStats(args.stats);
     } else {
       const port = await startServer();
-      const results = args.replay ? await runReplay(port) : await runUrls(port, urls);
+      const results = args.replay
+        ? await runReplay(port)
+        : await runUrls(port, urls);
       summary.requests = results.length;
       summary.slowest = [...results].sort((a, b) => b.ms - a.ms).slice(0, 10);
     }

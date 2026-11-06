@@ -17,10 +17,7 @@ module.exports = (title) => {
       .replace(/\.png/g, "")
       .replace(/\.gif/g, "")
 
-      .replace(
-        /[/«»“”‘–’`~!@#$%^&*()+=\\|\]}{['";:?>.<,]/g,
-        ""
-      )
+      .replace(/[/«»“”‘–’`~!@#$%^&*()+=\\|\]}{['";:?>.<,]/g, "")
       .replace(/-+/g, "-")
   ); // collapse dashes
 };

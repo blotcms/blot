@@ -47,8 +47,14 @@ const importRepo = require("../../app/clients/git/store/import");
 const { parse, objectStore } = require("./target");
 
 async function main() {
-  const { options, positional } = parse(process.argv.slice(2), { flags: ["verify"], values: ["scratch", "cache-mb"] });
-  if (positional.length !== 1) throw new Error("Usage: node scripts/git/import-repo.js <git-dir> (--dir <folder> | --bucket <name> [--prefix <p>]) [--scratch <dir>] [--cache-mb <n>] [--verify]");
+  const { options, positional } = parse(process.argv.slice(2), {
+    flags: ["verify"],
+    values: ["scratch", "cache-mb"],
+  });
+  if (positional.length !== 1)
+    throw new Error(
+      "Usage: node scripts/git/import-repo.js <git-dir> (--dir <folder> | --bucket <name> [--prefix <p>]) [--scratch <dir>] [--cache-mb <n>] [--verify]"
+    );
 
   const gitDir = path.resolve(positional[0]);
   if (!fs.existsSync(gitDir)) throw new Error("No such directory: " + gitDir);
@@ -56,16 +62,30 @@ async function main() {
   const target = objectStore(options);
   const objects = target.store;
   const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), "git-import-cache-"));
-  const cache = store.createCache({ dir: cacheDir, maxBytes: Number(options["cache-mb"] || 1024) * 1024 * 1024 });
+  const cache = store.createCache({
+    dir: cacheDir,
+    maxBytes: Number(options["cache-mb"] || 1024) * 1024 * 1024,
+  });
   const lock = (fn) => fn();
   const scratchDir = options.scratch ? path.resolve(options.scratch) : null;
 
   let result;
   try {
-    result = await importRepo({ store: objects, cache, lock, gitDir, scratchDir });
+    result = await importRepo({
+      store: objects,
+      cache,
+      lock,
+      gitDir,
+      scratchDir,
+    });
 
     if (options.verify && result.outcome === "imported") {
-      result.verified = await importRepo.verifyImport({ store: objects, cache, gitDir, scratchDir });
+      result.verified = await importRepo.verifyImport({
+        store: objects,
+        cache,
+        gitDir,
+        scratchDir,
+      });
     }
   } finally {
     fs.rmSync(cacheDir, { recursive: true, force: true });

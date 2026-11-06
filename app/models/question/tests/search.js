@@ -18,7 +18,7 @@ describe("questions.search", function () {
     const results = await search({ query: "how" });
 
     // each result should have only the properties 'title' and 'id'
-    results.forEach(result => {
+    results.forEach((result) => {
       expect(Object.keys(result).sort()).toEqual(["id", "score", "title"]);
     });
 
@@ -66,7 +66,7 @@ describe("questions.search", function () {
 
     const results = await search({ query: "how" });
 
-    const ids = results.map(result => result.id);
+    const ids = results.map((result) => result.id);
     expect(ids).toContain(valid.id);
     expect(ids).not.toContain(emptyBody.id);
   });

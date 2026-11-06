@@ -96,7 +96,11 @@ async function runPostListenTasks() {
     alarm.start();
     // Claim nothing new once draining; an unfinished one is retried elsewhere
     require("helper/drain").onStart(() => {
-      alarm.stop().catch((err) => logError("Failed to stop scheduled entry publication", err));
+      alarm
+        .stop()
+        .catch((err) =>
+          logError("Failed to stop scheduled entry publication", err)
+        );
     });
   } catch (err) {
     logError("Failed to start scheduled entry publication", err);
@@ -123,7 +127,9 @@ async function runPostListenTasks() {
       require("clients");
       followUpSync.startAll();
       require("helper/drain").onStart(() => {
-        followUpSync.stopAll().catch((err) => logError("Failed to stop follow-up syncs", err));
+        followUpSync
+          .stopAll()
+          .catch((err) => logError("Failed to stop follow-up syncs", err));
       });
     }
   } catch (err) {
@@ -241,7 +247,9 @@ function main(callback) {
 
         // In development, drop the cached copy so edits to the seed list show.
         if (config.environment === "development") {
-          await fs.remove(path.join(config.data_directory, "featured", "featured.json"));
+          await fs.remove(
+            path.join(config.data_directory, "featured", "featured.json")
+          );
           return;
         }
 
@@ -313,7 +321,6 @@ function main(callback) {
         await documentation({ watch: true });
         log("Built documentation assets");
       },
-
     ],
     callback
   );

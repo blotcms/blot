@@ -48,14 +48,18 @@ describe("Blog.create", function () {
 
       test.blog = blog;
 
-      folder.exists(blog.id, "/").then(function (exists) {
-        expect(exists).toBe(true);
+      folder
+        .exists(blog.id, "/")
+        .then(function (exists) {
+          expect(exists).toBe(true);
 
-        return folder.listNames(blog.id, "/");
-      }).then(function (names) {
-        expect(names).toEqual([]);
-        done();
-      }).catch(done.fail);
+          return folder.listNames(blog.id, "/");
+        })
+        .then(function (names) {
+          expect(names).toEqual([]);
+          done();
+        })
+        .catch(done.fail);
     });
   });
 
@@ -102,7 +106,6 @@ describe("Blog.create", function () {
     });
   });
 
-
   it("creates blogs with isolated plugin defaults", function (done) {
     var test = this;
 
@@ -114,17 +117,20 @@ describe("Blog.create", function () {
       firstBlog.plugins.typeset.enabled = false;
       firstBlog.plugins.typeset.options.smallCaps = false;
 
-      create(test.user.uid, { handle: "secondblog" }, function (err, secondBlog) {
-        if (err) return done.fail(err);
+      create(
+        test.user.uid,
+        { handle: "secondblog" },
+        function (err, secondBlog) {
+          if (err) return done.fail(err);
 
-        test.blogs.push(secondBlog);
+          test.blogs.push(secondBlog);
 
-        expect(secondBlog.plugins.typeset.enabled).toBe(true);
-        expect(secondBlog.plugins.typeset.options.smallCaps).toBe(true);
+          expect(secondBlog.plugins.typeset.enabled).toBe(true);
+          expect(secondBlog.plugins.typeset.options.smallCaps).toBe(true);
 
-        done();
-      });
+          done();
+        }
+      );
     });
   });
-
 });

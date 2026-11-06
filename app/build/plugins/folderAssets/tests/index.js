@@ -152,10 +152,18 @@ describe("folderAssets plugin", function () {
   it("finds a file ignoring case, preferring the exact name over a sibling differing only by case", async function () {
     var blog = this.blog;
 
-    await folder.write(this.blog.id, "/Hello.txt", "![A](pics/a.png) ![B](PICS/a.png) ![C](pics/B.PNG)");
+    await folder.write(
+      this.blog.id,
+      "/Hello.txt",
+      "![A](pics/a.png) ![B](PICS/a.png) ![C](pics/B.PNG)"
+    );
     await folder.write(this.blog.id, "/pics/a.png", "lowercase folder");
     await folder.write(this.blog.id, "/Pics/a.png", "capitalised folder");
-    await folder.write(this.blog.id, "/pics/b.png", "found by its stored spelling");
+    await folder.write(
+      this.blog.id,
+      "/pics/b.png",
+      "found by its stored spelling"
+    );
 
     var entry = await buildEntry(blog, "/Hello.txt");
 
@@ -189,7 +197,8 @@ describe("folderAssets plugin", function () {
 
   it("falls back to the blog folder when a reserved path isn't in the global static directory", async function () {
     var path = "/Hello.txt";
-    var contents = "![Font icon](fonts/icon.png) ![Missing](/katex/missing.png)";
+    var contents =
+      "![Font icon](fonts/icon.png) ![Missing](/katex/missing.png)";
 
     await folder.write(this.blog.id, path, contents);
     await folder.write(this.blog.id, "/fonts/icon.png", "blog file");
@@ -234,16 +243,16 @@ describe("folderAssets plugin", function () {
     var entry = await buildEntry(this.blog, path);
 
     expect(entry.html).toMatch(
-      new RegExp(`poster="${BLOT_CDN_TOKEN}/folder/v-[a-f0-9]{8}/[^"]*/poster\\.jpg"`)
+      new RegExp(
+        `poster="${BLOT_CDN_TOKEN}/folder/v-[a-f0-9]{8}/[^"]*/poster\\.jpg"`
+      )
     );
     expect(entry.html).toMatch(
       new RegExp(`srcset="[^"]*/a\\.jpg [^"]*1x, [^"]*/a2\\.jpg 2x"`)
     );
     expect(entry.dependencies).toContain("/poster.jpg");
     expect(entry.dependencies).toContain("/a2.jpg");
-    expect(entry.dependencies.length).toEqual(
-      new Set(entry.dependencies).size
-    );
+    expect(entry.dependencies.length).toEqual(new Set(entry.dependencies).size);
   });
 
   it("only treats whole path segments as reserved (/fontsFoo is a normal folder)", async function () {
@@ -277,7 +286,11 @@ describe("folderAssets plugin", function () {
   it("bakes a link to the entry's own file but doesn't record it as a dependency", async function () {
     var path = "/Hello.txt";
 
-    await folder.write(this.blog.id, path, "[Source](Hello.txt) [Other](other.pdf)");
+    await folder.write(
+      this.blog.id,
+      path,
+      "[Source](Hello.txt) [Other](other.pdf)"
+    );
     await folder.write(this.blog.id, "/other.pdf", "pdf");
 
     var entry = await buildEntry(this.blog, path);
@@ -300,7 +313,9 @@ describe("folderAssets plugin", function () {
 
     var entry = await buildEntry(this.blog, path);
 
-    expect(entry.html).toMatch(new RegExp('poster="' + tokenRegex("/posts/movie\\.jpg").source));
+    expect(entry.html).toMatch(
+      new RegExp('poster="' + tokenRegex("/posts/movie\\.jpg").source)
+    );
     expect(entry.html).toMatch(tokenRegex("/posts/small\\.jpg 1x"));
     expect(entry.html).toMatch(tokenRegex("/big\\.jpg 2x"));
     expect(entry.dependencies).toContain("/posts/movie.jpg");
@@ -323,7 +338,8 @@ describe("folderAssets plugin", function () {
 
   it("bakes a missing image in src, poster and srcset as a pending CDN URL", async function () {
     var path = "/posts/Hello.txt";
-    var pending = (file) => `${BLOT_CDN_TOKEN}/folder/v-pending/${this.blog.id}${file}`;
+    var pending = (file) =>
+      `${BLOT_CDN_TOKEN}/folder/v-pending/${this.blog.id}${file}`;
     var contents =
       '<video poster="still.png"></video>\n\n' +
       '<img src="/a%20b.jpg?w=1#top" loading="lazy" srcset="/here.jpg 1x, /gone.webp 2x">';
@@ -337,7 +353,13 @@ describe("folderAssets plugin", function () {
     expect(entry.html).toContain(`src="${pending("/a%20b.jpg")}?w=1#top"`);
     expect(entry.html).toContain('loading="lazy"');
     expect(entry.html).toMatch(
-      new RegExp('srcset="' + tokenRegex("/here\\.jpg 1x").source + ", " + pending("/gone.webp") + ' 2x"')
+      new RegExp(
+        'srcset="' +
+          tokenRegex("/here\\.jpg 1x").source +
+          ", " +
+          pending("/gone.webp") +
+          ' 2x"'
+      )
     );
     expect(entry.dependencies).toContain("/posts/still.png");
     expect(entry.dependencies).toContain("/a b.jpg");
@@ -427,7 +449,7 @@ describe("folderAssets plugin", function () {
       var contents =
         "---\n" +
         "teaser: '<img src=\"/photo.jpg\">'\n" +
-        "teaserBody: '<a href=\"/photo.jpg\">Photo</a> <a href=\"/later.pdf\">Later</a>'\n" +
+        'teaserBody: \'<a href="/photo.jpg">Photo</a> <a href="/later.pdf">Later</a>\'\n' +
         "---\n\n" +
         "Body text";
 
@@ -447,7 +469,8 @@ describe("folderAssets plugin", function () {
   it("percent-encodes the baked path so a space doesn't split a srcset candidate", async function () {
     var { parseSrcset } = require("blog/render/replaceFolderLinks/shared");
     var path = "/Hello.txt";
-    var contents = '<img src="/my pic.jpg" srcset="/my%20pic.jpg 1x, /big%20pic.jpg 2x">';
+    var contents =
+      '<img src="/my pic.jpg" srcset="/my%20pic.jpg 1x, /big%20pic.jpg 2x">';
 
     await folder.write(this.blog.id, path, contents);
     await folder.write(this.blog.id, "/my pic.jpg", "small");
@@ -463,7 +486,9 @@ describe("folderAssets plugin", function () {
     expect(candidates[0].descriptor).toEqual("1x");
     expect(candidates[1].url).toMatch(tokenRegex("/big%20pic\\.jpg$"));
     expect(candidates[1].descriptor).toEqual("2x");
-    expect(entry.html).toMatch(new RegExp('src="' + tokenRegex("/my%20pic\\.jpg").source + '"'));
+    expect(entry.html).toMatch(
+      new RegExp('src="' + tokenRegex("/my%20pic\\.jpg").source + '"')
+    );
     expect(entry.dependencies).toContain("/my pic.jpg");
     expect(entry.dependencies).toContain("/big pic.jpg");
   });
@@ -471,18 +496,25 @@ describe("folderAssets plugin", function () {
   it("keeps an encoded '#' or '?' in a file name part of the path", async function () {
     var path = "/Hello.txt";
 
-    await folder.write(this.blog.id, path, `<img src="/it's%20%231%3F.jpg?w=1#top">`);
+    await folder.write(
+      this.blog.id,
+      path,
+      `<img src="/it's%20%231%3F.jpg?w=1#top">`
+    );
     await folder.write(this.blog.id, "/it's #1?.jpg", "image");
 
     var entry = await buildEntry(this.blog, path);
 
-    expect(entry.html).toMatch(tokenRegex("/it%27s%20%231%3F\\.jpg\\?w=1#top\""));
+    expect(entry.html).toMatch(
+      tokenRegex('/it%27s%20%231%3F\\.jpg\\?w=1#top"')
+    );
     expect(entry.dependencies).toContain("/it's #1?.jpg");
   });
 
   it("re-bakes an already-baked encoded srcset, keeping a missing file's path encoded", async function () {
     var path = "/Hello.txt";
-    var baked = (file) => `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${this.blog.id}${file}`;
+    var baked = (file) =>
+      `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${this.blog.id}${file}`;
     var contents = `<img srcset="${baked("/my%20pic.jpg")} 2x, ${baked("/gone%20pic.jpg")} 1x">`;
 
     await folder.write(this.blog.id, path, contents);
@@ -492,7 +524,9 @@ describe("folderAssets plugin", function () {
 
     expect(entry.html).toMatch(
       new RegExp(
-        'srcset="' + tokenRegex("/my%20pic\\.jpg 2x").source + ", " +
+        'srcset="' +
+          tokenRegex("/my%20pic\\.jpg 2x").source +
+          ", " +
           `${BLOT_CDN_TOKEN}/folder/v-pending/${this.blog.id}/gone%20pic\\.jpg 1x"`
       )
     );
@@ -503,7 +537,11 @@ describe("folderAssets plugin", function () {
   describe("entry metadata", function () {
     it("is left as written, so templates can build URLs from it", async function () {
       await folder.write(this.blog.id, "/cover.jpg", "cover");
-      await folder.write(this.blog.id, "/Hello.txt", "Image: /cover.jpg\n\nBody");
+      await folder.write(
+        this.blog.id,
+        "/Hello.txt",
+        "Image: /cover.jpg\n\nBody"
+      );
 
       var entry = await buildEntry(this.blog, "/Hello.txt");
 

@@ -21,12 +21,14 @@ module.exports = function getView(templateID, viewID, callback) {
 
         if (!match) return callback(new Error("No view: " + viewID));
 
-        return client.hGetAll(key.view(templateID, match)).then(function (matchedView) {
-          if (!matchedView || !Object.keys(matchedView).length)
-            return callback(new Error("No view: " + viewID));
+        return client
+          .hGetAll(key.view(templateID, match))
+          .then(function (matchedView) {
+            if (!matchedView || !Object.keys(matchedView).length)
+              return callback(new Error("No view: " + viewID));
 
-          callback(null, deserialize(matchedView, viewModel));
-        });
+            callback(null, deserialize(matchedView, viewModel));
+          });
       });
     })
     .catch(callback);

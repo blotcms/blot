@@ -1,13 +1,14 @@
-const WATCH_PLAYER_SCRIPT = 'https://assets.mediadelivery.net/playerjs/player-0.1.0.min.js';
+const WATCH_PLAYER_SCRIPT =
+  "https://assets.mediadelivery.net/playerjs/player-0.1.0.min.js";
 
 (function () {
-  const screen = document.querySelector('[data-watch-screen]');
+  const screen = document.querySelector("[data-watch-screen]");
   if (!screen) return;
 
-  const frame = screen.querySelector('iframe');
-  const trigger = document.querySelector('[data-watch-trigger]');
-  const close = screen.querySelector('[data-watch-close]');
-  const standalone = document.body.classList.contains('watch-page');
+  const frame = screen.querySelector("iframe");
+  const trigger = document.querySelector("[data-watch-trigger]");
+  const close = screen.querySelector("[data-watch-close]");
+  const standalone = document.body.classList.contains("watch-page");
 
   let active = standalone;
   let player;
@@ -19,7 +20,7 @@ const WATCH_PLAYER_SCRIPT = 'https://assets.mediadelivery.net/playerjs/player-0.
     if (playerScriptPromise) return playerScriptPromise;
 
     playerScriptPromise = new Promise(function (resolve, reject) {
-      const script = document.createElement('script');
+      const script = document.createElement("script");
       script.src = WATCH_PLAYER_SCRIPT;
       script.async = true;
       script.onload = function () {
@@ -42,7 +43,7 @@ const WATCH_PLAYER_SCRIPT = 'https://assets.mediadelivery.net/playerjs/player-0.
         if (!playerjs || !playerjs.Player) return;
 
         player = new playerjs.Player(frame);
-        player.on('ready', function () {
+        player.on("ready", function () {
           if (active) playVideo();
         });
 
@@ -60,7 +61,8 @@ const WATCH_PLAYER_SCRIPT = 'https://assets.mediadelivery.net/playerjs/player-0.
 
     try {
       const result = player.play();
-      if (result && typeof result.catch === 'function') result.catch(function () {});
+      if (result && typeof result.catch === "function")
+        result.catch(function () {});
     } catch (error) {}
   }
 
@@ -68,19 +70,20 @@ const WATCH_PLAYER_SCRIPT = 'https://assets.mediadelivery.net/playerjs/player-0.
     if (!isActive && player) {
       try {
         const result = player.pause();
-        if (result && typeof result.catch === 'function') result.catch(function () {});
+        if (result && typeof result.catch === "function")
+          result.catch(function () {});
       } catch (error) {}
     }
 
     active = isActive;
-    document.body.classList.toggle('is-watching', isActive);
-    screen.classList.toggle('is-active', isActive);
-    screen.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+    document.body.classList.toggle("is-watching", isActive);
+    screen.classList.toggle("is-active", isActive);
+    screen.setAttribute("aria-hidden", isActive ? "false" : "true");
   }
 
   function openWatch(updateUrl) {
-    if (updateUrl && window.location.pathname !== '/watch') {
-      window.history.pushState({ watch: true }, '', '/watch');
+    if (updateUrl && window.location.pathname !== "/watch") {
+      window.history.pushState({ watch: true }, "", "/watch");
     }
 
     setScreenState(true);
@@ -92,7 +95,7 @@ const WATCH_PLAYER_SCRIPT = 'https://assets.mediadelivery.net/playerjs/player-0.
     if (event) event.preventDefault();
 
     if (standalone) {
-      window.location.href = '/';
+      window.location.href = "/";
       return;
     }
 
@@ -101,7 +104,7 @@ const WATCH_PLAYER_SCRIPT = 'https://assets.mediadelivery.net/playerjs/player-0.
       return;
     }
 
-    window.history.replaceState({}, '', '/');
+    window.history.replaceState({}, "", "/");
     setScreenState(false);
     if (trigger) trigger.focus();
   }
@@ -117,16 +120,16 @@ const WATCH_PLAYER_SCRIPT = 'https://assets.mediadelivery.net/playerjs/player-0.
   }
 
   if (trigger) {
-    trigger.addEventListener('click', function (event) {
+    trigger.addEventListener("click", function (event) {
       event.preventDefault();
       openWatch(true);
     });
   }
 
-  if (close) close.addEventListener('click', closeWatch);
+  if (close) close.addEventListener("click", closeWatch);
 
-  window.addEventListener('popstate', function () {
-    if (window.location.pathname === '/watch') {
+  window.addEventListener("popstate", function () {
+    if (window.location.pathname === "/watch") {
       openWatch(false);
     } else if (!standalone) {
       setScreenState(false);

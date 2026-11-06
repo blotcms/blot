@@ -5,7 +5,7 @@ module.exports = function (text) {
   const lines = text.split("\n");
 
   text = lines
-    .map(line => {
+    .map((line) => {
       if (!line || !line.trim()) return line;
 
       if (line.endsWith("  ")) return line;

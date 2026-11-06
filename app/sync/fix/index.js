@@ -67,7 +67,11 @@ module.exports = function (blog, options, callback) {
       current += 1;
       status(`(${current}/${checks.length}) Checking ${check.name}`);
       const startedAt = Date.now();
-      runningChecks.set(callID, { blogID: blog.id, check: check.name, startedAt });
+      runningChecks.set(callID, {
+        blogID: blog.id,
+        check: check.name,
+        startedAt,
+      });
       check.fn(
         blog,
         callOnce(function (err, report) {

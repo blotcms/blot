@@ -204,7 +204,10 @@ module.exports = function alarm(name, handler, options = {}) {
           arguments: [String(now()), String(leaseMs), token],
         });
       } catch (err) {
-        log(isRedisUnavailableError(err) ? "Redis unavailable:" : "claim failed:", err);
+        log(
+          isRedisUnavailableError(err) ? "Redis unavailable:" : "claim failed:",
+          err
+        );
         break;
       }
 

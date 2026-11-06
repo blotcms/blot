@@ -7,7 +7,7 @@ const pathNormalizer = require("helper/pathNormalizer");
 const Path = require("path");
 const clfdate = require("helper/clfdate");
 
-const prefix = () => clfdate() + ' Dropbox: Delta: ';
+const prefix = () => clfdate() + " Dropbox: Delta: ";
 
 function normalizeRelativePath(path) {
   return (path || "").replace(/^\/+/, "");
@@ -58,8 +58,12 @@ function listDropboxFolderEntries(client, path) {
 }
 
 async function injectCaseOnlyDeletes(entries, blogID, client) {
-
-  console.log(prefix(), "Checking for case-only renames in", entries.length, "entries" );
+  console.log(
+    prefix(),
+    "Checking for case-only renames in",
+    entries.length,
+    "entries"
+  );
 
   const normalizeRelativePathForComparison = function (relativePath) {
     return (relativePath || "").replace(/^\/+/, "").toLowerCase();
@@ -95,16 +99,29 @@ async function injectCaseOnlyDeletes(entries, blogID, client) {
       // use case-sensitive path to find the parent directory.
       if (err.code === "ENOENT") {
         try {
-          console.log("Parent directory does not exist, trying case-sensitive path");
-          const resolvedPath = await folder.resolveCaseInsensitive(blogID, Path.dirname(entry.relative_path));
+          console.log(
+            "Parent directory does not exist, trying case-sensitive path"
+          );
+          const resolvedPath = await folder.resolveCaseInsensitive(
+            blogID,
+            Path.dirname(entry.relative_path)
+          );
           localEntries = await folder.listNames(blogID, resolvedPath);
         } catch (err2) {
           // The folder is often just not on disk yet because its delta has not
           // been applied, so an expected miss gets one line and no stack.
           if (err2 && err2.code === "ENOENT") {
-            console.log(prefix(), "Local directory not found with case-sensitive path:", err2.message);
+            console.log(
+              prefix(),
+              "Local directory not found with case-sensitive path:",
+              err2.message
+            );
           } else {
-            console.log(prefix(), "Error reading local directory with case-sensitive path:", err2);
+            console.log(
+              prefix(),
+              "Error reading local directory with case-sensitive path:",
+              err2
+            );
           }
           continue;
         }
@@ -150,12 +167,18 @@ async function injectCaseOnlyDeletes(entries, blogID, client) {
     });
 
     if (!newEntry || oldEntry) {
-      console.log(prefix(), "Could not find new or old entry in Dropbox folder");
+      console.log(
+        prefix(),
+        "Could not find new or old entry in Dropbox folder"
+      );
       continue;
     }
 
     if (newEntry[".tag"] !== entry[".tag"]) {
-      console.log(prefix(), "New entry type does not match original entry type");
+      console.log(
+        prefix(),
+        "New entry type does not match original entry type"
+      );
       continue;
     }
 
@@ -191,7 +214,8 @@ async function injectCaseOnlyDeletes(entries, blogID, client) {
       ? Path.posix.join(dropboxParent, existingName)
       : "/" + existingName;
 
-    console.log(prefix(), 
+    console.log(
+      prefix(),
       "Injecting case-only delete for",
       oldRelativePath,
       "alongside",
@@ -206,7 +230,10 @@ async function injectCaseOnlyDeletes(entries, blogID, client) {
     if (entry[".tag"] === "folder") {
       const shouldPrefixSlash = entry.relative_path[0] === "/";
 
-      const descendantPaths = await listDescendantPaths(blogID, oldRelativePath);
+      const descendantPaths = await listDescendantPaths(
+        blogID,
+        oldRelativePath
+      );
       const descendantDeletes = [];
 
       for (const descendantPath of descendantPaths) {

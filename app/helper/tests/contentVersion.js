@@ -141,21 +141,29 @@ describe("contentVersion", function () {
 
         const stat = await folder.stat(this.blog.id, "/file.bin");
 
-        expect(await contentVersion.fromFolder(this.blog.id, "/file.bin", stat)).toEqual(
-          await contentVersion(filePath, fs.statSync(filePath))
-        );
+        expect(
+          await contentVersion.fromFolder(this.blog.id, "/file.bin", stat)
+        ).toEqual(await contentVersion(filePath, fs.statSync(filePath)));
       });
     });
 
     it("doesn't read a file above the cap", async function () {
-      await folder.write(this.blog.id, "/big.bin", Buffer.alloc(6 * 1024 * 1024, "x"));
+      await folder.write(
+        this.blog.id,
+        "/big.bin",
+        Buffer.alloc(6 * 1024 * 1024, "x")
+      );
 
       const stat = await folder.stat(this.blog.id, "/big.bin");
 
       spyOn(fs, "readFile").and.callThrough();
       spyOn(fs, "createReadStream").and.callThrough();
 
-      const version = await contentVersion.fromFolder(this.blog.id, "/big.bin", stat);
+      const version = await contentVersion.fromFolder(
+        this.blog.id,
+        "/big.bin",
+        stat
+      );
 
       expect(version).toEqual(contentVersion.fromFolderStat(stat));
       expect(fs.readFile).not.toHaveBeenCalled();
@@ -171,9 +179,15 @@ describe("contentVersion", function () {
       fs.utimesSync(filePath, 1700000000.123456, 1700000000.123456);
 
       const stat = fs.statSync(filePath);
-      const folderStat = { isDirectory: false, size: stat.size, modified: stat.mtimeMs };
+      const folderStat = {
+        isDirectory: false,
+        size: stat.size,
+        modified: stat.mtimeMs,
+      };
 
-      expect(contentVersion.fromFolderStat(folderStat)).toEqual(contentVersion.fromStat(stat));
+      expect(contentVersion.fromFolderStat(folderStat)).toEqual(
+        contentVersion.fromStat(stat)
+      );
     });
   });
 });

@@ -58,45 +58,57 @@ function scratchDirectory() {
 // input, feed (a function given stdin, returning a promise of the writing,
 // handled at once), ok (exit codes which are not failures).
 function git(args, options = {}) {
-  return limiter.run("background", () => new Promise((resolve, reject) => {
-    const child = childProcess.spawn("git", limiter.args(args), {
-      cwd: options.cwd,
-      env: Object.assign({}, process.env, { GIT_TERMINAL_PROMPT: "0" }, options.env),
-      stdio: ["pipe", "pipe", "pipe"],
-      timeout: GIT_TIMEOUT_MS,
-      killSignal: "SIGKILL",
-    });
-    const stdout = [];
-    let stderr = "";
-    let fed = Promise.resolve(null);
+  return limiter.run(
+    "background",
+    () =>
+      new Promise((resolve, reject) => {
+        const child = childProcess.spawn("git", limiter.args(args), {
+          cwd: options.cwd,
+          env: Object.assign(
+            {},
+            process.env,
+            { GIT_TERMINAL_PROMPT: "0" },
+            options.env
+          ),
+          stdio: ["pipe", "pipe", "pipe"],
+          timeout: GIT_TIMEOUT_MS,
+          killSignal: "SIGKILL",
+        });
+        const stdout = [];
+        let stderr = "";
+        let fed = Promise.resolve(null);
 
-    child.stdout.on("data", (chunk) => stdout.push(chunk));
-    child.stderr.on("data", (chunk) => {
-      if (stderr.length < STDERR_BYTES) stderr += chunk;
-    });
-    child.stdin.on("error", () => {});
-    child.on("error", reject);
-    child.on("close", (code, signal) => {
-      fed.then((fedError) => {
-        const ok = options.ok || [0];
-        if (fedError) return reject(fedError);
-        if (signal || ok.indexOf(code) === -1) return reject(new Error("git " + args[0] + " failed: " + stderr.trim()));
-        resolve(Buffer.concat(stdout));
-      });
-    });
+        child.stdout.on("data", (chunk) => stdout.push(chunk));
+        child.stderr.on("data", (chunk) => {
+          if (stderr.length < STDERR_BYTES) stderr += chunk;
+        });
+        child.stdin.on("error", () => {});
+        child.on("error", reject);
+        child.on("close", (code, signal) => {
+          fed.then((fedError) => {
+            const ok = options.ok || [0];
+            if (fedError) return reject(fedError);
+            if (signal || ok.indexOf(code) === -1)
+              return reject(
+                new Error("git " + args[0] + " failed: " + stderr.trim())
+              );
+            resolve(Buffer.concat(stdout));
+          });
+        });
 
-    if (options.feed) {
-      fed = new Promise((settle) => settle(options.feed(child.stdin))).then(
-        () => null,
-        (err) => {
-          child.kill("SIGKILL");
-          return err || new Error("feeding git failed");
+        if (options.feed) {
+          fed = new Promise((settle) => settle(options.feed(child.stdin))).then(
+            () => null,
+            (err) => {
+              child.kill("SIGKILL");
+              return err || new Error("feeding git failed");
+            }
+          );
+        } else {
+          child.stdin.end(options.input);
         }
-      );
-    } else {
-      child.stdin.end(options.input);
-    }
-  }));
+      })
+  );
 }
 
 // Writes to a stream, waiting while it is full
@@ -125,7 +137,8 @@ function quote(file) {
     if (byte === 0x22) out += '\\"';
     else if (byte === 0x5c) out += "\\\\";
     else if (byte === 0x0a) out += "\\n";
-    else if (byte < 0x20 || byte === 0x7f) out += "\\" + byte.toString(8).padStart(3, "0");
+    else if (byte < 0x20 || byte === 0x7f)
+      out += "\\" + byte.toString(8).padStart(3, "0");
     else out += String.fromCharCode(byte);
   }
   // The non-ASCII bytes above were kept as latin1 characters: back to bytes
@@ -145,7 +158,11 @@ async function candidates(blogID) {
     if (shouldIgnoreFile(file)) continue;
 
     if ((await storage.stat(blogID, file)).size === 0) {
-      console.log(clfdate() + " Git: create: skipping empty file (possible placeholder)", blogID, file);
+      console.log(
+        clfdate() + " Git: create: skipping empty file (possible placeholder)",
+        blogID,
+        file
+      );
       continue;
     }
 
@@ -156,18 +173,34 @@ async function candidates(blogID) {
 
 // Which of the files the folder's .gitignore files exclude, as git add would
 async function gitIgnored(blogID, files, dir) {
-  const rules = files.filter((file) => path.posix.basename(file) === ".gitignore");
+  const rules = files.filter(
+    (file) => path.posix.basename(file) === ".gitignore"
+  );
   if (!rules.length) return new Set();
 
   const workTree = path.join(dir, "ignore");
-  for (const file of rules) await fs.outputFile(path.join(workTree, file), await storage.read(blogID, "/" + file));
+  for (const file of rules)
+    await fs.outputFile(
+      path.join(workTree, file),
+      await storage.read(blogID, "/" + file)
+    );
 
-  const output = await git(["--git-dir=" + path.join(dir, "repo.git"), "--work-tree=" + workTree, "check-ignore", "--no-index", "--stdin", "-z"], {
-    cwd: workTree,
-    input: files.map((file) => file + "\0").join(""),
-    // 1: nothing is ignored
-    ok: [0, 1],
-  });
+  const output = await git(
+    [
+      "--git-dir=" + path.join(dir, "repo.git"),
+      "--work-tree=" + workTree,
+      "check-ignore",
+      "--no-index",
+      "--stdin",
+      "-z",
+    ],
+    {
+      cwd: workTree,
+      input: files.map((file) => file + "\0").join(""),
+      // 1: nothing is ignored
+      ok: [0, 1],
+    }
+  );
 
   return new Set(output.toString("utf8").split("\0").filter(Boolean));
 }
@@ -181,14 +214,34 @@ async function fastImport(blogID, files, gitDir, folder) {
   await git(["fast-import", "--quiet", "--done"], {
     env: { GIT_DIR: gitDir },
     feed: async (stdin) => {
-      await write(stdin, "commit refs/heads/master\ncommitter " + IDENTITY.name + " <" + IDENTITY.email + "> " + seconds + " +0000\ndata " + Buffer.byteLength(message) + "\n" + message + "\n");
+      await write(
+        stdin,
+        "commit refs/heads/master\ncommitter " +
+          IDENTITY.name +
+          " <" +
+          IDENTITY.email +
+          "> " +
+          seconds +
+          " +0000\ndata " +
+          Buffer.byteLength(message) +
+          "\n" +
+          message +
+          "\n"
+      );
 
       for (const file of files) {
         const { size } = await storage.stat(blogID, "/" + file);
         const body = storage.createReadStream(blogID, "/" + file);
         let sent = 0;
 
-        await write(stdin, Buffer.concat([Buffer.from("M 100644 inline "), quote(file), Buffer.from("\ndata " + size + "\n")]));
+        await write(
+          stdin,
+          Buffer.concat([
+            Buffer.from("M 100644 inline "),
+            quote(file),
+            Buffer.from("\ndata " + size + "\n"),
+          ])
+        );
 
         for await (const chunk of body) {
           sent += chunk.length;
@@ -197,11 +250,15 @@ async function fastImport(blogID, files, gitDir, folder) {
         }
 
         body.destroy();
-        if (sent !== size) throw new Error("A file changed while the folder was being read: " + file);
+        if (sent !== size)
+          throw new Error(
+            "A file changed while the folder was being read: " + file
+          );
 
         await write(stdin, "\n");
 
-        if (++added % 100 === 0) folder.status("Adding files (" + added + "/" + files.length + ")");
+        if (++added % 100 === 0)
+          folder.status("Adding files (" + added + "/" + files.length + ")");
       }
 
       await write(stdin, "done\n");
@@ -209,7 +266,13 @@ async function fastImport(blogID, files, gitDir, folder) {
     },
   });
 
-  return (await git(["rev-parse", "--verify", "refs/heads/master^{commit}"], { env: { GIT_DIR: gitDir } })).toString().trim();
+  return (
+    await git(["rev-parse", "--verify", "refs/heads/master^{commit}"], {
+      env: { GIT_DIR: gitDir },
+    })
+  )
+    .toString()
+    .trim();
 }
 
 // Whether master in the store's newest manifest is the commit. A read which
@@ -229,7 +292,14 @@ async function removeCopy(blogID) {
   try {
     await removeRepo({ store: context.objectStoreFor(blogID) });
   } catch (err) {
-    log({ blog: blogID, op: "create", outcome: "error", detail: "could not remove the store copy: " + ((err && (err.code || err.message)) || "error") });
+    log({
+      blog: blogID,
+      op: "create",
+      outcome: "error",
+      detail:
+        "could not remove the store copy: " +
+        ((err && (err.code || err.message)) || "error"),
+    });
   }
 }
 
@@ -237,7 +307,10 @@ async function removeCopy(blogID) {
 async function assertEmpty(blogID) {
   if (!manifest.isEmpty(await manifest.read(context.storeFor(blogID)))) {
     log({ blog: blogID, op: "create", outcome: "error", detail: "EEXIST" });
-    throw Object.assign(new Error("The blog already has a repository in the git store"), { code: "EEXIST" });
+    throw Object.assign(
+      new Error("The blog already has a repository in the git store"),
+      { code: "EEXIST" }
+    );
   }
 }
 
@@ -277,28 +350,53 @@ async function create(blog, folder) {
     let result;
 
     try {
-      result = await importRepo({ store, cache, lock: context.refLock(blogID), gitDir, scratchDir: base, pack: { "pack.window": "0" }, gate: limiter.gate("background") });
+      result = await importRepo({
+        store,
+        cache,
+        lock: context.refLock(blogID),
+        gitDir,
+        scratchDir: base,
+        pack: { "pack.window": "0" },
+        gate: limiter.gate("background"),
+      });
     } catch (err) {
       // Refused as not empty, or another writer's first manifest landed:
       // what is in the store is someone else's, and is left alone
-      if (err && (err.code === "ENOTEMPTY" || err.code === "EMOVED")) imported = false;
+      if (err && (err.code === "ENOTEMPTY" || err.code === "EMOVED"))
+        imported = false;
       throw err;
     }
 
     // The swap may or may not have landed: only a read that finds this
     // commit on master lets the setup go on
     if (result.outcome !== "imported" && !(await landed(store, commit))) {
-      throw Object.assign(new Error("Blot could not confirm that the repository was saved"), { code: "EUNKNOWN" });
+      throw Object.assign(
+        new Error("Blot could not confirm that the repository was saved"),
+        { code: "EUNKNOWN" }
+      );
     }
 
-    log({ blog: blogID, op: "create", outcome: "ok", ms: Date.now() - started, files: files.length, ignored: ignored.size });
+    log({
+      blog: blogID,
+      op: "create",
+      outcome: "ok",
+      ms: Date.now() - started,
+      files: files.length,
+      ignored: ignored.size,
+    });
 
     // The store's copy stays this setup's to take back until create.js has
     // recorded the setup (the applied pointer, the status): a failure there
     // calls rollback, so a retry finds the store empty
     return { commit, rollback: () => removeCopy(blogID) };
   } catch (err) {
-    log({ blog: blogID, op: "create", outcome: "error", ms: Date.now() - started, detail: (err && (err.code || err.message)) || "error" });
+    log({
+      blog: blogID,
+      op: "create",
+      outcome: "error",
+      ms: Date.now() - started,
+      detail: (err && (err.code || err.message)) || "error",
+    });
 
     if (imported) await removeCopy(blogID);
     throw err;

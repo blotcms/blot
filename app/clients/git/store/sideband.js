@@ -23,15 +23,26 @@ const MAX_PACKET = 65520;
 const KEEPALIVE = Buffer.from("0005\x01");
 
 function pktLine(content) {
-  return Buffer.concat([Buffer.from((4 + content.length).toString(16).padStart(4, "0")), content]);
+  return Buffer.concat([
+    Buffer.from((4 + content.length).toString(16).padStart(4, "0")),
+    content,
+  ]);
 }
 
 function oneLine(text) {
-  return String(text).replace(/[\r\n\0]+/g, " ").trim().slice(0, 1000);
+  return String(text)
+    .replace(/[\r\n\0]+/g, " ")
+    .trim()
+    .slice(0, 1000);
 }
 
-function createResponse(res, { capabilities = "", commands = [], keepaliveMs = 5000 } = {}) {
-  const wanted = Array.isArray(capabilities) ? capabilities : String(capabilities).split(/\s+/);
+function createResponse(
+  res,
+  { capabilities = "", commands = [], keepaliveMs = 5000 } = {}
+) {
+  const wanted = Array.isArray(capabilities)
+    ? capabilities
+    : String(capabilities).split(/\s+/);
   const has = (name) => wanted.includes(name);
   const sideband = has("side-band-64k");
   const quiet = has("quiet");
@@ -52,7 +63,14 @@ function createResponse(res, { capabilities = "", commands = [], keepaliveMs = 5
 
   function band(number, content) {
     for (let at = 0; at < content.length || at === 0; at += MAX_PACKET - 5) {
-      write(pktLine(Buffer.concat([Buffer.from([number]), content.subarray(at, at + MAX_PACKET - 5)])));
+      write(
+        pktLine(
+          Buffer.concat([
+            Buffer.from([number]),
+            content.subarray(at, at + MAX_PACKET - 5),
+          ])
+        )
+      );
     }
   }
 
@@ -84,12 +102,22 @@ function createResponse(res, { capabilities = "", commands = [], keepaliveMs = 5
     if (ended) return;
     clearTimeout(timer);
 
-    if (sideband) for (const message of messages) band(2, Buffer.from(oneLine(message) + "\n"));
+    if (sideband)
+      for (const message of messages)
+        band(2, Buffer.from(oneLine(message) + "\n"));
 
     if (has("report-status")) {
       const lines = [pktLine(Buffer.from("unpack " + oneLine(status) + "\n"))];
       for (const { ref, error } of results) {
-        lines.push(pktLine(Buffer.from(error ? "ng " + ref + " " + oneLine(error) + "\n" : "ok " + ref + "\n")));
+        lines.push(
+          pktLine(
+            Buffer.from(
+              error
+                ? "ng " + ref + " " + oneLine(error) + "\n"
+                : "ok " + ref + "\n"
+            )
+          )
+        );
       }
       lines.push(Buffer.from("0000"));
       const report = Buffer.concat(lines);
@@ -115,7 +143,9 @@ function createResponse(res, { capabilities = "", commands = [], keepaliveMs = 5
     end(
       "Blot hit an error receiving the push; please try again in a moment",
       commands.map(({ ref }) => ({ ref, error: "internal error" })),
-      ["Blot hit an error receiving the push. Run git fetch to see whether it was saved before you push again."]
+      [
+        "Blot hit an error receiving the push. Run git fetch to see whether it was saved before you push again.",
+      ]
     );
   }
 

@@ -39,7 +39,8 @@ describe("Blog.bumpCacheID", function () {
     if (originalSet) require.cache[setPath] = originalSet;
     else delete require.cache[setPath];
 
-    if (originalBumpCacheID) require.cache[bumpCacheIDPath] = originalBumpCacheID;
+    if (originalBumpCacheID)
+      require.cache[bumpCacheIDPath] = originalBumpCacheID;
     else delete require.cache[bumpCacheIDPath];
   });
 

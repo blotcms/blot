@@ -26,11 +26,10 @@ module.exports = function (req, res, next) {
       res.locals.scheduled = entries
         .slice(0, NUMBER_OF_SCHEDULED_ENTRIES_TO_DISPLAY)
         .map(function (entry) {
-            
           return {
             title: entry.title,
             date: moment(entry.dateStamp).fromNow(),
-            path: entry.path
+            path: entry.path,
           };
         });
 

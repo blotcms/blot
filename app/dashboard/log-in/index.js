@@ -21,7 +21,7 @@ var DASHBOARD_PAGE_DESCRIPTION = {
   "/settings/links": "edit the links on your dashboard",
   "/sites/default/settings/redirects": "set up redirects on your dashboard",
   "/sites/default/settings/redirects/404s": "view 404s on your dashboard",
-  "/sites/default/settings/links": "edit the links on your dashboard"
+  "/sites/default/settings/links": "edit the links on your dashboard",
 };
 
 form.use(function (req, res, next) {

@@ -4,7 +4,8 @@ var ensure = require("helper/ensure");
 var extname = require("path").extname;
 var cheerio = require("cheerio");
 var Metadata = require("build/metadata");
-var normalizeLiteralDollarMath = require("build/math/normalizeLiteralDollars").normalizeLiteralDollarMath;
+var normalizeLiteralDollarMath =
+  require("build/math/normalizeLiteralDollars").normalizeLiteralDollarMath;
 var postSourceSize = require("build/converters/post-source-size");
 var folderStat = callbackify(require("build/converters/folderStat"));
 var readFile = callbackify(folder.read);
@@ -14,9 +15,7 @@ function is(path) {
 }
 
 function read(blog, path, callback) {
-  ensure(blog, "object")
-    .and(path, "string")
-    .and(callback, "function");
+  ensure(blog, "object").and(path, "string").and(callback, "function");
 
   folderStat(blog.id, path, function (err, stat) {
     if (err) return callback(err);
@@ -36,7 +35,7 @@ function read(blog, path, callback) {
       normalizeLiteralDollarMath($);
 
       return callback(null, $.html(), stat, {
-        preExtractedMetadata: parsed.metadata
+        preExtractedMetadata: parsed.metadata,
       });
     });
   });

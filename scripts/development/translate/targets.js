@@ -52,7 +52,8 @@ async function representativeEntry(blogID) {
 
   for (const id of ids.slice(0, 20)) {
     const entry = await getEntry(blogID, id);
-    if (entry && entry.url && !entry.deleted && !entry.draft) candidates.push(entry);
+    if (entry && entry.url && !entry.deleted && !entry.draft)
+      candidates.push(entry);
   }
 
   if (!candidates.length) return null;

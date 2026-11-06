@@ -42,7 +42,9 @@ const recentEntriesCache = createRenderCache("recentEntries", {
         resolve
       );
     });
-    const prepared = prepareCacheValue(recent, { preserveEntryInstances: true });
+    const prepared = prepareCacheValue(recent, {
+      preserveEntryInstances: true,
+    });
 
     // getRecent still swallows other Redis failures (a failed zRange or
     // zCard) by resolving to [] - see getRange / getRecent in ./index.js.
@@ -73,9 +75,15 @@ async function getCachedRecent(blogID, options = {}) {
 
   let prepared;
   try {
-    prepared = await fetchCached(recentEntriesCache, "recentEntries", options.log, key, {
-      context: { blogID },
-    });
+    prepared = await fetchCached(
+      recentEntriesCache,
+      "recentEntries",
+      options.log,
+      key,
+      {
+        context: { blogID },
+      }
+    );
   } catch (e) {
     if (!(e instanceof Uncacheable)) throw e;
     prepared = e.payload;

@@ -28,7 +28,8 @@ async function folderStat(blogID, path, options) {
   try {
     return await folder.stat(blogID, path, options);
   } catch (err) {
-    if (err instanceof folder.NotFoundError || err.code === "ENOENT") return null;
+    if (err instanceof folder.NotFoundError || err.code === "ENOENT")
+      return null;
     throw err;
   }
 }
@@ -50,7 +51,9 @@ async function sourceStat(dir, path) {
 // so their entries are dropped.
 async function removeFromFolder(blogID, path, current, removed) {
   if (removed && current && current.isDirectory) {
-    for await (const child of folder.walk(blogID, path, { directories: true })) {
+    for await (const child of folder.walk(blogID, path, {
+      directories: true,
+    })) {
       removed.push(child);
     }
   }
@@ -91,14 +94,17 @@ async function syncPath(blogID, dir, path, removed) {
     return false;
   }
 
-  if (current && current.isDirectory) await removeFromFolder(blogID, path, current, removed);
+  if (current && current.isDirectory)
+    await removeFromFolder(blogID, path, current, removed);
   await folder.writeFrom(blogID, path, file, { modified: source.stat.mtimeMs });
   return true;
 }
 
 // Every path in the source directory, "/a", "/a/b.txt", parents first
 async function listSource(dir, path = "/", found = []) {
-  const entries = await fs.readdir(absolute(dir, path), { withFileTypes: true });
+  const entries = await fs.readdir(absolute(dir, path), {
+    withFileTypes: true,
+  });
   entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 
   for (const entry of entries) {
@@ -136,7 +142,8 @@ async function reconcile(blogID, dir, changed = []) {
 
   const extras = [];
   for await (const path of folder.walk(blogID, "/", { directories: true })) {
-    if (!present.has(nfc(path)) && !path.split("/").some(shouldIgnoreFile)) extras.push(path);
+    if (!present.has(nfc(path)) && !path.split("/").some(shouldIgnoreFile))
+      extras.push(path);
   }
 
   // Deepest first, so a directory goes after what is in it
@@ -171,7 +178,8 @@ async function seed(blogID, dir) {
 
       await fs.ensureDir(dirname(target));
       await fs.writeFile(target, await folder.read(blogID, path));
-      if (stat.modified) await fs.utimes(target, new Date(), new Date(stat.modified));
+      if (stat.modified)
+        await fs.utimes(target, new Date(), new Date(stat.modified));
       count++;
     }
 

@@ -6,7 +6,9 @@ describe("/default template-editor shim", function () {
   // regexp so we can exercise it in isolation, the way install.js does.
   const defaultShim = router.stack
     .filter(function (layer) {
-      return !layer.route && layer.regexp && layer.regexp.source.includes("default");
+      return (
+        !layer.route && layer.regexp && layer.regexp.source.includes("default")
+      );
     })
     .map(function (layer) {
       return layer.handle;

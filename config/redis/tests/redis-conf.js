@@ -3,7 +3,8 @@ const path = require("path");
 
 // redis.conf is production configuration, so pin the settings that were chosen
 // on purpose. (host/setup.sh proves the file parses with a real redis6-server.)
-const read = (file) => fs.readFileSync(path.join(__dirname, "..", file), "utf8");
+const read = (file) =>
+  fs.readFileSync(path.join(__dirname, "..", file), "utf8");
 
 // { directive: [value, ...] } - a directive can repeat, e.g. "save"
 const parse = (text) =>
@@ -51,7 +52,9 @@ describe("redis.conf", function () {
     expect(only("unixsocket")).toBe("/run/blot/redis/redis.sock");
     expect(only("unixsocketperm")).toBe("777");
     expect(only("port")).toBe("6379");
-    expect(read("host/setup.sh")).toContain("d /run/blot/redis 0755 redis6 redis6 -");
+    expect(read("host/setup.sh")).toContain(
+      "d /run/blot/redis 0755 redis6 redis6 -"
+    );
   });
 
   it("frees memory lazily and avoids huge pages", function () {

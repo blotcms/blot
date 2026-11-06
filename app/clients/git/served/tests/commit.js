@@ -29,11 +29,15 @@ describe("git store: Blot's own writes", function () {
 
     expect(after.seq).toBeGreaterThan(before.seq);
     expect(master).not.toBe(before.refs["refs/heads/master"]);
-    expect((await folder.read(this.blog.id, "/How/about That name.txt")).toString()).toBe("Hello, world!");
+    expect(
+      (await folder.read(this.blog.id, "/How/about That name.txt")).toString()
+    ).toBe("Hello, world!");
     expect(await applied(this.blog.id)).toBe(master);
 
     await this.local.pull();
-    expect((await this.local.read("/How/about That name.txt")).toString()).toBe("Hello, world!");
+    expect((await this.local.read("/How/about That name.txt")).toString()).toBe(
+      "Hello, world!"
+    );
     expect(await this.local.head()).toBe(master);
     await this.local.expectSynced();
   });
@@ -62,7 +66,13 @@ describe("git store: Blot's own writes", function () {
     var refused = await this.local.tryPush();
     expect(refused.code).not.toBe(0);
 
-    await this.local.git(["pull", "--no-rebase", "--no-edit", "origin", "master"]);
+    await this.local.git([
+      "pull",
+      "--no-rebase",
+      "--no-edit",
+      "origin",
+      "master",
+    ]);
     await this.local.push();
 
     var master = (await current(this)).refs["refs/heads/master"];
@@ -73,7 +83,8 @@ describe("git store: Blot's own writes", function () {
   it("refuses a write when the store has no copy, and leaves the folder alone", async function () {
     await this.local.writeAndPush("/a.txt", "A");
 
-    this.stores[this.blog.id] = require("clients/git/store").createMemoryStore();
+    this.stores[this.blog.id] =
+      require("clients/git/store").createMemoryStore();
     require("clients/git/served/context")._reset();
 
     var failed = await write(this.blog.id, "/new.txt", "New").then(

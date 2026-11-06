@@ -16,7 +16,10 @@ module.exports = async function getHealth(blogID) {
       issue.message = account.error;
     }
 
-    if (typeof account.errorSince === "number" && isFinite(account.errorSince)) {
+    if (
+      typeof account.errorSince === "number" &&
+      isFinite(account.errorSince)
+    ) {
       issue.since = account.errorSince;
     }
 

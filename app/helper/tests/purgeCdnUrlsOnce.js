@@ -43,7 +43,9 @@ describe("purgeCdnUrlsOnce", function () {
       });
     } catch (e) {}
 
-    expect(await purgeCdnUrlsOnce(["/a-1"], async (u) => calls.push(u))).toBe(true);
+    expect(await purgeCdnUrlsOnce(["/a-1"], async (u) => calls.push(u))).toBe(
+      true
+    );
     expect(calls).toEqual([["/a-1"]]);
   });
 

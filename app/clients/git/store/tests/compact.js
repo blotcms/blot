@@ -22,13 +22,18 @@ const createReader = require("../reader");
 const { readHistory } = require("../history");
 const { negotiate } = require("../fetch");
 const { manifestKey, idxKey, revKey, packKey } = require("../layout");
-const { OutcomeUnknownError, StaleManifestError, NoRoomError } = require("../errors");
+const {
+  OutcomeUnknownError,
+  StaleManifestError,
+  NoRoomError,
+} = require("../errors");
 const { buildRev } = require("../rev");
 
 const MiB = 1024 * 1024;
 const MASTER = "refs/heads/master";
 
-const dropped = () => Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" });
+const dropped = () =>
+  Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" });
 
 function createLock() {
   let tail = Promise.resolve();
@@ -40,7 +45,13 @@ function createLock() {
 }
 
 // A manifest entry, for the plan's specs
-const pack = (n, size, seq) => ({ name: "pack-" + String(n).padStart(40, "0"), size, idxSize: 1100, objects: 3, seq });
+const pack = (n, size, seq) => ({
+  name: "pack-" + String(n).padStart(40, "0"),
+  size,
+  idxSize: 1100,
+  objects: 3,
+  seq,
+});
 
 function manifestWith(packs, pieces = 0) {
   const seq = Math.max(1, ...packs.map((p) => p.seq));
@@ -49,13 +60,18 @@ function manifestWith(packs, pieces = 0) {
     seq,
     writer: "test",
     packs,
-    historyPieces: Array.from({ length: pieces }, (_, i) => ({ ...pack(1000 + i, 200, Math.min(seq, i + 1)) })),
+    historyPieces: Array.from({ length: pieces }, (_, i) => ({
+      ...pack(1000 + i, 200, Math.min(seq, i + 1)),
+    })),
   };
 }
 
 describe("git store compaction plan", function () {
   it("merges the small packs below the base, leaving the newest pushes' packs alone", function () {
-    const m = manifestWith([pack(1, 1000000, 1), ...[2, 3, 4, 5, 6, 7, 8, 9].map((seq) => pack(seq, 1000 + seq, seq))]);
+    const m = manifestWith([
+      pack(1, 1000000, 1),
+      ...[2, 3, 4, 5, 6, 7, 8, 9].map((seq) => pack(seq, 1000 + seq, seq)),
+    ]);
     const chosen = compact.plan(m);
     expect(chosen.history).toBe(false);
     // 6 to 9 are the newest four
@@ -65,34 +81,68 @@ describe("git store compaction plan", function () {
   it("finds the smallest split that leaves every pack above it at least twice everything below", function () {
     // Sorted: 10, 12, 30, 100, 1000. 30 < 2 * 22, so 10, 12 and 30 go; then
     // 100 >= 2 * 52 fails too (100 < 104), so it goes as well; 1000 stays
-    const m = manifestWith([pack(1, 1000, 1), pack(2, 100, 2), pack(3, 30, 3), pack(4, 12, 4), pack(5, 10, 5)]);
+    const m = manifestWith([
+      pack(1, 1000, 1),
+      pack(2, 100, 2),
+      pack(3, 30, 3),
+      pack(4, 12, 4),
+      pack(5, 10, 5),
+    ]);
     const chosen = compact.plan(m, { keepRecent: 0 });
     expect(chosen.packs.sort()).toEqual([2, 3, 4, 5].map((n) => pack(n).name));
 
     // Already geometric: nothing to do
-    const geometric = manifestWith([pack(1, 1000, 1), pack(2, 300, 2), pack(3, 100, 3), pack(4, 30, 4), pack(5, 10, 5)]);
+    const geometric = manifestWith([
+      pack(1, 1000, 1),
+      pack(2, 300, 2),
+      pack(3, 100, 3),
+      pack(4, 30, 4),
+      pack(5, 10, 5),
+    ]);
     expect(compact.plan(geometric, { keepRecent: 0 })).toBe(null);
 
     // A larger factor merges more
-    expect(compact.plan(geometric, { keepRecent: 0, factor: 4 }).packs.length).toBe(5);
+    expect(
+      compact.plan(geometric, { keepRecent: 0, factor: 4 }).packs.length
+    ).toBe(5);
   });
 
   it("does not merge a single pack, nor touch the newest packs however small", function () {
-    expect(compact.plan(manifestWith([pack(1, 1000, 1), pack(2, 10, 2)]), { keepRecent: 0 })).toBe(null);
-    const m = manifestWith([pack(1, 1000, 1), pack(2, 10, 2), pack(3, 10, 3), pack(4, 10, 4)]);
+    expect(
+      compact.plan(manifestWith([pack(1, 1000, 1), pack(2, 10, 2)]), {
+        keepRecent: 0,
+      })
+    ).toBe(null);
+    const m = manifestWith([
+      pack(1, 1000, 1),
+      pack(2, 10, 2),
+      pack(3, 10, 3),
+      pack(4, 10, 4),
+    ]);
     expect(compact.plan(m, { keepRecent: 3 })).toBe(null);
     expect(compact.plan(m, { keepRecent: 2 })).toBe(null);
     expect(compact.plan(m, { keepRecent: 1 }).packs.length).toBe(2);
   });
 
   it("counts the newest pushes by seq, so packs sharing one are kept together", function () {
-    const m = manifestWith([pack(1, 1000, 1), pack(2, 10, 2), pack(3, 10, 3), pack(4, 10, 3), pack(5, 10, 4)]);
+    const m = manifestWith([
+      pack(1, 1000, 1),
+      pack(2, 10, 2),
+      pack(3, 10, 3),
+      pack(4, 10, 3),
+      pack(5, 10, 4),
+    ]);
     expect(compact.plan(m, { keepRecent: 2 })).toBe(null);
-    expect(compact.plan(m, { keepRecent: 1 }).packs.sort()).toEqual([2, 3, 4].map((n) => pack(n).name));
+    expect(compact.plan(m, { keepRecent: 1 }).packs.sort()).toEqual(
+      [2, 3, 4].map((n) => pack(n).name)
+    );
   });
 
   it("ignores keepRecent past maxPacks, so a burst of pushes cannot leave many packs", function () {
-    const many = [pack(1, 100000, 1), ...Array.from({ length: 40 }, (_, i) => pack(i + 2, 500, i + 2))];
+    const many = [
+      pack(1, 100000, 1),
+      ...Array.from({ length: 40 }, (_, i) => pack(i + 2, 500, i + 2)),
+    ];
     const chosen = compact.plan(manifestWith(many));
     expect(chosen.packs.length).toBe(40);
     expect(compact.plan(manifestWith(many.slice(0, 33))).packs.length).toBe(32);
@@ -101,12 +151,22 @@ describe("git store compaction plan", function () {
 
   it("never takes in more than maxBytes, leaving a base pack bigger than that alone", function () {
     // The base is under twice the rest, so the geometric split takes it too
-    const m = manifestWith([pack(1, 500, 1), pack(2, 100, 2), pack(3, 100, 3), pack(4, 100, 4), pack(5, 100, 5)]);
+    const m = manifestWith([
+      pack(1, 500, 1),
+      pack(2, 100, 2),
+      pack(3, 100, 3),
+      pack(4, 100, 4),
+      pack(5, 100, 5),
+    ]);
     expect(compact.plan(m, { keepRecent: 0 }).packs.length).toBe(5);
 
     // Each small pack is 100 bytes and a 1100-byte .idx
-    expect(compact.plan(m, { keepRecent: 0, maxBytes: 5000 }).packs.sort()).toEqual([2, 3, 4, 5].map((n) => pack(n).name));
-    expect(compact.plan(m, { keepRecent: 0, maxBytes: 2500 }).packs.length).toBe(2);
+    expect(
+      compact.plan(m, { keepRecent: 0, maxBytes: 5000 }).packs.sort()
+    ).toEqual([2, 3, 4, 5].map((n) => pack(n).name));
+    expect(
+      compact.plan(m, { keepRecent: 0, maxBytes: 2500 }).packs.length
+    ).toBe(2);
     expect(compact.plan(m, { keepRecent: 0, maxBytes: 1300 })).toBe(null);
   });
 
@@ -116,17 +176,24 @@ describe("git store compaction plan", function () {
       { ...pack(2, 110000, 2), idxSize: 2000 },
       { ...pack(3, 120000, 3), idxSize: 2000 },
     ]);
-    expect(compact.plan(m, { keepRecent: 0, maxBytes: 262144 }).packs.sort()).toEqual([pack(2).name, pack(3).name]);
+    expect(
+      compact.plan(m, { keepRecent: 0, maxBytes: 262144 }).packs.sort()
+    ).toEqual([pack(2).name, pack(3).name]);
   });
 
   it("merges the small packs that fit past maxPacks, leaving a big base", function () {
-    const many = [pack(1, 15000, 1), ...Array.from({ length: 40 }, (_, i) => pack(i + 2, 500, i + 2))];
+    const many = [
+      pack(1, 15000, 1),
+      ...Array.from({ length: 40 }, (_, i) => pack(i + 2, 500, i + 2)),
+    ];
     expect(compact.plan(manifestWith(many)).packs.length).toBe(41);
 
     const chosen = compact.plan(manifestWith(many), { maxBytes: 40 * 1600 });
     expect(chosen.packs.length).toBe(40);
     expect(chosen.packs).not.toContain(pack(1).name);
-    expect(compact.plan(manifestWith(many), { maxBytes: 10 * 1600 }).packs.length).toBe(10);
+    expect(
+      compact.plan(manifestWith(many), { maxBytes: 10 * 1600 }).packs.length
+    ).toBe(10);
   });
 
   it("does not count packs too big to merge towards maxPacks, so keepRecent still protects the newest", function () {
@@ -134,7 +201,9 @@ describe("git store compaction plan", function () {
     // then six small recent ones
     const full = Array.from({ length: 50 }, (_, i) => pack(i + 1, 2000, i + 1));
     const small = Array.from({ length: 6 }, (_, i) => pack(i + 51, 50, i + 51));
-    const chosen = compact.plan(manifestWith([...full, ...small]), { maxBytes: 5000 });
+    const chosen = compact.plan(manifestWith([...full, ...small]), {
+      maxBytes: 5000,
+    });
 
     // The newest four (53 to 56) are kept; the two older small ones merge
     expect(chosen.packs.sort()).toEqual([51, 52].map((n) => pack(n).name));
@@ -142,8 +211,14 @@ describe("git store compaction plan", function () {
 
   it("rebuilds the history once there are enough pieces", function () {
     expect(compact.plan(manifestWith([pack(1, 1000, 1)], 15))).toBe(null);
-    expect(compact.plan(manifestWith([pack(1, 1000, 1)], 16))).toEqual({ packs: [], history: true, trim: false });
-    expect(compact.plan(manifestWith([pack(1, 1000, 1)], 3), { minPieces: 3 })).toEqual({ packs: [], history: true, trim: false });
+    expect(compact.plan(manifestWith([pack(1, 1000, 1)], 16))).toEqual({
+      packs: [],
+      history: true,
+      trim: false,
+    });
+    expect(
+      compact.plan(manifestWith([pack(1, 1000, 1)], 3), { minPieces: 3 })
+    ).toEqual({ packs: [], history: true, trim: false });
   });
 
   it("has nothing to do for an empty repository", function () {
@@ -155,13 +230,18 @@ describe("git store compaction plan", function () {
       const m = manifestWith([pack(1, 1000, n)]);
       m.snapshots = Array.from({ length: n }, (_, i) => {
         const named = {};
-        for (let r = 0; r < refs; r++) named["refs/heads/b" + r] = "a".repeat(40);
+        for (let r = 0; r < refs; r++)
+          named["refs/heads/b" + r] = "a".repeat(40);
         return { seq: i + 1, refs: named };
       });
       return m;
     };
     expect(compact.plan(withSnapshots(11), { maxSnapshots: 10 })).toBe(null);
-    expect(compact.plan(withSnapshots(12), { maxSnapshots: 10 })).toEqual({ packs: [], history: false, trim: true });
+    expect(compact.plan(withSnapshots(12), { maxSnapshots: 10 })).toEqual({
+      packs: [],
+      history: false,
+      trim: true,
+    });
     expect(compact.plan(withSnapshots(1100))).toBe(null);
     expect(compact.plan(withSnapshots(1101)).trim).toBe(true);
 
@@ -172,7 +252,9 @@ describe("git store compaction plan", function () {
     expect(compact.plan(big, { maxSnapshotBytes: 19 * each })).toBe(null);
     expect(compact.plan(big, { maxSnapshotBytes: 15 * each }).trim).toBe(true);
     // but never below minSnapshots
-    expect(compact.plan(big, { maxSnapshotBytes: 1, minSnapshots: 20 })).toBe(null);
+    expect(compact.plan(big, { maxSnapshotBytes: 1, minSnapshots: 20 })).toBe(
+      null
+    );
   });
 });
 
@@ -185,12 +267,21 @@ describe("git store compaction of snapshots alone", function () {
       const cache = createCache({ dir, maxBytes: 1024 });
       for (let i = 1; i <= 12; i++) {
         const base = await manifest.read(store);
-        const next = manifest.advance(base, { refs: { [MASTER]: String(i % 10).repeat(40) }, head: MASTER });
+        const next = manifest.advance(base, {
+          refs: { [MASTER]: String(i % 10).repeat(40) },
+          head: MASTER,
+        });
         await manifest.swap({ store, lock, base, next });
       }
 
       const before = { ...store.stats };
-      const result = await compact({ store, cache, lock, maxSnapshots: 10, minSnapshots: 2 });
+      const result = await compact({
+        store,
+        cache,
+        lock,
+        maxSnapshots: 10,
+        minSnapshots: 2,
+      });
       expect(result.outcome).toBe("compacted");
       expect(result.merged).toEqual([]);
       expect(result.into).toBe(null);
@@ -199,8 +290,12 @@ describe("git store compaction of snapshots alone", function () {
 
       const latest = await manifest.read(store);
       expect(latest.seq).toBe(13);
-      expect(latest.snapshots.map((snapshot) => snapshot.seq)).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-      expect((await compact({ store, cache, lock, maxSnapshots: 10 })).outcome).toBe("nothing");
+      expect(latest.snapshots.map((snapshot) => snapshot.seq)).toEqual([
+        3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+      ]);
+      expect(
+        (await compact({ store, cache, lock, maxSnapshots: 10 })).outcome
+      ).toBe("nothing");
     } finally {
       fx.remove(dir);
     }
@@ -210,14 +305,26 @@ describe("git store compaction of snapshots alone", function () {
 describe("git store manifest.compacted", function () {
   it("replaces the inputs with the merged pack at the largest of their seqs, in seq order, changing nothing else", function () {
     const base = {
-      ...manifestWith([pack(1, 1000, 1), pack(2, 100, 2), pack(3, 100, 3), pack(4, 100, 4), pack(5, 100, 5)], 3),
+      ...manifestWith(
+        [
+          pack(1, 1000, 1),
+          pack(2, 100, 2),
+          pack(3, 100, 3),
+          pack(4, 100, 4),
+          pack(5, 100, 5),
+        ],
+        3
+      ),
       refs: { [MASTER]: "a".repeat(40) },
       head: MASTER,
       snapshots: [{ seq: 5, refs: { [MASTER]: "a".repeat(40) } }],
       peeled: {},
     };
     const merged = { name: pack(9).name, size: 250, idxSize: 1200, objects: 6 };
-    const next = manifest.compacted(base, { remove: [pack(2).name, pack(3).name], add: merged });
+    const next = manifest.compacted(base, {
+      remove: [pack(2).name, pack(3).name],
+      add: merged,
+    });
 
     expect(next.seq).toBe(6);
     expect(next.writer).not.toBe(base.writer);
@@ -227,14 +334,34 @@ describe("git store manifest.compacted", function () {
       [pack(4).name, 4],
       [pack(5).name, 5],
     ]);
-    for (const field of ["refs", "head", "snapshots", "peeled", "history", "historyPieces"]) expect(next[field]).toEqual(base[field]);
+    for (const field of [
+      "refs",
+      "head",
+      "snapshots",
+      "peeled",
+      "history",
+      "historyPieces",
+    ])
+      expect(next[field]).toEqual(base[field]);
     manifest.validate(next);
   });
 
   it("swaps the history pack and drops only the pieces it merged", function () {
-    const base = manifestWith([pack(1, 1000, 1), pack(2, 10, 2), pack(3, 10, 3)], 3);
-    const history = { name: pack(8).name, size: 300, idxSize: 1100, objects: 2, through: 2 };
-    const next = manifest.compacted(base, { history, removePieces: base.historyPieces.slice(0, 2).map((p) => p.name) });
+    const base = manifestWith(
+      [pack(1, 1000, 1), pack(2, 10, 2), pack(3, 10, 3)],
+      3
+    );
+    const history = {
+      name: pack(8).name,
+      size: 300,
+      idxSize: 1100,
+      objects: 2,
+      through: 2,
+    };
+    const next = manifest.compacted(base, {
+      history,
+      removePieces: base.historyPieces.slice(0, 2).map((p) => p.name),
+    });
     expect(next.history).toEqual(history);
     expect(next.historyPieces).toEqual([base.historyPieces[2]]);
     expect(next.packs).toEqual(base.packs);
@@ -242,8 +369,12 @@ describe("git store manifest.compacted", function () {
 
   it("refuses inputs which are no longer listed", function () {
     const base = manifestWith([pack(1, 1000, 1), pack(2, 10, 2)]);
-    expect(() => manifest.compacted(base, { remove: [pack(7).name], add: pack(9) })).toThrowError(StaleManifestError);
-    expect(() => manifest.compacted(base, { removePieces: [pack(7).name], history: null })).toThrowError(StaleManifestError);
+    expect(() =>
+      manifest.compacted(base, { remove: [pack(7).name], add: pack(9) })
+    ).toThrowError(StaleManifestError);
+    expect(() =>
+      manifest.compacted(base, { removePieces: [pack(7).name], history: null })
+    ).toThrowError(StaleManifestError);
   });
 });
 
@@ -300,8 +431,14 @@ describe("git store compaction", function () {
   async function pushes(n) {
     for (let i = 0; i < n; i++) {
       const id = ++counter;
-      fs.appendFileSync(path.join(work, "docs", "big.txt"), "Edited in push " + id + "\n");
-      fs.writeFileSync(path.join(work, "posts", "new-" + id + ".md"), "# Post " + id + "\n\nWritten for push " + id + "\n");
+      fs.appendFileSync(
+        path.join(work, "docs", "big.txt"),
+        "Edited in push " + id + "\n"
+      );
+      fs.writeFileSync(
+        path.join(work, "posts", "new-" + id + ".md"),
+        "# Post " + id + "\n\nWritten for push " + id + "\n"
+      );
       fx.git(work, ["add", "-A"]);
       fx.git(work, ["commit", "-q", "-m", "Push " + id]);
       await pushWork();
@@ -312,16 +449,35 @@ describe("git store compaction", function () {
   async function blotCommits(n) {
     for (let i = 0; i < n; i++) {
       const id = ++counter;
-      const result = await commit({ store, cache, lock, path: "/drafts/draft-" + id + ".md", contents: Buffer.from("# Draft " + id + "\n") });
+      const result = await commit({
+        store,
+        cache,
+        lock,
+        path: "/drafts/draft-" + id + ".md",
+        contents: Buffer.from("# Draft " + id + "\n"),
+      });
       expect(result.changed).toBe(true);
     }
     await refresh();
-    ok(await runGit(["pull", "-q", "--ff-only", server.url, "master"], { cwd: work }));
+    ok(
+      await runGit(["pull", "-q", "--ff-only", server.url, "master"], {
+        cwd: work,
+      })
+    );
   }
 
   async function clone(name) {
     const target = path.join(dir, name);
-    ok(await runGit(["-c", "transfer.fsckObjects=true", "clone", "-q", server.url, target]));
+    ok(
+      await runGit([
+        "-c",
+        "transfer.fsckObjects=true",
+        "clone",
+        "-q",
+        server.url,
+        target,
+      ])
+    );
     return target;
   }
 
@@ -329,13 +485,25 @@ describe("git store compaction", function () {
   function expectMirror(client) {
     fx.git(client, ["fsck", "--strict", "--no-dangling"]);
     const found = {};
-    for (const line of fx.text(client, ["for-each-ref", "--format=%(objectname) %(refname)", "refs/remotes/origin", "refs/tags"]).split("\n").filter(Boolean)) {
+    for (const line of fx
+      .text(client, [
+        "for-each-ref",
+        "--format=%(objectname) %(refname)",
+        "refs/remotes/origin",
+        "refs/tags",
+      ])
+      .split("\n")
+      .filter(Boolean)) {
       const [oid, ref] = line.split(" ");
       if (ref !== "refs/remotes/origin/HEAD") found[ref] = oid;
     }
     const expected = {};
     for (const [ref, oid] of Object.entries(latest.refs)) {
-      expected[ref.startsWith("refs/heads/") ? "refs/remotes/origin/" + ref.slice(11) : ref] = oid;
+      expected[
+        ref.startsWith("refs/heads/")
+          ? "refs/remotes/origin/" + ref.slice(11)
+          : ref
+      ] = oid;
     }
     expect(found).toEqual(expected);
   }
@@ -345,7 +513,10 @@ describe("git store compaction", function () {
   async function expectObjects() {
     const reader = createReader({ store, cache, packs: latest.packs });
     expect(fx.text(work, ["rev-parse", "master"])).toBe(latest.refs[MASTER]);
-    const oids = fx.text(work, ["rev-list", "--objects", "master"]).split("\n").map((line) => line.slice(0, 40));
+    const oids = fx
+      .text(work, ["rev-list", "--objects", "master"])
+      .split("\n")
+      .map((line) => line.slice(0, 40));
     const oracle = fx.catAll(work, oids);
     for (const [oid, { type, data }] of oracle) {
       const found = await reader.read(oid);
@@ -361,7 +532,12 @@ describe("git store compaction", function () {
     const before = { ...inner.stats };
     const target = await clone(name);
     expectMirror(target);
-    return inner.stats.heads + inner.stats.reads + inner.stats.gets - (before.heads + before.reads + before.gets);
+    return (
+      inner.stats.heads +
+      inner.stats.reads +
+      inner.stats.gets -
+      (before.heads + before.reads + before.gets)
+    );
   }
 
   const lastResult = () => server.results[server.results.length - 1];
@@ -404,28 +580,40 @@ describe("git store compaction", function () {
       expect(result.merged.length).toBeGreaterThan(5);
       expect(latest.packs.length).toBe(packsBefore - result.merged.length + 1);
       expect(latest.packs.map((p) => p.name)).toContain(result.into);
-      expect(result.stats.objectsOut).toBeLessThanOrEqual(result.stats.objectsIn);
+      expect(result.stats.objectsOut).toBeLessThanOrEqual(
+        result.stats.objectsIn
+      );
 
       // The merged pack has a .rev that matches its index, and is self-contained
       const idx = await store.get(idxKey(result.into));
-      expect((await store.get(revKey(result.into))).equals(buildRev(idx))).toBe(true);
+      expect((await store.get(revKey(result.into))).equals(buildRev(idx))).toBe(
+        true
+      );
 
       // The history: one pack of every commit, no pieces
       expect(latest.historyPieces).toEqual([]);
       expect(latest.history.name).toBe(result.history);
       expect(result.stats.piecesIn).toBe(piecesBefore);
       const graph = await readHistory({ store, manifest: latest });
-      expect(graph.size).toBe(Number(fx.text(work, ["rev-list", "--count", "--all"])));
+      expect(graph.size).toBe(
+        Number(fx.text(work, ["rev-list", "--count", "--all"]))
+      );
 
       // No snapshot was added: the refs did not change
-      expect(latest.snapshots[latest.snapshots.length - 1].seq).toBe(latest.seq - 1);
+      expect(latest.snapshots[latest.snapshots.length - 1].seq).toBe(
+        latest.seq - 1
+      );
 
       // The objects held twice before read back as git has them, and the clone
       // (which skips duplicates) is still whole
       await expectObjects();
       const requestsAfter = await cloneRequests("after");
       expect(requestsAfter).toBeLessThan(requestsBefore);
-      expect(latest.packs.every((p, i) => i === 0 || latest.packs[i - 1].seq <= p.seq)).toBe(true);
+      expect(
+        latest.packs.every(
+          (p, i) => i === 0 || latest.packs[i - 1].seq <= p.seq
+        )
+      ).toBe(true);
 
       // Run again: nothing more is worth doing
       const again = await compact({ store, cache, lock, minPieces: 8 });
@@ -442,12 +630,22 @@ describe("git store compaction", function () {
       expect(result.outcome).toBe("compacted");
       await refresh();
 
-      ok(await runGit(["-c", "transfer.fsckObjects=true", "fetch", "-q", "origin"], { cwd: one }));
+      ok(
+        await runGit(
+          ["-c", "transfer.fsckObjects=true", "fetch", "-q", "origin"],
+          { cwd: one }
+        )
+      );
       expect(lastResult().packs).toBe(1);
       expect(lastResult().objects).toBeLessThan(10);
       expectMirror(one);
 
-      ok(await runGit(["-c", "transfer.fsckObjects=true", "fetch", "-q", "origin"], { cwd: several }));
+      ok(
+        await runGit(
+          ["-c", "transfer.fsckObjects=true", "fetch", "-q", "origin"],
+          { cwd: several }
+        )
+      );
       expect(lastResult().packs).toBe(3);
       expect(lastResult().objects).toBeLessThan(25);
       expectMirror(several);
@@ -461,22 +659,60 @@ describe("git store compaction", function () {
       await pushes(2);
       const snapshotsBefore = latest.snapshots.length;
 
-      const result = await compact({ store, cache, lock, maxSnapshots: 4, minSnapshots: 2 });
+      const result = await compact({
+        store,
+        cache,
+        lock,
+        maxSnapshots: 4,
+        minSnapshots: 2,
+      });
       expect(result.outcome).toBe("compacted");
       expect(result.stats.snapshotsTrimmed).toBe(snapshotsBefore - 4);
       await refresh();
       expect(latest.snapshots.length).toBe(4);
-      expect(latest.snapshots[latest.snapshots.length - 1].refs).toEqual(latest.refs);
+      expect(latest.snapshots[latest.snapshots.length - 1].refs).toEqual(
+        latest.refs
+      );
 
       // Two pushes behind, at a snapshot that is kept: only those pushes' packs.
       // No auto gc, which a fetch can start in the background, under fsck
-      ok(await runGit(["-c", "gc.auto=0", "-c", "maintenance.auto=false", "-c", "transfer.fsckObjects=true", "fetch", "-q", "origin"], { cwd: recent }));
+      ok(
+        await runGit(
+          [
+            "-c",
+            "gc.auto=0",
+            "-c",
+            "maintenance.auto=false",
+            "-c",
+            "transfer.fsckObjects=true",
+            "fetch",
+            "-q",
+            "origin",
+          ],
+          { cwd: recent }
+        )
+      );
       expect(lastResult().packs).toBe(2);
       expect(lastResult().objects).toBeLessThan(15);
       expectMirror(recent);
 
       // Eight behind, older than every snapshot kept: everything, as a clone
-      ok(await runGit(["-c", "gc.auto=0", "-c", "maintenance.auto=false", "-c", "transfer.fsckObjects=true", "fetch", "-q", "origin"], { cwd: old }));
+      ok(
+        await runGit(
+          [
+            "-c",
+            "gc.auto=0",
+            "-c",
+            "maintenance.auto=false",
+            "-c",
+            "transfer.fsckObjects=true",
+            "fetch",
+            "-q",
+            "origin",
+          ],
+          { cwd: old }
+        )
+      );
       expect(lastResult().packs).toBe(latest.packs.length);
       expectMirror(old);
     });
@@ -496,9 +732,16 @@ describe("git store compaction", function () {
       expect(latest.historyPieces).toEqual([]);
 
       // The walk from it reaches the tip of the push before
-      const negotiation = await negotiate({ store, cache, manifest: latest, haves: [middle] });
+      const negotiation = await negotiate({
+        store,
+        cache,
+        manifest: latest,
+        haves: [middle],
+      });
       expect(negotiation.walked).toBeGreaterThan(1);
-      expect(negotiation.floor).toBe(latest.snapshots[latest.snapshots.length - 2].seq);
+      expect(negotiation.floor).toBe(
+        latest.snapshots[latest.snapshots.length - 2].seq
+      );
 
       // And a push after it adds a piece the next walk reads alongside the pack
       await pushes(1);
@@ -529,14 +772,19 @@ describe("git store compaction", function () {
     }
 
     it("builds again on the new manifest when a push lands between its read and its swap", async function () {
-      const result = await compact({ store, cache, lock: raceOnce(() => pushes(1)) });
+      const result = await compact({
+        store,
+        cache,
+        lock: raceOnce(() => pushes(1)),
+      });
       expect(result.outcome).toBe("compacted");
       expect(result.stats.attempts).toBe(2);
 
       await refresh();
       expect(latest.refs[MASTER]).toBe(fx.text(work, ["rev-parse", "HEAD"]));
       expect(latest.packs.map((p) => p.name)).toContain(result.into);
-      for (const name of result.merged) expect(latest.packs.map((p) => p.name)).not.toContain(name);
+      for (const name of result.merged)
+        expect(latest.packs.map((p) => p.name)).not.toContain(name);
       // The push's own pack is the newest, unmerged
       expect(latest.packs[latest.packs.length - 1].seq).toBe(latest.seq - 1);
 
@@ -565,7 +813,13 @@ describe("git store compaction", function () {
 
     it("is superseded when another compaction removes its inputs first", async function () {
       let winner;
-      const result = await compact({ store, cache, lock: raceOnce(async () => (winner = await compact({ store, cache, lock }))) });
+      const result = await compact({
+        store,
+        cache,
+        lock: raceOnce(
+          async () => (winner = await compact({ store, cache, lock }))
+        ),
+      });
 
       expect(winner.outcome).toBe("compacted");
       expect(result.outcome).toBe("superseded");
@@ -583,7 +837,10 @@ describe("git store compaction", function () {
       const racing = raceOnce(async () => {
         const base = await manifest.read(store);
         const { name, size, idxSize, objects } = moved;
-        const next = manifest.advance(base, { refs: base.refs, packs: [{ name, size, idxSize, objects }] });
+        const next = manifest.advance(base, {
+          refs: base.refs,
+          packs: [{ name, size, idxSize, objects }],
+        });
         await manifest.swap({ store, lock, base, next });
       });
 
@@ -607,9 +864,15 @@ describe("git store compaction", function () {
 
     it("leaves the manifest as it was after a crash between the uploads and the swap, and a rerun works", async function () {
       const before = await manifest.read(store);
-      store.inject("putIfAbsent", { key: manifestKey(before.seq + 1), before: dropped() });
+      store.inject("putIfAbsent", {
+        key: manifestKey(before.seq + 1),
+        before: dropped(),
+      });
 
-      const error = await compact({ store, cache, lock }).then(() => null, (err) => err);
+      const error = await compact({ store, cache, lock }).then(
+        () => null,
+        (err) => err
+      );
       expect(error.code).toBe("ECONNRESET");
       expect(await manifest.read(store)).toEqual(before);
 
@@ -617,7 +880,9 @@ describe("git store compaction", function () {
       expect(again.outcome).toBe("compacted");
       expect(again.seq).toBe(before.seq + 1);
       // The same pack, made again and uploaded over itself
-      const puts = store.calls.filter((call) => call === "put " + packKey(again.into));
+      const puts = store.calls.filter(
+        (call) => call === "put " + packKey(again.into)
+      );
       expect(puts.length).toBe(2);
 
       await refresh();
@@ -628,7 +893,9 @@ describe("git store compaction", function () {
     it("returns an unknown outcome when the swap cannot be read back, and the manifest says which", async function () {
       const before = await manifest.read(store);
       const key = manifestKey(before.seq + 1);
-      store.inject("putIfAbsent", { key, after: dropped() }).inject("get", { key, before: dropped() });
+      store
+        .inject("putIfAbsent", { key, after: dropped() })
+        .inject("get", { key, before: dropped() });
 
       const result = await compact({ store, cache, lock });
       expect(result.outcome).toBe("unknown");
@@ -643,25 +910,50 @@ describe("git store compaction", function () {
 
     it("fails with NoRoomError, changing nothing, when the cache has no room for its scratch space", async function () {
       const before = await manifest.read(store);
-      const small = createCache({ dir: path.join(dir, "small"), maxBytes: 1024 });
-      const error = await compact({ store, cache: small, lock, maxBytes: Infinity }).then(() => null, (err) => err);
+      const small = createCache({
+        dir: path.join(dir, "small"),
+        maxBytes: 1024,
+      });
+      const error = await compact({
+        store,
+        cache: small,
+        lock,
+        maxBytes: Infinity,
+      }).then(
+        () => null,
+        (err) => err
+      );
       expect(error).toEqual(jasmine.any(NoRoomError));
       expect(await manifest.read(store)).toEqual(before);
 
       // Left to size merges by the cache, it finds nothing small enough to do
-      expect((await compact({ store, cache: small, lock })).outcome).toBe("nothing");
+      expect((await compact({ store, cache: small, lock })).outcome).toBe(
+        "nothing"
+      );
     });
 
     it("still merges the packs when the history is too big to rewrite, leaving the pieces", async function () {
       const pieces = latest.historyPieces.length;
-      const historyBytes = latest.historyPieces.reduce((sum, p) => sum + p.size + p.idxSize, 0);
+      const historyBytes = latest.historyPieces.reduce(
+        (sum, p) => sum + p.size + p.idxSize,
+        0
+      );
       const maxBytes = historyBytes - 1;
       const chosen = compact.plan(latest, { minPieces: 2, maxBytes });
       expect(chosen.packs.length).toBeGreaterThan(1);
       expect(chosen.history).toBe(true);
 
-      const small = createCache({ dir: path.join(dir, "small"), maxBytes: 4 * maxBytes + 64 * 1024 });
-      const result = await compact({ store, cache: small, lock, minPieces: 2, maxBytes });
+      const small = createCache({
+        dir: path.join(dir, "small"),
+        maxBytes: 4 * maxBytes + 64 * 1024,
+      });
+      const result = await compact({
+        store,
+        cache: small,
+        lock,
+        minPieces: 2,
+        maxBytes,
+      });
       expect(result.outcome).toBe("compacted");
       expect(result.into).toMatch(/^pack-/);
       expect(result.history).toBe(null);
@@ -676,11 +968,23 @@ describe("git store compaction", function () {
     it("skips the history, not the packs, when the cache has no room for both", async function () {
       const chosen = compact.plan(latest, { minPieces: 2, maxBytes: Infinity });
       const byName = new Map(latest.packs.map((p) => [p.name, p]));
-      const packBytes = chosen.packs.reduce((sum, name) => sum + byName.get(name).size + byName.get(name).idxSize, 0);
+      const packBytes = chosen.packs.reduce(
+        (sum, name) => sum + byName.get(name).size + byName.get(name).idxSize,
+        0
+      );
 
       // Room for the packs' scratch and not much more
-      const small = createCache({ dir: path.join(dir, "small"), maxBytes: 2 * packBytes + 64 * 1024 + 100 });
-      const result = await compact({ store, cache: small, lock, minPieces: 2, maxBytes: Infinity });
+      const small = createCache({
+        dir: path.join(dir, "small"),
+        maxBytes: 2 * packBytes + 64 * 1024 + 100,
+      });
+      const result = await compact({
+        store,
+        cache: small,
+        lock,
+        minPieces: 2,
+        maxBytes: Infinity,
+      });
       expect(result.outcome).toBe("compacted");
       expect(result.merged.length).toBe(chosen.packs.length);
       expect(result.stats.historySkipped).toBe("no room");
@@ -704,7 +1008,10 @@ describe("git store compaction", function () {
       store.inject("stream", { key: /\.pack$/, delay: 300, times: 20 });
       store.inject("stream", { key: /\.idx$/, before: dropped() });
 
-      const error = await compact({ store: counting, cache, lock }).then(() => null, (err) => err);
+      const error = await compact({ store: counting, cache, lock }).then(
+        () => null,
+        (err) => err
+      );
       expect(error.code).toBe("ECONNRESET");
       expect(peak).toBeGreaterThan(1);
       expect(active).toBe(0);
@@ -723,8 +1030,13 @@ describe("git store compaction", function () {
 
       // A quarter of a 1 MiB cache: the big pack can never be an input, though
       // the geometric split alone (with a factor large enough) would take it
-      const small = createCache({ dir: path.join(dir, "small"), maxBytes: 1 * MiB });
-      expect(compact.plan(latest, { factor: 100, maxBytes: Infinity }).packs).toContain(big.name);
+      const small = createCache({
+        dir: path.join(dir, "small"),
+        maxBytes: 1 * MiB,
+      });
+      expect(
+        compact.plan(latest, { factor: 100, maxBytes: Infinity }).packs
+      ).toContain(big.name);
 
       const before = latest.packs.length;
       const result = await compact({ store, cache: small, lock, factor: 100 });
@@ -742,7 +1054,10 @@ describe("git store compaction", function () {
     it("refuses an input that is not the size the manifest says, changing nothing", async function () {
       const before = await manifest.read(store);
       store.inject("stream", { key: /\.pack$/, truncate: 40 });
-      const error = await compact({ store, cache, lock }).then(() => null, (err) => err);
+      const error = await compact({ store, cache, lock }).then(
+        () => null,
+        (err) => err
+      );
       expect(error.code).toBe("CORRUPT");
       expect(await manifest.read(store)).toEqual(before);
     });

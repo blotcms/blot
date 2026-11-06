@@ -9,7 +9,10 @@ async function latestEntry(req, res) {
   const log = typeof req?.log === "function" ? req.log.bind(req) : () => {};
 
   log("Loading latest entry");
-  const { entries } = await getPage(req.blog.id, { pageNumber: 1, pageSize: 1 });
+  const { entries } = await getPage(req.blog.id, {
+    pageNumber: 1,
+    pageSize: 1,
+  });
   log("Loaded latest entry");
   const latest = entries && entries.length ? entries[0] : {};
 

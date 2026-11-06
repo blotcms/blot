@@ -48,10 +48,14 @@ const postsCache = createRenderCache("posts", {
     const page = await new Promise((resolve, reject) => {
       // Required here: models/entries requires this module (and specs spy
       // on getPage)
-      require("models/entries").getPage(blogID, query, (err, entries, pagination) => {
-        if (err) reject(err);
-        else resolve({ entries, pagination });
-      });
+      require("models/entries").getPage(
+        blogID,
+        query,
+        (err, entries, pagination) => {
+          if (err) reject(err);
+          else resolve({ entries, pagination });
+        }
+      );
     });
     stripHeavyFields(page.entries || [], keep);
     return prepareCacheValue(page, { preserveEntryInstances: true });

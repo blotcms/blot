@@ -67,7 +67,10 @@ function main() {
   // be eligible to trigger a regression issue.
   const excludePhaseArg = arg("--exclude-phase");
   const excludePhases = excludePhaseArg
-    ? excludePhaseArg.split(",").map((s) => s.trim()).filter(Boolean)
+    ? excludePhaseArg
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
     : [];
   const repo = process.env.GITHUB_REPOSITORY;
 
@@ -104,7 +107,14 @@ function main() {
 
     const perCommit = windowRecords.map((rec) => {
       const value = rec.metrics ? rec.metrics[key] : null;
-      return { rec, value, ...classify(value, base.median, { thresholdPercent: band, mad: base.mad }) };
+      return {
+        rec,
+        value,
+        ...classify(value, base.median, {
+          thresholdPercent: band,
+          mad: base.mad,
+        }),
+      };
     });
 
     const allRegressed = perCommit.every((c) => c.status === "regression");
@@ -123,7 +133,9 @@ function main() {
   }
 
   if (!offenders.length) {
-    console.log(`[detect] ${arch}: no sustained regression across last ${consecutive} runs.`);
+    console.log(
+      `[detect] ${arch}: no sustained regression across last ${consecutive} runs.`
+    );
     return;
   }
 

@@ -1,6 +1,6 @@
 var request = require("request");
 
-function main (product_id, callback) {
+function main(product_id, callback) {
   require("../generate-access-token")(function (err, token) {
     request.post(
       {
@@ -8,7 +8,7 @@ function main (product_id, callback) {
         headers: {
           "Content-Type": "application/json",
           "Accept-Language": "en_US",
-          "Authorization": "Bearer " + token
+          Authorization: "Bearer " + token,
         },
         body: JSON.stringify({
           product_id: product_id,
@@ -19,7 +19,7 @@ function main (product_id, callback) {
             {
               frequency: {
                 interval_unit: "YEAR",
-                interval_count: 1
+                interval_count: 1,
               },
               tenure_type: "REGULAR",
               sequence: 1,
@@ -27,16 +27,16 @@ function main (product_id, callback) {
               pricing_scheme: {
                 fixed_price: {
                   value: "44",
-                  currency_code: "USD"
-                }
-              }
-            }
+                  currency_code: "USD",
+                },
+              },
+            },
           ],
           payment_preferences: {
             auto_bill_outstanding: true,
-            payment_failure_threshold: 3
-          }
-        })
+            payment_failure_threshold: 3,
+          },
+        }),
       },
       function (err, res, data) {
         if (err) return callback(err);

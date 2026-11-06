@@ -185,14 +185,23 @@ module.exports = async function resolveCaseConflicts(
           const existingLowerSet = new Set(
             targetEntries.map((item) => canonicalName(item.name))
           );
-          const conflictName = generateConflictName(existingLowerSet, entry.name);
-          await moveEntry(sourceChildRel, path.posix.join(targetRel, conflictName));
+          const conflictName = generateConflictName(
+            existingLowerSet,
+            entry.name
+          );
+          await moveEntry(
+            sourceChildRel,
+            path.posix.join(targetRel, conflictName)
+          );
         } else if (!targetStat.isDirectory && entry.isDirectory) {
           const targetEntries = await listEntries(blogID, targetRel);
           const existingLowerSet = new Set(
             targetEntries.map((item) => canonicalName(item.name))
           );
-          const conflictName = generateConflictName(existingLowerSet, entry.name);
+          const conflictName = generateConflictName(
+            existingLowerSet,
+            entry.name
+          );
           await renameEntry(targetRel, entry.name, conflictName);
           await moveEntry(sourceChildRel, targetChildRel);
         } else {
@@ -200,8 +209,14 @@ module.exports = async function resolveCaseConflicts(
           const existingLowerSet = new Set(
             targetEntries.map((item) => canonicalName(item.name))
           );
-          const conflictName = generateConflictName(existingLowerSet, entry.name);
-          await moveEntry(sourceChildRel, path.posix.join(targetRel, conflictName));
+          const conflictName = generateConflictName(
+            existingLowerSet,
+            entry.name
+          );
+          await moveEntry(
+            sourceChildRel,
+            path.posix.join(targetRel, conflictName)
+          );
         }
       } else {
         await moveEntry(sourceChildRel, targetChildRel);
@@ -265,7 +280,10 @@ module.exports = async function resolveCaseConflicts(
         }
 
         for (const entry of files) {
-          const conflictName = generateConflictName(existingLowerSet, entry.name);
+          const conflictName = generateConflictName(
+            existingLowerSet,
+            entry.name
+          );
           await renameEntry(relDir, entry.name, conflictName);
         }
 
@@ -274,7 +292,10 @@ module.exports = async function resolveCaseConflicts(
       } else {
         const winner = files[0];
         for (const entry of files.slice(1)) {
-          const conflictName = generateConflictName(existingLowerSet, entry.name);
+          const conflictName = generateConflictName(
+            existingLowerSet,
+            entry.name
+          );
           await renameEntry(relDir, entry.name, conflictName);
         }
         resolvedDirs.add(path.posix.join(relDir, winner.name));

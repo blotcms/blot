@@ -17,7 +17,8 @@ each(
   function (user, next) {
     if (!user.isDisabled) return next();
 
-    if (subscriptionLifecycle.cancellationDetails(user).cancelled) return next();
+    if (subscriptionLifecycle.cancellationDetails(user).cancelled)
+      return next();
 
     const overdue = subscriptionLifecycle.overdueDetails(user);
 

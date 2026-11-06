@@ -16,7 +16,9 @@ describe("rebuild when Redis is unavailable", function () {
     await this.blog.write({ path: second, content: "Title: Second" });
 
     spyOn(Entry, "set").and.callFake(function (blogID, path, entry, callback) {
-      callback(new SimpleError("NOREPLICAS Not enough good replicas to write."));
+      callback(
+        new SimpleError("NOREPLICAS Not enough good replicas to write.")
+      );
     });
 
     var error;

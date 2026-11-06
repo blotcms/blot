@@ -1,5 +1,5 @@
 var client = require("models/client");
- 
+
 function main(string, callback) {
   var types = {};
   var result = [];
@@ -151,8 +151,8 @@ function normalizeScanReply(reply) {
     const keys = Array.isArray(reply.keys)
       ? reply.keys
       : Array.isArray(reply.results)
-      ? reply.results
-      : [];
+        ? reply.results
+        : [];
 
     return { cursor, keys };
   }

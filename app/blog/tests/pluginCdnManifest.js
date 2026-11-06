@@ -1,10 +1,9 @@
-const { extractHash, validate } = require('./util/cdn');
+const { extractHash, validate } = require("./util/cdn");
 
 describe("plugin CDN manifest updates", function () {
   require("./util/setup")();
 
   it("updates CDN manifest hash for script.js when analytics plugin changes", async function () {
-    
     // Create a template with script.js that uses app_js (which includes analytics)
     // and make script.js a CDN target by referencing it in another view
     await this.template({
@@ -23,16 +22,18 @@ describe("plugin CDN manifest updates", function () {
     expect(initialScriptContent).not.toContain("www.google-analytics.com");
 
     // Update analytics plugin - this should trigger CDN manifest update
-    await this.blog.update({ plugins: {
-      ...this.blog.plugins,
-      analytics: {
-        enabled: true,
-        options: {
-          provider: { Google: true },
-          trackingID: "UA-12345678-9",
+    await this.blog.update({
+      plugins: {
+        ...this.blog.plugins,
+        analytics: {
+          enabled: true,
+          options: {
+            provider: { Google: true },
+            trackingID: "UA-12345678-9",
+          },
         },
       },
-    } });
+    });
 
     // Get the new CDN URL for script.js
     const updatedCDNUrl = await this.text("/");

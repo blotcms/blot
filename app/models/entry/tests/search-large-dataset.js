@@ -18,10 +18,10 @@ describe("entry.search (large dataset)", function () {
     const startTime = Date.now();
     const results = await this.search("Hello");
     const duration = Date.now() - startTime;
-  
+
     expect(duration).toBeLessThanOrEqual(4100);
     expect(results.length).toEqual(25);
-  
+
     done();
   });
 });

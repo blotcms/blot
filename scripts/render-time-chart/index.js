@@ -8,7 +8,9 @@ const OUT_DIR = path.join(__dirname, "out");
 const OUT_FILE = path.join(OUT_DIR, "render-time.html");
 
 async function main() {
-  console.log("Fetching p95 render time from production (ssh blot, read-only)...");
+  console.log(
+    "Fetching p95 render time from production (ssh blot, read-only)..."
+  );
 
   const data = await fetchRenderTimeData();
   console.log(

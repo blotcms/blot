@@ -75,15 +75,39 @@
 // by running purge() again.
 const fsp = require("fs/promises");
 const path = require("path");
-const { StaleManifestError, OutcomeUnknownError, CorruptError, NoRoomError } = require("./errors");
-const { SWEEP_KEY, PACK_PREFIX, manifestKey, packKey, idxKey, packFile } = require("./layout");
+const {
+  StaleManifestError,
+  OutcomeUnknownError,
+  CorruptError,
+  NoRoomError,
+} = require("./errors");
+const {
+  SWEEP_KEY,
+  PACK_PREFIX,
+  manifestKey,
+  packKey,
+  idxKey,
+  packFile,
+} = require("./layout");
 const { mapLimit, createChildren } = require("./limit");
 const manifest = require("./manifest");
 const { PACK_CONFIG, git: shared } = require("./compact");
 const { internals } = require("./import");
 
 const { runGit, fetchInput, CONCURRENCY } = shared;
-const { counting, peelTags, describePack, packEverything, packCommits, proveClosed, watchGrowth, upload, has, entryOf, SLACK } = internals;
+const {
+  counting,
+  peelTags,
+  describePack,
+  packEverything,
+  packCommits,
+  proveClosed,
+  watchGrowth,
+  upload,
+  has,
+  entryOf,
+  SLACK,
+} = internals;
 
 // A swap lost to another writer is tried again this many times in all
 const ATTEMPTS = 3;
@@ -96,27 +120,47 @@ function coded(message, code, extra) {
 
 const sameRefs = (a, b) => {
   const names = Object.keys(a);
-  return names.length === Object.keys(b).length && names.every((name) => a[name] === b[name]);
+  return (
+    names.length === Object.keys(b).length &&
+    names.every((name) => a[name] === b[name])
+  );
 };
 
 // Whether packs made from `a` are still right for `b`: the same refs and head
 // (so the same objects reached) and the same epoch (so no rewrite, and no
 // purge which could have deleted them, came between)
-const sameState = (a, b) => sameRefs(a.refs, b.refs) && a.head === b.head && manifest.epochOf(a) === manifest.epochOf(b);
+const sameState = (a, b) =>
+  sameRefs(a.refs, b.refs) &&
+  a.head === b.head &&
+  manifest.epochOf(a) === manifest.epochOf(b);
 
 // The packs, history pack and pieces a manifest names, as manifest entries
 function namedEntries(m) {
-  return [...m.packs, ...(m.history ? [m.history] : []), ...(m.historyPieces || [])];
+  return [
+    ...m.packs,
+    ...(m.history ? [m.history] : []),
+    ...(m.historyPieces || []),
+  ];
 }
 
-const bytesOf = (entries) => entries.reduce((sum, entry) => sum + entry.size + entry.idxSize, 0);
+const bytesOf = (entries) =>
+  entries.reduce((sum, entry) => sum + entry.size + entry.idxSize, 0);
 
 // ---- Making the packs -----------------------------------------------------
 
 // Fetches `base`'s packs into scratch, writes and proves the pack of what its
 // refs reach and the history pack, and (unless `dryRun`) uploads them.
 // Resolves with { from, main, history, peeled, before, after, uploaded }.
-async function make({ store, cache, scratchDir, base, packConfig, dryRun, stats, gate }) {
+async function make({
+  store,
+  cache,
+  scratchDir,
+  base,
+  packConfig,
+  dryRun,
+  stats,
+  gate,
+}) {
   const children = createChildren(gate);
   let reservation = null;
   let dir = null;
@@ -131,7 +175,9 @@ async function make({ store, cache, scratchDir, base, packConfig, dryRun, stats,
         // extended as git writes if that is not enough
         reservation = await cache.reserve(2 * bytesOf(base.packs) + SLACK);
       } catch (err) {
-        if (err instanceof NoRoomError) err.message += " (a repository bigger than the cache can be rewritten with scratchDir, a directory on a larger disk)";
+        if (err instanceof NoRoomError)
+          err.message +=
+            " (a repository bigger than the cache can be rewritten with scratchDir, a directory on a larger disk)";
         throw err;
       }
       dir = reservation.dir;
@@ -145,35 +191,82 @@ async function make({ store, cache, scratchDir, base, packConfig, dryRun, stats,
 
     // mapLimit waits for every fetch in flight before it rejects
     const downloads = { controller: new AbortController(), error: null };
-    await mapLimit(base.packs, CONCURRENCY, (entry) => fetchInput(store, entry, packDir, downloads));
+    await mapLimit(base.packs, CONCURRENCY, (entry) =>
+      fetchInput(store, entry, packDir, downloads)
+    );
 
-    const all = (await runGit(children, ["cat-file", "--batch-all-objects", "--batch-check=%(objectname)"], { gitDir: repo })).split("\n").filter(Boolean);
-    const before = { packs: namedEntries(base).length, bytes: bytesOf(namedEntries(base)), objects: all.length };
+    const all = (
+      await runGit(
+        children,
+        ["cat-file", "--batch-all-objects", "--batch-check=%(objectname)"],
+        { gitDir: repo }
+      )
+    )
+      .split("\n")
+      .filter(Boolean);
+    const before = {
+      packs: namedEntries(base).length,
+      bytes: bytesOf(namedEntries(base)),
+      objects: all.length,
+    };
 
     const refs = base.refs;
     const tips = [...new Set(Object.values(refs))];
     if (!tips.length) {
       stats.gitMs += Date.now() - mark;
-      return { from: base, main: null, history: null, peeled: {}, before, after: { packs: 0, bytes: 0, objects: 0 }, uploaded: [] };
+      return {
+        from: base,
+        main: null,
+        history: null,
+        peeled: {},
+        before,
+        after: { packs: 0, bytes: 0, objects: 0 },
+        uploaded: [],
+      };
     }
 
     // What each ref points at, for the peeled targets and the history's tips
     const kinds = {};
     const typeOf = new Map();
-    const listing = await runGit(children, ["cat-file", "--batch-check=%(objectname) %(objecttype)"], { gitDir: repo, input: tips.join("\n") + "\n" });
+    const listing = await runGit(
+      children,
+      ["cat-file", "--batch-check=%(objectname) %(objecttype)"],
+      { gitDir: repo, input: tips.join("\n") + "\n" }
+    );
     listing.split("\n").forEach((line, i) => {
       if (i < tips.length) typeOf.set(tips[i], line.split(" ")[1]);
     });
     for (const [ref, oid] of Object.entries(refs)) {
       const type = typeOf.get(oid);
-      if (!type || type === "missing") throw new CorruptError("The repository's packs lack " + oid + ", the tip of " + ref);
+      if (!type || type === "missing")
+        throw new CorruptError(
+          "The repository's packs lack " + oid + ", the tip of " + ref
+        );
       kinds[ref] = type;
     }
     const { peeled, peeledType } = await peelTags(children, repo, refs, kinds);
     for (const [tag, target] of Object.entries(base.peeled || {})) {
-      if (peeled[tag] !== undefined && peeled[tag] !== target) throw new CorruptError("The manifest says tag " + tag + " peels to " + target + "; the objects say " + peeled[tag]);
+      if (peeled[tag] !== undefined && peeled[tag] !== target)
+        throw new CorruptError(
+          "The manifest says tag " +
+            tag +
+            " peels to " +
+            target +
+            "; the objects say " +
+            peeled[tag]
+        );
     }
-    const commitTips = [...new Set(Object.keys(refs).flatMap((ref) => (kinds[ref] === "commit" ? [refs[ref]] : peeledType[refs[ref]] === "commit" ? [peeled[refs[ref]]] : [])))];
+    const commitTips = [
+      ...new Set(
+        Object.keys(refs).flatMap((ref) =>
+          kinds[ref] === "commit"
+            ? [refs[ref]]
+            : peeledType[refs[ref]] === "commit"
+              ? [peeled[refs[ref]]]
+              : []
+        )
+      ),
+    ];
 
     const outDir = path.join(dir, "out");
     await fsp.mkdir(outDir);
@@ -184,7 +277,15 @@ async function make({ store, cache, scratchDir, base, packConfig, dryRun, stats,
     try {
       [hash, history] = await Promise.all([
         packEverything({ children, repo, dir: outDir, tips, config }),
-        commitTips.length ? packCommits({ children, repo, dir: outDir, tips: commitTips, config }) : null,
+        commitTips.length
+          ? packCommits({
+              children,
+              repo,
+              dir: outDir,
+              tips: commitTips,
+              config,
+            })
+          : null,
       ]);
     } catch (err) {
       throw (watching && watching.fail()) || err;
@@ -194,45 +295,93 @@ async function make({ store, cache, scratchDir, base, packConfig, dryRun, stats,
     if (watching) await watching.check();
 
     // Proofs. Nothing is uploaded until all hold.
-    const main = await describePack(path.join(outDir, "all"), hash, "rewritten");
+    const main = await describePack(
+      path.join(outDir, "all"),
+      hash,
+      "rewritten"
+    );
     for (const [ref, oid] of Object.entries(refs)) {
-      if (!has(main.ids, oid)) throw new CorruptError("The rewritten pack lacks " + oid + ", the tip of " + ref);
+      if (!has(main.ids, oid))
+        throw new CorruptError(
+          "The rewritten pack lacks " + oid + ", the tip of " + ref
+        );
     }
     for (const target of Object.values(peeled)) {
-      if (!has(main.ids, target)) throw new CorruptError("The rewritten pack lacks " + target + ", the target of a tag");
+      if (!has(main.ids, target))
+        throw new CorruptError(
+          "The rewritten pack lacks " + target + ", the target of a tag"
+        );
     }
     await proveClosed({ children, dir, main, tips });
 
     let commits = null;
     if (history) {
-      commits = await describePack(path.join(outDir, "history"), history.hash, "history");
-      if (commits.objects !== history.commits.length) throw new CorruptError("The history pack holds " + commits.objects + " objects for " + history.commits.length + " commits");
+      commits = await describePack(
+        path.join(outDir, "history"),
+        history.hash,
+        "history"
+      );
+      if (commits.objects !== history.commits.length)
+        throw new CorruptError(
+          "The history pack holds " +
+            commits.objects +
+            " objects for " +
+            history.commits.length +
+            " commits"
+        );
       for (const oid of history.commits) {
-        if (!has(commits.ids, oid)) throw new CorruptError("The history pack lacks the commit " + oid);
-        if (!has(main.ids, oid)) throw new CorruptError("The rewritten pack lacks the commit " + oid);
+        if (!has(commits.ids, oid))
+          throw new CorruptError("The history pack lacks the commit " + oid);
+        if (!has(main.ids, oid))
+          throw new CorruptError("The rewritten pack lacks the commit " + oid);
       }
     }
     stats.gitMs += Date.now() - mark;
 
     const made = [main, ...(commits ? [commits] : [])];
-    const after = { packs: made.length, bytes: bytesOf(made.map(entryOf)), objects: main.objects };
+    const after = {
+      packs: made.length,
+      bytes: bytesOf(made.map(entryOf)),
+      objects: main.objects,
+    };
     let uploaded = [];
     if (!dryRun) {
       mark = Date.now();
       // Both settle before either failure is thrown, so no upload is still
       // reading scratch when scratch is deleted
-      const uploads = await Promise.allSettled([upload(store, main, { rev: true }), commits ? upload(store, commits, { rev: false }) : null]);
+      const uploads = await Promise.allSettled([
+        upload(store, main, { rev: true }),
+        commits ? upload(store, commits, { rev: false }) : null,
+      ]);
       const failed = uploads.find((settled) => settled.status === "rejected");
       if (failed) throw failed.reason;
       uploaded = made.map((pack) => pack.name);
       stats.uploadMs += Date.now() - mark;
     }
 
-    return { from: base, main: entryOf(main), history: commits ? entryOf(commits) : null, peeled, before, after, uploaded };
+    return {
+      from: base,
+      main: entryOf(main),
+      history: commits ? entryOf(commits) : null,
+      peeled,
+      before,
+      after,
+      uploaded,
+    };
   } finally {
     for (const child of children) child.kill("SIGKILL");
-    if (reservation) await reservation.release().catch((err) => console.error("Git store: could not remove scratch space", err));
-    else if (dir) await fsp.rm(dir, { recursive: true, force: true }).catch((err) => console.error("Git store: could not remove scratch space", err));
+    if (reservation)
+      await reservation
+        .release()
+        .catch((err) =>
+          console.error("Git store: could not remove scratch space", err)
+        );
+    else if (dir)
+      await fsp
+        .rm(dir, { recursive: true, force: true })
+        .catch((err) =>
+          console.error("Git store: could not remove scratch space", err)
+        );
   }
 }
 
@@ -300,15 +449,25 @@ const second = (ms) => (Number.isFinite(ms) ? Math.floor(ms / 1000) : Infinity);
 async function purge({ store, ours }) {
   const result = { packs: 0, bytes: 0, spared: 0, missing: [] };
   const created = await store.head(manifestKey(ours.seq));
-  if (!created) throw new Error("The rewritten manifest " + manifestKey(ours.seq) + " is not in the store");
+  if (!created)
+    throw new Error(
+      "The rewritten manifest " + manifestKey(ours.seq) + " is not in the store"
+    );
   const cutoff = second(created.lastModified);
 
   const named = new Set(manifest.packsNamed(ours));
   let newest = ours;
   async function readForward() {
     while (await store.head(manifestKey(newest.seq + 1))) {
-      const next = manifest.parse(await store.get(manifestKey(newest.seq + 1), { maxBytes: manifest.MAX_BYTES }));
-      if (next.seq !== newest.seq + 1) throw new CorruptError(manifestKey(newest.seq + 1) + " says it is seq " + next.seq);
+      const next = manifest.parse(
+        await store.get(manifestKey(newest.seq + 1), {
+          maxBytes: manifest.MAX_BYTES,
+        })
+      );
+      if (next.seq !== newest.seq + 1)
+        throw new CorruptError(
+          manifestKey(newest.seq + 1) + " says it is seq " + next.seq
+        );
       newest = next;
       for (const name of manifest.packsNamed(newest)) named.add(name);
     }
@@ -317,7 +476,11 @@ async function purge({ store, ours }) {
 
   for (const [name, listed] of await listPacks(store)) {
     if (named.has(name)) continue;
-    if (Object.values(listed).some((file) => !(second(file.lastModified) < cutoff))) {
+    if (
+      Object.values(listed).some(
+        (file) => !(second(file.lastModified) < cutoff)
+      )
+    ) {
       result.spared++;
       continue;
     }
@@ -325,7 +488,14 @@ async function purge({ store, ours }) {
     await readForward();
     if (named.has(name)) continue;
     if (manifest.packsNamed(newest).includes(name)) {
-      throw coded("The purge was about to delete " + name + ", which the newest manifest (seq " + newest.seq + ") names", "PURGE_REFERENCED");
+      throw coded(
+        "The purge was about to delete " +
+          name +
+          ", which the newest manifest (seq " +
+          newest.seq +
+          ") names",
+        "PURGE_REFERENCED"
+      );
     }
 
     // A HEAD and then the DELETE, a file at a time, so each check is as
@@ -355,7 +525,10 @@ async function purge({ store, ours }) {
   // The check after: everything the newest manifest names is there
   const latest = await manifest.read(store);
   for (const entry of namedEntries(latest)) {
-    const [pack, idx] = await Promise.all([store.head(packKey(entry.name)), store.head(idxKey(entry.name))]);
+    const [pack, idx] = await Promise.all([
+      store.head(packKey(entry.name)),
+      store.head(idxKey(entry.name)),
+    ]);
     if (!pack || !idx) result.missing.push(entry.name);
   }
   return result;
@@ -368,55 +541,137 @@ async function planPurge(store, kept) {
   for (const [name, listed] of await listPacks(store)) {
     if (kept.includes(name)) continue;
     plan.packs++;
-    plan.bytes += Object.values(listed).reduce((sum, file) => sum + file.size, 0);
+    plan.bytes += Object.values(listed).reduce(
+      (sum, file) => sum + file.size,
+      0
+    );
   }
   return plan;
 }
 
 // ---- The rewrite ----------------------------------------------------------
 
-async function rewriteRepo({ store: objects, cache, lock, scratchDir = null, purge: purging = false, dryRun = false, pack = {}, clock = Date.now, attempts = ATTEMPTS, gate = null }) {
-  if (!dryRun && typeof lock !== "function") throw new Error("rewriteRepo needs the host's lock function");
-  if (!scratchDir && !(cache && typeof cache.reserve === "function")) throw new Error("rewriteRepo needs a cache to reserve scratch space from, or a scratchDir");
+async function rewriteRepo({
+  store: objects,
+  cache,
+  lock,
+  scratchDir = null,
+  purge: purging = false,
+  dryRun = false,
+  pack = {},
+  clock = Date.now,
+  attempts = ATTEMPTS,
+  gate = null,
+}) {
+  if (!dryRun && typeof lock !== "function")
+    throw new Error("rewriteRepo needs the host's lock function");
+  if (!scratchDir && !(cache && typeof cache.reserve === "function"))
+    throw new Error(
+      "rewriteRepo needs a cache to reserve scratch space from, or a scratchDir"
+    );
 
   const started = Date.now();
   const { store, requests } = counting(objects);
-  const stats = { ms: 0, attempts: 0, gitMs: 0, uploadMs: 0, swapMs: 0, purgeMs: 0, requests };
+  const stats = {
+    ms: 0,
+    attempts: 0,
+    gitMs: 0,
+    uploadMs: 0,
+    swapMs: 0,
+    purgeMs: 0,
+    requests,
+  };
   const none = { packs: 0, bytes: 0, spared: 0, missing: [] };
-  const finish = (result) => ({ ...result, stats: { ...stats, ms: Date.now() - started } });
+  const finish = (result) => ({
+    ...result,
+    stats: { ...stats, ms: Date.now() - started },
+  });
   const report = (made) => ({
     before: made.before,
     after: made.after,
-    dropped: { objects: made.before.objects - made.after.objects, bytes: made.before.bytes - made.after.bytes },
+    dropped: {
+      objects: made.before.objects - made.after.objects,
+      bytes: made.before.bytes - made.after.bytes,
+    },
   });
 
   let current = await manifest.read(store, { clock });
-  if (manifest.isEmpty(current)) return finish({ outcome: "empty", seq: current.seq, epoch: manifest.epochOf(current), purged: none });
+  if (manifest.isEmpty(current))
+    return finish({
+      outcome: "empty",
+      seq: current.seq,
+      epoch: manifest.epochOf(current),
+      purged: none,
+    });
 
   let made = null;
   for (let attempt = 1; ; attempt++) {
     stats.attempts = attempt;
     if (!made || !sameState(made.from, current)) {
-      made = await make({ store, cache, scratchDir, base: current, packConfig: pack, dryRun, stats, gate });
+      made = await make({
+        store,
+        cache,
+        scratchDir,
+        base: current,
+        packConfig: pack,
+        dryRun,
+        stats,
+        gate,
+      });
     }
 
     if (dryRun) {
-      const result = { outcome: "dry-run", seq: current.seq, epoch: manifest.epochOf(current), ...report(made), purged: none };
-      if (purging) result.wouldPurge = await planPurge(store, [made.main, made.history].filter(Boolean).map((p) => p.name));
+      const result = {
+        outcome: "dry-run",
+        seq: current.seq,
+        epoch: manifest.epochOf(current),
+        ...report(made),
+        purged: none,
+      };
+      if (purging)
+        result.wouldPurge = await planPurge(
+          store,
+          [made.main, made.history].filter(Boolean).map((p) => p.name)
+        );
       return finish(result);
     }
 
     const epoch = manifest.newEpoch();
     // On `current`, whose refs and head are those the packs were made from
-    const next = manifest.rewritten(current, { epoch, pack: made.main, history: made.history, peeled: made.peeled });
+    const next = manifest.rewritten(current, {
+      epoch,
+      pack: made.main,
+      history: made.history,
+      peeled: made.peeled,
+    });
     const mark = Date.now();
     try {
-      await manifest.swap({ store, lock, base: current, next, uploaded: made.uploaded, clock });
+      await manifest.swap({
+        store,
+        lock,
+        base: current,
+        next,
+        uploaded: made.uploaded,
+        clock,
+      });
     } catch (err) {
       stats.swapMs += Date.now() - mark;
-      if (err instanceof OutcomeUnknownError) return finish({ outcome: "unknown", seq: next.seq, epoch, ...report(made), purged: none, error: err });
+      if (err instanceof OutcomeUnknownError)
+        return finish({
+          outcome: "unknown",
+          seq: next.seq,
+          epoch,
+          ...report(made),
+          purged: none,
+          error: err,
+        });
       if (!(err instanceof StaleManifestError)) throw err;
-      if (attempt >= attempts) throw coded("The manifest moved " + attempts + " times while rewriting", "EMOVED", { cause: err });
+      if (attempt >= attempts)
+        throw coded(
+          "The manifest moved " + attempts + " times while rewriting",
+          "EMOVED",
+          { cause: err }
+        );
       current = await manifest.read(store, { clock });
       continue;
     }

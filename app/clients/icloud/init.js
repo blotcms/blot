@@ -71,7 +71,7 @@ const resyncRecentlySynced = async (options = {}) => {
       console.log(clfdate(), "Resyncing blog: ", blogID);
 
       // Ensure the hourly sync check is always gated by the sync
-      // lock to prevent files from being removed from Blot 
+      // lock to prevent files from being removed from Blot
       // during an initial setup. This prevents data loss.
       let folder;
       let done;
@@ -89,7 +89,7 @@ const resyncRecentlySynced = async (options = {}) => {
       try {
         // We don't sync to iCloud here because we want to respect
         // the state of the iCloud folder. It's possible that Blot
-        // has made some folder changes which are unsynced but we 
+        // has made some folder changes which are unsynced but we
         // prefer to destroy those rather than re-upload files
         // which were deleted on iCloud.
         await syncFromiCloud(blogID, folder.status, folder.update);

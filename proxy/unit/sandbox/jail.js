@@ -101,8 +101,11 @@ const JOBS = {
   pandoc: {
     command: [
       "/usr/local/bin/pandoc",
-      "+RTS", "-M400M", "-RTS",
-      "lua", "/usr/src/app/app/sandbox/jobs/pandoc-worker.lua",
+      "+RTS",
+      "-M400M",
+      "-RTS",
+      "lua",
+      "/usr/src/app/app/sandbox/jobs/pandoc-worker.lua",
     ],
     memoryBytes: 512 * MiB,
     timeSeconds: 600,
@@ -285,7 +288,10 @@ const NETWORK_JOBS = {
 };
 
 function job(name) {
-  if (typeof name !== "string" || !Object.prototype.hasOwnProperty.call(JOBS, name)) {
+  if (
+    typeof name !== "string" ||
+    !Object.prototype.hasOwnProperty.call(JOBS, name)
+  ) {
     throw new Error("unknown job");
   }
   return JOBS[name];
@@ -298,31 +304,49 @@ function args(name) {
     "-Mo",
     "--really_quiet",
     "--disable_proc",
-    "--hostname", "sandbox",
-    "--cwd", "/",
-    "-m", `none:/tmp:tmpfs:size=${TMPFS_BYTES}`,
-    "--time_limit", String(j.timeSeconds),
+    "--hostname",
+    "sandbox",
+    "--cwd",
+    "/",
+    "-m",
+    `none:/tmp:tmpfs:size=${TMPFS_BYTES}`,
+    "--time_limit",
+    String(j.timeSeconds),
     // uid 65000 inside and outside. Never --user: as root it leaves the job
     // mapped to root outside the namespace.
-    "-u", "65000:65000:1",
-    "-g", "65000:65000:1",
+    "-u",
+    "65000:65000:1",
+    "-g",
+    "65000:65000:1",
   ];
   for (const bind of BINDS) flags.push("-R", bind);
   flags.push(
-    "--rlimit_as", "hard",
-    "--rlimit_cpu", String(j.timeSeconds),
-    "--rlimit_fsize", "256",
-    "--rlimit_nofile", "64",
-    "--rlimit_core", "0",
+    "--rlimit_as",
+    "hard",
+    "--rlimit_cpu",
+    String(j.timeSeconds),
+    "--rlimit_fsize",
+    "256",
+    "--rlimit_nofile",
+    "64",
+    "--rlimit_core",
+    "0",
     "--use_cgroupv2",
-    "--cgroupv2_mount", CGROUP_MOUNT,
-    "--cgroup_mem_max", String(j.memoryBytes),
-    "--cgroup_mem_swap_max", "0",
-    "--cgroup_pids_max", "64",
-    "--cgroup_cpu_ms_per_sec", "1000",
-    "--seccomp_policy", POLICY,
+    "--cgroupv2_mount",
+    CGROUP_MOUNT,
+    "--cgroup_mem_max",
+    String(j.memoryBytes),
+    "--cgroup_mem_swap_max",
+    "0",
+    "--cgroup_pids_max",
+    "64",
+    "--cgroup_cpu_ms_per_sec",
+    "1000",
+    "--seccomp_policy",
+    POLICY,
     // nsjail passes no environment; this is the only variable the job gets
-    "-E", "NODE_PATH=/usr/src/app/node_modules",
+    "-E",
+    "NODE_PATH=/usr/src/app/node_modules",
     "--"
   );
   return flags.concat(j.command);
@@ -336,27 +360,41 @@ function args(name) {
 // timeSeconds, nofile, env, command }.
 function networkArgs({ config, binds, timeSeconds, nofile, env, command }) {
   const flags = [
-    "--config", config,
+    "--config",
+    config,
     "-Mo",
     "--really_quiet",
     "--disable_proc",
-    "--hostname", "sandbox",
-    "--cwd", "/",
-    "-m", `none:/tmp:tmpfs:size=${256 * MiB}`,
-    "--time_limit", String(timeSeconds),
-    "-u", `65000:${NETWORK_UID}:1`,
-    "-g", `65000:${NETWORK_UID}:1`,
+    "--hostname",
+    "sandbox",
+    "--cwd",
+    "/",
+    "-m",
+    `none:/tmp:tmpfs:size=${256 * MiB}`,
+    "--time_limit",
+    String(timeSeconds),
+    "-u",
+    `65000:${NETWORK_UID}:1`,
+    "-g",
+    `65000:${NETWORK_UID}:1`,
     "--keep_caps",
   ];
   for (const bind of binds) flags.push("-R", bind);
   flags.push(
-    "--rlimit_as", "hard",
-    "--rlimit_cpu", timeSeconds ? String(timeSeconds) : "inf",
-    "--rlimit_fsize", "256",
-    "--rlimit_nofile", String(nofile),
-    "--rlimit_core", "0",
-    "--seccomp_policy", NETWORK_POLICY,
-    "-E", "PATH=/usr/bin:/bin:/usr/sbin:/sbin"
+    "--rlimit_as",
+    "hard",
+    "--rlimit_cpu",
+    timeSeconds ? String(timeSeconds) : "inf",
+    "--rlimit_fsize",
+    "256",
+    "--rlimit_nofile",
+    String(nofile),
+    "--rlimit_core",
+    "0",
+    "--seccomp_policy",
+    NETWORK_POLICY,
+    "-E",
+    "PATH=/usr/bin:/bin:/usr/sbin:/sbin"
   );
   for (const variable of env) flags.push("-E", variable);
   return flags.concat("--", "/bin/sh", ENTER_NETWORK, command);
@@ -377,12 +415,19 @@ const ENTER_CGROUP = 'echo $$ > "$1/cgroup.procs" && shift && exec "$@"';
 
 // Starts a jail in a cgroup, as NETWORK_UID
 function inCgroup(cgroup, args, { raiseOomScore }) {
-  const script = raiseOomScore ? `${RAISE_OOM_SCORE} && ${ENTER_CGROUP}` : ENTER_CGROUP;
+  const script = raiseOomScore
+    ? `${RAISE_OOM_SCORE} && ${ENTER_CGROUP}`
+    : ENTER_CGROUP;
   return {
     file: "/bin/sh",
     args: [
-      "-c", script, "sh", cgroup,
-      SU_EXEC, `${NETWORK_UID}:${NETWORK_UID}`, NSJAIL,
+      "-c",
+      script,
+      "sh",
+      cgroup,
+      SU_EXEC,
+      `${NETWORK_UID}:${NETWORK_UID}`,
+      NSJAIL,
     ].concat(args),
   };
 }
@@ -394,7 +439,9 @@ function command(name, cgroup) {
   if (!j.network) {
     return {
       file: "/bin/sh",
-      args: ["-c", `${RAISE_OOM_SCORE} && exec "$@"`, "sh", NSJAIL].concat(args(name)),
+      args: ["-c", `${RAISE_OOM_SCORE} && exec "$@"`, "sh", NSJAIL].concat(
+        args(name)
+      ),
     };
   }
   const directory = cgroup || j.cgroups[0];
@@ -427,10 +474,26 @@ function proxyCommand(unit) {
       // A connection each way for each of tinyproxy's MaxClients
       nofile: 256,
       env: ["BLOT_PROXY_JAIL=1"],
-      command: ["/usr/bin/tinyproxy", "-d", "-c", path.join(__dirname, "tinyproxy.conf")],
+      command: [
+        "/usr/bin/tinyproxy",
+        "-d",
+        "-c",
+        path.join(__dirname, "tinyproxy.conf"),
+      ],
     }),
     { raiseOomScore: false }
   );
 }
 
-module.exports = { JOBS, NSJAIL, BROWSER_CGROUP, PROXY_CGROUP, FETCH_CGROUP, OOM_SCORE_ADJ, job, args, command, proxyCommand };
+module.exports = {
+  JOBS,
+  NSJAIL,
+  BROWSER_CGROUP,
+  PROXY_CGROUP,
+  FETCH_CGROUP,
+  OOM_SCORE_ADJ,
+  job,
+  args,
+  command,
+  proxyCommand,
+};

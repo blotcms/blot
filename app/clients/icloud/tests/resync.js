@@ -6,7 +6,8 @@ describe("icloud resync", function () {
   const originals = new Map();
 
   function mockModule(modulePath, exportsValue) {
-    if (!originals.has(modulePath)) originals.set(modulePath, require.cache[modulePath]);
+    if (!originals.has(modulePath))
+      originals.set(modulePath, require.cache[modulePath]);
     require.cache[modulePath] = {
       id: modulePath,
       filename: modulePath,
@@ -24,7 +25,8 @@ describe("icloud resync", function () {
     mockModule(fromiCloudPath, syncFromiCloud);
     // Load a fresh copy bound to the mocks; afterEach puts back whatever
     // was cached (e.g. by the client index) before this spec ran.
-    if (!originals.has(resyncPath)) originals.set(resyncPath, require.cache[resyncPath]);
+    if (!originals.has(resyncPath))
+      originals.set(resyncPath, require.cache[resyncPath]);
     delete require.cache[resyncPath];
 
     return { resync: require(resyncPath), syncFromiCloud };
@@ -85,7 +87,9 @@ describe("icloud resync", function () {
   it("refuses when there is no iCloud account", async function () {
     const { resync, syncFromiCloud } = load(null);
 
-    expect((await rejection(resync("blog"))).code).toBe("ICLOUD_SETUP_INCOMPLETE");
+    expect((await rejection(resync("blog"))).code).toBe(
+      "ICLOUD_SETUP_INCOMPLETE"
+    );
     expect(syncFromiCloud).not.toHaveBeenCalled();
   });
 });

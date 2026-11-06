@@ -110,8 +110,10 @@ describe("icloud error classification", function () {
       ).errorCode
     ).toBe(SETUP_FAILED);
     expect(
-      normalizeErrorFields({ error: "Boom" }, { setupComplete: false, acceptedSharingLink: true })
-        .errorCode
+      normalizeErrorFields(
+        { error: "Boom" },
+        { setupComplete: false, acceptedSharingLink: true }
+      ).errorCode
     ).toBe(health.CODES.TRANSFER_INCOMPLETE);
   });
 
@@ -125,7 +127,10 @@ describe("icloud error classification", function () {
 
     expect(
       normalizeErrorFields(
-        { error: BLOG_DIRECTORY_DELETED, errorCode: health.CODES.SOURCE_MISSING },
+        {
+          error: BLOG_DIRECTORY_DELETED,
+          errorCode: health.CODES.SOURCE_MISSING,
+        },
         current
       )
     ).toEqual({

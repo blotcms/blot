@@ -52,11 +52,19 @@ describe("template", function () {
     // a fresh but equal object, as readFromFolder passes on every sync
     await setMetadata(this.template.id, { errors: {}, localEditing: true });
     expect((await getBlog({ id: this.blog.id })).cacheID).toEqual(blogCacheID);
-    expect((await getMetadata(this.template.id)).cacheID).toEqual(templateCacheID);
+    expect((await getMetadata(this.template.id)).cacheID).toEqual(
+      templateCacheID
+    );
 
-    await setMetadata(this.template.id, { errors: { "entries.html": "Unclosed tag" } });
-    expect((await getBlog({ id: this.blog.id })).cacheID).not.toEqual(blogCacheID);
-    expect((await getMetadata(this.template.id)).cacheID).not.toEqual(templateCacheID);
+    await setMetadata(this.template.id, {
+      errors: { "entries.html": "Unclosed tag" },
+    });
+    expect((await getBlog({ id: this.blog.id })).cacheID).not.toEqual(
+      blogCacheID
+    );
+    expect((await getMetadata(this.template.id)).cacheID).not.toEqual(
+      templateCacheID
+    );
   });
 
   it("never writes a template cache ID it was given or had read", async function () {
@@ -91,7 +99,7 @@ describe("template", function () {
 
   it("updates the CDN manifest when metadata locals change", async function () {
     // Install the template so the CDN manifest is generated
-    await this.blog.update({template: this.template.id});
+    await this.blog.update({ template: this.template.id });
 
     await this.setView({
       name: "style.css",
@@ -131,5 +139,4 @@ describe("template", function () {
     expect(nextMetadata.cdn["style.css"]).toEqual(jasmine.any(String));
     expect(nextMetadata.cdn["style.css"]).not.toEqual(updatedHash);
   });
-
 });

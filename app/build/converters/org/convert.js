@@ -29,7 +29,7 @@ module.exports = function (blog, text, callback) {
       result,
       {
         decodeEntities: false,
-        xmlMode: true
+        xmlMode: true,
       },
       false
     );

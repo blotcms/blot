@@ -26,7 +26,8 @@ const report = {
 // Regex patterns to detect tokens (allow optional whitespace inside braces)
 // Support both cssURL/css_url and scriptURL/script_url aliases
 const CSS_URL_PATTERN = /\{\{\s*\{?\s*(?:cssURL|css_url)\s*\}\s*\}\}?/g;
-const SCRIPT_URL_PATTERN = /\{\{\s*\{?\s*(?:scriptURL|script_url)\s*\}\s*\}\}?/g;
+const SCRIPT_URL_PATTERN =
+  /\{\{\s*\{?\s*(?:scriptURL|script_url)\s*\}\s*\}\}?/g;
 
 /**
  * Resolve a URL against a base URL
@@ -55,7 +56,7 @@ function resolveUrl(baseUrl, targetUrl) {
  */
 function isValidUrl(urlString) {
   if (!urlString || typeof urlString !== "string") return false;
-  
+
   // Allow protocol-relative URLs (starting with //)
   if (urlString.startsWith("//")) {
     try {
@@ -66,7 +67,7 @@ function isValidUrl(urlString) {
       return false;
     }
   }
-  
+
   // For absolute URLs, require both protocol and hostname
   try {
     const parsed = url.parse(urlString);
@@ -99,9 +100,14 @@ async function fetchAsset(assetUrl) {
   } catch (error) {
     clearTimeout(timer);
     if (error.name === "AbortError") {
-      throw new Error(`Failed to fetch ${assetUrl}: Request timed out after 10 seconds`, { cause: error });
+      throw new Error(
+        `Failed to fetch ${assetUrl}: Request timed out after 10 seconds`,
+        { cause: error }
+      );
     }
-    throw new Error(`Failed to fetch ${assetUrl}: ${error.message}`, { cause: error });
+    throw new Error(`Failed to fetch ${assetUrl}: ${error.message}`, {
+      cause: error,
+    });
   }
 }
 
@@ -135,11 +141,18 @@ async function revertView(blog, template, view, originalContent) {
  * Verify remote assets match CDN assets for installed templates
  * Returns true if verification passes, false otherwise
  */
-async function verifyRemoteAssets(blog, template, view, workingView, originalContent, replacements) {
+async function verifyRemoteAssets(
+  blog,
+  template,
+  view,
+  workingView,
+  originalContent,
+  replacements
+) {
   // Check if target views exist before fetching assets
   const replacementsToValidate = [];
   const replacementsToSkip = [];
-  
+
   for (const replacement of replacements) {
     try {
       const targetView = await getViewAsync(template.id, replacement.viewName);
@@ -305,7 +318,7 @@ async function processView(user, blog, template, view) {
 
   // Extend blog object to ensure url, cssURL, scriptURL are available
   const extendedBlog = Blog.extend(blog);
-  
+
   // Determine the base URL based on whether the template is installed
   // If template.id === blog.template, the template is installed, use blogURL
   // Otherwise, use previewURL for the template
@@ -316,9 +329,9 @@ async function processView(user, blog, template, view) {
   } else {
     // Template is NOT installed - construct preview URL
     // Extract template slug from template ID (everything after first colon)
-    const templateSlug = template.id.split(':').slice(1).join(':');
+    const templateSlug = template.id.split(":").slice(1).join(":");
     const isMine = template.owner === blog.id;
-    const myPrefix = isMine ? 'my-' : '';
+    const myPrefix = isMine ? "my-" : "";
     baseUrl = `https://preview-of-${myPrefix}${templateSlug}-on-${blog.handle}.${config.host}`;
   }
 
@@ -499,9 +512,7 @@ function logReport(callback) {
   if (report.successes.length > 0) {
     console.log("\nSuccesses:");
     report.successes.forEach((item) => {
-      console.log(
-        `  - ${item.blogID} / ${item.templateID} / ${item.viewName}`
-      );
+      console.log(`  - ${item.blogID} / ${item.templateID} / ${item.viewName}`);
       item.replacements.forEach((r) => {
         const skipNote = r.skippedValidation
           ? " (validation skipped - view does not exist)"
@@ -517,9 +528,7 @@ function logReport(callback) {
   if (report.mismatches.length > 0) {
     console.log("\nMismatches (reverted):");
     report.mismatches.forEach((item) => {
-      console.log(
-        `  - ${item.blogID} / ${item.templateID} / ${item.viewName}`
-      );
+      console.log(`  - ${item.blogID} / ${item.templateID} / ${item.viewName}`);
       console.log(`    Original URLs: ${item.originalUrls.join(", ")}`);
       console.log(`    CDN URLs: ${item.cdnUrls.join(", ")}`);
     });
@@ -529,9 +538,7 @@ function logReport(callback) {
   if (report.fetchErrors.length > 0) {
     console.log("\nErrors:");
     report.fetchErrors.forEach((item) => {
-      console.log(
-        `  - ${item.blogID} / ${item.templateID} / ${item.viewName}`
-      );
+      console.log(`  - ${item.blogID} / ${item.templateID} / ${item.viewName}`);
       console.log(`    Error: ${item.error}`);
       if (item.originalUrl)
         console.log(`    Original URL: ${item.originalUrl}`);
@@ -543,9 +550,7 @@ function logReport(callback) {
   if (report.revertErrors.length > 0) {
     console.log("\nRevert Errors (failed to revert changes):");
     report.revertErrors.forEach((item) => {
-      console.log(
-        `  - ${item.blogID} / ${item.templateID} / ${item.viewName}`
-      );
+      console.log(`  - ${item.blogID} / ${item.templateID} / ${item.viewName}`);
       console.log(`    Error: ${item.error}`);
     });
   }

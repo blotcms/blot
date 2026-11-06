@@ -50,7 +50,7 @@ const { parseCommit } = require("../store/objects");
 const { diffTrees, EMPTY_TREE } = require("../store/treediff");
 const { NotFoundError, CorruptError } = require("../store/errors");
 
-const MODES = { "100644": true, "100755": true };
+const MODES = { 100644: true, 100755: true };
 const SYMLINK = "120000";
 
 // Blobs up to this size are compared with the file before being written
@@ -77,7 +77,9 @@ function join(parts) {
 // real ones, which the callers here have checked.
 async function kind(blogID, file) {
   try {
-    return (await storage.stat(blogID, file)).isDirectory ? "directory" : "file";
+    return (await storage.stat(blogID, file)).isDirectory
+      ? "directory"
+      : "file";
   } catch (err) {
     if (err.code === "ENOENT") return null;
     if (err.code === "ELOOP") return "link";
@@ -103,7 +105,11 @@ async function ensureDirectory(blogID, parts) {
 // Removes a file, then the directories that this leaves empty. A directory in
 // its place, or a symbolic link on the way to it, is not something to remove.
 async function removeFile(blogID, parts) {
-  if (parts.length > 1 && (await kind(blogID, join(parts.slice(0, -1)))) !== "directory") return;
+  if (
+    parts.length > 1 &&
+    (await kind(blogID, join(parts.slice(0, -1)))) !== "directory"
+  )
+    return;
 
   const found = await kind(blogID, join(parts));
 
@@ -133,8 +139,12 @@ async function treeOf(reader, commit) {
   if (!commit || commit === EMPTY_TREE) return null;
 
   const object = await reader.read(commit);
-  if (!object) throw new NotFoundError("Commit " + commit + " is not in the repository");
-  if (object.type !== "commit") throw new CorruptError("Object " + commit + " is a " + object.type + ", not a commit");
+  if (!object)
+    throw new NotFoundError("Commit " + commit + " is not in the repository");
+  if (object.type !== "commit")
+    throw new CorruptError(
+      "Object " + commit + " is a " + object.type + ", not a commit"
+    );
 
   return parseCommit(object.data).tree;
 }
@@ -143,7 +153,8 @@ async function statOf(blogID, file, options) {
   try {
     return await storage.stat(blogID, file, options);
   } catch (err) {
-    if (err.code === "ENOENT" || err.code === "ELOOP" || err.code === "ENOTDIR") return null;
+    if (err.code === "ENOENT" || err.code === "ELOOP" || err.code === "ENOTDIR")
+      return null;
     throw err;
   }
 }
@@ -158,8 +169,14 @@ async function bufferOf(stream) {
 async function writeBlob(blogID, reader, parts, oid, stats) {
   const blob = await reader.stream(oid);
 
-  if (!blob) throw new NotFoundError("Blob " + oid + " (" + parts.join("/") + ") is not in the repository");
-  if (blob.type !== "blob") throw new CorruptError("Object " + oid + " is a " + blob.type + ", not a blob");
+  if (!blob)
+    throw new NotFoundError(
+      "Blob " + oid + " (" + parts.join("/") + ") is not in the repository"
+    );
+  if (blob.type !== "blob")
+    throw new CorruptError(
+      "Object " + oid + " is a " + blob.type + ", not a blob"
+    );
 
   const file = join(parts);
   let body = Readable.from(blob.data, { objectMode: false });
@@ -172,7 +189,10 @@ async function writeBlob(blogID, reader, parts, oid, stats) {
 
       if (found && !found.isDirectory && found.size === bytes.length) {
         const hashed = await statOf(blogID, file, { sha1: true });
-        if (hashed && hashed.sha1 === crypto.createHash("sha1").update(bytes).digest("hex")) {
+        if (
+          hashed &&
+          hashed.sha1 === crypto.createHash("sha1").update(bytes).digest("hex")
+        ) {
           stats.unchanged++;
           return;
         }
@@ -197,7 +217,9 @@ async function writeBlob(blogID, reader, parts, oid, stats) {
 function nested(a, b) {
   const shorter = a.length <= b.length ? a : b;
   const longer = shorter === a ? b : a;
-  return shorter.every((part, i) => longer[i].normalize("NFC") === part.normalize("NFC"));
+  return shorter.every(
+    (part, i) => longer[i].normalize("NFC") === part.normalize("NFC")
+  );
 }
 
 // Whether the file at `parts` holds exactly the blob `oid`: its git blob ID,
@@ -221,7 +243,13 @@ async function holds(blogID, parts, oid) {
       hash.update(chunk);
     }
   } catch (err) {
-    if (err.code === "ENOENT" || err.code === "ELOOP" || err.code === "ENOTDIR" || err.name === "NotFoundError") return false;
+    if (
+      err.code === "ENOENT" ||
+      err.code === "ELOOP" ||
+      err.code === "ENOTDIR" ||
+      err.name === "NotFoundError"
+    )
+      return false;
     throw err;
   }
 
@@ -254,7 +282,13 @@ async function moveFile(blogID, from, to) {
   }
 }
 
-async function materialize({ blogID, reader, from = null, to, log = function () {} }) {
+async function materialize({
+  blogID,
+  reader,
+  from = null,
+  to,
+  log = function () {},
+}) {
   const [a, b] = await Promise.all([treeOf(reader, from), treeOf(reader, to)]);
   const removals = [];
   const writes = [];
@@ -265,15 +299,27 @@ async function materialize({ blogID, reader, from = null, to, log = function () 
     const parts = change.valid ? safeParts(change.path) : null;
 
     if (!parts) {
-      log("Skipping a path that is not safe to write: " + JSON.stringify(change.path));
+      log(
+        "Skipping a path that is not safe to write: " +
+          JSON.stringify(change.path)
+      );
       continue;
     }
 
     if (change.newMode in MODES) {
-      writes.push({ parts, path: change.path, oid: change.newOid, added: !change.oldMode });
+      writes.push({
+        parts,
+        path: change.path,
+        oid: change.newOid,
+        added: !change.oldMode,
+      });
     } else if (change.oldMode in MODES || change.oldMode === SYMLINK) {
       // Gone, or something we do not write (a link or submodule) in its place
-      removals.push({ parts, path: change.path, oid: change.oldMode in MODES && !change.newMode ? change.oldOid : null });
+      removals.push({
+        parts,
+        path: change.path,
+        oid: change.oldMode in MODES && !change.newMode ? change.oldOid : null,
+      });
     } else {
       continue;
     }
@@ -296,7 +342,9 @@ async function materialize({ blogID, reader, from = null, to, log = function () 
 
     // One path inside the other (a/b.txt to a, or a to a/b.txt): making room
     // for the target would remove the source, so it is a removal and a write
-    const at = candidates.findIndex((removal) => !nested(removal.parts, write.parts));
+    const at = candidates.findIndex(
+      (removal) => !nested(removal.parts, write.parts)
+    );
     if (at === -1) continue;
 
     const removal = candidates.splice(at, 1)[0];

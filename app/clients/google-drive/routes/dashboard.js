@@ -122,7 +122,11 @@ dashboard
           return res.redirect(res.locals.dashboardBase + "/client");
         }
 
-        if (existingAccount && existingAccount.folderId && !existingAccount.error) {
+        if (
+          existingAccount &&
+          existingAccount.folderId &&
+          !existingAccount.error
+        ) {
           return res.redirect(req.baseUrl);
         }
 
@@ -133,7 +137,11 @@ dashboard
         return res.message(req.baseUrl, "Please enter your email address");
       }
 
-      if (existingAccount && existingAccount.email === req.body.email && !existingAccount.error) {
+      if (
+        existingAccount &&
+        existingAccount.email === req.body.email &&
+        !existingAccount.error
+      ) {
         return res.redirect(req.baseUrl);
       }
 

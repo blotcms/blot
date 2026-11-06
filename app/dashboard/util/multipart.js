@@ -26,7 +26,9 @@ module.exports = function multipart(options = {}) {
     };
     const cleanup = () => {
       finished = true;
-      return Promise.all([...files].filter(path => !retained.has(path)).map(remove));
+      return Promise.all(
+        [...files].filter((path) => !retained.has(path)).map(remove)
+      );
     };
 
     req.retainUpload = (file) => {
@@ -58,9 +60,12 @@ module.exports = function multipart(options = {}) {
       }
       if (finished) return;
 
-      req.body = Object.fromEntries(Object.keys(fields).map(key => [
-        key, fields[key].length === 1 ? fields[key][0] : fields[key],
-      ]));
+      req.body = Object.fromEntries(
+        Object.keys(fields).map((key) => [
+          key,
+          fields[key].length === 1 ? fields[key][0] : fields[key],
+        ])
+      );
       req.files = uploads;
       // Preserve other upload fields; cleanup retains the complete file list.
       if (uploads.avatar) req.files.avatar = uploads.avatar[0];

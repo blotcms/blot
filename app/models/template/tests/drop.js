@@ -41,10 +41,13 @@ describe("template", function () {
       if (err) return done.fail(err);
       drop(test.blog.id, test.template.name, function (err) {
         if (err) return done.fail(err);
-        client.keys("*" + test.template.id + "*").then(function (result) {
-          expect(result).toEqual([]);
-          done();
-        }).catch(done.fail);
+        client
+          .keys("*" + test.template.id + "*")
+          .then(function (result) {
+            expect(result).toEqual([]);
+            done();
+          })
+          .catch(done.fail);
       });
     });
   });
@@ -53,10 +56,13 @@ describe("template", function () {
     var test = this;
     drop(test.blog.id, test.template.name, function (err) {
       if (err) return done.fail(err);
-      client.keys("*" + test.template.id + "*").then(function (result) {
-        expect(result).toEqual([]);
-        done();
-      }).catch(done.fail);
+      client
+        .keys("*" + test.template.id + "*")
+        .then(function (result) {
+          expect(result).toEqual([]);
+          done();
+        })
+        .catch(done.fail);
     });
   });
 
@@ -96,20 +102,22 @@ describe("template", function () {
   it("cleans up references when metadata is missing", function (done) {
     var test = this;
 
-    client.del(key.metadata(test.template.id)).then(function () {
+    client
+      .del(key.metadata(test.template.id))
+      .then(function () {
+        drop(test.blog.id, test.template.name, function (err) {
+          if (err) return done.fail(err);
 
-      drop(test.blog.id, test.template.name, function (err) {
-        if (err) return done.fail(err);
-
-        client
-          .sIsMember(key.blogTemplates(test.blog.id), test.template.id)
-          .then(function (isMember) {
-            expect(!!isMember).toBe(false);
-            done();
-          })
-          .catch(done.fail);
-      });
-    }).catch(done.fail);
+          client
+            .sIsMember(key.blogTemplates(test.blog.id), test.template.id)
+            .then(function (isMember) {
+              expect(!!isMember).toBe(false);
+              done();
+            })
+            .catch(done.fail);
+        });
+      })
+      .catch(done.fail);
   });
 
   it("drop resolves without an error when the template does not exist", function (done) {
@@ -180,7 +188,9 @@ describe("template", function () {
     var dropPath = require.resolve("../drop");
     var originalPurgeModule = require.cache[purgePath];
     var originalDropModule = require.cache[dropPath];
-    var purgeSpy = jasmine.createSpy("purgeCdnUrls").and.returnValue(Promise.resolve());
+    var purgeSpy = jasmine
+      .createSpy("purgeCdnUrls")
+      .and.returnValue(Promise.resolve());
 
     require.cache[purgePath] = {
       id: purgePath,
@@ -192,7 +202,9 @@ describe("template", function () {
     var dropWithPurgeStub = require("../drop");
 
     new Promise(function (resolve, reject) {
-      client.hSet(metadataKey, "cdn", JSON.stringify(manifest)).then(resolve, reject);
+      client
+        .hSet(metadataKey, "cdn", JSON.stringify(manifest))
+        .then(resolve, reject);
     })
       .then(function () {
         return new Promise(function (resolve, reject) {
@@ -252,27 +264,34 @@ describe("template", function () {
     var test = this;
     var metadataKey = key.metadata(test.template.id);
 
-    client.hDel(metadataKey, "cdn").then(function () {
-
-      drop(test.blog.id, test.template.name, function (err) {
-        if (err) return done.fail(err);
-
-        require("../index").create(test.blog.id, "malformed-cdn", {}, function (err) {
+    client
+      .hDel(metadataKey, "cdn")
+      .then(function () {
+        drop(test.blog.id, test.template.name, function (err) {
           if (err) return done.fail(err);
 
-          var malformedTemplateID = test.blog.id + ":malformed-cdn";
-          client
-            .hSet(key.metadata(malformedTemplateID), "cdn", '"broken"')
-            .then(function () {
-              drop(test.blog.id, "malformed-cdn", function (err, message) {
-                if (err) return done.fail(err);
-                expect(typeof message).toBe("string");
-                done();
-              });
-            })
-            .catch(done.fail);
+          require("../index").create(
+            test.blog.id,
+            "malformed-cdn",
+            {},
+            function (err) {
+              if (err) return done.fail(err);
+
+              var malformedTemplateID = test.blog.id + ":malformed-cdn";
+              client
+                .hSet(key.metadata(malformedTemplateID), "cdn", '"broken"')
+                .then(function () {
+                  drop(test.blog.id, "malformed-cdn", function (err, message) {
+                    if (err) return done.fail(err);
+                    expect(typeof message).toBe("string");
+                    done();
+                  });
+                })
+                .catch(done.fail);
+            }
+          );
         });
-      });
-    }).catch(done.fail);
+      })
+      .catch(done.fail);
   });
 });

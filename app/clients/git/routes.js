@@ -62,8 +62,8 @@ dashboard.get("/", function (req, res) {
       res.render(__dirname + "/views/index.html", {
         title: "Git",
         token: token,
-        createFailed: status === 'createFailed',
-        createInProgress: status === 'createInProgress',
+        createFailed: status === "createFailed",
+        createInProgress: status === "createInProgress",
         host,
       });
     });
@@ -78,7 +78,6 @@ dashboard.get("/create", function (req, res) {
 });
 
 dashboard.post("/create", function (req, res, next) {
-  
   if (req.body.cancel) {
     console.log(clfdate() + " Git: User cancelled creation of repo");
 
@@ -96,10 +95,15 @@ dashboard.post("/create", function (req, res, next) {
     if (err) return next(err);
 
     if (exists) {
-      console.log(clfdate() + " Git: Refused to create over repo for blog", req.blog.id);
+      console.log(
+        clfdate() + " Git: Refused to create over repo for blog",
+        req.blog.id
+      );
       return res.message(
         req.baseUrl + "/create",
-        new Error("A Git repository already exists for this username. Please contact us.")
+        new Error(
+          "A Git repository already exists for this username. Please contact us."
+        )
       );
     }
 
@@ -151,7 +155,8 @@ dashboard.post("/disconnect", function (req, res, next) {
 // /end//handle.git indistinguishable from /end/handle.git. Blog handles are
 // canonical lowercase alphanumerics between 2 and 70 characters (the same
 // shape stored by the blog model).
-var GIT_REQUEST = /^(?![^#]*%(?:2[fF]|5[cC]))\/(end)(\/([a-z0-9]{2,70})\.git\/(?:info\/refs|HEAD|git-(?:upload|receive)-pack)(?:\?[^#]*)?)$/;
+var GIT_REQUEST =
+  /^(?![^#]*%(?:2[fF]|5[cC]))\/(end)(\/([a-z0-9]{2,70})\.git\/(?:info\/refs|HEAD|git-(?:upload|receive)-pack)(?:\?[^#]*)?)$/;
 
 function parseGitRequest(req, res, next) {
   var match = GIT_REQUEST.exec(req.url);
@@ -256,41 +261,46 @@ repo.onPush(
 
 // Keep req.url untouched: the canonical repository path parsed and
 // authenticated above selects the repository.
-site.use(parseGitRequest, redirectRenamedGitHandle, authenticate, function (req, res) {
-  function endResponse() {
-    if (res && !res.headersSent && !res.finished && !res.writableEnded) {
-      try {
-        res.end();
-      } catch (err) {
-        debug("Error ending git response", err);
+site.use(
+  parseGitRequest,
+  redirectRenamedGitHandle,
+  authenticate,
+  function (req, res) {
+    function endResponse() {
+      if (res && !res.headersSent && !res.finished && !res.writableEnded) {
+        try {
+          res.end();
+        } catch (err) {
+          debug("Error ending git response", err);
+        }
       }
     }
+
+    req.on("error", function (err) {
+      if (err && (err.code === "ECONNRESET" || err.code === "EPIPE")) {
+        debug("Git request connection error", err.message || err);
+      } else {
+        debug("Git request error", err);
+      }
+
+      endResponse();
+    });
+
+    req.on("aborted", function () {
+      debug("Git request aborted");
+      endResponse();
+    });
+
+    res.on("error", function (err) {
+      if (err && (err.code === "ECONNRESET" || err.code === "EPIPE")) {
+        return debug("Git response connection error", err.message || err);
+      }
+
+      debug("Git response error", err);
+    });
+
+    repo.handleSmartHttp(req, res, req.blog.id, req.blog);
   }
-
-  req.on("error", function (err) {
-    if (err && (err.code === "ECONNRESET" || err.code === "EPIPE")) {
-      debug("Git request connection error", err.message || err);
-    } else {
-      debug("Git request error", err);
-    }
-
-    endResponse();
-  });
-
-  req.on("aborted", function () {
-    debug("Git request aborted");
-    endResponse();
-  });
-
-  res.on("error", function (err) {
-    if (err && (err.code === "ECONNRESET" || err.code === "EPIPE")) {
-      return debug("Git response connection error", err.message || err);
-    }
-
-    debug("Git response error", err);
-  });
-
-  repo.handleSmartHttp(req, res, req.blog.id, req.blog);
-});
+);
 
 module.exports = { dashboard: dashboard, site: site };

@@ -7,12 +7,12 @@ async function getBreadcrumbs(blogId, dir, cacheID) {
   const breadcrumbs = [];
 
   for (let i = 0; i < names.length; i++) {
-    breadcrumbs.push({ 
+    breadcrumbs.push({
       name: names[i],
-      url: i === 0 ? "/folder/" + names[i] : names[i]
+      url: i === 0 ? "/folder/" + names[i] : names[i],
     });
   }
-  
+
   return breadcrumbs;
 }
 

@@ -45,7 +45,9 @@ function stripePeriodEndAtMs(subscription) {
 function paypalPeriodEndAtMs(paypal) {
   if (!paypal) return null;
 
-  var nextBilling = toMs(paypal.billing_info && paypal.billing_info.next_billing_time);
+  var nextBilling = toMs(
+    paypal.billing_info && paypal.billing_info.next_billing_time
+  );
   if (nextBilling) return nextBilling;
 
   var lastPayment = toMs(
@@ -150,7 +152,8 @@ function cancellationDetails(user, now) {
 
   if (cancellationCandidates.length) {
     cancellationCandidates.sort(function (a, b) {
-      if (a.periodEndedAt && b.periodEndedAt) return b.periodEndedAt - a.periodEndedAt;
+      if (a.periodEndedAt && b.periodEndedAt)
+        return b.periodEndedAt - a.periodEndedAt;
       if (a.periodEndedAt) return -1;
       if (b.periodEndedAt) return 1;
       return 0;

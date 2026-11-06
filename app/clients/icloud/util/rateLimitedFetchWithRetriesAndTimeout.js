@@ -14,8 +14,13 @@ const fetchWithRetriesAndTimeout = async (url, options = {}) => {
   // the timeout and retries cover reading the body: the timer restarts on
   // each chunk, so a stalled body aborts the attempt (rather than hanging the
   // caller after the headers arrived) while a slow but active one completes.
-  const { timeout = 10000, retries = 3, readBody = false, ...fetchOptions } = options;
-    
+  const {
+    timeout = 10000,
+    retries = 3,
+    readBody = false,
+    ...fetchOptions
+  } = options;
+
   for (let attempt = 1; attempt <= retries; attempt++) {
     // Timeout logic
     const controller = new AbortController();
@@ -26,7 +31,9 @@ const fetchWithRetriesAndTimeout = async (url, options = {}) => {
       const response = await fetch(url, { ...fetchOptions, signal });
 
       if (!response.ok) {
-        throw new Error(`HTTP error: ${response.status} - ${response.statusText}`);
+        throw new Error(
+          `HTTP error: ${response.status} - ${response.statusText}`
+        );
       }
 
       if (readBody) {
@@ -49,17 +56,23 @@ const fetchWithRetriesAndTimeout = async (url, options = {}) => {
 
       // Handle timeout or other fetch errors
       if (error.name === "AbortError") {
-        console.error(`Request timed out (attempt ${attempt} of ${retries}): ${url}`);
+        console.error(
+          `Request timed out (attempt ${attempt} of ${retries}): ${url}`
+        );
       } else {
-        console.error(`Request failed: ${url} ${error.message} (attempt ${attempt}/${retries})`);
-        
+        console.error(
+          `Request failed: ${url} ${error.message} (attempt ${attempt}/${retries})`
+        );
+
         if (options && options.headers && options.headers.blogID) {
           console.error(`- blog id: ${options.headers.blogID}`);
         }
 
         if (options && options.headers && options.headers.pathBase64) {
-          console.error(`- path: ${Buffer.from(options.headers.pathBase64, 'base64').toString('utf8')}`);
-        } 
+          console.error(
+            `- path: ${Buffer.from(options.headers.pathBase64, "base64").toString("utf8")}`
+          );
+        }
 
         if (options && options.body) {
           console.error(`- body size: ${options.body.length} bytes`);
@@ -71,18 +84,22 @@ const fetchWithRetriesAndTimeout = async (url, options = {}) => {
         } else {
           console.error(`- abort signal was not triggered`);
         }
-        
       }
 
       // If all retries fail, throw the error
       if (attempt === retries) {
-        throw new Error(`Request failed after ${retries} retries: ${error.message} ${url}`, { cause: error });
+        throw new Error(
+          `Request failed after ${retries} retries: ${error.message} ${url}`,
+          { cause: error }
+        );
       }
     }
   }
 };
 
 // Wrap the fetchWithRetriesAndTimeout function with the rate limiter
-const rateLimitedFetchWithRetriesAndTimeout = limiter.wrap(fetchWithRetriesAndTimeout);
+const rateLimitedFetchWithRetriesAndTimeout = limiter.wrap(
+  fetchWithRetriesAndTimeout
+);
 
 module.exports = rateLimitedFetchWithRetriesAndTimeout;

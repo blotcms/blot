@@ -14,7 +14,9 @@ describe("sync/fix/entry-ghosts", function () {
 
   function folderPostHTML(folder) {
     return (
-      '<section class="multi-file-post" data-folder="' + folder + '">' +
+      '<section class="multi-file-post" data-folder="' +
+      folder +
+      '">' +
       "</section>"
     );
   }
@@ -42,9 +44,12 @@ describe("sync/fix/entry-ghosts", function () {
 
   it("skips deleted entries entirely", function (done) {
     spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
-      iterator({ id: "/foo.txt", path: "/foo.txt", deleted: true }, function () {
-        callback();
-      });
+      iterator(
+        { id: "/foo.txt", path: "/foo.txt", deleted: true },
+        function () {
+          callback();
+        }
+      );
     });
     spyOn(storage, "stat");
     spyOn(Entry, "set");
@@ -75,12 +80,14 @@ describe("sync/fix/entry-ghosts", function () {
       throw missingError();
     });
 
-    spyOn(Entry, "set").and.callFake(function (blogID, path, updates, callback) {
-      expect(blogID).toBe("blog-id");
-      expect(path).toBe("/Foo.txt");
-      expect(updates).toEqual({ path: "/foo.txt" });
-      callback();
-    });
+    spyOn(Entry, "set").and.callFake(
+      function (blogID, path, updates, callback) {
+        expect(blogID).toBe("blog-id");
+        expect(path).toBe("/Foo.txt");
+        expect(updates).toEqual({ path: "/foo.txt" });
+        callback();
+      }
+    );
     spyOn(Entry, "drop");
 
     fixEntryGhosts({ id: "blog-id" }, function (err, report) {

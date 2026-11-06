@@ -31,17 +31,17 @@ module.exports = function (blogID, callback) {
 
         // ensure we only detect entries of the same size
         // if the size is defined and non-zero
-        deletedEntriesOfSameSize = deletedEntries.filter(function (
-          deletedEntry
-        ) {
-          return deletedEntry.size && deletedEntry.size === createdEntry.size;
-        });
+        deletedEntriesOfSameSize = deletedEntries.filter(
+          function (deletedEntry) {
+            return deletedEntry.size && deletedEntry.size === createdEntry.size;
+          }
+        );
 
-        deletedEntriesOfSameTitle = deletedEntries.filter(function (
-          deletedEntry
-        ) {
-          return deletedEntry.title === createdEntry.title;
-        });
+        deletedEntriesOfSameTitle = deletedEntries.filter(
+          function (deletedEntry) {
+            return deletedEntry.title === createdEntry.title;
+          }
+        );
 
         if (deletedEntriesOfSameSize.length === 1) {
           deletedEntry = deletedEntriesOfSameSize.pop();
@@ -98,7 +98,6 @@ module.exports = function (blogID, callback) {
             }
 
             isDraft(blogID, deletedEntry.path, function (err, draft) {
-
               // if the deleted entry was a draft, we reset the created date
               // otherwise we use the old created date of the renamed file
               if (!draft) {
@@ -138,7 +137,7 @@ module.exports = function (blogID, callback) {
               Entry.set(blogID, createdEntry.path, updates, (err) => {
                 if (err) return next(err);
 
-                Entry.set(blogID, deletedEntry.path, { guid: '' }, next);
+                Entry.set(blogID, deletedEntry.path, { guid: "" }, next);
               });
             });
           },

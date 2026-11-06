@@ -26,11 +26,16 @@ describe("email templates", function () {
   // escapes code itself, so an HTML-escaped value shows up as &#x3D; there
   templates.forEach((template) => {
     it(template + " uses {{{triple}}} in its subject and code", function () {
-      const lines = fs.readFileSync(path.join(root, template), "utf-8").split("\n");
+      const lines = fs
+        .readFileSync(path.join(root, template), "utf-8")
+        .split("\n");
       const subject = lines[0];
-      const code = (lines.slice(2).join("\n").match(/```[\s\S]*?```|`[^`\n]*`/g) || []).filter(
-        (span) => ESCAPED_VARIABLE.test(span)
-      );
+      const code = (
+        lines
+          .slice(2)
+          .join("\n")
+          .match(/```[\s\S]*?```|`[^`\n]*`/g) || []
+      ).filter((span) => ESCAPED_VARIABLE.test(span));
 
       expect(ESCAPED_VARIABLE.test(subject))
         .withContext("subject: " + subject)
@@ -40,18 +45,21 @@ describe("email templates", function () {
   });
 
   it("renders SERVER_START without escaping the event", function () {
-    const text = fs.readFileSync(path.join(root, "admin/SERVER_START.txt"), "utf-8");
+    const text = fs.readFileSync(
+      path.join(root, "admin/SERVER_START.txt"),
+      "utf-8"
+    );
     const lines = text.split("\n");
     const locals = {
       container: "blue/node-b",
-      event: "restarted (Exited pid=153 code=null signal=SIGKILL)"
+      event: "restarted (Exited pid=153 code=null signal=SIGKILL)",
     };
 
     expect(Mustache.render(lines[0], locals)).toBe(
       "blue/node-b server restarted (Exited pid=153 code=null signal=SIGKILL)"
     );
-    expect(marked.parse(Mustache.render(lines.slice(2).join("\n"), locals))).toContain(
-      "logs blue/node-b | grep"
-    );
+    expect(
+      marked.parse(Mustache.render(lines.slice(2).join("\n"), locals))
+    ).toContain("logs blue/node-b | grep");
   });
 });

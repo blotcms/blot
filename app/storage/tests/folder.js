@@ -101,8 +101,12 @@ describe("storage/folder", function () {
       it("reads a file, with or without a leading slash", async function () {
         await folder.write(this.blog.id, "/a.txt", "hello");
 
-        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("hello");
-        expect((await folder.read(this.blog.id, "a.txt")).toString()).toEqual("hello");
+        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual(
+          "hello"
+        );
+        expect((await folder.read(this.blog.id, "a.txt")).toString()).toEqual(
+          "hello"
+        );
       });
 
       it("rejects a missing file with NotFoundError and code ENOENT", async function () {
@@ -133,7 +137,9 @@ describe("storage/folder", function () {
 
         for (var path of weird) {
           await folder.write(this.blog.id, path, path);
-          expect((await folder.read(this.blog.id, path)).toString()).toEqual(path);
+          expect((await folder.read(this.blog.id, path)).toString()).toEqual(
+            path
+          );
         }
       });
     });
@@ -142,18 +148,28 @@ describe("storage/folder", function () {
       it("writes with .. inside the folder", async function () {
         await folder.write(this.blog.id, "/../../escaped.txt", "x");
 
-        expect((await folder.read(this.blog.id, "/escaped.txt")).toString()).toEqual("x");
-        expect(await folder.listNames(this.blog.id, "/")).toEqual([{ name: "escaped.txt", isDirectory: false }]);
+        expect(
+          (await folder.read(this.blog.id, "/escaped.txt")).toString()
+        ).toEqual("x");
+        expect(await folder.listNames(this.blog.id, "/")).toEqual([
+          { name: "escaped.txt", isDirectory: false },
+        ]);
       });
 
       it("rejects a blog ID which is a path", async function () {
-        expect(await rejection(folder.read("../other", "/a.txt"))).toBeDefined();
+        expect(
+          await rejection(folder.read("../other", "/a.txt"))
+        ).toBeDefined();
         expect(await rejection(folder.read("", "/a.txt"))).toBeDefined();
-        expect(await rejection(folder.write("a/b", "/a.txt", "x"))).toBeDefined();
+        expect(
+          await rejection(folder.write("a/b", "/a.txt", "x"))
+        ).toBeDefined();
       });
 
       it("rejects a null byte", async function () {
-        expect(await rejection(folder.read(this.blog.id, "/a\0b"))).toBeDefined();
+        expect(
+          await rejection(folder.read(this.blog.id, "/a\0b"))
+        ).toBeDefined();
       });
     });
 
@@ -161,13 +177,28 @@ describe("storage/folder", function () {
       it("streams a file and a byte range", async function () {
         await folder.write(this.blog.id, "/a.txt", "0123456789");
 
-        expect(await slurp(folder.createReadStream(this.blog.id, "/a.txt"))).toEqual("0123456789");
-        expect(await slurp(folder.createReadStream(this.blog.id, "/a.txt", { start: 2, end: 5 }))).toEqual("2345");
-        expect(await slurp(folder.createReadStream(this.blog.id, "/a.txt", { start: 7 }))).toEqual("789");
+        expect(
+          await slurp(folder.createReadStream(this.blog.id, "/a.txt"))
+        ).toEqual("0123456789");
+        expect(
+          await slurp(
+            folder.createReadStream(this.blog.id, "/a.txt", {
+              start: 2,
+              end: 5,
+            })
+          )
+        ).toEqual("2345");
+        expect(
+          await slurp(
+            folder.createReadStream(this.blog.id, "/a.txt", { start: 7 })
+          )
+        ).toEqual("789");
       });
 
       it("emits NotFoundError for a missing file", async function () {
-        var err = await streamError(folder.createReadStream(this.blog.id, "/nope.txt"));
+        var err = await streamError(
+          folder.createReadStream(this.blog.id, "/nope.txt")
+        );
 
         expect(err instanceof folder.NotFoundError).toBe(true);
         expect(err.code).toEqual("ENOENT");
@@ -176,7 +207,12 @@ describe("storage/folder", function () {
       it("emits an invalid range as an error", async function () {
         await folder.write(this.blog.id, "/range.txt", "0123456789");
 
-        var err = await streamError(folder.createReadStream(this.blog.id, "/range.txt", { start: 2, end: 1 }));
+        var err = await streamError(
+          folder.createReadStream(this.blog.id, "/range.txt", {
+            start: 2,
+            end: 1,
+          })
+        );
 
         expect(err.message).not.toEqual("no error");
       });
@@ -186,16 +222,25 @@ describe("storage/folder", function () {
       it("rejects when a stream fails before writing starts", async function () {
         var stream = fs.createReadStream(join(outside, "missing.txt"));
 
-        expect((await rejection(folder.write(this.blog.id, "/early.txt", stream))).code).toEqual("ENOENT");
+        expect(
+          (await rejection(folder.write(this.blog.id, "/early.txt", stream)))
+            .code
+        ).toEqual("ENOENT");
         expect(await folder.exists(this.blog.id, "/early.txt")).toBe(false);
       });
 
       it("writes a stream to a name near the filesystem's limit", async function () {
         var name = "/" + "a".repeat(250) + ".txt";
 
-        await folder.write(this.blog.id, name, Readable.from([Buffer.from("long")]));
+        await folder.write(
+          this.blog.id,
+          name,
+          Readable.from([Buffer.from("long")])
+        );
 
-        expect((await folder.read(this.blog.id, name)).toString()).toEqual("long");
+        expect((await folder.read(this.blog.id, name)).toString()).toEqual(
+          "long"
+        );
       });
 
       it("keeps the existing file when a stream fails part way", async function () {
@@ -208,27 +253,51 @@ describe("storage/folder", function () {
           },
         });
 
-        expect(await rejection(folder.write(this.blog.id, "/keep.txt", stream))).toBeDefined();
-        expect((await folder.read(this.blog.id, "/keep.txt")).toString()).toEqual("old");
-        expect(await folder.listNames(this.blog.id, "/")).toEqual([{ name: "keep.txt", isDirectory: false }]);
+        expect(
+          await rejection(folder.write(this.blog.id, "/keep.txt", stream))
+        ).toBeDefined();
+        expect(
+          (await folder.read(this.blog.id, "/keep.txt")).toString()
+        ).toEqual("old");
+        expect(await folder.listNames(this.blog.id, "/")).toEqual([
+          { name: "keep.txt", isDirectory: false },
+        ]);
       });
 
       it("writes a buffer, a string and a stream, creating parents", async function () {
-        await folder.write(this.blog.id, "/a/b/buffer.txt", Buffer.from("buffer"));
+        await folder.write(
+          this.blog.id,
+          "/a/b/buffer.txt",
+          Buffer.from("buffer")
+        );
         await folder.write(this.blog.id, "/a/b/string.txt", "string");
-        await folder.write(this.blog.id, "/a/b/stream.txt", Readable.from([Buffer.from("str"), Buffer.from("eam")]));
+        await folder.write(
+          this.blog.id,
+          "/a/b/stream.txt",
+          Readable.from([Buffer.from("str"), Buffer.from("eam")])
+        );
 
-        expect((await folder.read(this.blog.id, "/a/b/buffer.txt")).toString()).toEqual("buffer");
-        expect((await folder.read(this.blog.id, "/a/b/string.txt")).toString()).toEqual("string");
-        expect((await folder.read(this.blog.id, "/a/b/stream.txt")).toString()).toEqual("stream");
-        expect((await folder.stat(this.blog.id, "/a/b")).isDirectory).toBe(true);
+        expect(
+          (await folder.read(this.blog.id, "/a/b/buffer.txt")).toString()
+        ).toEqual("buffer");
+        expect(
+          (await folder.read(this.blog.id, "/a/b/string.txt")).toString()
+        ).toEqual("string");
+        expect(
+          (await folder.read(this.blog.id, "/a/b/stream.txt")).toString()
+        ).toEqual("stream");
+        expect((await folder.stat(this.blog.id, "/a/b")).isDirectory).toBe(
+          true
+        );
       });
 
       it("replaces an existing file", async function () {
         await folder.write(this.blog.id, "/a.txt", "one");
         await folder.write(this.blog.id, "/a.txt", "two");
 
-        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("two");
+        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual(
+          "two"
+        );
         expect((await folder.stat(this.blog.id, "/a.txt")).size).toEqual(3);
       });
 
@@ -238,7 +307,9 @@ describe("storage/folder", function () {
 
         await folder.writeFrom(this.blog.id, "/x/copy.txt", source);
 
-        expect((await folder.read(this.blog.id, "/x/copy.txt")).toString()).toEqual("copied");
+        expect(
+          (await folder.read(this.blog.id, "/x/copy.txt")).toString()
+        ).toEqual("copied");
         expect(await fs.pathExists(source)).toBe(true);
       });
 
@@ -247,28 +318,40 @@ describe("storage/folder", function () {
         await fs.outputFile(source, "moved");
         await folder.write(this.blog.id, "/x/move.txt", "old");
 
-        await folder.writeFrom(this.blog.id, "/x/move.txt", source, { move: true });
+        await folder.writeFrom(this.blog.id, "/x/move.txt", source, {
+          move: true,
+        });
 
-        expect((await folder.read(this.blog.id, "/x/move.txt")).toString()).toEqual("moved");
+        expect(
+          (await folder.read(this.blog.id, "/x/move.txt")).toString()
+        ).toEqual("moved");
         expect(await fs.pathExists(source)).toBe(false);
       });
 
       it("rejects copying in a missing local file with ENOENT", async function () {
-        var err = await rejection(folder.writeFrom(this.blog.id, "/x.txt", join(outside, "missing.txt")));
+        var err = await rejection(
+          folder.writeFrom(this.blog.id, "/x.txt", join(outside, "missing.txt"))
+        );
 
         expect(err.code).toEqual("ENOENT");
         expect(await folder.exists(this.blog.id, "/x.txt")).toBe(false);
       });
 
       it("refuses to write the folder itself", async function () {
-        expect(await rejection(folder.write(this.blog.id, "/", "x"))).toBeDefined();
+        expect(
+          await rejection(folder.write(this.blog.id, "/", "x"))
+        ).toBeDefined();
       });
 
       it("refuses to write below a file", async function () {
         await folder.write(this.blog.id, "/f", "file");
 
-        expect(await rejection(folder.write(this.blog.id, "/f/g.txt", "x"))).toBeDefined();
-        expect((await folder.read(this.blog.id, "/f")).toString()).toEqual("file");
+        expect(
+          await rejection(folder.write(this.blog.id, "/f/g.txt", "x"))
+        ).toBeDefined();
+        expect((await folder.read(this.blog.id, "/f")).toString()).toEqual(
+          "file"
+        );
       });
     });
 
@@ -279,7 +362,9 @@ describe("storage/folder", function () {
         await fs.outputFile(place, "from a tool");
         await folder.commit(this.blog.id, "/tool/out.txt");
 
-        expect((await folder.read(this.blog.id, "/tool/out.txt")).toString()).toEqual("from a tool");
+        expect(
+          (await folder.read(this.blog.id, "/tool/out.txt")).toString()
+        ).toEqual("from a tool");
       });
 
       it("commits nothing when the tool wrote nothing", async function () {
@@ -296,7 +381,9 @@ describe("storage/folder", function () {
         await folder.remove(this.blog.id, "/former-directory/sub/file.txt");
         await folder.rmdir(this.blog.id, "/former-directory/sub");
 
-        expect(await folder.exists(this.blog.id, "/former-directory")).toBe(true);
+        expect(await folder.exists(this.blog.id, "/former-directory")).toBe(
+          true
+        );
       });
     });
 
@@ -314,11 +401,18 @@ describe("storage/folder", function () {
         await folder.ensureLocal(this.blog.id, "/a.txt");
         await folder.write(this.blog.id, "/a.txt", "two");
 
-        expect(await fs.readFile(await folder.ensureLocal(this.blog.id, "/a.txt"), "utf8")).toEqual("two");
+        expect(
+          await fs.readFile(
+            await folder.ensureLocal(this.blog.id, "/a.txt"),
+            "utf8"
+          )
+        ).toEqual("two");
       });
 
       it("rejects a missing file with ENOENT", async function () {
-        var err = await rejection(folder.ensureLocal(this.blog.id, "/nope.txt"));
+        var err = await rejection(
+          folder.ensureLocal(this.blog.id, "/nope.txt")
+        );
 
         expect(err instanceof folder.NotFoundError).toBe(true);
       });
@@ -329,10 +423,14 @@ describe("storage/folder", function () {
         await folder.write(this.blog.id, "/a.txt", "held");
 
         var seen;
-        var result = await folder.withLocal(this.blog.id, "/a.txt", async function (local) {
-          seen = await fs.readFile(local, "utf8");
-          return "result";
-        });
+        var result = await folder.withLocal(
+          this.blog.id,
+          "/a.txt",
+          async function (local) {
+            seen = await fs.readFile(local, "utf8");
+            return "result";
+          }
+        );
 
         expect(seen).toEqual("held");
         expect(result).toEqual("result");
@@ -364,7 +462,9 @@ describe("storage/folder", function () {
 
       it("rejects a missing file without calling fn", async function () {
         var fn = jasmine.createSpy("fn");
-        var err = await rejection(folder.withLocal(this.blog.id, "/nope.txt", fn));
+        var err = await rejection(
+          folder.withLocal(this.blog.id, "/nope.txt", fn)
+        );
 
         expect(err instanceof folder.NotFoundError).toBe(true);
         expect(fn).not.toHaveBeenCalled();
@@ -375,8 +475,12 @@ describe("storage/folder", function () {
       it("makes nested directories", async function () {
         await folder.mkdir(this.blog.id, "/a/b/c");
 
-        expect((await folder.stat(this.blog.id, "/a/b/c")).isDirectory).toBe(true);
-        expect((await folder.stat(this.blog.id, "/a/b")).isDirectory).toBe(true);
+        expect((await folder.stat(this.blog.id, "/a/b/c")).isDirectory).toBe(
+          true
+        );
+        expect((await folder.stat(this.blog.id, "/a/b")).isDirectory).toBe(
+          true
+        );
       });
 
       it("mkdir of an existing directory is fine", async function () {
@@ -384,7 +488,9 @@ describe("storage/folder", function () {
         await folder.mkdir(this.blog.id, "/a");
         await folder.mkdir(this.blog.id, "/a");
 
-        expect(await folder.listNames(this.blog.id, "/a")).toEqual([{ name: "f.txt", isDirectory: false }]);
+        expect(await folder.listNames(this.blog.id, "/a")).toEqual([
+          { name: "f.txt", isDirectory: false },
+        ]);
       });
 
       it("rmdir removes a directory and everything in it", async function () {
@@ -401,7 +507,9 @@ describe("storage/folder", function () {
         await folder.rmdir(this.blog.id, "/nope");
         await folder.write(this.blog.id, "/f.txt", "x");
 
-        expect((await rejection(folder.rmdir(this.blog.id, "/f.txt"))).code).toEqual("ENOTDIR");
+        expect(
+          (await rejection(folder.rmdir(this.blog.id, "/f.txt"))).code
+        ).toEqual("ENOTDIR");
         expect(await folder.exists(this.blog.id, "/f.txt")).toBe(true);
       });
 
@@ -430,7 +538,9 @@ describe("storage/folder", function () {
         await folder.write(this.blog.id, "/f.txt", "x");
 
         expect(await rejection(folder.remove(this.blog.id, "/"))).toBeDefined();
-        expect(await rejection(folder.rmdir(this.blog.id, "/.."))).toBeDefined();
+        expect(
+          await rejection(folder.rmdir(this.blog.id, "/.."))
+        ).toBeDefined();
         expect(await folder.exists(this.blog.id, "/f.txt")).toBe(true);
       });
 
@@ -440,7 +550,9 @@ describe("storage/folder", function () {
         await folder.move(this.blog.id, "/a.txt", "/new/dir/b.txt");
 
         expect(await folder.exists(this.blog.id, "/a.txt")).toBe(false);
-        expect((await folder.read(this.blog.id, "/new/dir/b.txt")).toString()).toEqual("x");
+        expect(
+          (await folder.read(this.blog.id, "/new/dir/b.txt")).toString()
+        ).toEqual("x");
       });
 
       it("moves a directory over a directory, and a file over a file", async function () {
@@ -452,10 +564,16 @@ describe("storage/folder", function () {
         await folder.move(this.blog.id, "/d", "/target");
         await folder.move(this.blog.id, "/f.txt", "/g.txt");
 
-        expect((await folder.read(this.blog.id, "/target/1.txt")).toString()).toEqual("1");
-        expect(await folder.exists(this.blog.id, "/target/old.txt")).toBe(false);
+        expect(
+          (await folder.read(this.blog.id, "/target/1.txt")).toString()
+        ).toEqual("1");
+        expect(await folder.exists(this.blog.id, "/target/old.txt")).toBe(
+          false
+        );
         expect(await folder.exists(this.blog.id, "/d")).toBe(false);
-        expect((await folder.read(this.blog.id, "/g.txt")).toString()).toEqual("new");
+        expect((await folder.read(this.blog.id, "/g.txt")).toString()).toEqual(
+          "new"
+        );
       });
 
       it("moves a directory with nested and empty directories in it", async function () {
@@ -464,12 +582,9 @@ describe("storage/folder", function () {
 
         await folder.move(this.blog.id, "/d", "/e");
 
-        expect(await collect(folder.walk(this.blog.id, "/", { directories: true }))).toEqual([
-          "/e",
-          "/e/a",
-          "/e/a/1.txt",
-          "/e/empty",
-        ]);
+        expect(
+          await collect(folder.walk(this.blog.id, "/", { directories: true }))
+        ).toEqual(["/e", "/e/a", "/e/a/1.txt", "/e/empty"]);
       });
 
       it("renames a file to a different case", async function () {
@@ -477,18 +592,28 @@ describe("storage/folder", function () {
 
         await folder.move(this.blog.id, "/Photo.JPG", "/photo.jpg");
 
-        expect(await folder.listNames(this.blog.id, "/")).toEqual([{ name: "photo.jpg", isDirectory: false }]);
+        expect(await folder.listNames(this.blog.id, "/")).toEqual([
+          { name: "photo.jpg", isDirectory: false },
+        ]);
       });
 
       it("refuses to move onto its own ancestor, losing nothing", async function () {
         await folder.write(this.blog.id, "/a/b/c.txt", "c");
         await folder.write(this.blog.id, "/a/d.txt", "d");
 
-        expect((await rejection(folder.move(this.blog.id, "/a/b", "/a"))).code).toEqual("EINVAL");
-        expect((await rejection(folder.move(this.blog.id, "/a/b/c.txt", "/a"))).code).toEqual("EINVAL");
+        expect(
+          (await rejection(folder.move(this.blog.id, "/a/b", "/a"))).code
+        ).toEqual("EINVAL");
+        expect(
+          (await rejection(folder.move(this.blog.id, "/a/b/c.txt", "/a"))).code
+        ).toEqual("EINVAL");
 
-        expect((await folder.read(this.blog.id, "/a/b/c.txt")).toString()).toEqual("c");
-        expect((await folder.read(this.blog.id, "/a/d.txt")).toString()).toEqual("d");
+        expect(
+          (await folder.read(this.blog.id, "/a/b/c.txt")).toString()
+        ).toEqual("c");
+        expect(
+          (await folder.read(this.blog.id, "/a/d.txt")).toString()
+        ).toEqual("d");
       });
 
       it("rejects moving a missing path with ENOENT", async function () {
@@ -506,7 +631,11 @@ describe("storage/folder", function () {
 
         var stat = await folder.stat(this.blog.id, "/a.txt");
 
-        expect(Object.keys(stat).sort()).toEqual(["isDirectory", "modified", "size"]);
+        expect(Object.keys(stat).sort()).toEqual([
+          "isDirectory",
+          "modified",
+          "size",
+        ]);
         expect(stat.isDirectory).toBe(false);
         expect(stat.size).toEqual(5);
         // Filesystems may round the time down a little
@@ -534,7 +663,9 @@ describe("storage/folder", function () {
         await fs.outputFile(join(outside, "empty.txt"), "");
 
         var big = await folder.stat(this.blog.id, "/big.bin", { hash: true });
-        var empty = await folder.stat(this.blog.id, "/empty.txt", { hash: true });
+        var empty = await folder.stat(this.blog.id, "/empty.txt", {
+          hash: true,
+        });
 
         expect(big.hash).toEqual(await hashFile(join(outside, "big.bin")));
         expect(empty.hash).toEqual(await hashFile(join(outside, "empty.txt")));
@@ -549,18 +680,24 @@ describe("storage/folder", function () {
         await folder.mkdir(this.blog.id, "/d");
 
         // Whichever backend holds the file, the same bytes give the same hash
-        expect((await folder.stat(this.blog.id, "/a.txt", { sha1: true })).sha1).toEqual(
-          crypto.createHash("sha1").update("hello").digest("hex")
-        );
-        expect((await folder.stat(this.blog.id, "/empty.txt", { sha1: true })).sha1).toEqual(
-          crypto.createHash("sha1").update("").digest("hex")
-        );
-        expect((await folder.stat(this.blog.id, "/a.txt")).sha1).toBeUndefined();
-        expect((await folder.stat(this.blog.id, "/d", { sha1: true })).sha1).toBeUndefined();
+        expect(
+          (await folder.stat(this.blog.id, "/a.txt", { sha1: true })).sha1
+        ).toEqual(crypto.createHash("sha1").update("hello").digest("hex"));
+        expect(
+          (await folder.stat(this.blog.id, "/empty.txt", { sha1: true })).sha1
+        ).toEqual(crypto.createHash("sha1").update("").digest("hex"));
+        expect(
+          (await folder.stat(this.blog.id, "/a.txt")).sha1
+        ).toBeUndefined();
+        expect(
+          (await folder.stat(this.blog.id, "/d", { sha1: true })).sha1
+        ).toBeUndefined();
       });
 
       it("rejects a missing file with ENOENT and exists is false", async function () {
-        var err = await rejection(folder.stat(this.blog.id, "/nope.txt", { hash: true }));
+        var err = await rejection(
+          folder.stat(this.blog.id, "/nope.txt", { hash: true })
+        );
 
         expect(err instanceof folder.NotFoundError).toBe(true);
         expect(err.code).toEqual("ENOENT");
@@ -598,11 +735,18 @@ describe("storage/folder", function () {
       });
 
       it("paginates across a cursor boundary without repeats or gaps", async function () {
-        for (var i = 0; i < 7; i++) await folder.write(this.blog.id, "/d/f" + i + ".txt", "x");
+        for (var i = 0; i < 7; i++)
+          await folder.write(this.blog.id, "/d/f" + i + ".txt", "x");
 
         var first = await folder.list(this.blog.id, "/d", { limit: 3 });
-        var second = await folder.list(this.blog.id, "/d", { limit: 3, cursor: first.cursor });
-        var third = await folder.list(this.blog.id, "/d", { limit: 3, cursor: second.cursor });
+        var second = await folder.list(this.blog.id, "/d", {
+          limit: 3,
+          cursor: first.cursor,
+        });
+        var third = await folder.list(this.blog.id, "/d", {
+          limit: 3,
+          cursor: second.cursor,
+        });
 
         expect(names(first)).toEqual(["f0.txt", "f1.txt", "f2.txt"]);
         expect(typeof first.cursor).toEqual("string");
@@ -622,19 +766,24 @@ describe("storage/folder", function () {
       });
 
       it("keeps its place when entries change between pages", async function () {
-        for (var name of ["a", "b", "c", "d"]) await folder.write(this.blog.id, "/d/" + name, "x");
+        for (var name of ["a", "b", "c", "d"])
+          await folder.write(this.blog.id, "/d/" + name, "x");
 
         var first = await folder.list(this.blog.id, "/d", { limit: 2 });
         await folder.remove(this.blog.id, "/d/a");
         await folder.remove(this.blog.id, "/d/b");
         await folder.write(this.blog.id, "/d/bb", "x");
-        var second = await folder.list(this.blog.id, "/d", { limit: 2, cursor: first.cursor });
+        var second = await folder.list(this.blog.id, "/d", {
+          limit: 2,
+          cursor: first.cursor,
+        });
 
         expect(names(second)).toEqual(["bb", "c"]);
       });
 
       it("sorts names with non-ASCII and control characters", async function () {
-        for (var name of ["é", "z", "a b", "\tx", "日本"]) await folder.write(this.blog.id, "/d/" + name, "x");
+        for (var name of ["é", "z", "a b", "\tx", "日本"])
+          await folder.write(this.blog.id, "/d/" + name, "x");
 
         var page = await folder.list(this.blog.id, "/d");
 
@@ -642,19 +791,31 @@ describe("storage/folder", function () {
       });
 
       it("rejects a missing directory with ENOENT, a bad cursor and a bad limit", async function () {
-        expect((await rejection(folder.list(this.blog.id, "/nope"))).code).toEqual("ENOENT");
-        expect((await rejection(folder.list(this.blog.id, "/nope"))) instanceof folder.NotFoundError).toBe(true);
+        expect(
+          (await rejection(folder.list(this.blog.id, "/nope"))).code
+        ).toEqual("ENOENT");
+        expect(
+          (await rejection(folder.list(this.blog.id, "/nope"))) instanceof
+            folder.NotFoundError
+        ).toBe(true);
 
         await folder.mkdir(this.blog.id, "/d");
 
-        expect(await rejection(folder.list(this.blog.id, "/d", { cursor: "!!" }))).toBeDefined();
-        expect(await rejection(folder.list(this.blog.id, "/d", { limit: 0 }))).toBeDefined();
+        expect(
+          await rejection(folder.list(this.blog.id, "/d", { cursor: "!!" }))
+        ).toBeDefined();
+        expect(
+          await rejection(folder.list(this.blog.id, "/d", { limit: 0 }))
+        ).toBeDefined();
       });
 
       it("lists an empty directory", async function () {
         await folder.mkdir(this.blog.id, "/d");
 
-        expect(await folder.list(this.blog.id, "/d")).toEqual({ entries: [], cursor: null });
+        expect(await folder.list(this.blog.id, "/d")).toEqual({
+          entries: [],
+          cursor: null,
+        });
       });
 
       it("listNames gives sorted names and kinds", async function () {
@@ -676,7 +837,8 @@ describe("storage/folder", function () {
       });
 
       it("listAll collects every page", async function () {
-        for (var i = 0; i < 5; i++) await folder.write(this.blog.id, "/d/" + i, "x");
+        for (var i = 0; i < 5; i++)
+          await folder.write(this.blog.id, "/d/" + i, "x");
 
         var all = await folder.listAll(this.blog.id, "/d");
 
@@ -709,25 +871,28 @@ describe("storage/folder", function () {
         await folder.write(this.blog.id, "/a b.txt", "x");
         await folder.write(this.blog.id, "/a/1.txt", "x");
 
-        expect(await collect(folder.walk(this.blog.id, "/"))).toEqual(["/a/1.txt", "/a b.txt"]);
+        expect(await collect(folder.walk(this.blog.id, "/"))).toEqual([
+          "/a/1.txt",
+          "/a b.txt",
+        ]);
       });
 
       it("yields directories before their contents when asked", async function () {
         await folder.write(this.blog.id, "/a/1.txt", "x");
         await folder.mkdir(this.blog.id, "/empty");
 
-        expect(await collect(folder.walk(this.blog.id, "/", { directories: true }))).toEqual([
-          "/a",
-          "/a/1.txt",
-          "/empty",
-        ]);
+        expect(
+          await collect(folder.walk(this.blog.id, "/", { directories: true }))
+        ).toEqual(["/a", "/a/1.txt", "/empty"]);
       });
 
       it("walks a subdirectory, with paths relative to the blog folder", async function () {
         await folder.write(this.blog.id, "/a/b/1.txt", "x");
         await folder.write(this.blog.id, "/z.txt", "x");
 
-        expect(await collect(folder.walk(this.blog.id, "/a"))).toEqual(["/a/b/1.txt"]);
+        expect(await collect(folder.walk(this.blog.id, "/a"))).toEqual([
+          "/a/b/1.txt",
+        ]);
       });
 
       it("yields nothing for an empty folder and rejects a missing directory", async function () {
@@ -739,7 +904,8 @@ describe("storage/folder", function () {
       });
 
       it("can be stopped early", async function () {
-        for (var i = 0; i < 5; i++) await folder.write(this.blog.id, "/d/" + i, "x");
+        for (var i = 0; i < 5; i++)
+          await folder.write(this.blog.id, "/d/" + i, "x");
 
         for await (var path of folder.walk(this.blog.id, "/")) {
           expect(path).toEqual("/d/0");
@@ -752,17 +918,33 @@ describe("storage/folder", function () {
       it("finds the stored spelling of every segment", async function () {
         await folder.write(this.blog.id, "/Templates/Style.CSS", "x");
 
-        expect(await folder.resolveCaseInsensitive(this.blog.id, "/templates/style.css")).toEqual("/Templates/Style.CSS");
-        expect(await folder.resolveCaseInsensitive(this.blog.id, "TEMPLATES/STYLE.CSS")).toEqual("/Templates/Style.CSS");
-        expect(await folder.resolveCaseInsensitive(this.blog.id, "/")).toEqual("/");
+        expect(
+          await folder.resolveCaseInsensitive(
+            this.blog.id,
+            "/templates/style.css"
+          )
+        ).toEqual("/Templates/Style.CSS");
+        expect(
+          await folder.resolveCaseInsensitive(
+            this.blog.id,
+            "TEMPLATES/STYLE.CSS"
+          )
+        ).toEqual("/Templates/Style.CSS");
+        expect(await folder.resolveCaseInsensitive(this.blog.id, "/")).toEqual(
+          "/"
+        );
       });
 
       it("prefers the exact name when case-only siblings exist", async function () {
         await folder.write(this.blog.id, "/Templates/a.txt", "upper");
         await folder.write(this.blog.id, "/templates/a.txt", "lower");
 
-        expect(await folder.resolveCaseInsensitive(this.blog.id, "/Templates/a.txt")).toEqual("/Templates/a.txt");
-        expect(await folder.resolveCaseInsensitive(this.blog.id, "/templates/a.txt")).toEqual("/templates/a.txt");
+        expect(
+          await folder.resolveCaseInsensitive(this.blog.id, "/Templates/a.txt")
+        ).toEqual("/Templates/a.txt");
+        expect(
+          await folder.resolveCaseInsensitive(this.blog.id, "/templates/a.txt")
+        ).toEqual("/templates/a.txt");
       });
 
       it("picks one of the case-only siblings when none is exact", async function () {
@@ -779,20 +961,28 @@ describe("storage/folder", function () {
         await folder.write(this.blog.id, "/templates/a.txt", "lower");
         await folder.remove(this.blog.id, "/Templates");
 
-        expect(await folder.resolveCaseInsensitive(this.blog.id, "/TEMPLATES/A.TXT")).toEqual("/templates/a.txt");
+        expect(
+          await folder.resolveCaseInsensitive(this.blog.id, "/TEMPLATES/A.TXT")
+        ).toEqual("/templates/a.txt");
       });
 
       it("matches across Unicode normalisation", async function () {
         await folder.write(this.blog.id, "/Café.txt", "x");
 
-        expect(await folder.resolveCaseInsensitive(this.blog.id, "/café.TXT")).toEqual("/Café.txt");
+        expect(
+          await folder.resolveCaseInsensitive(this.blog.id, "/café.TXT")
+        ).toEqual("/Café.txt");
       });
 
       it("rejects a missing path with ENOENT, and a path below a file", async function () {
         await folder.write(this.blog.id, "/a.txt", "x");
 
-        var missing = await rejection(folder.resolveCaseInsensitive(this.blog.id, "/b.txt"));
-        var below = await rejection(folder.resolveCaseInsensitive(this.blog.id, "/A.TXT/b"));
+        var missing = await rejection(
+          folder.resolveCaseInsensitive(this.blog.id, "/b.txt")
+        );
+        var below = await rejection(
+          folder.resolveCaseInsensitive(this.blog.id, "/A.TXT/b")
+        );
 
         expect(missing instanceof folder.NotFoundError).toBe(true);
         expect(missing.code).toEqual("ENOENT");
@@ -802,7 +992,9 @@ describe("storage/folder", function () {
       it("keeps .. inside the folder", async function () {
         await folder.write(this.blog.id, "/a.txt", "x");
 
-        expect(await folder.resolveCaseInsensitive(this.blog.id, "/../../A.TXT")).toEqual("/a.txt");
+        expect(
+          await folder.resolveCaseInsensitive(this.blog.id, "/../../A.TXT")
+        ).toEqual("/a.txt");
       });
     });
 
@@ -829,14 +1021,20 @@ describe("storage/folder", function () {
 
       it("serves a file with validators and caching headers", async function () {
         await folder.write(state.blogID, "/a.txt", "hello");
-        state.options = { maxAge: "1y", immutable: true, headers: { "Content-Type": "text/x-test" } };
+        state.options = {
+          maxAge: "1y",
+          immutable: true,
+          headers: { "Content-Type": "text/x-test" },
+        };
 
         var res = await fetch(state.origin + "/a.txt");
 
         expect(res.status).toEqual(200);
         expect(await res.text()).toEqual("hello");
         expect(res.headers.get("content-type")).toEqual("text/x-test");
-        expect(res.headers.get("cache-control")).toEqual("public, max-age=31536000, immutable");
+        expect(res.headers.get("cache-control")).toEqual(
+          "public, max-age=31536000, immutable"
+        );
         expect(res.headers.get("accept-ranges")).toEqual("bytes");
         expect(res.headers.get("etag")).toBeTruthy();
         expect(res.headers.get("last-modified")).toBeTruthy();
@@ -845,13 +1043,17 @@ describe("storage/folder", function () {
       it("answers a Range request with 206, and an unsatisfiable one with 416", async function () {
         await folder.write(state.blogID, "/a.txt", "0123456789");
 
-        var partial = await fetch(state.origin + "/a.txt", { headers: { Range: "bytes=2-4" } });
+        var partial = await fetch(state.origin + "/a.txt", {
+          headers: { Range: "bytes=2-4" },
+        });
 
         expect(partial.status).toEqual(206);
         expect(await partial.text()).toEqual("234");
         expect(partial.headers.get("content-range")).toEqual("bytes 2-4/10");
 
-        var bad = await fetch(state.origin + "/a.txt", { headers: { Range: "bytes=50-60" } });
+        var bad = await fetch(state.origin + "/a.txt", {
+          headers: { Range: "bytes=50-60" },
+        });
 
         expect(bad.status).toEqual(416);
       });
@@ -870,17 +1072,23 @@ describe("storage/folder", function () {
       it("serves dotfiles unless told to ignore them", async function () {
         await folder.write(state.blogID, "/.well-known/x.txt", "dot");
 
-        expect((await fetch(state.origin + "/.well-known/x.txt")).status).toEqual(200);
+        expect(
+          (await fetch(state.origin + "/.well-known/x.txt")).status
+        ).toEqual(200);
 
         state.options = { dotfiles: "ignore" };
 
-        expect((await fetch(state.origin + "/.well-known/x.txt")).status).toEqual(404);
+        expect(
+          (await fetch(state.origin + "/.well-known/x.txt")).status
+        ).toEqual(404);
       });
 
       it("serves a directory's index.html for a trailing slash", async function () {
         await folder.write(state.blogID, "/dir/index.html", "<p>index</p>");
 
-        expect(await (await fetch(state.origin + "/dir/")).text()).toEqual("<p>index</p>");
+        expect(await (await fetch(state.origin + "/dir/")).text()).toEqual(
+          "<p>index</p>"
+        );
         expect((await fetch(state.origin + "/dir")).status).toEqual(404);
       });
 
@@ -889,7 +1097,9 @@ describe("storage/folder", function () {
       });
 
       it("keeps .. inside the folder", async function () {
-        var err = await rejection(folder.serve({ headers: {} }, {}, state.blogID, "/../escaped.txt"));
+        var err = await rejection(
+          folder.serve({ headers: {} }, {}, state.blogID, "/../escaped.txt")
+        );
 
         expect(err instanceof folder.NotFoundError).toBe(true);
       });
@@ -913,7 +1123,8 @@ describe("storage/folder", function () {
 
     async function keys(blogID) {
       var found = [];
-      for await (var entry of s3.listEntries(backend.root(blogID))) found.push(entry.key);
+      for await (var entry of s3.listEntries(backend.root(blogID)))
+        found.push(entry.key);
       return found.sort();
     }
 
@@ -921,7 +1132,9 @@ describe("storage/folder", function () {
       it("keeps a file at {blogID}/folder/{path} and records it", async function () {
         await folder.write(this.blog.id, "/a/b.txt", "hello");
 
-        expect(await keys(this.blog.id)).toEqual([this.blog.id + "/folder/a/b.txt"]);
+        expect(await keys(this.blog.id)).toEqual([
+          this.blog.id + "/folder/a/b.txt",
+        ]);
 
         var record = await File.get(this.blog.id, "/a/b.txt");
 
@@ -940,7 +1153,10 @@ describe("storage/folder", function () {
         await folder.write(this.blog.id, "/a/b.txt", "hello");
         await folder.mkdir(this.blog.id, "/c");
 
-        expect(await keys(this.blog.id)).toEqual([this.blog.id + "/folder/a/b.txt", this.blog.id + "/folder/c/"]);
+        expect(await keys(this.blog.id)).toEqual([
+          this.blog.id + "/folder/a/b.txt",
+          this.blog.id + "/folder/c/",
+        ]);
 
         await folder.removeAll(this.blog.id);
 
@@ -953,17 +1169,27 @@ describe("storage/folder", function () {
         var source = join(outside, "source.txt");
         await fs.outputFile(source, "from disk");
 
-        await folder.write(this.blog.id, "/s.txt", Readable.from([Buffer.from("str"), Buffer.from("eam")]));
+        await folder.write(
+          this.blog.id,
+          "/s.txt",
+          Readable.from([Buffer.from("str"), Buffer.from("eam")])
+        );
         await folder.writeFrom(this.blog.id, "/c.txt", source);
 
-        expect((await File.get(this.blog.id, "/s.txt")).sha1).toEqual(sha1("stream"));
-        expect((await File.get(this.blog.id, "/c.txt")).sha1).toEqual(sha1("from disk"));
+        expect((await File.get(this.blog.id, "/s.txt")).sha1).toEqual(
+          sha1("stream")
+        );
+        expect((await File.get(this.blog.id, "/c.txt")).sha1).toEqual(
+          sha1("from disk")
+        );
       });
 
       it("makes a marker object for an explicit directory, and removes it with the directory", async function () {
         await folder.mkdir(this.blog.id, "/d/e");
 
-        expect(await keys(this.blog.id)).toEqual([this.blog.id + "/folder/d/e/"]);
+        expect(await keys(this.blog.id)).toEqual([
+          this.blog.id + "/folder/d/e/",
+        ]);
 
         await folder.write(this.blog.id, "/d/e/f.txt", "x");
         await folder.rmdir(this.blog.id, "/d");
@@ -976,7 +1202,9 @@ describe("storage/folder", function () {
       it("leaves a marker when a remove empties a directory", async function () {
         await folder.write(this.blog.id, "/d/f.txt", "x");
 
-        expect(await keys(this.blog.id)).toEqual([this.blog.id + "/folder/d/f.txt"]);
+        expect(await keys(this.blog.id)).toEqual([
+          this.blog.id + "/folder/d/f.txt",
+        ]);
 
         await folder.remove(this.blog.id, "/d/f.txt");
 
@@ -990,9 +1218,13 @@ describe("storage/folder", function () {
         await fs.outputFile(source, "old");
         await fs.utimes(source, then, then);
 
-        await folder.writeFrom(this.blog.id, "/old.txt", source, { move: true });
+        await folder.writeFrom(this.blog.id, "/old.txt", source, {
+          move: true,
+        });
 
-        expect((await folder.stat(this.blog.id, "/old.txt")).modified).toEqual(then.getTime());
+        expect((await folder.stat(this.blog.id, "/old.txt")).modified).toEqual(
+          then.getTime()
+        );
       });
 
       it("keeps sizes, times and hashes when a directory moves", async function () {
@@ -1003,7 +1235,9 @@ describe("storage/folder", function () {
         await folder.move(this.blog.id, "/d", "/e");
 
         expect(await File.get(this.blog.id, "/e/a/1.txt")).toEqual(before);
-        expect(await keys(this.blog.id)).toEqual([this.blog.id + "/folder/e/a/1.txt"]);
+        expect(await keys(this.blog.id)).toEqual([
+          this.blog.id + "/folder/e/a/1.txt",
+        ]);
         expect(await File.totals(this.blog.id)).toEqual({ bytes: 3, files: 1 });
       });
 
@@ -1015,15 +1249,21 @@ describe("storage/folder", function () {
         await folder.move(this.blog.id, "/theme.txt", "/theme.css");
         await folder.move(this.blog.id, "/d", "/e");
 
-        expect((await s3.head(this.blog.id + "/folder/theme.css")).contentType).toMatch(/^text\/css/);
-        expect((await s3.head(this.blog.id + "/folder/e/style.txt")).contentType).toMatch(/^text\/plain/);
+        expect(
+          (await s3.head(this.blog.id + "/folder/theme.css")).contentType
+        ).toMatch(/^text\/css/);
+        expect(
+          (await s3.head(this.blog.id + "/folder/e/style.txt")).contentType
+        ).toMatch(/^text\/plain/);
         expect(await s3.head(this.blog.id + "/folder/e/empty/")).not.toBeNull();
       });
 
       it("uploads nothing below a file", async function () {
         await folder.write(this.blog.id, "/f", "file");
 
-        expect((await rejection(folder.write(this.blog.id, "/f/g.txt", "x"))).code).toEqual("ENOTDIR");
+        expect(
+          (await rejection(folder.write(this.blog.id, "/f/g.txt", "x"))).code
+        ).toEqual("ENOTDIR");
         expect(await keys(this.blog.id)).toEqual([this.blog.id + "/folder/f"]);
       });
 
@@ -1037,14 +1277,20 @@ describe("storage/folder", function () {
         s3.reset();
 
         try {
-          expect(await rejection(folder.write(this.blog.id, "/a.txt", "new!"))).toBeDefined();
-          expect(await rejection(folder.write(this.blog.id, "/b.txt", "new"))).toBeDefined();
+          expect(
+            await rejection(folder.write(this.blog.id, "/a.txt", "new!"))
+          ).toBeDefined();
+          expect(
+            await rejection(folder.write(this.blog.id, "/b.txt", "new"))
+          ).toBeDefined();
         } finally {
           config.storage.endpoint = endpoint;
           s3.reset();
         }
 
-        expect((await File.get(this.blog.id, "/a.txt")).sha1).toEqual(sha1("old"));
+        expect((await File.get(this.blog.id, "/a.txt")).sha1).toEqual(
+          sha1("old")
+        );
         expect(await File.get(this.blog.id, "/b.txt")).toBeNull();
       }, 30000);
 
@@ -1114,11 +1360,15 @@ describe("storage/folder", function () {
       it("reads from S3 when the cache's disk is full", async function () {
         await folder.write(this.blog.id, "/a.txt", "from S3");
 
-        var full = Object.assign(new Error("no space left on device"), { code: "ENOSPC" });
+        var full = Object.assign(new Error("no space left on device"), {
+          code: "ENOSPC",
+        });
 
         spyOn(contentCache(), "use").and.callFake(() => Promise.reject(full));
 
-        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("from S3");
+        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual(
+          "from S3"
+        );
       });
 
       it("reads and streams a small file from the cache after the first time", async function () {
@@ -1127,10 +1377,25 @@ describe("storage/folder", function () {
 
         var gets = countGets(this.blog.id, "/a.txt");
 
-        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("0123456789");
-        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("0123456789");
-        expect(await slurp(folder.createReadStream(this.blog.id, "/a.txt", { start: 2, end: 4 }))).toEqual("234");
-        expect(await slurp(folder.createReadStream(this.blog.id, "/a.txt", { start: 50 }))).toEqual("");
+        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual(
+          "0123456789"
+        );
+        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual(
+          "0123456789"
+        );
+        expect(
+          await slurp(
+            folder.createReadStream(this.blog.id, "/a.txt", {
+              start: 2,
+              end: 4,
+            })
+          )
+        ).toEqual("234");
+        expect(
+          await slurp(
+            folder.createReadStream(this.blog.id, "/a.txt", { start: 50 })
+          )
+        ).toEqual("");
         expect(gets()).toEqual(1);
       });
 
@@ -1141,8 +1406,12 @@ describe("storage/folder", function () {
 
         var gets = countGets(this.blog.id, "/big.txt");
 
-        expect((await folder.read(this.blog.id, "/big.txt")).toString()).toEqual("too big");
-        expect((await folder.read(this.blog.id, "/big.txt")).toString()).toEqual("too big");
+        expect(
+          (await folder.read(this.blog.id, "/big.txt")).toString()
+        ).toEqual("too big");
+        expect(
+          (await folder.read(this.blog.id, "/big.txt")).toString()
+        ).toEqual("too big");
         expect(gets()).toEqual(2);
       });
 
@@ -1152,13 +1421,19 @@ describe("storage/folder", function () {
 
         var gets = countGets(this.blog.id, "/a.txt");
 
-        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("one");
+        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual(
+          "one"
+        );
 
         await folder.write(this.blog.id, "/a.txt", "two");
         await forget(this.blog.id);
 
-        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("two");
-        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("two");
+        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual(
+          "two"
+        );
+        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual(
+          "two"
+        );
         expect(gets()).toEqual(2);
       });
 
@@ -1169,8 +1444,12 @@ describe("storage/folder", function () {
         // As if a write had reached S3 but not yet the index
         await s3.putBuffer(this.blog.id + "/folder/a.txt", Buffer.from("new"));
 
-        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("new");
-        expect((await rejection(folder.ensureLocal(this.blog.id, "/a.txt"))).code).toEqual("ECHANGED");
+        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual(
+          "new"
+        );
+        expect(
+          (await rejection(folder.ensureLocal(this.blog.id, "/a.txt"))).code
+        ).toEqual("ECHANGED");
       });
 
       it("removes the blog's cached copies with its folder", async function () {
@@ -1203,7 +1482,9 @@ describe("storage/folder", function () {
 
         beforeEach(async function () {
           await fs.ensureDir(config.tmp_directory);
-          tmp = await fs.mkdtemp(join(config.tmp_directory, "storage-folder-write-through-"));
+          tmp = await fs.mkdtemp(
+            join(config.tmp_directory, "storage-folder-write-through-")
+          );
         });
 
         afterEach(async function () {
@@ -1221,12 +1502,27 @@ describe("storage/folder", function () {
 
           await folder.write(blogID, "/buffer.txt", Buffer.from("buffer"));
           await folder.write(blogID, "/string.txt", "string");
-          await folder.write(blogID, "/stream.txt", Readable.from([Buffer.from("str"), Buffer.from("eam")]));
+          await folder.write(
+            blogID,
+            "/stream.txt",
+            Readable.from([Buffer.from("str"), Buffer.from("eam")])
+          );
 
-          expect((await folder.read(blogID, "/buffer.txt")).toString()).toEqual("buffer");
-          expect((await folder.read(blogID, "/string.txt")).toString()).toEqual("string");
-          expect(await slurp(folder.createReadStream(blogID, "/stream.txt"))).toEqual("stream");
-          expect(await fs.readFile(await folder.ensureLocal(blogID, "/stream.txt"), "utf8")).toEqual("stream");
+          expect((await folder.read(blogID, "/buffer.txt")).toString()).toEqual(
+            "buffer"
+          );
+          expect((await folder.read(blogID, "/string.txt")).toString()).toEqual(
+            "string"
+          );
+          expect(
+            await slurp(folder.createReadStream(blogID, "/stream.txt"))
+          ).toEqual("stream");
+          expect(
+            await fs.readFile(
+              await folder.ensureLocal(blogID, "/stream.txt"),
+              "utf8"
+            )
+          ).toEqual("stream");
 
           var after = contentCache().stats();
 
@@ -1246,12 +1542,18 @@ describe("storage/folder", function () {
           var get = spyOn(s3, "get").and.callThrough();
 
           await folder.writeFrom(this.blog.id, "/copied.txt", copied);
-          await folder.writeFrom(this.blog.id, "/moved.txt", moved, { move: true });
+          await folder.writeFrom(this.blog.id, "/moved.txt", moved, {
+            move: true,
+          });
 
           expect(await fs.pathExists(copied)).toBe(true);
           expect(await fs.pathExists(moved)).toBe(false);
-          expect((await folder.read(this.blog.id, "/copied.txt")).toString()).toEqual("copied");
-          expect((await folder.read(this.blog.id, "/moved.txt")).toString()).toEqual("moved");
+          expect(
+            (await folder.read(this.blog.id, "/copied.txt")).toString()
+          ).toEqual("copied");
+          expect(
+            (await folder.read(this.blog.id, "/moved.txt")).toString()
+          ).toEqual("moved");
           expect(get).not.toHaveBeenCalled();
         });
 
@@ -1264,7 +1566,9 @@ describe("storage/folder", function () {
 
           await folder.commit(this.blog.id, "/tool.txt");
 
-          expect((await folder.read(this.blog.id, "/tool.txt")).toString()).toEqual("from a tool");
+          expect(
+            (await folder.read(this.blog.id, "/tool.txt")).toString()
+          ).toEqual("from a tool");
           expect(get).not.toHaveBeenCalled();
         });
 
@@ -1273,14 +1577,20 @@ describe("storage/folder", function () {
           var gets = countGets(this.blog.id, "/a.txt");
 
           await folder.write(this.blog.id, "/a.txt", "one");
-          expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("one");
+          expect(
+            (await folder.read(this.blog.id, "/a.txt")).toString()
+          ).toEqual("one");
 
           await folder.write(this.blog.id, "/a.txt", "two");
-          expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("two");
+          expect(
+            (await folder.read(this.blog.id, "/a.txt")).toString()
+          ).toEqual("two");
 
           await fs.writeFile(source, "three");
           await folder.writeFrom(this.blog.id, "/a.txt", source);
-          expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("three");
+          expect(
+            (await folder.read(this.blog.id, "/a.txt")).toString()
+          ).toEqual("three");
 
           expect(gets()).toEqual(0);
         });
@@ -1293,7 +1603,11 @@ describe("storage/folder", function () {
 
           await fs.writeFile(source, "too big");
           await folder.write(this.blog.id, "/big.txt", "too big");
-          await folder.write(this.blog.id, "/big-stream.txt", Readable.from([Buffer.from("too big")]));
+          await folder.write(
+            this.blog.id,
+            "/big-stream.txt",
+            Readable.from([Buffer.from("too big")])
+          );
           await folder.writeFrom(this.blog.id, "/big-copy.txt", source);
 
           expect(filled()).toEqual(before);
@@ -1301,32 +1615,55 @@ describe("storage/folder", function () {
           // ensureLocal, which caches any size, downloads it
           var gets = countGets(this.blog.id, "/big.txt");
 
-          expect(await fs.readFile(await folder.ensureLocal(this.blog.id, "/big.txt"), "utf8")).toEqual("too big");
+          expect(
+            await fs.readFile(
+              await folder.ensureLocal(this.blog.id, "/big.txt"),
+              "utf8"
+            )
+          ).toEqual("too big");
           expect(gets()).toEqual(1);
         });
 
         it("still writes when the cache fails, and the read downloads", async function () {
-          var full = Object.assign(new Error("no space left on device"), { code: "ENOSPC" });
+          var full = Object.assign(new Error("no space left on device"), {
+            code: "ENOSPC",
+          });
           var source = join(tmp, "moved.txt");
-          var put = spyOn(contentCache(), "put").and.callFake(() => Promise.reject(full));
+          var put = spyOn(contentCache(), "put").and.callFake(() =>
+            Promise.reject(full)
+          );
 
           spyOn(console, "error");
 
           await fs.writeFile(source, "moved");
 
           await folder.write(this.blog.id, "/a.txt", "buffer");
-          await folder.write(this.blog.id, "/b.txt", Readable.from([Buffer.from("stream")]));
-          await folder.writeFrom(this.blog.id, "/c.txt", source, { move: true });
+          await folder.write(
+            this.blog.id,
+            "/b.txt",
+            Readable.from([Buffer.from("stream")])
+          );
+          await folder.writeFrom(this.blog.id, "/c.txt", source, {
+            move: true,
+          });
 
           expect(put.calls.count()).toEqual(3);
           expect(await fs.pathExists(source)).toBe(false);
-          expect((await File.get(this.blog.id, "/c.txt")).sha1).toEqual(sha1("moved"));
+          expect((await File.get(this.blog.id, "/c.txt")).sha1).toEqual(
+            sha1("moved")
+          );
 
           var gets = countGets(this.blog.id, "/a.txt");
 
-          expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("buffer");
-          expect((await folder.read(this.blog.id, "/b.txt")).toString()).toEqual("stream");
-          expect((await folder.read(this.blog.id, "/c.txt")).toString()).toEqual("moved");
+          expect(
+            (await folder.read(this.blog.id, "/a.txt")).toString()
+          ).toEqual("buffer");
+          expect(
+            (await folder.read(this.blog.id, "/b.txt")).toString()
+          ).toEqual("stream");
+          expect(
+            (await folder.read(this.blog.id, "/c.txt")).toString()
+          ).toEqual("moved");
           expect(gets()).toEqual(1);
         });
 
@@ -1351,7 +1688,9 @@ describe("storage/folder", function () {
 
           var gets = countGets(this.blog.id, "/a.txt");
 
-          expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("uploaded");
+          expect(
+            (await folder.read(this.blog.id, "/a.txt")).toString()
+          ).toEqual("uploaded");
           expect(gets()).toEqual(1);
         });
       });
@@ -1369,7 +1708,9 @@ describe("storage/folder", function () {
           var open = spyOn(s3, "open").and.callThrough();
 
           var first = await fetch(state.origin + "/a.txt");
-          var second = await fetch(state.origin + "/a.txt", { headers: { "If-None-Match": first.headers.get("etag") } });
+          var second = await fetch(state.origin + "/a.txt", {
+            headers: { "If-None-Match": first.headers.get("etag") },
+          });
 
           expect(await first.text()).toEqual("hello");
           expect(first.headers.get("etag")).toEqual('"' + sha1("hello") + '"');
@@ -1411,7 +1752,9 @@ describe("storage/folder", function () {
         await folder.commit(this.blog.id, "/tool/out.txt");
 
         expect(await fs.pathExists(place)).toBe(false);
-        expect((await File.get(this.blog.id, "/tool/out.txt")).sha1).toEqual(sha1("from a tool"));
+        expect((await File.get(this.blog.id, "/tool/out.txt")).sha1).toEqual(
+          sha1("from a tool")
+        );
       });
     });
 
@@ -1420,7 +1763,9 @@ describe("storage/folder", function () {
         await folder.write(this.blog.id, "/templates/a.txt", "lower");
         await folder.write(this.blog.id, "/Templates/a.txt", "upper");
 
-        expect(await folder.resolveCaseInsensitive(this.blog.id, "/TEMPLATES/a.txt")).toEqual("/Templates/a.txt");
+        expect(
+          await folder.resolveCaseInsensitive(this.blog.id, "/TEMPLATES/a.txt")
+        ).toEqual("/Templates/a.txt");
       });
     });
 
@@ -1430,7 +1775,9 @@ describe("storage/folder", function () {
         await folder.write(this.blog.id, "/c.txt", "cc");
         await folder.mkdir(this.blog.id, "/empty");
 
-        var before = await collect(folder.walk(this.blog.id, "/", { directories: true }));
+        var before = await collect(
+          folder.walk(this.blog.id, "/", { directories: true })
+        );
         var record = await File.get(this.blog.id, "/a/b.txt");
 
         await File.removeAll(this.blog.id);
@@ -1438,8 +1785,12 @@ describe("storage/folder", function () {
         var counts = await backend.rebuildIndex(this.blog.id, { hash: true });
 
         expect(counts).toEqual({ files: 2, dirs: 2, bytes: 7, skipped: [] });
-        expect(await collect(folder.walk(this.blog.id, "/", { directories: true }))).toEqual(before);
-        expect((await File.get(this.blog.id, "/a/b.txt")).sha1).toEqual(record.sha1);
+        expect(
+          await collect(folder.walk(this.blog.id, "/", { directories: true }))
+        ).toEqual(before);
+        expect((await File.get(this.blog.id, "/a/b.txt")).sha1).toEqual(
+          record.sha1
+        );
       });
 
       it("keeps apart downloads of same-named files when there are no hashes", async function () {
@@ -1448,11 +1799,26 @@ describe("storage/folder", function () {
 
         // As a rebuild without hashing leaves them: same name, size and time
         for (var path of ["/one/a.txt", "/two/a.txt"]) {
-          await File.set(this.blog.id, path, { type: "file", size: 1, modified: 5, sha1: "" });
+          await File.set(this.blog.id, path, {
+            type: "file",
+            size: 1,
+            modified: 5,
+            sha1: "",
+          });
         }
 
-        expect(await fs.readFile(await folder.ensureLocal(this.blog.id, "/one/a.txt"), "utf8")).toEqual("1");
-        expect(await fs.readFile(await folder.ensureLocal(this.blog.id, "/two/a.txt"), "utf8")).toEqual("2");
+        expect(
+          await fs.readFile(
+            await folder.ensureLocal(this.blog.id, "/one/a.txt"),
+            "utf8"
+          )
+        ).toEqual("1");
+        expect(
+          await fs.readFile(
+            await folder.ensureLocal(this.blog.id, "/two/a.txt"),
+            "utf8"
+          )
+        ).toEqual("2");
       });
 
       it("leaves hashes out unless asked", async function () {
@@ -1461,9 +1827,18 @@ describe("storage/folder", function () {
         await backend.rebuildIndex(this.blog.id);
 
         expect((await File.get(this.blog.id, "/a.txt")).sha1).toEqual("");
-        expect((await folder.stat(this.blog.id, "/a.txt", { sha1: true })).sha1).toEqual(sha1("x"));
-        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual("x");
-        expect(await fs.readFile(await folder.ensureLocal(this.blog.id, "/a.txt"), "utf8")).toEqual("x");
+        expect(
+          (await folder.stat(this.blog.id, "/a.txt", { sha1: true })).sha1
+        ).toEqual(sha1("x"));
+        expect((await folder.read(this.blog.id, "/a.txt")).toString()).toEqual(
+          "x"
+        );
+        expect(
+          await fs.readFile(
+            await folder.ensureLocal(this.blog.id, "/a.txt"),
+            "utf8"
+          )
+        ).toEqual("x");
       });
     });
   });

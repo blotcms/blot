@@ -1,14 +1,14 @@
 const pendingSyncs = new Map();
 const pendingUpdates = new Map();
 
-const ensureSyncSet = blogID => {
+const ensureSyncSet = (blogID) => {
   if (!pendingSyncs.has(blogID)) {
     pendingSyncs.set(blogID, new Set());
   }
   return pendingSyncs.get(blogID);
 };
 
-const ensureUpdateMap = blogID => {
+const ensureUpdateMap = (blogID) => {
   if (!pendingUpdates.has(blogID)) {
     pendingUpdates.set(blogID, new Map());
   }
@@ -97,5 +97,5 @@ module.exports = {
   addPendingUpdate,
   removePendingUpdate,
   getPendingSyncs,
-  getPendingUpdates
+  getPendingUpdates,
 };

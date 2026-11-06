@@ -99,21 +99,18 @@ SourceCode.route("/:viewSlug/edit")
       } catch (e) {
         return sendError(e);
       }
-      Template.package.save(
-        req.template.id,
-        parsed,
-        function (err, views) {
+      Template.package.save(req.template.id, parsed, function (err, views) {
+        if (err) return sendError(err);
+        views = views || {};
+
+        Template.getMetadata(req.template.id, function (err, metadata) {
           if (err) return sendError(err);
-          views = views || {};
 
-          Template.getMetadata(req.template.id, function (err, metadata) {
-            if (err) return sendError(err);
+          const templateForSync = metadata || req.template;
 
-            const templateForSync = metadata || req.template;
-
-            async.eachSeries(
-              Object.keys(views),
-              function (name, next) {
+          async.eachSeries(
+            Object.keys(views),
+            function (name, next) {
               Template.getView(req.template.id, name, function (err, view) {
                 // getView returns an error if the view does not exist
                 // We want to be able to create new views using local editing
@@ -127,29 +124,28 @@ SourceCode.route("/:viewSlug/edit")
                 Template.setView(req.template.id, view, next);
               });
             },
-              function (err) {
-                if (err) return sendError(err);
-                writeChangeToFolder(
-                  req.blog,
-                  templateForSync,
-                  view,
-                  function (err) {
-                    if (err) return sendError(err);
-                    // package.json is metadata, not a view file. Publish after the
-                    // locals and any view metadata from it are stored so an
-                    // open preview tab reloads.
-                    previewReload.publish(req.blog.id);
-                    if (res.locals.templateForked) {
-                      res.set("X-Template-Forked", "1");
-                    }
-                    res.send("Saved changes!");
+            function (err) {
+              if (err) return sendError(err);
+              writeChangeToFolder(
+                req.blog,
+                templateForSync,
+                view,
+                function (err) {
+                  if (err) return sendError(err);
+                  // package.json is metadata, not a view file. Publish after the
+                  // locals and any view metadata from it are stored so an
+                  // open preview tab reloads.
+                  previewReload.publish(req.blog.id);
+                  if (res.locals.templateForked) {
+                    res.set("X-Template-Forked", "1");
                   }
-                );
-              }
-            );
-          });
-        }
-      );
+                  res.send("Saved changes!");
+                }
+              );
+            }
+          );
+        });
+      });
     } else {
       Template.setView(req.template.id, view, function (err) {
         if (err) return sendError(err);
@@ -253,9 +249,7 @@ SourceCode.route("/:viewSlug/configure")
         );
       }
       // Validate that all elements are non-empty (empty strings normalize to "" and make views unreachable)
-      const emptyIndex = configuration.url.findIndex(
-        (item) => !item.trim()
-      );
+      const emptyIndex = configuration.url.findIndex((item) => !item.trim());
       if (emptyIndex !== -1) {
         return next(
           new Error(

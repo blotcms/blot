@@ -18,19 +18,23 @@ const MAX_SIZES = 8;
 const MAX_SIZE = 512;
 
 function checkSizes(sizes) {
-  if (!Array.isArray(sizes) || !sizes.length || sizes.length > MAX_SIZES) throw new Error("invalid sizes");
+  if (!Array.isArray(sizes) || !sizes.length || sizes.length > MAX_SIZES)
+    throw new Error("invalid sizes");
   for (const size of sizes) {
-    if (!Number.isInteger(size) || size < 1 || size > MAX_SIZE) throw new Error("invalid size");
+    if (!Number.isInteger(size) || size < 1 || size > MAX_SIZE)
+      throw new Error("invalid size");
   }
   return sizes;
 }
 
 function checkExtract(extract) {
-  if (!extract || typeof extract !== "object") throw new Error("invalid extract");
+  if (!extract || typeof extract !== "object")
+    throw new Error("invalid extract");
   const out = {};
   for (const field of ["left", "top", "width", "height"]) {
     const value = extract[field];
-    if (!Number.isInteger(value) || value < 0) throw new Error("invalid extract");
+    if (!Number.isInteger(value) || value < 0)
+      throw new Error("invalid extract");
     out[field] = value;
   }
   if (out.width < 1 || out.height < 1) throw new Error("invalid extract");

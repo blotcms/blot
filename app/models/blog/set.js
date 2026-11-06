@@ -64,7 +64,10 @@ module.exports = function (blogID, blog, callback) {
         latest.template.indexOf("SITE:") === 0
       ) {
         try {
-          var forkedTemplateID = await forkSiteTemplate(blogID, latest.template);
+          var forkedTemplateID = await forkSiteTemplate(
+            blogID,
+            latest.template
+          );
 
           if (forkedTemplateID && forkedTemplateID !== latest.template) {
             latest.template = forkedTemplateID;
@@ -72,7 +75,7 @@ module.exports = function (blogID, blog, callback) {
           }
         } catch (forkError) {
           // for now, do nothing
-          console.log('Blog.set', blogID, 'Error forking template', forkError);
+          console.log("Blog.set", blogID, "Error forking template", forkError);
         }
       }
 
@@ -185,19 +188,24 @@ module.exports = function (blogID, blog, callback) {
 
       const template = latest.template || former.template;
 
-        // Also update CDN manifest when plugin settings change, since
-        // plugin changes (especially analytics) affect the rendered output
-        // of views like script.js that use {{{app_js}}}
-        const shouldUpdateManifest = changes.template || changes.plugins;
+      // Also update CDN manifest when plugin settings change, since
+      // plugin changes (especially analytics) affect the rendered output
+      // of views like script.js that use {{{app_js}}}
+      const shouldUpdateManifest = changes.template || changes.plugins;
 
-        if (template && shouldUpdateManifest) {
-          try {
-            await updateCdnManifestAsync(template);
-          } catch (updateError) {
-            // for now, do nothing
-            console.log('Blog.set', blogID, 'Error updating template CDN manifest', updateError);
-          }
+      if (template && shouldUpdateManifest) {
+        try {
+          await updateCdnManifestAsync(template);
+        } catch (updateError) {
+          // for now, do nothing
+          console.log(
+            "Blog.set",
+            blogID,
+            "Error updating template CDN manifest",
+            updateError
+          );
         }
+      }
 
       flushCache(blogID, former, function (err) {
         callback(err, changesList);
@@ -218,7 +226,12 @@ module.exports = function (blogID, blog, callback) {
           if (former.handle && template && template.indexOf(blogID + ":") === 0)
             updateCdnManifest(template, function (manifestErr) {
               if (manifestErr)
-                console.log("Blog.set", blogID, "Error updating template CDN manifest", manifestErr);
+                console.log(
+                  "Blog.set",
+                  blogID,
+                  "Error updating template CDN manifest",
+                  manifestErr
+                );
             });
         }
       });

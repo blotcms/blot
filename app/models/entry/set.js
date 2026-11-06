@@ -25,7 +25,7 @@ var { DELETED_ENTRY_TTL_SECONDS } = require("../entries/sweepExpiredDeleted");
 // properties in the updates param and then overwrites those.
 // Also updates entry properties which affect data stored
 // elsewhere such as created date, permalink etc..
-module.exports = function set (blogID, path, updates, callback) {
+module.exports = function set(blogID, path, updates, callback) {
   ensure(blogID, "string")
     .and(path, "string")
     .and(updates, "object")
@@ -89,7 +89,8 @@ module.exports = function set (blogID, path, updates, callback) {
     if (entry.dependencies === undefined) entry.dependencies = [];
     if (entry.backlinks === undefined) entry.backlinks = [];
     if (entry.internalLinks === undefined) entry.internalLinks = [];
-    if (!entry.metadata || typeof entry.metadata !== "object") entry.metadata = {};
+    if (!entry.metadata || typeof entry.metadata !== "object")
+      entry.metadata = {};
     if (!entry.exif || typeof entry.exif !== "object") entry.exif = {};
     if (typeof entry.contentHash !== "string") entry.contentHash = "";
 
@@ -162,16 +163,20 @@ module.exports = function set (blogID, path, updates, callback) {
             url === firstCandidate;
 
           if (reclamation) {
-            entry.dependencies = entry.dependencies.filter(function (dependency) {
-              var wasPrevious = previousDependencies.indexOf(dependency) > -1;
-              var inBase = baseDependencies.indexOf(dependency) > -1;
+            entry.dependencies = entry.dependencies.filter(
+              function (dependency) {
+                var wasPrevious = previousDependencies.indexOf(dependency) > -1;
+                var inBase = baseDependencies.indexOf(dependency) > -1;
 
-              if (!dependenciesProvided) {
-                return !(previousUrlWasDeduped && dependency === conflictingEntryPath);
+                if (!dependenciesProvided) {
+                  return !(
+                    previousUrlWasDeduped && dependency === conflictingEntryPath
+                  );
+                }
+
+                return !(wasPrevious && !inBase);
               }
-
-              return !(wasPrevious && !inBase);
-            });
+            );
           }
         }
 
@@ -186,10 +191,14 @@ module.exports = function set (blogID, path, updates, callback) {
           .set(entryKey, json)
           .then(function () {
             if (entry.deleted) {
-              return redis.expire(entryKey, DELETED_ENTRY_TTL_SECONDS).then(function (result) {
-                if (!result)
-                  throw new Error("Failed to set expiration for deleted entry");
-              });
+              return redis
+                .expire(entryKey, DELETED_ENTRY_TTL_SECONDS)
+                .then(function (result) {
+                  if (!result)
+                    throw new Error(
+                      "Failed to set expiration for deleted entry"
+                    );
+                });
             }
 
             return redis.persist(entryKey);
@@ -198,7 +207,12 @@ module.exports = function set (blogID, path, updates, callback) {
             queue = [
               updateTagList.bind(this, blogID, entry),
               assignToLists.bind(this, blogID, entry),
-              rebuildDependencyGraph.bind(this, blogID, entry, previousDependencies),
+              rebuildDependencyGraph.bind(
+                this,
+                blogID,
+                entry,
+                previousDependencies
+              ),
             ];
 
             // Arms the publication alarm, or cancels it when a scheduled entry
@@ -242,25 +256,40 @@ module.exports = function set (blogID, path, updates, callback) {
                         "    - linked entry:",
                         linkedEntryPath
                       );
-                      set(blogID, linkedEntryPath, { backlinks }, function (err) {
-                        if (err) {
-                          console.log(
-                            clfdate(),
-                            blogID.slice(0, 12),
-                            "    - error updating linked entry:",
-                            linkedEntryPath
-                          );
-                          console.log(err);
+                      set(
+                        blogID,
+                        linkedEntryPath,
+                        { backlinks },
+                        function (err) {
+                          if (err) {
+                            console.log(
+                              clfdate(),
+                              blogID.slice(0, 12),
+                              "    - error updating linked entry:",
+                              linkedEntryPath
+                            );
+                            console.log(err);
+                          }
+                          next();
                         }
-                        next();
-                      });
+                      );
                     },
                     function (err) {
                       if (err) return callback(err);
                       if (entry.deleted) {
-                        console.log(clfdate(), blogID.slice(0, 12), "delete", path);
+                        console.log(
+                          clfdate(),
+                          blogID.slice(0, 12),
+                          "delete",
+                          path
+                        );
                       } else {
-                        console.log(clfdate(), blogID.slice(0, 12), "update", path);
+                        console.log(
+                          clfdate(),
+                          blogID.slice(0, 12),
+                          "update",
+                          path
+                        );
                       }
                       // changed: false when the stored entry is exactly as
                       // it was, no other entry's backlinks moved and no tag

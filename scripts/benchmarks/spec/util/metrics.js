@@ -19,7 +19,9 @@ function percentile(values, p) {
 }
 
 function summarizeDurations(values) {
-  const cleaned = values.filter((value) => Number.isFinite(value) && value >= 0);
+  const cleaned = values.filter(
+    (value) => Number.isFinite(value) && value >= 0
+  );
 
   if (!cleaned.length) {
     return {

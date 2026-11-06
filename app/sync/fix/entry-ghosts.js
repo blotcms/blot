@@ -15,7 +15,7 @@ const folderPostFolder = require("sync/update/folderPostSourceFolder");
 // thrown and stops the check, because a wrong "gone" drops a live entry.
 // A symlink at the path counts as there: it used to be followed, and the
 // entry of a file which has become a link is not ours to drop.
-async function present (blogID, path) {
+async function present(blogID, path) {
   try {
     await storage.stat(blogID, path);
     return true;
@@ -27,7 +27,7 @@ async function present (blogID, path) {
 }
 
 // As present, but the path must be a directory
-async function presentDirectory (blogID, path) {
+async function presentDirectory(blogID, path) {
   try {
     return (await storage.stat(blogID, path)).isDirectory;
   } catch (err) {
@@ -39,7 +39,7 @@ async function presentDirectory (blogID, path) {
 
 // Calls back with the first candidate which is on disk, or with nothing if
 // none is. An error checking a candidate is passed on.
-function resolvePath (blogID, path, callback) {
+function resolvePath(blogID, path, callback) {
   var candidates = [];
 
   candidates.push(path);
@@ -82,13 +82,13 @@ function resolvePath (blogID, path, callback) {
 // peak memory instead of letting it climb for the length of the walk.
 var YIELD_EVERY = 50;
 
-function main (blog, callback) {
+function main(blog, callback) {
   var missing = [];
   var edit = [];
   var report = [];
   var count = 0;
 
-  function done (next) {
+  function done(next) {
     count++;
     if (count % YIELD_EVERY === 0) return setImmediate(next);
     next();
@@ -97,7 +97,6 @@ function main (blog, callback) {
   Entries.each(
     blog.id,
     function (_entry, next) {
-
       if (!_entry) return done(next);
 
       if (_entry.deleted) return done(next);
@@ -111,13 +110,17 @@ function main (blog, callback) {
       // meant to repair.
       var multiFolder = folderPostFolder(_entry);
       if (multiFolder) {
-        return callbackify(presentDirectory)(blog.id, multiFolder, function (err, isDirectory) {
-          if (err) return next(err);
-          if (!isDirectory) {
-            missing.push({ id: _entry.id, path: _entry.path });
+        return callbackify(presentDirectory)(
+          blog.id,
+          multiFolder,
+          function (err, isDirectory) {
+            if (err) return next(err);
+            if (!isDirectory) {
+              missing.push({ id: _entry.id, path: _entry.path });
+            }
+            done(next);
           }
-          done(next);
-        });
+        );
       }
 
       resolvePath(blog.id, _entry.path, function (err, path) {

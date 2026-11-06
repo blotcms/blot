@@ -19,11 +19,19 @@ async function run(args, html) {
   lifecycle.check();
   if (typeof html !== "string") throw new Error("The post has no HTML");
 
-  const { meta, outputs } = await sandbox.run("parse-html", args, Buffer.from(html));
+  const { meta, outputs } = await sandbox.run(
+    "parse-html",
+    args,
+    Buffer.from(html)
+  );
   lifecycle.check();
 
-  if (!meta || typeof meta !== "object") throw new Error("parse-html: invalid answer");
-  if (meta.error) throw new Error("Could not read the post's HTML: " + String(meta.error).slice(0, 100));
+  if (!meta || typeof meta !== "object")
+    throw new Error("parse-html: invalid answer");
+  if (meta.error)
+    throw new Error(
+      "Could not read the post's HTML: " + String(meta.error).slice(0, 100)
+    );
   if (outputs.length !== 1) throw new Error("parse-html: invalid answer");
   return { meta, output: outputs[0].toString("utf8") };
 }
@@ -32,7 +40,10 @@ async function run(args, html) {
 // parser writes it back
 async function scan(kind, html) {
   const { meta, output } = await run({ op: "scan", kind }, html);
-  if (!Array.isArray(meta.urls) || !meta.urls.every((url) => typeof url === "string")) {
+  if (
+    !Array.isArray(meta.urls) ||
+    !meta.urls.every((url) => typeof url === "string")
+  ) {
     throw new Error("parse-html: invalid answer");
   }
   return { urls: meta.urls, html: output };

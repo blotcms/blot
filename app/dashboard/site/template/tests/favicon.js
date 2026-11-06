@@ -21,8 +21,6 @@ describe("favicon template support", function () {
   });
 
   it("recognises an existing favicon local even without view metadata", function () {
-    expect(
-      templateSupportsFavicon({ locals: { favicon: {} } }, {})
-    ).toBe(true);
+    expect(templateSupportsFavicon({ locals: { favicon: {} } }, {})).toBe(true);
   });
 });

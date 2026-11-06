@@ -1,6 +1,6 @@
-const inputToFocus = document.querySelector('input[autofocus]');
+const inputToFocus = document.querySelector("input[autofocus]");
 
 if (inputToFocus) {
-    inputToFocus.focus();
-    inputToFocus.select();
+  inputToFocus.focus();
+  inputToFocus.select();
 }

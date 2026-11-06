@@ -52,7 +52,10 @@ function argAll(name) {
 
 function percentile(sorted, p) {
   if (!sorted.length) return null;
-  const idx = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
+  const idx = Math.min(
+    sorted.length - 1,
+    Math.floor((p / 100) * sorted.length)
+  );
   return sorted[idx];
 }
 
@@ -61,7 +64,9 @@ function pandocVersion() {
   const { execFileSync } = require("child_process");
   const bin =
     process.env.BLOT_PANDOC_PATH ||
-    (fs.existsSync("/usr/local/bin/pandoc") ? "/usr/local/bin/pandoc" : "pandoc");
+    (fs.existsSync("/usr/local/bin/pandoc")
+      ? "/usr/local/bin/pandoc"
+      : "pandoc");
   try {
     return execFileSync(bin, ["--version"]).toString().split("\n")[0];
   } catch (err) {
@@ -129,9 +134,9 @@ function collectFixtures(converterName, converterModule) {
 async function benchmarkConverter(name, n, options = {}) {
   const converterModule = require(`../../app/build/converters/${name}`);
   const label = options.label || name;
-  const fixtures = (options.fixtures || collectFixtures(name, converterModule)).filter((f) =>
-    converterModule.is(f)
-  );
+  const fixtures = (
+    options.fixtures || collectFixtures(name, converterModule)
+  ).filter((f) => converterModule.is(f));
 
   if (!fixtures.length) {
     return { name: label, skipped: true, reason: "no usable fixtures found" };
@@ -196,7 +201,9 @@ async function benchmarkConverter(name, n, options = {}) {
       lastErrorMessage = err.message || String(err);
     } else {
       durationsMs.push(elapsedMs);
-      (perFixture[fixtureIndex] = perFixture[fixtureIndex] || []).push(elapsedMs);
+      (perFixture[fixtureIndex] = perFixture[fixtureIndex] || []).push(
+        elapsedMs
+      );
     }
 
     // KNOWN LIMITATION: this is the absolute RSS of the current (shared)
@@ -252,7 +259,12 @@ async function benchmarkConverter(name, n, options = {}) {
     fixture_p50_ms: Object.fromEntries(
       fixtures.map((f, i) => [
         path.basename(f),
-        perFixture[i] ? percentile([...perFixture[i]].sort((a, b) => a - b), 50) : null,
+        perFixture[i]
+          ? percentile(
+              [...perFixture[i]].sort((a, b) => a - b),
+              50
+            )
+          : null,
       ])
     ),
   };
@@ -265,7 +277,8 @@ async function main() {
   const corpora = argAll("--corpus");
   if (!corpora.length) corpora.push("tests");
   for (const corpus of corpora) {
-    if (corpus !== "tests" && corpus !== "typical") throw new Error(`unknown corpus: ${corpus}`);
+    if (corpus !== "tests" && corpus !== "typical")
+      throw new Error(`unknown corpus: ${corpus}`);
   }
 
   if (!converters.length) {
@@ -273,7 +286,8 @@ async function main() {
   }
 
   // Before anything loads config, which reads BLOT_SANDBOX_SOCKET once
-  if (process.argv.includes("--sandbox")) sandbox = await require("./lib/local-sandbox").start();
+  if (process.argv.includes("--sandbox"))
+    sandbox = await require("./lib/local-sandbox").start();
 
   console.log(
     `[converter-bench] benchmarking: ${converters.join(", ")} (n=${n}, corpus=${corpora.join("+")}, ` +
@@ -288,16 +302,23 @@ async function main() {
   let corpusDir = null;
   let typical = {};
   if (corpora.includes("typical")) {
-    corpusDir = fs.mkdtempSync(path.join(os.tmpdir(), "blot-converter-corpus-"));
+    corpusDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "blot-converter-corpus-")
+    );
     typical = await require("./converter-corpus").build(corpusDir, converters);
   }
 
   const runs = [];
   for (const name of converters) {
     for (const corpus of corpora) {
-      if (corpus === "tests") runs.push({ name, label: name + (sandbox ? "-sandbox" : "") });
+      if (corpus === "tests")
+        runs.push({ name, label: name + (sandbox ? "-sandbox" : "") });
       else if (typical[name]) {
-        runs.push({ name, label: name + "-typical" + (sandbox ? "-sandbox" : ""), fixtures: typical[name] });
+        runs.push({
+          name,
+          label: name + "-typical" + (sandbox ? "-sandbox" : ""),
+          fixtures: typical[name],
+        });
       }
     }
   }
@@ -320,9 +341,13 @@ async function main() {
           `[converter-bench] ${label}: p50=${result.timing_ms.p50.toFixed(2)}ms ` +
             `p95=${result.timing_ms.p95.toFixed(2)}ms peak_rss=${result.peak_rss_mb}MB ` +
             `(${result.fixture_count} fixtures, ${result.conversions} conversions` +
-            (sandbox ? `, ${result.sandbox_jobs_per_conversion.toFixed(2)} sandbox jobs each` : "") +
+            (sandbox
+              ? `, ${result.sandbox_jobs_per_conversion.toFixed(2)} sandbox jobs each`
+              : "") +
             ")" +
-            (perFixture ? `\n[converter-bench]   p50 per file: ${perFixture}` : "")
+            (perFixture
+              ? `\n[converter-bench]   p50 per file: ${perFixture}`
+              : "")
         );
       }
     } catch (err) {

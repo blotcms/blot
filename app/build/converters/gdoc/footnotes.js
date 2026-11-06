@@ -33,10 +33,7 @@ module.exports = function footnotes($) {
 
     if (firstContent && firstContent.length) {
       if (firstContent[0].type === "text") {
-        firstContent[0].data = firstContent[0].data.replace(
-          /^[\s\u00a0]+/,
-          ""
-        );
+        firstContent[0].data = firstContent[0].data.replace(/^[\s\u00a0]+/, "");
       } else if (firstContent[0].type === "tag") {
         const text = firstContent.text();
         const trimmed = text.replace(/^[\s\u00a0]+/, "");

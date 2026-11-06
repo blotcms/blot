@@ -8,7 +8,8 @@ var DateStamp = require("../../build/prepare/dateStamp");
 var Blog = require("../blog");
 var pathIndex = require("./pathIndex");
 var normalizePathPrefix = require("helper/pathPrefix").normalizePathPrefix;
-var isRedisUnavailableError = require("helper/redisUnavailable").isRedisUnavailableError;
+var isRedisUnavailableError =
+  require("helper/redisUnavailable").isRedisUnavailableError;
 
 var MAX_RANDOM_ATTEMPTS = 10;
 
@@ -549,11 +550,7 @@ module.exports = (function () {
 
     // Attempt to parse and validate page size (user input)
     const parsedPageSize = parseInt(pageSize, 10);
-    if (
-      !isNaN(parsedPageSize) &&
-      parsedPageSize > 0 &&
-      parsedPageSize <= 100
-    ) {
+    if (!isNaN(parsedPageSize) && parsedPageSize > 0 && parsedPageSize <= 100) {
       return parsedPageSize;
     }
 
@@ -596,8 +593,6 @@ module.exports = (function () {
     return defaultSortOrder; // Default sort order
   }
 
-
-
   function fetchEntryScores(blogID, entryIDs, callback) {
     if (!entryIDs.length) return callback(null, []);
 
@@ -624,7 +619,6 @@ module.exports = (function () {
     }, callback);
   }
 
-
   function getPrefixFilteredPage(
     blogID,
     pathPrefix,
@@ -643,99 +637,98 @@ module.exports = (function () {
     redis
       .zRangeByLex(pathIndex.lexKey(blogID), min, max)
       .then(function (matchingIDs) {
+        var totalEntries = matchingIDs.length;
 
-      var totalEntries = matchingIDs.length;
-
-      if (!totalEntries) {
-        return handlePaginationAndCallback(
-          blogID,
-          [],
-          0,
-          zeroIndexedPageNo,
-          pageSize,
-          start,
-          end,
-          pageNo,
-          callback
-        );
-      }
-
-      if (sortBy === "id") {
-        var ids = order === "desc" ? matchingIDs.slice().reverse() : matchingIDs.slice();
-
-        return handlePaginationAndCallback(
-          blogID,
-          ids.slice(start, end + 1),
-          totalEntries,
-          zeroIndexedPageNo,
-          pageSize,
-          start,
-          end,
-          pageNo,
-          callback
-        );
-      }
-
-        fetchEntryScores(blogID, matchingIDs, function (error, scoredEntries) {
-        if (error) {
-          console.error(error);
-          return callback(error, [], null);
+        if (!totalEntries) {
+          return handlePaginationAndCallback(
+            blogID,
+            [],
+            0,
+            zeroIndexedPageNo,
+            pageSize,
+            start,
+            end,
+            pageNo,
+            callback
+          );
         }
 
-        scoredEntries.sort(function (a, b) {
-          var scoreDifference = order === "asc" ? b.score - a.score : a.score - b.score;
+        if (sortBy === "id") {
+          var ids =
+            order === "desc"
+              ? matchingIDs.slice().reverse()
+              : matchingIDs.slice();
 
-          if (scoreDifference !== 0) return scoreDifference;
+          return handlePaginationAndCallback(
+            blogID,
+            ids.slice(start, end + 1),
+            totalEntries,
+            zeroIndexedPageNo,
+            pageSize,
+            start,
+            end,
+            pageNo,
+            callback
+          );
+        }
 
-          // Redis-compatible tie handling: equal scores are ordered by member
-          // lexicographically (reverse for ZREVRANGE semantics, forward for ZRANGE).
-          if (a.id === b.id) return 0;
+        fetchEntryScores(blogID, matchingIDs, function (error, scoredEntries) {
+          if (error) {
+            console.error(error);
+            return callback(error, [], null);
+          }
 
-          if (order === "asc") return a.id < b.id ? 1 : -1;
+          scoredEntries.sort(function (a, b) {
+            var scoreDifference =
+              order === "asc" ? b.score - a.score : a.score - b.score;
 
-          return a.id < b.id ? -1 : 1;
-        });
+            if (scoreDifference !== 0) return scoreDifference;
 
-        totalEntries = scoredEntries.length;
+            // Redis-compatible tie handling: equal scores are ordered by member
+            // lexicographically (reverse for ZREVRANGE semantics, forward for ZRANGE).
+            if (a.id === b.id) return 0;
 
-        var pagedIDs = scoredEntries
-          .slice(start, end + 1)
-          .map(function (item) {
-            return item.id;
+            if (order === "asc") return a.id < b.id ? 1 : -1;
+
+            return a.id < b.id ? -1 : 1;
           });
 
-        handlePaginationAndCallback(
-          blogID,
-          pagedIDs,
-          totalEntries,
-          zeroIndexedPageNo,
-          pageSize,
-          start,
-          end,
-          pageNo,
-          callback
-        );
-      });
+          totalEntries = scoredEntries.length;
+
+          var pagedIDs = scoredEntries
+            .slice(start, end + 1)
+            .map(function (item) {
+              return item.id;
+            });
+
+          handlePaginationAndCallback(
+            blogID,
+            pagedIDs,
+            totalEntries,
+            zeroIndexedPageNo,
+            pageSize,
+            start,
+            end,
+            pageNo,
+            callback
+          );
+        });
       })
       .catch(function (error) {
         console.error(error);
         return callback(error, [], null);
       });
   }
-  function getPage(
-    blogID,
-    options = {},
-    callback
-  ) {
+  function getPage(blogID, options = {}, callback) {
     ensure(blogID, "string").and(callback, "function");
 
     // Extract and validate options
-    const { 
-      pageNumber: pageNoInput = "1", 
-      pageSize: rawPageSize, 
-      sortBy: rawSortBy, 
+    const {
+      pageNumber: pageNoInput = "1",
+      pageSize: rawPageSize,
+      sortBy: rawSortBy,
       order: rawOrder,
-      pathPrefix: rawPathPrefix
+      pathPrefix: rawPathPrefix,
     } = options;
 
     // Validate page number input
@@ -879,7 +872,7 @@ module.exports = (function () {
       if (entries && entries.length > 0) {
         entries.at(-1).pagination = pagination;
       }
-      
+
       return callback(null, entries, pagination);
     });
   }
@@ -899,29 +892,35 @@ module.exports = (function () {
       options = {};
     }
 
-    getRange(blogID, 0, 30, { skinny: true, onError: options.onError }, function (entries) {
-      redis
-        .zCard(listKey(blogID, "entries"))
-        .then(function (totalEntries) {
-          // The first entry published should have an index of 1
-          // The fifth entry published should have an index of 5
-          // The most recently published entry should have an index
-          // equal to the number of total entries published.
-          let index = totalEntries;
-          entries.forEach(function (entry) {
-            entry.index = index;
-            index--;
+    getRange(
+      blogID,
+      0,
+      30,
+      { skinny: true, onError: options.onError },
+      function (entries) {
+        redis
+          .zCard(listKey(blogID, "entries"))
+          .then(function (totalEntries) {
+            // The first entry published should have an index of 1
+            // The fifth entry published should have an index of 5
+            // The most recently published entry should have an index
+            // equal to the number of total entries published.
+            let index = totalEntries;
+            entries.forEach(function (entry) {
+              entry.index = index;
+              index--;
+            });
+
+            callback(entries);
+          })
+          .catch(function (err) {
+            if (options.onError && isRedisUnavailableError(err))
+              return options.onError(err);
+
+            callback([]);
           });
-
-          callback(entries);
-        })
-        .catch(function (err) {
-          if (options.onError && isRedisUnavailableError(err))
-            return options.onError(err);
-
-          callback([]);
-        });
-    });
+      }
+    );
   }
 
   function listKey(blogID, list) {

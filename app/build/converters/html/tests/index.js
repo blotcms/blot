@@ -12,21 +12,21 @@ describe("html converter metadata", function () {
       const blog = this.blog;
 
       folder.writeFrom(blog.id, entryPath, source).then(function () {
-      build(blog, entryPath, function (err, entry) {
-        if (err) return done.fail(err);
+        build(blog, entryPath, function (err, entry) {
+          if (err) return done.fail(err);
 
-        expect(entry.metadata.Title).toBe("Rock & Roll");
-        expect(entry.metadata.Custom).toBe("1 < 2 &copy; 3 > 2");
-        expect(entry.slug).toBe("rock-roll");
+          expect(entry.metadata.Title).toBe("Rock & Roll");
+          expect(entry.metadata.Custom).toBe("1 < 2 &copy; 3 > 2");
+          expect(entry.slug).toBe("rock-roll");
 
-        expect(entry.html).not.toContain("Title: Rock");
-        expect(entry.html).not.toContain("Custom:");
-        expect(entry.html).not.toContain("---");
-        expect(entry.html).toContain(
-          '<div class="body">Body &amp; entity<br></div>'
-        );
-        done();
-      });
+          expect(entry.html).not.toContain("Title: Rock");
+          expect(entry.html).not.toContain("Custom:");
+          expect(entry.html).not.toContain("---");
+          expect(entry.html).toContain(
+            '<div class="body">Body &amp; entity<br></div>'
+          );
+          done();
+        });
       }, done.fail);
     });
   });

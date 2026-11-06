@@ -54,7 +54,8 @@ module.exports = async function (req, res) {
         try {
           await folder.update(dirPath);
         } catch (err) {
-          if (isRedisUnavailableError(err)) await storage.rmdir(blogID, dirPath).catch(() => {});
+          if (isRedisUnavailableError(err))
+            await storage.rmdir(blogID, dirPath).catch(() => {});
           throw err;
         }
 

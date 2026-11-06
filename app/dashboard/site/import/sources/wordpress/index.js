@@ -17,66 +17,69 @@ function main(sourceFile, outputDirectory, status, options, callback) {
     // characters in the XML provided by WordPress.
     // Strict seems to have some side-effects, which is why we also normalize:true
     // and normalizeTags:true.
-    parseXML(xml, { strict: false, normalizeTags: true }, function (
-      err,
-      result
-    ) {
-      if (err) return callback(err);
+    parseXML(
+      xml,
+      { strict: false, normalizeTags: true },
+      function (err, result) {
+        if (err) return callback(err);
 
-      try {
-        var channel = result.rss.channel[0];
-        var link = channel && channel.link && channel.link[0];
-        var exportVersion = channel && channel["wp:wxr_version"] && channel["wp:wxr_version"][0];
-        
-        console.log(colors.dim("Site URL:"), link);
-        console.log(
-          colors.dim("Export Version"),
-          exportVersion
-        );
+        try {
+          var channel = result.rss.channel[0];
+          var link = channel && channel.link && channel.link[0];
+          var exportVersion =
+            channel &&
+            channel["wp:wxr_version"] &&
+            channel["wp:wxr_version"][0];
 
-        // If you want to see other properties available,
-        // log this to STDOUT
-        // console.log(result.rss.channel);
+          console.log(colors.dim("Site URL:"), link);
+          console.log(colors.dim("Export Version"), exportVersion);
 
-        if (options.filter) {
-          console.log("filter by:", options.filter);
-          channel.item = channel.item.filter(
-            function (item) {
+          // If you want to see other properties available,
+          // log this to STDOUT
+          // console.log(result.rss.channel);
+
+          if (options.filter) {
+            console.log("filter by:", options.filter);
+            channel.item = channel.item.filter(function (item) {
               return (
                 item.title[0]
                   .toLowerCase()
                   .indexOf(options.filter.toLowerCase()) > -1
               );
-            }
-          );
+            });
+          }
+
+          var items = channel.item;
+
+          var totalItems = items.length;
+        } catch (e) {
+          return callback(new Error("Invalid XML"));
         }
 
-        var items = channel.item;
+        // Final destinations are allocated only after downloads have established
+        // whether an entry needs a directory-backed post.txt representation.
+        var write = helper.write.createWriter();
 
-        var totalItems = items.length;
-      } catch (e) {
-        return callback(new Error("Invalid XML"));
+        async.eachOfSeries(
+          items,
+          function (item, index, done) {
+            try {
+              require("../../lifecycle").check();
+            } catch (err) {
+              return done(err);
+            }
+            var current = Number(index) + 1;
+            var title = item.title[0].trim();
+
+            status("(" + current + "/" + totalItems + ") Processing " + title);
+            console.log(colors.dim(current + "/" + totalItems), title);
+            injectAttachedThumbnail(item, channel.item);
+            Item(item, outputDirectory, write, done);
+          },
+          callback
+        );
       }
-
-      // Final destinations are allocated only after downloads have established
-      // whether an entry needs a directory-backed post.txt representation.
-      var write = helper.write.createWriter();
-
-      async.eachOfSeries(
-        items,
-        function (item, index, done) {
-          try { require("../../lifecycle").check(); } catch (err) { return done(err); }
-          var current = Number(index) + 1;
-          var title = item.title[0].trim();
-
-          status("(" + current + "/" + totalItems + ") Processing " + title);
-          console.log(colors.dim(current + "/" + totalItems), title);
-          injectAttachedThumbnail(item, channel.item);
-          Item(item, outputDirectory, write, done);
-        },
-        callback
-      );
-    });
+    );
   });
 }
 

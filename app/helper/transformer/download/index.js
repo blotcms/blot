@@ -66,7 +66,8 @@ module.exports = function (url, headers, callback) {
   sandbox
     .run("fetch-image", args, Buffer.alloc(0))
     .then(async ({ meta, outputs }) => {
-      if (!meta || typeof meta !== "object") throw new Error("fetch-image: no answer");
+      if (!meta || typeof meta !== "object")
+        throw new Error("fetch-image: no answer");
       // The status for a bad one, as before, or why it isn't an image
       if (meta.error) throw new Error(meta.error);
 
@@ -104,7 +105,7 @@ module.exports = function (url, headers, callback) {
     );
 };
 
-function isFresh (existing) {
+function isFresh(existing) {
   return (
     existing &&
     existing.url &&
@@ -113,7 +114,7 @@ function isFresh (existing) {
   );
 }
 
-function print (obj) {
+function print(obj) {
   return Object.entries(obj)
     .map(([key, value]) => `  ${key}: "${value}"`)
     .join("\n");

@@ -41,7 +41,9 @@ function detail(err) {
 async function deleteCopy(blogID) {
   if (!context.hasStore()) return null;
 
-  const { deleted } = await removeRepo({ store: context.objectStoreFor(blogID) });
+  const { deleted } = await removeRepo({
+    store: context.objectStoreFor(blogID),
+  });
 
   return deleted;
 }
@@ -49,9 +51,16 @@ async function deleteCopy(blogID) {
 async function deleteAndLog(blogID, pass) {
   try {
     const deleted = await deleteCopy(blogID);
-    if (deleted) log({ blog: blogID, op: "remove", outcome: "ok", deleted, pass });
+    if (deleted)
+      log({ blog: blogID, op: "remove", outcome: "ok", deleted, pass });
   } catch (err) {
-    log({ blog: blogID, op: "remove", outcome: "error", pass, detail: detail(err) });
+    log({
+      blog: blogID,
+      op: "remove",
+      outcome: "error",
+      pass,
+      detail: detail(err),
+    });
   }
 }
 
@@ -74,7 +83,14 @@ async function removeBlog(blogID) {
       // Back on git: its new copy is not ours to delete. A failed lookup
       // doesn't say it is gone, so the copy is kept: the monthly orphan sweep
       // deletes it if the blog is still off git.
-      if (err) log({ blog: blogID, op: "remove", outcome: "spared", pass: 2, detail: detail(err) });
+      if (err)
+        log({
+          blog: blogID,
+          op: "remove",
+          outcome: "spared",
+          pass: 2,
+          detail: detail(err),
+        });
       else if (!blog || blog.client !== "git") await deleteAndLog(blogID, 2);
       removed.delete(blogID);
     });

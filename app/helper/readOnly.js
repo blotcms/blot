@@ -110,9 +110,11 @@ function rejectWrites({ allow = [], deny = [] } = {}) {
       "Retry-After": String(RETRY_AFTER_SECONDS),
       "Cache-Control": "no-store",
     });
-    res.type("text").send(
-      "Blot is briefly read-only for maintenance. Please try again in a few minutes."
-    );
+    res
+      .type("text")
+      .send(
+        "Blot is briefly read-only for maintenance. Please try again in a few minutes."
+      );
   };
 }
 

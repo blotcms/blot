@@ -44,16 +44,18 @@ describe("template", function () {
     var blogID = this.blog.id;
     var folderName = "My Local Theme";
 
-    create(blogID, folderName, { slug: folderName, localEditing: true }, function (
-      err,
-      template
-    ) {
-      if (err) return done.fail(err);
+    create(
+      blogID,
+      folderName,
+      { slug: folderName, localEditing: true },
+      function (err, template) {
+        if (err) return done.fail(err);
 
-      expect(makeID(blogID, template.slug)).toEqual(template.id);
-      expect(template.slug).toEqual(folderName);
-      done();
-    });
+        expect(makeID(blogID, template.slug)).toEqual(template.id);
+        expect(template.slug).toEqual(folderName);
+        done();
+      }
+    );
   });
 
   it("throws an error if you try to create a template with no name", function (done) {
@@ -144,23 +146,26 @@ describe("template", function () {
             return template.name === original;
           })[0];
 
-          create(blogID, cloned, { cloneFrom: originalTemplate.id }, function (
-            err
-          ) {
-            if (err) return done.fail(err);
-
-            getTemplateList(test.blog.id, function (err, templates) {
+          create(
+            blogID,
+            cloned,
+            { cloneFrom: originalTemplate.id },
+            function (err) {
               if (err) return done.fail(err);
 
-              clonedTemplate = templates.filter(function (template) {
-                return template.name === cloned;
-              })[0];
+              getTemplateList(test.blog.id, function (err, templates) {
+                if (err) return done.fail(err);
 
-              expect(originalTemplate.locals).toEqual(clonedTemplate.locals);
+                clonedTemplate = templates.filter(function (template) {
+                  return template.name === cloned;
+                })[0];
 
-              done();
-            });
-          });
+                expect(originalTemplate.locals).toEqual(clonedTemplate.locals);
+
+                done();
+              });
+            }
+          );
         });
       }
     );

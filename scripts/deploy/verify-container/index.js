@@ -23,7 +23,10 @@ const DEADLINE = 45 * 1000;
 function withTimeout(promise, ms, name) {
   let timer;
   const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`timed out after ${ms / 1000}s`)), ms);
+    timer = setTimeout(
+      () => reject(new Error(`timed out after ${ms / 1000}s`)),
+      ms
+    );
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }

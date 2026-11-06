@@ -208,21 +208,25 @@ function checkFolder(blogID, paths, results, callback) {
   function checkPath(index, next) {
     var candidates = filesWhichWouldBeServed(paths[index]);
 
-    async.detectSeries(candidates, isFile.bind(null, blogID), function (err, file) {
-      if (err) return next(err);
+    async.detectSeries(
+      candidates,
+      isFile.bind(null, blogID),
+      function (err, file) {
+        if (err) return next(err);
 
-      if (file)
-        results[index] = {
-          type: "file",
-          path: paths[index],
-          message:
-            "This redirect will not be used because a file in your folder is already published at " +
-            paths[index] +
-            ".",
-        };
+        if (file)
+          results[index] = {
+            type: "file",
+            path: paths[index],
+            message:
+              "This redirect will not be used because a file in your folder is already published at " +
+              paths[index] +
+              ".",
+          };
 
-      next();
-    });
+        next();
+      }
+    );
   }
 }
 

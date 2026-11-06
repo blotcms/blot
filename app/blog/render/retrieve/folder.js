@@ -107,6 +107,6 @@ async function folder(req, res) {
     parent,
     parentURI: encodeURIComponent(parent),
   };
-};
+}
 
 module.exports = asRetriever(folder);

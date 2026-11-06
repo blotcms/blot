@@ -19,7 +19,9 @@ async function main([packDir, folder, from, to]) {
   const store = createMemoryStore();
   const packs = [];
 
-  for (const file of fs.readdirSync(packDir).filter((f) => f.endsWith(".pack"))) {
+  for (const file of fs
+    .readdirSync(packDir)
+    .filter((f) => f.endsWith(".pack"))) {
     const name = file.slice(0, -".pack".length);
     const pack = fs.readFileSync(path.join(packDir, file));
     const idx = fs.readFileSync(path.join(packDir, name + ".idx"));
@@ -43,7 +45,12 @@ async function main([packDir, folder, from, to]) {
     peak = Math.max(peak, held());
   }, 20);
 
-  await materialize({ reader, from: from === "null" ? null : from, to, sink: createFolderSink({ root: folder }) });
+  await materialize({
+    reader,
+    from: from === "null" ? null : from,
+    to,
+    sink: createFolderSink({ root: folder }),
+  });
   clearInterval(timer);
   console.log(peak - before);
 }

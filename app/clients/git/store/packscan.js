@@ -35,21 +35,36 @@ async function scanPack(file) {
     const header = Buffer.alloc(12);
     const { bytesRead } = await handle.read(header, 0, 12, 0);
 
-    if (size < 32 || bytesRead < 12 || header.toString("latin1", 0, 4) !== "PACK" || header.readUInt32BE(4) !== 2) {
+    if (
+      size < 32 ||
+      bytesRead < 12 ||
+      header.toString("latin1", 0, 4) !== "PACK" ||
+      header.readUInt32BE(4) !== 2
+    ) {
       throw new CorruptError("Not a version 2 pack");
     }
 
     const count = header.readUInt32BE(8);
-    const pack = openPack({ store: fileStore(file, handle), key: "incoming", size, name: "the pushed pack" });
+    const pack = openPack({
+      store: fileStore(file, handle),
+      key: "incoming",
+      size,
+      name: "the pushed pack",
+    });
     const whole = new Set();
     const bases = new Set();
     let at = 12;
 
     for (let i = 0; i < count; i++) {
-      if (at >= size - 20) throw new CorruptError("The pack has fewer entries than it says");
+      if (at >= size - 20)
+        throw new CorruptError("The pack has fewer entries than it says");
 
       const entry = await pack.open(at);
-      const hash = isDelta(entry) ? null : crypto.createHash("sha1").update(entry.type + " " + entry.size + "\0");
+      const hash = isDelta(entry)
+        ? null
+        : crypto
+            .createHash("sha1")
+            .update(entry.type + " " + entry.size + "\0");
       for await (const chunk of entry.output) if (hash) hash.update(chunk);
 
       if (hash) whole.add(hash.digest("hex"));
@@ -57,7 +72,8 @@ async function scanPack(file) {
       at = entry.end();
     }
 
-    if (at + 20 !== size) throw new CorruptError("The pack has data after its last entry");
+    if (at + 20 !== size)
+      throw new CorruptError("The pack has data after its last entry");
     return { count, whole, bases };
   } finally {
     await handle.close();

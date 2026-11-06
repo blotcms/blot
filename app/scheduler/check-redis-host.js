@@ -71,9 +71,11 @@ const OFFSITE_KEY = "blot:redis-host:offsite";
 // the storage bucket to B2 (config/storage-bucket/bin/offsite-sync.sh). Absent
 // where it isn't configured.
 const STORAGE_OFFSITE_KEY = "blot:storage:offsite";
-const STORAGE_README_URL = "https://github.com/blotcms/blot/blob/master/config/storage-bucket/README.md";
+const STORAGE_README_URL =
+  "https://github.com/blotcms/blot/blob/master/config/storage-bucket/README.md";
 const STATE_KEY = "blot:redis-host:alerts";
-const README_URL = "https://github.com/blotcms/blot/blob/master/config/redis/README.md";
+const README_URL =
+  "https://github.com/blotcms/blot/blob/master/config/redis/README.md";
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -193,7 +195,9 @@ function parseSample(value) {
 
   const time = Date.parse(stamp);
   const mem = Number(fields.mem);
-  const tcpMem = String(fields.tcp_mem || "").split(",").map(Number);
+  const tcpMem = String(fields.tcp_mem || "")
+    .split(",")
+    .map(Number);
 
   if (!time || !fields.mem || !(mem >= 0)) return null;
   if (tcpMem.length !== 3 || !tcpMem.every((n) => n > 0)) return null;
@@ -209,7 +213,9 @@ function parseSample(value) {
     host: String(fields.host || "unknown").replace(/[^\w.-]/g, ""),
     active: fields.active === "1",
     ramTotal: Number(fields.ram_total) > 0 ? Number(fields.ram_total) : null,
-    ramAvailable: /^\d+$/.test(fields.ram_avail || "") ? Number(fields.ram_avail) : null,
+    ramAvailable: /^\d+$/.test(fields.ram_avail || "")
+      ? Number(fields.ram_avail)
+      : null,
     diskRoot: parseDisk(fields.disk_root),
     diskBackups: parseDisk(fields.disk_backups),
   };
@@ -241,7 +247,8 @@ function parseStorageOffsite(value) {
   const [stamp, objects, bytes] = String(value).trim().split(/\s+/);
   const time = Date.parse(stamp);
 
-  if (!time || !/^\d+$/.test(objects || "") || !/^\d+$/.test(bytes || "")) return null;
+  if (!time || !/^\d+$/.test(objects || "") || !/^\d+$/.test(bytes || ""))
+    return null;
 
   return { time, objects: Number(objects), bytes: Number(bytes) };
 }
@@ -271,10 +278,12 @@ function parseMemory(text) {
 
 // Is the state on? A fraction above `alert` turns it on; one that was on stays
 // on until it drops below `clear`.
-const above = (fraction, wasOn, alert, clear) => fraction >= (wasOn ? clear : alert);
+const above = (fraction, wasOn, alert, clear) =>
+  fraction >= (wasOn ? clear : alert);
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
-const duration = (ms) => (ms >= HOUR ? plural(Math.round(ms / HOUR), "hour") : minutes(ms));
+const duration = (ms) =>
+  ms >= HOUR ? plural(Math.round(ms / HOUR), "hour") : minutes(ms);
 const commas = (n) => Number(n).toLocaleString("en-US");
 const ms = (us) => commas(Math.round(us / 1000)) + "ms";
 const counts = (byType) =>
@@ -314,7 +323,16 @@ async function check(deps = {}) {
   // every 5 minutes, written by another client. One INFO (the default
   // sections hold memory, persistence, stats, errorstats and keyspace) and one
   // SLOWLOG GET: both are cheap.
-  const [sampleValue, backupValue, offsiteValue, storageOffsiteValue, stateValue, infoText, slowlogReply, machine] = await Promise.all([
+  const [
+    sampleValue,
+    backupValue,
+    offsiteValue,
+    storageOffsiteValue,
+    stateValue,
+    infoText,
+    slowlogReply,
+    machine,
+  ] = await Promise.all([
     client.sendCommand(["GET", SAMPLE_KEY]),
     client.sendCommand(["GET", BACKUP_KEY]),
     client.sendCommand(["GET", OFFSITE_KEY]),
@@ -332,7 +350,8 @@ async function check(deps = {}) {
     state = {};
   }
   // The state a run could not write to Redis (see run()), if it is newer
-  if (keep.state && (keep.state.updatedAt || 0) > (state.updatedAt || 0)) state = keep.state;
+  if (keep.state && (keep.state.updatedAt || 0) > (state.updatedAt || 0))
+    state = keep.state;
   state = {
     updatedAt: state.updatedAt || 0,
     alerts: state.alerts || {},
@@ -379,7 +398,12 @@ async function check(deps = {}) {
   [
     ["backup-stale", backupValue, BACKUP_STALE_MS, parseBackup],
     ["offsite-stale", offsiteValue, OFFSITE_STALE_MS, parseBackup],
-    ["storage-offsite-stale", storageOffsiteValue, STORAGE_OFFSITE_STALE_MS, parseStorageOffsite],
+    [
+      "storage-offsite-stale",
+      storageOffsiteValue,
+      STORAGE_OFFSITE_STALE_MS,
+      parseStorageOffsite,
+    ],
   ].forEach(([name, value, limit, parse]) => {
     if (value === null || value === undefined) return;
 
@@ -392,7 +416,12 @@ async function check(deps = {}) {
 
   if (fresh) {
     sample.fraction = sample.mem / sample.tcpMem[1];
-    conditions["tcp-mem"] = above(sample.fraction, was("tcp-mem"), TCP_MEM_ALERT, TCP_MEM_CLEAR);
+    conditions["tcp-mem"] = above(
+      sample.fraction,
+      was("tcp-mem"),
+      TCP_MEM_ALERT,
+      TCP_MEM_CLEAR
+    );
     conditions["maxmemory-unset"] = sample.active && memory.maxmemory === 0;
 
     // The counter is per host and since boot: a new host, or a reboot, starts
@@ -400,7 +429,11 @@ async function check(deps = {}) {
     if (sample.pressures !== null) {
       const sameHost = pressures && pressures.host === sample.host;
       if (sameHost && sample.pressures > pressures.count) {
-        pressureRise = { from: pressures.count, to: sample.pressures, host: sample.host };
+        pressureRise = {
+          from: pressures.count,
+          to: sample.pressures,
+          host: sample.host,
+        };
       }
       pressures = { host: sample.host, count: sample.pressures };
     }
@@ -418,7 +451,12 @@ async function check(deps = {}) {
 
   if (memory.maxmemory > 0) {
     memory.fraction = memory.used / memory.maxmemory;
-    conditions.maxmemory = above(memory.fraction, was("maxmemory"), MAXMEMORY_ALERT, MAXMEMORY_CLEAR);
+    conditions.maxmemory = above(
+      memory.fraction,
+      was("maxmemory"),
+      MAXMEMORY_ALERT,
+      MAXMEMORY_CLEAR
+    );
   } else {
     conditions.maxmemory = false;
   }
@@ -461,7 +499,11 @@ async function check(deps = {}) {
 
   // Events: what happened since the last check, at most one email per type
   // per cooldown
-  const { events, observed } = detect(state.observed, observe(fields, slowlogReply), { sample, now });
+  const { events, observed } = detect(
+    state.observed,
+    observe(fields, slowlogReply),
+    { sample, now }
+  );
   if (pressureRise) events["tcp-pressure"] = pressureRise;
 
   const pending = { ...state.pending };
@@ -470,7 +512,8 @@ async function check(deps = {}) {
 
   new Set([...Object.keys(pending), ...Object.keys(events)]).forEach((type) => {
     let data = pending[type];
-    if (events[type]) data = data ? merge[type](data, events[type]) : events[type];
+    if (events[type])
+      data = data ? merge[type](data, events[type]) : events[type];
 
     const last = mail[type] || { at: 0, flaps: 0 };
     if (now - last.at >= eventCooldown(type)) {
@@ -498,9 +541,19 @@ async function check(deps = {}) {
     events,
     due,
     held,
-    send: started.length > 0 || cleared.length > 0 || Object.keys(due).length > 0,
+    send:
+      started.length > 0 || cleared.length > 0 || Object.keys(due).length > 0,
     state,
-    nextState: { updatedAt: now, alerts, pressures, lowMemory, mail, seen, pending, observed },
+    nextState: {
+      updatedAt: now,
+      alerts,
+      pressures,
+      lowMemory,
+      mail,
+      seen,
+      pending,
+      observed,
+    },
   };
 }
 
@@ -527,7 +580,8 @@ function eventMessage(type, data, report) {
       );
     case "slowlog": {
       const lines = data.worst.map(
-        (entry) => `  - ${ms(entry.us)} at ${new Date(entry.at).toISOString().slice(11, 16)}Z: ${code(entry.command)}`
+        (entry) =>
+          `  - ${ms(entry.us)} at ${new Date(entry.at).toISOString().slice(11, 16)}Z: ${code(entry.command)}`
       );
       const rest = data.count - data.worst.length;
       if (rest > 0) lines.push(`  - and ${rest} more`);
@@ -617,8 +671,10 @@ function view(report) {
       // One alert that cannot be described must not stop the others
       text = `could not be described (${String(err && err.message).slice(0, 100)}); see the report from \`check-redis-host.js\``;
     }
-    if (report.flaps[name] > 1) text += ` (flapping: it changed state ${report.flaps[name]} times since the last email about it)`;
-    if (report.held[name]) text += ` (includes what was held back by the limit of one email per ${duration(eventCooldown(name))})`;
+    if (report.flaps[name] > 1)
+      text += ` (flapping: it changed state ${report.flaps[name]} times since the last email about it)`;
+    if (report.held[name])
+      text += ` (includes what was held back by the limit of one email per ${duration(eventCooldown(name))})`;
     return { title: TITLES[name], message: text };
   };
   const recovered = report.cleared.map((name) => ({
@@ -654,7 +710,9 @@ function view(report) {
   if (redis.saveStatus) {
     readings.push(
       `Last background save: ${redis.saveStatus}` +
-        (redis.lastSave ? `, ${minutes(report.now - redis.lastSave)} ago` : "") +
+        (redis.lastSave
+          ? `, ${minutes(report.now - redis.lastSave)} ago`
+          : "") +
         `; Redis ${redis.version || "?"}, up ${duration(redis.uptime * 1000)}`
     );
   }
@@ -698,7 +756,11 @@ async function run(deps = {}) {
 
   if (JSON.stringify(report.nextState) !== JSON.stringify(report.state)) {
     try {
-      await client.sendCommand(["SET", STATE_KEY, JSON.stringify(report.nextState)]);
+      await client.sendCommand([
+        "SET",
+        STATE_KEY,
+        JSON.stringify(report.nextState),
+      ]);
       keep.state = null;
     } catch (err) {
       // The email is out. When Redis refuses this write (OOM, or MISCONF on a
@@ -706,7 +768,10 @@ async function run(deps = {}) {
       // would send the same email again, every 5 minutes: keep it here and
       // use it until a write gets through.
       keep.state = report.nextState;
-      console.log("Redis host check: could not save its state to Redis:", err && err.message);
+      console.log(
+        "Redis host check: could not save its state to Redis:",
+        err && err.message
+      );
     }
   }
 

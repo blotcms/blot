@@ -9,7 +9,7 @@ var MODEL = {
   passwordHash: "string",
   subscription: "object",
   paypal: "object",
-  paymentMethods: "array"
+  paymentMethods: "array",
 };
 
 module.exports = MODEL;

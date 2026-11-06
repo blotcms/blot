@@ -185,10 +185,10 @@ function generateSVG(directory, text) {
   const fontpath = fs.existsSync(`${directory}/regular.woff`)
     ? `${directory}/regular.woff`
     : fs.existsSync(`${directory}/book.woff`)
-    ? `${directory}/book.woff`
-    : fs.existsSync(`${directory}/400.woff`)
-    ? `${directory}/400.woff`
-    : null;
+      ? `${directory}/book.woff`
+      : fs.existsSync(`${directory}/400.woff`)
+        ? `${directory}/400.woff`
+        : null;
   if (!fontpath) return;
   const textToSVG = TextToSVG.loadSync(fontpath);
   const svg = textToSVG.getSVG(text, { x: 0, y: 0, anchor: "left top" });
@@ -309,9 +309,7 @@ function convert(directory) {
   // .ttf/.otf are still read as *sources* here (they're git rm'd only
   // after the build) but we no longer emit them.
   fs.readdirSync(directory)
-    .filter((i) =>
-      [".woff2", ".woff", ".ttf", ".otf"].includes(extname(i))
-    )
+    .filter((i) => [".woff2", ".woff", ".ttf", ".otf"].includes(extname(i)))
     .forEach((filename) => {
       let name = filename.slice(0, -extname(filename).length);
       if (name.includes(".")) {

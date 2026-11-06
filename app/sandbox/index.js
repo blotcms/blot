@@ -45,14 +45,19 @@ function sandboxError(code, message) {
 
 async function inProcess(job, args, input) {
   if (!JOB.test(job)) throw new Error("unknown job");
-  const buffer = Buffer.isBuffer(input) ? input : await fs.promises.readFile(input.path);
+  const buffer = Buffer.isBuffer(input)
+    ? input
+    : await fs.promises.readFile(input.path);
   return require("./jobs/" + job).run(args, buffer);
 }
 
 function readLine(buffer, max) {
   const end = buffer.indexOf(10);
   if (end === -1 || end > max) return null;
-  return { line: buffer.subarray(0, end).toString(), rest: buffer.subarray(end + 1) };
+  return {
+    line: buffer.subarray(0, end).toString(),
+    rest: buffer.subarray(end + 1),
+  };
 }
 
 function isLength(n, max) {
@@ -74,14 +79,20 @@ function parseReply(reply) {
   if (!header || typeof header !== "object") throw sandboxError("BAD_REPLY");
 
   if (header.ok === false) {
-    if (!BROKER_ERRORS.includes(header.error)) throw sandboxError("BAD_REPLY", "unknown error");
-    throw sandboxError(header.error.toUpperCase().replace(/-/g, "_"), "sandbox: " + header.error);
+    if (!BROKER_ERRORS.includes(header.error))
+      throw sandboxError("BAD_REPLY", "unknown error");
+    throw sandboxError(
+      header.error.toUpperCase().replace(/-/g, "_"),
+      "sandbox: " + header.error
+    );
   }
   if (header.ok !== true || !isLength(header.length, MAX_REPLY_BYTES)) {
     throw sandboxError("BAD_REPLY", "invalid reply");
   }
-  if (first.rest.length < header.length) throw sandboxError("TRUNCATED", "reply was cut short");
-  if (first.rest.length > header.length) throw sandboxError("BAD_REPLY", "reply is longer than it says");
+  if (first.rest.length < header.length)
+    throw sandboxError("TRUNCATED", "reply was cut short");
+  if (first.rest.length > header.length)
+    throw sandboxError("BAD_REPLY", "reply is longer than it says");
 
   const second = readLine(first.rest, MAX_REPLY_BYTES);
   if (!second) throw sandboxError("BAD_REPLY", "no job line");
@@ -112,9 +123,12 @@ function parseReply(reply) {
 
 function viaBroker(socketPath, job, args, input) {
   return new Promise((resolve, reject) => {
-    if (!JOB.test(job)) return reject(sandboxError("UNKNOWN_JOB", "unknown job"));
+    if (!JOB.test(job))
+      return reject(sandboxError("UNKNOWN_JOB", "unknown job"));
     if (!Buffer.isBuffer(input) && !(input && typeof input.path === "string")) {
-      return reject(sandboxError("INPUT", "input must be a Buffer or { path }"));
+      return reject(
+        sandboxError("INPUT", "input must be a Buffer or { path }")
+      );
     }
 
     const chunks = [];
@@ -154,7 +168,12 @@ function viaBroker(socketPath, job, args, input) {
     socket.on("close", () => {
       if (done) return;
       if (!size && connectError) {
-        return finish(sandboxError("UNAVAILABLE", "cannot reach the sandbox: " + connectError.code));
+        return finish(
+          sandboxError(
+            "UNAVAILABLE",
+            "cannot reach the sandbox: " + connectError.code
+          )
+        );
       }
       try {
         finish(null, parseReply(Buffer.concat(chunks)));
@@ -163,12 +182,16 @@ function viaBroker(socketPath, job, args, input) {
       }
     });
 
-    socket.write(JSON.stringify({ job }) + "\n" + JSON.stringify(args || {}) + "\n");
+    socket.write(
+      JSON.stringify({ job }) + "\n" + JSON.stringify(args || {}) + "\n"
+    );
 
     if (Buffer.isBuffer(input)) return socket.end(input);
 
     file = fs.createReadStream(input.path);
-    file.on("error", (err) => finish(sandboxError("INPUT", "cannot read input: " + err.code)));
+    file.on("error", (err) =>
+      finish(sandboxError("INPUT", "cannot read input: " + err.code))
+    );
     file.pipe(socket);
   });
 }

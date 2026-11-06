@@ -18,7 +18,8 @@ const OPS = ["scan", "rewrite", "markdown"];
 
 async function run(args, input) {
   args = args && typeof args === "object" ? args : {};
-  if (!OPS.includes(args.op)) return { meta: { error: "unknown operation" }, outputs: [] };
+  if (!OPS.includes(args.op))
+    return { meta: { error: "unknown operation" }, outputs: [] };
 
   try {
     const text = input.toString("utf8");
@@ -28,11 +29,17 @@ async function run(args, input) {
       return { meta: { urls }, outputs: [Buffer.from(normalized)] };
     }
     if (args.op === "rewrite") {
-      return { meta: {}, outputs: [Buffer.from(html.rewrite(args.kind, text, args.replacements))] };
+      return {
+        meta: {},
+        outputs: [
+          Buffer.from(html.rewrite(args.kind, text, args.replacements)),
+        ],
+      };
     }
     return { meta: {}, outputs: [Buffer.from(html.markdown(text))] };
   } catch (err) {
-    if (err instanceof html.MarkupError) return { meta: { error: err.message }, outputs: [] };
+    if (err instanceof html.MarkupError)
+      return { meta: { error: err.message }, outputs: [] };
     throw err;
   }
 }

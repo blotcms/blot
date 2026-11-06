@@ -7,7 +7,7 @@ describe("restore Google Docs display math paragraphs", function () {
       "<p>Display equation follows:<br>$$<br>" +
         "\\int_0^\\infty e^{-x}\\,dx = 1<br>$$</p>",
       { decodeEntities: false },
-      false,
+      false
     );
 
     restoreDisplayMath($);
@@ -15,7 +15,7 @@ describe("restore Google Docs display math paragraphs", function () {
     expect($("p").length).toBe(2);
     expect($("p").first().text()).toBe("Display equation follows:");
     expect($("p").last().text()).toBe(
-      "$$\n\\int_0^\\infty e^{-x}\\,dx = 1\n$$",
+      "$$\n\\int_0^\\infty e^{-x}\\,dx = 1\n$$"
     );
   });
 

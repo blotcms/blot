@@ -62,7 +62,9 @@ const taggedCache = createRenderCache("tagged", {
       total: result.total !== undefined ? result.total : entryIDs.length,
     };
 
-    const prepared = prepareCacheValue(payload, { preserveEntryInstances: true });
+    const prepared = prepareCacheValue(payload, {
+      preserveEntryInstances: true,
+    });
 
     // Entry.get swallows Redis MGET failures as [] (models/entry/get.js).
     // If we received IDs but no hydrated entries, that is indistinguishable

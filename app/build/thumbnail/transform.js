@@ -34,12 +34,18 @@ function make(animated) {
     async function work() {
       var reply = await sandbox.run(
         "thumbnail",
-        { extension: extension, animated: animated, sizes: sizes, accept: validate.ACCEPT },
+        {
+          extension: extension,
+          animated: animated,
+          sizes: sizes,
+          accept: validate.ACCEPT,
+        },
         { path: path }
       );
 
       var meta = reply.meta;
-      if (!meta || typeof meta !== "object") throw new Error("Unexpected thumbnail result");
+      if (!meta || typeof meta !== "object")
+        throw new Error("Unexpected thumbnail result");
 
       var invalid = validate.check(meta.source);
       if (invalid || meta.thumbnails === null) {
@@ -64,7 +70,10 @@ function make(animated) {
         names.map(async function (name, i) {
           var fileName = name.toLowerCase() + extension;
 
-          await fs.writeFile(outputDirectory + "/" + fileName, reply.outputs[i]);
+          await fs.writeFile(
+            outputDirectory + "/" + fileName,
+            reply.outputs[i]
+          );
 
           result[name] = {
             width: meta.thumbnails[i].width,

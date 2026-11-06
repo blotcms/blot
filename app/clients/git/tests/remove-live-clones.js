@@ -13,7 +13,13 @@ describe("git client: removing leftover live clones", function () {
     var url = origin || "/var/www/blot/data/git/" + ctx.blog.handle + ".git";
 
     await folder.write(ctx.blog.id, "/.git/HEAD", "ref: refs/heads/master\n");
-    await folder.write(ctx.blog.id, "/.git/config", '[core]\n\tbare = false\n[remote "origin"]\n\turl = ' + url + "\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n");
+    await folder.write(
+      ctx.blog.id,
+      "/.git/config",
+      '[core]\n\tbare = false\n[remote "origin"]\n\turl = ' +
+        url +
+        "\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    );
     await folder.write(ctx.blog.id, "/.git/refs/heads/master", commit + "\n");
   }
 
@@ -29,10 +35,16 @@ describe("git client: removing leftover live clones", function () {
     // Behind master is fine: the store has everything it holds
     await plantClone(this, behind);
 
-    expect(await check(this)).toEqual({ blog: this.blog.id, outcome: "removable" });
+    expect(await check(this)).toEqual({
+      blog: this.blog.id,
+      outcome: "removable",
+    });
     expect(await folder.has(this.blog.id, "/.git")).toBe(true);
 
-    expect(await check(this, { apply: true })).toEqual({ blog: this.blog.id, outcome: "removed" });
+    expect(await check(this, { apply: true })).toEqual({
+      blog: this.blog.id,
+      outcome: "removed",
+    });
     expect(await folder.has(this.blog.id, "/.git")).toBe(false);
 
     // The blog's own files are left alone
@@ -72,7 +84,11 @@ describe("git client: removing leftover live clones", function () {
   it("keeps a user's own checkout, whose origin is somewhere else", async function () {
     await this.local.writeAndPush("/a.txt", "A");
 
-    await plantClone(this, await this.local.head(), "https://github.com/someone/blog.git");
+    await plantClone(
+      this,
+      await this.local.head(),
+      "https://github.com/someone/blog.git"
+    );
 
     var result = await check(this, { apply: true });
 
@@ -87,7 +103,9 @@ describe("git client: removing leftover live clones", function () {
     expect((await check(this)).reason).toBe("no-clone");
 
     await plantClone(this, await this.local.head());
-    await util.promisify(require("models/blog").set)(this.blog.id, { client: "" });
+    await util.promisify(require("models/blog").set)(this.blog.id, {
+      client: "",
+    });
 
     var result = await check(this, { apply: true });
 
@@ -100,19 +118,43 @@ describe("git client: removing leftover live clones", function () {
     await plantClone(this, await this.local.head());
 
     var seen = [];
-    var counts = await liveClones.run({ apply: true, ids: [this.blog.id, "blog_doesnotexist"], onResult: (r) => seen.push(r) });
+    var counts = await liveClones.run({
+      apply: true,
+      ids: [this.blog.id, "blog_doesnotexist"],
+      onResult: (r) => seen.push(r),
+    });
 
-    expect(counts).toEqual({ blogs: 2, removable: 0, removed: 1, failed: 0, kept: { "not-git": 1 } });
+    expect(counts).toEqual({
+      blogs: 2,
+      removable: 0,
+      removed: 1,
+      failed: 0,
+      kept: { "not-git": 1 },
+    });
     expect(seen.map((r) => r.outcome)).toEqual(["removed", "kept"]);
   });
 
   it("knows Blot's bare repository from anything else", function () {
-    expect(liveClones.isOwnBareRepo("/var/www/blot/data/git/handle.git", "handle")).toBe(true);
-    expect(liveClones.isOwnBareRepo("/usr/src/app/data/git/handle.git/", "handle")).toBe(true);
-    expect(liveClones.isOwnBareRepo("/var/www/blot/data/git/other.git", "handle")).toBe(false);
-    expect(liveClones.isOwnBareRepo("https://example.com/git/handle.git", "handle")).toBe(false);
-    expect(liveClones.isOwnBareRepo("/somewhere/handle.git", "handle")).toBe(false);
-    expect(liveClones.originOf('[remote "upstream"]\n\turl = /a\n[remote "origin"]\n\turl = /b\n')).toBe("/b");
+    expect(
+      liveClones.isOwnBareRepo("/var/www/blot/data/git/handle.git", "handle")
+    ).toBe(true);
+    expect(
+      liveClones.isOwnBareRepo("/usr/src/app/data/git/handle.git/", "handle")
+    ).toBe(true);
+    expect(
+      liveClones.isOwnBareRepo("/var/www/blot/data/git/other.git", "handle")
+    ).toBe(false);
+    expect(
+      liveClones.isOwnBareRepo("https://example.com/git/handle.git", "handle")
+    ).toBe(false);
+    expect(liveClones.isOwnBareRepo("/somewhere/handle.git", "handle")).toBe(
+      false
+    );
+    expect(
+      liveClones.originOf(
+        '[remote "upstream"]\n\turl = /a\n[remote "origin"]\n\turl = /b\n'
+      )
+    ).toBe("/b");
     expect(liveClones.originOf("[core]\n\tbare = false\n")).toBe(null);
   });
 });

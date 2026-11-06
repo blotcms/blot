@@ -82,16 +82,35 @@ function objectHasher(type, size) {
 // manifest its packs came from (`manifest`, in place of `packs` and `epoch`),
 // or its `epoch` with the packs; without either the epoch is "", which is right
 // only for a manifest without one.
-function createReader({ store, cache = null, manifest = null, packs = manifest && manifest.packs, epoch = (manifest && manifest.epoch) || "", maxSize = DEFAULT_MAX_SIZE, scratch = null, scratchConcurrency = 1, objectCache = true }) {
-  if (!Array.isArray(packs)) throw new Error("createReader needs the packs, or the manifest they are in");
-  if (typeof epoch !== "string") throw new Error("A reader's epoch is a string");
+function createReader({
+  store,
+  cache = null,
+  manifest = null,
+  packs = manifest && manifest.packs,
+  epoch = (manifest && manifest.epoch) || "",
+  maxSize = DEFAULT_MAX_SIZE,
+  scratch = null,
+  scratchConcurrency = 1,
+  objectCache = true,
+}) {
+  if (!Array.isArray(packs))
+    throw new Error(
+      "createReader needs the packs, or the manifest they are in"
+    );
+  if (typeof epoch !== "string")
+    throw new Error("A reader's epoch is a string");
   const scratchTurn = createSemaphore(scratchConcurrency);
 
   // Throws TooLargeError if `bytes` of scratch could never be had
   function mustFit(bytes, size) {
     if (typeof scratch.maxBytes === "number" && bytes > scratch.maxBytes) {
       const err = new TooLargeError(
-        "Building an object of " + size + " bytes needs " + bytes + " bytes of scratch space, and there can never be more than " + scratch.maxBytes
+        "Building an object of " +
+          size +
+          " bytes needs " +
+          bytes +
+          " bytes of scratch space, and there can never be more than " +
+          scratch.maxBytes
       );
       err.size = size;
       throw err;
@@ -102,7 +121,14 @@ function createReader({ store, cache = null, manifest = null, packs = manifest &
   const recent = recentReads();
   const opened = packs.map((entry) => ({
     name: entry.name,
-    pack: openPack({ store, key: packKey(entry.name), size: entry.size, name: entry.name, recent, cache }),
+    pack: openPack({
+      store,
+      key: packKey(entry.name),
+      size: entry.size,
+      name: entry.name,
+      recent,
+      cache,
+    }),
     index: openIndex({
       store,
       key: idxKey(entry.name),
@@ -136,7 +162,9 @@ function createReader({ store, cache = null, manifest = null, packs = manifest &
   // null. Every pack is asked at once, since each answer may be a cache hit.
   async function locate(oid) {
     await loadIndexes();
-    const offsets = await mapLimit(opened, LOOKUP_CONCURRENCY, (p) => p.index.lookup(oid));
+    const offsets = await mapLimit(opened, LOOKUP_CONCURRENCY, (p) =>
+      p.index.lookup(oid)
+    );
     for (let i = opened.length - 1; i >= 0; i--) {
       if (offsets[i] !== null) return { pack: opened[i], offset: offsets[i] };
     }
@@ -145,10 +173,14 @@ function createReader({ store, cache = null, manifest = null, packs = manifest &
 
   // Follows a delta's base: an offset in the same pack, or an ID anywhere
   async function baseOf(at, entry) {
-    if (entry.baseOffset !== undefined) return { pack: at.pack, offset: entry.baseOffset };
+    if (entry.baseOffset !== undefined)
+      return { pack: at.pack, offset: entry.baseOffset };
 
     const found = await locate(entry.baseOid);
-    if (!found) throw new NotFoundError("Delta base " + entry.baseOid + " is not in any pack");
+    if (!found)
+      throw new NotFoundError(
+        "Delta base " + entry.baseOid + " is not in any pack"
+      );
     return found;
   }
 
@@ -162,7 +194,8 @@ function createReader({ store, cache = null, manifest = null, packs = manifest &
 
     for (;;) {
       const id = at.pack.name + ":" + at.offset;
-      if (visited.has(id) || visited.size >= MAX_CHAIN) throw new CorruptError("Delta chain does not end");
+      if (visited.has(id) || visited.size >= MAX_CHAIN)
+        throw new CorruptError("Delta chain does not end");
       visited.add(id);
 
       const entry = await at.pack.pack.read(at.offset, limit);
@@ -172,19 +205,24 @@ function createReader({ store, cache = null, manifest = null, packs = manifest &
       }
 
       held += entry.data.length;
-      if (held > limit) throw new TooLargeError("Delta chain is larger than " + limit + " bytes");
+      if (held > limit)
+        throw new TooLargeError(
+          "Delta chain is larger than " + limit + " bytes"
+        );
       deltas.push(entry.data);
       at = await baseOf(at, entry);
     }
 
     let data = base.data;
-    for (let i = deltas.length - 1; i >= 0; i--) data = applyDelta(data, deltas[i], limit);
+    for (let i = deltas.length - 1; i >= 0; i--)
+      data = applyDelta(data, deltas[i], limit);
     return { type: base.type, data };
   }
 
   function check(oid, type, data) {
     const hash = objectHasher(type, data.length).update(data).digest("hex");
-    if (hash !== oid) throw new CorruptError("Object " + oid + " read back as " + hash);
+    if (hash !== oid)
+      throw new CorruptError("Object " + oid + " read back as " + hash);
   }
 
   async function has(oid) {
@@ -223,7 +261,8 @@ function createReader({ store, cache = null, manifest = null, packs = manifest &
   const packTypes = new Map();
   const noteType = (oid, type) => {
     packTypes.set(oid, type);
-    if (packTypes.size > MAX_TYPES) packTypes.delete(packTypes.keys().next().value);
+    if (packTypes.size > MAX_TYPES)
+      packTypes.delete(packTypes.keys().next().value);
   };
 
   // The object `oid` as { type, size, data }, or null if no pack has it.
@@ -255,7 +294,8 @@ function createReader({ store, cache = null, manifest = null, packs = manifest &
 
   const reading = new Map();
   // Without an epoch the key is what it always was
-  const objectKey = (oid) => store.id + "/obj/" + (epoch ? epoch + "/" : "") + oid;
+  const objectKey = (oid) =>
+    store.id + "/obj/" + (epoch ? epoch + "/" : "") + oid;
 
   // A commit, tree or tag from the cache, checked against its ID, or null
   async function cachedObject(oid) {
@@ -264,7 +304,8 @@ function createReader({ store, cache = null, manifest = null, packs = manifest &
     if (!hit || !hit.length || !TYPE_BY_CODE[hit[0]]) return null;
     const type = TYPE_BY_CODE[hit[0]];
     const data = hit.subarray(1);
-    if (objectHasher(type, data.length).update(data).digest("hex") !== oid) return null;
+    if (objectHasher(type, data.length).update(data).digest("hex") !== oid)
+      return null;
     return { type, size: data.length, data };
   }
 
@@ -272,8 +313,19 @@ function createReader({ store, cache = null, manifest = null, packs = manifest &
   // `oid` is; a caller other than read() passes what it has just hashed or
   // written itself.
   async function remember(oid, type, data) {
-    if (!cache || !objectCache || !CACHED_TYPES[type] || data.length > OBJECT_CACHE_MAX) return false;
-    return cache.put(objectKey(oid), Buffer.concat([Buffer.from([CACHED_TYPES[type]]), data])).catch(() => false);
+    if (
+      !cache ||
+      !objectCache ||
+      !CACHED_TYPES[type] ||
+      data.length > OBJECT_CACHE_MAX
+    )
+      return false;
+    return cache
+      .put(
+        objectKey(oid),
+        Buffer.concat([Buffer.from([CACHED_TYPES[type]]), data])
+      )
+      .catch(() => false);
   }
 
   // The size of the object a delta entry builds, from the start of its data
@@ -339,7 +391,8 @@ function createReader({ store, cache = null, manifest = null, packs = manifest &
 
     for (;;) {
       const id = at.pack.name + ":" + at.offset;
-      if (visited.has(id) || visited.size >= MAX_CHAIN) throw new CorruptError("Delta chain does not end");
+      if (visited.has(id) || visited.size >= MAX_CHAIN)
+        throw new CorruptError("Delta chain does not end");
       visited.add(id);
 
       const entry = await at.pack.pack.open(at.offset);
@@ -377,7 +430,10 @@ function createReader({ store, cache = null, manifest = null, packs = manifest &
     try {
       let current = path.join(reservation.dir, "0");
       let size = await writeFile(current, base.output);
-      if (size !== base.size) throw new CorruptError("Pack entry at " + base.offset + " is not the size its header says");
+      if (size !== base.size)
+        throw new CorruptError(
+          "Pack entry at " + base.offset + " is not the size its header says"
+        );
 
       for (let i = chain.length - 1; i >= 0; i--) {
         const entry = await chain[i].pack.pack.open(chain[i].offset);
@@ -410,15 +466,23 @@ function createReader({ store, cache = null, manifest = null, packs = manifest &
 
       async function* verified() {
         try {
-          for (let read = 0; read < length; ) {
-            const chunk = Buffer.allocUnsafe(Math.min(FILE_CHUNK, length - read));
+          for (let read = 0; read < length;) {
+            const chunk = Buffer.allocUnsafe(
+              Math.min(FILE_CHUNK, length - read)
+            );
             const { bytesRead } = await file.read(chunk, 0, chunk.length, read);
-            if (!bytesRead) throw new CorruptError("Object " + oid + " was cut short in scratch space");
+            if (!bytesRead)
+              throw new CorruptError(
+                "Object " + oid + " was cut short in scratch space"
+              );
             read += bytesRead;
             hash.update(chunk.subarray(0, bytesRead));
             yield chunk.subarray(0, bytesRead);
           }
-          if (hash.digest("hex") !== oid) throw new CorruptError("Object " + oid + " read back as a different object");
+          if (hash.digest("hex") !== oid)
+            throw new CorruptError(
+              "Object " + oid + " read back as a different object"
+            );
         } finally {
           await cleanup();
         }
@@ -464,7 +528,13 @@ function createReader({ store, cache = null, manifest = null, packs = manifest &
     // the trees of the push before) was checked against its ID as it came out
     const known = await cachedObject(oid);
     if (known && known.data.length <= limit) {
-      return { type: known.type, size: known.size, data: (async function* () { yield known.data; })() };
+      return {
+        type: known.type,
+        size: known.size,
+        data: (async function* () {
+          yield known.data;
+        })(),
+      };
     }
 
     const at = await locate(oid);
@@ -473,19 +543,27 @@ function createReader({ store, cache = null, manifest = null, packs = manifest &
     const entry = await at.pack.pack.open(at.offset);
     if (isDelta(entry)) {
       if (!scratch) entry.output.return();
-      else if ((await targetSize(entry)) > limit) return streamThroughScratch(oid, at);
+      else if ((await targetSize(entry)) > limit)
+        return streamThroughScratch(oid, at);
 
       let resolved;
       try {
         resolved = await resolve(at, limit);
       } catch (err) {
         // The result fits but something it is built from does not
-        if (scratch && err instanceof TooLargeError) return streamThroughScratch(oid, at);
+        if (scratch && err instanceof TooLargeError)
+          return streamThroughScratch(oid, at);
         throw err;
       }
 
       check(oid, resolved.type, resolved.data);
-      return { type: resolved.type, size: resolved.data.length, data: (async function* () { yield resolved.data; })() };
+      return {
+        type: resolved.type,
+        size: resolved.data.length,
+        data: (async function* () {
+          yield resolved.data;
+        })(),
+      };
     }
 
     const hash = objectHasher(entry.type, entry.size);
@@ -494,12 +572,25 @@ function createReader({ store, cache = null, manifest = null, packs = manifest &
         hash.update(chunk);
         yield chunk;
       }
-      if (hash.digest("hex") !== oid) throw new CorruptError("Object " + oid + " read back as a different object");
+      if (hash.digest("hex") !== oid)
+        throw new CorruptError(
+          "Object " + oid + " read back as a different object"
+        );
     }
     return { type: entry.type, size: entry.size, data: verified() };
   }
 
-  return { packs: opened.map((p) => p.name), epoch, has, locate, typeOf, read, stream, remember, pack: (name) => byName.get(name) };
+  return {
+    packs: opened.map((p) => p.name),
+    epoch,
+    has,
+    locate,
+    typeOf,
+    read,
+    stream,
+    remember,
+    pack: (name) => byName.get(name),
+  };
 }
 
 module.exports = createReader;

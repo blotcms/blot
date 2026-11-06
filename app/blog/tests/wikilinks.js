@@ -3,7 +3,7 @@ const cheerio = require("cheerio");
 describe("wikilinks", function () {
   require("./util/setup")();
 
-  global.test.timeout(10 * 1000);// 10 second timeout
+  global.test.timeout(10 * 1000); // 10 second timeout
 
   async function enableWikilinks() {
     const plugins = {
@@ -49,7 +49,7 @@ describe("wikilinks", function () {
     await this.blog.rebuild();
 
     const body = await this.text("/post");
-    expect(body).toContain('/_image_cache/');
+    expect(body).toContain("/_image_cache/");
     expect(body).not.toContain('"/Image.jpg"');
   });
 
@@ -73,34 +73,21 @@ describe("wikilinks", function () {
   it("resolves wikilinks by path for relative, absolute, and parent lookups", async function () {
     await this.write({
       path: "/Fruits/Apple.md",
-      content: [
-        "Title: Apple",
-        "Link: fruits/apple",
-        "",
-        "# Apple",
-      ].join("\n"),
+      content: ["Title: Apple", "Link: fruits/apple", "", "# Apple"].join("\n"),
     });
     await this.blog.rebuild();
 
     await this.write({
       path: "/Fruits/Pear.txt",
-      content: [
-        "Title: Pear",
-        "Link: fruits/pear",
-        "",
-        "# Pear",
-      ].join("\n"),
+      content: ["Title: Pear", "Link: fruits/pear", "", "# Pear"].join("\n"),
     });
     await this.blog.rebuild();
 
     await this.write({
       path: "/Fruits/Tasty/Mango.md",
-      content: [
-        "Title: Mango",
-        "Link: fruits/tasty/mango",
-        "",
-        "# Mango",
-      ].join("\n"),
+      content: ["Title: Mango", "Link: fruits/tasty/mango", "", "# Mango"].join(
+        "\n"
+      ),
     });
     await this.blog.rebuild();
 
@@ -143,16 +130,10 @@ describe("wikilinks", function () {
     expect(mangoBody).toContain(">Apple<");
   });
 
-
   it("does not rewrite unresolved absolute wikilink paths for normal links", async function () {
     await this.write({
       path: "/Guide.md",
-      content: [
-        "Title: Root Guide",
-        "Link: guide",
-        "",
-        "# Guide",
-      ].join("\n"),
+      content: ["Title: Root Guide", "Link: guide", "", "# Guide"].join("\n"),
     });
     await this.blog.rebuild();
 
@@ -170,7 +151,7 @@ describe("wikilinks", function () {
     const body = await this.text("/daily/plan");
     expect(body).toContain('href="/Daily/Guide"');
     expect(body).not.toContain('href="/guide"');
-    expect(body).toContain('>Guide<');
+    expect(body).toContain(">Guide<");
   });
 
   it("preserves unresolved relative wikilink text", async function () {
@@ -187,30 +168,24 @@ describe("wikilinks", function () {
 
     const body = await this.text("/daily/plan");
     expect(body).toContain('href="docs/missing-note"');
-    expect(body).toContain('>docs/missing-note<');
-    expect(body).not.toContain('>missing-note<');
+    expect(body).toContain(">docs/missing-note<");
+    expect(body).not.toContain(">missing-note<");
   });
 
   it("resolves filename-only wikilinks by traversing sibling directories", async function () {
     await this.write({
       path: "/Fruits/Tasty/Mango.md",
-      content: [
-        "Title: Mango",
-        "Link: fruits/tasty/mango",
-        "",
-        "# Mango",
-      ].join("\n"),
+      content: ["Title: Mango", "Link: fruits/tasty/mango", "", "# Mango"].join(
+        "\n"
+      ),
     });
     await this.blog.rebuild();
 
     await this.write({
       path: "/Fruits/Apple.md",
-      content: [
-        "Title: Apple",
-        "Link: fruits/apple",
-        "",
-        "[[Mango]]",
-      ].join("\n"),
+      content: ["Title: Apple", "Link: fruits/apple", "", "[[Mango]]"].join(
+        "\n"
+      ),
     });
     await this.blog.rebuild();
 
@@ -276,8 +251,7 @@ describe("wikilinks", function () {
     expect(body).toContain(">About Us<");
   });
 
-
-  // todo: work out why this test fails for '[[Heading Demo]]' and '[[#Heading Demo]]' but 
+  // todo: work out why this test fails for '[[Heading Demo]]' and '[[#Heading Demo]]' but
   // passes for '[[custom-heading]]' and '[[#custom-heading]]'
   xit("links to same-page headings for all supported anchor syntaxes", async function () {
     await this.write({
@@ -301,7 +275,6 @@ describe("wikilinks", function () {
     expect(body).toMatch(/>Heading Demo<.*>Heading Demo</s); // heading text reused for both forms
     expect(body).toMatch(/>Custom Heading<.*>Custom Heading</s);
   });
-
 
   // todo: work out why this test fails
   xit("prefers entry matches over same-page headings unless explicitly anchored", async function () {
@@ -445,16 +418,11 @@ describe("wikilinks", function () {
   });
 
   it("does not match folders when resolving by filename", async function () {
-    
     await this.write({
       path: "/Hello.md",
-      content: [
-        "Link: hello",
-        "",
-        "[[Corsi|...more]]",
-      ].join("\n"),
+      content: ["Link: hello", "", "[[Corsi|...more]]"].join("\n"),
     });
-    
+
     await this.write({
       path: "/Corsi/Index.md",
       content: [
@@ -467,8 +435,8 @@ describe("wikilinks", function () {
 
     await this.blog.rebuild();
 
-    expect(await this.text("/hello")).toContain('<a href="/resolved"') // match by post title
-    expect(await this.text("/hello")).not.toContain('<a href="/Corsi"') // match for folder name (incorrect)
+    expect(await this.text("/hello")).toContain('<a href="/resolved"'); // match by post title
+    expect(await this.text("/hello")).not.toContain('<a href="/Corsi"'); // match for folder name (incorrect)
   });
 
   // todo: implement a test spec which verifies filename lookup works *without* file extension
@@ -539,7 +507,9 @@ describe("wikilinks", function () {
 
     expect(embedded.length).toBe(1);
     expect(embedded.find("h1.injected-title").length).toBe(0);
-    expect(embedded.text()).toContain("Auto-heading should be hidden inside embeds.");
+    expect(embedded.text()).toContain(
+      "Auto-heading should be hidden inside embeds."
+    );
   });
 
   it("keeps authored headings in embedded markdown even when injectTitle is enabled", async function () {
@@ -608,13 +578,15 @@ describe("wikilinks", function () {
     expect(embedded.length).toBe(1);
     expect(embedded.find("h1").length).toBe(0);
     expect(embedded.find("h1.injected-title").length).toBe(0);
-    expect(embedded.text()).toContain("No synthetic title should exist without injectTitle.");
+    expect(embedded.text()).toContain(
+      "No synthetic title should exist without injectTitle."
+    );
   });
 
   it("embeds text files with different extensions (.txt, .text, .markdown)", async function () {
     await this.write({
       path: "/Reference/Notes.txt",
-      content: "Important reference information here."
+      content: "Important reference information here.",
     });
     await this.write({
       path: "/Main/Post.md",
@@ -635,7 +607,7 @@ describe("wikilinks", function () {
   it("tracks dependencies for embedded markdown files", async function () {
     await this.write({
       path: "/Snippets/Template.md",
-      content: "Original content"
+      content: "Original content",
     });
 
     await this.write({
@@ -651,7 +623,7 @@ describe("wikilinks", function () {
 
     await this.write({
       path: "/Snippets/Template.md",
-      content: "Updated content"
+      content: "Updated content",
     });
 
     expect(await this.text("/pages/guide")).toContain("Updated content");

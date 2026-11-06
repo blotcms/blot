@@ -96,8 +96,14 @@ describe("teaser parser", function () {
     strip("<p>{{more}} <em>After</em></p>", "<p> <em>After</em></p>");
     strip("<p><!-- more --><em>After</em></p>", "<p><em>After</em></p>");
     strip("  Before {{more}} After", "  Before  After");
-    strip("Before {{more}} middle &lt;&lt; more &gt;&gt; after", "Before  middle &lt;&lt; more &gt;&gt; after");
-    strip("<p>Explain <code>{{more}}</code> syntax</p>", "<p>Explain <code>{{more}}</code> syntax</p>");
+    strip(
+      "Before {{more}} middle &lt;&lt; more &gt;&gt; after",
+      "Before  middle &lt;&lt; more &gt;&gt; after"
+    );
+    strip(
+      "<p>Explain <code>{{more}}</code> syntax</p>",
+      "<p>Explain <code>{{more}}</code> syntax</p>"
+    );
     strip("İ Before {{more}} After", "İ Before  After");
     strip("<p>No marker</p>", "<p>No marker</p>");
     strip("<pre>{{more}}</pre><p>A</p>", "<pre>{{more}}</pre><p>A</p>");

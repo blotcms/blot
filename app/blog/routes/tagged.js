@@ -3,7 +3,10 @@
 // page renders with tagged/entries missing. See the note in
 // render/retrieve/index.js.
 module.exports = function register(blog) {
-  blog.get(["/tagged/:tag", "/tagged/:tag/page/:page"], function (req, res, next) {
-    res.renderView("tagged.html", next);
-  });
+  blog.get(
+    ["/tagged/:tag", "/tagged/:tag/page/:page"],
+    function (req, res, next) {
+      res.renderView("tagged.html", next);
+    }
+  );
 };

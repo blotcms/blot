@@ -20,7 +20,8 @@ async function mapLimit(items, limit, fn) {
   }
 
   const workers = [];
-  for (let i = 0; i < Math.min(limit, items.length); i++) workers.push(worker());
+  for (let i = 0; i < Math.min(limit, items.length); i++)
+    workers.push(worker());
   await Promise.all(workers);
 
   if (failure) throw failure.err;
@@ -51,7 +52,8 @@ function createSemaphore(limit) {
 // returns what it returns. Without a gate git starts at once. See "Limiting
 // git" in the README.
 function createChildren(gate) {
-  if (gate !== undefined && gate !== null && typeof gate !== "function") throw new Error("gate must be a function");
+  if (gate !== undefined && gate !== null && typeof gate !== "function")
+    throw new Error("gate must be a function");
   const children = new Set();
   children.start = gate || ((start) => start());
   return children;

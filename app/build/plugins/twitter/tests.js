@@ -4,7 +4,7 @@ const nock = require("nock");
 
 const validTweetURLs = [
   "https://x.com/Interior/status/463440424141459456",
-  "https://twitter.com/Interior/status/463440424141459456"
+  "https://twitter.com/Interior/status/463440424141459456",
 ];
 
 const invalidTweetURLs = [
@@ -25,10 +25,9 @@ const runTest = (html) => {
       resolve($.html());
     });
   });
-}
+};
 
 describe("twitter plugin", function () {
-
   global.test.timeout(10000); // 10 seconds
 
   beforeEach(function () {
@@ -39,10 +38,17 @@ describe("twitter plugin", function () {
       .get("/oembed")
       .query(true)
       .reply(function (uri) {
-        const requestUrl = new URL(`https://publish.twitter.com${uri}`).searchParams.get("url");
+        const requestUrl = new URL(
+          `https://publish.twitter.com${uri}`
+        ).searchParams.get("url");
 
         // Only mock valid Twitter/X URLs
-        if (requestUrl && /^(https?:\/\/)?(www\.)?(twitter\.com|x\.com)\/.+\/status\/\d+/.test(requestUrl)) {
+        if (
+          requestUrl &&
+          /^(https?:\/\/)?(www\.)?(twitter\.com|x\.com)\/.+\/status\/\d+/.test(
+            requestUrl
+          )
+        ) {
           const html =
             `<blockquote class="twitter-tweet" data-theme="light">` +
             `<p lang="en" dir="ltr">Example tweet content</p>` +
@@ -68,7 +74,9 @@ describe("twitter plugin", function () {
       const html = `<p><a href='${url}'>${url}</a></p>`;
       const newHTML = await runTest(html);
       // newHTML should contain a script tag and a blockquote tag
-      expect(newHTML).toContain(`<script async="" src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>`);
+      expect(newHTML).toContain(
+        `<script async="" src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>`
+      );
       expect(newHTML).toContain(`<blockquote class="twitter-tweet"`);
     }
   });
@@ -78,7 +86,9 @@ describe("twitter plugin", function () {
       const html = `<p><a href='${url}'>${url}</a></p>`;
       const newHTML = await runTest(html);
       // newHTML should be the same as the original html
-      expect(newHTML).not.toContain(`<script async="" src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>`);
+      expect(newHTML).not.toContain(
+        `<script async="" src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>`
+      );
       expect(newHTML).not.toContain(`<blockquote class="twitter-tweet">`);
     }
   });

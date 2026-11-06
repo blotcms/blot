@@ -2,7 +2,7 @@
 // left to check is that a remote with the old handle is told the new one.
 describe("git client handle changes", function () {
   require("./setup")({
-    clone: false
+    clone: false,
   });
 
   var http = require("http");
@@ -22,7 +22,13 @@ describe("git client handle changes", function () {
   function request(port, path, headers) {
     return new Promise(function (resolve, reject) {
       var req = http.request(
-        { method: "GET", hostname: "127.0.0.1", port: port, path: path, headers: headers || {} },
+        {
+          method: "GET",
+          hostname: "127.0.0.1",
+          port: port,
+          path: path,
+          headers: headers || {},
+        },
         function (res) {
           res.resume();
           resolve({ status: res.statusCode, location: res.headers.location });
@@ -49,10 +55,16 @@ describe("git client handle changes", function () {
     ];
 
     for (var [path, headers] of paths) {
-      var res = await request(this.server.port, "/clients/git/end/" + oldHandle + path, headers);
+      var res = await request(
+        this.server.port,
+        "/clients/git/end/" + oldHandle + path,
+        headers
+      );
 
       expect(res.status).toBe(308);
-      expect(res.location).toBe("https://" + host + "/clients/git/end/" + newHandle + path);
+      expect(res.location).toBe(
+        "https://" + host + "/clients/git/end/" + newHandle + path
+      );
     }
   });
 
@@ -64,9 +76,14 @@ describe("git client handle changes", function () {
     this.blog.handle = newHandle;
 
     // Deliberately no Authorization: handle history is public
-    var res = await request(this.server.port, "/clients/git/end/" + oldHandle + ".git/HEAD");
+    var res = await request(
+      this.server.port,
+      "/clients/git/end/" + oldHandle + ".git/HEAD"
+    );
 
     expect(res.status).toBe(308);
-    expect(res.location).toBe("https://" + host + "/clients/git/end/" + newHandle + ".git/HEAD");
+    expect(res.location).toBe(
+      "https://" + host + "/clients/git/end/" + newHandle + ".git/HEAD"
+    );
   });
 });

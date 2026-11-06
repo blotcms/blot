@@ -1,7 +1,11 @@
 describe("git store: daily maintenance", function () {
   // A blog on the git client with a clone, a memory store per blog, and the
   // store's log lines kept
-  require("clients/git/tests/setup")({ clone: false, client: true, lines: true });
+  require("clients/git/tests/setup")({
+    clone: false,
+    client: true,
+    lines: true,
+  });
 
   var maintenance = require("clients/git/served/maintenance");
   var gitStoreMaintenance = require("scheduler/git-store-maintenance");
@@ -26,12 +30,25 @@ describe("git store: daily maintenance", function () {
     });
 
     this.check = function (extra) {
-      return maintenance.verify(ctx.blog.id, Object.assign({ recheckDelayMs: 10, scratchDir: ctx.tmp + "/verify-scratch" }, extra));
+      return maintenance.verify(
+        ctx.blog.id,
+        Object.assign(
+          { recheckDelayMs: 10, scratchDir: ctx.tmp + "/verify-scratch" },
+          extra
+        )
+      );
     };
 
     // Only this blog: other specs' blogs may be in the database
     this.daily = function (options) {
-      return Object.assign({ ids: [ctx.blog.id], recheckDelayMs: 10, scratchDir: ctx.tmp + "/daily-scratch" }, options);
+      return Object.assign(
+        {
+          ids: [ctx.blog.id],
+          recheckDelayMs: 10,
+          scratchDir: ctx.tmp + "/daily-scratch",
+        },
+        options
+      );
     };
   });
 
@@ -52,7 +69,13 @@ describe("git store: daily maintenance", function () {
   describe("the verifier", function () {
     it("is ok when the store is whole", async function () {
       await this.local.writeAndPush("/a.txt", "A");
-      await this.local.git(["tag", "-a", "annotated", "-m", "An annotated tag"]);
+      await this.local.git([
+        "tag",
+        "-a",
+        "annotated",
+        "-m",
+        "An annotated tag",
+      ]);
       await this.local.push(["origin", "--tags"]);
 
       var result = await this.check();
@@ -68,13 +91,17 @@ describe("git store: daily maintenance", function () {
       await this.local.writeAndPush("/a.txt", "A");
       var named = await current(this);
 
-      await this.stores[this.blog.id].delete(layout.packKey(named.packs[0].name));
+      await this.stores[this.blog.id].delete(
+        layout.packKey(named.packs[0].name)
+      );
 
       var result = await this.check();
 
       expect(result.findings.length).toBe(1);
       expect(result.findings[0].kind).toBe("missing");
-      expect(result.findings[0].detail).toContain(named.packs[0].name + ".pack");
+      expect(result.findings[0].detail).toContain(
+        named.packs[0].name + ".pack"
+      );
       expect(this.storeLines("verify")[0]).toContain("outcome=missing");
       expect(this.storeLines("verify")[0]).toContain("attempts=2");
     });
@@ -113,7 +140,9 @@ describe("git store: daily maintenance", function () {
       var result = await this.check({ deep: true });
       expect(result.deep).toBe(true);
       expect(result.findings).toEqual([]);
-      expect(this.storeLines("verify").filter((line) => /check=deep/.test(line))[0]).toContain("outcome=ok");
+      expect(
+        this.storeLines("verify").filter((line) => /check=deep/.test(line))[0]
+      ).toContain("outcome=ok");
 
       // The same size, so only a clone notices
       var store = this.stores[this.blog.id];
@@ -136,16 +165,24 @@ describe("git store: daily maintenance", function () {
       var file = this.tmp + "/not-a-directory";
       require("fs").writeFileSync(file, "x");
 
-      var result = await this.check({ deep: true, scratchDir: file + "/scratch" });
+      var result = await this.check({
+        deep: true,
+        scratchDir: file + "/scratch",
+      });
 
       expect(result.findings.length).toBe(1);
       expect(result.findings[0].check).toBe("deep");
       expect(result.findings[0].kind).toBe("error");
-      expect(this.storeLines("verify").filter((line) => /check=deep/.test(line))[0]).toContain("outcome=error");
+      expect(
+        this.storeLines("verify").filter((line) => /check=deep/.test(line))[0]
+      ).toContain("outcome=error");
     });
 
     it("skips a blog which is off git", async function () {
-      await require("util").promisify(require("models/blog").set)(this.blog.id, { client: "" });
+      await require("util").promisify(require("models/blog").set)(
+        this.blog.id,
+        { client: "" }
+      );
 
       var result = await this.check();
 
@@ -159,19 +196,69 @@ describe("git store: daily maintenance", function () {
         return Object.assign(new Error(message), { code: code });
       };
 
-      expect(maintenance._verdict(new CorruptError("The store's refs differ from the source's"))).toBe("mismatch");
-      expect(maintenance._verdict(new NotFoundError("No such key: packs/pack-x.pack"))).toBe("missing");
-      expect(maintenance._verdict(new Error("git index-pack --strict --fsck-objects x.pack failed: fatal: pack has bad object at offset 12"))).toBe("mismatch");
-      expect(maintenance._verdict(new Error("git fsck --strict --no-dangling failed: missing blob 1234"))).toBe("mismatch");
-      expect(maintenance._verdict(new Error("git update-ref refs/heads/master 1234 failed: fatal: trying to write ref with nonexistent object"))).toBe("mismatch");
+      expect(
+        maintenance._verdict(
+          new CorruptError("The store's refs differ from the source's")
+        )
+      ).toBe("mismatch");
+      expect(
+        maintenance._verdict(
+          new NotFoundError("No such key: packs/pack-x.pack")
+        )
+      ).toBe("missing");
+      expect(
+        maintenance._verdict(
+          new Error(
+            "git index-pack --strict --fsck-objects x.pack failed: fatal: pack has bad object at offset 12"
+          )
+        )
+      ).toBe("mismatch");
+      expect(
+        maintenance._verdict(
+          new Error("git fsck --strict --no-dangling failed: missing blob 1234")
+        )
+      ).toBe("mismatch");
+      expect(
+        maintenance._verdict(
+          new Error(
+            "git update-ref refs/heads/master 1234 failed: fatal: trying to write ref with nonexistent object"
+          )
+        )
+      ).toBe("mismatch");
 
-      expect(maintenance._verdict(coded("ENOSPC: no space left on device, write", "ENOSPC"))).toBe(null);
-      expect(maintenance._verdict(coded("EACCES: permission denied, mkdtemp", "EACCES"))).toBe(null);
-      expect(maintenance._verdict(coded("EMFILE: too many open files", "EMFILE"))).toBe(null);
-      expect(maintenance._verdict(coded("No room in the cache", "NO_ROOM"))).toBe(null);
-      expect(maintenance._verdict(new Error("git index-pack --strict x.pack failed: fatal: unable to write: No space left on device"))).toBe(null);
-      expect(maintenance._verdict(new Error("git init -q --bare clone.git failed: Permission denied"))).toBe(null);
-      expect(maintenance._verdict(Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }))).toBe(null);
+      expect(
+        maintenance._verdict(
+          coded("ENOSPC: no space left on device, write", "ENOSPC")
+        )
+      ).toBe(null);
+      expect(
+        maintenance._verdict(
+          coded("EACCES: permission denied, mkdtemp", "EACCES")
+        )
+      ).toBe(null);
+      expect(
+        maintenance._verdict(coded("EMFILE: too many open files", "EMFILE"))
+      ).toBe(null);
+      expect(
+        maintenance._verdict(coded("No room in the cache", "NO_ROOM"))
+      ).toBe(null);
+      expect(
+        maintenance._verdict(
+          new Error(
+            "git index-pack --strict x.pack failed: fatal: unable to write: No space left on device"
+          )
+        )
+      ).toBe(null);
+      expect(
+        maintenance._verdict(
+          new Error("git init -q --bare clone.git failed: Permission denied")
+        )
+      ).toBe(null);
+      expect(
+        maintenance._verdict(
+          Object.assign(new Error("socket hang up"), { code: "ECONNRESET" })
+        )
+      ).toBe(null);
     });
   });
 
@@ -186,7 +273,9 @@ describe("git store: daily maintenance", function () {
       expect(stats.manifestsDeleted).toBe(0);
       expect(stats.packsDeleted).toBe(0);
       expect(this.stores[this.blog.id].stats.lists).toBeGreaterThan(lists);
-      expect(this.storeLines("sweep")[0]).toMatch(/ op=sweep outcome=ok ms=\d+ requests=\d+ /);
+      expect(this.storeLines("sweep")[0]).toMatch(
+        / op=sweep outcome=ok ms=\d+ requests=\d+ /
+      );
     });
   });
 
@@ -198,7 +287,10 @@ describe("git store: daily maintenance", function () {
         },
       });
       ctx.stores[blogID] = store;
-      return Promise.all([store.put("manifests/0000000001.json", Buffer.from("{}")), store.put("packs/pack-" + "a".repeat(40) + ".pack", Buffer.from("x"))]).then(function () {
+      return Promise.all([
+        store.put("manifests/0000000001.json", Buffer.from("{}")),
+        store.put("packs/pack-" + "a".repeat(40) + ".pack", Buffer.from("x")),
+      ]).then(function () {
         return store;
       });
     }
@@ -219,7 +311,14 @@ describe("git store: daily maintenance", function () {
       expect(counts.removed).toBe(1);
       expect(counts.spared).toBe(1);
       expect(counts.live).toBe(1);
-      expect(counts.findings).toEqual([{ blog: "blog_gone", check: "orphan", kind: "orphan", detail: "deleted 2 objects left behind" }]);
+      expect(counts.findings).toEqual([
+        {
+          blog: "blog_gone",
+          check: "orphan",
+          kind: "orphan",
+          detail: "deleted 2 objects left behind",
+        },
+      ]);
 
       // Even a week on, the live blog's prefix stays
       counts = await maintenance.orphans({ now: Date.now() + 7 * DAY });
@@ -227,7 +326,10 @@ describe("git store: daily maintenance", function () {
       expect(await keys(live)).toEqual(liveKeys);
       expect(counts.live).toBe(1);
 
-      expect(this.storeLines("remove").filter((line) => / outcome=ok /.test(line)).length).toBe(2);
+      expect(
+        this.storeLines("remove").filter((line) => / outcome=ok /.test(line))
+          .length
+      ).toBe(2);
     });
 
     it("deletes the manifests a disconnect's removal keeps without reporting them", async function () {
@@ -241,7 +343,11 @@ describe("git store: daily maintenance", function () {
       expect(await keys(gone)).toEqual([]);
       expect(counts.removed).toBe(1);
       expect(counts.findings).toEqual([]);
-      expect(this.storeLines("remove").filter((line) => /reason=tombstone/.test(line)).length).toBe(1);
+      expect(
+        this.storeLines("remove").filter((line) =>
+          /reason=tombstone/.test(line)
+        ).length
+      ).toBe(1);
     });
 
     it("reports a prefix it could not clean up, and goes on to the rest", async function () {
@@ -268,8 +374,18 @@ describe("git store: daily maintenance", function () {
       expect(counts.removed).toBe(1);
       expect(await keys(gone)).toEqual([]);
       expect(counts.findings).toEqual([
-        { blog: "blog_broken", check: "orphan", kind: "error", detail: "listing failed" },
-        { blog: "blog_gone", check: "orphan", kind: "orphan", detail: "deleted 2 objects left behind" },
+        {
+          blog: "blog_broken",
+          check: "orphan",
+          kind: "error",
+          detail: "listing failed",
+        },
+        {
+          blog: "blog_gone",
+          check: "orphan",
+          kind: "orphan",
+          detail: "deleted 2 objects left behind",
+        },
       ]);
 
       // The daily run emails it
@@ -286,7 +402,14 @@ describe("git store: daily maintenance", function () {
 
       expect(result.sent).toBe(true);
       expect(sent.length).toBe(1);
-      expect(sent[0].findings).toEqual([{ blog: "blog_broken", kind: "error", check: "orphan", detail: "listing failed" }]);
+      expect(sent[0].findings).toEqual([
+        {
+          blog: "blog_broken",
+          kind: "error",
+          check: "orphan",
+          detail: "listing failed",
+        },
+      ]);
       expect(result.report.orphans.errors).toBe(1);
     });
 
@@ -296,22 +419,36 @@ describe("git store: daily maintenance", function () {
       var gone = await old(this, "blog_gone", 3 * DAY);
       var options = this.daily({ deepCount: 0 });
 
-      var second = await maintenance.daily(Object.assign({ now: Date.UTC(2099, 0, 2) }, options));
+      var second = await maintenance.daily(
+        Object.assign({ now: Date.UTC(2099, 0, 2) }, options)
+      );
       expect(second.orphans).toBe(null);
       expect((await keys(gone)).length).toBe(2);
 
-      var first = await maintenance.daily(Object.assign({ now: Date.UTC(2099, 0, 1) }, options));
+      var first = await maintenance.daily(
+        Object.assign({ now: Date.UTC(2099, 0, 1) }, options)
+      );
       expect(first.orphans.removed).toBe(1);
       expect(await keys(gone)).toEqual([]);
       expect(first.findings.map((f) => f.kind)).toEqual(["orphan"]);
 
       // And the alert email says so
       var sent = [];
-      await gitStoreMaintenance.run(Object.assign({ orphanSweep: true, sendEmail: async (view) => sent.push(view) }, options));
+      await gitStoreMaintenance.run(
+        Object.assign(
+          { orphanSweep: true, sendEmail: async (view) => sent.push(view) },
+          options
+        )
+      );
       expect(sent).toEqual([]);
 
       await old(this, "blog_gone", 3 * DAY);
-      await gitStoreMaintenance.run(Object.assign({ orphanSweep: true, sendEmail: async (view) => sent.push(view) }, options));
+      await gitStoreMaintenance.run(
+        Object.assign(
+          { orphanSweep: true, sendEmail: async (view) => sent.push(view) },
+          options
+        )
+      );
       expect(sent.length).toBe(1);
       expect(sent[0].summary).toBe("1 leftover in 1 blog");
       expect(sent[0].hasOrphans).toBe(true);
@@ -343,8 +480,12 @@ describe("git store: daily maintenance", function () {
       expect(result.report.deepChecked).toBe(1);
       // The blog's sweep, and the scratch directory's (source=scratch)
       var sweeps = this.storeLines("sweep");
-      expect(sweeps.filter((line) => / source=scratch /.test(line)).length).toBe(1);
-      expect(sweeps.filter((line) => !/ source=scratch /.test(line)).length).toBe(1);
+      expect(
+        sweeps.filter((line) => / source=scratch /.test(line)).length
+      ).toBe(1);
+      expect(
+        sweeps.filter((line) => !/ source=scratch /.test(line)).length
+      ).toBe(1);
     });
 
     it("sends one email for several findings", async function () {
@@ -353,7 +494,10 @@ describe("git store: daily maintenance", function () {
       var named = await current(this);
       var store = this.stores[this.blog.id];
       await store.delete(layout.idxKey(named.packs[0].name));
-      await store.put(layout.packKey(named.packs[0].name), Buffer.from("too short"));
+      await store.put(
+        layout.packKey(named.packs[0].name),
+        Buffer.from("too short")
+      );
 
       var sent = [];
       var result = await run(this, sent);
@@ -361,9 +505,14 @@ describe("git store: daily maintenance", function () {
       expect(result.sent).toBe(true);
       expect(sent.length).toBe(1);
       expect(sent[0].findings.length).toBe(2);
-      expect(sent[0].findings.map((f) => f.kind).sort()).toEqual(["mismatch", "missing"]);
+      expect(sent[0].findings.map((f) => f.kind).sort()).toEqual([
+        "mismatch",
+        "missing",
+      ]);
       expect(sent[0].summary).toBe("1 missing file, 1 mismatch in 1 blog");
-      sent[0].findings.forEach((finding) => expect(finding.blog).toBe(this.blog.id));
+      sent[0].findings.forEach((finding) =>
+        expect(finding.blog).toBe(this.blog.id)
+      );
       expect(JSON.stringify(sent[0])).not.toContain(this.blog.handle);
 
       // A blog which failed the cheap check is not cloned

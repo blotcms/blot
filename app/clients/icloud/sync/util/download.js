@@ -6,7 +6,6 @@ const fetch = require("../../util/rateLimitedFetchWithRetriesAndTimeout");
 
 const DOWNLOAD_TIMEOUT_MS = 60 * 1000;
 
-
 module.exports = async (blogID, path) => {
   const pathBase64 = Buffer.from(path).toString("base64");
   // The macserver may first run `brctl download` for an evicted file (up to

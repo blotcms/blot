@@ -79,22 +79,46 @@ async function commit(blogID, change) {
             .then(release)
             .catch(function (err) {
               // The lock expires by itself; a commit that worked still worked
-              console.error(clfdate(), "Git: could not release the ref lock of", blogID, err && err.message);
+              console.error(
+                clfdate(),
+                "Git: could not release the ref lock of",
+                blogID,
+                err && err.message
+              );
             });
         }
       })
     );
 
     result = measured.result;
-    Object.assign(fields, { ms: Date.now() - started, requests: measured.counts.requests, bytesUp: measured.counts.bytesUp, seq: result.seq });
+    Object.assign(fields, {
+      ms: Date.now() - started,
+      requests: measured.counts.requests,
+      bytesUp: measured.counts.bytesUp,
+      seq: result.seq,
+    });
   } catch (err) {
-    log({ ...fields, outcome: "error", ms: Date.now() - started, detail: (err && (err.code || err.name)) || "error" });
+    log({
+      ...fields,
+      outcome: "error",
+      ms: Date.now() - started,
+      detail: (err && (err.code || err.name)) || "error",
+    });
     throw err;
   }
 
   if (result.outcome === "unknown") {
-    log({ ...fields, outcome: "unknown", detail: (result.error && (result.error.code || result.error.name)) || "unknown" });
-    throw new Error("Blot could not confirm whether the change to " + change.path + " was saved");
+    log({
+      ...fields,
+      outcome: "unknown",
+      detail:
+        (result.error && (result.error.code || result.error.name)) || "unknown",
+    });
+    throw new Error(
+      "Blot could not confirm whether the change to " +
+        change.path +
+        " was saved"
+    );
   }
 
   if (!result.changed) {
@@ -108,9 +132,16 @@ async function commit(blogID, change) {
   // no reason to fail a write that is already committed: the next sync
   // applies it again, which is harmless.
   if (result.parent) {
-    await advanceApplied(blogID, result.parent, result.commit).catch(function (err) {
-      console.error(clfdate(), "Git: could not record the applied commit of", blogID, err && err.message);
-    });
+    await advanceApplied(blogID, result.parent, result.commit).catch(
+      function (err) {
+        console.error(
+          clfdate(),
+          "Git: could not record the applied commit of",
+          blogID,
+          err && err.message
+        );
+      }
+    );
   }
 
   upkeep.compactAfter(blogID, result.manifest);

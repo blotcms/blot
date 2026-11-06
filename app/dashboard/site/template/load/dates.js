@@ -9,7 +9,7 @@ var displays = [
   "MMMM D, Y [at] h:mma",
   "D MMMM Y",
   "Y-MM-DD",
-  "Y-MM-DD HH:mm"
+  "Y-MM-DD HH:mm",
 ];
 
 module.exports = function (req, res, next) {
@@ -24,8 +24,8 @@ module.exports = function (req, res, next) {
       {
         value: hideDatesValue,
         selected: hide_dates ? "selected" : "",
-        date: "Hide dates"
-      }
+        date: "Hide dates",
+      },
     ];
     const hasMatchingFormat = displays.includes(date_display);
 
@@ -39,7 +39,7 @@ module.exports = function (req, res, next) {
           (display === date_display || (!hasMatchingFormat && index === 0))
             ? "selected"
             : "",
-        date: now
+        date: now,
       });
     });
 
