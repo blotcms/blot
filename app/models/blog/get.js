@@ -5,6 +5,7 @@ var serial = require("./serial");
 var withCallback = require("helper/withCallback");
 var applyImageExif = require("./util/imageExif").apply;
 var applyConverters = require("./util/converters").apply;
+var normalized = require("./util/normalized");
 
 // Resolves to the blog, or undefined when there is none
 module.exports = withCallback(async function get(by) {
@@ -35,6 +36,7 @@ module.exports = withCallback(async function get(by) {
   blog = serial.de(blog);
   applyImageExif(blog);
   applyConverters(blog);
+  normalized.add(blog);
 
   return blog;
 });

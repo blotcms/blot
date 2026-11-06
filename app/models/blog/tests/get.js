@@ -38,4 +38,32 @@ describe("Blog.get", function () {
     expect(blog.converters.markdown).toBe(true);
     expect(blog.converters.docx).toBe(true);
   });
+
+  // Callers (Blog.extend among them) change the blog they get, so each get
+  // must return a blog of its own, even when the client-side cache serves
+  // the hash
+  it("returns a fresh blog each time, unaffected by changes to an earlier one", async function () {
+    const first = await get({ id: this.blog.id });
+    first.title = "changed by a caller";
+    first.converters.markdown = !first.converters.markdown;
+    first.menu.push({ id: "x", label: "added" });
+
+    const second = await get({ id: this.blog.id });
+    expect(second.title).toBe(this.blog.title);
+    expect(second.converters.markdown).toBe(!first.converters.markdown);
+    expect(second.menu.length).toBe(first.menu.length - 1);
+  });
+
+  it("extends a fetched blog the same as before, and still normalizes other blogs", async function () {
+    const extend = require("../extend");
+
+    const fetched = extend(await get({ id: this.blog.id }));
+    expect(typeof fetched.converters.markdown).toBe("boolean");
+    expect(fetched.imageExif).toBeDefined();
+
+    // Not from get: extend normalizes it itself
+    const handBuilt = extend({ id: "x", handle: "x", menu: [] });
+    expect(handBuilt.converters.markdown).toBe(true);
+    expect(handBuilt.imageExif).toBe("off");
+  });
 });
