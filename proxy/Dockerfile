@@ -4,7 +4,7 @@
 #
 # Every version, commit and checksum ARG below is declared without a default:
 # config/versions.env holds them, and whatever builds this image passes them as
-# build args (proxy/build/image.sh, docker-bake.hcl, the workflows). A build
+# build args (proxy/build/image.sh, config/docker-bake.hcl, the workflows). A build
 # without them fails. scripts/security/check-versions.js (CI, and the daily
 # advisories check) fails if a default creeps back in.
 #

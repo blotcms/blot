@@ -4,7 +4,7 @@
 # boot-testing it with proxy/unit/smoke.sh. The Deploy workflow deploys it
 # (scripts/deploy/units.sh).
 #
-# OpenResty is built in the same build (docker-bake.hcl: the proxy target from
+# OpenResty is built in the same build (config/docker-bake.hcl: the proxy target from
 # proxy/Dockerfile, which the unit stage copies from), on the layers cached
 # under blot:cache-proxy-arm64, and the app on the layers under blot:cache-arm64.
 # Every workflow that builds the proxy image reads the first
@@ -21,7 +21,7 @@ on:
     branches: [master]
     paths:
       - ".github/workflows/unit-image.yml"
-      - "docker-bake.hcl"
+      - "config/docker-bake.hcl"
       - "proxy/**"
       - "Dockerfile"
       - "scripts/security/check-versions.js"
@@ -106,7 +106,7 @@ jobs:
             # The checkout, not the Git context: the proxy's generated config
             # (proxy/build/data) is untracked
             source: .
-            files: docker-bake.hcl
+            files: config/docker-bake.hcl
             targets: unit
             set: |
               unit.output=type=registry
