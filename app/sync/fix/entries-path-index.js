@@ -1,25 +1,26 @@
+const { promisify } = require("util");
+const withCallback = require("helper/withCallback");
 const client = require("models/client");
 const pathIndex = require("models/entries/pathIndex");
 
-module.exports = function entriesPathIndex(blog, callback) {
+module.exports = withCallback(async function entriesPathIndex(blog) {
   const entriesKey = "blog:" + blog.id + ":entries";
   const lexKey = pathIndex.lexKey(blog.id);
 
-  Promise.all([client.zCard(entriesKey), client.zCard(lexKey)])
-    .then(function ([entriesCountResult, lexCountResult]) {
-      const entriesCount = parseInt(entriesCountResult, 10) || 0;
-      const lexCount = parseInt(lexCountResult, 10) || 0;
+  const [entriesCountResult, lexCountResult] = await Promise.all([
+    client.zCard(entriesKey),
+    client.zCard(lexKey),
+  ]);
 
-      if (entriesCount === lexCount) return callback(null, []);
+  const entriesCount = parseInt(entriesCountResult, 10) || 0;
+  const lexCount = parseInt(lexCountResult, 10) || 0;
 
-      pathIndex.backfillIndex(blog.id, function (err, rebuiltCount) {
-        if (err) return callback(err);
+  if (entriesCount === lexCount) return [];
 
-        callback(null, [
-          ["MISMATCH", { entries: entriesCount, pathIndex: lexCount }],
-          ["BACKFILLED", rebuiltCount],
-        ]);
-      });
-    })
-    .catch(callback);
-};
+  const rebuiltCount = await promisify(pathIndex.backfillIndex)(blog.id);
+
+  return [
+    ["MISMATCH", { entries: entriesCount, pathIndex: lexCount }],
+    ["BACKFILLED", rebuiltCount],
+  ];
+});

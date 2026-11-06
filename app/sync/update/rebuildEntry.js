@@ -1,3 +1,5 @@
+var { promisify } = require("util");
+var withCallback = require("helper/withCallback");
 var Entry = require("models/entry");
 var build = require("build");
 var folderPostSource = require("./folderPostSourceFolder");
@@ -11,17 +13,15 @@ var folderPostSource = require("./folderPostSourceFolder");
 // does not exist on disk (e.g. the aggregate for /album+ is stored at /album),
 // so it is rebuilt through its source folder; otherwise build() would fail
 // with ENOENT/WRONGTYPE for a perfectly valid aggregate.
-module.exports = function rebuildEntry(blog, entry, callback) {
+module.exports = withCallback(async function rebuildEntry(blog, entry) {
   var folderSource = folderPostSource(entry);
   var buildPath = folderSource || entry.path;
 
-  build(blog, buildPath, function (err, updated) {
-    if (err) return callback(err);
+  var updated = await build(blog, buildPath);
 
-    if (folderSource && updated.metadata && updated.metadata._sourcePaths) {
-      delete updated.metadata._sourcePaths;
-    }
+  if (folderSource && updated.metadata && updated.metadata._sourcePaths) {
+    delete updated.metadata._sourcePaths;
+  }
 
-    Entry.set(blog.id, updated.path || entry.path, updated, callback);
-  });
-};
+  return promisify(Entry.set)(blog.id, updated.path || entry.path, updated);
+});
