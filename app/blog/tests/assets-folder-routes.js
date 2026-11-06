@@ -117,6 +117,28 @@ describe("blog asset folder routes", function () {
       expect((await fetch(cdnURL("/.dot.txt"))).status).toBe(404);
       expect((await fetch(cdnURL("/.hidden"))).status).toBe(404);
     });
+
+    it("serves a pending image once it syncs, ignoring case, with short caching", async function () {
+      const pendingURL = (suffix) => url + "/cdn/folder/v-pending/" + blogID + suffix;
+
+      const missing = await fetch(pendingURL("/Photos/Pic.JPG"));
+      expect(missing.status).toBe(404);
+      expect(missing.headers.get("cache-control")).toEqual("public, max-age=60");
+
+      await folder.write(blogID, "photos/pic.jpg", "pic");
+
+      const found = await fetch(pendingURL("/Photos/Pic.JPG"));
+      expect(found.status).toBe(200);
+      expect(await found.text()).toEqual("pic");
+      expect(found.headers.get("cache-control")).toEqual("public, max-age=3600");
+
+      // a directory is never a pending image
+      expect((await fetch(pendingURL("/photos"))).status).toBe(404);
+      expect((await fetch(pendingURL("/photos/"))).status).toBe(404);
+
+      // other versions keep the exact lookup
+      expect((await fetch(cdnURL("/Photos/Pic.JPG"))).status).toBe(404);
+    });
   });
 
   it("finds a file by its case on a page of a directory after the first", async function () {

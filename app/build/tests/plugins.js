@@ -27,8 +27,9 @@ describe("build", function () {
   it("will use a title to generate an image caption over the alt text", function (done) {
     const contents = `![Alt text here](foo.jpg "Title here")`;
     const path = "/hello.txt";
+    // foo.jpg isn't in the folder, so it's baked as a pending CDN URL
     const html =
-      '<p><img src="/foo.jpg" title="Title here" alt="Alt text here"><span class="caption">Title here</span></p>';
+      `<p><img src="%%BLOT_CDN%%/folder/v-pending/${this.blog.id}/foo.jpg" title="Title here" alt="Alt text here"><span class="caption">Title here</span></p>`;
 
     this.blog.plugins.imageCaption = { enabled: true, options: {} };
     this.buildAndCheck({ path, contents }, { html }, done);
