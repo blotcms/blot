@@ -13,7 +13,6 @@
 // The sync does not check the whole tree for links and submodules: a push
 // is refused if master's new tree adds one (store/receive.js,
 // regularFilesOnly), and ./materialize.js never writes one.
-const { promisify } = require("util");
 const database = require("../database");
 const manifest = require("../store/manifest");
 const createReader = require("../store/reader");
@@ -26,10 +25,8 @@ const { EMPTY_TREE } = materialize;
 const MASTER = "refs/heads/master";
 
 // Looked up on the module each time, so a spec can watch them
-const getApplied = (...args) =>
-  promisify(database.getApplied.bind(database))(...args);
-const setApplied = (...args) =>
-  promisify(database.setApplied.bind(database))(...args);
+const getApplied = (...args) => database.getApplied(...args);
+const setApplied = (...args) => database.setApplied(...args);
 
 async function hasCommit(reader, oid) {
   try {
