@@ -26,8 +26,7 @@
     "app/blog/static/fonts/test.js",
     "app/blog/static/syntax-highlighter/build.js",
     "app/build/plugins/katex/preview.js",
-    "scripts/benchmarks/spec/build-render.spec.js",
-    ".claude/skills/**/*.js"
+    "scripts/benchmarks/spec/build-render.spec.js"
   ],
   "paths": {
     "blog": ["app/blog"],

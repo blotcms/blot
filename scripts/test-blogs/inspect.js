@@ -1,6 +1,6 @@
 // Read-only: shows what Blot built for a test blog's entry and whether the
 // generated assets it uses exist on disk and (once there is a bucket) in S3.
-// Used by the test-blogs skill (.claude/skills/test-blogs/SKILL.md).
+// Used by the test-blogs skill (kept in the operator's local skills directory).
 //
 // Usage: node scripts/test-blogs/inspect.js <handle> [path-in-folder] [-n N]
 //

@@ -16,7 +16,7 @@
 // fetched independently with a timeout; a failing one is reported as
 // "source unavailable" and the rest continue. Only public URLs are used
 // (plus the optional local npm/gh calls). See
-// .claude/skills/check-security-advisories/SKILL.md.
+// the operator's local check-security-advisories skill.
 
 const fs = require("fs");
 const path = require("path");
