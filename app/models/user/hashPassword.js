@@ -1,10 +1,11 @@
 var bcrypt = require("bcryptjs");
+var withCallback = require("helper/withCallback");
 var { passwordIsTooLong } = require("./auth-limits");
 
-module.exports = function (password, callback) {
+module.exports = withCallback(async function hashPassword(password) {
   if (passwordIsTooLong(password)) {
-    return callback(new Error("Password is too long"));
+    throw new Error("Password is too long");
   }
 
-  bcrypt.hash(password, 10, callback);
-};
+  return await bcrypt.hash(password, 10);
+});

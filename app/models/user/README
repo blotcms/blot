@@ -139,6 +139,8 @@ Defined in `key.js`:
 
 All functions are exposed via `index.js`. Callbacks follow Node.js error-first convention: `callback(err, result)`.
 
+`getById`, `getByEmail`, `getAllIds`, `getByCustomerId`, `getByPayPalSubscriptionId`, `checkPassword`, `hashPassword`, `checkAccessToken` and `generateAccessToken` return a promise when called without a callback (`helper/withCallback`, #2559). New code should `await` them; the callback form remains for existing callers.
+
 ### `create(email, passwordHash, subscription, paypal, callback)`
 
 Creates a user record. Validates all fields, generates a UID, writes atomically to Redis, and schedules a subscription renewal notification. Retries automatically on UID collision.
