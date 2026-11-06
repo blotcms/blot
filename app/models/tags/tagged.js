@@ -117,21 +117,19 @@ function intersectMany(arrays) {
   return [...set];
 }
 
-function getTag(blogID, slug, opts) {
-  return new Promise((resolve, reject) => {
-    // Tags.get may accept options for single-tag queries
-    const cb = (err, entryIDs, prettyTag, total) =>
-      err
-        ? reject(err)
-        : resolve({
-            entryIDs: entryIDs || [],
-            prettyTag: prettyTag || slug,
-            total,
-          });
-    // Required here: models/tags requires this module (and specs spy on get)
-    const Tags = require("models/tags");
-    opts ? Tags.get(blogID, slug, opts, cb) : Tags.get(blogID, slug, cb);
-  });
+async function getTag(blogID, slug, opts) {
+  // Required here: models/tags requires this module (and specs spy on get)
+  const Tags = require("models/tags");
+  // Tags.get may accept options for single-tag queries
+  const { entryIDs, prettyTag, total } = opts
+    ? await Tags.get(blogID, slug, opts)
+    : await Tags.get(blogID, slug);
+
+  return {
+    entryIDs: entryIDs || [],
+    prettyTag: prettyTag || slug,
+    total,
+  };
 }
 
 async function getTagged(blogID, slugs, options) {
