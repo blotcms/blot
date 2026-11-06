@@ -242,6 +242,7 @@ function startServer() {
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", 1);
+  app.set("query parser", "extended"); // as app/server.js
 
   let nextId = 0;
   app.use((req, res, next) => {

@@ -9,7 +9,7 @@ const documentation = Express.Router();
 const VIEW_DIRECTORY = config.views_directory;
 
 documentation.get(
-  ["/how/format/*", "/how/files/markdown", "/how/formatting/math"],
+  ["/how/format/{*splat}", "/how/files/markdown", "/how/formatting/math"],
   function (req, res, next) {
     res.locals["show-on-this-page"] = true;
     next();
@@ -30,6 +30,7 @@ for (const path of files) {
       maxAge: "1y", // cache long-term
       acceptRanges: false, // do not allow ranged requests
       immutable: true, // the file will not change
+      dotfiles: "allow", // Express 5 checks every segment of an absolute path
     })
   );
 }
