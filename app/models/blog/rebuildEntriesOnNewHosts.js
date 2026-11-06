@@ -88,9 +88,8 @@ async function run(blogID, former) {
     for (const path of paths) {
       // Read again under the lock: a sync may have rebuilt or removed it
       // since the scan.
-      const entry = await new Promise((resolve) =>
-        Entry.get(blogID, path, resolve)
-      );
+      // A failed read is the same as no entry
+      const entry = await Entry.get(blogID, path).catch(() => undefined);
 
       if (!entry || entry.deleted) continue;
 

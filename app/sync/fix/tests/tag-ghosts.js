@@ -105,9 +105,7 @@ describe("sync/fix/tag-ghosts", function () {
       return { entryIDs: ["/missing-entry"], prettyTag: "x", total: 0 };
     });
     stubMGet("blog-id", {});
-    spyOn(Entry, "get").and.callFake(function () {
-      throw new Error("Entry.get should not be called for a MISSING id");
-    });
+    spyOn(Entry, "get").and.callThrough();
 
     var multi = fakeMulti();
     spyOn(client, "multi").and.returnValue(multi);
@@ -115,6 +113,7 @@ describe("sync/fix/tag-ghosts", function () {
     fixTagGhosts({ id: "blog-id" }, function (err, report) {
       expect(err).toBeNull();
       expect(report).toEqual([["MISSING", "/missing-entry"]]);
+      expect(Entry.get).not.toHaveBeenCalled();
       expect(multi.zRem).toHaveBeenCalledWith(
         Tags.key.sortedTag("blog-id", "chairs"),
         "/missing-entry"
@@ -168,9 +167,9 @@ describe("sync/fix/tag-ghosts", function () {
     // first; the check then re-fetches the full entry via Entry.get only
     // for this one mismatched id.
     stubMGet("blog-id", { "/old-path": entry });
-    spyOn(Entry, "get").and.callFake(function (_blogID, entryID, callback) {
+    spyOn(Entry, "get").and.callFake(function (_blogID, entryID) {
       expect(entryID).toBe("/old-path");
-      callback(entry);
+      return Promise.resolve(entry);
     });
     spyOn(Entry, "set").and.callFake(
       function (blogID, id, updatedEntry, callback) {

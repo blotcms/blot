@@ -26,8 +26,7 @@ const Blog = require("models/blog");
 const client = require("models/client");
 const pathIndex = require("models/entries/pathIndex");
 
-const getEntry = (blogID, id) =>
-  promisify((next) => Entry.get(blogID, id, (entry) => next(null, entry)))();
+const getEntry = (blogID, id) => Entry.get(blogID, id);
 const getBlog = promisify((id, cb) => Blog.get({ id }, cb));
 const fixOnBlogID = promisify(fix);
 

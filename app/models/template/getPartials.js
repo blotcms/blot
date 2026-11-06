@@ -1,6 +1,7 @@
 var getView = require("./getView");
 var async = require("async");
 var ensure = require("helper/ensure");
+var withCallback = require("helper/withCallback");
 var parseTemplate = require("./parseTemplate");
 var mergeRetrieve = require("./util/mergeRetrieve");
 var {
@@ -182,7 +183,7 @@ module.exports = async function getPartials(
         // If the partial's name starts with a slash,
         // it is a path to an entry.
         if (partial.charAt(0) === "/") {
-          Entry.getByPath(blogID, partial, function (entry) {
+          withCallback(Entry.getByPath)(blogID, partial, function (err, entry) {
             // empty string and not undefined to
             // prevent infinite fetches
             allPartials[partial] = "";

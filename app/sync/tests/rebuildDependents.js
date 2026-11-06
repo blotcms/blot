@@ -33,8 +33,8 @@ describe("rebuildDependents", function () {
       );
     });
 
-    spyOn(Entry, "get").and.callFake(function (_, __, callback) {
-      callback(null);
+    spyOn(Entry, "get").and.callFake(function (_, __) {
+      return Promise.resolve(null);
     });
 
     rebuildDependents("blog-2", "/post.md", function (err) {

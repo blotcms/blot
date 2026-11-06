@@ -6,8 +6,7 @@ describe("rebuild dependents cleanup", function () {
 
   global.test.blog();
 
-  const getEntry = (blogID, path) =>
-    new Promise((resolve) => Entry.get(blogID, path, resolve));
+  const getEntry = (blogID, path) => Entry.get(blogID, path);
 
   const rebuildDependentsOf = (blogID, path) =>
     new Promise((resolve, reject) =>
@@ -41,13 +40,9 @@ describe("rebuild dependents cleanup", function () {
       });
     });
 
-    await new Promise((resolve) => {
-      Entry.get(this.blog.id, postPath, function (entry) {
-        expect(entry).toBeDefined();
-        expect(entry.deleted).toBe(true);
-        resolve();
-      });
-    });
+    const entry = await Entry.get(this.blog.id, postPath);
+    expect(entry).toBeDefined();
+    expect(entry.deleted).toBe(true);
   });
 
   it("does not log an error when the dependent was deleted too", async function () {
@@ -96,12 +91,8 @@ describe("rebuild dependents cleanup", function () {
     // The aggregate is published at the plus-stripped path.
     await this.blog.check({ path: "/album" });
 
-    await new Promise((resolve) => {
-      Entry.get(this.blog.id, "/album", function (entry) {
-        expect(entry.dependencies).toContain(assetPath);
-        resolve();
-      });
-    });
+    const album = await Entry.get(this.blog.id, "/album");
+    expect(album.dependencies).toContain(assetPath);
 
     // Touching the referenced asset triggers a dependent rebuild. This must
     // rebuild the aggregate through /album+, not drop it because /album has
@@ -113,14 +104,10 @@ describe("rebuild dependents cleanup", function () {
       });
     });
 
-    await new Promise((resolve) => {
-      Entry.get(this.blog.id, "/album", function (entry) {
-        expect(entry).toBeDefined();
-        expect(entry.deleted).toBeFalsy();
-        expect(entry.html).toContain('class="multi-file-post"');
-        resolve();
-      });
-    });
+    const rebuiltAlbum = await Entry.get(this.blog.id, "/album");
+    expect(rebuiltAlbum).toBeDefined();
+    expect(rebuiltAlbum.deleted).toBeFalsy();
+    expect(rebuiltAlbum.html).toContain('class="multi-file-post"');
   });
 
   describe("dependents keys", function () {

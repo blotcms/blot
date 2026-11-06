@@ -268,7 +268,8 @@ async function seed() {
       setEntry(created.id, entry.path, entry)
     );
     const stored = await mapLimit(entries, 8, (entry) =>
-      promisify((cb) => Entry.get(created.id, entry.path, (e) => cb(null, e)))()
+      // A failed read is the same as no entry (as before)
+      Entry.get(created.id, entry.path).catch(() => undefined)
     );
     return { blog: created, entries: stored.filter((e) => e && !e.page) };
   }

@@ -86,7 +86,8 @@ module.exports = async function byPath(blogID, pathOfPost, href, isLink) {
 function getEntry(blogID, path) {
   const get = require("models/entry").get;
 
-  return new Promise((done) => get(blogID, path, done));
+  // A failed read is the same as no entry
+  return get(blogID, path).catch(() => undefined);
 }
 
 async function exact(blogID, path) {

@@ -89,11 +89,12 @@ Retrieves one or more named lists in a single call.
 - `options.skinny` — defaults to `true`; when `true`, retrieves full entry objects via `Entry.get`. When `false`, returns raw entry IDs only.
 - `callback(err, response)` — `response` is an object keyed by list name, each value being an array of entries or IDs.
 
-### `getAll(blogID, [options,] callback)`
+### `async getAll(blogID, [options])`
 
 Retrieves all entries including deleted ones (reads from the `all` list). Returns skinny entry objects by default (`options.skinny` defaults to `true`).
 
-- `callback(entries)` — array of `Entry` instances.
+- `options.rejectOnOutage` — when set, a Redis outage rejects with the error instead of resolving `[]` (`getAllCached`, the export and the catalog set it).
+- Resolves to an array of `Entry` instances; `[]` on other Redis failures. Takes no callback.
 
 ### `getCatalog(blogID, [options])`
 
@@ -228,7 +229,7 @@ The lex index is only updated incrementally by `_assign.js` when the ready flag 
 `index.js` is a self-invoking function that closes over private helpers:
 
 - `listKey(blogID, list)` — constructs and validates Redis key strings. Throws if `list` is not one of the eight recognised list names.
-- `async getRange(blogID, start, end, options)` — the internal paginated fetch used by `getAll`, `get`, `getRecent` and `lastUpdate`; resolves to the entries (`[]` on a Redis failure, a rejection on an outage with `options.rejectOnOutage`). `getAll` and `get` still call back, through `getRangeWithCallback`. Issues a `ZREVRANGE` and optionally hydrates results via `Entry.get`.
+- `async getRange(blogID, start, end, options)` — the internal paginated fetch used by `getAll`, `get`, `getRecent` and `lastUpdate`; resolves to the entries (`[]` on a Redis failure, a rejection on an outage with `options.rejectOnOutage`). `get` still calls back, through `getRangeWithCallback`; `getAll` calls `getRange` directly. Issues a `ZREVRANGE` and optionally hydrates results via `Entry.get`.
 - `validatePageNumber`, `validatePageSize`, `validateSortBy`, `validateSortOrder` — input sanitisation helpers used by `getPage`. Not exported.
 - `normalizePathPrefix` — normalises a path prefix string (trims, ensures leading `/`).
 - `fetchEntryScores` — fetches scores for a list of entry IDs from the `entries` sorted set using concurrent `zscore` calls via `Promise.all`. Used for date-sorting within path-prefix–filtered result sets.

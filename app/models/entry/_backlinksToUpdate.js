@@ -1,6 +1,7 @@
 const _ = require("lodash");
 const async = require("async");
 const getByUrl = require("./getByUrl");
+const withCallback = require("helper/withCallback");
 const debug = require("debug")("blot:entry:set:backlinksToUpdate");
 
 // This function takes an entry currently being updated
@@ -54,7 +55,8 @@ function backlinksToUpdate(
     allInternalLinks,
     function (urlPath, next) {
       debug("getting", blogID, urlPath);
-      getByUrl(blogID, urlPath, function (backLinkedEntry) {
+      // A failed lookup is the same as no entry
+      withCallback(getByUrl)(blogID, urlPath, function (err, backLinkedEntry) {
         if (!backLinkedEntry) {
           debug("no backlinked entry for", urlPath);
           return next(null, false);

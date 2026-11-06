@@ -204,7 +204,9 @@ describe("entry scheduled publication", function () {
     await alarms.set(id, Date.now() - 1000);
 
     await withGetter(
-      (blogID, path, callback) => callback(undefined, new Error("boom")),
+      async () => {
+        throw new Error("boom");
+      },
       () => alarms.poll()
     );
 
@@ -220,11 +222,10 @@ describe("entry scheduled publication", function () {
     await alarms.set(id, Date.now() - 1000);
 
     await withGetter(
-      (blogID, path, callback) =>
-        callback({
-          scheduled: true,
-          dateStamp: reads.length > 1 ? reads.shift() : reads[0],
-        }),
+      async () => ({
+        scheduled: true,
+        dateStamp: reads.length > 1 ? reads.shift() : reads[0],
+      }),
       () => alarms.poll()
     );
 

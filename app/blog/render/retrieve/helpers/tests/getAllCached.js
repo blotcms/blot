@@ -58,8 +58,8 @@ describe("getAllCached", function () {
   }
 
   function stubCatalog() {
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback(catalog());
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve(catalog());
     });
   }
 
@@ -67,8 +67,10 @@ describe("getAllCached", function () {
   // they were made.
   function deferGetAll() {
     const pending = [];
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      pending.push(() => callback(catalog()));
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return new Promise((resolve) => {
+        pending.push(() => resolve(catalog()));
+      });
     });
     return pending;
   }
@@ -418,8 +420,8 @@ describe("getAllCached", function () {
   });
 
   it("does not cache an empty catalog", async function () {
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([]);
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve([]);
     });
 
     await getAllCached(blog, { retrieve: NARROW });
@@ -430,8 +432,8 @@ describe("getAllCached", function () {
   });
 
   it("returns Entry instances when getAll returns them, whether or not heavy fields are stripped", async function () {
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback(catalog().map((entry) => new Entry(entry)));
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve(catalog().map((entry) => new Entry(entry)));
     });
 
     const wide = await getAllCached(blog, { retrieve: WIDE });

@@ -152,12 +152,9 @@ const moment = require("moment");
 
 require("moment-timezone");
 
+// A Redis outage rejects, rather than exporting an empty blog
 const loadEntries = (blogID) => {
-  return new Promise((resolve, reject) => {
-    Entries.getAll(blogID, { onError: reject }, function (allEntries) {
-      resolve(allEntries);
-    });
-  });
+  return Entries.getAll(blogID, { rejectOnOutage: true });
 };
 
 Export.get("/wordpress", async function (req, res, next) {

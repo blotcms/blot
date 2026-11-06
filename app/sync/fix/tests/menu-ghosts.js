@@ -7,8 +7,13 @@ describe("sync/fix/menu-ghosts", function () {
     var item = { id: "/foo", label: "Foo", url: "/foo", metadata: {} };
     var blog = { id: "blog-id", menu: [item] };
 
-    spyOn(Entry, "get").and.callFake(function (blogID, id, callback) {
-      callback({ id: "/foo", title: "Foo", url: "/foo", metadata: {} });
+    spyOn(Entry, "get").and.callFake(function (blogID, id) {
+      return Promise.resolve({
+        id: "/foo",
+        title: "Foo",
+        url: "/foo",
+        metadata: {},
+      });
     });
     spyOn(Blog, "set");
 
@@ -24,8 +29,8 @@ describe("sync/fix/menu-ghosts", function () {
     var item = { id: "/gone", label: "Gone", url: "/gone", metadata: {} };
     var blog = { id: "blog-id", menu: [item] };
 
-    spyOn(Entry, "get").and.callFake(function (blogID, id, callback) {
-      callback({ id: "/gone", deleted: true });
+    spyOn(Entry, "get").and.callFake(function (blogID, id) {
+      return Promise.resolve({ id: "/gone", deleted: true });
     });
     // what is stored, before Fix() edits blog.menu in place
     var stored = JSON.parse(JSON.stringify(blog.menu));
@@ -53,8 +58,8 @@ describe("sync/fix/menu-ghosts", function () {
     };
     var blog = { id: "blog-id", menu: [item] };
 
-    spyOn(Entry, "get").and.callFake(function (blogID, id, callback) {
-      callback(undefined);
+    spyOn(Entry, "get").and.callFake(function (blogID, id) {
+      return Promise.resolve(undefined);
     });
     spyOn(Blog, "set");
 
@@ -75,8 +80,8 @@ describe("sync/fix/menu-ghosts", function () {
     };
     var blog = { id: "blog-id", menu: [item] };
 
-    spyOn(Entry, "get").and.callFake(function (blogID, id, callback) {
-      callback({
+    spyOn(Entry, "get").and.callFake(function (blogID, id) {
+      return Promise.resolve({
         id: "/foo",
         title: "New label",
         url: "/new-url",
@@ -117,8 +122,13 @@ describe("sync/fix/menu-ghosts", function () {
     var second = { id: "/foo", label: "Foo (dupe)", url: "/foo", metadata: {} };
     var blog = { id: "blog-id", menu: [first, second] };
 
-    spyOn(Entry, "get").and.callFake(function (blogID, id, callback) {
-      callback({ id: "/foo", title: "Foo", url: "/foo", metadata: {} });
+    spyOn(Entry, "get").and.callFake(function (blogID, id) {
+      return Promise.resolve({
+        id: "/foo",
+        title: "Foo",
+        url: "/foo",
+        metadata: {},
+      });
     });
     // what is stored, before Fix() edits blog.menu in place
     var stored = JSON.parse(JSON.stringify(blog.menu));
@@ -143,8 +153,8 @@ describe("sync/fix/menu-ghosts", function () {
     var item = { id: "/gone", label: "Gone", url: "/gone", metadata: {} };
     var blog = { id: "blog-id", menu: [item] };
 
-    spyOn(Entry, "get").and.callFake(function (blogID, id, callback) {
-      callback({ id: "/gone", deleted: true });
+    spyOn(Entry, "get").and.callFake(function (blogID, id) {
+      return Promise.resolve({ id: "/gone", deleted: true });
     });
     // what is stored, before Fix() edits blog.menu in place
     var stored = JSON.parse(JSON.stringify(blog.menu));
@@ -167,9 +177,15 @@ describe("sync/fix/menu-ghosts", function () {
     var added = { id: "/new", label: "New", url: "/new", metadata: {} };
     var blog = { id: "blog-id", menu: [ghost, kept] };
 
-    spyOn(Entry, "get").and.callFake(function (blogID, id, callback) {
-      if (id === "/gone") return callback({ id: "/gone", deleted: true });
-      callback({ id: "/foo", title: "Foo", url: "/foo", metadata: {} });
+    spyOn(Entry, "get").and.callFake(function (blogID, id) {
+      if (id === "/gone")
+        return Promise.resolve({ id: "/gone", deleted: true });
+      return Promise.resolve({
+        id: "/foo",
+        title: "Foo",
+        url: "/foo",
+        metadata: {},
+      });
     });
     // By the time the fix writes, the menu has gained an item
     spyOn(Blog, "get").and.callFake(function (by, callback) {
@@ -192,8 +208,8 @@ describe("sync/fix/menu-ghosts", function () {
     var ghost = { id: "/gone", label: "Gone", url: "/gone", metadata: {} };
     var blog = { id: "blog-id", menu: [ghost] };
 
-    spyOn(Entry, "get").and.callFake(function (blogID, id, callback) {
-      callback({ id: "/gone", deleted: true });
+    spyOn(Entry, "get").and.callFake(function (blogID, id) {
+      return Promise.resolve({ id: "/gone", deleted: true });
     });
     spyOn(Blog, "get").and.callFake(function (by, callback) {
       callback(null, { id: blog.id, menu: [] });
@@ -215,14 +231,16 @@ describe("sync/fix/menu-ghosts", function () {
     var blog = { id: "blog-id", menu: [first, second] };
     var stored = JSON.parse(JSON.stringify(blog.menu));
 
-    spyOn(Entry, "get").and.callFake(function (blogID, id, callback) {
-      // both ids resolve to the same entry, whose id is the NFC form
-      setTimeout(
-        function () {
-          callback({ id: nfc, title: "Cafe", url: "/cafe", metadata: {} });
-        },
-        id === nfc ? 0 : 5
-      );
+    spyOn(Entry, "get").and.callFake(function (blogID, id) {
+      return new Promise(function (resolve) {
+        // both ids resolve to the same entry, whose id is the NFC form
+        setTimeout(
+          function () {
+            resolve({ id: nfc, title: "Cafe", url: "/cafe", metadata: {} });
+          },
+          id === nfc ? 0 : 5
+        );
+      });
     });
     spyOn(Blog, "get").and.callFake(function (by, callback) {
       callback(null, { id: blog.id, menu: stored });
@@ -247,13 +265,15 @@ describe("sync/fix/menu-ghosts", function () {
     var second = { id: nfd, label: "Cafe", url: "/cafe", metadata: {} };
     var blog = { id: "blog-id", menu: [first, second] };
 
-    spyOn(Entry, "get").and.callFake(function (blogID, id, callback) {
-      setTimeout(
-        function () {
-          callback({ id: nfc, title: "Cafe", url: "/cafe", metadata: {} });
-        },
-        id === nfc ? 0 : 5
-      );
+    spyOn(Entry, "get").and.callFake(function (blogID, id) {
+      return new Promise(function (resolve) {
+        setTimeout(
+          function () {
+            resolve({ id: nfc, title: "Cafe", url: "/cafe", metadata: {} });
+          },
+          id === nfc ? 0 : 5
+        );
+      });
     });
     // the kept item has been removed by the time we write
     spyOn(Blog, "get").and.callFake(function (by, callback) {

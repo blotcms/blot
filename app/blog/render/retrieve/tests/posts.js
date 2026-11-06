@@ -376,10 +376,10 @@ describe("posts cache", function () {
       return { entryIDs: ["a.txt", "m.txt", "z.txt"], pagination: {} };
     });
 
-    spyOn(Entry, "get").and.callFake(function (blogID, ids, cb) {
+    spyOn(Entry, "get").and.callFake(function (blogID, ids) {
       // Entry.get preserves input order; return the hydrated entries shuffled
       // to prove posts.js re-applies the selected order.
-      cb([
+      return Promise.resolve([
         { id: "m.txt", dateStamp: 2 },
         { id: "z.txt", dateStamp: 1 },
         { id: "a.txt", dateStamp: 3 },
@@ -440,8 +440,8 @@ describe("posts cache", function () {
       }
     );
 
-    spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
-      callback([
+    spyOn(Entry, "get").and.callFake(function (blogID, entryIDs) {
+      return Promise.resolve([
         { id: "1", dateStamp: 1, title: "First" },
         { id: "2", dateStamp: 2, title: "Second" },
       ]);

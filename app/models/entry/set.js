@@ -6,6 +6,7 @@ var guid = require("helper/guid");
 var clfdate = require("helper/clfdate");
 var debug = require("debug")("blot:entry:set");
 var get = require("./get");
+var withCallback = require("helper/withCallback");
 var key = require("./key");
 var setUrl = require("./_setUrl");
 var Candidates = setUrl.Candidates;
@@ -37,7 +38,7 @@ module.exports = function set(blogID, path, updates, callback) {
   debug("set", blogID, path);
 
   // Get the entry stored against this ID
-  get(blogID, path, function (entry, err) {
+  withCallback(get)(blogID, path, function (err, entry) {
     // A failed read is not a new entry: carrying on would overwrite the stored
     // one, and the caller (e.g. a scheduled publish) needs the Redis error.
     if (err) return callback(err);

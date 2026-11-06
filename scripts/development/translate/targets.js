@@ -22,8 +22,9 @@ const Entry = require("models/entry");
 const getBlog = promisify(Blog.get);
 const getListIDs = promisify(Entries.getListIDs);
 
+// A failed read is the same as no entry (as before)
 const getEntry = (blogID, path) =>
-  new Promise((resolve) => Entry.get(blogID, path, resolve));
+  Entry.get(blogID, path).catch(() => undefined);
 
 // The preview subdomain skips CDN rewriting and renders template errors on a
 // dedicated page instead of failing opaquely, which is what we want while

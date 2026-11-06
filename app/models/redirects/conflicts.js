@@ -148,7 +148,8 @@ function checkEntries(blogID, paths, results, callback) {
     .catch(callback);
 
   function checkEntry(index, next) {
-    Entry.getByUrl(blogID, paths[index], function (entry) {
+    // A failed lookup is the same as no entry
+    withCallback(Entry.getByUrl)(blogID, paths[index], function (err, entry) {
       // Blot skips these too, so the redirect still runs
       if (!entry || entry.deleted || entry.draft || entry.scheduled)
         return next();

@@ -147,9 +147,8 @@ async function seed(shape) {
 
   const urls = [];
   for (const entry of entries) {
-    const stored = await new Promise((resolve) =>
-      Entry.get(blog.id, entry.path, resolve)
-    );
+    // A failed read is the same as no entry (as before)
+    const stored = await Entry.get(blog.id, entry.path).catch(() => undefined);
     if (stored && !stored.page && !stored.draft) urls.push(stored.url);
   }
 

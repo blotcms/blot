@@ -212,7 +212,7 @@ function instrumentBuild() {
 
   // Loaded lazily by the lookups above (circular with build), so wrapping
   // the property they read at call time is enough. entries.get calls back
-  // (err, { entries: [...], pages: [...] }); Entry.get calls back (entry).
+  // (err, { entries: [...], pages: [...] }); Entry.get resolves with the entry.
   wrapModule(
     "models/entries",
     "get",
@@ -546,12 +546,13 @@ async function resolveTarget(target) {
   const url = new URL(parsed.url);
   const blog = await getBlog(url.hostname);
   // getByUrl does its own decoding; only the source path fallback needs it.
+  // A failed read is the same as no entry (as before)
   const entry =
-    (await new Promise((done) =>
-      Entry.getByUrl(blog.id, normalizeEntryUrlPath(url.pathname), done)
+    (await Entry.getByUrl(blog.id, normalizeEntryUrlPath(url.pathname)).catch(
+      () => undefined
     )) ||
-    (await new Promise((done) =>
-      Entry.get(blog.id, decodeURIComponent(url.pathname), done)
+    (await Entry.get(blog.id, decodeURIComponent(url.pathname)).catch(
+      () => undefined
     ));
 
   if (!entry) throw new Error("No entry at " + target);

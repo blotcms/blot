@@ -122,8 +122,7 @@ describe("rebuild", function () {
   it("keeps a folder post aggregate through a full rebuild", async function (done) {
     const Entry = require("models/entry");
     const { promisify } = require("util");
-    const getEntry = (id) =>
-      new Promise((resolve) => Entry.get(this.blog.id, id, resolve));
+    const getEntry = (id) => Entry.get(this.blog.id, id);
 
     await this.blog.write({ path: "/essay+/01 intro.md", content: "# Intro" });
     await this.blog.write({ path: "/essay+/02 body.md", content: "The body." });
@@ -164,8 +163,7 @@ describe("rebuild", function () {
 
   it("drops a folder post aggregate when its + folder is emptied before a rebuild", async function (done) {
     const Entry = require("models/entry");
-    const getEntry = (id) =>
-      new Promise((resolve) => Entry.get(this.blog.id, id, resolve));
+    const getEntry = (id) => Entry.get(this.blog.id, id);
 
     await this.blog.write({ path: "/essay+/01 intro.md", content: "# Intro" });
     await this.blog.write({ path: "/essay+/02 body.md", content: "The body." });

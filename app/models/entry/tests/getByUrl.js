@@ -1,5 +1,5 @@
 describe("entry.getByUrl", function () {
-  function withMocks(redisImpl, getImpl, run) {
+  async function withMocks(redisImpl, getImpl, run) {
     const modulePath = require.resolve("../getByUrl");
     const redisPath = require.resolve("models/client");
     const getPath = require.resolve("../get");
@@ -26,7 +26,7 @@ describe("entry.getByUrl", function () {
 
     try {
       const getByUrl = require("../getByUrl");
-      run(getByUrl);
+      await run(getByUrl);
     } finally {
       delete require.cache[modulePath];
 
@@ -41,116 +41,132 @@ describe("entry.getByUrl", function () {
     }
   }
 
-  it("decodes encoded unicode input and resolves the decoded key", function (done) {
+  it("decodes encoded unicode input and resolves the decoded key", async function () {
     const calls = [];
 
-    withMocks(
+    await withMocks(
       {
         get: (key) => {
           calls.push(key);
           return Promise.resolve("/entry.txt");
         },
       },
-      (blogID, entryID, callback) => {
+      async (blogID, entryID) => {
         expect(blogID).toEqual("blog-id");
         expect(entryID).toEqual("/entry.txt");
-        callback({ id: entryID, title: "ok" });
+        return { id: entryID, title: "ok" };
       },
-      (getByUrl) => {
-        getByUrl("blog-id", "/gr%C3%BC%C3%9Fe", (entry) => {
-          expect(calls.length).toEqual(1);
-          expect(calls[0]).toContain("/grüße");
-          expect(entry.title).toEqual("ok");
-          done();
-        });
+      async (getByUrl) => {
+        const entry = await getByUrl("blog-id", "/gr%C3%BC%C3%9Fe");
+
+        expect(calls.length).toEqual(1);
+        expect(calls[0]).toContain("/grüße");
+        expect(entry.title).toEqual("ok");
       }
     );
   });
 
-  it("does not throw on malformed percent input and falls back to raw key", function (done) {
+  it("does not throw on malformed percent input and falls back to raw key", async function () {
     const calls = [];
 
-    withMocks(
+    await withMocks(
       {
         get: (key) => {
           calls.push(key);
           return Promise.resolve("/entry.txt");
         },
       },
-      (_blogID, _entryID, callback) => callback({ id: "/entry.txt" }),
-      (getByUrl) => {
-        expect(function () {
-          getByUrl("blog-id", "/bad%2", (entry) => {
-            expect(calls.length).toEqual(1);
-            expect(calls[0]).toContain("/bad%2");
-            expect(entry.id).toEqual("/entry.txt");
-            done();
-          });
-        }).not.toThrow();
+      async () => ({ id: "/entry.txt" }),
+      async (getByUrl) => {
+        const entry = await getByUrl("blog-id", "/bad%2");
+
+        expect(calls.length).toEqual(1);
+        expect(calls[0]).toContain("/bad%2");
+        expect(entry.id).toEqual("/entry.txt");
       }
     );
   });
 
-  it("handles redis rejection without throwing asynchronously", function (done) {
-    const rejection = new Error("redis get failed");
-    const uncaughtHandler = jasmine.createSpy("uncaughtHandler");
-    const unhandledRejectionHandler = jasmine.createSpy(
-      "unhandledRejectionHandler"
+  it("resolves undefined for a URL with no entry, without reading one", async function () {
+    await withMocks(
+      { get: () => Promise.resolve(null) },
+      () => {
+        throw new Error("get should not be called when there is no ID");
+      },
+      async (getByUrl) => {
+        expect(await getByUrl("blog-id", "/missing")).toBeUndefined();
+      }
     );
-    const originalConsoleError = console.error;
-    const consoleErrorSpy = jasmine.createSpy("console.error");
+  });
 
-    process.once("uncaughtException", uncaughtHandler);
-    process.once("unhandledRejection", unhandledRejectionHandler);
-    console.error = consoleErrorSpy;
+  it("rejects with the error when redis rejects", async function () {
+    const rejection = new Error("redis get failed");
+    const consoleErrorSpy = spyOn(console, "error");
 
-    withMocks(
+    await withMocks(
       {
         get: () => Promise.reject(rejection),
       },
       () => {
         throw new Error("get should not be called when redis.get rejects");
       },
-      (getByUrl) => {
-        expect(function () {
-          getByUrl("blog-id", "/entry", function (entry, error) {
-            expect(entry).toBeUndefined();
-            expect(error).toBe(rejection);
-          });
-        }).not.toThrow();
+      async (getByUrl) => {
+        let error;
 
-        setTimeout(function () {
-          console.error = originalConsoleError;
+        try {
+          await getByUrl("blog-id", "/entry");
+        } catch (err) {
+          error = err;
+        }
 
-          expect(uncaughtHandler).not.toHaveBeenCalled();
-          expect(unhandledRejectionHandler).not.toHaveBeenCalled();
-          expect(consoleErrorSpy).toHaveBeenCalledWith(
-            "entry.getByUrl: failed to resolve URL",
-            rejection
-          );
-          done();
-        }, 10);
+        expect(error).toBe(rejection);
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          "entry.getByUrl: failed to resolve URL",
+          rejection
+        );
       }
     );
   });
-  it("keeps already-decoded input stable", function (done) {
+
+  it("rejects with the error when reading the entry fails", async function () {
+    const rejection = new Error("mget failed");
+
+    await withMocks(
+      { get: () => Promise.resolve("/entry.txt") },
+      async () => {
+        throw rejection;
+      },
+      async (getByUrl) => {
+        let error;
+
+        try {
+          await getByUrl("blog-id", "/entry");
+        } catch (err) {
+          error = err;
+        }
+
+        expect(error).toBe(rejection);
+      }
+    );
+  });
+
+  it("keeps already-decoded input stable", async function () {
     const calls = [];
 
-    withMocks(
+    await withMocks(
       {
         get: (key) => {
           calls.push(key);
           return Promise.resolve("/entry.txt");
         },
       },
-      (_blogID, _entryID, callback) => callback({ id: "/entry.txt" }),
-      (getByUrl) => {
-        getByUrl("blog-id", "/already-decoded", (entry) => {
-          expect(calls.length).toEqual(1);
-          expect(calls[0]).toContain("/already-decoded");
-          expect(entry.id).toEqual("/entry.txt");
-          done();
-        });
+      async () => ({ id: "/entry.txt" }),
+      async (getByUrl) => {
+        const entry = await getByUrl("blog-id", "/already-decoded");
+
+        expect(calls.length).toEqual(1);
+        expect(calls[0]).toContain("/already-decoded");
+        expect(entry.id).toEqual("/entry.txt");
       }
     );
   });

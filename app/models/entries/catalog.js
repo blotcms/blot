@@ -80,9 +80,8 @@ function yieldToEventLoop() {
 // Required here: models/entries requires this module, and this one needs it
 function getAll(blogID) {
   const Entries = require("models/entries");
-  return new Promise((resolve, reject) => {
-    Entries.getAll(blogID, { onError: reject }, (entries) => resolve(entries));
-  });
+  // A Redis outage rejects
+  return Entries.getAll(blogID, { rejectOnOutage: true });
 }
 
 async function getCatalog(blogID, options = {}) {

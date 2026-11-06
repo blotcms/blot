@@ -1,3 +1,4 @@
+var withCallback = require("helper/withCallback");
 var rebuildDependents = require("./rebuildDependents");
 var Ignore = require("./ignore");
 var Entry = require("models/entry");
@@ -45,7 +46,7 @@ function isTemplate(path) {
 function dropEntryAndPreview(blogID, targetPath, callback) {
   targetPath = pathNormalizer(targetPath);
 
-  Entry.get(blogID, targetPath, function (entry, err) {
+  withCallback(Entry.get)(blogID, targetPath, function (err, entry) {
     // A failed read is not a missing entry: dropping nothing would lose the
     // deletion, so pass on a Redis outage.
     if (!entry)
@@ -76,19 +77,24 @@ function buildAndSet(blog, path, multiInfo, state, callback) {
     // not unpublish an unrelated "/post.md" sibling.
     function dropStaleAggregate(finalErr) {
       if (!multiInfo) return callback(finalErr);
-      Entry.get(blog.id, multiInfo.entryPath, function (existing, getErr) {
-        if (!existing && getErr && isRedisUnavailableError(getErr))
-          return callback(getErr);
+      withCallback(Entry.get)(
+        blog.id,
+        multiInfo.entryPath,
+        function (getErr, existing) {
+          if (!existing && getErr && isRedisUnavailableError(getErr))
+            return callback(getErr);
 
-        var sourceFolder = folderPostSourceFolder(existing);
-        if (
-          sourceFolder &&
-          pathNormalizer(sourceFolder) === pathNormalizer(multiInfo.folderPath)
-        ) {
-          return dropEntryAndPreview(blog.id, multiInfo.entryPath, callback);
+          var sourceFolder = folderPostSourceFolder(existing);
+          if (
+            sourceFolder &&
+            pathNormalizer(sourceFolder) ===
+              pathNormalizer(multiInfo.folderPath)
+          ) {
+            return dropEntryAndPreview(blog.id, multiInfo.entryPath, callback);
+          }
+          return callback(finalErr);
         }
-        return callback(finalErr);
-      });
+      );
     }
 
     if (err && err.code === "WRONGTYPE")
