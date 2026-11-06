@@ -1,8 +1,6 @@
 describe("dropbox sync/index with a file over the download size limit", function () {
-  const fs = require("fs-extra");
-  const { join } = require("path");
-  const { blog_folder_dir } = require("config");
   const storage = require("storage/folder");
+  const constants = require("../util/constants");
 
   const syncPath = require.resolve("../sync");
   const lockPath = require.resolve("sync");
@@ -20,12 +18,15 @@ describe("dropbox sync/index with a file over the download size limit", function
   ];
 
   const blogID = "blog_syncoversized" + Date.now();
-  const blogDirectory = join(blog_folder_dir, blogID);
   const originals = {};
+  let maxFileSize;
 
-  beforeEach(async function () {
+  // A limit below the fixtures' sizes, so a matching local copy can have the
+  // same size as the Dropbox file. sync/index reads it when it loads.
+  beforeEach(function () {
     paths.forEach((path) => (originals[path] = require.cache[path]));
-    await fs.ensureDir(blogDirectory);
+    maxFileSize = constants.MAX_FILE_SIZE;
+    constants.MAX_FILE_SIZE = 4;
   });
 
   afterEach(async function () {
@@ -33,10 +34,11 @@ describe("dropbox sync/index with a file over the download size limit", function
       if (originals[path]) require.cache[path] = originals[path];
       else delete require.cache[path];
     });
-    await fs.remove(blogDirectory);
+    constants.MAX_FILE_SIZE = maxFileSize;
+    await storage.removeAll(blogID);
   });
 
-  function run(content_hash) {
+  function run(content_hash, size) {
     require.cache[lockPath] = {
       exports: function (_blogID, callback) {
         callback(
@@ -44,7 +46,6 @@ describe("dropbox sync/index with a file over the download size limit", function
           {
             log: function () {},
             status: function () {},
-            path: blogDirectory,
             update: (path, cb) => cb(),
           },
           (err, cb) => cb(err)
@@ -71,7 +72,7 @@ describe("dropbox sync/index with a file over the download size limit", function
                     path_display: "/big.txt",
                     relative_path: "big.txt",
                     content_hash,
-                    size: 200 * 1024 * 1024,
+                    size,
                   },
                 ]
               : [];
@@ -88,23 +89,23 @@ describe("dropbox sync/index with a file over the download size limit", function
   }
 
   it("keeps a local copy whose content hash matches", async function () {
-    await fs.outputFile(join(blogDirectory, "big.txt"), "real contents");
-    const { hash } = await storage.stat(blogID, "/big.txt", { hash: true });
+    await storage.write(blogID, "/big.txt", "real contents");
+    const { hash, size } = await storage.stat(blogID, "/big.txt", { hash: true });
 
-    await run(hash);
+    await run(hash, size);
 
-    expect(await fs.readFile(join(blogDirectory, "big.txt"), "utf8")).toEqual(
+    expect((await storage.read(blogID, "/big.txt")).toString()).toEqual(
       "real contents"
     );
   });
 
   it("writes an empty placeholder when the local copy differs or is absent", async function () {
-    await fs.outputFile(join(blogDirectory, "big.txt"), "something else");
-    await run("not-the-local-hash");
-    expect(await fs.readFile(join(blogDirectory, "big.txt"), "utf8")).toEqual("");
+    await storage.write(blogID, "/big.txt", "something else");
+    await run("not-the-local-hash", 14);
+    expect((await storage.read(blogID, "/big.txt")).toString()).toEqual("");
 
-    await fs.remove(join(blogDirectory, "big.txt"));
-    await run("not-the-local-hash");
-    expect(await fs.readFile(join(blogDirectory, "big.txt"), "utf8")).toEqual("");
+    await storage.remove(blogID, "/big.txt");
+    await run("not-the-local-hash", 14);
+    expect((await storage.read(blogID, "/big.txt")).toString()).toEqual("");
   });
 });

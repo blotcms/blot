@@ -187,38 +187,52 @@ describe("dropbox resetToBlot", function () {
   });
 
   describe("a file over the download size limit", function () {
-    const oversized = (content_hash) => ({
+    const constants = require("../util/constants");
+    let maxFileSize;
+
+    // A limit below the fixtures' sizes, so a matching local copy can have
+    // the same size as the Dropbox file. reset-to-blot reads it when it loads.
+    beforeEach(function () {
+      maxFileSize = constants.MAX_FILE_SIZE;
+      constants.MAX_FILE_SIZE = 4;
+    });
+
+    afterEach(function () {
+      constants.MAX_FILE_SIZE = maxFileSize;
+    });
+
+    const oversized = (content_hash, size) => ({
       ".tag": "file",
       name: "big.txt",
       path_display: "/big.txt",
       content_hash,
-      size: 200 * 1024 * 1024,
+      size,
       server_modified: "2026-01-01T00:00:00Z",
     });
 
     it("keeps a local copy whose content hash matches (a file Blot uploaded)", async function () {
-      await fs.outputFile(join(blogDirectory, "big.txt"), "real contents");
-      const { hash } = await storage.stat(blogID, "/big.txt", { hash: true });
-      const resetToBlot = load({ "/": [oversized(hash)] });
+      await storage.write(blogID, "/big.txt", "real contents");
+      const { hash, size } = await storage.stat(blogID, "/big.txt", { hash: true });
+      const resetToBlot = load({ "/": [oversized(hash, size)] });
 
       const summary = await resetToBlot(blogID, () => {}, async () => {});
 
       expect(summary.skipped).toEqual(1);
-      expect(await fs.readFile(join(blogDirectory, "big.txt"), "utf8")).toEqual(
+      expect((await storage.read(blogID, "/big.txt")).toString()).toEqual(
         "real contents"
       );
     });
 
     it("replaces a local copy that differs, or is absent, with an empty placeholder", async function () {
-      await fs.outputFile(join(blogDirectory, "big.txt"), "something else");
-      let resetToBlot = load({ "/": [oversized("not-the-local-hash")] });
+      await storage.write(blogID, "/big.txt", "something else");
+      let resetToBlot = load({ "/": [oversized("not-the-local-hash", 14)] });
       await resetToBlot(blogID, () => {}, async () => {});
-      expect(await fs.readFile(join(blogDirectory, "big.txt"), "utf8")).toEqual("");
+      expect((await storage.read(blogID, "/big.txt")).toString()).toEqual("");
 
-      await fs.remove(join(blogDirectory, "big.txt"));
-      resetToBlot = load({ "/": [oversized("not-the-local-hash")] });
+      await storage.remove(blogID, "/big.txt");
+      resetToBlot = load({ "/": [oversized("not-the-local-hash", 14)] });
       await resetToBlot(blogID, () => {}, async () => {});
-      expect(await fs.readFile(join(blogDirectory, "big.txt"), "utf8")).toEqual("");
+      expect((await storage.read(blogID, "/big.txt")).toString()).toEqual("");
     });
   });
 
