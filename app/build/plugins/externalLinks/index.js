@@ -1,6 +1,7 @@
 var Url = require("url");
+const withPluginCallback = require("../withPluginCallback");
 
-function render($, callback, options) {
+async function render($, options) {
   // Links with these hosts
   // are not external.
   var ignore;
@@ -17,7 +18,7 @@ function render($, callback, options) {
       options.domain,
     ];
   } catch (e) {
-    return callback();
+    return;
   }
 
   $("a").each(function () {
@@ -28,12 +29,10 @@ function render($, callback, options) {
       if (host && ignore.indexOf(host) === -1) $(this).attr("target", "_blank");
     } catch (e) {}
   });
-
-  return callback();
 }
 
 module.exports = {
-  render: render,
+  render: withPluginCallback(render),
   isDefault: false,
   category: "links",
   description: "Open external links in a new tab",
