@@ -41,7 +41,14 @@
   // Column widths a table was resized to (js/data-table.js saves them), as
   // variables its <th>s read, e.g. --folder-columns-name: 40%, so the table
   // is drawn at those widths from the start
-  ["folder-columns", "sites-columns"].forEach(function (key) {
+  [
+    "folder-columns",
+    "sites-columns",
+    "posts-columns",
+    "pages-columns",
+    "drafts-columns",
+    "scheduled-columns",
+  ].forEach(function (key) {
     try {
       var saved = JSON.parse(localStorage.getItem(key)) || {};
       Object.keys(saved).forEach(function (column) {

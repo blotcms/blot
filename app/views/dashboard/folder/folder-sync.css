@@ -108,10 +108,6 @@
   box-shadow: 0 0 4px 1px var(--indicator-amber-glow);
 }
 
-.folder-filters__empty {
-  padding: var(--space-3) var(--space-4);
-}
-
 /* One link: transparent until hovered, then a grey pill. It leads to the
    client's page (or, with no folder, to connecting one). */
 .folder-sync {

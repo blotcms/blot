@@ -4,7 +4,8 @@
   .data-table            fixed layout, full width, one line per cell
   .data-table--zebra     tinted alternate rows
   th[data-sort-key]      a sortable column; holds a .data-table__sort button
-                         and shows aria-sort as an arrow
+                         (or, sorted on the server, a link) and shows
+                         aria-sort as an arrow
   .data-table__resize    the column resize handle js/data-table.js adds
   .is-resizing           set on the table while a column is dragged, and on
                          the handle being dragged
@@ -185,6 +186,7 @@
   letter-spacing: inherit;
   text-align: inherit;
   text-transform: inherit;
+  text-decoration: none;
 }
 
 .data-table__sort:focus-visible {

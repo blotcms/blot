@@ -86,17 +86,21 @@
                 {{> site-dashboard-views}}
               </div>
               {{> folder-sync-issue}}
-              {{#postItems.length}}
+              {{#postColumns.length}}
               <div class="directory-scroll">
-                <table class="data-table data-table--zebra directory-list folder-filter-table">
+                <table class="data-table data-table--zebra directory-list folder-filter-table{{^postItems.length}} empty{{/postItems.length}}" data-table-sort="link" data-table-resizable data-table-resize-key="{{postFilterKey}}-columns">
                   <thead>
                     <tr>
-                      <th scope="col">Title</th>
-                      {{#postColumns}}<th scope="col" style="width:{{width}}">{{label}}</th>{{/postColumns}}
+                      {{#postColumns}}<th scope="col" data-sort-key="{{key}}" aria-sort="{{ariaSort}}" style="width:var(--{{postFilterKey}}-columns-{{key}}, {{width}})"><a class="data-table__sort" href="{{href}}">{{label}}</a></th>{{/postColumns}}
                       <th scope="col" class="folder-filter-table__actions"><span class="visually-hidden">Actions</span></th>
                     </tr>
                   </thead>
                   <tbody>
+                    {{^postItems.length}}
+                    <tr>
+                      <td colspan="{{postColumnCount}}" class="directory-list__empty">{{emptyPostFilterMessage}}</td>
+                    </tr>
+                    {{/postItems.length}}
                     {{#postItems}}
                     <tr class="directory-row row-action-menu-row">
                       <td>
@@ -134,8 +138,7 @@
                   </tbody>
                 </table>
               </div>
-              {{/postItems.length}}
-              {{#emptyPostFilterMessage}}<p class="site-dashboard-empty folder-filters__empty">{{emptyPostFilterMessage}}</p>{{/emptyPostFilterMessage}}
+              {{/postColumns.length}}
               {{#hasNewerPosts}}{{> folder-filter-pager}}{{/hasNewerPosts}}{{^hasNewerPosts}}{{#hasOlderPosts}}{{> folder-filter-pager}}{{/hasOlderPosts}}{{/hasNewerPosts}}
               {{> folder-row-menu}}
             </div>

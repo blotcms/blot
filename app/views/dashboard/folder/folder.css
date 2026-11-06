@@ -137,6 +137,15 @@
   height: 100%;
 }
 
+/* The one row of an empty list, its message centred like the empty folder's */
+.directory-list .directory-list__empty {
+  height: 300px;
+  color: var(--light-text-color);
+  font-size: var(--text-sm);
+  text-align: center;
+  vertical-align: middle;
+}
+
 .directory-list td[data-sort] {
   font-size: var(--text-sm);
 }

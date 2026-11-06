@@ -155,8 +155,22 @@ function clientSorter(table) {
   };
 }
 
+// Headers whose sort is a link to the next one (rendered by the server):
+// a click anywhere in the cell follows it
+function bindSortLinks(table) {
+  sortableHeaders(table).forEach(function (th) {
+    var link = th.querySelector("a.data-table__sort");
+    if (!link) return;
+    th.addEventListener("click", function (event) {
+      if (event.target.closest(".data-table__resize, a")) return;
+      link.click();
+    });
+  });
+}
+
 function bindSorting(table) {
   var mode = table.getAttribute("data-table-sort");
+  if (mode === "link") return bindSortLinks(table);
   var sorter = mode === "client" ? clientSorter(table) : table.dataTableSort;
   if (!sorter) return;
 
@@ -218,6 +232,13 @@ function bindResizing(table) {
 
   headers.slice(0, -1).forEach(function (th) {
     var next = th.nextElementSibling;
+    // Not against a column with no key (e.g. a row's actions), whose width
+    // isn't saved
+    if (
+      !th.hasAttribute("data-sort-key") ||
+      !next.hasAttribute("data-sort-key")
+    )
+      return;
     var handle = document.createElement("span");
     handle.className = "data-table__resize";
     handle.setAttribute("role", "separator");

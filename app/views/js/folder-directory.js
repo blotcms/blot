@@ -605,7 +605,9 @@
   }
 
   function applySortIndicators() {
+    // The Posts filter pages' tables are sorted by links the server renders
     if (!table || !window.DataTable) return;
+    if (table.getAttribute("data-table-sort") !== "custom") return;
     window.DataTable.updateIndicators(
       table,
       listState.chosen ? listState.sort : null,
