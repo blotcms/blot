@@ -1,14 +1,7 @@
 var client = require("models/client");
-var ensure = require("helper/ensure");
 var key = require("./key");
+var withCallback = require("helper/withCallback");
 
-module.exports = function getAllIDs(callback) {
-  ensure(callback, "function");
-
-  client
-    .sMembers(key.ids)
-    .then(function (ids) {
-      callback(null, ids);
-    })
-    .catch(callback);
-};
+module.exports = withCallback(async function getAllIDs() {
+  return client.sMembers(key.ids);
+});

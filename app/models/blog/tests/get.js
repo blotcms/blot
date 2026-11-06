@@ -5,6 +5,20 @@ describe("Blog.get", function () {
 
   global.test.blog();
 
+  it("returns a promise without a callback", async function () {
+    const blog = await get({ id: this.blog.id });
+    expect(blog.id).toBe(this.blog.id);
+    expect(await get({ id: "nonexistent-" + Date.now() })).toBeUndefined();
+  });
+
+  it("calls back once with the blog", function (done) {
+    get({ id: this.blog.id }, (err, blog) => {
+      if (err) return done.fail(err);
+      expect(blog.id).toBe(this.blog.id);
+      done();
+    });
+  });
+
   it("falls back to safe image metadata defaults", function (done) {
     var test = this;
 
