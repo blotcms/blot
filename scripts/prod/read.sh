@@ -37,8 +37,9 @@ set -euo pipefail
 #   --since <30m|6h|2d|ISO time>   logs only: start of the window
 #   --tail <n>                     last n lines (after --grep)
 #   --grep <text>                  keep lines containing the text (fixed string)
-#   --yesterday                    access only: read yesterday's rotated file too
-#   --day <YYYYMMDD>               access only: one whole rotated day instead (gzipped or not)
+#   --yesterday                    access only: yesterday's requests too (the file rotated today)
+#   --day <YYYYMMDD>               access only: just the file rotated on that date, which holds
+#                                  the previous day's requests (gzipped or not)
 #   --rotated                      error-log only: include the rotated (and gzipped) files
 #
 # Writes nothing on the host. Anything else (scripts in a container, docker cp,
@@ -90,7 +91,10 @@ parse_options() {
     case "$1" in
       --since)
         [[ "${2:-}" =~ ^([0-9]{1,4}[smhd]|[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9:.]+Z?)?)$ ]] || fail "bad --since '${2:-}'"
-        SINCE="$2"; shift 2 ;;
+        SINCE="$2"
+        # docker logs takes Go durations, which have no day unit
+        [[ "$SINCE" =~ ^([0-9]+)d$ ]] && SINCE="$((BASH_REMATCH[1] * 24))h"
+        shift 2 ;;
       --tail) number "${2:-}"; TAIL="$2"; shift 2 ;;
       --grep) [[ -n "${2:-}" ]] || fail "--grep needs text"; PATTERN="$2"; shift 2 ;;
       --yesterday) YESTERDAY=1; shift ;;
@@ -138,12 +142,15 @@ case "$command" in
     parse_options "$@"
     [[ -z "$SINCE$ROTATED" ]] || fail "access takes --grep, --tail, --yesterday and --day"
     [[ -z "$DAY" || -z "$YESTERDAY" ]] || fail "use --day or --yesterday, not both"
+    # logrotate names each file for the day it rotated (holding the day before's
+    # requests) and gzips it a day later, so read whichever of the two exists
+    rotated="rotated() { f=$LOG_DIRECTORY/access.log-\$1; [ -e \$f ] || f=\$f.gz; zcat -f \$f; }"
     if [[ -n "$DAY" ]]; then
-      filtered "zcat -f $LOG_DIRECTORY/access.log-$DAY $LOG_DIRECTORY/access.log-$DAY.gz 2>/dev/null"
+      filtered "$rotated; rotated $DAY"
+    elif [[ -n "$YESTERDAY" ]]; then
+      filtered "$rotated; rotated \$(date +%Y%m%d); cat $LOG_DIRECTORY/access.log"
     else
-      files="$LOG_DIRECTORY/access.log"
-      [[ -n "$YESTERDAY" ]] && files="$LOG_DIRECTORY/access.log-\$(date -d yesterday +%Y%m%d) $files"
-      filtered "cat $files"
+      filtered "cat $LOG_DIRECTORY/access.log"
     fi ;;
   error-log)
     parse_options "$@"
