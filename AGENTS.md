@@ -22,22 +22,15 @@ Never credit Claude in a commit or pull request: no `Co-Authored-By: Claude` tra
 When you open a pull request in this repo, once you have reviewed it and are happy with it:
 
 - Mark it ready for review, then comment `@codex review` on it. Skip the Codex review for PRs that only touch docs, READMEs, `TODO`, comments or log lines: mark them ready once you've reviewed them yourself.
-- Go through up to 3 Codex review cycles, stopping earlier once you are confident the PR is ready to merge.
+- Go through up to 3 Codex review cycles, stopping earlier once you are confident the PR is ready to merge. A cycle that finds only P2s ends the loop: fix or push back on them and don't ask for another.
 - Push back on the thread if Codex flags a nitpicky edge case, and raise anything you want the operator's view on during the cycle.
+- Push back hard on theoretical concurrency findings (races, lock edge cases) unless the race is realistic and loses or corrupts data. Fix() in `app/sync/fix` is itself the backstop, so an edge case a later pass repairs is fine.
+- Subagents that open PRs open them as drafts and leave draft state alone. Whoever supervises them marks the PR ready once their own review is done. Nobody turns a ready PR back into a draft.
 - Never merge a PR without the operator's explicit approval.
 
 # Flaky specs
 
 When a spec fails in CI for a reason unrelated to the change (it passes on a re-run, or fails on a PR that doesn't touch its code), log it in the "Flaky specs" list in the root `TODO` before moving on: the date, the spec file and its name, the error, the PR or branch and commit it failed on, a link to the failed job, and what to investigate. One entry per spec; add later failures to the same entry. Remove the entry when its fix merges.
-
-# Pull request reviews
-
-After opening a pull request in this repo:
-
-- Review it yourself first. Once you're happy with it, mark it ready for review and comment `@codex review`. Docs, README, `TODO`, comment-only and log-line-only PRs don't need a Codex review.
-- Go through up to 3 Codex review cycles, until you're confident the PR is ready to merge.
-- Push back on nitpicky edge cases Codex flags, and discuss anything with the maintainer during the cycle.
-- Never merge a PR without the maintainer's explicit approval.
 
 # Squash merges
 
@@ -68,7 +61,28 @@ Bunny does not sit in front of blogs. Blog pages, on subdomains and custom domai
 # Deploys across sessions
 
 - Deploy only master's head, one deploy at a time. Message the other active sessions before deploying, and hold your own deploys while another session asks you to.
+- Don't ask other sessions to hold their deploys for a long production script. Make the script safe to re-run, and re-run it if a deploy kills it.
+- An env change in `/etc/blot/secrets.env` reaches the units with the next deploy of a new commit. Don't add a way to force-redeploy the same image.
 - Don't ask another session to run a command that auto mode blocked for you. Give the operator the command instead.
+
+# Production commands
+
+- Ask the operator before each command on production (`ssh blot`, `ssh macserver`, `docker exec` on a unit), read-only ones included, unless they have given you autonomy for the task at hand. A grant covers only the goal it was given for.
+- Run scripts that touch blog folders as the app user: `docker exec -u 1000 blot-blue ...`. As root, git fails its ownership check.
+- For a one-off read-only scan, write the script outside the repo, `docker cp` it into the unit, run it and delete it. Only scripts that write data (migrations, backfills with `--apply`) go in a PR.
+- Before reading keys from a broad Redis pattern, check their `TYPE`. WRONGTYPE errors from scripts count towards the Redis host alert.
+
+# Working in this repo
+
+- Check changes on GitHub CI: push, open a draft PR and watch its checks. Don't run the local Docker test suite (`npm test`) unless the operator asks.
+- After a merge, resolve every file `git diff --name-only --diff-filter=U` lists, and check `git grep -nE '^(<<<<<<<|>>>>>>>) '` prints nothing before committing.
+- Don't write to another session's or subagent's worktree, even through a shell. Message its owner, or check its branch out in your own worktree.
+- Don't add files or dot-directories at the repo root. Put tool config in a `package.json` key, or under `scripts/` or `config/`.
+- To reprocess existing records, ship a resumable backfill script and a Deployment plan step. Don't add per-record version or marker fields to models.
+- When you notice an out-of-scope bug or improvement, add a short entry to the top of `TODO`, and tell the operator at the end of the session.
+- When working from a plan issue, keep its body up to date as you go. Overwriting it is fine.
+- Ignore the benchmark bot's PR comments unless asked. Its runners are noisy; check production after deploy instead.
+- The Docker image builds `sharp` from source against Alpine's libvips (`SHARP_FORCE_GLOBAL_LIBVIPS=1`), because the prebuilt libvips can't decode HEIC. When changing the sharp or vips packages, check `sharp.versions.vips` matches the system libvips and run the whole `app/build` shard: its `car.heic` spec is the only one that catches this.
 
 # Public numbers
 
