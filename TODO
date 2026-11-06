@@ -1,3 +1,13 @@
+Noticed during the async/await migration (#2559), 6 Nov 2026
+- A logged-out dashboard tab polls `/sites/<handle>/status` forever: one site's status stream drew more than 8,000 401s today, about 1,500 an hour. The client's `ReconnectingEventSource` reconnects on any close. Stop reconnecting (or reload to the log-in page) when the server answers 401.
+- `POST /stripe-webhook` answers 503 when a Stripe customer has no subscription ("Failed to retrieve Stripe subscription ... does not have a subscription"). Stripe retries 5xx for days, so a permanent condition becomes a retry storm. Answer 2xx (or 4xx) for permanent errors and keep 5xx for transient ones.
+- Container logs vanish on every deploy (they live with the container), so a post-deploy check can't compare against the hour before. Ship them somewhere that survives a restart (a log file on the host, or `docker logs` saved by the deploy script) before the old containers go.
+- The openresty access log has no HTTP method field, so a POST and a GET to the same path look alike. Add `$request_method` to the log format.
+- `Entry.get`, `Entries.getRange`/`getRecent`/`getAll` call back with no error argument (`callback(entries)`), so errors are silently dropped and every caller needs a hand-written adapter (`blog/lib/models.js`, `entry/search.js`, ...). The migration gives them promise APIs (#2559); until then, treat an empty result there as "maybe an error".
+- `scripts/fix-probe/probe.js`'s `wrapAsync` only times functions called with a callback, so it silently stops timing anything that now returns a promise (`Tags.get` already). Teach it to time returned promises too.
+- The PR benchmark's render peak RSS is bimodal (about 470 MB or about 530 MB on the same code), so it flags "regressed" at random. Pin the runner, raise the iteration count, or compare against the same runner's previous run.
+- GitHub reports 20 open Dependabot alerts on master, 2 critical. Nothing in CI checks npm advisories (see the stale dependencies note further down).
+
 Follow-ups from the ESLint and Prettier setup (#2508)
 - `app/clients/icloud/macserver/httpClient/resync.js`: the `return` inside `finally` (when the debounce entry is gone) swallows a failed resync, so the caller sees success. Move the cleanup into an `if (entry)` and let the error through; needs a macserver deploy.
 - `app/clients/google-drive/util/download.js` and `scripts/tests/util/site.js` build a `new Promise(async ...)`: an exception thrown outside their own try/catch is lost and the promise never settles. Rewrite both as plain async functions (part of the callbacks to async/await migration).
