@@ -12,6 +12,16 @@ describe("user reads without a callback", function () {
   var uid = "user_promise_forms_test";
   var email = "promise-forms@example.com";
 
+  async function expectRejection(promise, message) {
+    var error;
+    try {
+      await promise;
+    } catch (err) {
+      error = err;
+    }
+    expect(error && error.message).toBe(message);
+  }
+
   afterEach(async function () {
     await client.del(key.user(uid));
     await client.del(key.email(email));
@@ -33,16 +43,15 @@ describe("user reads without a callback", function () {
     expect(await getAllIds()).toContain(uid);
     expect(await checkPassword(uid, "correct horse")).toBe(true);
     expect(await checkPassword(uid, "wrong")).toBe(false);
-    await expectAsync(
-      checkPassword("user_nonexistent_promise", "x")
-    ).toBeRejectedWithError("No user");
+    await expectRejection(
+      checkPassword("user_nonexistent_promise", "x"),
+      "No user"
+    );
   });
 
   it("returns promises for access tokens, which can be used once", async function () {
     var token = await generateAccessToken({ uid: uid });
     expect(await checkAccessToken(token)).toBe(uid);
-    await expectAsync(checkAccessToken(token)).toBeRejectedWithError(
-      "Invalid access token"
-    );
+    await expectRejection(checkAccessToken(token), "Invalid access token");
   });
 });
