@@ -31,15 +31,15 @@ function request(hasPassword, token, method) {
 
 describe("password setting authorization", function () {
   beforeEach(function () {
-    spyOn(User, "hashPassword").and.callFake(function (password, callback) {
-      callback(null, "hashed-password");
-    });
+    spyOn(User, "hashPassword").and.returnValue(
+      Promise.resolve("hashed-password")
+    );
     spyOn(User, "set").and.callFake(function (uid, updates, callback) {
       callback(null);
     });
-    spyOn(User, "checkAccessToken").and.callFake(function (token, callback) {
-      callback(null, "password-route-user");
-    });
+    spyOn(User, "checkAccessToken").and.returnValue(
+      Promise.resolve("password-route-user")
+    );
   });
 
   it("blocks existing-password accounts without a reset token on GET and POST", async function () {
@@ -63,16 +63,13 @@ describe("password setting authorization", function () {
 
   it("allows a valid token for this account", async function () {
     expect((await request(true, "valid-token")).saved).toEqual("/sites");
-    expect(User.checkAccessToken).toHaveBeenCalledWith(
-      "valid-token",
-      jasmine.any(Function)
-    );
+    expect(User.checkAccessToken).toHaveBeenCalledWith("valid-token");
   });
 
   it("rejects expired or consumed tokens", async function () {
-    User.checkAccessToken.and.callFake(function (token, callback) {
-      callback(new Error("Invalid access token"));
-    });
+    User.checkAccessToken.and.callFake(() =>
+      Promise.reject(new Error("Invalid access token"))
+    );
     expect((await request(true, "expired-token")).error.message).toEqual(
       "Invalid access token"
     );
@@ -80,9 +77,7 @@ describe("password setting authorization", function () {
   });
 
   it("rejects a token belonging to a different account", async function () {
-    User.checkAccessToken.and.callFake(function (token, callback) {
-      callback(null, "another-user");
-    });
+    User.checkAccessToken.and.returnValue(Promise.resolve("another-user"));
     expect((await request(true, "other-token")).error.message).toEqual(
       "Your token was invalid."
     );

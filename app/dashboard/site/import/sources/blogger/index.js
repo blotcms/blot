@@ -1,24 +1,28 @@
 const lifecycle = require("dashboard/site/import/lifecycle");
-const async = require("async");
 const fs = require("fs-extra");
 const helper = require("dashboard/site/import/helper");
 const parse = require("./parse");
 
-function processEntry(entry, outputDirectory) {
-  return new Promise((resolve, reject) => {
-    async.waterfall(
-      [
-        (next) => next(null, entry),
-        helper.determine_path(outputDirectory),
-        helper.download_pdfs,
-        helper.download_images,
-        helper.convert_to_markdown,
-        helper.insert_metadata,
-        helper.write,
-      ].map(lifecycle.guard),
-      (err) => (err ? reject(err) : resolve())
-    );
-  });
+// Runs one callback-style import step (helper/*) on the entry, as a promise.
+function callStep(step, entry) {
+  return new Promise((resolve, reject) =>
+    step(entry, (err, result) => (err ? reject(err) : resolve(result)))
+  );
+}
+
+async function processEntry(entry, outputDirectory) {
+  const steps = [
+    helper.determine_path(outputDirectory),
+    helper.download_pdfs,
+    helper.download_images,
+    helper.convert_to_markdown,
+    helper.insert_metadata,
+    helper.write,
+  ];
+  for (const step of steps) {
+    lifecycle.check();
+    entry = await callStep(step, entry);
+  }
 }
 
 async function importBlogger(sourceFile, outputDirectory, status, siteHost) {

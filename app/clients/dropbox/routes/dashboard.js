@@ -13,22 +13,24 @@ const views = __dirname + "/../views/";
 const client = require("models/client");
 const Blog = require("models/blog");
 
-dashboard.use(function loadDropboxAccount(req, res, next) {
-  Database.get(req.blog.id, function (err, account) {
-    if (err) return next(err);
+dashboard.use(async function loadDropboxAccount(req, res, next) {
+  try {
+    const account = await Database.get(req.blog.id);
 
-    if (!account) return next();
+    if (account) {
+      var last_sync = account.last_sync;
 
-    var last_sync = account.last_sync;
+      res.locals.account = req.account = account;
 
-    res.locals.account = req.account = account;
-
-    if (last_sync) {
-      res.locals.account.last_sync = moment.utc(last_sync).fromNow();
+      if (last_sync) {
+        res.locals.account.last_sync = moment.utc(last_sync).fromNow();
+      }
     }
+  } catch (err) {
+    return next(err);
+  }
 
-    return next();
-  });
+  next();
 });
 
 // The settings page for a Dropbox account
@@ -147,24 +149,35 @@ dashboard.get("/edit", function (req, res) {
 });
 
 // Redirects the user to the OAuth page on Dropbox.com
-dashboard.get("/redirect", function (req, res) {
-  Database.get(req.blog.id, function (err, account) {
+dashboard.get("/redirect", async function (req, res, next) {
+  try {
+    let account = null;
+
+    try {
+      account = await Database.get(req.blog.id);
+    } catch (err) {
+      // Treated as having no account
+    }
+
     // Remember whatever durable error is on the account right now, before
     // we optimistically clear it below. If the user cancels on Dropbox's
     // page (or the token exchange otherwise fails) /authenticate restores
     // this instead of leaving the blog looking healthy with a half-done
     // reconnect. Only a successful new token should actually clear it for
     // real - see the comment on /authenticate.
-    req.session.dropboxPriorError =
-      !err && account
-        ? {
-            error_code: account.error_code,
-            error_source: account.error_source,
-            error_since: account.error_since,
-          }
-        : null;
+    req.session.dropboxPriorError = account
+      ? {
+          error_code: account.error_code,
+          error_source: account.error_source,
+          error_since: account.error_since,
+        }
+      : null;
+  } catch (err) {
+    return next(err);
+  }
 
-    req.session.save(function () {
+  req.session.save(async function () {
+    try {
       // Clear the durable error now, before the user ever leaves for
       // Dropbox, instead of waiting for setup() to get through
       // getAccount()/createFolder() (real network round trips) after they
@@ -173,10 +186,16 @@ dashboard.get("/redirect", function (req, res) {
       // here removes the race instead of papering over it downstream.
       // error_source/error_since clear too - see database.js. dropboxPriorError
       // above is how we undo this if the round trip doesn't end up succeeding.
-      Database.set(req.blog.id, { error_code: 0 }, function () {
-        redirectToDropbox(req, res);
-      });
-    });
+      try {
+        await Database.set(req.blog.id, { error_code: 0 });
+      } catch (err) {
+        // Redirect to Dropbox regardless
+      }
+
+      redirectToDropbox(req, res);
+    } catch (err) {
+      next(err);
+    }
   });
 });
 
@@ -250,6 +269,10 @@ dashboard.get("/permission", function (req, res) {
 // N.B. This GET mutates and starts the initial upload, so nginx pins it to
 // green rather than serving it on blue like other GETs (blot-site.conf).
 dashboard.get("/authenticate", function (req, res, next) {
+  authenticate(req, res, next).catch(next);
+});
+
+async function authenticate(req, res, next) {
   // the user has reloaded this page
   // if (req.session.dropbox && req.session.dropbox.preparing === true) {
   //   console.log('here, redirecting cause of session');
@@ -265,23 +288,24 @@ dashboard.get("/authenticate", function (req, res, next) {
   const priorError = req.session.dropboxPriorError;
   delete req.session.dropboxPriorError;
 
-  const restorePriorError = function (cb) {
-    if (!priorError) return cb();
+  // Never rejects: restoring is best effort
+  const restorePriorError = async function () {
+    if (!priorError) return;
 
-    // Only restore onto an account that actually exists - a first-time
-    // connect that gets cancelled/fails should not create one.
-    Database.get(req.blog.id, function (err, account) {
-      if (err || !account) return cb();
-      Database.set(
-        req.blog.id,
-        {
-          error_code: priorError.error_code,
-          error_source: priorError.error_source,
-          error_since: priorError.error_since,
-        },
-        cb
-      );
-    });
+    try {
+      // Only restore onto an account that actually exists - a first-time
+      // connect that gets cancelled/fails should not create one.
+      const account = await Database.get(req.blog.id);
+      if (!account) return;
+
+      await Database.set(req.blog.id, {
+        error_code: priorError.error_code,
+        error_source: priorError.error_source,
+        error_since: priorError.error_since,
+      });
+    } catch (err) {
+      // Nothing more can be done
+    }
   };
 
   // The user pressed "Cancel" on Dropbox's authorization page (error is
@@ -299,14 +323,16 @@ dashboard.get("/authenticate", function (req, res, next) {
     delete req.session.dropbox;
 
     return req.session.save(function () {
-      restorePriorError(function () {
-        res.locals.error =
-          error === "access_denied"
-            ? "You cancelled Dropbox authorization, so Blot can't access your folder. Try again to connect."
-            : "Something went wrong connecting to Dropbox. Try again to connect.";
+      restorePriorError()
+        .then(function () {
+          res.locals.error =
+            error === "access_denied"
+              ? "You cancelled Dropbox authorization, so Blot can't access your folder. Try again to connect."
+              : "Something went wrong connecting to Dropbox. Try again to connect.";
 
-        res.render(views + "authenticate");
-      });
+          res.render(views + "authenticate");
+        })
+        .catch(next);
     });
   }
 
@@ -333,31 +359,29 @@ dashboard.get("/authenticate", function (req, res, next) {
   // this the first time the user has visited this page
   req.session.dropbox = account;
 
-  Blog.set(req.blog.id, { client: "dropbox" }, function (err) {
-    if (err) return next(err);
+  await Blog.set(req.blog.id, { client: "dropbox" });
 
-    setup(account, req.session, function (err) {
-      if (err) {
-        console.log("err setting up", err);
-        // The code Dropbox gave us didn't actually lead to a working
-        // account (expired/reused code, a Dropbox API error, etc). Put
-        // back whatever durable error was there before /redirect cleared
-        // it, for the same reason a cancelled authorization does above.
-        return restorePriorError(function () {});
-      }
-    });
-
-    // req.session.dropbox above must actually reach the session store
-    // before the browser's next request (the redirect target below) can
-    // see it - otherwise that request's own session read can race the
-    // save from this one and come back without it, showing the stale
-    // pre-reconnect error for a render or two until a later request
-    // catches up. res.redirect() doesn't wait for that on its own.
-    req.session.save(function () {
-      res.redirect(req.baseUrl);
-    });
+  setup(account, req.session, function (err) {
+    if (err) {
+      console.log("err setting up", err);
+      // The code Dropbox gave us didn't actually lead to a working
+      // account (expired/reused code, a Dropbox API error, etc). Put
+      // back whatever durable error was there before /redirect cleared
+      // it, for the same reason a cancelled authorization does above.
+      restorePriorError();
+    }
   });
-});
+
+  // req.session.dropbox above must actually reach the session store
+  // before the browser's next request (the redirect target below) can
+  // see it - otherwise that request's own session read can race the
+  // save from this one and come back without it, showing the stale
+  // pre-reconnect error for a render or two until a later request
+  // catches up. res.redirect() doesn't wait for that on its own.
+  req.session.save(function () {
+    res.redirect(req.baseUrl);
+  });
+}
 
 // Will remove the Dropbox account from the client's database
 // and revoke the token if needed.

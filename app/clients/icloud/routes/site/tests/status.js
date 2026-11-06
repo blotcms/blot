@@ -127,11 +127,10 @@ describe("icloud status route", function () {
     });
     mockModule(establishSyncLockPath, async () => makeLock());
     mockModule(blogPath, {
-      get: ({ id }, callback) =>
-        callback(null, blog && Object.assign({}, blog, { id })),
+      get: async ({ id }) => blog && Object.assign({}, blog, { id }),
     });
     mockModule(entriesPath, {
-      getAllTotal: (_id, callback) => callback(null, 3),
+      getAllTotal: async () => 3,
     });
     mockModule(fixPath, (blog, callback) => {
       fixes.push(blog.id);
@@ -461,10 +460,10 @@ describe("icloud status route", function () {
     let failLoad = true;
     spyOn(console, "error");
     mockModule(blogPath, {
-      get: ({ id }, callback) =>
-        failLoad
-          ? callback(new Error("Redis unavailable"))
-          : callback(null, Object.assign({}, blog, { id })),
+      get: async ({ id }) => {
+        if (failLoad) throw new Error("Redis unavailable");
+        return Object.assign({}, blog, { id });
+      },
     });
     const status = require(statusPath);
 

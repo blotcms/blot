@@ -4,36 +4,45 @@ require("models/template");
 const getBlogHealth = require("./get-blog-health");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
 
-module.exports = function (req, res, next, handle) {
+// Anything thrown below reaches Express as next(err)
+module.exports = (req, res, next, handle) =>
+  loadBlog(req, res, next, handle).catch(next);
+
+async function loadBlog(req, res, next, handle) {
   if (!req.session || !req.user || !req.user.blogs.length) return next();
   if (!handle) return next();
 
   req.handle = handle;
 
-  Blog.get({ handle }, function (err, blog) {
+  let blog;
+  try {
+    blog = await Blog.get({ handle });
+  } catch (err) {
     // An outage is not a missing blog
     if (isRedisUnavailableError(err)) return next(err);
+    // Any other failure leaves no blog, as the callback form did
+    blog = null;
+  }
 
-    if (!blog || blog.owner !== req.user.uid) return next(new Error("No blog"));
+  if (!blog || blog.owner !== req.user.uid) return next(new Error("No blog"));
 
-    try {
-      blog = Blog.extend(blog);
+  try {
+    blog = Blog.extend(blog);
 
-      if (blog.status && blog.status.message === "Synced") {
-        blog.status.state = "synced";
-      }
-
-      if (blog.status && blog.status.message !== "Synced") {
-        blog.status.state = "syncing";
-      }
-    } catch (e) {
-      return next(e);
+    if (blog.status && blog.status.message === "Synced") {
+      blog.status.state = "synced";
     }
 
-    getBlogHealth(blog).then(function () {
-      finish(blog);
-    }, next);
-  });
+    if (blog.status && blog.status.message !== "Synced") {
+      blog.status.state = "syncing";
+    }
+  } catch (e) {
+    return next(e);
+  }
+
+  getBlogHealth(blog).then(function () {
+    finish(blog);
+  }, next);
 
   function finish(blog) {
     const siteTemplate = blog.template.startsWith("SITE:");
@@ -54,4 +63,4 @@ module.exports = function (req, res, next, handle) {
     res.locals.title = req.blog.pretty.label;
     next();
   }
-};
+}

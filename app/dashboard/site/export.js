@@ -7,7 +7,6 @@ const { finished } = require("stream/promises");
 const folder = require("storage/folder");
 const assets = require("storage/assets");
 const Template = require("models/template");
-const withCallback = require("helper/withCallback");
 const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
 
 Export.get("/", function (req, res) {
@@ -109,40 +108,29 @@ Export.get("/download", async function (req, res, next) {
 });
 
 const getAllTemplates = async (blogID) => {
-  return new Promise((resolve, reject) => {
-    Template.getTemplateList(blogID, function (err, templates) {
-      if (err) return reject(err);
-      // filter out templates which are not owned by the blog
-      const blogTemplates = templates.filter((t) => t.owner === blogID);
-      resolve(blogTemplates);
-    });
-  });
+  const templates = await Template.getTemplateList(blogID);
+  // filter out templates which are not owned by the blog
+  return templates.filter((t) => t.owner === blogID);
 };
 
 const addTemplate = async (templateID, archive) => {
-  return new Promise((resolve, reject) => {
-    withCallback(Template.getAllViews)(templateID, function (err, result) {
-      var views = result && result.views;
-      var template = result && result.metadata;
+  const result = await Template.getAllViews(templateID);
+  var views = result && result.views;
+  var template = result && result.metadata;
 
-      if (err || !views || !template)
-        return reject(err || new Error("No views or template found"));
+  if (!views || !template) throw new Error("No views or template found");
 
-      // Add the views to the archive
-      for (const view in views) {
-        if (!views[view].content) continue;
-        archive.append(views[view].content, {
-          name: "templates/" + template.slug + "/" + view,
-        });
-      }
-
-      // append the template JSON as 'package.json'
-      archive.append(JSON.stringify(template, null, 2), {
-        name: "templates/" + template.slug + "/package.json",
-      });
-
-      resolve();
+  // Add the views to the archive
+  for (const view in views) {
+    if (!views[view].content) continue;
+    archive.append(views[view].content, {
+      name: "templates/" + template.slug + "/" + view,
     });
+  }
+
+  // append the template JSON as 'package.json'
+  archive.append(JSON.stringify(template, null, 2), {
+    name: "templates/" + template.slug + "/package.json",
   });
 };
 

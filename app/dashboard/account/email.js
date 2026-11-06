@@ -12,26 +12,35 @@ Email.route("/")
     });
   })
 
-  .post(function (req, res, next) {
-    if (!req.body.email) {
-      return next(new Error("Please specify an email address"));
-    }
-
-    if (emailIsTooLong(req.body.email)) {
-      return next(new Error("Email address is too long"));
-    }
-
-    User.set(req.user.uid, { email: req.body.email }, function (err, changes) {
-      if (err) {
-        return next(err);
+  .post(async function (req, res, next) {
+    try {
+      if (!req.body.email) {
+        return next(new Error("Please specify an email address"));
       }
+
+      if (emailIsTooLong(req.body.email)) {
+        return next(new Error("Email address is too long"));
+      }
+
+      const changes = await new Promise(function (resolve, reject) {
+        User.set(
+          req.user.uid,
+          { email: req.body.email },
+          function (err, changes) {
+            if (err) return reject(err);
+            resolve(changes);
+          }
+        );
+      });
 
       if (changes.length) {
         res.message("Saved your new email address");
       } else {
         res.redirect(req.baseUrl + req.path);
       }
-    });
+    } catch (err) {
+      next(err);
+    }
   });
 
 module.exports = Email;

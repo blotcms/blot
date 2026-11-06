@@ -2,21 +2,12 @@ var key = require("./key");
 var client = require("models/client");
 var getByShareID = require("./getByShareID");
 var setMetadata = require("./setMetadata");
+var withCallback = require("helper/withCallback");
 
-module.exports = function dropShareID(shareID, callback) {
-  getByShareID(shareID, function (err, template) {
-    if (err) return callback(err);
+module.exports = withCallback(async function dropShareID(shareID) {
+  var template = await getByShareID(shareID);
 
-    template.shareID = "";
-    setMetadata(template.id, template, function (setErr) {
-      if (setErr) return callback(setErr);
-
-      client
-        .del(key.share(shareID))
-        .then(function () {
-          callback();
-        })
-        .catch(callback);
-    });
-  });
-};
+  template.shareID = "";
+  await setMetadata(template.id, template);
+  await client.del(key.share(shareID));
+});

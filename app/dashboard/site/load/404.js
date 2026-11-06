@@ -9,12 +9,17 @@ function withCreateParam(item) {
   return { ...item, createParam: encodeURIComponent(item.url) };
 }
 
-module.exports = function (req, res, next) {
-  // The raw list is every path; the page formats only the latest 100
-  var options = req.query.raw ? {} : { limit: MAX_SHOWN };
+module.exports = async function (req, res, next) {
+  try {
+    // The raw list is every path; the page formats only the latest 100
+    var options = req.query.raw ? {} : { limit: MAX_SHOWN };
 
-  List(req.blog.id, options, function (err, list, ignored, totals) {
-    if (err) return next(err);
+    var [list, ignored, totals] = await new Promise((resolve, reject) => {
+      List(req.blog.id, options, (err, list, ignored, totals) => {
+        if (err) return reject(err);
+        resolve([list, ignored, totals]);
+      });
+    });
 
     var has_ignored;
 
@@ -42,5 +47,7 @@ module.exports = function (req, res, next) {
     res.locals.ignored = ignored.map(withCreateParam);
 
     next();
-  });
+  } catch (err) {
+    next(err);
+  }
 };

@@ -1,4 +1,3 @@
-const { promisify } = require("util");
 const Blog = require("models/blog");
 const clfdate = require("helper/clfdate");
 const email = require("helper/email");
@@ -14,24 +13,18 @@ const syncReport = require("clients/util/syncReport");
 const { exclusive, schedule } = require("clients/util/scheduleExclusive");
 const onceAtStartup = require("clients/util/onceAtStartup");
 
-const getBlog = promisify(Blog.get);
-
 const ONE_HOUR_IN_MS = 60 * 60 * 1000;
 const RESYNC_WINDOW = 1000 * 60 * 10; // 10 minutes
 
-const getLastSyncDateStamp = (blogID) => {
-  return new Promise((resolve, reject) => {
-    Blog.getStatuses(blogID, { pageSize: 1 }, (err, res) => {
-      if (err) return reject(err);
+const getLastSyncDateStamp = async (blogID) => {
+  const res = await Blog.getStatuses(blogID, { pageSize: 1 });
+  const statuses = res.statuses;
 
-      const statuses = res.statuses;
+  if (!statuses || statuses.length === 0) {
+    return null;
+  }
 
-      if (!statuses || statuses.length === 0) {
-        return resolve(null);
-      }
-      resolve(statuses[0].datestamp);
-    });
-  });
+  return statuses[0].datestamp;
 };
 
 const resyncRecentlySynced = async (options = {}) => {
@@ -137,7 +130,7 @@ const validateAllBlogs = async () => {
       let phase = "validation";
 
       try {
-        blog = await getBlog({ id: blogID });
+        blog = await Blog.get({ id: blogID });
         if (!blog || blog.isDisabled || blog.client !== "icloud") return;
 
         // Deleting or unsharing the folder, or running out of iCloud storage,
@@ -220,7 +213,7 @@ const resyncAllConnected = async ({ notify = true } = {}) => {
       }
 
       try {
-        const blog = await getBlog({ id: blogID });
+        const blog = await Blog.get({ id: blogID });
         if (!blog || blog.client !== "icloud") return;
 
         checkedBlogs += 1;

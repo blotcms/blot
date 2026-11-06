@@ -29,17 +29,6 @@ function Changes(latest, former) {
   return changes;
 }
 
-// validate calls back (errors, latest), errors being null or an object of
-// messages keyed by field
-function validateAsync(blogID, blog) {
-  return new Promise(function (resolve, reject) {
-    validate(blogID, blog, function (errors, latest) {
-      if (errors) return reject(errors);
-      resolve(latest);
-    });
-  });
-}
-
 // Resolves to the list of changed fields. Rejects with validate's errors
 // object, or with the error that stopped the save.
 module.exports = withCallback(async function set(blogID, blog) {
@@ -49,7 +38,7 @@ module.exports = withCallback(async function set(blogID, blog) {
   var formerBackupDomain, changes, backupDomain;
   var changesList;
 
-  var latest = await validateAsync(blogID, blog);
+  var latest = await validate(blogID, blog);
   var former = (await get({ id: blogID })) || {};
 
   // Blog.get has already normalised former's imageExif and converters

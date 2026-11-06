@@ -1,34 +1,38 @@
 var folder = require("storage/folder");
-var callbackify = require("util").callbackify;
+var withCallback = require("helper/withCallback");
 
-function determineTemplateFolder(blogID, callback) {
-  callbackify(folder.listNames)(blogID, "/", function (err, listing) {
-    if (err || !Array.isArray(listing)) {
-      return callback(null, "Templates");
-    }
+module.exports = withCallback(async function determineTemplateFolder(blogID) {
+  var listing;
 
-    var entries = listing.map(function (entry) {
-      return entry.name;
-    });
+  try {
+    listing = await folder.listNames(blogID, "/");
+  } catch (err) {
+    return "Templates";
+  }
 
-    if (entries.indexOf("Templates") > -1) return callback(null, "Templates");
-    if (entries.indexOf("templates") > -1) return callback(null, "templates");
+  if (!Array.isArray(listing)) {
+    return "Templates";
+  }
 
-    var visible = entries.filter(function (name) {
-      return name && name[0] !== ".";
-    });
-
-    if (
-      visible.length &&
-      visible.every(function (name) {
-        return name === name.toLowerCase();
-      })
-    ) {
-      return callback(null, "templates");
-    }
-
-    callback(null, "Templates");
+  var entries = listing.map(function (entry) {
+    return entry.name;
   });
-}
 
-module.exports = determineTemplateFolder;
+  if (entries.indexOf("Templates") > -1) return "Templates";
+  if (entries.indexOf("templates") > -1) return "templates";
+
+  var visible = entries.filter(function (name) {
+    return name && name[0] !== ".";
+  });
+
+  if (
+    visible.length &&
+    visible.every(function (name) {
+      return name === name.toLowerCase();
+    })
+  ) {
+    return "templates";
+  }
+
+  return "Templates";
+});

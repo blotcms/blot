@@ -32,13 +32,30 @@ describe("templates skipUnchanged", function () {
   });
 
   it("does not store a fingerprint when the build fails", async function () {
-    this.pass.and.callFake(function (owner, callback) {
-      callback(new Error("Build failure"));
+    this.pass.and.callFake(async function () {
+      throw new Error("Build failure");
     });
 
     await expectAsync(templates({ skipUnchanged: true })).toBeRejected();
 
     expect(await client.get(KEY)).toBe(null);
+  });
+
+  it("returns a promise when called without a callback", async function () {
+    const result = require("templates")({ skipUnchanged: true });
+    expect(typeof result.then).toBe("function");
+    await result;
+
+    this.pass.and.callFake(async function () {
+      throw new Error("Build failure");
+    });
+
+    try {
+      await require("templates")({});
+      fail("expected the build to reject");
+    } catch (err) {
+      expect(err.message).toBe("Build failure");
+    }
   });
 
   it("always builds without the option, and drops the fingerprint", async function () {

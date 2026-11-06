@@ -8,6 +8,26 @@ describe("template", function () {
   const getBlog = promisify(require("models/blog").get);
   const setBlog = promisify(require("models/blog").set);
 
+  it("returns a promise when given no callback, and calls back when given one", async function () {
+    const direct = require("../index").setMetadata;
+
+    expect(await direct(this.template.id, { description: "one" })).toBe(true);
+    expect(
+      await direct(this.template.id, { description: "one" })
+    ).toBeUndefined();
+
+    const template = this.template;
+    const viaCallback = await new Promise(function (resolve, reject) {
+      direct(template.id, { description: "two" }, function (err, changes) {
+        if (err) return reject(err);
+        resolve(changes);
+      });
+    });
+
+    expect(viaCallback).toBe(true);
+    await expectAsync(direct(template.id, null)).toBeRejected();
+  });
+
   it("sets a template's metadata", async function () {
     var updates = { description: "A test template description" };
     await setMetadata(this.template.id, updates);

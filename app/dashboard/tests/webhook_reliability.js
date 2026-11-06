@@ -60,9 +60,7 @@ describe("payment webhook delivery reliability", function () {
     spyOn(console, "error");
     spyOn(console, "log");
     spyOn(User, "getByCustomerId").and.callFake((id, cb) => cb(null, user));
-    spyOn(User, "getByPayPalSubscriptionId").and.callFake((id, cb) =>
-      cb(null, user)
-    );
+    spyOn(User, "getByPayPalSubscriptionId").and.callFake(async () => user);
     spyOn(User, "set").and.callFake((id, updates, cb) => cb(null));
     spyOn(User, "enable").and.callFake((user, updates, cb) =>
       User.set(user.uid, updates, cb)

@@ -1,3 +1,4 @@
+var withCallback = require("helper/withCallback");
 var client = require("models/client");
 var key = require("models/template/key");
 var updateCdnManifest = require("models/template/util/updateCdnManifest");
@@ -11,8 +12,8 @@ var updateCdnManifest = require("models/template/util/updateCdnManifest");
 // pending for the next sync (and loses at most the one in flight). A
 // template whose regeneration fails is put back once the rest are done, so
 // the next sync retries it rather than leaving its manifest stale.
-module.exports = function regenerateTemplateManifests(blogID, log, callback) {
-  (async function () {
+module.exports = withCallback(
+  async function regenerateTemplateManifests(blogID, log) {
     var count = 0;
     var failed = [];
     var templateID;
@@ -44,12 +45,5 @@ module.exports = function regenerateTemplateManifests(blogID, log, callback) {
     }
 
     return count;
-  })().then(
-    function (count) {
-      callback(null, count);
-    },
-    function (err) {
-      callback(err);
-    }
-  );
-};
+  }
+);

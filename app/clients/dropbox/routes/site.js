@@ -3,7 +3,6 @@ const site = express.Router();
 const sync = require("clients/dropbox/sync");
 const Database = require("clients/dropbox/database");
 const debug = require("debug")("blot:clients:dropbox:routes");
-const async = require("async");
 const config = require("config");
 const crypto = require("crypto");
 const cookieParser = require("cookie-parser");
@@ -85,18 +84,64 @@ site.get("/webhook", function (req, res, next) {
 });
 // Syncs a blog, or leaves a follow-up for any process to run once a sync
 // already running (here or in another container) has finished
-const followUps = followUpSync("dropbox", function (blogID) {
-  return new Promise(function (resolve, reject) {
-    Blog.get({ id: blogID }, function (err, blog) {
+const followUps = followUpSync("dropbox", async function (blogID) {
+  const blog = await Blog.get({ id: blogID });
+  if (!blog) return;
+
+  await new Promise(function (resolve, reject) {
+    sync(blog, function (err) {
       if (err) return reject(err);
-      if (!blog) return resolve();
-      sync(blog, function (err) {
-        if (err) return reject(err);
-        resolve();
-      });
+      resolve();
     });
   });
 });
+
+// Syncs the blogs connected to each of the accounts. The accounts, and the
+// blogs of each account, are synced in parallel.
+async function syncAccounts(accounts) {
+  await Promise.all(
+    accounts.map(async function (account_id) {
+      debug("Checking blogs for Dropbox account", account_id);
+
+      let blogs;
+
+      try {
+        blogs = await Database.listBlogs(account_id);
+      } catch (err) {
+        console.error(
+          clfdate(),
+          "Dropbox: Webhook failed to list blogs for account",
+          account_id,
+          err
+        );
+        return;
+      }
+
+      debug("Syncing", blogs.length, "blogs");
+
+      await Promise.all(
+        blogs.map(async function (blog) {
+          // Used for testing purposes only
+          started(blog.id);
+
+          try {
+            await followUps.run(blog.id);
+          } catch (err) {
+            console.error(
+              clfdate(),
+              "Dropbox: Webhook sync error",
+              blog.id,
+              err
+            );
+          }
+
+          debug("Finish sync for", blog.id);
+          finished(blog.id);
+        })
+      );
+    })
+  );
+}
 
 site.post("/webhook", function (req, res) {
   var data = "";
@@ -134,50 +179,11 @@ site.post("/webhook", function (req, res) {
     // Tell Dropbox we retrieved the list of accounts
     res.sendStatus(200);
 
-    // Sync each of the accounts!
-    // accounts can be synced in parallel
-    async.each(
-      accounts,
-      function (account_id, next_account) {
-        debug("Checking blogs for Dropbox account", account_id);
-
-        Database.listBlogs(account_id, function (err, blogs) {
-          if (err) return next_account(err);
-
-          debug("Syncing", blogs.length, "blogs");
-
-          // blogs can be synced in parallel
-          async.each(
-            blogs,
-            function (blog, next) {
-              // Used for testing purposes only
-              started(blog.id);
-              followUps
-                .run(blog.id)
-                .catch(function (err) {
-                  console.error(
-                    clfdate(),
-                    "Dropbox: Webhook sync error",
-                    blog.id,
-                    err
-                  );
-                })
-                .then(function () {
-                  debug("Finish sync for", blog.id);
-                  finished(blog.id);
-                  next();
-                });
-            },
-            function () {}
-          );
-        });
-
-        next_account();
-
-        // Do nothing when all the accounts have synced.
-      },
-      function () {}
-    );
+    // Sync each of the accounts! Nothing waits for the syncs to finish,
+    // Dropbox has been answered already.
+    syncAccounts(accounts).catch(function (err) {
+      console.error(clfdate(), "Dropbox: Webhook error", err);
+    });
   });
 });
 

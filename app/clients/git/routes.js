@@ -17,57 +17,68 @@ var host = require("config").host;
 // once a sync already running (here or in another container) has finished.
 // The blog's current handle is its repository's name: pushes to an old
 // handle are redirected before they get this far.
-var followUps = followUpSync("git", function (blogID) {
-  return new Promise(function (resolve, reject) {
-    Blog.get({ id: blogID }, function (err, blog) {
-      if (err) return reject(err);
-      if (!blog) return resolve();
-      sync(blogID, blog.handle, function (err) {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
-  });
+var followUps = followUpSync("git", async function (blogID) {
+  var blog = await Blog.get({ id: blogID });
+
+  if (!blog) return;
+
+  await sync(blogID, blog.handle);
 });
 
 // Whether the blog has a repository in the store, or one is being set up for
 // it: the blog's own mark, set by create.js, which expires by itself, so a
 // setup cut off by a crash or a deploy doesn't leave the blog, or the owner's
 // other blogs, stuck "in progress"
-function hasRepository(blog, callback) {
-  repo.exists(blog.id, function (err, exists) {
-    if (err) return callback(err);
-    if (exists) return callback(null, true);
+async function hasRepository(blog) {
+  if (await repo.exists(blog.id)) return true;
 
-    database.isCreating(blog.id, callback);
-  });
+  return await database.isCreating(blog.id);
 }
 
-dashboard.get("/", function (req, res, next) {
-  hasRepository(req.blog, function (err, exists) {
-    if (err) return next(err);
+dashboard.get("/", async function (req, res, next) {
+  var exists;
 
-    if (exists) {
-      res.locals.repo = true;
-      return next();
-    }
+  try {
+    exists = await hasRepository(req.blog);
+  } catch (err) {
+    return next(err);
+  }
 
-    res.redirect(req.baseUrl + "/create");
-  });
+  if (exists) {
+    res.locals.repo = true;
+    return next();
+  }
+
+  res.redirect(req.baseUrl + "/create");
 });
 
-dashboard.get("/", function (req, res) {
-  database.getStatus(req.blog.owner, function (err, status) {
-    database.getToken(req.blog.owner, function (err, token) {
-      res.render(__dirname + "/views/index.html", {
-        title: "Git",
-        token: token,
-        createFailed: status === "createFailed",
-        createInProgress: status === "createInProgress",
-        host,
-      });
+dashboard.get("/", async function (req, res, next) {
+  // A failed lookup renders the page without it, as before
+  var status, token;
+
+  try {
+    status = await database.getStatus(req.blog.owner);
+  } catch (err) {
+    status = undefined;
+  }
+
+  try {
+    token = await database.getToken(req.blog.owner);
+  } catch (err) {
+    token = undefined;
+  }
+
+  try {
+    res.render(__dirname + "/views/index.html", {
+      title: "Git",
+      token: token,
+      createFailed: status === "createFailed",
+      createInProgress: status === "createInProgress",
+      host,
     });
-  });
+  } catch (err) {
+    next(err);
+  }
 });
 
 dashboard.get("/create", function (req, res) {
@@ -77,24 +88,23 @@ dashboard.get("/create", function (req, res) {
   });
 });
 
-dashboard.post("/create", function (req, res, next) {
-  if (req.body.cancel) {
-    console.log(clfdate() + " Git: User cancelled creation of repo");
+dashboard.post("/create", async function (req, res, next) {
+  try {
+    if (req.body.cancel) {
+      console.log(clfdate() + " Git: User cancelled creation of repo");
 
-    if (!req.blog.client) {
-      return res.redirect(res.locals.dashboardBase + "/sync");
+      if (!req.blog.client) {
+        return res.redirect(res.locals.dashboardBase + "/sync");
+      }
+
+      await disconnect(req.blog.id);
+      return next();
     }
 
-    return disconnect(req.blog.id, next);
-  }
-
-  // A repository the blog already has, or one still being made: setup would
-  // refuse a store which is not empty, and a second setup would race the
-  // first
-  hasRepository(req.blog, function (err, exists) {
-    if (err) return next(err);
-
-    if (exists) {
+    // A repository the blog already has, or one still being made: setup would
+    // refuse a store which is not empty, and a second setup would race the
+    // first
+    if (await hasRepository(req.blog)) {
       console.log(
         clfdate() + " Git: Refused to create over repo for blog",
         req.blog.id
@@ -107,22 +117,25 @@ dashboard.post("/create", function (req, res, next) {
       );
     }
 
-    Blog.set(req.blog.id, { client: "git" }, function (err) {
-      if (err) return next(err);
+    await Blog.set(req.blog.id, { client: "git" });
 
-      // Marked before the redirect, so the page it lands on shows the setup
-      // (create.js marks it too, and clears it when the setup ends)
-      database.setCreating(req.blog.id, function () {
-        res.redirect(req.baseUrl);
+    // Marked before the redirect, so the page it lands on shows the setup
+    // (create.js marks it too, and clears it when the setup ends). A failure
+    // to mark it does not stop the setup.
+    try {
+      await database.setCreating(req.blog.id);
+    } catch (err) {
+      // Ignored
+    }
 
-        create(req.blog, function (err) {
-          if (err) {
-            console.log(clfdate() + " Git: Error creating repo", err);
-          }
-        });
-      });
+    res.redirect(req.baseUrl);
+
+    create(req.blog).catch(function (err) {
+      console.log(clfdate() + " Git: Error creating repo", err);
     });
-  });
+  } catch (err) {
+    next(err);
+  }
 });
 
 dashboard.get("/reset-password", function (req, res) {
@@ -131,11 +144,13 @@ dashboard.get("/reset-password", function (req, res) {
   });
 });
 
-dashboard.post("/reset-password", function (req, res, next) {
-  database.refreshToken(req.blog.owner, function (err) {
-    if (err) return next(err);
+dashboard.post("/reset-password", async function (req, res, next) {
+  try {
+    await database.refreshToken(req.blog.owner);
     res.redirect(req.baseUrl);
-  });
+  } catch (err) {
+    next(err);
+  }
 });
 
 dashboard.get("/disconnect", function (req, res) {
@@ -145,9 +160,16 @@ dashboard.get("/disconnect", function (req, res) {
   });
 });
 
-dashboard.post("/disconnect", function (req, res, next) {
+dashboard.post("/disconnect", async function (req, res, next) {
   req.blog.client = "";
-  disconnect(req.blog.id, next);
+
+  try {
+    await disconnect(req.blog.id);
+  } catch (err) {
+    return next(err);
+  }
+
+  next();
 });
 
 // Parse the literal /end prefix while this router can still see it. Mounting a
@@ -169,15 +191,23 @@ function parseGitRequest(req, res, next) {
   next();
 }
 
-function redirectRenamedGitHandle(req, res, next) {
+async function redirectRenamedGitHandle(req, res, next) {
   // Historical-to-current handle mappings are public. Resolve them before
   // authentication so old Git remotes can discover their canonical URL.
-  Blog.get({ handle: req.gitHandle }, function (err, blog) {
-    if (err || !blog || blog.handle === req.gitHandle) return next();
+  var blog;
 
-    var oldRepository = "/" + req.gitHandle + ".git";
-    var trailingPathAndQuery = req.url.slice(oldRepository.length);
+  try {
+    blog = await Blog.get({ handle: req.gitHandle });
+  } catch (err) {
+    return next();
+  }
 
+  if (!blog || blog.handle === req.gitHandle) return next();
+
+  var oldRepository = "/" + req.gitHandle + ".git";
+  var trailingPathAndQuery = req.url.slice(oldRepository.length);
+
+  try {
     res.redirect(
       308,
       "https://" +
@@ -190,7 +220,9 @@ function redirectRenamedGitHandle(req, res, next) {
         ".git" +
         trailingPathAndQuery
     );
-  });
+  } catch (err) {
+    next(err);
+  }
 }
 
 // We keep a dictionary of synced blogs for testing

@@ -1,7 +1,7 @@
 var retry = require("clients/dropbox/util/retry");
 var createClient = require("clients/dropbox/util/createClient");
 
-function remove(done) {
+async function remove() {
   var client = createClient(process.env.BLOT_DROPBOX_TEST_ACCOUNT_APP_TOKEN);
 
   function checkBatchStatus(result) {
@@ -25,28 +25,26 @@ function remove(done) {
     });
   }
 
-  client
-    .filesListFolder({ path: "" })
-    .then(removeAllFiles)
-    .then(checkBatchStatus)
-    .then(function (res) {
-      if (
-        res.entries.some(function (entry) {
-          return entry[".tag"] !== "success";
-        })
-      ) {
-        remove(done);
-      } else {
-        done();
-      }
-    })
-    .catch(function (err) {
-      if (err instanceof Error) {
-        done(err);
-      } else {
-        done(new Error(err));
-      }
-    });
+  try {
+    const res = await client
+      .filesListFolder({ path: "" })
+      .then(removeAllFiles)
+      .then(checkBatchStatus);
+
+    if (
+      res.entries.some(function (entry) {
+        return entry[".tag"] !== "success";
+      })
+    ) {
+      return remove();
+    }
+  } catch (err) {
+    if (err instanceof Error) {
+      throw err;
+    } else {
+      throw new Error(err, { cause: err });
+    }
+  }
 }
 
 module.exports = retry(remove);

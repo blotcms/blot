@@ -33,6 +33,24 @@ describe("dropbox database", function () {
     });
   });
 
+  describe("promise form", function () {
+    it("sets, gets and drops an account without a callback", async function () {
+      const blogID = this.blog.id;
+
+      expect(await database.get(blogID)).toBeNull();
+
+      await database.set(blogID, fakeAccount());
+      const account = await database.get(blogID);
+      expect(account.account_id).toEqual("XXXXX");
+
+      // The blog does not use the Dropbox client, so it is not listed
+      expect(await database.listBlogs("XXXXX")).toEqual(jasmine.any(Array));
+
+      await database.drop(blogID);
+      expect(await database.get(blogID)).toBeNull();
+    });
+  });
+
   describe("error fields", function () {
     it("defaults missing error_source and error_since", function (done) {
       var blogID = this.blog.id;

@@ -1,4 +1,3 @@
-var async = require("async");
 var ensure = require("helper/ensure");
 var _ = require("lodash");
 var urlNormalizer = require("helper/urlNormalizer");
@@ -154,55 +153,56 @@ function Candidates(blog, entry) {
   return candidates;
 }
 
-function check(blogID, candidate, entryID, callback) {
+// Resolves to whether the candidate url is taken by another visible entry,
+// and if so the path of that entry.
+async function check(blogID, candidate, entryID) {
   var key = Key(blogID, candidate);
 
-  redis
-    .get(key)
-    .then(function (existingID) {
-      // This url is available and unused
-      if (!existingID) return callback(null, false, null);
+  var existingID = await redis.get(key);
 
-      // This url points to this entry already
-      if (existingID === entryID) return callback(null, false, null);
+  // This url is available and unused
+  if (!existingID) return { taken: false, conflictingEntryPath: null };
 
-      // This url points to a different entry
-      // A failed read is the same as no entry
-      withCallback(get)(blogID, existingID, function (err, existingEntry) {
-        // For some reason (bug) the url key was
-        // set but the entry does not exist. Claim the url.
-        if (!existingEntry) return callback(null, false, null);
+  // This url points to this entry already
+  if (existingID === entryID)
+    return { taken: false, conflictingEntryPath: null };
 
-        // The existing entry has since moved to a different url
-        // (perhaps the author modified its permalink etc...)
-        // so this entry can claim this url.
-        if (existingEntry.url !== candidate) return callback(null, false, null);
-
-        // The existing entry was deleted after claiming this
-        // url, so this entry can claim it.
-        if (existingEntry.deleted) return callback(null, false, null);
-
-        // If we reach this far down, it means the entry
-        // which has claimed this url is still visible and
-        // still uses this url, so we can't claim it.
-        return callback(null, true, existingEntry.path);
-      });
-    })
-    .catch(function (err) {
-      return callback(err);
-    });
-}
-
-// this needs to return an error if something went wrong
-// and the finalized, stored url to the entry...
-function setUrl(blogID, entry, callback) {
-  ensure(blogID, "string").and(entry, "object").and(callback, "function");
+  // This url points to a different entry
+  var existingEntry;
 
   try {
-    ensure(entry, model);
-  } catch (e) {
-    return callback(e);
+    existingEntry = await get(blogID, existingID);
+  } catch (err) {
+    // A failed read is the same as no entry
   }
+
+  // For some reason (bug) the url key was
+  // set but the entry does not exist. Claim the url.
+  if (!existingEntry) return { taken: false, conflictingEntryPath: null };
+
+  // The existing entry has since moved to a different url
+  // (perhaps the author modified its permalink etc...)
+  // so this entry can claim this url.
+  if (existingEntry.url !== candidate)
+    return { taken: false, conflictingEntryPath: null };
+
+  // The existing entry was deleted after claiming this
+  // url, so this entry can claim it.
+  if (existingEntry.deleted)
+    return { taken: false, conflictingEntryPath: null };
+
+  // If we reach this far down, it means the entry
+  // which has claimed this url is still visible and
+  // still uses this url, so we can't claim it.
+  return { taken: true, conflictingEntryPath: existingEntry.path };
+}
+
+// Resolves to { url, conflictingEntryPath }: the finalized, stored url for
+// the entry. Rejects if something went wrong.
+async function setUrl(blogID, entry) {
+  ensure(blogID, "string").and(entry, "object");
+
+  ensure(entry, model);
 
   if (entry.metadata === undefined) {
     console.log(
@@ -211,75 +211,55 @@ function setUrl(blogID, entry, callback) {
       "Entry.setURL: Entry metadata is unexpectedly undefined",
       entry
     );
-    return callback(null, { url: "", conflictingEntryPath: null });
+    return { url: "", conflictingEntryPath: null };
   }
 
   debug("Setting url for", entry.path);
 
   if (entry.draft || entry.deleted)
-    return callback(null, { url: "", conflictingEntryPath: null });
+    return { url: "", conflictingEntryPath: null };
 
-  Blog.get({ id: blogID }, function (err, blog) {
-    if (err) return callback(err);
+  var blog = await Blog.get({ id: blogID });
 
-    if (!blog) return callback(new Error("Blog not found"));
+  if (!blog) throw new Error("Blog not found");
 
-    var candidates = Candidates(blog, entry);
-    var firstCandidate = candidates[0];
-    var firstCandidateTaken = false;
-    var firstCandidateConflictingPath = null;
+  var candidates = Candidates(blog, entry);
+  var firstCandidate = candidates[0];
+  var firstCandidateTaken = false;
+  var firstCandidateConflictingPath = null;
 
-    // does This cause a memory leak? we sometimes
-    // exist before calling all the next functions
-    // if we find a successful candidate.
-    async.eachOfSeries(
-      candidates,
-      function (candidate, index, next) {
-        debug("Checking candidate", candidate);
-        check(
-          blogID,
-          candidate,
-          entry.id,
-          function (err, taken, conflictingEntryPath) {
-            if (err) return callback(err);
+  for (var index = 0; index < candidates.length; index++) {
+    var candidate = candidates[index];
 
-            if (taken) {
-              if (index === 0) {
-                firstCandidateTaken = true;
-                firstCandidateConflictingPath = conflictingEntryPath;
-              }
+    debug("Checking candidate", candidate);
 
-              return next();
-            }
+    var checked = await check(blogID, candidate, entry.id);
 
-            var key = Key(blogID, candidate);
-
-            redis
-              .set(key, entry.id)
-              .then(function () {
-                return callback(null, {
-                  url: candidate,
-                  conflictingEntryPath:
-                    firstCandidateTaken && candidate !== firstCandidate
-                      ? firstCandidateConflictingPath
-                      : null,
-                });
-              })
-              .catch(function (err) {
-                return callback(err);
-              });
-          }
-        );
-      },
-      function () {
-        // if we exhaust the list of candidates, what should happen?
-        // just return an error for now... TODO in future, just keep
-        // generating UIDS... but whatever for now.
-        callback(new Error("Could not find a permalink for " + entry.path));
+    if (checked.taken) {
+      if (index === 0) {
+        firstCandidateTaken = true;
+        firstCandidateConflictingPath = checked.conflictingEntryPath;
       }
-    );
-  });
+
+      continue;
+    }
+
+    await redis.set(Key(blogID, candidate), entry.id);
+
+    return {
+      url: candidate,
+      conflictingEntryPath:
+        firstCandidateTaken && candidate !== firstCandidate
+          ? firstCandidateConflictingPath
+          : null,
+    };
+  }
+
+  // if we exhaust the list of candidates, what should happen?
+  // just return an error for now... TODO in future, just keep
+  // generating UIDS... but whatever for now.
+  throw new Error("Could not find a permalink for " + entry.path);
 }
 
-module.exports = setUrl;
+module.exports = withCallback(setUrl);
 module.exports.Candidates = Candidates;

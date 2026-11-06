@@ -48,16 +48,23 @@ function sanitize(entry) {
   };
 }
 
-module.exports = function drop(blogID, path, callback) {
-  ensure(blogID, "string").and(path, "string").and(callback, "function");
+// Resolves to set's result, or to undefined when there is no such entry
+async function drop(blogID, path) {
+  ensure(blogID, "string").and(path, "string");
 
-  withCallback(get)(blogID, path, function (err, entry) {
-    if (!entry) {
-      // A read that failed because Redis is unavailable says nothing about
-      // whether the entry exists. Reporting success would lose the drop.
-      return callback(err && isRedisUnavailableError(err) ? err : undefined);
-    }
+  var entry;
 
-    set(blogID, path, sanitize(entry), callback);
-  });
-};
+  try {
+    entry = await get(blogID, path);
+  } catch (err) {
+    // A read that failed because Redis is unavailable says nothing about
+    // whether the entry exists. Reporting success would lose the drop.
+    if (isRedisUnavailableError(err)) throw err;
+  }
+
+  if (!entry) return;
+
+  return await set(blogID, path, sanitize(entry));
+}
+
+module.exports = withCallback(drop);

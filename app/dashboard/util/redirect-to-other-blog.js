@@ -5,11 +5,16 @@ const Similarity = require("helper/similarity");
 // request gets the 404 page rather than another site's page
 const MIN_SIMILARITY = 0.6;
 
-module.exports = function (err, req, res, next) {
+module.exports = async function (err, req, res, next) {
   if (err.message !== "No blog") return next(err);
   err.status = 404;
-  loadBlogs(req, res, function (loadErr) {
-    if (loadErr) return next(loadErr);
+  try {
+    await new Promise((resolve, reject) => {
+      loadBlogs(req, res, function (loadErr) {
+        if (loadErr) return reject(loadErr);
+        resolve();
+      });
+    });
     if (!req.handle || !req.blogs.length) return next(err);
     let handle = req.handle;
     let handleToRedirect;
@@ -31,5 +36,7 @@ module.exports = function (err, req, res, next) {
     if (similarity < MIN_SIMILARITY) return next(err);
 
     res.redirect(`/sites/${handleToRedirect}${pathWithoutHandle}`);
-  });
+  } catch (error) {
+    next(error);
+  }
 };

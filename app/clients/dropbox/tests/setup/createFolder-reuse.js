@@ -28,17 +28,15 @@ describe("dropbox createFolder reuses a partially-transferred folder on retry", 
   function load(existingAccount) {
     require.cache[databasePath] = {
       exports: {
-        get: function (_blogID, callback) {
-          callback(null, existingAccount);
+        get: async function () {
+          return existingAccount;
         },
-        listBlogs: function (_accountID, callback) {
+        listBlogs: async function () {
           // No other blogs on this Dropbox account - keeps checkAppFolder's
           // fall-through path (used when reuse doesn't apply) simple.
-          callback(null, []);
+          return [];
         },
-        set: function (_blogID, _values, callback) {
-          callback(null);
-        },
+        set: async function () {},
       },
     };
     delete require.cache[createFolderPath];
@@ -242,15 +240,13 @@ describe("dropbox createFolder reuses a partially-transferred folder on retry", 
   it("propagates a database read failure instead of falling through to mkdir", async function () {
     require.cache[databasePath] = {
       exports: {
-        get: function (_blogID, callback) {
-          callback(new Error("redis blip"));
+        get: async function () {
+          throw new Error("redis blip");
         },
-        listBlogs: function (_accountID, callback) {
-          callback(null, []);
+        listBlogs: async function () {
+          return [];
         },
-        set: function (_blogID, _values, callback) {
-          callback(null);
-        },
+        set: async function () {},
       },
     };
     delete require.cache[createFolderPath];

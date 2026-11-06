@@ -29,12 +29,8 @@ function getEntry(blogID, path) {
 
 function setEntry(blogID, path) {
   var set = require("./set");
-  return new Promise(function (resolve, reject) {
-    set(blogID, path, {}, function (err) {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+  // set returns a promise when it is not given a callback
+  return set(blogID, path, {}).then(function () {});
 }
 
 function bumpCacheID(blogID) {
@@ -114,19 +110,13 @@ var alarms = alarm(
 // succeeded, so a process that exits mid-publish leaves the claimed alarm to
 // be retried after its lease. A stray alarm for an already published entry
 // just re-saves it (idempotent) when it fires, then completes.
-function addToSchedule(blogID, entry, callback) {
-  ensure(blogID, "string").and(entry, model).and(callback, "function");
+async function addToSchedule(blogID, entry) {
+  ensure(blogID, "string").and(entry, model);
 
   var id = toID(blogID, entry.path);
-  var done;
 
-  if (entry.scheduled) done = alarms.set(id, entry.dateStamp);
-  else if (entry.draft || entry.deleted) done = alarms.cancel(id);
-  else done = Promise.resolve();
-
-  done.then(function () {
-    callback();
-  }, callback);
+  if (entry.scheduled) await alarms.set(id, entry.dateStamp);
+  else if (entry.draft || entry.deleted) await alarms.cancel(id);
 }
 
 // Safety net for alarms that went missing or stale (a lost race, a flush, an

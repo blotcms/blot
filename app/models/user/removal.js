@@ -1,4 +1,5 @@
 var moment = require("moment");
+var withCallback = require("helper/withCallback");
 var subscriptionLifecycle = require("./subscriptionLifecycle");
 var overdueSince = require("./overdueSince");
 
@@ -16,19 +17,14 @@ function isPaused(user) {
 
 // Overdue details for a user, measured from when they actually went overdue.
 // Only unpaid users cost a Stripe lookup (see overdueSince).
-function overdueFor(user, callback) {
+async function overdueFor(user) {
   if (isPaused(user)) {
-    return callback(null, { overdue: false, startedAt: null, phase: null });
+    return { overdue: false, startedAt: null, phase: null };
   }
 
-  overdueSince(user, function (err, startedAt) {
-    if (err) return callback(err);
+  var startedAt = await overdueSince(user);
 
-    callback(
-      null,
-      subscriptionLifecycle.overdueDetails(user, Date.now(), startedAt)
-    );
-  });
+  return subscriptionLifecycle.overdueDetails(user, Date.now(), startedAt);
 }
 
 // Decides whether a user has passed their grace period and is due for removal,
@@ -75,6 +71,6 @@ function removalCandidate(user, overdue) {
 
 module.exports = {
   isPaused: isPaused,
-  overdueFor: overdueFor,
+  overdueFor: withCallback(overdueFor),
   removalCandidate: removalCandidate,
 };

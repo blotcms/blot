@@ -23,35 +23,37 @@ const templateSupportsFavicon = (template, views) => {
   );
 };
 
-module.exports = function loadFavicon(req, res, next) {
-  res.locals.favicon = req.template.locals.favicon || null;
+module.exports = async function loadFavicon(req, res, next) {
+  try {
+    res.locals.favicon = req.template.locals.favicon || null;
 
-  if (hasFaviconLocal(req.template.locals)) {
-    res.locals.favicon_supported = true;
-    return next();
+    if (hasFaviconLocal(req.template.locals)) {
+      res.locals.favicon_supported = true;
+      return next();
+    }
+
+    const key = req.template.id + ":" + req.template.cacheID;
+
+    if (req.template.cacheID && supported.has(key)) {
+      res.locals.favicon_supported = supported.get(key);
+      return next();
+    }
+
+    const result = await Template.getAllViews(req.template.id);
+
+    res.locals.favicon_supported = templateSupportsFavicon(
+      req.template,
+      result.views
+    );
+
+    if (req.template.cacheID) {
+      supported.set(key, res.locals.favicon_supported);
+    }
+
+    next();
+  } catch (err) {
+    next(err);
   }
-
-  const key = req.template.id + ":" + req.template.cacheID;
-
-  if (req.template.cacheID && supported.has(key)) {
-    res.locals.favicon_supported = supported.get(key);
-    return next();
-  }
-
-  Template.getAllViews(req.template.id)
-    .then(function ({ views }) {
-      res.locals.favicon_supported = templateSupportsFavicon(
-        req.template,
-        views
-      );
-
-      if (req.template.cacheID) {
-        supported.set(key, res.locals.favicon_supported);
-      }
-
-      next();
-    })
-    .catch(next);
 };
 
 module.exports.hasFaviconLocal = hasFaviconLocal;

@@ -155,10 +155,9 @@ TemplateEditor.route("/new")
     res.render("dashboard/template/new");
   })
   .post((req, res, next) => {
-    Template.create(req.blog.id, req.body.name, (err, template) => {
-      if (err) return next(err);
+    Template.create(req.blog.id, req.body.name).then((template) => {
       res.redirect(req.baseUrl + "/" + template.slug);
-    });
+    }, next);
   });
 
 // Creates a template from a dropped folder or zip file. Two path segments, so
@@ -489,13 +488,9 @@ TemplateEditor.route("/:templateSlug/rename")
       );
     }
 
-    Template.setMetadata(
-      req.template.id,
-      { name: req.body.name },
-      function (err) {
-        if (err) return next(err);
-        res.message(res.locals.base, "Renamed template!");
-      }
+    Template.setMetadata(req.template.id, { name: req.body.name }).then(
+      () => res.message(res.locals.base, "Renamed template!"),
+      next
     );
   });
 

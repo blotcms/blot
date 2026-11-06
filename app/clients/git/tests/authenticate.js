@@ -164,7 +164,9 @@ describe("git client authenticate", function () {
         },
         function (blog, next) {
           otherBlog = blog;
-          createRepository(blog, next);
+          createRepository(blog, function (err) {
+            next(err);
+          });
         },
         function (next) {
           repoUrl = url.parse(repoUrl);

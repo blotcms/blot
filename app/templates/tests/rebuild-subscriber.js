@@ -24,8 +24,8 @@ describe("templates rebuild subscription", function () {
     fsExtra.readdirSync = function () {
       return [];
     };
-    Template.getTemplateList = function (_owner, callback) {
-      callback(null, []);
+    Template.getTemplateList = async function () {
+      return [];
     };
     process.stdin.resume = function () {};
 

@@ -14,7 +14,7 @@ var _ = require("lodash");
 // Keys are lowercased (see key.js), so two dependencies which differ only by
 // case share one set.
 
-module.exports = function (blogID, entry, previous_dependencies, callback) {
+module.exports = async function (blogID, entry, previous_dependencies) {
   var removed_dependencies;
   var current_dependencies = [];
   var multi = client.multi();
@@ -52,12 +52,5 @@ module.exports = function (blogID, entry, previous_dependencies, callback) {
     multi.sAdd(key, entry.path);
   });
 
-  multi
-    .exec()
-    .then(function () {
-      return callback();
-    })
-    .catch(function (err) {
-      return callback(err);
-    });
+  await multi.exec();
 };

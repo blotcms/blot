@@ -4,6 +4,7 @@ var client = require("models/client");
 var key = require("./key");
 var urlNormalizer = require("helper/urlNormalizer");
 var ensure = require("helper/ensure");
+var withCallback = require("helper/withCallback");
 var extend = require("helper/extend");
 var viewModel = require("./viewModel");
 var getView = require("./getView");
@@ -19,8 +20,8 @@ var clfdate = require("helper/clfdate");
 var applyUserRetrieveOptions = require("./util/applyUserRetrieveOptions");
 const MAX_VIEW_PAYLOAD_SIZE = 2 * 1024 * 1024;
 
-module.exports = function setView(templateID, updates, callback) {
-  ensure(templateID, "string").and(updates, "object").and(callback, "function");
+module.exports = withCallback(async function setView(templateID, updates) {
+  ensure(templateID, "string").and(updates, "object");
 
   if (updates.partials !== undefined && type(updates.partials) !== "object") {
     updates.partials = {};
@@ -30,384 +31,317 @@ module.exports = function setView(templateID, updates, callback) {
   var name = updates.name;
 
   if (!name || !type(name, "string")) {
-    return callback(new Error("The view's name is invalid"));
+    throw new Error("The view's name is invalid");
   }
 
   // Validate that the name doesn't start with '.' or contain a slash
   if (name.startsWith(".")) {
-    return callback(new Error("View names cannot start with '.'"));
+    throw new Error("View names cannot start with '.'");
   }
 
   // We don't support subdirectories in templates at the moment
   if (name.includes("/") || name.includes("\\")) {
-    return callback(new Error("View names cannot contain slashes"));
+    throw new Error("View names cannot contain slashes");
   }
 
   const serializedUpdates = JSON.stringify(updates);
   const payloadSize = Buffer.byteLength(serializedUpdates);
 
   if (payloadSize > MAX_VIEW_PAYLOAD_SIZE) {
-    return callback(new Error("View payload exceeds maximum size of 2 MB"));
+    throw new Error("View payload exceeds maximum size of 2 MB");
   }
 
   if (updates.content !== undefined) {
-    try {
-      Mustache.render(updates.content, {});
-    } catch (e) {
-      return callback(e);
-    }
+    Mustache.render(updates.content, {});
   }
 
   var allViews = key.allViews(templateID);
   var viewKey = key.view(templateID, name);
 
-  getMetadata(templateID, (err, metadata) => {
-    if (err) return callback(err);
+  var metadata = await getMetadata(templateID);
 
-    if (!metadata)
-      return callback(new Error("There is no template called " + templateID));
+  if (!metadata) throw new Error("There is no template called " + templateID);
 
-    client
-      .sAdd(allViews, name)
-      .then(() => {
-        // Look up previous state of view if applicable
-        getView(templateID, name, (err, view) => {
-          view = view || {};
-          let redisWriteChain = Promise.resolve();
+  await client.sAdd(allViews, name);
 
-          const enqueueRedisWrite = (writeFn) => {
-            redisWriteChain = redisWriteChain.then(() =>
-              Promise.resolve().then(writeFn)
-            );
-          };
+  // Look up previous state of view if applicable
+  var view;
 
-          // Normalize legacy views' urlPatterns for short-circuit comparison
-          // This ensures legacy views with only view.url can properly short-circuit
-          if (!view.urlPatterns && view.url) {
-            view.urlPatterns = [urlNormalizer(view.url)];
-          }
+  try {
+    view = await getView(templateID, name);
+  } catch (err) {
+    // a view that doesn't exist yet is created below
+  }
 
-          var changes;
+  view = view || {};
+  let redisWriteChain = Promise.resolve();
 
-          // Handle `url` logic
-          var shouldRemoveUrl = false;
-          var shouldRemoveUrlPatterns = false;
+  const enqueueRedisWrite = (writeFn) => {
+    redisWriteChain = redisWriteChain.then(() =>
+      Promise.resolve().then(writeFn)
+    );
+  };
 
-          if (updates.url !== undefined) {
-            if (type(updates.url, "array")) {
-              if (updates.url.length === 0) {
-                delete updates.url;
-                delete updates.urlPatterns;
-                shouldRemoveUrl = true;
-                shouldRemoveUrlPatterns = true;
-              } else {
-                // If `url` is an array, use the first item as `url` and the array as `urlPatterns`
-                const normalizedUrls = updates.url.map(urlNormalizer);
-                updates.url = normalizedUrls[0];
-                updates.urlPatterns = normalizedUrls;
-              }
-            } else if (type(updates.url, "string")) {
-              // If `url` is a string, normalize it and use `[url]` as `urlPatterns`
-              updates.url = urlNormalizer(updates.url);
-              updates.urlPatterns = [updates.url];
-            } else {
-              return callback(
-                new Error("The provided `url` must be a string or an array")
-              );
-            }
+  // Normalize legacy views' urlPatterns for short-circuit comparison
+  // This ensures legacy views with only view.url can properly short-circuit
+  if (!view.urlPatterns && view.url) {
+    view.urlPatterns = [urlNormalizer(view.url)];
+  }
 
-            // Only update Redis if url is still defined (not deleted due to empty array)
-            if (updates.url !== undefined) {
-              enqueueRedisWrite(() =>
-                client.set(key.url(templateID, updates.url), name)
-              );
+  var changes;
 
-              if (updates.url !== view.url) {
-                enqueueRedisWrite(() =>
-                  client.del(key.url(templateID, view.url))
-                );
-              }
-            } else {
-              // If url was deleted (empty array), remove the old URL mapping
-              if (view.url) {
-                enqueueRedisWrite(() =>
-                  client.del(key.url(templateID, view.url))
-                );
-              }
-            }
-          }
+  // Handle `url` logic
+  var shouldRemoveUrl = false;
+  var shouldRemoveUrlPatterns = false;
 
-          redisWriteChain
-            .then(() => {
-              // SHORT-CIRCUIT: Check if content and other critical fields are unchanged
-              // This avoids expensive operations (parsing, dependency detection, Redis writes, CDN updates)
-              var contentUnchanged =
-                updates.content === undefined ||
-                updates.content === view.content;
-              var urlUnchanged;
-              if (shouldRemoveUrl) {
-                // If we're removing url, check if view currently has one
-                urlUnchanged = !view.url;
-              } else {
-                urlUnchanged = !updates.url || updates.url === view.url;
-              }
-              var urlPatternsUnchanged;
-              if (shouldRemoveUrlPatterns) {
-                // If we're removing urlPatterns, check if view currently has one
-                urlPatternsUnchanged = !view.urlPatterns;
-              } else {
-                urlPatternsUnchanged =
-                  !updates.urlPatterns ||
-                  JSON.stringify(updates.urlPatterns) ===
-                    JSON.stringify(view.urlPatterns);
-              }
-              var localsUnchanged =
-                !updates.locals ||
-                JSON.stringify(updates.locals || {}) ===
-                  JSON.stringify(view.locals || {});
-              var partialsUnchanged = true; // Default to true
-              if (updates.partials !== undefined) {
-                // If partials are provided, we need to compare the final merged result
-                // Since partials are merged with parsed partials from content, we need
-                // to compute the expected final partials for comparison
-                if (contentUnchanged && view.content) {
-                  // Content unchanged, so parse it to get the same parseResult.partials
-                  // that would be merged with updates.partials
-                  var parseResultForComparison = parseTemplate(view.content);
-                  var expectedPartials = {};
-                  // Start with updates.partials (normalized to object)
-                  if (type(updates.partials, "object")) {
-                    extend(expectedPartials).and(updates.partials);
-                  }
-                  // Merge with parsed partials (same as what happens in line 185)
-                  if (
-                    type(
-                      parseResultForComparison &&
-                        parseResultForComparison.partials,
-                      "object"
-                    )
-                  ) {
-                    extend(expectedPartials).and(
-                      parseResultForComparison.partials
-                    );
-                  }
-                  partialsUnchanged =
-                    JSON.stringify(expectedPartials) ===
-                    JSON.stringify(view.partials || {});
-                } else {
-                  // Content changed, so we can't short-circuit anyway - partials will be recomputed
-                  partialsUnchanged = false;
-                }
-              }
-              var retrieveUnchanged =
-                !updates.retrieve ||
-                JSON.stringify(updates.retrieve || {}) ===
-                  JSON.stringify(view.retrieve || {});
+  if (updates.url !== undefined) {
+    if (type(updates.url, "array")) {
+      if (updates.url.length === 0) {
+        delete updates.url;
+        delete updates.urlPatterns;
+        shouldRemoveUrl = true;
+        shouldRemoveUrlPatterns = true;
+      } else {
+        // If `url` is an array, use the first item as `url` and the array as `urlPatterns`
+        const normalizedUrls = updates.url.map(urlNormalizer);
+        updates.url = normalizedUrls[0];
+        updates.urlPatterns = normalizedUrls;
+      }
+    } else if (type(updates.url, "string")) {
+      // If `url` is a string, normalize it and use `[url]` as `urlPatterns`
+      updates.url = urlNormalizer(updates.url);
+      updates.urlPatterns = [updates.url];
+    } else {
+      throw new Error("The provided `url` must be a string or an array");
+    }
 
-              if (
-                contentUnchanged &&
-                urlUnchanged &&
-                urlPatternsUnchanged &&
-                localsUnchanged &&
-                partialsUnchanged &&
-                retrieveUnchanged
-              ) {
-                // Nothing has changed, skip all expensive operations
-                console.log(
-                  clfdate(),
-                  templateID.slice(0, 12),
-                  "setView: short-circuit",
-                  name
-                );
-                return callback();
-              } else {
-                console.log(
-                  clfdate(),
-                  templateID.slice(0, 12),
-                  "setView: proceeding",
-                  name,
-                  "contentUnchanged=" + contentUnchanged,
-                  "urlUnchanged=" + urlUnchanged,
-                  "urlPatternsUnchanged=" + urlPatternsUnchanged,
-                  "localsUnchanged=" + localsUnchanged,
-                  "partialsUnchanged=" + partialsUnchanged,
-                  "retrieveUnchanged=" + retrieveUnchanged
-                );
-              }
+    // Only update Redis if url is still defined (not deleted due to empty array)
+    if (updates.url !== undefined) {
+      enqueueRedisWrite(() =>
+        client.set(key.url(templateID, updates.url), name)
+      );
 
-              console.log(clfdate(), templateID.slice(0, 12), "setView:", name);
+      if (updates.url !== view.url) {
+        enqueueRedisWrite(() => client.del(key.url(templateID, view.url)));
+      }
+    } else {
+      // If url was deleted (empty array), remove the old URL mapping
+      if (view.url) {
+        enqueueRedisWrite(() => client.del(key.url(templateID, view.url)));
+      }
+    }
+  }
 
-              var existingRetrieve = view.retrieve || {};
+  await redisWriteChain;
 
-              for (var i in updates) {
-                if (updates[i] !== view[i]) changes = true;
-                view[i] = updates[i];
-              }
+  // SHORT-CIRCUIT: Check if content and other critical fields are unchanged
+  // This avoids expensive operations (parsing, dependency detection, Redis writes, CDN updates)
+  var contentUnchanged =
+    updates.content === undefined || updates.content === view.content;
+  var urlUnchanged;
+  if (shouldRemoveUrl) {
+    // If we're removing url, check if view currently has one
+    urlUnchanged = !view.url;
+  } else {
+    urlUnchanged = !updates.url || updates.url === view.url;
+  }
+  var urlPatternsUnchanged;
+  if (shouldRemoveUrlPatterns) {
+    // If we're removing urlPatterns, check if view currently has one
+    urlPatternsUnchanged = !view.urlPatterns;
+  } else {
+    urlPatternsUnchanged =
+      !updates.urlPatterns ||
+      JSON.stringify(updates.urlPatterns) === JSON.stringify(view.urlPatterns);
+  }
+  var localsUnchanged =
+    !updates.locals ||
+    JSON.stringify(updates.locals || {}) === JSON.stringify(view.locals || {});
+  var partialsUnchanged = true; // Default to true
+  if (updates.partials !== undefined) {
+    // If partials are provided, we need to compare the final merged result
+    // Since partials are merged with parsed partials from content, we need
+    // to compute the expected final partials for comparison
+    if (contentUnchanged && view.content) {
+      // Content unchanged, so parse it to get the same parseResult.partials
+      // that would be merged with updates.partials
+      var parseResultForComparison = parseTemplate(view.content);
+      var expectedPartials = {};
+      // Start with updates.partials (normalized to object)
+      if (type(updates.partials, "object")) {
+        extend(expectedPartials).and(updates.partials);
+      }
+      // Merge with parsed partials (same as what happens in line 185)
+      if (
+        type(
+          parseResultForComparison && parseResultForComparison.partials,
+          "object"
+        )
+      ) {
+        extend(expectedPartials).and(parseResultForComparison.partials);
+      }
+      partialsUnchanged =
+        JSON.stringify(expectedPartials) ===
+        JSON.stringify(view.partials || {});
+    } else {
+      // Content changed, so we can't short-circuit anyway - partials will be recomputed
+      partialsUnchanged = false;
+    }
+  }
+  var retrieveUnchanged =
+    !updates.retrieve ||
+    JSON.stringify(updates.retrieve || {}) ===
+      JSON.stringify(view.retrieve || {});
 
-              // Explicitly remove url and urlPatterns if they were deleted (empty array case)
-              if (shouldRemoveUrl) {
-                delete view.url;
-                changes = true;
-              }
-              if (shouldRemoveUrlPatterns) {
-                delete view.urlPatterns;
-                changes = true;
-              }
+  if (
+    contentUnchanged &&
+    urlUnchanged &&
+    urlPatternsUnchanged &&
+    localsUnchanged &&
+    partialsUnchanged &&
+    retrieveUnchanged
+  ) {
+    // Nothing has changed, skip all expensive operations
+    console.log(
+      clfdate(),
+      templateID.slice(0, 12),
+      "setView: short-circuit",
+      name
+    );
+    return;
+  } else {
+    console.log(
+      clfdate(),
+      templateID.slice(0, 12),
+      "setView: proceeding",
+      name,
+      "contentUnchanged=" + contentUnchanged,
+      "urlUnchanged=" + urlUnchanged,
+      "urlPatternsUnchanged=" + urlPatternsUnchanged,
+      "localsUnchanged=" + localsUnchanged,
+      "partialsUnchanged=" + partialsUnchanged,
+      "retrieveUnchanged=" + retrieveUnchanged
+    );
+  }
 
-              ensure(view, viewModel);
+  console.log(clfdate(), templateID.slice(0, 12), "setView:", name);
 
-              if (updates.urlPatterns) {
-                // Store `urlPatterns` in Redis
-                const urlPatternsKey = key.urlPatterns(templateID);
-                enqueueRedisWrite(() =>
-                  client.hSet(
-                    urlPatternsKey,
-                    name,
-                    JSON.stringify(updates.urlPatterns)
-                  )
-                );
-              } else if (shouldRemoveUrlPatterns) {
-                // Delete urlPatterns from Redis if it was removed
-                const urlPatternsKey = key.urlPatterns(templateID);
-                enqueueRedisWrite(() => client.hDel(urlPatternsKey, name));
-              }
+  var existingRetrieve = view.retrieve || {};
 
-              redisWriteChain
-                .then(() => {
-                  view.locals = view.locals || {};
-                  view.retrieve = view.retrieve || {};
-                  view.partials = view.partials || {};
+  for (var i in updates) {
+    if (updates[i] !== view[i]) changes = true;
+    view[i] = updates[i];
+  }
 
-                  var parseResult = parseTemplate(view.content);
+  // Explicitly remove url and urlPatterns if they were deleted (empty array case)
+  if (shouldRemoveUrl) {
+    delete view.url;
+    changes = true;
+  }
+  if (shouldRemoveUrlPatterns) {
+    delete view.urlPatterns;
+    changes = true;
+  }
 
-                  // TO DO REMOVE THIS
-                  if (type(view.partials, "array")) {
-                    var _partials = {};
+  ensure(view, viewModel);
 
-                    for (var i = 0; i < view.partials.length; i++)
-                      _partials[view.partials[i]] = null;
+  if (updates.urlPatterns) {
+    // Store `urlPatterns` in Redis
+    const urlPatternsKey = key.urlPatterns(templateID);
+    enqueueRedisWrite(() =>
+      client.hSet(urlPatternsKey, name, JSON.stringify(updates.urlPatterns))
+    );
+  } else if (shouldRemoveUrlPatterns) {
+    // Delete urlPatterns from Redis if it was removed
+    const urlPatternsKey = key.urlPatterns(templateID);
+    enqueueRedisWrite(() => client.hDel(urlPatternsKey, name));
+  }
 
-                    view.partials = _partials;
-                  }
+  await redisWriteChain;
 
-                  // Drop file-backed partial markers this save no longer references -
-                  // neither parsed from the current content nor explicitly passed in
-                  // updates.partials - so a "{{> /old.txt}}" edited out of the view
-                  // doesn't linger in the persisted map forever. Markers the caller
-                  // still declares are kept: they may back a file referenced only
-                  // inside an inline partial's body, which parseTemplate can't see.
-                  for (var storedPartial in view.partials) {
-                    if (
-                      storedPartial.charAt(0) === "/" &&
-                      !view.partials[storedPartial] &&
-                      !(
-                        parseResult.partials &&
-                        storedPartial in parseResult.partials
-                      ) &&
-                      !(
-                        updates.partials &&
-                        type(updates.partials, "object") &&
-                        storedPartial in updates.partials
-                      )
-                    )
-                      delete view.partials[storedPartial];
-                  }
+  view.locals = view.locals || {};
+  view.retrieve = view.retrieve || {};
+  view.partials = view.partials || {};
 
-                  extend(view.partials).and(parseResult.partials);
+  var parseResult = parseTemplate(view.content);
 
-                  detectInfinitePartialDependency(
-                    templateID,
-                    view,
-                    parseResult,
-                    (infiniteError) => {
-                      if (infiniteError) return callback(infiniteError);
+  // TO DO REMOVE THIS
+  if (type(view.partials, "array")) {
+    var _partials = {};
 
-                      // Parser output is the source of truth for retrieve locals.
-                      // Keep user-provided retrieve options (includeDraft, filters)
-                      // from the update or the previously stored view.
-                      view.retrieve = applyUserRetrieveOptions(
-                        parseResult.retrieve || {},
-                        updates.retrieve,
-                        existingRetrieve
-                      );
+    for (var p = 0; p < view.partials.length; p++)
+      _partials[view.partials[p]] = null;
 
-                      view = serializeRedisHashValues(
-                        serialize(view, viewModel)
-                      );
+    view.partials = _partials;
+  }
 
-                      // Delete url and urlPatterns from Redis hash if they were removed
-                      var multi = client.multi();
-                      multi.hSet(viewKey, view);
+  // Drop file-backed partial markers this save no longer references -
+  // neither parsed from the current content nor explicitly passed in
+  // updates.partials - so a "{{> /old.txt}}" edited out of the view
+  // doesn't linger in the persisted map forever. Markers the caller
+  // still declares are kept: they may back a file referenced only
+  // inside an inline partial's body, which parseTemplate can't see.
+  for (var storedPartial in view.partials) {
+    if (
+      storedPartial.charAt(0) === "/" &&
+      !view.partials[storedPartial] &&
+      !(parseResult.partials && storedPartial in parseResult.partials) &&
+      !(
+        updates.partials &&
+        type(updates.partials, "object") &&
+        storedPartial in updates.partials
+      )
+    )
+      delete view.partials[storedPartial];
+  }
 
-                      if (shouldRemoveUrl) {
-                        multi.hDel(viewKey, "url");
-                      }
-                      if (shouldRemoveUrlPatterns) {
-                        multi.hDel(viewKey, "urlPatterns");
-                      }
-                      if (changes) {
-                        multi.hSet(
-                          key.metadata(templateID),
-                          "cacheID",
-                          cacheID.create()
-                        );
-                      }
+  extend(view.partials).and(parseResult.partials);
 
-                      // node-redis v5 multi.exec() returns a thenable; normalize to Promise so .then/.catch chain reliably
-                      Promise.resolve(multi.exec())
-                        .then(() => {
-                          // Clear this view from template metadata.errors when saving
-                          // via the dashboard so fixing a view clears its error state.
-                          var clearErrorsIfNeeded = () => {
-                            if (metadata.errors && metadata.errors[name]) {
-                              delete metadata.errors[name];
-                              return setMetadata(
-                                templateID,
-                                { errors: metadata.errors },
-                                callback
-                              );
-                            }
+  await detectInfinitePartialDependency(templateID, view, parseResult);
 
-                            callback();
-                          };
+  // Parser output is the source of truth for retrieve locals.
+  // Keep user-provided retrieve options (includeDraft, filters)
+  // from the update or the previously stored view.
+  view.retrieve = applyUserRetrieveOptions(
+    parseResult.retrieve || {},
+    updates.retrieve,
+    existingRetrieve
+  );
 
-                          if (!changes) {
-                            return clearErrorsIfNeeded();
-                          }
+  view = serializeRedisHashValues(serialize(view, viewModel));
 
-                          cacheID.bumpBlogIfInstalled(
-                            metadata.owner,
-                            templateID,
-                            (cacheErr) => {
-                              if (cacheErr) return callback(cacheErr);
+  // Delete url and urlPatterns from Redis hash if they were removed
+  var multi = client.multi();
+  multi.hSet(viewKey, view);
 
-                              updateCdnManifest(templateID, (manifestErr) => {
-                                if (manifestErr) return callback(manifestErr);
+  if (shouldRemoveUrl) {
+    multi.hDel(viewKey, "url");
+  }
+  if (shouldRemoveUrlPatterns) {
+    multi.hDel(viewKey, "urlPatterns");
+  }
+  if (changes) {
+    multi.hSet(key.metadata(templateID), "cacheID", cacheID.create());
+  }
 
-                                clearErrorsIfNeeded();
-                              });
-                            }
-                          );
-                        })
-                        .catch(callback);
-                    }
-                  );
-                })
-                .catch(callback);
-            })
-            .catch(callback);
-        });
-      })
-      .catch(callback);
-  });
-};
+  await multi.exec();
 
-function detectInfinitePartialDependency(
-  templateID,
-  view,
-  parseResult,
-  callback
-) {
+  if (changes) {
+    await cacheID.bumpBlogIfInstalled(metadata.owner, templateID);
+    await updateCdnManifest(templateID);
+  }
+
+  // Clear this view from template metadata.errors when saving
+  // via the dashboard so fixing a view clears its error state.
+  if (metadata.errors && metadata.errors[name]) {
+    delete metadata.errors[name];
+    return setMetadata(templateID, {
+      errors: metadata.errors,
+    });
+  }
+});
+
+async function detectInfinitePartialDependency(templateID, view, parseResult) {
   var viewName = view && view.name;
   var viewAlias = null;
   if (type(viewName, "string") && viewName.indexOf(".") > -1) {
@@ -426,67 +360,66 @@ function detectInfinitePartialDependency(
     extend(rootInlinePartials).and(parseResult.partials);
   }
 
-  traverse(viewName, rootInlinePartials, function (err) {
-    if (err) return callback(err);
-    callback(null);
-  });
+  await traverse(viewName, rootInlinePartials);
 
-  function traverse(name, contextInlinePartials, done) {
-    if (!type(name, "string")) return done();
+  async function traverse(name, contextInlinePartials) {
+    if (!type(name, "string")) return;
 
     if (stack.indexOf(name) > -1) {
-      return done(ERROR.INFINITE());
+      throw ERROR.INFINITE();
     }
 
     stack.push(name);
 
-    resolveNode(name, contextInlinePartials, function (err, node) {
-      if (err) {
-        stack.pop();
-        return done(err);
+    var node;
+
+    try {
+      node = await resolveNode(name, contextInlinePartials);
+    } catch (err) {
+      stack.pop();
+      throw err;
+    }
+
+    if (node && node.cacheable && visited[name]) {
+      stack.pop();
+      return;
+    }
+
+    if (!node) {
+      stack.pop();
+      return;
+    }
+
+    var deps = node.deps || [];
+    var childContext = {};
+    if (type(contextInlinePartials, "object"))
+      extend(childContext).and(contextInlinePartials);
+    if (type(node.inlinePartials, "object"))
+      extend(childContext).and(node.inlinePartials);
+    if (type(rootInlinePartials, "object"))
+      extend(childContext).and(rootInlinePartials);
+
+    try {
+      for (var dep of deps) {
+        await traverse(dep, childContext);
       }
+    } catch (err) {
+      stack.pop();
+      throw err;
+    }
 
-      if (node && node.cacheable && visited[name]) {
-        stack.pop();
-        return done();
-      }
-
-      if (!node) {
-        stack.pop();
-        return done();
-      }
-
-      var deps = node.deps || [];
-      var childContext = {};
-      if (type(contextInlinePartials, "object"))
-        extend(childContext).and(contextInlinePartials);
-      if (type(node.inlinePartials, "object"))
-        extend(childContext).and(node.inlinePartials);
-      if (type(rootInlinePartials, "object"))
-        extend(childContext).and(rootInlinePartials);
-
-      eachSeries(
-        deps,
-        function (dep, next) {
-          traverse(dep, childContext, next);
-        },
-        function (err) {
-          stack.pop();
-          if (!err && node.cacheable) visited[name] = true;
-          done(err);
-        }
-      );
-    });
+    stack.pop();
+    if (node.cacheable) visited[name] = true;
   }
 
-  function resolveNode(name, contextInlinePartials, done) {
+  async function resolveNode(name, contextInlinePartials) {
     if (
       contextInlinePartials &&
       Object.prototype.hasOwnProperty.call(contextInlinePartials, name) &&
       contextInlinePartials[name] !== null &&
       contextInlinePartials[name] !== undefined
     ) {
-      return done(null, buildFromInline(contextInlinePartials[name]));
+      return buildFromInline(contextInlinePartials[name]);
     }
 
     if (
@@ -495,36 +428,38 @@ function detectInfinitePartialDependency(
       rootInlinePartials[name] !== null &&
       rootInlinePartials[name] !== undefined
     ) {
-      return done(null, buildFromInline(rootInlinePartials[name]));
+      return buildFromInline(rootInlinePartials[name]);
     }
 
-    if (cache[name]) return done(null, cache[name]);
+    if (cache[name]) return cache[name];
 
     if (isRootName(name)) {
       cache[name] = buildFromView(view, parseResult);
-      return done(null, cache[name]);
+      return cache[name];
     }
 
     if (name.charAt(0) === "/") {
       cache[name] = { deps: [], inlinePartials: {}, cacheable: true };
-      return done(null, cache[name]);
+      return cache[name];
     }
 
-    getView(templateID, name, function (err, fetchedView) {
-      if (err) {
-        if (!err.message || err.message.indexOf("No view:") !== 0) {
-          return done(err);
-        }
-      }
+    var fetchedView;
 
-      if (!fetchedView) {
-        cache[name] = { deps: [], inlinePartials: {}, cacheable: true };
-        return done(null, cache[name]);
+    try {
+      fetchedView = await getView(templateID, name);
+    } catch (err) {
+      if (!err.message || err.message.indexOf("No view:") !== 0) {
+        throw err;
       }
+    }
 
-      cache[name] = buildFromFetchedView(fetchedView);
-      done(null, cache[name]);
-    });
+    if (!fetchedView) {
+      cache[name] = { deps: [], inlinePartials: {}, cacheable: true };
+      return cache[name];
+    }
+
+    cache[name] = buildFromFetchedView(fetchedView);
+    return cache[name];
   }
 
   function isRootName(name) {
@@ -597,18 +532,4 @@ function detectInfinitePartialDependency(
       cacheable: false,
     };
   }
-}
-
-function eachSeries(list, iterator, done) {
-  var index = 0;
-  var items = Array.isArray(list) ? list : [];
-
-  function next(err) {
-    if (err) return done(err);
-    if (index >= items.length) return done();
-
-    iterator(items[index++], next);
-  }
-
-  next();
 }

@@ -1,25 +1,30 @@
 var ensure = require("helper/ensure");
+var withCallback = require("helper/withCallback");
 var setView = require("./setView");
 
-module.exports = function setMultipleViews(name, views, callback) {
-  ensure(name, "string").and(views, "object").and(callback, "function");
+module.exports = withCallback(async function setMultipleViews(name, views) {
+  ensure(name, "string").and(views, "object");
 
-  var totalViews = 0,
-    error;
+  var error;
+  var saves = [];
 
+  // The views are saved together. As before, the outcome is that of the
+  // last save to finish, so an earlier failure can be masked by a later
+  // success.
   for (var i in views) {
-    totalViews++;
-    setView(name, views[i], onSet);
+    saves.push(
+      setView(name, views[i]).then(
+        function () {
+          error = undefined;
+        },
+        function (err) {
+          error = err;
+        }
+      )
+    );
   }
 
-  if (!totalViews) onFinish();
+  await Promise.all(saves);
 
-  function onSet(err) {
-    error = err;
-    if (!--totalViews) onFinish();
-  }
-
-  function onFinish() {
-    callback(error);
-  }
-};
+  if (error) throw error;
+});

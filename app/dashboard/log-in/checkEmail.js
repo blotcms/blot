@@ -2,17 +2,17 @@ var User = require("models/user");
 var LogInError = require("./logInError");
 var { emailIsTooLong } = require("models/user/auth-limits");
 
-module.exports = function checkEmail(req, res, next) {
-  var email = req.body && req.body.email;
+module.exports = async function checkEmail(req, res, next) {
+  try {
+    var email = req.body && req.body.email;
 
-  if (typeof email !== "string" || !email)
-    return next(new LogInError("NOEMAIL"));
-  if (emailIsTooLong(email)) return next(new LogInError("EMAILTOOLONG"));
+    if (typeof email !== "string" || !email)
+      return next(new LogInError("NOEMAIL"));
+    if (emailIsTooLong(email)) return next(new LogInError("EMAILTOOLONG"));
 
-  res.locals.email = email;
+    res.locals.email = email;
 
-  User.getByEmail(email, function (err, user) {
-    if (err) return next(err);
+    const user = await User.getByEmail(email);
 
     // The supplied email address does not
     // match a user in our database.
@@ -22,7 +22,9 @@ module.exports = function checkEmail(req, res, next) {
     res.locals.validemail = true;
     req.user = user;
     res.locals.then = req.query.then;
+  } catch (err) {
+    return next(err);
+  }
 
-    next();
-  });
+  next();
 };

@@ -1,4 +1,5 @@
 var database = {};
+var withCallback = require("helper/withCallback");
 var client = require("models/client");
 var debug = require("debug")("blot:clients:git:database");
 
@@ -35,232 +36,130 @@ function generateToken() {
   return uuid().replace(/-/g, "");
 }
 
-function createToken(user_id, callback) {
+async function createToken(user_id) {
   var new_token = generateToken();
 
   debug("User:", user_id, "Creating token if none exists");
 
-  (async function () {
-    try {
-      var created = await client.setNX(tokenKey(user_id), new_token);
+  var created = await client.setNX(tokenKey(user_id), new_token);
 
-      // Preserve legacy setnx callback semantics (1: created, 0: existed)
-      if (typeof created === "boolean") created = created ? 1 : 0;
+  // Preserve legacy setnx callback semantics (1: created, 0: existed)
+  if (typeof created === "boolean") created = created ? 1 : 0;
 
-      callback(null, created);
-    } catch (err) {
-      callback(err);
-    }
-  })();
+  return created;
 }
 
-function refreshToken(user_id, callback) {
+async function refreshToken(user_id) {
   var new_token = generateToken();
 
   debug("User:", user_id, "Refreshing token");
 
-  (async function () {
-    try {
-      await client.set(tokenKey(user_id), new_token);
+  await client.set(tokenKey(user_id), new_token);
 
-      debug("User:", user_id, "Set token successfully");
+  debug("User:", user_id, "Set token successfully");
 
-      return callback(null, new_token);
-    } catch (err) {
-      return callback(err);
-    }
-  })();
+  return new_token;
 }
 
-function checkToken(user_id, token, callback) {
+async function checkToken(user_id, token) {
   debug("User:", user_id, "Checking token");
 
-  getToken(user_id, function (err, valid_token) {
-    if (err) return callback(err);
+  var valid_token = await getToken(user_id);
 
-    return callback(null, token === valid_token);
+  return token === valid_token;
+}
+
+async function flush(user_id) {
+  debug("User:", user_id, "Getting token");
+
+  await client.del(tokenKey(user_id));
+
+  debug("User:", user_id, "Flushed token");
+}
+
+async function getToken(user_id) {
+  debug("User:", user_id, "Getting token");
+
+  return await client.get(tokenKey(user_id));
+}
+
+async function setStatus(blogID, status) {
+  return await client.set(statusKey(blogID), status);
+}
+
+async function getStatus(blogID) {
+  return await client.get(statusKey(blogID));
+}
+
+async function removeStatus(blogID) {
+  return await client.del(statusKey(blogID));
+}
+
+async function setCreating(blogID) {
+  await client.set(creatingKey(blogID), String(Date.now()), {
+    EX: CREATING_TTL_SECONDS,
   });
 }
 
-function flush(user_id, callback) {
-  debug("User:", user_id, "Getting token");
-
-  (async function () {
-    try {
-      await client.del(tokenKey(user_id));
-
-      debug("User:", user_id, "Flushed token");
-
-      return callback(null);
-    } catch (err) {
-      return callback(err);
-    }
-  })();
+async function isCreating(blogID) {
+  return !!(await client.get(creatingKey(blogID)));
 }
 
-function getToken(user_id, callback) {
-  debug("User:", user_id, "Getting token");
-
-  (async function () {
-    try {
-      var token = await client.get(tokenKey(user_id));
-      return callback(null, token);
-    } catch (err) {
-      return callback(err);
-    }
-  })();
+async function clearCreating(blogID) {
+  await client.del(creatingKey(blogID));
 }
 
-function setStatus(blogID, status, callback) {
-  (async function () {
-    try {
-      var result = await client.set(statusKey(blogID), status);
-      return callback(null, result);
-    } catch (err) {
-      return callback(err);
-    }
-  })();
+async function getApplied(blogID) {
+  return (await client.get(appliedKey(blogID))) || null;
 }
 
-function getStatus(blogID, callback) {
-  (async function () {
-    try {
-      var status = await client.get(statusKey(blogID));
-      return callback(null, status);
-    } catch (err) {
-      return callback(err);
-    }
-  })();
+async function setApplied(blogID, commit) {
+  await client.set(appliedKey(blogID), commit);
 }
 
-function removeStatus(blogID, callback) {
-  (async function () {
-    try {
-      var removed = await client.del(statusKey(blogID));
-      return callback(null, removed);
-    } catch (err) {
-      return callback(err);
-    }
-  })();
-}
-
-function setCreating(blogID, callback) {
-  (async function () {
-    try {
-      await client.set(creatingKey(blogID), String(Date.now()), {
-        EX: CREATING_TTL_SECONDS,
-      });
-      return callback(null);
-    } catch (err) {
-      return callback(err);
-    }
-  })();
-}
-
-function isCreating(blogID, callback) {
-  (async function () {
-    try {
-      return callback(null, !!(await client.get(creatingKey(blogID))));
-    } catch (err) {
-      return callback(err);
-    }
-  })();
-}
-
-function clearCreating(blogID, callback) {
-  (async function () {
-    try {
-      await client.del(creatingKey(blogID));
-      return callback(null);
-    } catch (err) {
-      return callback(err);
-    }
-  })();
-}
-
-function getApplied(blogID, callback) {
-  (async function () {
-    try {
-      return callback(null, (await client.get(appliedKey(blogID))) || null);
-    } catch (err) {
-      return callback(err);
-    }
-  })();
-}
-
-function setApplied(blogID, commit, callback) {
-  (async function () {
-    try {
-      await client.set(appliedKey(blogID), commit);
-      return callback(null);
-    } catch (err) {
-      return callback(err);
-    }
-  })();
-}
-
-// Sets the commit only if there is none yet. Calls back with true if it did.
-function setAppliedIfMissing(blogID, commit, callback) {
-  (async function () {
-    try {
-      var created = await client.setNX(appliedKey(blogID), commit);
-      return callback(null, !!created);
-    } catch (err) {
-      return callback(err);
-    }
-  })();
+// Sets the commit only if there is none yet. Resolves to true if it did.
+async function setAppliedIfMissing(blogID, commit) {
+  var created = await client.setNX(appliedKey(blogID), commit);
+  return !!created;
 }
 
 // Moves the commit from one value to the next, unless something else has
 // moved it since. Blot's own commit does this while a sync may be applying a
 // push, and a plain read then write could set it back over the sync's newer
-// value, so this is the one compare-then-set that is a script. Calls back
-// with true if it moved.
-function advanceApplied(blogID, from, to, callback) {
-  (async function () {
-    try {
-      var moved = await client.eval(
-        "if redis.call('GET', KEYS[1]) == ARGV[1] then redis.call('SET', KEYS[1], ARGV[2]) return 1 end return 0",
-        { keys: [appliedKey(blogID)], arguments: [from, to] }
-      );
-      return callback(null, moved === 1);
-    } catch (err) {
-      return callback(err);
-    }
-  })();
+// value, so this is the one compare-then-set that is a script. Resolves to
+// true if it moved.
+async function advanceApplied(blogID, from, to) {
+  var moved = await client.eval(
+    "if redis.call('GET', KEYS[1]) == ARGV[1] then redis.call('SET', KEYS[1], ARGV[2]) return 1 end return 0",
+    { keys: [appliedKey(blogID)], arguments: [from, to] }
+  );
+  return moved === 1;
 }
 
-function removeApplied(blogID, callback) {
-  (async function () {
-    try {
-      await client.del(appliedKey(blogID));
-      return callback(null);
-    } catch (err) {
-      return callback(err);
-    }
-  })();
+async function removeApplied(blogID) {
+  await client.del(appliedKey(blogID));
 }
 
-database.createToken = createToken;
-database.checkToken = checkToken;
-database.getToken = getToken;
+database.createToken = withCallback(createToken);
+database.checkToken = withCallback(checkToken);
+database.getToken = withCallback(getToken);
 
-database.flush = flush;
-database.refreshToken = refreshToken;
+database.flush = withCallback(flush);
+database.refreshToken = withCallback(refreshToken);
 
-database.setStatus = setStatus;
-database.getStatus = getStatus;
-database.removeStatus = removeStatus;
-database.setCreating = setCreating;
-database.isCreating = isCreating;
-database.clearCreating = clearCreating;
+database.setStatus = withCallback(setStatus);
+database.getStatus = withCallback(getStatus);
+database.removeStatus = withCallback(removeStatus);
+database.setCreating = withCallback(setCreating);
+database.isCreating = withCallback(isCreating);
+database.clearCreating = withCallback(clearCreating);
 database.creatingKey = creatingKey;
 database.CREATING_TTL_SECONDS = CREATING_TTL_SECONDS;
 
-database.getApplied = getApplied;
-database.setApplied = setApplied;
-database.setAppliedIfMissing = setAppliedIfMissing;
-database.advanceApplied = advanceApplied;
-database.removeApplied = removeApplied;
+database.getApplied = withCallback(getApplied);
+database.setApplied = withCallback(setApplied);
+database.setAppliedIfMissing = withCallback(setAppliedIfMissing);
+database.advanceApplied = withCallback(advanceApplied);
+database.removeApplied = withCallback(removeApplied);
 
 module.exports = database;

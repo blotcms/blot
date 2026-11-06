@@ -75,29 +75,29 @@ describe("dropbox resetFromBlot", function () {
     };
     require.cache[databasePath] = {
       exports: {
-        set: function (_blogID, values, callback) {
+        set: async function (_blogID, values) {
           saved.push(values);
-          callback(null);
         },
         // Mirrors database.js's real setError closely enough for these
         // specs: only a persistable classification writes anything, and
         // what it writes is the same error_code/error_source/error_since
         // shape so `saved` reflects it the same way a direct set() would.
-        setError: function (_blogID, classification, callback) {
-          if (!classification || !classification.persist) return callback(null);
+        setError: async function (_blogID, classification) {
+          if (!classification || !classification.persist) return;
           saved.push({
             error_code: classification.status || 0,
             error_source: classification.source || "",
             error_since: Date.now(),
           });
-          callback(null);
         },
       },
     };
     require.cache[uploadPath] = {
-      exports: function (client, source, destination, callback) {
+      exports: function (client, source, destination) {
         uploadCalls.push(destination);
-        uploadBehavior(callback);
+        return new Promise((resolve, reject) =>
+          uploadBehavior((err) => (err ? reject(err) : resolve()))
+        );
       },
     };
     // Force persistError.js to reload so its own `require("../database")`

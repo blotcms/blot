@@ -25,7 +25,6 @@
 // One line per write:
 //
 //   [git-store-served] blog=<id> op=write outcome=ok|unchanged|unknown|error ms=...
-const { promisify } = require("util");
 const clfdate = require("helper/clfdate");
 const storage = require("storage/folder");
 const limiter = require("../limiter");
@@ -36,8 +35,6 @@ const { measure } = require("./counting");
 const context = require("./context");
 const upkeep = require("./upkeep");
 const log = require("./log");
-
-const advanceApplied = promisify(database.advanceApplied.bind(database));
 
 // change is { path, contents }, contents null to remove the file
 async function commit(blogID, change) {
@@ -132,16 +129,16 @@ async function commit(blogID, change) {
   // no reason to fail a write that is already committed: the next sync
   // applies it again, which is harmless.
   if (result.parent) {
-    await advanceApplied(blogID, result.parent, result.commit).catch(
-      function (err) {
+    await database
+      .advanceApplied(blogID, result.parent, result.commit)
+      .catch(function (err) {
         console.error(
           clfdate(),
           "Git: could not record the applied commit of",
           blogID,
           err && err.message
         );
-      }
-    );
+      });
   }
 
   upkeep.compactAfter(blogID, result.manifest);

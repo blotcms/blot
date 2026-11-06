@@ -7,18 +7,19 @@ module.exports = function (client, options, callback) {
 
   var create = retry(Create);
 
-  create(client, callback);
+  create(client).then(function ([folder, folderID]) {
+    callback(null, folder, folderID);
+  }, callback);
 };
 
-function Create(client, callback) {
+async function Create(client) {
   var path = "/" + uuid();
-  client
-    .filesCreateFolder({ path: path })
-    .then(function ({ result }) {
-      callback(null, result.path_display, result.id);
-    })
-    .catch(function (err) {
-      console.log(err);
-      callback(new Error("Could not set up test folder"));
-    });
+
+  try {
+    const { result } = await client.filesCreateFolder({ path: path });
+    return [result.path_display, result.id];
+  } catch (err) {
+    console.log(err);
+    throw new Error("Could not set up test folder", { cause: err });
+  }
 }

@@ -26,7 +26,7 @@ const escapesFolder = (relativePath) => {
 // N.B. In production this POST runs on green while the page you are redirected
 // to renders on blue (proxy/config/http.conf, $dashboard_upstream).
 // Don't rely on in-process cache invalidation here; see dashboard/site/index.js.
-module.exports = async (req, res) => {
+const removeFolderPath = async (req, res) => {
   const rawPath = (req.params.path || req.body.path || "")
     .normalize("NFC")
     .replace(/\\/g, "/")
@@ -162,3 +162,7 @@ module.exports = async (req, res) => {
     await release();
   }
 };
+
+// Errors from before the try (a malformed path, a failed stat, a lock error
+// other than 423) reach Express as next(err), not as an unhandled rejection
+module.exports = (req, res, next) => removeFolderPath(req, res).catch(next);

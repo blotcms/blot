@@ -1,7 +1,6 @@
 const ensure = require("helper/ensure");
-const type = require("helper/type");
 const Update = require("./update");
-const async = require("async");
+const withCallback = require("helper/withCallback");
 const storage = require("storage/folder");
 const messenger = require("./messenger");
 const assets = require("storage/assets");
@@ -54,155 +53,130 @@ async function walk(blogID) {
   return results;
 }
 
-module.exports = function main(blogID, options, callback) {
-  if (type(options, "function") && type(callback, "undefined")) {
-    callback = options;
-    options = {};
+module.exports = withCallback(async function main(blogID, options = {}) {
+  ensure(blogID, "string").and(options, "object");
+
+  const blog = await Blog.get({ id: blogID });
+
+  if (!blog) throw new Error("No blog");
+
+  const fallbackMessenger =
+    options.log && options.status ? null : messenger(blog);
+  const log = options.log || fallbackMessenger.log;
+  const status = options.status || fallbackMessenger.status;
+  // Update's ordinary "Syncing" statuses would split the progress stream.
+  // Rebuild publishes the more specific, counted status below instead.
+  const updateStatus = function () {};
+  const update = new Update(blog, log, updateStatus);
+
+  const paths = await walk(blog.id);
+
+  if (options.thumbnails) {
+    await wipeCache({
+      blogID: blog.id,
+      label: "thumbnails",
+      directory: "_thumbnails",
+    });
   }
 
-  ensure(blogID, "string").and(options, "object").and(callback, "function");
+  if (options.imageCache) {
+    await wipeCache({
+      blogID: blog.id,
+      label: "image-cache",
+      directory: "_image_cache",
+    });
+  }
 
-  Blog.get({ id: blogID }, function (err, blog) {
-    if (err || !blog) return callback(err || new Error("No blog"));
+  // Files inside a + folder all rebuild the same aggregated entry.
+  // Process each multi-folder once so a 50-file album is not built
+  // 50 separate times during a full rebuild.
+  const updatePaths = [];
+  const updatePathCounts = new Map();
 
-    const fallbackMessenger =
-      options.log && options.status ? null : messenger(blog);
-    const log = options.log || fallbackMessenger.log;
-    const status = options.status || fallbackMessenger.status;
-    // Update's ordinary "Syncing" statuses would split the progress stream.
-    // Rebuild publishes the more specific, counted status below instead.
-    const updateStatus = function () {};
-    const update = new Update(blog, log, updateStatus);
+  paths.forEach(function (path) {
+    var multiInfo = build.findMultiFolder(path);
 
-    walk(blog.id).then(async function (paths) {
-      try {
-        if (options.thumbnails) {
-          await wipeCache({
-            blogID: blog.id,
-            label: "thumbnails",
-            directory: "_thumbnails",
-          });
-        }
-
-        if (options.imageCache) {
-          await wipeCache({
-            blogID: blog.id,
-            label: "image-cache",
-            directory: "_image_cache",
-          });
-        }
-      } catch (e) {
-        return callback(e);
+    if (multiInfo) {
+      if (!updatePathCounts.has(multiInfo.folderPath)) {
+        updatePaths.push(multiInfo.folderPath);
+        updatePathCounts.set(multiInfo.folderPath, 0);
       }
-
-      // Files inside a + folder all rebuild the same aggregated entry.
-      // Process each multi-folder once so a 50-file album is not built
-      // 50 separate times during a full rebuild.
-      const updatePaths = [];
-      const updatePathCounts = new Map();
-
-      paths.forEach(function (path) {
-        var multiInfo = build.findMultiFolder(path);
-
-        if (multiInfo) {
-          if (!updatePathCounts.has(multiInfo.folderPath)) {
-            updatePaths.push(multiInfo.folderPath);
-            updatePathCounts.set(multiInfo.folderPath, 0);
-          }
-          updatePathCounts.set(
-            multiInfo.folderPath,
-            updatePathCounts.get(multiInfo.folderPath) + 1
-          );
-          return;
-        }
-
-        updatePaths.push(path);
-        updatePathCounts.set(path, 1);
-      });
-
-      const total = paths.length;
-      let current = 0;
-      let failed = 0;
-      let firstError = null;
-
-      // One at a time on purpose: Entry.set is not safe for two paths of a
-      // blog at once (URL claims in models/entry/_setUrl.js and the blog
-      // menu in models/entry/_assign.js are read-then-write), see #2258.
-      // options.shouldStop, if given, is asked before each path. When it
-      // says a newer rebuild is on its way, the rest is left to that one
-      // (the dashboard's settings rebuilds: dashboard/site/save/rebuild-settings.js)
-      let stopped = false;
-      const shouldStop = function (path, cb) {
-        if (stopped || !options.shouldStop) return cb(stopped);
-        Promise.resolve(options.shouldStop()).then(
-          function (stop) {
-            if (stop) {
-              stopped = true;
-              log("Rebuild stopped before", path, "for a newer one");
-            }
-            cb(stopped);
-          },
-          function () {
-            cb(false);
-          }
-        );
-      };
-
-      async.eachSeries(
-        updatePaths,
-        function (path, next) {
-          shouldStop(path, function (stop) {
-            if (stop) return next();
-
-            current += updatePathCounts.get(path);
-            status(`(${current}/${total}) Rebuilding ${path}`);
-            update(path, function (err, result) {
-              // Redis is unavailable, so every path after this one would fail
-              // the same way. Stop, and tell the caller.
-              if (err && isRedisUnavailableError(err)) return next(err);
-
-              // Any other error is about this one file (update reports some as
-              // err, such as a symlink in the way, and others in result.error)
-              // and must not stop the rebuild of the others. Count them and
-              // say so once at the end.
-              var fileError = err || (result && result.error);
-
-              if (fileError) {
-                failed++;
-                if (!firstError) firstError = fileError;
-              }
-
-              next();
-            });
-          });
-        },
-        (err) => {
-          if (err) {
-            log("Rebuild stopped, Redis is unavailable", err.message);
-            return callback(err);
-          }
-
-          if (failed) {
-            log(
-              `Rebuild finished but ${failed} of ${updatePaths.length} paths failed to build, e.g. ${firstError.message || firstError}`
-            );
-          }
-
-          // Rebuild can change every entry's parsed fields (e.g. dateStamp,
-          // after a dateFormat/timeZone change) without going through
-          // sync/index.js's normal "done" flow, which is what usually bumps
-          // cacheID. The render caches in the models (e.g. Entries.getCachedPage) key on
-          // blogID + cacheID, so without this an unchanged cacheID means a
-          // rebuild's fresh entries never invalidate that cache - see
-          // https://github.com/blotcms/blot/issues/1844
-          Blog.set(blogID, { cacheID: Date.now() }, (err) => {
-            callback(err);
-          });
-        }
+      updatePathCounts.set(
+        multiInfo.folderPath,
+        updatePathCounts.get(multiInfo.folderPath) + 1
       );
-    }, callback);
+      return;
+    }
+
+    updatePaths.push(path);
+    updatePathCounts.set(path, 1);
   });
-};
+
+  const total = paths.length;
+  let current = 0;
+  let failed = 0;
+  let firstError = null;
+
+  // One at a time on purpose: Entry.set is not safe for two paths of a
+  // blog at once (URL claims in models/entry/_setUrl.js and the blog
+  // menu in models/entry/_assign.js are read-then-write), see #2258.
+  // options.shouldStop, if given, is asked before each path. When it
+  // says a newer rebuild is on its way, the rest is left to that one
+  // (the dashboard's settings rebuilds: dashboard/site/save/rebuild-settings.js)
+  for (const path of updatePaths) {
+    if (options.shouldStop) {
+      const stop = await Promise.resolve(options.shouldStop()).catch(
+        () => false
+      );
+      if (stop) {
+        log("Rebuild stopped before", path, "for a newer one");
+        break;
+      }
+    }
+
+    current += updatePathCounts.get(path);
+    status(`(${current}/${total}) Rebuilding ${path}`);
+
+    const { err, result } = await new Promise(function (resolve) {
+      update(path, function (err, result) {
+        resolve({ err, result });
+      });
+    });
+
+    // Redis is unavailable, so every path after this one would fail
+    // the same way. Stop, and tell the caller.
+    if (err && isRedisUnavailableError(err)) {
+      log("Rebuild stopped, Redis is unavailable", err.message);
+      throw err;
+    }
+
+    // Any other error is about this one file (update reports some as
+    // err, such as a symlink in the way, and others in result.error)
+    // and must not stop the rebuild of the others. Count them and
+    // say so once at the end.
+    const fileError = err || (result && result.error);
+
+    if (fileError) {
+      failed++;
+      if (!firstError) firstError = fileError;
+    }
+  }
+
+  if (failed) {
+    log(
+      `Rebuild finished but ${failed} of ${updatePaths.length} paths failed to build, e.g. ${firstError.message || firstError}`
+    );
+  }
+
+  // Rebuild can change every entry's parsed fields (e.g. dateStamp,
+  // after a dateFormat/timeZone change) without going through
+  // sync/index.js's normal "done" flow, which is what usually bumps
+  // cacheID. The render caches in the models (e.g. Entries.getCachedPage) key on
+  // blogID + cacheID, so without this an unchanged cacheID means a
+  // rebuild's fresh entries never invalidate that cache - see
+  // https://github.com/blotcms/blot/issues/1844
+  await Blog.set(blogID, { cacheID: Date.now() });
+});
 
 async function wipeCache({ blogID, label, directory }) {
   const store = new Transformer(blogID, label);

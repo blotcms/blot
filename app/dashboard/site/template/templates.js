@@ -94,12 +94,13 @@ function decorate(template, req, res) {
   return template;
 }
 
-module.exports = function (req, res, next) {
+module.exports = async function (req, res, next) {
   var blog = req.blog,
     blogID = blog.id,
     currentTemplate = blog.template;
 
-  Template.getTemplateList(blogID, function (err, templates) {
+  try {
+    let templates = await Template.getTemplateList(blogID);
     var yourTemplates = [];
     var blotTemplates = [];
 
@@ -225,8 +226,11 @@ module.exports = function (req, res, next) {
     )[0];
 
     // Screenshots of the blog's own templates, taken in the background
-    screenshots.decorate(blog, templates, { complete: true }).then(next, next);
-  });
+    await screenshots.decorate(blog, templates, { complete: true });
+    next();
+  } catch (err) {
+    next(err);
+  }
 };
 
 // Redirects to a template's current screenshot, or its gallery image while

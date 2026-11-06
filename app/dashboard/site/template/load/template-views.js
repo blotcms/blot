@@ -1,13 +1,15 @@
 var Template = require("models/template");
-var withCallback = require("helper/withCallback");
 var arrayify = require("helper/arrayify");
 
-module.exports = function (req, res, next) {
-  withCallback(Template.getAllViews)(req.template.id, function (err, result) {
+module.exports = async function (req, res, next) {
+  try {
+    // getAllViews rejects when the template can't be read. That, like a
+    // missing result, becomes "No template".
+    var result = await Template.getAllViews(req.template.id).catch(() => null);
     var views = result && result.views;
     var template = result && result.metadata;
 
-    if (err || !views || !template) return next(new Error("No template"));
+    if (!views || !template) return next(new Error("No template"));
 
     res.locals.getAllViews = { views, template };
 
@@ -40,9 +42,11 @@ module.exports = function (req, res, next) {
 
     views = sort(views);
     res.locals.views = views;
+  } catch (err) {
+    return next(err);
+  }
 
-    next();
-  });
+  next();
 };
 
 function sort(arr) {

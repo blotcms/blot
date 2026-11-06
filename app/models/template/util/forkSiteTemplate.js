@@ -1,10 +1,9 @@
-var { promisify } = require("util");
 var makeSlug = require("helper/makeSlug");
 var {
   MAX_DEDUPLICATION_ATTEMPTS,
 } = require("../../../dashboard/site/template/save/constants");
 var makeID = require("./makeID");
-var getMetadataAsync = promisify(require("../getMetadata"));
+var getMetadata = require("../getMetadata");
 
 function buildSlug(baseSlug, attempt) {
   if (attempt === 1) return baseSlug;
@@ -20,11 +19,11 @@ function buildSlug(baseSlug, attempt) {
 // or the original template ID if no forking was required.
 module.exports = async function forkSiteTemplate(blogID, templateID) {
   // circular dependency so we import here
-  var createAsync = promisify(require("../create"));
+  var create = require("../create");
 
   if (!templateID || templateID.indexOf("SITE:") !== 0) return templateID;
 
-  var siteTemplate = await getMetadataAsync(templateID);
+  var siteTemplate = await getMetadata(templateID);
   var baseName = siteTemplate.name;
   var baseSlug = siteTemplate.slug || makeSlug(siteTemplate.name).slice(0, 30);
 
@@ -35,14 +34,14 @@ module.exports = async function forkSiteTemplate(blogID, templateID) {
     var forkID = makeID(blogID, deduplicatedName);
 
     try {
-      var existingFork = await getMetadataAsync(forkID);
+      var existingFork = await getMetadata(forkID);
       if (existingFork) return forkID;
     } catch (err) {
       if (err.code !== "ENOENT") throw err;
     }
 
     try {
-      var forkMetadata = await createAsync(blogID, deduplicatedName, {
+      var forkMetadata = await create(blogID, deduplicatedName, {
         name: deduplicatedName,
         slug: deduplicatedSlug,
         cloneFrom: templateID,

@@ -2,15 +2,18 @@ var ensure = require("helper/ensure");
 
 var moment = require("moment");
 require("moment-timezone");
+var withCallback = require("helper/withCallback");
 
-module.exports = function (blogID, timeZone, callback) {
-  ensure(blogID, "string").and(timeZone, "string").and(callback, "function");
+module.exports = withCallback(
+  async function validateTimeZone(blogID, timeZone) {
+    ensure(blogID, "string").and(timeZone, "string");
 
-  timeZone = timeZone.trim();
+    timeZone = timeZone.trim();
 
-  if (!timeZone) return callback(null, "UTC");
+    if (!timeZone) return "UTC";
 
-  if (moment.tz.zone(timeZone)) return callback(null, timeZone);
+    if (moment.tz.zone(timeZone)) return timeZone;
 
-  return callback(null, "UTC");
-};
+    return "UTC";
+  }
+);

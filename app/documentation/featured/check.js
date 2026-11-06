@@ -52,33 +52,26 @@ async function filter(sites) {
   ).then((sites) => sites.filter((i) => i));
 }
 
-const determineYearJoined = (domain) =>
-  new Promise((resolve, reject) => {
-    // If we are in dev we cannot access production db info so return a random year
-    if (config.environment === "development")
-      return resolve(new Date().getFullYear() - Math.floor(Math.random() * 6));
+const determineYearJoined = async (domain) => {
+  // If we are in dev we cannot access production db info so return a random year
+  if (config.environment === "development")
+    return new Date().getFullYear() - Math.floor(Math.random() * 6);
 
-    Blog.get({ domain }, function (err, blog) {
-      if (err || !blog)
-        return reject(err || new Error("No blog with domain " + domain));
+  const blog = await Blog.get({ domain });
 
-      User.getById(blog.owner, function (err, user) {
-        if (err || !user)
-          return reject(err || new Error("No user with id " + blog.owner));
+  if (!blog) throw new Error("No blog with domain " + domain);
 
-        let joined;
+  const user = await User.getById(blog.owner);
 
-        if (user && user.subscription && user.subscription.created) {
-          joined = new Date(user.subscription.created * 1000).getFullYear();
-        } else if (user && user.paypal) {
-          joined = new Date(user.paypal.start_time).getFullYear();
-        } else {
-          joined = new Date().getFullYear();
-        }
+  if (!user) throw new Error("No user with id " + blog.owner);
 
-        resolve(joined);
-      });
-    });
-  });
+  if (user.subscription && user.subscription.created) {
+    return new Date(user.subscription.created * 1000).getFullYear();
+  } else if (user.paypal) {
+    return new Date(user.paypal.start_time).getFullYear();
+  }
+
+  return new Date().getFullYear();
+};
 
 module.exports = check;

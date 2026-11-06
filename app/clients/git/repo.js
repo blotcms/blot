@@ -7,6 +7,7 @@
 // in the storage bucket, keyed by the blog's ID: a change of handle moves
 // nothing.
 var lock = require("helper/lock");
+var withCallback = require("helper/withCallback");
 var clfdate = require("helper/clfdate");
 var treePath = require("./store/commit").treePath;
 
@@ -63,26 +64,15 @@ function receiveHooks(blogID) {
   };
 }
 
-// Calls back with whether the blog has a repository in the store: one which
+// Resolves to whether the blog has a repository in the store: one which
 // is not empty. A failure to read the store is passed on.
-function exists(blogID, callback) {
+async function exists(blogID) {
   var manifest = require("./store/manifest");
-  var store;
+  var store = require("./served/context").storeFor(blogID);
 
-  try {
-    store = require("./served/context").storeFor(blogID);
-  } catch (err) {
-    return process.nextTick(callback, err);
-  }
+  var current = await manifest.read(store);
 
-  manifest.read(store).then(
-    function (current) {
-      callback(null, !manifest.isEmpty(current));
-    },
-    function (err) {
-      callback(err);
-    }
-  );
+  return !manifest.isEmpty(current);
 }
 
 // Serves a smart HTTP request (ref advertisement, fetch, push) for the blog's
@@ -120,10 +110,10 @@ function onPush(callback, options) {
   abandon = (options && options.abandon) || null;
 }
 
-// Removes the blog's repository from the store (served/remove.js). Always
-// calls back without an error: a failure is logged, and the monthly orphan
-// sweep deletes what is left.
-function remove(blogID, callback) {
+// Removes the blog's repository from the store (served/remove.js). Never
+// rejects: a failure is logged, and the monthly orphan sweep deletes what is
+// left.
+async function remove(blogID) {
   var removeBlog;
 
   try {
@@ -135,39 +125,25 @@ function remove(blogID, callback) {
       "could not remove the store copy:",
       err.message
     );
-    return process.nextTick(callback);
+    return;
   }
 
-  removeBlog(blogID).then(
-    function () {
-      callback();
-    },
-    function () {
-      callback();
-    }
-  );
+  try {
+    await removeBlog(blogID);
+  } catch (err) {
+    // Never fails the caller
+  }
 }
 
 // Makes one change to the blog's repository: writes the file, or removes it
 // if contents is null, as a commit on master. Used by the client's write and
 // remove methods.
 //
-//   commit(blogID, { path: "/a.txt", contents: "A" }, callback)
+//   await commit(blogID, { path: "/a.txt", contents: "A" })
 //
 // The file is changed in the blog folder too, before the commit. Only the
 // file is, nothing else in the folder. See served/commit.js.
-function commit(blogID, change, callback) {
-  commitChange(blogID, change).then(
-    function () {
-      process.nextTick(callback, null);
-    },
-    function (err) {
-      process.nextTick(callback, err);
-    }
-  );
-}
-
-async function commitChange(blogID, change) {
+async function commit(blogID, change) {
   // Before anything is touched
   treePath(change.path);
 
@@ -175,11 +151,11 @@ async function commitChange(blogID, change) {
 }
 
 module.exports = {
-  exists: exists,
-  remove: remove,
+  exists: withCallback(exists),
+  remove: withCallback(remove),
   handleSmartHttp: handleSmartHttp,
   onPush: onPush,
-  commit: commit,
+  commit: withCallback(commit),
   holdRefLock: holdRefLock,
   receiveHooks: receiveHooks,
 };

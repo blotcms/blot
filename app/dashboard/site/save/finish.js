@@ -1,7 +1,6 @@
 var resaveEntries = require("models/entries").resave;
 var safeRedirect = require("dashboard/util/safe-redirect");
 var Blog = require("models/blog");
-var _ = require("lodash");
 var requestRebuild = require("./rebuild-settings");
 
 var dictionary = {
@@ -18,7 +17,10 @@ var dictionary = {
 // N.B. In production this POST runs on green while the page you are redirected
 // to renders on blue (proxy/config/http.conf, $dashboard_upstream).
 // Don't rely on in-process cache invalidation here; see dashboard/site/index.js.
-module.exports = function (req, res, next) {
+// Anything thrown below reaches Express as next(err)
+module.exports = (req, res, next) => saveAndFinish(req, res, next).catch(next);
+
+async function saveAndFinish(req, res, next) {
   var updates = req.updates || {};
   // req.path is relative to the router mount, so fall back to the full
   // dashboard path (req.baseUrl + req.path) rather than "/", which would
@@ -29,53 +31,47 @@ module.exports = function (req, res, next) {
     req.hostname
   );
 
-  Blog.set(req.blog.id, updates, function (errors, changes) {
-    if (errors)
-      for (var i in errors)
-        if (errors[i] instanceof Error) return next(errors[i]);
+  let changes;
+  try {
+    changes = await Blog.set(req.blog.id, updates);
+  } catch (errors) {
+    for (var i in errors)
+      if (errors[i] instanceof Error) return next(errors[i]);
+    return next(errors);
+  }
 
-    if (errors) return next(errors);
+  // We now need to save every entry so that
+  // changes to permalink format take effect.
+  if (changes.indexOf("permalink") > -1) {
+    resaveEntries(req.blog.id, function () {});
+  }
 
-    // We now need to save every entry so that
-    // changes to permalink format take effect.
-    if (changes.indexOf("permalink") > -1) {
-      resaveEntries(req.blog.id, function () {});
+  // We need to build all the blog's entries if the user
+  // has changed any of the plugins or the image metadata
+  // preference so the stored EXIF matches their setting.
+  if (
+    changes &&
+    (changes.indexOf("plugins") > -1 ||
+      changes.indexOf("imageExif") > -1 ||
+      changes.indexOf("converters") > -1)
+  ) {
+    // One rebuild at a time per site; see rebuild-settings.js. The status
+    // is stored before the response, so the next page shows the rebuild.
+    try {
+      await requestRebuild(req.blog.id);
+    } catch (err) {
+      console.log("Failed to start settings rebuild", req.blog.id, err.message);
     }
+  }
 
-    // We need to build all the blog's entries if the user
-    // has changed any of the plugins or the image metadata
-    // preference so the stored EXIF matches their setting.
-    if (
-      changes &&
-      (changes.indexOf("plugins") > -1 ||
-        changes.indexOf("imageExif") > -1 ||
-        changes.indexOf("converters") > -1)
-    ) {
-      // One rebuild at a time per site; see rebuild-settings.js. The status
-      // is stored before the response, so the next page shows the rebuild.
-      return requestRebuild(req.blog.id).then(respond, function (err) {
-        console.log(
-          "Failed to start settings rebuild",
-          req.blog.id,
-          err.message
-        );
-        respond();
-      });
-    }
+  // Add success message if we're going to the settings page
+  // and successful changes were made
+  if (changes && changes.length) {
+    return res.message(
+      redirect,
+      dictionary[changes[0]] || "Saved changes to your " + changes[0]
+    );
+  }
 
-    respond();
-
-    function respond() {
-      // Add success message if we're going to the settings page
-      // and successful changes were made
-      if (changes && changes.length && _.isEmpty(errors)) {
-        return res.message(
-          redirect,
-          dictionary[changes[0]] || "Saved changes to your " + changes[0]
-        );
-      }
-
-      res.redirect(redirect);
-    }
-  });
-};
+  return res.redirect(redirect);
+}

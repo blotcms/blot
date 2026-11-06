@@ -3,6 +3,7 @@ const fs = require("fs-extra");
 const folder = require("storage/folder");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const source = require("./source");
+const withCallback = require("helper/withCallback");
 
 async function toBuffer(contents) {
   if (typeof contents === "string" || Buffer.isBuffer(contents))
@@ -17,19 +18,17 @@ async function toBuffer(contents) {
 // and source files for templates. The file goes to the source
 // directory first, so the watcher finds it already in the folder,
 // and then to storage/folder.
-module.exports = function write(blogID, path, contents, callback) {
+async function write(blogID, path, contents) {
   debug("Blog", blogID, "Directory to write path inside:", path);
 
   if (shouldIgnoreFile(path)) {
-    return callback(new Error(`Cannot write ignored file: ${path}`));
+    throw new Error(`Cannot write ignored file: ${path}`);
   }
 
-  (async function () {
-    const dir = await source.directory(blogID);
-    contents = await toBuffer(contents);
-    await fs.outputFile(source.absolute(dir, path), contents);
-    await folder.write(blogID, path, contents);
-  })().then(function () {
-    callback(null);
-  }, callback);
-};
+  const dir = await source.directory(blogID);
+  contents = await toBuffer(contents);
+  await fs.outputFile(source.absolute(dir, path), contents);
+  await folder.write(blogID, path, contents);
+}
+
+module.exports = withCallback(write);

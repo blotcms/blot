@@ -6,13 +6,13 @@ var DELETE = "/sites/account/subscription/delete";
 var LOGOUT = "/sites/account/log-out";
 var PASSWORD_SET = "/sites/account/password/set";
 
-module.exports = function (req, res, next) {
-  if (!req.session || !req.session.uid) return next();
+module.exports = async function (req, res, next) {
+  try {
+    if (!req.session || !req.session.uid) return next();
 
-  var uid = req.session.uid;
+    var uid = req.session.uid;
 
-  User.getById(uid, function (err, user) {
-    if (err) return next(err);
+    const user = await User.getById(uid);
 
     if (!user) {
       req.user = null;
@@ -63,7 +63,9 @@ module.exports = function (req, res, next) {
       res.locals.price = prettyPrice(user.subscription.plan.amount);
       res.locals.interval = user.subscription.plan.interval;
     }
+  } catch (err) {
+    return next(err);
+  }
 
-    next();
-  });
+  next();
 };

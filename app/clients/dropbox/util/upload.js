@@ -8,7 +8,6 @@ const fs = require("fs-extra");
 const retry = require("./retry");
 const { v4: uuid } = require("uuid");
 const clfdate = require("helper/clfdate");
-const callOnce = require("helper/callOnce");
 const retryRequest = require("./retryRequest");
 
 // Exported on upload.options so specs can shrink them.
@@ -140,7 +139,7 @@ async function uploadInChunks(
   }
 }
 
-async function upload(client, source, destination, callback) {
+async function upload(client, source, destination) {
   const id = uuid();
   const prefix = () => clfdate() + " clients:dropbox:upload:" + id.slice(0, 6);
 
@@ -150,28 +149,26 @@ async function upload(client, source, destination, callback) {
   // not the whole transfer.
   let timeout;
   let cancelled = false;
+  let rejectTimeout;
+  const timedOut = new Promise(function (resolve, reject) {
+    rejectTimeout = reject;
+  });
   const touch = function () {
     if (cancelled) return;
     clearTimeout(timeout);
     timeout = setTimeout(function () {
       console.log(prefix(), "reached timeout for upload");
       cancelled = true;
-      cleanup(new Error("Timeout reached for upload"));
+      rejectTimeout(new Error("Timeout reached for upload"));
     }, options.timeout); // 4 minutes by default
   };
   touch();
 
-  const cleanup = callOnce(function (err) {
-    clearTimeout(timeout);
-    console.log(prefix(), "calling back with err = ", err);
-    callback(err);
-  });
-
-  try {
+  const transfer = (async function () {
     const { size } = await fs.stat(source);
 
     if (size > options.threshold) {
-      await uploadInChunks(
+      return uploadInChunks(
         client,
         source,
         destination,
@@ -179,7 +176,6 @@ async function upload(client, source, destination, callback) {
         touch,
         () => cancelled
       );
-      return cleanup();
     }
 
     const contents = await fs.readFile(source);
@@ -193,11 +189,23 @@ async function upload(client, source, destination, callback) {
       autorename: false,
       contents,
     });
-  } catch (err) {
-    return cleanup(err);
-  }
+  })();
 
-  cleanup();
+  // After a timeout the transfer is abandoned, and whatever it ends with
+  // is not reported
+  transfer.catch(function () {});
+
+  let failure;
+
+  try {
+    await Promise.race([transfer, timedOut]);
+  } catch (err) {
+    failure = err;
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+    console.log(prefix(), "calling back with err = ", failure);
+  }
 }
 
 module.exports = retry(upload);
