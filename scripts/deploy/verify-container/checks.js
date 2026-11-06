@@ -13,18 +13,12 @@ const { promisify } = require("util");
 
 const execFileAsync = promisify(execFile);
 
-// A blog folder on disk is data/blogs/{blogID}. Deleted blogs and blogs that
-// never synced mean the two won't match exactly, so this is a loose floor:
-// a wrong, stale or empty mount misses most blogs, not a few. The real ratio
-// is always in the report - tighten this once we've seen it in prod.
-const MIN_BLOGS_WITH_FOLDER = 0.5;
-
-// An absolute floor only: the data disk is meant to fill up with blogs, so
-// how full it is belongs in monitoring, not a deploy gate.
+// An absolute floor only: how full the disk is belongs in monitoring, not a
+// deploy gate.
 const MIN_FREE_BYTES = 2 * 1024 ** 3; // 2GiB
 
 // The status page (https://status.blot.im) checks this same blog. Rendering
-// it exercises redis, the blogs mount, the templates and the blog server in
+// it exercises redis, the storage bucket, the templates and the blog server in
 // one request. Preview subdomains are exempt from the HTTPS redirect, so
 // plain HTTP to the container works.
 //
@@ -84,49 +78,6 @@ async function redisRoundTrip({ redis, skipRedisWrite }) {
   return "ping, write and read succeeded";
 }
 
-// config/host/scripts/mount-data-volume.sh requires this file on the data
-// volume before it will mount it. A container started against an empty
-// directory on the root disk (the volume not mounted) won't have it.
-const DATA_VOLUME_MARKER = ".blot-data-volume";
-
-async function dataVolumeMarker({ config }) {
-  const file = path.join(config.data_directory, DATA_VOLUME_MARKER);
-  let volumeID;
-  try {
-    volumeID = (await fs.readFile(file, "utf8")).trim();
-  } catch (err) {
-    throw new Error(
-      `cannot read ${file}: ${err.message} - data volume not mounted?`
-    );
-  }
-  return volumeID ? `data volume ${volumeID}` : `${file} is present`;
-}
-
-async function dataDirectory({ config, redis }) {
-  const blogsDir = config.blog_folder_dir;
-  let entries;
-  try {
-    entries = await fs.readdir(blogsDir, { withFileTypes: true });
-  } catch (err) {
-    throw new Error(`cannot read ${blogsDir}: ${err.message}`);
-  }
-
-  const folders = new Set(entries.filter((e) => e.isDirectory()).map((e) => e.name));
-  const blogIDs = await redis.sMembers("blogs");
-
-  if (!blogIDs.length) throw new Error("redis has no blogs");
-  if (!folders.size) throw new Error(`${blogsDir} has no blog folders`);
-
-  const withFolder = blogIDs.filter((id) => folders.has(id)).length;
-  const ratio = withFolder / blogIDs.length;
-  const summary = `${withFolder}/${blogIDs.length} blogs in redis have a folder, ${folders.size} folders on disk`;
-
-  if (ratio < MIN_BLOGS_WITH_FOLDER) {
-    throw new Error(`${summary} (need ${MIN_BLOGS_WITH_FOLDER * 100}%) - wrong or stale data mount?`);
-  }
-  return summary;
-}
-
 async function writable(directory) {
   const file = path.join(directory, `deploy-verify-${process.pid}`);
   await fs.writeFile(file, "ok");
@@ -134,13 +85,13 @@ async function writable(directory) {
   return `${directory} is writable`;
 }
 
-// The mount is owned by the host; the app runs as uid 1000.
+// The host creates the directory; the app runs as uid 1000.
 async function dataDirectoryWritable({ config }) {
   return writable(config.data_directory);
 }
 
 // The tmp directory is a separate mount (the host's instance store), so
-// proving the data volume writable says nothing about it. The host creates it
+// proving the data directory writable says nothing about it. The host creates it
 // (mount-instance-store.sh): not creating it here means a missing or
 // root-owned one fails the deploy rather than being papered over.
 async function tmpDirectoryWritable({ config }) {
@@ -170,7 +121,7 @@ async function diskSpace({ config }) {
   const ratio = free / (stats.blocks * stats.bsize);
   const summary = `${(free / 1024 ** 3).toFixed(1)}GiB free (${(ratio * 100).toFixed(0)}%)`;
   if (free < MIN_FREE_BYTES) {
-    throw new Error(`${summary} on the data mount`);
+    throw new Error(`${summary} on the data directory's disk`);
   }
   return summary;
 }
@@ -424,8 +375,6 @@ async function loginPage({ config }) {
 module.exports = [
   { name: "release ID", run: releaseID },
   { name: "redis read/write", run: redisRoundTrip },
-  { name: "data volume marker", run: dataVolumeMarker },
-  { name: "blog folders match redis", run: dataDirectory },
   { name: "data directory writable", run: dataDirectoryWritable },
   { name: "tmp directory writable", run: tmpDirectoryWritable },
   { name: "storage bucket reachable", run: storageBucket },

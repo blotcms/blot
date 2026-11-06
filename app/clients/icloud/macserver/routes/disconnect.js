@@ -2,6 +2,7 @@ import fs from "fs-extra";
 import { join } from "path";
 import { iCloudDriveDirectory } from "../config.js";
 import { removeLimiterForBlogID } from "../limiters.js";
+import { forgetBlog } from "../pushedFiles.js";
 import { unwatch } from "../watcher/index.js";
 import clfdate from "../util/clfdate.js";
 
@@ -24,6 +25,7 @@ export default async (req, res) => {
 
   // remove the blogid folder and the limiter
   removeLimiterForBlogID(blogID);
+  forgetBlog(blogID);
 
   try {
     await unwatch(blogID);

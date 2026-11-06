@@ -27,14 +27,17 @@
 //      reading the pack.
 //   2. Stream the pack into scratch space reserved from the cache, so the
 //      git disk budget stays one number. Stop at the limit. The manifest is
-//      read meanwhile, and a push whose old values are out of date is refused
-//      once the pack is in, before anything is checked.
+//      read meanwhile, and as soon as it is in, the commits the push replaces
+//      and their root trees are read (which fetches the indexes too). The
+//      pack is read through once it is all in, and then a push whose old
+//      values are out of date is refused, before anything else is checked.
 //   3. Find the objects the pack's deltas build on which it does not contain
 //      (it is a thin pack), fetch them from the store in a batch, and have
 //      `git index-pack --fix-thin --fsck-objects` complete and index the pack
 //      in scratch. That is git's own check that every object is well formed.
 //      (Not --strict: that also checks links, against a repository which is
-//      not here. Links are checked in step 4.)
+//      not here. Links are checked in step 4.) The pack, its .idx and its
+//      .rev start uploading now, while the steps up to 6 run.
 //   4. Check connectivity in JS. Every object already stored has everything it
 //      points at stored too, so only what the new pack adds can be missing:
 //      the parents and trees of its commits, the targets of its tags, and for
@@ -43,10 +46,14 @@
 //      each ref update's new tip exists, even when the push carried no objects,
 //      and for each tip that is an annotated tag find what it finally points at
 //      (the manifest's `peeled`, which the advertisement gives as a "^{}" line).
-//   5. Build the .rev file, and a small pack of just the push's commits (a
-//      history piece, which the manifest lists and compaction merges later).
-//   6. Upload the pack, its .idx and .rev, and the history piece and its .idx
-//      (a piece is read whole, so it has no .rev).
+//   5. Build a small pack of just the push's commits in JS (a history piece,
+//      which the manifest lists and compaction merges later), as soon as the
+//      commits are read for step 4, and start uploading it and its .idx (a
+//      piece is read whole, so it has no .rev).
+//   6. Wait for every upload. A check that fails aborts what is still
+//      uploading (a pack streamed from scratch is destroyed, which aborts a
+//      multipart upload), waits for every upload to end, and refuses the
+//      push: nothing names what did land, which is an orphan for the sweep.
 //   7. Swap the manifest, built on the one read in step 2 (the conditional
 //      create decides whether it is still the newest). Only a swap that
 //      landed is reported as a success. A swap lost to another writer is
@@ -95,9 +102,12 @@ const { parseCommit, parseTree, parseTag, isDirectory, isGitlink } = require("./
 const { scanPack } = require("./packscan");
 const { buildRev } = require("./rev");
 const { noteSize } = require("./pack");
+const { keepPack } = require("./packcache");
 const { rememberWhole } = require("./idx");
 const { readHistory } = require("./history");
+const { wholeEntry, assemblePack } = require("./commit");
 const { ancestors } = require("./fetch");
+const { indexArgs, commandOf } = require("./compact");
 
 const ZERO = "0".repeat(40);
 const MASTER = "refs/heads/master";
@@ -229,7 +239,12 @@ function describeGitError(stderr) {
 }
 
 function formatSize(bytes) {
-  return Math.max(1, Math.round(bytes / MiB)) + " MB";
+  return Math.max(1, Math.round(bytes / MiB)) + " MiB";
+}
+
+// A push over the limit: the size it is refused at, and what to do instead
+function tooLarge(limit) {
+  return new Refused("this push is larger than Blot accepts (" + formatSize(limit) + "); push fewer or smaller files at a time");
 }
 
 function createScratch(reservation, children) {
@@ -268,7 +283,7 @@ function createScratch(reservation, children) {
         clearTimeout(timer);
         children.delete(child);
         if (code === 0) return resolve(Buffer.concat(stdout));
-        const err = new Error("git " + args.join(" ") + " failed: " + oneLine(Buffer.concat(stderr).toString()));
+        const err = new Error("git " + commandOf(args) + " failed: " + oneLine(Buffer.concat(stderr).toString()));
         err.stderr = Buffer.concat(stderr).toString();
         reject(err);
       });
@@ -294,7 +309,7 @@ async function writeIncoming(incoming, reservation, cache, file, limit) {
       if (next.done) return;
 
       bytes += next.value.length;
-      if (bytes > limit) throw new Refused("the push is larger than the " + formatSize(limit) + " Blot accepts");
+      if (bytes > limit) throw tooLarge(limit);
       if (bytes > reservation.bytes) await reservation.extend(Math.max(bytes - reservation.bytes, Math.min(step, limit - reservation.bytes)));
       yield next.value;
     }
@@ -646,17 +661,117 @@ async function peelTags({ repo, local, types }) {
   return peeled;
 }
 
-// Uploads a pack with its index and, unless it is a history piece (which is
-// only ever read whole, so nothing wants its reverse index), its reverse
-// index, all at once. Every upload has ended, one way or the other, before this
-// settles, so none is still reading a file from scratch when it is deleted.
-async function uploadPack(store, piece, { rev = true } = {}) {
-  const stream = fs.createReadStream(piece.packFile);
-  stream.on("error", () => {}); // the upload sees it too, by reading the stream
-  const puts = [store.put(packKey(piece.name), stream).finally(() => stream.destroy()), store.put(idxKey(piece.name), piece.idx)];
-  if (rev) puts.push(store.put(revKey(piece.name), piece.rev));
-  const failed = (await Promise.allSettled(puts)).find((put) => put.status === "rejected");
-  if (failed) throw failed.reason;
+// The refusal of a master whose tree has anything but regular files in it
+const IRREGULAR = "Git blogs support regular files only (no symbolic links or submodules)";
+
+// With `regularFilesOnly`, a push may not leave master with anything but
+// regular files and directories in its tree (no symbolic links, no
+// submodules). Only what the new master's tree adds or changes against the old
+// master's is read: the old one was checked when it was pushed. A force push
+// is compared with the old master too, whatever its history. Resolves with the
+// problem for master, or null.
+async function irregularFiles({ repo, local, base, commands }) {
+  const master = commands.find((command) => command.ref === MASTER && command.new !== ZERO && command.new !== command.old);
+  if (!master) return null;
+
+  const read = async (oid) => local.get(oid) || (await repo.read(oid));
+  const treeOf = async (oid) => {
+    const found = oid && (await read(oid));
+    return found && found.type === "commit" ? parseCommit(found.data).tree : null;
+  };
+  const entriesOf = async (oid) => {
+    const found = oid && (await read(oid));
+    return found && found.type === "tree" ? parseTree(found.data) : [];
+  };
+
+  const old = base.refs[MASTER] || null;
+  let level = [{ a: await treeOf(old), b: await treeOf(master.new) }];
+
+  while (level.length) {
+    const next = [];
+
+    for (const { a, b } of level) {
+      if (!b || a === b) continue;
+
+      const before = new Map((await entriesOf(a)).map((entry) => [entry.name, entry]));
+      for (const entry of await entriesOf(b)) {
+        const was = before.get(entry.name);
+        if (was && was.oid === entry.oid && was.mode === entry.mode) continue;
+        if (isDirectory(entry)) next.push({ a: was && isDirectory(was) ? was.oid : null, b: entry.oid });
+        else if (entry.mode !== "100644" && entry.mode !== "100755") return { [MASTER]: IRREGULAR };
+      }
+    }
+
+    level = next;
+  }
+
+  return null;
+}
+
+// The push's uploads, each started as soon as its pack is ready, while the
+// push is still being checked: the pack and its .idx and .rev once index-pack
+// has written them, the history piece once it is built. Nothing names an
+// upload until the swap, which waits for done(), so a refused push leaves at
+// most orphans for the sweep. abort() stops what is still running (a pack
+// streamed from scratch is destroyed, which aborts a multipart upload) and,
+// like done(), resolves only once every upload has ended, so none is still
+// reading a file from scratch when it is deleted. A pack's bytes go in the
+// cache at the same time (packcache.js), which never fails the upload, so the
+// next clone, fetch or reader of the push reads them from there. A history
+// piece is only ever read whole, so nothing wants its reverse index.
+//
+// Uploads which completed before an abort are not deleted: packs are named by
+// their content, so the same key may be one a manifest names already (a push
+// sending a pack the repository has), or one another writer is about to name.
+function createUploads(store, cache) {
+  const running = [];
+  const streams = new Set();
+  let stopped = false;
+
+  function start(piece, { rev }) {
+    if (stopped) return;
+    let body = piece.buffer;
+    if (!body) {
+      body = fs.createReadStream(piece.packFile);
+      body.on("error", () => {}); // the upload sees it too, by reading the stream
+      streams.add(body);
+    }
+    const stream = body;
+    const puts = [
+      store.put(packKey(piece.name), body).finally(() => {
+        streams.delete(stream);
+        if (stream.destroy) stream.destroy();
+      }),
+      store.put(idxKey(piece.name), piece.idx),
+    ];
+    if (rev) puts.push(store.put(revKey(piece.name), piece.rev));
+    const kept = piece.buffer
+      ? keepPack({ cache, store, name: piece.name, size: piece.size, buffer: piece.buffer })
+      : keepPack({ cache, store, name: piece.name, size: piece.size, file: piece.packFile });
+
+    const upload = (async () => {
+      const failed = (await Promise.allSettled(puts)).find((put) => put.status === "rejected");
+      await kept;
+      if (failed) throw failed.reason;
+      // This process uploaded it, so it knows its size
+      noteSize(store, packKey(piece.name), piece.size);
+    })();
+    upload.catch(() => {});
+    running.push(upload);
+  }
+
+  async function done() {
+    const failed = (await Promise.allSettled(running)).find((upload) => upload.status === "rejected");
+    if (failed) throw failed.reason;
+  }
+
+  async function abort() {
+    stopped = true;
+    for (const stream of streams) stream.destroy(new Error("The push was refused before its upload finished"));
+    await Promise.allSettled(running);
+  }
+
+  return { start, done, abort };
 }
 
 // The manifest entry for an uploaded pack
@@ -679,7 +794,7 @@ function answer(commands, { outcome, status = "ok", problems = {}, messages = []
   return { outcome, status, results, messages, ...extra };
 }
 
-async function receive({ store, cache, lock, commands, pack = null, limit = DEFAULT_LIMIT, sizeHint = 0, smallBase = SMALL_BASE, progress = null, gate = null }) {
+async function receive({ store, cache, lock, commands, pack = null, limit = DEFAULT_LIMIT, sizeHint = 0, smallBase = SMALL_BASE, progress = null, gate = null, regularFilesOnly = false }) {
   // A host's callback must never be able to fail a push
   const say = (message) => {
     try {
@@ -701,14 +816,14 @@ async function receive({ store, cache, lock, commands, pack = null, limit = DEFA
 
     const problems = refusals(commands);
     if (Object.keys(problems).length) throw new Refused("ok", problems);
-    if (sizeHint > limit) throw new Refused("the push is larger than the " + formatSize(limit) + " Blot accepts");
+    if (sizeHint > limit) throw tooLarge(limit);
 
     // The manifest is read while the pack arrives. Work out of date is found
     // before anything is checked; the pack is still read to the end.
     const reading = manifest.read(store);
     reading.catch(() => {});
 
-    const { base, added, repo, local } = await prepare({ store, cache, commands, incoming, limit, sizeHint, reading, children, stats, smallBase, hold: (r) => (reservation = r), say });
+    const { base, added, repo, local } = await prepare({ store, cache, commands, incoming, limit, sizeHint, reading, children, stats, smallBase, regularFilesOnly, hold: (r) => (reservation = r), say });
     const next = await swap({ store, cache, lock, commands, added, base });
     await remember({ store, cache, repo, added, local });
 
@@ -742,8 +857,11 @@ function failure(commands, err, stats) {
     });
   }
 
+  // A host's lock(fn) may say why it failed, in words for the user
   const status =
-    err instanceof NoRoomError
+    err && typeof err.pushStatus === "string"
+      ? err.pushStatus
+      : err instanceof NoRoomError
       ? "Blot has no room to receive this push right now; please try again in a moment"
       : "Blot hit an error receiving the push; please try again in a moment";
   return answer(commands, { outcome: "failed", status, extra: { stats, error: err } });
@@ -795,10 +913,15 @@ function staleRefs(current, commands) {
   return new Refused("ok", Object.fromEntries(stale.map((command) => [command.ref, MOVED])));
 }
 
-// Everything up to the upload: the pack in scratch, completed and checked, its
+// Everything up to the swap: the pack in scratch, completed and checked, its
 // history piece, and both uploaded. Resolves with { packs, pieces } to name in
 // the manifest (none, for a push of refs only).
-async function prepare({ store, cache, commands, incoming, limit, sizeHint, reading, children, stats, smallBase, hold, say }) {
+//
+// The uploads start as soon as each pack is ready and run beside the checks
+// that follow, and the swap waits for them all: so what is acknowledged is
+// unchanged, and a check that fails aborts what is still uploading and waits
+// for every upload to end before it is reported.
+async function prepare({ store, cache, commands, incoming, limit, sizeHint, reading, children, stats, smallBase, regularFilesOnly, hold, say }) {
   const added = { packs: [], pieces: [] };
   const needsPack = commands.some((command) => command.new !== ZERO);
   const reservation = await cache.reserve(Math.min(limit, Math.max(sizeHint, FIRST_RESERVE), Math.floor(cache.maxBytes / 2)));
@@ -808,57 +931,76 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, read
   const incomingFile = path.join(reservation.dir, "incoming.pack");
   const gitDir = path.join(reservation.dir, "repo.git");
 
-  stats.bytes = needsPack ? await writeIncoming(incoming, reservation, cache, incomingFile, limit) : 0;
-  await incoming.drain();
-
-  const base = await reading;
-  const behind = staleRefs(base, commands) || nameConflicts(applied(base, commands), commands);
-  if (behind) throw behind;
-
-  const repo = createReader({ store, cache, manifest: base, scratch: scratchFrom(reservation, cache) });
-
   // The commits the push replaces, and their root trees, are what the check
   // of the new commits compares with first, and each is usually the parent of
   // a new commit, which the check looks up in the packs. All of that is read
-  // while the bases are fetched and the pack is indexed, rather than after.
-  const prefetch = Promise.all(
-    commands
-      .filter((command) => command.old !== ZERO && command.new !== ZERO)
-      .flatMap((command) => [
-        repo.typeOf(command.old),
-        repo.read(command.old).then((found) => found && found.type === "commit" && repo.read(parseCommit(found.data).tree)),
-      ])
-  ).catch(() => {});
+  // as soon as the manifest is in, while the rest of the pack arrives, the
+  // bases are fetched and the pack is indexed, rather than after; the first
+  // lookup also fetches the indexes the bases are then found with. Nothing is
+  // decided on it: a push which turns out to be out of date only wasted reads.
+  const opened = reading.then((base) => {
+    const repo = createReader({ store, cache, manifest: base, scratch: scratchFrom(reservation, cache) });
+    const prefetch = Promise.all(
+      commands
+        .filter((command) => command.old !== ZERO && command.new !== ZERO)
+        .flatMap((command) => [
+          repo.typeOf(command.old),
+          repo.read(command.old).then((found) => found && found.type === "commit" && repo.read(parseCommit(found.data).tree)),
+        ])
+    ).catch(() => {});
+    return { repo, prefetch };
+  });
+  opened.catch(() => {});
 
-  let fresh = new Map();
-  let local = new Map();
-  let listed = new Map();
+  stats.bytes = needsPack ? await writeIncoming(incoming, reservation, cache, incomingFile, limit) : 0;
+  await incoming.drain();
 
-  // A request which carried no pack, or a pack with no objects, is a push of
-  // refs to objects the repository has
+  // What needs only the pack is done before the manifest is waited for (it
+  // has been on its way since the push began): reading the pack through, and
+  // making the repository index-pack writes into. A request which carried no
+  // pack, or a pack with no objects, is a push of refs to objects the
+  // repository has.
+  const basesDir = path.join(reservation.dir, "bases");
+  let scanned = null;
   if (stats.bytes > 0) {
     say("Checking the pack...");
-    let scanned;
     try {
       scanned = await scanPack(incomingFile);
     } catch (err) {
       if (err instanceof CorruptError) throw new Refused("the pack is not valid: " + err.message);
       throw err;
     }
-
     if (scanned.count > 0) {
-      const wanted = [...scanned.bases].filter((oid) => !scanned.whole.has(oid));
-      const basesDir = path.join(reservation.dir, "bases");
       await fsp.mkdir(basesDir, { recursive: true });
+      await scratch.git(["init", "-q", "--bare", gitDir]);
+    }
+  }
+
+  const base = await reading;
+  const behind = staleRefs(base, commands) || nameConflicts(applied(base, commands), commands);
+  if (behind) throw behind;
+
+  const { repo, prefetch } = await opened;
+  const uploads = createUploads(store, cache);
+
+  let fresh = new Map();
+  let local = new Map();
+  let listed = new Map();
+
+  try {
+    if (scanned && scanned.count > 0) {
+      const wanted = [...scanned.bases].filter((oid) => !scanned.whole.has(oid));
       if (wanted.length) say(wanted.length >= 100 ? "Fetching " + wanted.length + " files the push builds on..." : "Fetching files the push builds on...");
       const bases = await fetchBases(repo, wanted, basesDir, reservation, cache, smallBase);
       stats.basesFetched = bases.fetched.size;
 
       // The pack index-pack writes holds the pack, its bases and an index
       await reservation.extend(stats.bytes + scanned.count * 32 + 4096);
-      await scratch.git(["init", "-q", "--bare", gitDir]);
       try {
-        await scratch.git(["index-pack", "--stdin", "--fix-thin", "--fsck-objects"], {
+        // A .gitattributes or .gitmodules blob a changed tree names but the
+        // push does not carry is in the store already (checked when it was
+        // pushed), not in scratch: fsck is told not to look for it
+        await scratch.git([...indexArgs(), "index-pack", "--stdin", "--fix-thin", "--fsck-objects=gitattributesMissing=ignore,gitmodulesMissing=ignore"], {
           gitDir,
           inputFile: incomingFile,
           env: { GIT_ALTERNATE_OBJECT_DIRECTORIES: basesDir },
@@ -869,9 +1011,16 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, read
       }
       await fsp.rm(incomingFile);
 
+      // index-pack has checked every object and named the pack by its
+      // checksum, so its upload starts now, beside the checks below. The
+      // pack the client sent is not what is stored (--fix-thin appends the
+      // bases and so changes the name), and its bytes are not checked
+      // until here, so nothing goes up before this.
       const packDir = path.join(gitDir, "objects", "pack");
-      const files = await fsp.readdir(packDir);
-      const packFile = files.find((file) => file.endsWith(".pack"));
+      const packFile = (await fsp.readdir(packDir)).find((file) => file.endsWith(".pack"));
+      const pushed = await describePack(path.join(packDir, packFile), path.join(packDir, packFile.replace(/\.pack$/, ".idx")));
+      added.packs.push(pushed);
+      uploads.start(pushed, { rev: true });
 
       listed = await listObjects(scratch, gitDir);
       fresh = new Map([...listed].filter(([oid]) => !bases.fetched.has(oid)));
@@ -883,6 +1032,13 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, read
       }
       local = await loadObjects(scratch, gitDir, checked.map(([oid]) => oid));
 
+      const commits = [...fresh].filter(([, { type }]) => type === "commit");
+      if (commits.length) {
+        const piece = await historyPiece(local, commits);
+        added.pieces.push(piece);
+        uploads.start(piece, { rev: false });
+      }
+
       say("Checking the new commits...");
       await prefetch;
       const { missing, wrong } = await findMissing({ repo, fresh, local, listed });
@@ -892,32 +1048,27 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, read
       if (missing.length) {
         throw new Refused("ok", Object.fromEntries(commands.filter((c) => c.new !== ZERO).map((c) => [c.ref, "missing necessary objects"])));
       }
-
-      added.packs.push(await describePack(path.join(packDir, packFile), path.join(packDir, packFile.replace(/\.pack$/, ".idx"))));
-
-      const commits = [...fresh].filter(([, { type }]) => type === "commit");
-      if (commits.length) added.pieces.push(await historyPiece(scratch, reservation, gitDir, commits));
     }
+
+    const types = new Map();
+    const tips = await checkTips({ repo, commands, listed, types });
+    if (Object.keys(tips).length) throw new Refused("ok", tips);
+    if (regularFilesOnly) {
+      const irregular = await irregularFiles({ repo, local, base, commands });
+      if (irregular) throw new Refused("ok", irregular);
+    }
+    added.peeled = await peelTags({ repo, local, types });
+    await prefetch;
+
+    // Nothing is acknowledged before this, and the manifest names no pack which
+    // is not uploaded: a failure here leaves the repository as it was
+    say("Saving to Blot...");
+    await uploads.done();
+  } catch (err) {
+    await uploads.abort();
+    throw err;
   }
 
-  const types = new Map();
-  const tips = await checkTips({ repo, commands, listed, types });
-  if (Object.keys(tips).length) throw new Refused("ok", tips);
-  added.peeled = await peelTags({ repo, local, types });
-  await prefetch;
-
-  // Nothing is acknowledged before this, and the manifest names no pack which
-  // is not uploaded: a failure here leaves the repository as it was
-  say("Saving to Blot...");
-
-  // Every upload ends before this returns, so none is still reading a file
-  // from scratch when scratch is deleted
-  const uploads = await Promise.allSettled([...added.packs, ...added.pieces].map((piece) => uploadPack(store, piece, { rev: added.packs.includes(piece) })));
-  const failed = uploads.find((upload) => upload.status === "rejected");
-  if (failed) throw failed.reason;
-
-  // This process uploaded them, so it knows their size
-  for (const piece of [...added.packs, ...added.pieces]) noteSize(store, packKey(piece.name), piece.size);
   return { base, added, repo, local };
 }
 
@@ -943,16 +1094,14 @@ async function remember({ store, cache, repo, added, local }) {
   await Promise.all([...indexes, ...objects]);
 }
 
-// A pack of just these commits, for the history pack that compaction keeps
-async function historyPiece(scratch, reservation, gitDir, commits) {
-  const commitBytes = commits.reduce((sum, [, { size }]) => sum + size + 64, 0);
-  await reservation.extend(commitBytes + 4096);
-
-  const packFile = path.join(reservation.dir, "history.pack");
-  await scratch.git(["pack-objects", "--stdout", "-q"], { gitDir, input: commits.map(([oid]) => oid).join("\n") + "\n", outputFile: packFile });
-  await scratch.git(["index-pack", packFile], { gitDir });
-
-  return describePack(packFile, path.join(reservation.dir, "history.idx"));
+// A pack of just these commits, for the history pack that compaction keeps.
+// It is built here, as Blot's own commits build theirs (commit.js), from the
+// commits already read for the check, each stored whole: no git process, no
+// scratch, and it is ready to upload at once. It holds no more than the
+// compressed copy of commits the check holds in memory anyway.
+async function historyPiece(local, commits) {
+  const pack = await assemblePack(commits.map(([oid]) => wholeEntry("commit", local.get(oid).data)));
+  return { name: pack.name, size: pack.size, objects: pack.objects, idx: pack.idx, idxSize: pack.idx.length, rev: pack.rev, buffer: pack.body() };
 }
 
 // The packs to list again (with this push's seq) because the push makes
@@ -1026,7 +1175,7 @@ async function swap({ store, cache, lock, commands, added, base }) {
     });
 
     try {
-      await manifest.swap({ store, lock, base: current, next, uploaded, waitForHint: false });
+      await manifest.swap({ store, lock, base: current, next, uploaded });
       return next;
     } catch (err) {
       if (!(err instanceof StaleManifestError) || attempt >= ATTEMPTS) throw err;

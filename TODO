@@ -1,9 +1,54 @@
-Route image URLs through the CDN even when the images have not synced yet
-- Reason: a post can reach Blot before its images. The build currently leaves missing images as /public/... URLs on the blog's domain. Loading an image-heavy page or an early cached RSS copy can then produce bursts of origin requests, 404s and 429s, triggering temporary fail2ban bans for legitimate visitors. The 3–4 Nov 2026 incident showed matching image-request bursts and visitor bans; local tests reproduced the original-URL fallback with missing files, though the historical rendered HTML was not retained.
-- Plan: in app/build/plugins/folderAssets, rewrite eligible missing image paths to provisional versioned CDN URLs instead of leaving them on the blog's domain. Keep the dependency edges so each arriving image triggers a rebuild and replaces its provisional URL with the normal content-versioned CDN URL (and dimensions/optimized asset where available). Preserve the existing path validation and handle case resolution when the file arrives.
-- The CDN may serve 404s while a file is absent. Give the available file a different URL/version so cached 404s cannot hide it after sync. Verify CDN negative-cache behavior; cache misses still reach Blot, but via the CDN's exempt route rather than accumulating rate-limit violations against the visitor's IP. Test missing → available images, partial syncs, RSS and lazy-loading attributes. This should work automatically without authors hardcoding CDN URLs.
-- Separate performance follow-up: batch dependent-entry rebuilds across a sync so a large image batch does not rebuild the same post hundreds of times while holding the folder lock (see Improve Dropbox sync below).
-- Tell [Christopher](https://mail.google.com/mail/u/0/#inbox/FMfcgzQjggrQPpqTwcCrLtZGBDDgRCJK)
+Host cycle follow-ups, from the live cycle onto a 30 GB root on 6 Nov 2026 (#2552)
+- Check the daily email of 7 Nov: the first offsite (B2) sync from the new host runs at 02:10 UTC. Overdue or failed means the `blot-b2-storage` profile or `/etc/blot/storage-offsite-bucket` did not reach it at `app`.
+- The final data-volume snapshot (tagged `purpose=final-before-removal`) is the last cost left from the volume: move it to the archive tier around 20 Nov, or delete it once S3 plus B2 have run for a while. The operator decides.
+- `launch.sh` connects with `StrictHostKeyChecking=no` and keeps no key: have it read the ED25519 fingerprint from `get-console-output`, check it, and write a known_hosts line for `<new>` (the README says how to do it by hand).
+- Time each step of `switch` inside the freeze. Writes were frozen 110 s live against 41 s in the drill, with no failed requests; probably ssh round trips through `ProxyJump` from the operator's Mac, unmeasured. Then decide whether to run the in-freeze steps from the new host instead.
+- `cycle.sh` deploys the old host's image, so it could set `SKIP_BRANCH_CHECK=true` for `units.sh` itself instead of failing from a worktree.
+- The Deploy workflow's `commit` input fails on a short hash ("could not resolve commit") although its description says short codes work: fetch enough history, or say full hash only.
+
+Serve blog folder files on the CDN straight from S3, as assets are (left over from #2258, closed once the B2 restore test passed)
+- Today `cdn.blot.im/folder/v-<version>/<blogID>/<path>` reaches the origin, which reads the file through `storage/folder`. Every blog is on S3 now, so a Bunny edge rule could send `/folder/v-*` to the bucket instead, like `_image_cache` and `_thumbnails`.
+- Decide first: dotfiles (node 404s any path segment starting with `.`, S3 serves all but `.git`, so maybe Deny `.env`-style names too); directory URLs (node redirects to the trailing slash and serves `index.html`, S3 has only a zero-byte marker: check whether the build ever bakes a directory link); a missing object is a 403 from S3, not a 404; Content-Type comes from the object.
+- Watch #2258's performance gates (S3 requests, origin hits from the `[folder-asset]` log line) before and after.
+- Keep `/folder/v-pending/*` on the app: it finds the file ignoring case and sets its own short cache times (see `app/cdn/index.js`), and its 404 must not become S3's 403.
+
+Why does helper/ have four ID generators? can we consolidate under one, using a backfill?
+
+Fix this: Callbacks and promises mixed: about 199 files mix them, and async@2 is required in 72. This causes double callbacks and dropped errors.
+
+Update these: Stale dependencies:
+- stripe@6.36.0, a 2019 client, on your payments path.
+- highlight.js@10 (end-of-life) and jasmine@3.3.1.
+- faker@4.1.0 and colors@1.3.2. Their author sabotaged both projects in 2022, and you still carry them.
+- moment, debug@3, async@2, node-fetch@2.
+- You have a skill that checks Node, nginx and the OS for advisories, but nothing checks npm packages. The checking points at the wrong place.
+
+Set up prettier to lint format code
+
+Fix this: 879 console.log calls in non-test app code, and no structured logging. Several of your skills exist mainly to grep and rebuild meaning from free-text logs ([STATS], [SLOW-FILL], [folder-asset]). Structured logs plus a metrics backend would make most of them unnecessary.
+
+Fix this: Weak input validation. The blog schema only type-checks client as string. In app/dashboard/site/client.js, POST /switch disconnects the current client, then saves req.body.client without checking it names a real client. Later, clients[req.blog.client].disconnect hits undefined. It’s minor, but it’s the kind of thing a reviewer finds in five minutes and generalises from.
+
+Unify this: Duplicated libraries: node-fetch alongside native fetch, moment throughout, and some scripts require request, which isn’t in package.json.
+
+Unify this: Scattered config: about 101 environment variables, and 14 files read process.env directly.
+
+Fix this: Dev differs from prod: the test Redis is redis:alpine, unpinned (scripts/tests/invoke.sh:30), while CI and production run 6.2. Markdown goes through pandoc in production and through marked in development. The sandbox runs jailed in production and in-process in development.
+
+Remove customer info from TODO (and gmail links)
+
+Fix this: The agent instructions aren’t maintained. CLAUDE.md has two near-identical sections, “Pull request review” and “Pull request reviews”. One calls you “operator”, the other “maintainer”. A careful reviewer reads this as rules piled up and never edited.
+
+Research then implement this if sound: Make the version the only invalidation. Put cacheID in the proxy cache key, and drop the purge RPCs, the pending-purge queue, the per-file purges during sync, and most of the LRUs. Old entries age out by eviction. This is cheap and removes a whole failure class. Full pre-rendering is the logical end point, but don’t go all the way: search, arbitrary query strings and very large catalogs make it a lazy-render-into-versioned-store design, not an SSG.
+- I wonder if we could store the cacheID against the host and then as the ssl cert was read, we could seed this info automatically?
+
+Switch from redis to relational db?
+- Per-blog SQLite on object storage
+
+Implement: 5. Builds in isolated workers off a job queue.
+- multiple builds in parallel
+
+We should follow sane soc 2 practices
 
 ---
 
@@ -39,25 +84,22 @@ Diagnostics
 
 ---
 
-remove emojis from deploy summary and benchmarks and ban emojis from the project
-
 when we next cycle hosts, should we cycle the ssh key pair too?
 
 - 3 Nov 2026, after 03:05 UTC (#2261): the first daily Redis backup from the new host is in S3 and B2, and no stale-offsite email was sent
 - 8 Nov 2026, after 03:35 UTC (#2261): the first `weekly/` Redis dump from the new host is in S3 (`aws s3 ls s3://blot-redis-backups/weekly/`). On 3 Nov there was no `weekly/` prefix at all: no weekly dump had reached S3 since #2055 set them up on 7 Oct (the lifecycle rules only expire weeklies after 30 days, so they weren't swept), leaving only 7 days of dailies to restore a deleted blog from. If it is missing, read `~/backup.log` on the host and fix it before the next Sunday
 - Next wildcard certificate renewal (#2261): it works with the new `blot` key; its Route 53 access wasn't tested
 - For a week or two after the 2 Nov move (#2261): watch `[LOCK] slow heartbeat` lines and the Redis slowlog. If they appear, pin Redis to one core and limit the units to the rest
-- Host cycle standby side effects (#2261): a "server started" email per boot and a Bunny purge of the dashboard CSS and JS. Harmless so far; fix before a second host (#2271) makes them frequent
-- Once #2258 and #2259 have moved blog folders and git repos to S3, cycle the production host to drop the data volume and shrink the root to 40 GB (#2377; a volume can't shrink in place). Review `config/host/cycle.sh` first: without the data volume, the `data` phase, the snapshot and delta copies, the read-only freeze and `move retag` may go, so a cycle could be mostly Redis replication and the switch
-- From 5 Nov 2026: delete what the 2 Nov host cycle kept (#2261): the old data volume and the snapshots tagged `BlotCycle=prod-2026-11-02`. List them with `aws ec2 describe-volumes` and `aws ec2 describe-snapshots --owner-ids self` filtered on that tag, and check each before deleting. The snapshot policy's own snapshots carry the tag too; it ages them out by itself.
+- Cycle the production host (#2377) onto the 30 GB root disk, since a root volume can't shrink in place. Rehearse `config/host/cycle.sh` with `--drill` first: it has no `data` phase now, and `switch` freezes the app itself
 - iCloud sync is flaky: on 2 Nov, after the host move, a new folder in icloudtest never reached the macserver within the test's wait, though the macserver's calls to the new host succeeded. Find out where iCloud changes stall (iCloud itself, the macserver's watcher, or the resync path) and make sync dependable
 - Mid-Nov 2026 (#2261, #2107): buy the m6gd.xlarge reservation, since the host runs on-demand until then. First run `unit-mem-summary.sh` on the host over a stretch that includes a deploy, to confirm the 3300m unit limits and 6gb Redis maxmemory fit the size
-Git sync (#2259 PR 7): when the last applied commit is gone from the bare repo (a force push, then gc) and so is the live clone's HEAD (or the blog has no live clone, as new blogs don't since PR 8), a sync compares from the empty tree: it writes every file but removes none, so files the rewrite deleted stay in the blog folder until a resync
-Git handle collisions: a repo left at data/git/<handle>.git now makes that handle unavailable until someone removes it, so clear the leftovers from the 1 Nov comparison. A blog already on a leftover repo isn't caught: dashboard/site/client.js's switch to git lands on it, and authenticate.js doesn't check blog.client. A crash between the move and the save in Blog.set leaves the repo at the new handle, fixed by hand. Deleting a blog removes its repo only while the blog is on git (its disconnect does, at its current handle), so a blog on another client keeps one left at its handle, and a repo at a former handle is never removed. All of this goes with repos keyed by blog ID (#2259 Phase 2)
-Git (#2259 PR 6 follow-ups): a branch other than master that an earlier push got in (the bypass) can't be deleted by its owner, since every non-master branch ref is refused, deletions included; receivePack keeps each push as a pack where git's receive-pack unpacked small ones loose, so check `ls objects/pack | wc -l` on a busy repo a while after deploy
+Git store (#2259 follow-up): raise the push limit (the issue has the numbers)
+Git store (#2259 follow-up): a warm push still makes one avoidable round trip, the manifest read that the advertisement already did
+Git store (#2259 follow-up): show push progress through the proxy
+Git store (#2259 follow-up): set `socketTimeout` on the store's S3 client
+Git sync (#2259 PR 7): when the last applied commit is gone from the git store (a force push, then a rewrite), a sync compares from the empty tree: it writes every file but removes none, so files the rewrite deleted stay in the blog folder until a resync
+Git (#2259 PR 6 follow-ups): a branch other than master that an earlier push got in (the bypass) can't be deleted by its owner, since every non-master branch ref is refused, deletions included
 Git sync (#2259 PR 4): a sync interrupted part way leaves already-applied paths ahead of the recorded commit, so a later push that restores such a file to the recorded commit's contents shows no diff and the entry stays stale until a resync. Since the materializer (PR 7) the file in the folder stays stale too, because nothing resets the folder. Needs a crash or Redis outage, no retry, and that exact revert
-
-scripts/git/repair.js swaps the blog folder for a fresh clone of the bare repo, so files in the folder that aren't in the repo are lost, and since #2259 PR 8 a blog without a live clone is normal, so running it puts back a clone nothing needs: don't run it, and retire the script once live clones go (PR 9)
 
 Speed up ci / simplify proxy and e2e testing slightly
 
@@ -82,7 +124,6 @@ Redis host follow-ups (from #2041, new host since 8 Oct):
 - Proxy: auto-ssl's lock and hook calls can reuse a timed-out Redis connection
 - Deploy log archive (scripts/deploy/units.sh, proxy/deploy/blue-green.sh): before a unit is replaced, archive its container logs with docker logs -t, outside /tmp, more than 3 files, size-capped
 - TLS handshakes were about a quarter of billed egress on 21 Oct (#2107): ECDSA certificates shrink each by about a third, and few TLS connections resume today, so look at session reuse and keep-alive (about 1.7 requests per connection). No `ssl_session_tickets` without a shared key (#2271)
-- reconcile.js can select every sync-client blog after a restore: a unit that boots with a global template changed since Redis last stored it rebuilds it and bumps every blog's cacheID (app/templates/index.js bumpCacheIDForEveryBlog), and cycle.sh restore starts the units first. The 1 Nov rehearsal selected every blog, most likely this way. Capture the cacheIDs with redis6-cli before the units start, or use a signal a boot doesn't touch (#2261). Only slower recovery, never a missed blog
 - restore.sh --offsite: have the host download from B2 with a short-lived presigned URL (aws s3 presign on the operator's machine, passed over stdin), so a restore doesn't depend on the operator's upload speed and the read key still stays off servers. Not tested yet
 - cycle.sh --drill hosts have no AWS credentials (no instance profile), so restoring an S3 backup onto one means copying keys onto it or using --offsite, which streams the dump through the operator's machine: on 3 Nov a 2 GB dump took about 30 minutes at 1.2 MB/s. Give drill hosts a read-only instance profile scoped to s3://blot-redis-backups (or reuse the presigned-URL idea above for S3 too), so the host fetches it directly in about a minute
 - Upgrade the Redis server from 6.2 to 8.4+ for native compare-and-set (SET ... IFEQ, DELEX), then drop Lua: helper/lock extend/release become plain commands; helper/alarm claim/renew/complete need per-id claim keys to go native; also the legacy scripts in sync/lock.js, models/user/set.js, helper/flushCachePending.js, clients/icloud/database.js
@@ -93,7 +134,6 @@ Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 - After the next 03:46 logrotate: access.log/error.log still written after copytruncate, fail2ban counts still moving
 - After the first wildcard renewal by the app (scheduler log "Wildcard SSL"): the proxy serves the new cert fingerprint from Redis within ~10 seconds, with no reload ("wildcard cert:" lines in the proxy error log mean it fell back to the file)
 - Custom-domain certs renew inside the container: none within ~20 days of expiry apart from domains that no longer point at Blot; after a daily renewal run, error.log should show no "certificate for ... expired at" warnings for domains still pointing at Blot (the proxy now refuses to serve an expired stored cert; no host cron)
-- auto-ssl's daily renewal timer first fires 24h after a container starts, so a proxy restarted more often than daily never runs it: confirm proxy deploys are far enough apart, or kick the first run from init_worker
 - Reboot the host once in a maintenance window: mount-instance-store mounts without reformatting, docker starts after it, the proxy comes back with cache/log mounts, :80/:443 answer
 - http://www.blot.im/ returns 404: confirm intended
 - app/blog/static has no copy on the host, so those cdn. files fall through to Node: export them from the Node image on deploy, or accept
@@ -123,7 +163,7 @@ How to reduce likelihood of downtime?
 
 ---
 
-Harden app against S3 being unavailable (generated assets today, blog folders once #2258 lands)
+Harden app against S3 being unavailable (generated assets and blog folders)
 
 Implement folder storage limits (include generated files in this amount?). #2258's Redis index keeps the per-blog byte totals to enforce them from.
 
@@ -182,13 +222,7 @@ Add rebuild button to each file on dashboard
 
 benchmarks-render.yml is manual only because benchmarks-corpus.yml fails, leaving no corpus: fix the corpus build (probably needed since #2111 dropped data/static from the corpus), then give the render benchmark a daily schedule
 
-Back up blot-storage-prod off AWS (Backblaze B2, hourly, no --delete): _avatars and _template_assets can't be regenerated
-
 Bunny: decide Volume vs Standard tier (more PoPs, faster first byte far from Volume PoPs) once we've run the numbers on cost and latency; also why cache HIT is low (Statistics: status codes, top uncached URLs)
-
-We get two emails one after the other and we should only get one
-- User in overdue disabled grace period
-- User account has been closed after for late payments
 
 Add a list of billing history / invoices to subscription page
 
@@ -197,8 +231,6 @@ Create skills which delegate cheap subagents to scan logs for issues:
 - node container logs
 
 Upgrade the Stripe integration (low priority): the stripe npm package is 6.36.0 (2019) and the account's default API version is 2011-11-17, except app/models/user/syncPaymentMethods.js, which pins 2020-08-27. Move to a current stripe-node and pin one explicit API version on every client, after checking the webhook handler (app/dashboard/webhooks/stripe_webhook.js), subscription create/cancel/pay and card update against the API changelog. Upgrade the account default in the Dashboard only once the code no longer relies on it.
-
-Image cache and thumbnails name some files after a slug that is still percent-encoded (literal %E8..., sometimes cut mid-sequence: ...-%E2.png, large.jpg%e2%80%9d) and build URLs without escaping, so those images 404/400 today: slug from the decoded name, then rebuild affected blogs (backfill --dry-run lists them)
 
 Do we eventually prune and rotate the data gathered in the various statistics cron jobs? Eventually we need to purge these we don’t want the database growing infinitely
 
@@ -243,8 +275,7 @@ How do we think about a shared asset library across templates?
 
 Decide whether or not to revert the preset system – should it only be used for the templates index for explaining the customization features?
 
-Test script for point-in-time restoration of specific blog folders at specific time (e.g. 2 days ago)
-- test npm run restore-folder
+Test script for point-in-time restoration of specific blog folders at specific time (e.g. 2 days ago), from the B2 copy of the bucket (restore-folder.sh restored from EBS snapshots and went with the folder cleanup)
 
 Under templates index
 - Clicking on file in folder pulls up post on preview site ?
@@ -253,6 +284,7 @@ Clarify on cancel / delete / overdue pages for accounts with grandfathered subsc
 
 Sync sweep digest (app/clients/util/syncReport.js) follow-ups
 - Hourly Fix() (Dropbox, iCloud, Google Drive) runs outside the folder lock, so menu-ghosts' whole-array menu write can clobber a concurrent sync's menu change - fix in app/sync/fix/menu-ghosts for all clients (raised on PR #2001)
+- iCloud: stop watching blogs that are disabled or gone (the macserver keeps uploading, gets 500 `Cannot sync blog` from sync/index.js and requests resyncs); have /upload answer 4xx so the macserver drops them
 - iCloud initial transfer: the verify pass now reruns twice with a pause, but still gives up with TRANSFER_INCOMPLETE if every attempt fails; make initialTransfer resumable (a stalled `ls` during the upload burst caused TRANSFER_INCOMPLETE). Check the macserver's new `ls took`/`Diagnostic snapshot`/`still running after kill` log lines for the root cause of the stalls
 - Don't report a stuck lock for a blog still in its initial setup/transfer (Dropbox transfer_pending, Drive preparing, iCloud transferringToiCloud) - a big first transfer can legitimately hold the lock >1h
 - Once-per-occurrence suppression treats "not seen this run" as cleared, including blogs that just weren't eligible that hour, so an ongoing error can be re-emailed after a quiet hour - remember issues until a successful walk/Fix actually clears them
@@ -268,8 +300,6 @@ Make sure next bill amount is in all billing emails to customers
 Explain on the about page the websites started out as files in a folder. But they had to be HTML. Blot makes other file types possible too.
 
 Get node container horizontally scalable and multi-region (#1932)
-- blog folders to S3 (#2258)
-- git repos to S3 (#2259)
 
 Add clear bill change info to new blog flow
 
@@ -314,17 +344,9 @@ Improve Google Drive sync
   - Make it possible to short-circuit the full folder traversal and immediately begin at a specific file/subfolder
 - Improve html output for google docs and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBQFmTvLKzPkJrgsBTWZmQJWS)
   Issue: <p><img><br><img></p> should be <p><img></p><p><img></p>
-- Fix bug with new folder setup (e.g. waiting for user to share folder on drive) which does not survive a server restart (See init.js TODO)
 - Fix possible bug where it seems like sometimes the first sentence of Google Docs become titles unexpectedly – possibly a mis-identified title tag?
-- How do we handle two files with same name and same parent? How does our fileId:path hash handle this? Make sure we delete the right file. Will file.title as opposed to file.name give us the deduped version?
-  - Bug: move file with deduplicated name from sub folder to other folder
-  - download should check for an existing file with same name but different fileId and dedupe before storing the path?
-- Handle revoked credentials without tanking server
-- Handle removed blog folder without error
-- Handle renamed blog folder
-- Handle google drive's This service is not available error
-- Handle storage quota errors
-- Handle 429 errors with exponential backoff retry
+- Surface storage quota errors as QUOTA_EXCEEDED health for Google Drive (isQuotaError exists, nothing sets the code)
+- Retry 429s on Google Drive writes (files.create/update): reads already retry with backoff (serviceAccount/retryConfig.js), but write bodies are streams gaxios can't replay
 - Add a way for sync/build to accept a ctime as an option. We can't set this at the operating system level but google drive's API does return a createdTime value and we could use this as the true file's created date, rather than the date the file is made on the server
 - Google Drive `write` should use the best method for large file uploading
 - Add proper testing for this
@@ -338,13 +360,10 @@ Improve Dropbox sync
 - Batch dependent-entry rebuilds across a sync: a large asset delta batch rebuilt the same referring entry after each image (~13s per update), holding the folder lock for over three hours (2026-11-04). The stuck-lock alert should distinguish ongoing progress from a hung sync.
 - Review public asset rate limits and nginx-429 bans: loading an image-heavy page triggered repeated 429s and temporary visitor bans (2026-11-03/04); avoid banning normal page loads while retaining abuse protection.
 - When you re-connect to Dropbox, you have to re-create a folder and perform a full transfer. It would be great if we could re-use the existing folder... Maybe an option during the connect flow? Would be nice to avoid requiring a full transfer
-- Bug: removing a directory in Dropbox resync only updates the directory path; child entries wait for Fix
 - Bug: Dropbox validation's catch-up sync restores last_sync from outside sync() after releasing the lock, so it can clobber a webhook sync's stamp; teach sync() not to stamp last_sync for catch-up instead
 - Sync verification should instrument the sync/fix function to also report errors where the folder doesn't match the database.
 - Bug: ensure that when a process dies, any blogs setting up dropbox client will be re-attempted
-- Bug: Adding an additional blog to existing app folder under constant webhooks failed. New blog had correct folder but old blog still used root. To fix we need to acquire a lock on ALL blogs interacting with that dropbox account to proceed with setup process of second site.
-  - Bug: handle a sync lock failure on second blog when migrating an app folder
-- Bug: retry transient Dropbox API errors with exponential backoff while surfacing hard failures for manual intervention.
+- Adding an additional blog to an existing app folder under constant webhooks fails: moveExistingFiles (routes/setup/createFolder.js) gives up on the root blog's lock after ~5s and setup fails loudly. Retry or wait longer for the other blog's lock (or take all account-linked blogs' locks in a fixed order)
 - Bug: re-use iCloud resolve case-conflicts function (maybe move into sync?) to ensure blogs with case-sensitive file conflicts are properly initialized on Dropbox
 - Fix bug with Client.write which does not propogate sync errors... to demonstrate this, revoke dropbox token then try to enable local editing.
 - Bug: Switch uploads >150 MB to the Dropbox upload session API with chunked transfer and resumable checkpoints
@@ -353,7 +372,6 @@ Improve Dropbox sync
 - Bug: reconnecting with the same account and same permissions should not create a new folder for `full_access=true`
 - Bug: add a check for folder storage before doing mass upload
 - Bug: handle folder full error appropriately
-- Bug: add sync lock process to dropbox connection when writing folder contents
 - Bug: ensure the app permission access_token is destroyed when switching to full-folder and vice versa
 - Add testing for dropbox:
 - Modify setup flow:
@@ -376,7 +394,6 @@ Improve git sync
 - Make git client setup resumable / handle server restart
 - Fix bug with git client which let large pushes overwhelm the main server, leading to downtime
 - Handle error out of space on blot server during git client setup
-- Surface errors with permissions on Git repo directory when setting up Git client
 - Add sync check
 - Add support for LFS and tell [Jamie](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVMcpnxGHqnxJHNdbMBSrglzg)
 - Backdate existing commits (perhaps set file ctime using info from git log?) This would sidestep the frustration experienced by [Gavin](https://mail.google.com/mail/u/0/#inbox/1669a8e621f9ef37) when he imported an existing repository.
@@ -442,10 +459,6 @@ Improve iCloud sync
 Fix bug with placeholder files when switching clients which will lead to data loss because Blot will not transfer the contents of placeholder files across
 
 Fix bug with the paypal next bill dates are not syncing correctly for some users (e.g.slopserve)
-
-Fix bug with huge draft crashing the sync server
-- /a327ex/drafts/it_follows.txt
-- Chunk large drafts into multiple messages to avoid memory issues? 
 
 Fix bug with overdue subscription payment form not working
 - Possible bug introduced by recent stripe upgrade?
@@ -1324,8 +1337,11 @@ Self-hosting:
 ---
 
 Flaky specs (newest first; see "Flaky specs" in CLAUDE.md). Remove an entry when its fix merges.
+- 5 Nov 2026, `app/helper/tests/drain.js` "drain lets an in-flight request finish before resolving": `Expected true to be false.` (line 48), on a shell-and-docs-only PR (#2552, 1fb8999e0). Run: https://github.com/blotcms/blot/actions/runs/42108964359/job/127531835056. Timing: the request it waits on probably finished before drain's check (419 ms spec); investigate the ordering it assumes.
+- 5 Nov 2026, `app/helper/tests/drain.js` "drain lets an in-flight request finish before resolving": `Expected true to be false.` (line 48) on master 26fdffd73 (#2458) and again on 94c4327de (#2537), neither of which touches drain; passed on re-run. Runs: https://github.com/blotcms/blot/actions/runs/42022737821, https://github.com/blotcms/blot/actions/runs/42026054270/job/127240433491. Investigate: not yet read; check whether the assertion at line 48 depends on timers, so drain can resolve before the in-flight request ends on a slow runner.
+- 5 Nov 2026, `app/storage/folder/tests/cache.js` "storage/folder cache put counts towards the budget like any other entry" (line 522): it saw 2 evictions, not the count it expected, on an unrelated PR (#2540, store-perf-push, git store push pipelining only); passed on re-run. Run: https://github.com/blotcms/blot/actions/runs/42019107506. Investigate: whether eviction order or count depends on mtime/atime resolution or on a background sweep finishing, and make the spec wait for the put to settle or compare against the budget rather than an exact count.
 - 3 Nov 2026, `app/clients/google-drive/serviceAccount/tests/hotDocPoller.js` "google drive hotDocPoller spaces docs.get slots 250ms apart for a service account": `Expected 2 to equal 3.` (line 200) on master after an unrelated merge (#2460, shadow-mode logging only, cdf74d9e7). Run: https://github.com/blotcms/blot/actions/runs/41723548264/job/126222287641. Investigate: the spec counts docs.get calls made within a wall-clock window of 250 ms slots, so a slow runner fits one slot fewer. Use a fake clock (jasmine.clock) or count slots rather than calls within a fixed time.
-- 3 Nov 2026, `.github/workflows` unit-deploy-e2e (the swap-load check after `proxy/deploy/blue-green.sh` replaces blot-blue then blot-green): `total=103 bad=2` (`1 000`, `1 curl-err`, "2 requests did not get a 200") on an unrelated PR (#2449, production-proxy-local-dev, d4235bc73, which only changes local development). Run: https://github.com/blotcms/blot/actions/runs/41641275280/job/125935119037. Investigate: the known occasional dropped request during a unit swap (#2119, the old `tcp_migrate_req` note), which 74e7df179 started reporting apart from drain-timeout cuts; find which side resets the connection.
+- 3 Nov 2026, `.github/workflows` unit-deploy-e2e (the swap-load check after `proxy/deploy/blue-green.sh` replaces blot-blue then blot-green): `total=103 bad=2` (`1 000`, `1 curl-err`, "2 requests did not get a 200") on an unrelated PR (#2449, production-proxy-local-dev, d4235bc73, which only changes local development). Run: https://github.com/blotcms/blot/actions/runs/41641275280/job/125935119037. Again 5 Nov 2026, `total=101 bad=2` (same pair) on #2538 (store-perf-cache, 99ac8232a), passed on re-run: https://github.com/blotcms/blot/actions/runs/42022943268/job/127229976948. Investigate: the known occasional dropped request during a unit swap (#2119, the old `tcp_migrate_req` note), which 74e7df179 started reporting apart from drain-timeout cuts; find which side resets the connection.
 - 2 Nov 2026, `app/clients/git/store/tests/scratch.js` "git store reader scratch one pack with a chain of OFS_DELTA entries builds the deepest in chunks of at most 64 KB, and the files are gone by…": `Error: ENOTEMPTY, Directory not empty: '/tmp/git-store-spec-…'` in its setup or teardown, on an unrelated PR (screenshot-reencode-2257, eb479a959); passed on re-run. Run: https://github.com/blotcms/blot/actions/runs/41518327555/job/125527518301. Investigate: the spec removes its temp directory while something it started (a scratch file write or a child git process) is still creating files in it, so wait for that to finish or remove with retries (fs.rm maxRetries).
 - 2 Nov 2026, `app/models/template/tests/create.js` "template creates multiple templates in parallel": `Failed: No template: blog_…:<uuid>` on an unrelated PR (rename-egress, 13cf5b5ca). Run: https://github.com/blotcms/blot/actions/runs/41517695943/job/125525345596. Investigate: a template created in parallel isn't readable yet when the spec reads it back, so look for a create that resolves before its Redis writes (or the template index update) finish, or the spec reading through a cache.
 - 2 Nov 2026, `app/clients/icloud/tests/macserverDisconnect.js` "removeLimiterForBlogID drops waiting jobs, lets the running job finish and rejects the dropped ones": `TypeError: release is not a function` and `Error: This limiter has been stopped.` on an unrelated PR (node-b-oom-score, 9b930a320); passed on re-run. Run: https://github.com/blotcms/blot/actions/runs/41446374389/job/125280368697. Investigate: the running job's release callback is missing when the limiter is stopped mid-job, so check the order of stop() against the job's completion in the limiter (Bottleneck) and whether the spec relies on timing.

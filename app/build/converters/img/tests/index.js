@@ -1,5 +1,6 @@
 const img = require("../index");
 const fs = require("fs-extra");
+const folder = require("storage/folder");
 const exif = require("../exif");
 const path = require("path");
 const hash = require("helper/hash");
@@ -9,10 +10,19 @@ const { promisify } = require("util");
 describe("img converter", function () {
   global.test.blog();
 
+  // Resolves to every argument of the read callback: [err, html, stat, extras]
+  function readAll(blog, path) {
+    return new Promise(function (resolve) {
+      img.read(blog, path, function () {
+        resolve(Array.from(arguments));
+      });
+    });
+  }
+
   const tests = fs.readdirSync(__dirname).filter((i) => img.is(i));
 
   tests.forEach((name) => {
-    it("converts img with " + name, function (done) {
+    it("converts img with " + name, async function () {
       const test = this;
       const relativePath = "/" + name;
       const expected = fs.readFileSync(
@@ -20,108 +30,98 @@ describe("img converter", function () {
         "utf8"
       );
 
-      fs.copySync(__dirname + relativePath, test.blogDirectory + relativePath);
+      await folder.writeFrom(test.blog.id, relativePath, __dirname + relativePath);
 
-      img.read(test.blog, relativePath, function (err, result) {
-        if (err) return done.fail(err);
-        expect(result).toEqual(expected);
-        done();
-      });
+      const [err, result] = await readAll(test.blog, relativePath);
+      if (err) throw err;
+      expect(result).toEqual(expected);
     });
   });
 
-  it("extracts EXIF data by default", function (done) {
+  it("extracts EXIF data by default", async function () {
     const test = this;
     const path = "/exif.jpg";
 
-    fs.copySync(__dirname + path, test.blogDirectory + path);
+    await folder.writeFrom(test.blog.id, path, __dirname + path);
 
-    img.read(test.blog, path, function (err, html, stat, extras) {
-      if (err) return done.fail(err);
-      expect(extras).toEqual({
-        exif: {
-          Make: "SONY",
-          Model: "ILCE-7M2",
-          ExposureTime: "1/250",
-          FNumber: 4.5,
-          ISO: 100,
-          Flash: "Off, Did not fire",
-          FocalLength: 55,
-          LensModel: "FE 55mm F1.8 ZA",
-        },
-      });
-      done();
+    const [err, html, stat, extras] = await readAll(test.blog, path);
+    if (err) throw err;
+    expect(extras).toEqual({
+      exif: {
+        Make: "SONY",
+        Model: "ILCE-7M2",
+        ExposureTime: "1/250",
+        FNumber: 4.5,
+        ISO: 100,
+        Flash: "Off, Did not fire",
+        FocalLength: 55,
+        LensModel: "FE 55mm F1.8 ZA",
+      },
     });
   });
 
-  it("omits EXIF data when disabled", function (done) {
+  it("omits EXIF data when disabled", async function () {
     const test = this;
     const path = "/exif.jpg";
 
-    fs.copySync(__dirname + path, test.blogDirectory + path);
+    await folder.writeFrom(test.blog.id, path, __dirname + path);
     test.blog.imageExif = "off";
 
-    img.read(test.blog, path, function (err, html, stat, extras) {
-      if (err) return done.fail(err);
-      expect(extras).toBeUndefined();
-      done();
-    });
+    const [err, html, stat, extras] = await readAll(test.blog, path);
+    if (err) throw err;
+    expect(extras).toBeUndefined();
   });
 
-  it("returns sanitized EXIF data in basic mode", function (done) {
+  it("returns sanitized EXIF data in basic mode", async function () {
     const test = this;
     const path = "/gps.jpg";
 
-    fs.copySync(__dirname + path, test.blogDirectory + path);
+    await folder.writeFrom(test.blog.id, path, __dirname + path);
 
     test.blog.imageExif = "basic";
 
-    img.read(test.blog, path, function (err, html, stat, extras) {
-      if (err) return done.fail(err);
+    const [err, html, stat, extras] = await readAll(test.blog, path);
+    if (err) throw err;
 
-      expect(extras).toEqual({
-        exif: {
-          ImageDescription: "                               ",
-          Make: "NIKON",
-          Model: "COOLPIX P6000",
-          ExposureTime: "1/178",
-          FNumber: 4.5,
-          ISO: 64,
-          FocalLength: 6,
-          Flash: "Off, Did not fire",
-        },
-      });
-      done();
+    expect(extras).toEqual({
+      exif: {
+        ImageDescription: "                               ",
+        Make: "NIKON",
+        Model: "COOLPIX P6000",
+        ExposureTime: "1/178",
+        FNumber: 4.5,
+        ISO: 64,
+        FocalLength: 6,
+        Flash: "Off, Did not fire",
+      },
     });
   });
 
-  it("returns full EXIF data in full mode", function (done) {
+  it("returns full EXIF data in full mode", async function () {
     const test = this;
     const path = "/gps.jpg";
 
-    fs.copySync(__dirname + path, test.blogDirectory + path);
+    await folder.writeFrom(test.blog.id, path, __dirname + path);
     test.blog.imageExif = "full";
 
-    img.read(test.blog, path, function (err, html, stat, extras) {
-      if (err) return done.fail(err);
+    const [err, html, stat, extras] = await readAll(test.blog, path);
+    if (err) throw err;
 
-      expect(extras).toEqual({
-        exif: {
-          ImageDescription: "                               ",
-          Make: "NIKON",
-          Model: "COOLPIX P6000",
-          ExposureTime: "1/178",
-          FNumber: 4.5,
-          ISO: 64,
-          Flash: "Off, Did not fire",
-          FocalLength: 6,
-          GPSLatitude: `43 deg 28' 1.76" N`,
-          GPSLongitude: `11 deg 53' 7.42" E`,
-          GPSPosition: `43 deg 28' 1.76" N, 11 deg 53' 7.42" E`,
-          Flash: "Off, Did not fire",
-        },
-      });
-      done();
+    expect(extras).toEqual({
+      exif: {
+        ImageDescription: "                               ",
+        Make: "NIKON",
+        Model: "COOLPIX P6000",
+        ExposureTime: "1/178",
+        FNumber: 4.5,
+        ISO: 64,
+        Flash: "Off, Did not fire",
+        FocalLength: 6,
+        GPSLatitude: `43 deg 28' 1.76" N`,
+        GPSLongitude: `11 deg 53' 7.42" E`,
+        GPSPosition: `43 deg 28' 1.76" N, 11 deg 53' 7.42" E`,
+        Flash: "Off, Did not fire",
+      },
     });
   });
 
@@ -130,7 +130,7 @@ describe("img converter", function () {
     const relativePath = "/land.avif";
     const read = promisify(img.read);
 
-    fs.copySync(__dirname + relativePath, test.blogDirectory + relativePath);
+    await folder.writeFrom(test.blog.id, relativePath, __dirname + relativePath);
 
     const firstResult = await read(test.blog, relativePath);
 
@@ -156,7 +156,7 @@ describe("img converter", function () {
     const secondPath = "/land-copy.avif";
     const read = promisify(img.read);
 
-    fs.copySync(__dirname + firstPath, test.blogDirectory + firstPath);
+    await folder.writeFrom(test.blog.id, firstPath, __dirname + firstPath);
 
     await read(test.blog, firstPath);
 
@@ -170,7 +170,7 @@ describe("img converter", function () {
 
     await assets.remove(test.blog.id, fallbackAssetPath);
 
-    fs.copySync(__dirname + firstPath, test.blogDirectory + secondPath);
+    await folder.writeFrom(test.blog.id, secondPath, __dirname + firstPath);
 
     const result = await read(test.blog, secondPath);
 

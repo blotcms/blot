@@ -127,6 +127,17 @@ describe("sandbox pandoc job", function () {
       expect(alerts.jobFailed.calls.count()).toEqual(1);
     });
 
+    it("rejects with pandoc's error when the broker kills a worker for taking too long", async function () {
+      spyOn(sandbox, "run").and.callFake(function () {
+        const err = new Error("sandbox: timeout");
+        err.code = "SANDBOX_TIMEOUT";
+        return Promise.reject(err);
+      });
+      const err = await rejection(pandoc({ from: "docx" }, Buffer.from("")));
+      expect(err.message).toMatch(/^Pandoc exited with code null \(SIGKILL\) \(timed out\)/);
+      expect(err.code).toBeUndefined();
+    });
+
     it("refuses media names that leave the directory", async function () {
       const run = spyOn(sandbox, "run");
       for (const name of ["../x.png", "/x.png", "a//b.png", "a/./b.png", ""]) {

@@ -1,21 +1,24 @@
 // Rebuilds a blog's folder index (models/file) from a full listing of its
-// folder in the storage bucket, {blogID}/folder/. Only for blogs with a copy
-// in S3 (mirrored and backfilled, or on S3): for any other blog the listing
-// is empty and the index would be emptied.
+// folder in the storage bucket, {blogID}/folder/. This is the check of the
+// index against S3, and its repair: S3 is the folder, and the index is
+// derived from it (the backend writes to S3 first and to the index after, so
+// a crash leaves the index behind S3, never ahead).
 //
-// For a blog on S3 (config.folder_primary, #2258 Phase D), the index is what
-// every read goes by, and --apply empties it before refilling it. Reads which
-// come in meanwhile (visitors take no lock) see a partial or empty folder.
-// Run it at a quiet time, or roll the blog back to
-// disk first (scripts/storage/backfill-folder.js, then unset its flag).
-//
-//   node scripts/storage/rebuild-file-index.js <blogID> [--apply] [--no-hash]
+//   node scripts/storage/rebuild-file-index.js <blogID> [--apply --live] [--no-hash]
 //
 // Without --apply it only lists the bucket and reports what the index would
-// hold, next to what it holds now. With --apply it replaces the index, under
-// the blog's sync lock so no sync writes while it runs. Files are downloaded
-// to compute their SHA-1 unless --no-hash; without hashes, ensureLocal still
-// works but anything which compares hashes sees every file as changed.
+// hold, next to what it holds now.
+//
+// With --apply it replaces the index, under the blog's sync lock so no sync
+// writes while it runs. The listing (and the hashing) is done first, so the
+// index is only empty or partial while the records are written to Redis: a
+// few seconds for a large blog. Reads take no lock, so a visitor or a build
+// in that window sees part of the folder. Hence --live as well, to say that
+// is understood; --apply alone refuses.
+//
+// Files are downloaded to compute their SHA-1 unless --no-hash; without
+// hashes, ensureLocal still works but anything which compares hashes sees
+// every file as changed.
 //
 // A file's modified time becomes the time its object was written, so a time
 // kept by a move into the folder is lost. S3 can hold a file "a" beside
@@ -32,15 +35,16 @@ const { promisify } = require("util");
 function usage(message) {
   if (message) console.error(message + "\n");
 
-  console.error("Usage: node scripts/storage/rebuild-file-index.js <blogID> [--apply] [--no-hash]");
+  console.error("Usage: node scripts/storage/rebuild-file-index.js <blogID> [--apply --live] [--no-hash]");
   process.exit(2);
 }
 
 function parse(argv) {
-  const options = { apply: false, hash: true };
+  const options = { apply: false, live: false, hash: true };
 
   for (const arg of argv) {
     if (arg === "--apply") options.apply = true;
+    else if (arg === "--live") options.live = true;
     else if (arg === "--no-hash") options.hash = false;
     else if (arg.startsWith("--")) usage("Unknown argument " + arg);
     else if (options.blogID) usage("Only one blogID");
@@ -48,6 +52,9 @@ function parse(argv) {
   }
 
   if (!options.blogID) usage();
+  if (options.apply && !options.live) {
+    usage("--apply empties the index while it is rewritten, and reads in that window see part of the folder. Pass --live too (see the header).");
+  }
 
   return options;
 }
@@ -104,6 +111,24 @@ function report(label, counts) {
   }
 }
 
+// Replaces a blog's index with one built from S3, under its sync lock. The
+// whole listing is read (and hashed) before the index is touched, so the
+// window in which reads see a partial index is only the Redis writes.
+// Resolves to what models/file's rebuild counted. options: { hash }
+async function rebuild(blogID, options) {
+  options = options || {};
+
+  return hold(blogID, async function () {
+    const records = [];
+
+    for await (const record of backend.indexRecords(blogID, { hash: options.hash !== false })) {
+      records.push(record);
+    }
+
+    return File.rebuild(blogID, records);
+  });
+}
+
 async function main() {
   const options = parse(process.argv.slice(2));
   const blogID = options.blogID;
@@ -119,23 +144,23 @@ async function main() {
   if (!options.apply) {
     // No need to hash just to count
     report("From S3:", await count(blogID, { hash: false }));
-    console.log("Dry run: pass --apply to rebuild the index");
+    console.log("Dry run: pass --apply --live to rebuild the index");
     return;
   }
 
-  const result = await hold(blogID, function () {
-    return backend.rebuildIndex(blogID, { hash: options.hash });
-  });
-
-  report("Rebuilt:", result);
+  report("Rebuilt:", await rebuild(blogID, options));
 }
 
-main().then(
-  function () {
-    process.exit(0);
-  },
-  function (err) {
-    console.error(err);
-    process.exit(1);
-  }
-);
+if (require.main === module) {
+  main().then(
+    function () {
+      process.exit(0);
+    },
+    function (err) {
+      console.error(err);
+      process.exit(1);
+    }
+  );
+}
+
+module.exports = { rebuild, count };

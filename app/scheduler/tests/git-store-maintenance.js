@@ -50,24 +50,15 @@ describe("scheduler git-store-maintenance", function () {
     expect(gitStoreMaintenance.job).toHaveBeenCalledTimes(1);
   });
 
-  it("does nothing without shadow mode or a bucket", async function () {
-    const saved = config.git_store.shadow;
+  it("does nothing without a bucket", async function () {
     const sendEmail = jasmine.createSpy("sendEmail");
+    const bucket = config.storage.bucket;
 
     try {
-      config.git_store.shadow = "";
-      expect((await gitStoreMaintenance.run({ sendEmail })).skipped).toBe(true);
-
-      config.git_store.shadow = "all";
-      const bucket = config.storage.bucket;
       config.storage.bucket = "";
-      try {
-        expect((await gitStoreMaintenance.run({ sendEmail })).skipped).toBe(true);
-      } finally {
-        config.storage.bucket = bucket;
-      }
+      expect((await gitStoreMaintenance.run({ sendEmail })).skipped).toBe(true);
     } finally {
-      config.git_store.shadow = saved;
+      config.storage.bucket = bucket;
     }
 
     expect(sendEmail).not.toHaveBeenCalled();
@@ -88,5 +79,25 @@ describe("scheduler git-store-maintenance", function () {
     expect(view.findings.length).toBe(3);
     expect(view.hasMissing).toBe(true);
     expect(view.hasErrors).toBe(false);
+    expect(view.deepBlogs).toBe("none");
+  });
+
+  it("names the deep sample, and tells sweep errors and leftovers from other errors", function () {
+    const view = gitStoreMaintenance.view({
+      blogs: 4,
+      deepChecked: 2,
+      deepBlogs: ["blog_a", "blog_b"],
+      findings: [
+        { blog: "blog_a", check: "sweep", kind: "error", detail: "listing failed" },
+        { blog: "blog_gone", check: "orphan", kind: "orphan", detail: "deleted 3 objects left behind" },
+        { blog: "-", check: "scratch", kind: "error", detail: "EACCES" },
+      ],
+    });
+
+    expect(view.summary).toBe("1 sweep error, 1 error, 1 leftover in 3 blogs");
+    expect(view.deepBlogs).toBe("blog_a, blog_b");
+    expect(view.hasSweepErrors).toBe(true);
+    expect(view.hasErrors).toBe(true);
+    expect(view.hasOrphans).toBe(true);
   });
 });

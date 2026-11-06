@@ -8,8 +8,17 @@ describe("move ", function () {
   const fs = require("fs-extra");
   const { join } = require("path");
 
-  // Set up a test blog before each test
-  global.test.blog();
+  const os = require("os");
+
+  // The helper moves things inside a directory on disk, so give it a
+  // temporary directory of its own
+  beforeEach(async function () {
+    this.directory = await fs.mkdtemp(join(os.tmpdir(), "blot-move-"));
+  });
+
+  afterEach(async function () {
+    await fs.remove(this.directory);
+  });
 
   it("moves a file", async function () {
     await this.check([{ from: "/foo.txt", to: "/bar.txt" }]);
@@ -166,7 +175,7 @@ describe("move ", function () {
 
   beforeEach(function () {
     this.check = async (items, { folders } = {}) => {
-      const base = this.blogDirectory;
+      const base = this.directory;
       const results = {};
       const initialContents = {};
 

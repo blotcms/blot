@@ -210,15 +210,13 @@ describe("dropbox delta relative path normalization", function () {
 
 describe("dropbox delta case-only renames", function () {
   var Delta = require("../delta");
-  var fs = require("fs-extra");
   var Path = require("path");
-  var blog_folder_dir = require("config").blog_folder_dir;
+  var folder = require("storage/folder");
 
   var blogID = "blog_deltacaseonly" + Date.now();
-  var blogDirectory = Path.join(blog_folder_dir, blogID);
 
   afterEach(function () {
-    return fs.remove(blogDirectory);
+    return folder.removeAll(blogID);
   });
 
   // The Dropbox folder holds only what is listed in dropboxEntries, as
@@ -248,7 +246,7 @@ describe("dropbox delta case-only renames", function () {
   }
 
   it("deletes the old name of a file renamed only in case", async function () {
-    await fs.outputFile(Path.join(blogDirectory, "Photo.txt"), "x");
+    await folder.write(blogID, "/Photo.txt", "x");
 
     var entries = await run([
       {
@@ -266,8 +264,8 @@ describe("dropbox delta case-only renames", function () {
   });
 
   it("deletes everything inside a folder renamed only in case", async function () {
-    await fs.outputFile(Path.join(blogDirectory, "Sub", "a.txt"), "x");
-    await fs.outputFile(Path.join(blogDirectory, "Sub", "Inner", "b.txt"), "x");
+    await folder.write(blogID, "/Sub/a.txt", "x");
+    await folder.write(blogID, "/Sub/Inner/b.txt", "x");
 
     var entries = await run([
       {
@@ -290,7 +288,7 @@ describe("dropbox delta case-only renames", function () {
   });
 
   it("finds a renamed file in a parent folder spelled differently", async function () {
-    await fs.outputFile(Path.join(blogDirectory, "Sub", "Photo.txt"), "x");
+    await folder.write(blogID, "/Sub/Photo.txt", "x");
 
     var entries = await run([
       {
@@ -308,7 +306,7 @@ describe("dropbox delta case-only renames", function () {
   });
 
   it("injects nothing when the name is the same", async function () {
-    await fs.outputFile(Path.join(blogDirectory, "photo.txt"), "x");
+    await folder.write(blogID, "/photo.txt", "x");
 
     var entries = await run([
       {

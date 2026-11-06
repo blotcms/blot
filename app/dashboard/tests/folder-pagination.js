@@ -92,15 +92,16 @@ describe("folder (pagination and sorting)", function () {
     });
 
     it("still lists a folder when an entry disappears mid-read", async function () {
-      // A dangling symlink makes fs.stat throw ENOENT, the same failure mode
-      // as a file removed between readdir and stat while a big folder syncs.
-      // Previously this made the whole folder render as empty.
-      const fs = require("fs-extra");
-      const { join } = require("path");
-      await fs.symlink(
-        join(this.blogDirectory, "does-not-exist.txt"),
-        join(this.blogDirectory, "dangling.txt")
-      );
+      // An entry which is listed but gone by the time it is stat'd is the
+      // failure mode of a file removed between list and stat while a big
+      // folder syncs. Previously this made the whole folder render as empty.
+      const storage = require("storage/folder");
+      await this.write({ path: "dangling.txt", content: "dangling" });
+      const stat = storage.stat;
+      spyOn(storage, "stat").and.callFake((blogID, path, ...rest) => {
+        if (path === "/dangling.txt") throw new storage.NotFoundError();
+        return stat(blogID, path, ...rest);
+      });
 
       const $ = await this.parse(`/sites/${this.blog.handle}`);
 
@@ -112,10 +113,8 @@ describe("folder (pagination and sorting)", function () {
       // page one; it is listed but gone by the time it is stat'd (or has
       // become a symlink). The page should still show a full pageSize of real
       // files by pulling the next name in.
-      const fs = require("fs-extra");
-      const { join } = require("path");
       const storage = require("storage/folder");
-      await fs.writeFile(join(this.blogDirectory, "p00.txt"), "p00");
+      await this.write({ path: "p00.txt", content: "p00" });
       const stat = storage.stat;
       spyOn(storage, "stat").and.callFake((blogID, path, ...rest) => {
         if (path === "/p00.txt") throw new storage.NotFoundError();
@@ -173,17 +172,28 @@ describe("folder (pagination and sorting)", function () {
 
     beforeEach(async function () {
       const fs = require("fs-extra");
+      const os = require("os");
       const { join } = require("path");
+      const folder = require("storage/folder");
 
       // Distinct sizes and modified times so every sort has one right answer.
-      await this.write({ path: "small.txt", content: "x".repeat(10) });
-      await this.write({ path: "large.txt", content: "x".repeat(4000) });
-      await this.write({ path: "medium.txt", content: "x".repeat(500) });
-
-      const t = (iso) => new Date(iso);
-      await fs.utimes(join(this.blogDirectory, "small.txt"), t("2021-01-01"), t("2021-01-01"));
-      await fs.utimes(join(this.blogDirectory, "medium.txt"), t("2022-06-01"), t("2022-06-01"));
-      await fs.utimes(join(this.blogDirectory, "large.txt"), t("2023-12-01"), t("2023-12-01"));
+      // A file's modified time is given when it is copied in.
+      const dir = await fs.mkdtemp(join(os.tmpdir(), "blot-folder-sort-"));
+      try {
+        const files = [
+          ["small.txt", "x".repeat(10), "2021-01-01"],
+          ["large.txt", "x".repeat(4000), "2023-12-01"],
+          ["medium.txt", "x".repeat(500), "2022-06-01"],
+        ];
+        for (const [name, content, iso] of files) {
+          await fs.writeFile(join(dir, name), content);
+          await folder.writeFrom(this.blog.id, "/" + name, join(dir, name), {
+            modified: new Date(iso).getTime(),
+          });
+        }
+      } finally {
+        await fs.remove(dir);
+      }
     });
 
     it("orders by size, largest first", async function () {

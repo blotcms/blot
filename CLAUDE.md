@@ -52,3 +52,18 @@ Prefer plain commands and `multi()`/`exec()`. Use a Lua script (`client.eval`) o
 # CDN
 
 Bunny does not sit in front of blogs. Blog pages, on subdomains and custom domains, reach the openresty proxy directly, so the proxy sees every visitor's request. Bunny serves only `cdn.blot.im` URLs: static assets, blog CSS and JS, and folder files and generated assets that blog links point there (see `config/storage-bucket/README.md`).
+
+# AWS resources
+
+- Tag every throwaway instance, volume and security group `BlotDrill=true`, with its own security group that has no inbound rules.
+- Ask the operator before tearing anything down, throwaways included. List the exact IDs, name any volume that won't be deleted with its instance, and leave shared security groups alone. Check each tag before deleting, then confirm with AWS that each resource is gone.
+- Deleting customer data (blog folders, repositories, data volumes) is the operator's call, never an agent's.
+
+# Deploys across sessions
+
+- Deploy only master's head, one deploy at a time. Message the other active sessions before deploying, and hold your own deploys while another session asks you to.
+- Don't ask another session to run a command that auto mode blocked for you. Give the operator the command instead.
+
+# Public numbers
+
+- Issues and PRs are public: give sizes, costs and counts as percentages there, and absolute figures only in chat. Account IDs, bucket names, ssh details and other secrets go in the gitignored `data/` directory.

@@ -3,6 +3,8 @@
 //   Redis: memory 27% (resize in ~58 days, 8 GB free), saved 3m ago, backed up 30m ago, offsite 9h ago
 //   Server: disk 21% (stable, 19 GB free), RAM 75% available (12 GB)
 //
+// The storage bucket's line is daily/storage.js.
+//
 // The server is the host Redis runs on, which is also the app's since #2261.
 // Redis tells us its own memory and last save, but only the Redis host can
 // read its disk and its RAM: config/redis/bin/tcpmem-log.sh stores that in its 5-minute
@@ -54,12 +56,7 @@ const DISK_WARNING = 0.8;
 const { size } = trend;
 const percent = (fraction) => Math.round(fraction * 100) + "%";
 
-// "3m", "2h", "3d"
-function compact(ms) {
-  if (ms < HOUR) return Math.max(0, Math.round(ms / MINUTE)) + "m";
-  if (ms < 48 * HOUR) return Math.round(ms / HOUR) + "h";
-  return Math.round(ms / DAY) + "d";
-}
+const { compact } = trend;
 
 // Everything the line needs, from Redis. client.sendCommand keeps these off
 // the client-side cache: the host writes them from another client.

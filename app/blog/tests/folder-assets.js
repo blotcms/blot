@@ -105,17 +105,40 @@ describe("build-time baked folder links", function () {
       content: "Link: /cased\n\n![Pic](/Photo.JPG)",
     });
 
-    expect(await this.text("/cased")).not.toContain("/folder/v-");
+    const before = await this.text("/cased");
+
+    // on the CDN while it's missing, as written
+    expect(before).toContain(
+      `src="${config.cdn.origin}/folder/v-pending/${this.blog.id}/Photo.JPG"`
+    );
+    expect(before).not.toContain('src="/Photo.JPG"');
 
     await this.write({ path: "/photo.jpg", content: "pic one" });
 
     const after = await this.text("/cased");
 
     expect(versionOf(after, "photo\\.jpg")).toBeTruthy();
+    expect(after).not.toContain("v-pending");
+  });
 
-    const stored = await (await this.get("/cased?json=true")).json();
+  it("bakes the arriving images of a partial sync, keeping the rest pending", async function () {
+    await this.template({ "entry.html": "{{{entry.html}}}" });
+    await this.write({
+      path: "/gallery.txt",
+      content:
+        'Link: /gallery\n\n<img src="/one.jpg" loading="lazy"> <img src="/two.jpg" loading="lazy"> <img src="/three.jpg" loading="lazy">',
+    });
 
-    expect(stored.entry.html).toContain("/folder/v-");
+    expect((await this.text("/gallery")).match(/v-pending/g).length).toEqual(3);
+
+    await this.write({ path: "/two.jpg", content: "two" });
+
+    const after = await this.text("/gallery");
+
+    expect(versionOf(after, "two\\.jpg")).toBeTruthy();
+    expect(after).toContain(`/folder/v-pending/${this.blog.id}/one.jpg"`);
+    expect(after).toContain(`/folder/v-pending/${this.blog.id}/three.jpg"`);
+    expect(after.match(/loading="lazy"/g).length).toEqual(3);
   });
 
   it("bakes a poster linked by its percent-encoded name once the file arrives", async function () {
@@ -125,17 +148,19 @@ describe("build-time baked folder links", function () {
       content: 'Link: /encoded\n\n<video poster="/my%20pic.jpg"></video>',
     });
 
-    expect(await this.text("/encoded")).not.toContain("/folder/v-");
+    expect(await this.text("/encoded")).toContain(
+      `/folder/v-pending/${this.blog.id}/my%20pic.jpg"`
+    );
 
     await this.write({ path: "/my pic.jpg", content: "pic one" });
 
     const stored = await (await this.get("/encoded?json=true")).json();
 
-    expect(stored.entry.html).toContain("/folder/v-");
-    expect(stored.entry.html).toContain("/my%20pic.jpg");
+    expect(stored.entry.html).toMatch(/\/folder\/v-[a-f0-9]{8}\/[^"]*\/my%20pic\.jpg/);
+    expect(stored.entry.html).not.toContain("v-pending");
   });
 
-  it("falls back to the plain path when a baked file is deleted", async function () {
+  it("falls back to a pending CDN URL when a baked image is deleted", async function () {
     await this.template({ "entry.html": "{{{entry.html}}}" });
     await this.write({ path: "/photo.jpg", content: "photo one" });
     await this.write({
@@ -155,9 +180,11 @@ describe("build-time baked folder links", function () {
 
     const after = await this.text("/pages/a");
 
-    expect(after).not.toContain("/folder/v-");
+    expect(versionOf(after, "photo\\.jpg")).toBeFalsy();
     expect(after).not.toContain(BLOT_CDN_TOKEN);
-    expect(after).toContain('src="/photo.jpg"');
+    expect(after).toContain(
+      `src="${config.cdn.origin}/folder/v-pending/${this.blog.id}/photo.jpg"`
+    );
 
     const json = await (await this.get("/pages/a?json=true")).json();
 
@@ -175,5 +202,17 @@ describe("build-time baked folder links", function () {
 
     expect(feed).not.toContain(BLOT_CDN_TOKEN);
     expect(feed).toContain(`${config.cdn.origin}/folder/v-`);
+  });
+
+  it("puts a missing image on the CDN in RSS feeds too", async function () {
+    await this.template({
+      "feed.rss": "{{#recent_entries}}{{{body}}}{{/recent_entries}}",
+    });
+    await this.write({ path: "/post.txt", content: "![Image](late.jpg)" });
+
+    const feed = await this.text("/feed.rss");
+
+    expect(feed).not.toContain(BLOT_CDN_TOKEN);
+    expect(feed).toContain(`${config.cdn.origin}/folder/v-pending/${this.blog.id}/late.jpg`);
   });
 });

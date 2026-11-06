@@ -7,8 +7,8 @@ describe("dropbox client", function () {
     var webhook = this.webhook;
     var path = this.fake.path(".txt");
     var contents = this.fake.file();
-    var blogDirectory = this.blogDirectory;
-    var fs = require("fs-extra");
+    var blog = this.blog;
+    var blogFolder = require("storage/folder");
     var afterSync = this.afterSync;
     var otherContents;
     var folder = this.folder;
@@ -31,10 +31,10 @@ describe("dropbox client", function () {
                   afterSync(function (err) {
                     if (err) return done.fail(err);
 
-                    expect(
-                      fs.existsSync(blogDirectory + path)
-                    ).toEqual(false);
-                    done();
+                    blogFolder.exists(blog.id, path).then(function (exists) {
+                      expect(exists).toEqual(false);
+                      done();
+                    }, done.fail);
                   });
                 });
               })
@@ -54,8 +54,8 @@ describe("dropbox client", function () {
     var webhook = this.webhook;
     var path = this.fake.path(".txt");
     var contents = this.fake.file();
-    var blogDirectory = this.blogDirectory;
-    var fs = require("fs-extra");
+    var blog = this.blog;
+    var blogFolder = require("storage/folder");
     var afterSync = this.afterSync;
     var otherContents;
 
@@ -68,18 +68,13 @@ describe("dropbox client", function () {
           afterSync(function (err) {
             if (err) return done.fail(err);
 
-            try {
-              otherContents = fs.readFileSync(
-                blogDirectory + path,
-                "utf-8"
-              );
-            } catch (e) {
-              return done.fail(e);
-            }
+            blogFolder.read(blog.id, path).then(function (buffer) {
+              otherContents = buffer.toString("utf-8");
 
-            expect(otherContents).toEqual(contents);
+              expect(otherContents).toEqual(contents);
 
-            done();
+              done();
+            }, done.fail);
           });
         });
       })

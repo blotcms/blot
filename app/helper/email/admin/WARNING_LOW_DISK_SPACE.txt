@@ -6,10 +6,4 @@ A disk attached to Blot's server is running low on space:
 - **{{label}}** {{available_human}} available, {{used_human}} used ({{used_percent}}%) {{mount}}
 {{/disks}}
 
-Resolve this now. For the data disk (/var/www/blot/data), grow its volume online from a checkout on your Mac; no freeze, nothing restarts (config/host/data-volume/README.md):
-
-```
-config/host/data-volume/resize.sh grow <new-size-GiB>
-```
-
-For any other disk, [resize its volume in the AWS console](https://us-west-2.console.aws.amazon.com/ec2/home?region=us-west-2#Volumes:), then ssh into the server and [expand the file system](https://docs.aws.amazon.com/ebs/latest/userguide/recognize-expanded-volume-linux.html).
+Resolve this now. [Resize its volume in the AWS console](https://us-west-2.console.aws.amazon.com/ec2/home?region=us-west-2#Volumes:), then ssh into the server and [expand the file system](https://docs.aws.amazon.com/ebs/latest/userguide/recognize-expanded-volume-linux.html).

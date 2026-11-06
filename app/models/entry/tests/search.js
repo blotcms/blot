@@ -43,11 +43,11 @@ describe("entry.search", function () {
   });
 
   it("matches the decoded file name of a baked folder link, not its prefix", async function (done) {
-    const fs = require("fs-extra");
+    const folder = require("storage/folder");
     const path = "/post.txt";
 
-    fs.outputFileSync(this.blogDirectory + "/Café pic.jpg", "image");
-    fs.outputFileSync(this.blogDirectory + "/l'été.jpg", "image");
+    await folder.write(this.blog.id, "/Café pic.jpg", "image");
+    await folder.write(this.blog.id, "/l'été.jpg", "image");
     const entry = await this.set(path, "![](Café%20pic.jpg) ![](l'%C3%A9t%C3%A9.jpg)");
 
     expect(entry.html).toContain("Caf%C3%A9%20pic.jpg");

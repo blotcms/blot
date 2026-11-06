@@ -1,6 +1,6 @@
 var debug = require("debug")("blot:build");
 var fs = require("fs");
-var bplist = require("./bplist");
+var bplist = require("bplist-parser");
 var ensure = require("helper/ensure");
 var titlify = require("build/prepare/titlify");
 var callbackify = require("util").callbackify;
@@ -79,17 +79,24 @@ function extractFromXML(localPath, callback) {
 function extractFromBPlist(localPath, callback) {
   var url;
 
-  bplist.parseFile(localPath, function (err, obj) {
-    if (err) return callback(err);
+  // bplist-parser's parseFile returns a promise that rejects on a bad file,
+  // even when given a callback, so use the promise. The callback runs on the
+  // next tick, outside the promise chain, so an error it throws isn't
+  // swallowed as a rejection.
+  bplist.parseFile(localPath).then(
+    function (obj) {
+      try {
+        url = obj[0].URL;
+      } catch (e) {
+        return process.nextTick(callback, e);
+      }
 
-    try {
-      url = obj[0].URL;
-    } catch (e) {
-      return callback(e);
+      process.nextTick(callback, null, url);
+    },
+    function (err) {
+      process.nextTick(callback, err);
     }
-
-    return callback(null, url);
-  });
+  );
 }
 
 function read(blog, path, callback) {

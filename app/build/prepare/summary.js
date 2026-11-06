@@ -16,7 +16,8 @@ function normalize(str) {
 function summary($, title) {
   var summary;
 
-  debug($.html());
+  // Serializing the document costs as much as parsing it: only when logging
+  if (debug.enabled) debug($.html());
 
   // We ignore the text content of
   // these tags for the summary

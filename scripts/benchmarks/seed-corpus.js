@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 "use strict";
 
-// Best-effort: make sure --out-dir has redis-dump.rdb/blogs.tar.gz/
+// Best-effort: make sure --out-dir has redis-dump.rdb/minio.tar.gz/
 // manifest.json. The GitHub Actions cache (benchmark-corpus-v*)
 // is the primary store; if it missed entirely (first run ever, or 7+ idle
 // days evicted it), fall back to the newest `benchmark-corpus-artifacts`
@@ -20,7 +20,7 @@ const { spawnSync } = require("child_process");
 
 const REQUIRED_FILES = [
   "redis-dump.rdb",
-  "blogs.tar.gz",
+  "minio.tar.gz",
   "manifest.json",
 ];
 

@@ -1,7 +1,7 @@
 describe("date integration tests", function () {
     const sync = require("sync");
     const blogServer = require("blog");
-    const fs = require("fs-extra");
+    const storage = require("storage/folder");
     const Blog = require("models/blog");
     const Template = require("models/template");
     const fetch = require("node-fetch");
@@ -83,10 +83,13 @@ describe("date integration tests", function () {
       const contents = `Date: ${date}\n\n# Hello, world\n\nThis is a post.`;
       sync(test.blog.id, function (err, folder, done) {
         if (err) return callback(err);
-        fs.outputFileSync(test.blogDirectory + path, contents, "utf-8");
-        folder.update(path, function (err) {
-          if (err) return callback(err);
-          done(null, callback);
+        storage.write(test.blog.id, path, contents).then(function () {
+          folder.update(path, function (err) {
+            if (err) return callback(err);
+            done(null, callback);
+          });
+        }, function (err) {
+          done(err, callback);
         });
       });
     }

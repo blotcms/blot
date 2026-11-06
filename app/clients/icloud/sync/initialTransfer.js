@@ -38,7 +38,7 @@ module.exports = async function initialTransfer(blogID, options = {}) {
     // this lets the user set up a folder which contains files and
     // which will be merged with the Blot folder.
     folder.status("Transferring files to iCloud");
-    await syncToiCloud(blogID, folder.status, folder.update, { skipDeletions: true });
+    await syncToiCloud(blogID, folder.status, folder.update, { skipDeletions: true, skipEmptyFiles: true });
 
     // we run the sync again to verify the transfer succeeded
     // it's important to abort on error here so we can surface the error to the user
@@ -46,7 +46,7 @@ module.exports = async function initialTransfer(blogID, options = {}) {
     folder.status("Verifying transfer");
     for (let attempt = 0; ; attempt++) {
       try {
-        await syncToiCloud(blogID, folder.status, folder.update, { skipDeletions: true, abortOnError: true });
+        await syncToiCloud(blogID, folder.status, folder.update, { skipDeletions: true, abortOnError: true, skipEmptyFiles: true });
         break;
       } catch (error) {
         if (attempt >= VERIFY_EXTRA_ATTEMPTS) throw error;

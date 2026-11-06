@@ -9,7 +9,6 @@ describe("git client authenticate (malformed paths with credentials)", function 
     once: true,
   });
 
-  var fs = require("fs-extra");
   var http = require("http");
   var url = require("url");
 
@@ -20,7 +19,6 @@ describe("git client authenticate (malformed paths with credentials)", function 
     repository,
     withCredentials,
   ) {
-    var repo = require("clients/git/repo");
     var repo = require("clients/git/repo");
     var handleSpy = spyOn(repo, "handleSmartHttp").and.callThrough();
     var requestOptions = {
@@ -38,12 +36,6 @@ describe("git client authenticate (malformed paths with credentials)", function 
       res.on("end", function () {
         expect(res.statusCode).toBe(404, path);
         expect(handleSpy).not.toHaveBeenCalled();
-        if (repository) {
-          expect(fs.existsSync(repo.directory(repository))).toBe(
-            false,
-            path,
-          );
-        }
         done();
       });
     });

@@ -1,11 +1,16 @@
 describe("sync multi-folder support", function () {
-  var fs = require("fs-extra");
+  var storage = require("storage/folder");
   var path = require("path");
   var async = require("async");
   var Entry = require("models/entry");
   var Entries = require("models/entries");
   var syncFolder = require("sync");
-  var localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
+
+  // Runs fn once the promise resolves; calls fail with its error otherwise
+  function after(promise, fail, fn) {
+    promise.then(fn, fail);
+  }
+
   var drafts = require("../update/drafts");
   var previewPath = drafts.previewPath;
 
@@ -192,22 +197,27 @@ describe("sync multi-folder support", function () {
       (err) => {
         if (err) return done.fail(err);
 
-        var previewFile = localPath(this.blog.id, previewPath("/drafts/post"));
+        var blogID = this.blog.id;
+        var previewFile = previewPath("/drafts/post");
 
-        expect(fs.existsSync(previewFile)).toBe(true);
-        expect(
-          fs.readdirSync(path.dirname(previewFile)).filter(function (name) {
-            return name.indexOf(".tmp-") === 0;
-          })
-        ).toEqual([]);
-        done();
+        Promise.all([
+          storage.exists(blogID, previewFile),
+          storage.listNames(blogID, path.posix.dirname(previewFile)),
+        ]).then(function (results) {
+          expect(results[0]).toBe(true);
+          expect(
+            results[1].filter(function (entry) {
+              return entry.name.indexOf(".tmp-") === 0;
+            })
+          ).toEqual([]);
+          done();
+        }, done.fail);
       }
     );
   });
 
   it("handles renaming a directory to use the + convention", function (done) {
     var blogID = this.blog.id;
-    var root = this.blogDirectory;
 
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
@@ -215,8 +225,9 @@ describe("sync multi-folder support", function () {
       async.series(
         [
           function (next) {
-            fs.outputFileSync(path.join(root, "images/photo.md"), "# Photo");
-            folder.update("/images/photo.md", next);
+            after(storage.write(blogID, "/images/photo.md", "# Photo"), next, function () {
+              folder.update("/images/photo.md", next);
+            });
           },
         ],
         function (err) {
@@ -226,12 +237,8 @@ describe("sync multi-folder support", function () {
             Entry.get(blogID, "/images/photo.md", function (initialEntry) {
               expect(initialEntry).toBeDefined();
 
-              fs.moveSync(
-                path.join(root, "images"),
-                path.join(root, "images+")
-              );
-
-              syncFolder(blogID, function (err2, folder2, finish2) {
+              after(storage.move(blogID, "/images", "/images+"), done.fail, function () {
+                syncFolder(blogID, function (err2, folder2, finish2) {
                 if (err2) return done.fail(err2);
 
                 async.series(
@@ -274,6 +281,7 @@ describe("sync multi-folder support", function () {
                   }
                 );
               });
+              });
             });
           });
         }
@@ -283,7 +291,6 @@ describe("sync multi-folder support", function () {
 
   it("rebuilds the aggregated entry when a child file is removed", function (done) {
     var blogID = this.blog.id;
-    var root = this.blogDirectory;
 
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
@@ -291,12 +298,14 @@ describe("sync multi-folder support", function () {
       async.series(
         [
           function (next) {
-            fs.outputFileSync(path.join(root, "album+/one.md"), "# One");
-            folder.update("/album+/one.md", next);
+            after(storage.write(blogID, "/album+/one.md", "# One"), next, function () {
+              folder.update("/album+/one.md", next);
+            });
           },
           function (next) {
-            fs.outputFileSync(path.join(root, "album+/two.md"), "# Two");
-            folder.update("/album+/two.md", next);
+            after(storage.write(blogID, "/album+/two.md", "# Two"), next, function () {
+              folder.update("/album+/two.md", next);
+            });
           },
         ],
         function (seriesErr) {
@@ -309,9 +318,8 @@ describe("sync multi-folder support", function () {
               expect(initialEntry.html.indexOf("One")).toBeGreaterThan(-1);
               expect(initialEntry.html.indexOf("Two")).toBeGreaterThan(-1);
 
-              fs.removeSync(path.join(root, "album+/two.md"));
-
-              syncFolder(blogID, function (err2, folder2, finish2) {
+              after(storage.remove(blogID, "/album+/two.md"), done.fail, function () {
+                syncFolder(blogID, function (err2, folder2, finish2) {
                 if (err2) return done.fail(err2);
 
                 folder2.update("/album+/two.md", function (updateErr) {
@@ -331,6 +339,7 @@ describe("sync multi-folder support", function () {
                   });
                 });
               });
+              });
             });
           });
         }
@@ -340,7 +349,6 @@ describe("sync multi-folder support", function () {
 
   it("drops the synthesized entry when the + folder is removed", function (done) {
     var blogID = this.blog.id;
-    var root = this.blogDirectory;
 
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
@@ -348,12 +356,14 @@ describe("sync multi-folder support", function () {
       async.series(
         [
           function (next) {
-            fs.outputFileSync(path.join(root, "gallery+/a.md"), "# A");
-            folder.update("/gallery+/a.md", next);
+            after(storage.write(blogID, "/gallery+/a.md", "# A"), next, function () {
+              folder.update("/gallery+/a.md", next);
+            });
           },
           function (next) {
-            fs.outputFileSync(path.join(root, "gallery+/b.md"), "# B");
-            folder.update("/gallery+/b.md", next);
+            after(storage.write(blogID, "/gallery+/b.md", "# B"), next, function () {
+              folder.update("/gallery+/b.md", next);
+            });
           },
         ],
         function (seriesErr) {
@@ -365,9 +375,8 @@ describe("sync multi-folder support", function () {
               expect(initialEntry).toBeDefined();
               expect(initialEntry.deleted).toBeFalsy();
 
-              fs.removeSync(path.join(root, "gallery+"));
-
-              syncFolder(blogID, function (err2, folder2, finish2) {
+              after(storage.remove(blogID, "/gallery+"), done.fail, function () {
+                syncFolder(blogID, function (err2, folder2, finish2) {
                 if (err2) return done.fail(err2);
 
                 async.series(
@@ -399,6 +408,7 @@ describe("sync multi-folder support", function () {
                   }
                 );
               });
+              });
             });
           });
         }
@@ -410,7 +420,6 @@ describe("sync multi-folder support", function () {
     var Fix = require("sync/fix");
     var blog = this.blog;
     var blogID = blog.id;
-    var root = this.blogDirectory;
 
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
@@ -418,12 +427,14 @@ describe("sync multi-folder support", function () {
       async.series(
         [
           function (next) {
-            fs.outputFileSync(path.join(root, "essay+/one.md"), "# One");
-            folder.update("/essay+/one.md", next);
+            after(storage.write(blogID, "/essay+/one.md", "# One"), next, function () {
+              folder.update("/essay+/one.md", next);
+            });
           },
           function (next) {
-            fs.outputFileSync(path.join(root, "essay+/two.md"), "# Two");
-            folder.update("/essay+/two.md", next);
+            after(storage.write(blogID, "/essay+/two.md", "# Two"), next, function () {
+              folder.update("/essay+/two.md", next);
+            });
           },
         ],
         function (seriesErr) {
@@ -460,7 +471,6 @@ describe("sync multi-folder support", function () {
     var Fix = require("sync/fix");
     var blog = this.blog;
     var blogID = blog.id;
-    var root = this.blogDirectory;
 
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
@@ -468,12 +478,14 @@ describe("sync multi-folder support", function () {
       async.series(
         [
           function (next) {
-            fs.outputFileSync(path.join(root, "essay+/one.md"), "# One");
-            folder.update("/essay+/one.md", next);
+            after(storage.write(blogID, "/essay+/one.md", "# One"), next, function () {
+              folder.update("/essay+/one.md", next);
+            });
           },
           function (next) {
-            fs.outputFileSync(path.join(root, "essay+/two.md"), "# Two");
-            folder.update("/essay+/two.md", next);
+            after(storage.write(blogID, "/essay+/two.md", "# Two"), next, function () {
+              folder.update("/essay+/two.md", next);
+            });
           },
         ],
         function (seriesErr) {
@@ -488,9 +500,8 @@ describe("sync multi-folder support", function () {
               // Remove the folder without letting sync see it, then let Fix
               // reconcile: the aggregate has no source folder left on disk, so
               // it is a genuine ghost and must be dropped.
-              fs.removeSync(path.join(root, "essay+"));
-
-              Fix(blog, function (fixErr) {
+              after(storage.remove(blogID, "/essay+"), done.fail, function () {
+                Fix(blog, function (fixErr) {
                 if (fixErr) return done.fail(fixErr);
 
                 Entry.get(blogID, "/essay", function (afterEntry) {
@@ -501,6 +512,7 @@ describe("sync multi-folder support", function () {
                   }
                   done();
                 });
+              });
               });
             });
           });
@@ -513,7 +525,6 @@ describe("sync multi-folder support", function () {
     var Fix = require("sync/fix");
     var blog = this.blog;
     var blogID = blog.id;
-    var root = this.blogDirectory;
 
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
@@ -521,12 +532,14 @@ describe("sync multi-folder support", function () {
       async.series(
         [
           function (next) {
-            fs.outputFileSync(path.join(root, "essay+/one.md"), "# One");
-            folder.update("/essay+/one.md", next);
+            after(storage.write(blogID, "/essay+/one.md", "# One"), next, function () {
+              folder.update("/essay+/one.md", next);
+            });
           },
           function (next) {
-            fs.outputFileSync(path.join(root, "essay+/two.md"), "# Two");
-            folder.update("/essay+/two.md", next);
+            after(storage.write(blogID, "/essay+/two.md", "# Two"), next, function () {
+              folder.update("/essay+/two.md", next);
+            });
           },
         ],
         function (seriesErr) {
@@ -538,10 +551,10 @@ describe("sync multi-folder support", function () {
               expect(initialEntry).toBeDefined();
 
               // Swap the directory for a plain file at the same path.
-              fs.removeSync(path.join(root, "essay+"));
-              fs.outputFileSync(path.join(root, "essay+"), "not a folder");
-
-              syncFolder(blogID, function (err2, folder2, finish2) {
+              after(storage.remove(blogID, "/essay+").then(function () {
+                return storage.write(blogID, "/essay+", "not a folder");
+              }), done.fail, function () {
+                syncFolder(blogID, function (err2, folder2, finish2) {
                 if (err2) return done.fail(err2);
 
                 folder2.update("/essay+", function (updateErr) {
@@ -572,6 +585,7 @@ describe("sync multi-folder support", function () {
                   });
                 });
               });
+              });
             });
           });
         }
@@ -581,7 +595,6 @@ describe("sync multi-folder support", function () {
 
   it("keeps a sibling post when a plain +-suffixed file shares its stripped path", function (done) {
     var blogID = this.blog.id;
-    var root = this.blogDirectory;
 
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
@@ -589,13 +602,15 @@ describe("sync multi-folder support", function () {
       async.series(
         [
           function (next) {
-            fs.outputFileSync(path.join(root, "post.md"), "# The Real Post");
-            folder.update("/post.md", next);
+            after(storage.write(blogID, "/post.md", "# The Real Post"), next, function () {
+              folder.update("/post.md", next);
+            });
           },
           function (next) {
             // A file that just happens to end in "+", never a folder.
-            fs.outputFileSync(path.join(root, "post.md+"), "leftover");
-            folder.update("/post.md+", next);
+            after(storage.write(blogID, "/post.md+", "leftover"), next, function () {
+              folder.update("/post.md+", next);
+            });
           },
         ],
         function (seriesErr) {
@@ -617,7 +632,6 @@ describe("sync multi-folder support", function () {
 
   it("keeps a sibling file's entry when a + folder collides with its stripped path", function (done) {
     var blogID = this.blog.id;
-    var root = this.blogDirectory;
 
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
@@ -625,18 +639,14 @@ describe("sync multi-folder support", function () {
       async.series(
         [
           function (next) {
-            fs.outputFileSync(
-              path.join(root, "article.md"),
-              "# The Real Article"
-            );
-            folder.update("/article.md", next);
+            after(storage.write(blogID, "/article.md", "# The Real Article"), next, function () {
+              folder.update("/article.md", next);
+            });
           },
           function (next) {
-            fs.outputFileSync(
-              path.join(root, "article.md+/extra.md"),
-              "# Extra"
-            );
-            folder.update("/article.md+/extra.md", next);
+            after(storage.write(blogID, "/article.md+/extra.md", "# Extra"), next, function () {
+              folder.update("/article.md+/extra.md", next);
+            });
           },
         ],
         function (seriesErr) {
@@ -661,7 +671,6 @@ describe("sync multi-folder support", function () {
 
   it("drops the aggregate when every file is removed and only the files are synced", function (done) {
     var blogID = this.blog.id;
-    var root = this.blogDirectory;
 
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
@@ -669,12 +678,14 @@ describe("sync multi-folder support", function () {
       async.series(
         [
           function (next) {
-            fs.outputFileSync(path.join(root, "notes/multi+/a.md"), "# A");
-            folder.update("/notes/multi+/a.md", next);
+            after(storage.write(blogID, "/notes/multi+/a.md", "# A"), next, function () {
+              folder.update("/notes/multi+/a.md", next);
+            });
           },
           function (next) {
-            fs.outputFileSync(path.join(root, "notes/multi+/b.md"), "# B");
-            folder.update("/notes/multi+/b.md", next);
+            after(storage.write(blogID, "/notes/multi+/b.md", "# B"), next, function () {
+              folder.update("/notes/multi+/b.md", next);
+            });
           },
         ],
         function (seriesErr) {
@@ -688,9 +699,8 @@ describe("sync multi-folder support", function () {
 
               // Like a push to a repository: the files and the folder are
               // gone, and only the file paths are reported.
-              fs.removeSync(path.join(root, "notes/multi+"));
-
-              syncFolder(blogID, function (err2, folder2, finish2) {
+              after(storage.remove(blogID, "/notes/multi+"), done.fail, function () {
+                syncFolder(blogID, function (err2, folder2, finish2) {
                 if (err2) return done.fail(err2);
 
                 async.series(
@@ -725,6 +735,7 @@ describe("sync multi-folder support", function () {
                   }
                 );
               });
+              });
             });
           });
         }
@@ -734,7 +745,6 @@ describe("sync multi-folder support", function () {
 
   it("keeps a sibling file's entry when every file of its colliding + folder is removed", function (done) {
     var blogID = this.blog.id;
-    var root = this.blogDirectory;
 
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
@@ -742,19 +752,19 @@ describe("sync multi-folder support", function () {
       async.series(
         [
           function (next) {
-            fs.outputFileSync(
-              path.join(root, "article.md"),
-              "# The Real Article"
-            );
-            folder.update("/article.md", next);
+            after(storage.write(blogID, "/article.md", "# The Real Article"), next, function () {
+              folder.update("/article.md", next);
+            });
           },
           function (next) {
-            fs.outputFileSync(path.join(root, "article.md+/a.md"), "# A");
-            folder.update("/article.md+/a.md", next);
+            after(storage.write(blogID, "/article.md+/a.md", "# A"), next, function () {
+              folder.update("/article.md+/a.md", next);
+            });
           },
           function (next) {
-            fs.outputFileSync(path.join(root, "article.md+/b.md"), "# B");
-            folder.update("/article.md+/b.md", next);
+            after(storage.write(blogID, "/article.md+/b.md", "# B"), next, function () {
+              folder.update("/article.md+/b.md", next);
+            });
           },
         ],
         function (seriesErr) {
@@ -762,9 +772,8 @@ describe("sync multi-folder support", function () {
             if (seriesErr || finishErr)
               return done.fail(seriesErr || finishErr);
 
-            fs.removeSync(path.join(root, "article.md+"));
-
-            syncFolder(blogID, function (err2, folder2, finish2) {
+            after(storage.remove(blogID, "/article.md+"), done.fail, function () {
+              syncFolder(blogID, function (err2, folder2, finish2) {
               if (err2) return done.fail(err2);
 
               async.series(
@@ -793,6 +802,7 @@ describe("sync multi-folder support", function () {
                 }
               );
             });
+            });
           });
         }
       );
@@ -801,7 +811,6 @@ describe("sync multi-folder support", function () {
 
   it("keeps a sibling file's entry when its colliding + folder is deleted", function (done) {
     var blogID = this.blog.id;
-    var root = this.blogDirectory;
 
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
@@ -809,18 +818,14 @@ describe("sync multi-folder support", function () {
       async.series(
         [
           function (next) {
-            fs.outputFileSync(
-              path.join(root, "article.md"),
-              "# The Real Article"
-            );
-            folder.update("/article.md", next);
+            after(storage.write(blogID, "/article.md", "# The Real Article"), next, function () {
+              folder.update("/article.md", next);
+            });
           },
           function (next) {
-            fs.outputFileSync(
-              path.join(root, "article.md+/extra.md"),
-              "# Extra"
-            );
-            folder.update("/article.md+/extra.md", next);
+            after(storage.write(blogID, "/article.md+/extra.md", "# Extra"), next, function () {
+              folder.update("/article.md+/extra.md", next);
+            });
           },
         ],
         function (seriesErr) {
@@ -829,9 +834,8 @@ describe("sync multi-folder support", function () {
               return done.fail(seriesErr || finishErr);
 
             // Delete the colliding "+" folder outright.
-            fs.removeSync(path.join(root, "article.md+"));
-
-            syncFolder(blogID, function (err2, folder2, finish2) {
+            after(storage.remove(blogID, "/article.md+"), done.fail, function () {
+              syncFolder(blogID, function (err2, folder2, finish2) {
               if (err2) return done.fail(err2);
 
               folder2.update("/article.md+", function (updateErr) {
@@ -849,6 +853,7 @@ describe("sync multi-folder support", function () {
                 });
               });
             });
+            });
           });
         }
       );
@@ -857,7 +862,6 @@ describe("sync multi-folder support", function () {
 
   it("rebuilds a colliding + folder once the blocking sibling file is deleted", function (done) {
     var blogID = this.blog.id;
-    var root = this.blogDirectory;
 
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
@@ -865,18 +869,14 @@ describe("sync multi-folder support", function () {
       async.series(
         [
           function (next) {
-            fs.outputFileSync(
-              path.join(root, "article.md"),
-              "# The Real Article"
-            );
-            folder.update("/article.md", next);
+            after(storage.write(blogID, "/article.md", "# The Real Article"), next, function () {
+              folder.update("/article.md", next);
+            });
           },
           function (next) {
-            fs.outputFileSync(
-              path.join(root, "article.md+/extra.md"),
-              "# Extra"
-            );
-            folder.update("/article.md+/extra.md", next);
+            after(storage.write(blogID, "/article.md+/extra.md", "# Extra"), next, function () {
+              folder.update("/article.md+/extra.md", next);
+            });
           },
         ],
         function (seriesErr) {
@@ -885,9 +885,8 @@ describe("sync multi-folder support", function () {
               return done.fail(seriesErr || finishErr);
 
             // Remove the sibling file that was blocking the folder post.
-            fs.removeSync(path.join(root, "article.md"));
-
-            syncFolder(blogID, function (err2, folder2, finish2) {
+            after(storage.remove(blogID, "/article.md"), done.fail, function () {
+              syncFolder(blogID, function (err2, folder2, finish2) {
               if (err2) return done.fail(err2);
 
               folder2.update("/article.md", function (updateErr) {
@@ -906,6 +905,7 @@ describe("sync multi-folder support", function () {
                 });
               });
             });
+            });
           });
         }
       );
@@ -916,7 +916,6 @@ describe("sync multi-folder support", function () {
     var limit = require("build/converters/post-source-size").MARKDOWN.bytes;
     var IgnoredFiles = require("models/ignoredFiles");
     var blogID = this.blog.id;
-    var root = this.blogDirectory;
 
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
@@ -924,20 +923,20 @@ describe("sync multi-folder support", function () {
       async.series(
         [
           function (next) {
-            fs.outputFileSync(path.join(root, "album+/01.md"), "# One");
-            folder.update("/album+/01.md", next);
+            after(storage.write(blogID, "/album+/01.md", "# One"), next, function () {
+              folder.update("/album+/01.md", next);
+            });
           },
           function (next) {
-            fs.outputFileSync(path.join(root, "album+/02.md"), "# Two");
-            folder.update("/album+/02.md", next);
+            after(storage.write(blogID, "/album+/02.md", "# Two"), next, function () {
+              folder.update("/album+/02.md", next);
+            });
           },
           function (next) {
             // Grow one source past its converter limit.
-            fs.outputFileSync(
-              path.join(root, "album+/02.md"),
-              Buffer.alloc(limit + 1, 32)
-            );
-            folder.update("/album+/02.md", next);
+            after(storage.write(blogID, "/album+/02.md", Buffer.alloc(limit + 1, 32)), next, function () {
+              folder.update("/album+/02.md", next);
+            });
           },
         ],
         function (seriesErr) {
@@ -959,11 +958,8 @@ describe("sync multi-folder support", function () {
                 syncFolder(blogID, function (err2, folder2, finish2) {
                   if (err2) return done.fail(err2);
 
-                  fs.outputFileSync(
-                    path.join(root, "album+/02.md"),
-                    "# Two again"
-                  );
-                  folder2.update("/album+/02.md", function (updateErr) {
+                  after(storage.write(blogID, "/album+/02.md", "# Two again"), done.fail, function () {
+                    folder2.update("/album+/02.md", function (updateErr) {
                     finish2(updateErr, function (finishErr2) {
                       if (updateErr || finishErr2)
                         return done.fail(updateErr || finishErr2);
@@ -987,6 +983,7 @@ describe("sync multi-folder support", function () {
                       });
                     });
                   });
+                  });
                 });
               });
             });
@@ -998,7 +995,6 @@ describe("sync multi-folder support", function () {
 
   it("does not overwrite a sibling file when a draft folder post writes its preview", function (done) {
     var blogID = this.blog.id;
-    var root = this.blogDirectory;
 
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
@@ -1007,18 +1003,14 @@ describe("sync multi-folder support", function () {
         [
           function (next) {
             // A real source file at the folder post's published path + .html
-            fs.outputFileSync(
-              path.join(root, "album.html"),
-              "<p>real sibling</p>"
-            );
-            folder.update("/album.html", next);
+            after(storage.write(blogID, "/album.html", "<p>real sibling</p>"), next, function () {
+              folder.update("/album.html", next);
+            });
           },
           function (next) {
-            fs.outputFileSync(
-              path.join(root, "album+/01.md"),
-              "Draft: yes\n\n# Draft album"
-            );
-            folder.update("/album+/01.md", next);
+            after(storage.write(blogID, "/album+/01.md", "Draft: yes\n\n# Draft album"), next, function () {
+              folder.update("/album+/01.md", next);
+            });
           },
         ],
         function (seriesErr) {
@@ -1030,10 +1022,10 @@ describe("sync multi-folder support", function () {
               expect(aggregate && aggregate.draft).toBe(true);
               // previewPath("/album") is "/album.html"; the sibling on disk
               // must be left untouched.
-              expect(
-                fs.readFileSync(path.join(root, "album.html"), "utf-8")
-              ).toEqual("<p>real sibling</p>");
-              done();
+              storage.read(blogID, "/album.html").then(function (contents) {
+                expect(contents.toString()).toEqual("<p>real sibling</p>");
+                done();
+              }, done.fail);
             });
           });
         }

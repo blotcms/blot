@@ -22,8 +22,6 @@ describe("scheduler", function () {
     "subscription-emails",
     "welcome-email-reconcile",
     "scheduled-entries-reconcile",
-    "folder-mirror-repair",
-    "folder-mirror-verify",
   ];
 
   describe("registering jobs", function () {
@@ -73,9 +71,6 @@ describe("scheduler", function () {
   describe("notifyLowDisk", function () {
     const KEYS = [
       "notify:low-disk-space",
-      "notify:data-disk-percent:90",
-      "notify:data-disk-percent:95",
-      "notify:data-disk-percent:99",
     ];
     const GB = 1024 * 1024;
     const disk = (label, available_k, used_percent) => ({
@@ -98,7 +93,7 @@ describe("scheduler", function () {
     });
 
     it("sends one email for a low disk however many times it is called", async function () {
-      const disks = [disk("data", 100 * GB, 10), disk("root", 1 * GB, 90)];
+      const disks = [disk("instance", 100 * GB, 10), disk("root", 1 * GB, 90)];
 
       await Promise.all([
         this.notifyLowDisk(disks),
@@ -115,40 +110,11 @@ describe("scheduler", function () {
 
     it("sends nothing when there is room", async function () {
       await this.notifyLowDisk([
-        disk("data", 100 * GB, 10),
+        disk("instance", 100 * GB, 10),
         disk("root", 10 * GB, 50),
       ]);
 
       expect(email.WARNING_LOW_DISK_SPACE).not.toHaveBeenCalled();
-    });
-
-    it("sends one email per data disk alert level", async function () {
-      const at = (percent) => [disk("data", 100 * GB, percent)];
-
-      await this.notifyLowDisk(at(91));
-      await this.notifyLowDisk(at(91));
-      await this.notifyLowDisk(at(96));
-      await this.notifyLowDisk(at(91));
-      await this.notifyLowDisk(at(96));
-
-      const headlines = email.WARNING_LOW_DISK_SPACE.calls
-        .allArgs()
-        .map((args) => args[1].headline);
-      expect(headlines.length).toEqual(2);
-      expect(headlines[0]).toContain("90%");
-      expect(headlines[1]).toContain("95%");
-    });
-
-    it("does not email for a lower level after a higher one", async function () {
-      const at = (percent) => [disk("data", 100 * GB, percent)];
-
-      await this.notifyLowDisk(at(96));
-      await this.notifyLowDisk(at(91));
-
-      expect(email.WARNING_LOW_DISK_SPACE.calls.count()).toEqual(1);
-      expect(email.WARNING_LOW_DISK_SPACE.calls.argsFor(0)[1].headline).toContain("95%");
-      // The lower level's marker expires like the others
-      expect(await client.pTTL("notify:data-disk-percent:90")).toBeGreaterThan(0);
     });
   });
 });

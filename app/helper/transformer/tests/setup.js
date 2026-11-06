@@ -130,7 +130,7 @@ module.exports = function setup(options) {
   // Sets up a temporary tmp folder, cleans it up after
   global.test.tmp();
 
-  beforeEach(function () {
+  beforeEach(async function () {
     // This simulates me using the transformer to perform
     // some task that I don't want to repeat needlessly.
     // In reality, it might be the function which turns
@@ -155,8 +155,11 @@ module.exports = function setup(options) {
 
     // Create a test file to use for the transformer
     this.path = "foo.txt";
-    this.localPath = this.blogDirectory + "/" + this.path;
-    fs.outputFileSync(this.localPath, "Hello, World !" + Date.now());
+    await require("storage/folder").write(
+      this.blog.id,
+      "/" + this.path,
+      "Hello, World !" + Date.now()
+    );
 
     sequenceQueue.length = 0;
     this.sequenceUrl = this.origin + "/sequence";

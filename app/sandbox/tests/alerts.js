@@ -50,6 +50,19 @@ describe("sandbox alerts", function () {
     expect(email.SANDBOX_ALERT.calls.argsFor(0)[1].lines).toBe("1 × job thumbnail: busy");
   });
 
+  it("logs a pandoc worker killed for taking too long, which is the document's doing, but emails it killed", async function () {
+    spyOn(console, "log");
+    alerts.jobFailed("pandoc", error("SANDBOX_TIMEOUT"));
+    await tick();
+    expect(email.SANDBOX_ALERT).not.toHaveBeenCalled();
+    expect(console.log.calls.argsFor(0)[1]).toBe("sandbox: job pandoc timed out");
+
+    alerts.jobFailed("pandoc", error("SANDBOX_KILLED"));
+    await tick();
+    expect(email.SANDBOX_ALERT).toHaveBeenCalledTimes(1);
+    expect(email.SANDBOX_ALERT.calls.argsFor(0)[1].lines).toBe("1 × job pandoc: killed");
+  });
+
   it("emails a failed fetch-image job, which answers bad input with meta.error", async function () {
     alerts.jobFailed("fetch-image", error("SANDBOX_FAILED"));
     await tick();

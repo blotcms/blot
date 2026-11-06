@@ -13,8 +13,8 @@ module.exports = function setupBenchmark(options = {}) {
   const blogs = Number(options.blogs || benchmarkConfig.sites || 5);
 
   // corpusMode "build" (see build-corpus.js) needs every blog's Redis keys
-  // and disk folders to survive past the spec's own afterEach hooks: the
-  // host-side orchestrator only SAVEs Redis and tars data/blogs
+  // and blog folders (in the storage bucket) to survive past the spec's own afterEach hooks: the
+  // host-side orchestrator only SAVEs Redis and copies out the MinIO data
   // *after* this whole `docker run` invocation exits, which is well after
   // sharedSetup's normal per-blog afterEach teardown would otherwise have
   // already deleted everything (afterEach runs at the end of this file's

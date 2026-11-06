@@ -1,5 +1,5 @@
 describe("template", function () {
-  var fs = require("fs-extra");
+  var folder = require("storage/folder");
   var get = require("../index").getView;
 
   var create = require("../index").create;
@@ -15,22 +15,23 @@ describe("template", function () {
     // readFromFolder takes a path in the blog's folder, which is removed
     // along with the blog
     this.dir = "/Templates/" + name;
-    this.tmp = this.blogDirectory + this.dir;
+
+    // Writes a file into the template's folder in the blog's folder
+    this.put = (path, contents) =>
+      folder.write(this.blog.id, this.dir + path, contents);
 
     create(this.blog.id, name, { localEditing: true }, done);
   });
 
   it("reads template properties from package.json", function (done) {
-    fs.outputJsonSync(this.tmp + "/package.json", {
-      locals: { foo: "bar" }
-    });
+    this.put("/package.json", JSON.stringify({ locals: { foo: "bar" } })).then(() => {
+      readFromFolder(this.blog.id, this.dir, function (err, template) {
+        if (err) return done.fail(err);
 
-    readFromFolder(this.blog.id, this.dir, function (err, template) {
-      if (err) return done.fail(err);
-
-      expect(template.locals.foo).toEqual("bar");
-      done();
-    });
+        expect(template.locals.foo).toEqual("bar");
+        done();
+      });
+    }, done.fail);
   });
 
   it("marks a template read from a folder without package.json as locally edited", function (done) {
@@ -38,18 +39,18 @@ describe("template", function () {
     var makeID = require("../util/makeID");
     var test = this;
 
-    fs.outputFileSync(this.tmp + "/entries.html", "{{title}}");
-
-    setMetadata(makeID(this.blog.id, this.blog.handle), { localEditing: false }, function (err) {
-      if (err) return done.fail(err);
-
-      readFromFolder(test.blog.id, test.dir, function (err, template) {
+    this.put("/entries.html", "{{title}}").then(function () {
+      setMetadata(makeID(test.blog.id, test.blog.handle), { localEditing: false }, function (err) {
         if (err) return done.fail(err);
 
-        expect(template.localEditing).toEqual(true);
-        done();
+        readFromFolder(test.blog.id, test.dir, function (err, template) {
+          if (err) return done.fail(err);
+
+          expect(template.localEditing).toEqual(true);
+          done();
+        });
       });
-    });
+    }, done.fail);
   });
 
   it("leaves the blog's cache alone when a sync reads an unchanged template", async function () {
@@ -61,7 +62,7 @@ describe("template", function () {
     var makeID = require("../util/makeID");
     var id = makeID(this.blog.id, this.blog.handle);
 
-    fs.outputFileSync(this.tmp + "/entries.html", "{{title}}");
+    await this.put("/entries.html", "{{title}}");
     await read(this.blog.id, this.dir);
     await setBlog(this.blog.id, { template: id });
 
@@ -73,79 +74,81 @@ describe("template", function () {
     expect((await getBlog({ id: this.blog.id })).cacheID).toEqual(blogCacheID);
     expect((await getMetadata(id)).cacheID).toEqual(templateCacheID);
 
-    fs.outputFileSync(this.tmp + "/entries.html", "{{title}}!");
+    await this.put("/entries.html", "{{title}}!");
     await read(this.blog.id, this.dir);
 
     expect((await getBlog({ id: this.blog.id })).cacheID).not.toEqual(blogCacheID);
   });
 
   it("explains what is wrong with an invalid package.json", function (done) {
-    fs.outputFileSync(this.tmp + "/package.json", '{\n  "name": "Example",\n}');
+    this.put("/package.json", '{\n  "name": "Example",\n}').then(() => {
+      readFromFolder(this.blog.id, this.dir, function (err, template) {
+        if (err) return done.fail(err);
 
-    readFromFolder(this.blog.id, this.dir, function (err, template) {
-      if (err) return done.fail(err);
+        var message = template.errors["package.json"];
 
-      var message = template.errors["package.json"];
-
-      // The message has to describe the file, not our own failure to
-      // rewrite the parse error
-      expect(message).not.toContain("Cannot read properties");
-      expect(message.toLowerCase()).toContain("json");
-      done();
-    });
+        // The message has to describe the file, not our own failure to
+        // rewrite the parse error
+        expect(message).not.toContain("Cannot read properties");
+        expect(message.toLowerCase()).toContain("json");
+        done();
+      });
+    }, done.fail);
   });
 
   it("ignores view files which are too large", function (done) {
     // 3mb of random data should exceed the limit of 2.5mb
-    fs.outputFileSync(
-      this.tmp + "/style.css",
+    this.put(
+      "/style.css",
       require("crypto").randomBytes(3 * 1000 * 1000)
-    );
-
-    readFromFolder(this.blog.id, this.dir, function (err, template) {
-      if (err) return done.fail(err);
-
-      getViewByURL(template.id, "/style.css", function (err, name) {
+    ).then(() => {
+      readFromFolder(this.blog.id, this.dir, function (err, template) {
         if (err) return done.fail(err);
 
-        expect(name).toEqual(null);
-        done();
+        getViewByURL(template.id, "/style.css", function (err, name) {
+          if (err) return done.fail(err);
+
+          expect(name).toEqual(null);
+          done();
+        });
       });
-    });
+    }, done.fail);
   });
 
   it("reads a view's properties from package.json", function (done) {
-    fs.outputFileSync(this.tmp + "/style.css", "body {color:pink}");
-    fs.outputJsonSync(this.tmp + "/package.json", {
-      locals: { foo: "bar" },
-      views: { "style.css": { url: "/test", locals: { baz: "bat" } } }
-    });
-
-    readFromFolder(this.blog.id, this.dir, function (err, template) {
-      if (err) return done.fail(err);
-
-      getViewByURL(template.id, "/test", function (err, name) {
+    Promise.all([
+      this.put("/style.css", "body {color:pink}"),
+      this.put("/package.json", JSON.stringify({
+        locals: { foo: "bar" },
+        views: { "style.css": { url: "/test", locals: { baz: "bat" } } }
+      })),
+    ]).then(() => {
+      readFromFolder(this.blog.id, this.dir, function (err, template) {
         if (err) return done.fail(err);
 
-        expect(name).toEqual("style.css");
-        done();
+        getViewByURL(template.id, "/test", function (err, name) {
+          if (err) return done.fail(err);
+
+          expect(name).toEqual("style.css");
+          done();
+        });
       });
-    });
+    }, done.fail);
   });
 
   it("assigns a view a URL automatically", function (done) {
-    fs.outputFileSync(this.tmp + "/style.css", "body {color:pink}");
-
-    readFromFolder(this.blog.id, this.dir, function (err, template) {
-      if (err) return done.fail(err);
-
-      getViewByURL(template.id, "/style.css", function (err, name) {
+    this.put("/style.css", "body {color:pink}").then(() => {
+      readFromFolder(this.blog.id, this.dir, function (err, template) {
         if (err) return done.fail(err);
 
-        expect(name).toEqual("style.css");
-        done();
+        getViewByURL(template.id, "/style.css", function (err, name) {
+          if (err) return done.fail(err);
+
+          expect(name).toEqual("style.css");
+          done();
+        });
       });
-    });
+    }, done.fail);
   });
 
   // By default, when a new view is read from a template folder its URL
@@ -154,68 +157,71 @@ describe("template", function () {
   // editor. We want to preserve this URL if the template is ever read
   // from a folder in future.
   it("will not clobber the URL for a view set elsewhere", function (done) {
-    fs.outputFileSync(this.tmp + "/style.css", "body {color:pink}");
     var templateFolder = this.dir;
     var blogID = this.blog.id;
 
-    readFromFolder(blogID, templateFolder, function (err, template) {
-      if (err) return done.fail(err);
-
-      setView(template.id, { name: "style.css", url: "/foo" }, function (err) {
+    this.put("/style.css", "body {color:pink}").then(() => {
+      readFromFolder(blogID, templateFolder, function (err, template) {
         if (err) return done.fail(err);
 
-        readFromFolder(blogID, templateFolder, function (err, template) {
+        setView(template.id, { name: "style.css", url: "/foo" }, function (err) {
           if (err) return done.fail(err);
 
-          getViewByURL(template.id, "/foo", function (err, name) {
+          readFromFolder(blogID, templateFolder, function (err, template) {
             if (err) return done.fail(err);
 
-            expect(name).toEqual("style.css");
-            done();
+            getViewByURL(template.id, "/foo", function (err, name) {
+              if (err) return done.fail(err);
+
+              expect(name).toEqual("style.css");
+              done();
+            });
           });
         });
       });
-    });
+    }, done.fail);
   });
 
   it("removes a view when you remove its file", function (done) {
-    const tmp = this.tmp;
     const dir = this.dir;
     const blogID = this.blog.id;
 
-    fs.outputFileSync(tmp + "/hello.html", "Hello, world!");
-    fs.outputFileSync(tmp + "/test.html", "Hello, test!");
+    Promise.all([
+      this.put("/hello.html", "Hello, world!"),
+      this.put("/test.html", "Hello, test!"),
+    ]).then(() => {
+      readFromFolder(blogID, dir, function (err, template) {
+        if (err) return done.fail(err);
+        get(template.id, "test.html", function (err, view) {
+          expect(view.content).toEqual("Hello, test!");
 
-    readFromFolder(blogID, dir, function (err, template) {
-      if (err) return done.fail(err);
-      get(template.id, "test.html", function (err, view) {
-        expect(view.content).toEqual("Hello, test!");
-
-        fs.removeSync(tmp + "/test.html");
-        readFromFolder(blogID, dir, function (err) {
-          if (err) return done.fail(err);
-          get(template.id, "test.html", function (err, view) {
-            expect(err.message.includes("No view")).toBe(true);
-            expect(view).toEqual(undefined);
-            done();
-          });
+          folder.remove(blogID, dir + "/test.html").then(function () {
+            readFromFolder(blogID, dir, function (err) {
+              if (err) return done.fail(err);
+              get(template.id, "test.html", function (err, view) {
+                expect(err.message.includes("No view")).toBe(true);
+                expect(view).toEqual(undefined);
+                done();
+              });
+            });
+          }, done.fail);
         });
       });
-    });
+    }, done.fail);
   });
 
   it("reads a view's content from a folder", function (done) {
-    fs.outputFileSync(this.tmp + "/style.css", "body {color:pink}");
-
-    readFromFolder(this.blog.id, this.dir, function (err, template) {
-      if (err) return done.fail(err);
-
-      get(template.id, "style", function (err, view) {
+    this.put("/style.css", "body {color:pink}").then(() => {
+      readFromFolder(this.blog.id, this.dir, function (err, template) {
         if (err) return done.fail(err);
-        expect(view.content).toEqual("body {color:pink}");
-        done();
+
+        get(template.id, "style", function (err, view) {
+          if (err) return done.fail(err);
+          expect(view.content).toEqual("body {color:pink}");
+          done();
+        });
       });
-    });
+    }, done.fail);
   });
 
   // A sync waits on buildFromFolder, which waits on this callback, before it
@@ -277,16 +283,16 @@ describe("template", function () {
         callback(error);
       });
 
-      fs.outputFileSync(this.blogDirectory + dir + "/entries.html", "{{#entries}}{{/entries}}");
-
-      readFromFolderWith({ create: create })(
-        this.blog.id,
-        dir,
-        once(done, function (err) {
-          expect(create).toHaveBeenCalled();
-          expect(err).toBe(error);
-        })
-      );
+      folder.write(this.blog.id, dir + "/entries.html", "{{#entries}}{{/entries}}").then(() => {
+        readFromFolderWith({ create: create })(
+          this.blog.id,
+          dir,
+          once(done, function (err) {
+            expect(create).toHaveBeenCalled();
+            expect(err).toBe(error);
+          })
+        );
+      }, done.fail);
     });
 
     it("passes an error reading the template's metadata to the callback", function (done) {
@@ -296,17 +302,17 @@ describe("template", function () {
         callback(error);
       };
 
-      fs.outputFileSync(this.tmp + "/style.css", "body {color:pink}");
-
-      readFromFolderWith({ create: create, getMetadata: getMetadata })(
-        this.blog.id,
-        this.dir,
-        once(done, function (err) {
-          // Only a missing template should be created
-          expect(create).not.toHaveBeenCalled();
-          expect(err).toBe(error);
-        })
-      );
+      this.put("/style.css", "body {color:pink}").then(() => {
+        readFromFolderWith({ create: create, getMetadata: getMetadata })(
+          this.blog.id,
+          this.dir,
+          once(done, function (err) {
+            // Only a missing template should be created
+            expect(create).not.toHaveBeenCalled();
+            expect(err).toBe(error);
+          })
+        );
+      }, done.fail);
     });
 
     it("passes an error saving the template's metadata to the callback", function (done) {
@@ -315,15 +321,15 @@ describe("template", function () {
         callback(error);
       };
 
-      fs.outputFileSync(this.tmp + "/style.css", "body {color:pink}");
-
-      readFromFolderWith({ setMetadata: setMetadata })(
-        this.blog.id,
-        this.dir,
-        once(done, function (err) {
-          expect(err).toBe(error);
-        })
-      );
+      this.put("/style.css", "body {color:pink}").then(() => {
+        readFromFolderWith({ setMetadata: setMetadata })(
+          this.blog.id,
+          this.dir,
+          once(done, function (err) {
+            expect(err).toBe(error);
+          })
+        );
+      }, done.fail);
     });
   });
 });

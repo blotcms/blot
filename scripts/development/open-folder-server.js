@@ -5,7 +5,6 @@ const os = require("os");
 const fs = require("fs");
 
 const PORT = Number(process.env.LOCAL_OPEN_FOLDER_PORT) || 3020;
-const BLOGS_DIR = path.resolve(__dirname, "../../data/blogs");
 const SOURCES_DIR = path.resolve(__dirname, "../../data/local-sources");
 
 // Map client types to their folder paths in development
@@ -44,7 +43,7 @@ http
       const source = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(handle) && !handle.includes("..")
         ? path.join(SOURCES_DIR, handle)
         : null;
-      folderPath = source && fs.existsSync(source) ? source : path.join(BLOGS_DIR, blogID);
+      folderPath = source && fs.existsSync(source) ? source : SOURCES_DIR;
     }
 
     spawn("open", ['-R',folderPath], {

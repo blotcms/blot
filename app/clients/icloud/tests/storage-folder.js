@@ -1,6 +1,3 @@
-const fs = require("fs-extra");
-const os = require("os");
-const { join } = require("path");
 const { promisify } = require("util");
 const folder = require("storage/folder");
 const localReaddir = require("../sync/util/localReaddir");
@@ -11,15 +8,8 @@ const resolveCaseConflicts = require("../sync/resolveCaseConflicts");
 describe("iCloud client access to the blog folder", function () {
   global.test.blog();
 
-  let outside;
-
-  beforeEach(async function () {
-    outside = await fs.mkdtemp(join(os.tmpdir(), "icloud-folder-"));
+  beforeEach(function () {
     spyOn(console, "log");
-  });
-
-  afterEach(async function () {
-    await fs.remove(outside);
   });
 
   it("writes a file and removes it again", async function () {
@@ -62,16 +52,6 @@ describe("iCloud client access to the blog folder", function () {
         { name: "a.txt", isDirectory: false, size: 5 },
         { name: "dir", isDirectory: true, size: undefined },
       ]);
-    });
-
-    it("does not follow a symlink out of the blog folder", async function () {
-      await fs.writeFile(join(outside, "secret.txt"), "secret");
-      await fs.symlink(join(outside, "secret.txt"), join(this.blogDirectory, "link.txt"));
-      await folder.write(this.blog.id, "/a.txt", "hello");
-
-      const names = (await localReaddir(this.blog.id, "/")).map((item) => item.name);
-
-      expect(names).toEqual(["a.txt"]);
     });
 
     it("rejects with ENOENT for a missing directory", async function () {

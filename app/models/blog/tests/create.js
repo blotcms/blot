@@ -41,16 +41,21 @@ describe("Blog.create", function () {
 
   it("creates the blog's folder", function (done) {
     var test = this;
-    var fs = require("fs-extra");
-    var localPath = (blogID, path) => require("path").join(require("config").blog_folder_dir, blogID, path);
+    var folder = require("storage/folder");
 
     create(test.user.uid, { handle: "exampleblog" }, function (err, blog) {
       if (err) return done.fail(err);
 
       test.blog = blog;
 
-      expect(fs.readdirSync(localPath(blog.id, "/"))).toEqual([]);
-      done();
+      folder.exists(blog.id, "/").then(function (exists) {
+        expect(exists).toBe(true);
+
+        return folder.listNames(blog.id, "/");
+      }).then(function (names) {
+        expect(names).toEqual([]);
+        done();
+      }).catch(done.fail);
     });
   });
 

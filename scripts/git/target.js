@@ -37,15 +37,18 @@ function objectStore(options) {
 
   if (!options.bucket) throw new Error("Give a target: --dir <folder> or --bucket <name>");
   const { S3Client } = require("@aws-sdk/client-s3");
-  const key = process.env.BLOT_AWS_KEY || process.env.AWS_ACCESS_KEY_ID;
-  const secret = process.env.BLOT_AWS_SECRET || process.env.AWS_SECRET_ACCESS_KEY;
+  // AWS_ACCESS_KEY_ID and the rest (a session token included) are left to
+  // the SDK's own chain
+  const key = process.env.BLOT_AWS_KEY;
+  const secret = process.env.BLOT_AWS_SECRET;
   const client = new S3Client({
     region: options.region || "us-east-1",
     ...(options.endpoint ? { endpoint: options.endpoint, forcePathStyle: true } : {}),
     // B2 and MinIO want checksums only when an operation requires one
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
-    ...(options.endpoint && key && secret ? { credentials: { accessKeyId: key, secretAccessKey: secret } } : {}),
+    // The app's own keys when set (a unit has only those)
+    ...(key && secret ? { credentials: { accessKeyId: key, secretAccessKey: secret } } : {}),
   });
   const prefix = options.prefix ? options.prefix.replace(/\/?$/, "/") : "";
   return { client, store: store.createS3Store({ client, bucket: options.bucket, prefix }) };

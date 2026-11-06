@@ -546,6 +546,21 @@ describe("Google Drive hourly sync validation", function () {
       expect(calls.emails[0].blogs[0].hasStuckLock).toBe(true);
     });
 
+    it("does not report one while the blog is still being set up", async function () {
+      const { validate, calls } = load({
+        accounts: {
+          a: driveAccount({ preparing: true, lastSync: Date.now() - 5 * 60 * MINUTE }),
+        },
+        blogs: blogsFor("a"),
+        heldSince: { a: Date.now() - 5 * 60 * MINUTE },
+      });
+
+      await validate.runValidation();
+
+      expect(calls.walked).toEqual([]);
+      expect(calls.emails).toEqual([]);
+    });
+
     it("does not report a lock held for less than an hour", async function () {
       const { validate, calls } = load({
         accounts: { a: driveAccount() },

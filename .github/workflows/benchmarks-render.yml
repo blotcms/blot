@@ -35,7 +35,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  CORPUS_SCHEMA_VERSION: 1
+  CORPUS_SCHEMA_VERSION: 2
 
 jobs:
   render-benchmark:
@@ -111,7 +111,7 @@ jobs:
         with:
           path: |
             ${{ env.CORPUS_DIR }}/redis-dump.rdb
-            ${{ env.CORPUS_DIR }}/blogs.tar.gz
+            ${{ env.CORPUS_DIR }}/minio.tar.gz
             ${{ env.CORPUS_DIR }}/manifest.json
           key: benchmark-corpus-v${{ env.CORPUS_SCHEMA_VERSION }}-nonexistent
           restore-keys: |
@@ -133,7 +133,7 @@ jobs:
         id: corpus-check
         run: |
           available=true
-          for f in redis-dump.rdb blogs.tar.gz manifest.json; do
+          for f in redis-dump.rdb minio.tar.gz manifest.json; do
             if [ ! -s "$CORPUS_DIR/$f" ]; then
               available=false
             fi
@@ -170,11 +170,9 @@ jobs:
           # process restart (which would also drop the port mapping).
           docker exec "$CONTAINER_ID" redis-cli DEBUG RELOAD
 
-      - name: Extract corpus data directories
+      - name: Create corpus data directory
         if: steps.corpus-check.outputs.available == 'true'
-        run: |
-          mkdir -p .benchmarks/corpus/data/blogs
-          tar -xzf "$CORPUS_DIR/blogs.tar.gz" -C .benchmarks/corpus/data
+        run: mkdir -p .benchmarks/corpus/data
 
       - name: Mark PR benchmark comment as running
         if: steps.corpus-check.outputs.available == 'true' && github.event_name == 'pull_request'
@@ -187,11 +185,29 @@ jobs:
             --comment-tag render \
             --title "Render benchmark (large corpus)"
 
-      # The app needs a storage bucket to start serving; nothing the render
-      # benchmark requests is in it
+      # The blogs' folders live in the storage bucket, so MinIO starts with
+      # the corpus's data: copied into the stopped container, then started
+      # again (the action waits for MinIO to be ready before it returns, so
+      # it is started first and restarted here).
       - name: Start MinIO
         if: steps.corpus-check.outputs.available == 'true'
         uses: ./.github/actions/start-minio
+
+      - name: Restore the corpus's MinIO data
+        if: steps.corpus-check.outputs.available == 'true'
+        run: |
+          docker stop minio
+          gunzip -c "$CORPUS_DIR/minio.tar.gz" | docker cp - minio:/data
+          docker start minio
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:9000/minio/health/live > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs minio
+          echo "MinIO did not become ready"
+          exit 1
 
       - name: Restore render benchmark history
         if: steps.corpus-check.outputs.available == 'true'

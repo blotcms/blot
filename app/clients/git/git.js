@@ -20,8 +20,7 @@
 // (err, stdout) when given a callback.
 //
 // Every command waits for room in a lane of limiter.js, background unless
-// options.lane says "interactive" (receivePack.js does, for a push), and runs
-// with its memory settings.
+// options.lane says "interactive", and runs with its memory settings.
 
 const { execFile } = require("child_process");
 const fs = require("fs");
@@ -59,13 +58,9 @@ module.exports = function Git(directory, options) {
   let queue = Promise.resolve();
 
   function run(args) {
-    return limiter.run(
-      lane,
-      function () {
-        return execute(args);
-      },
-      { gc: limiter.isGc(args) }
-    );
+    return limiter.run(lane, function () {
+      return execute(args);
+    });
   }
 
   function execute(args) {

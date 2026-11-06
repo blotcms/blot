@@ -20,7 +20,7 @@ ok() { echo "ok - $*"; }
 fail() { echo "FAILED - $*"; FAILED=1; }
 
 W=$TMP/world
-mkdir -p "$TMP/bin" "$W" "$TMP/tree/config/host/data-volume" "$TMP/tree/config/redis" "$TMP/tree/scripts/deploy" "$TMP/tree/data" "$TMP/home/.ssh"
+mkdir -p "$TMP/bin" "$W" "$TMP/tree/config/host" "$TMP/tree/config/redis" "$TMP/tree/scripts/deploy" "$TMP/tree/data" "$TMP/home/.ssh"
 export HOME="$TMP/home"
 cp "$REPO/config/host/cycle.sh" "$TMP/tree/config/host/cycle.sh"
 git -C "$TMP/tree" init -q
@@ -96,7 +96,10 @@ case "$cmd" in
   *"docker stop"*) rm -f "$W/units.$m" ;;
   *"read-only.js on"*) touch "$W/frozen" ;;
   *"read-only.js off"*) rm -f "$W/frozen"; echo '{"readOnly":null,"lockedBlogs":[]}' ;;
-  *"read-only.js status"*) if [ -e "$W/frozen" ]; then echo '{"readOnly":{"reason":"data volume move"}}'; else echo '{"readOnly":null}'; fi ;;
+  *"read-only.js status"*)
+    locks="[]"; [ -z "${STUB_LOCKS:-}" ] || locks='["b1"]'
+    if [ -e "$W/frozen" ]; then echo "{\"readOnly\":{\"reason\":\"${STUB_FREEZE_REASON:-host cycle}\"},\"lockedBlogs\":$locks}"
+    else echo "{\"readOnly\":null,\"lockedBlogs\":$locks}"; fi ;;
   *"tee /etc/blot/deploy-paused"*) cat > /dev/null; touch "$W/paused.$m" ;;
   *"test -e /etc/blot/deploy-paused"*) [ -e "$W/paused.$m" ] ;;
   *"test ! -e /etc/blot/deploy-paused"*) [ ! -e "$W/paused.$m" ] ;;
@@ -107,12 +110,11 @@ case "$cmd" in
   *"sed -n 's/^BLOT_HOST"*) echo blot.test ;;
   *"mountpoint -q"*) [ ! -e "$W/nomount.$m" ] ;;
   *'grep -qs "^\[blot-b2\]"'*) true ;;
+  *'grep -qs "^\[blot-b2-storage\]"'*) [ -z "${STUB_NO_B2_STORAGE:-}" ] ;;
+  *"cat /etc/blot/storage-offsite-bucket"*) [ -n "${STUB_NO_B2_STORAGE:-}" ] || echo test-storage-offsite ;;
+  *"tee /etc/blot/storage-offsite-bucket"*) cat > "$W/storage-offsite.$m" ;;
   *"grep -qsxF"*) [ -n "${STUB_NEW_HAS_B2:-}" ] || { [ -n "${STUB_NEW_HAS_B2_CREDS:-}" ] && [[ "$cmd" == *credentials* ]]; } ;;
   *".aws/credentials"*) cat > /dev/null; touch "$W/creds.$m" ;;
-  *"mkdir /tmp/blot-data-volume"*) cat > /dev/null ;;
-  *blockdev*) echo "268435456 bytes (268 MB, 256 MiB) copied, 1.0 s, 268 MB/s" ;;
-  *"host.sh prewarm"*) printf 'prewarm=%s\nprewarm_percent=10\nprewarm_duration_s=5\n' "$(cat "$W/prewarm" 2> /dev/null || echo running)" ;;
-  *".blot-data-volume"*) cat "$W/marker" 2> /dev/null || echo vol-0e ;;
   *"aws sts"*) [ -z "${STUB_NO_BACKUP_KEY:-}" ] && { [ -z "${STUB_AWS_AFTER_COPY:-}" ] || [ -e "$W/aws-copied" ]; } ;;
   *'tar -C "$HOME" -xf -'*) cat > /dev/null; touch "$W/aws-copied" ;;
   *"curl -sS"*"cdn.blot.test"*"/layout.css"*) echo "${STUB_STATIC:-200}" ;;
@@ -126,16 +128,8 @@ cat > "$TMP/bin/aws" << 'EOF'
 a=$*
 echo "aws $a" >> "$W/calls"
 case "$a" in
-  # restore: the lost volume's snapshots, the volume made from one, the new host's tags
-  *describe-snapshots*) if [ -e "$W/nosnap" ]; then echo "None None None None"; else echo "snap-0a1 2026-11-01T03:00:00+00:00 vol-0a1b completed"; fi ;;
-  *describe-volumes*BlotRestoreCycle*) cat "$W/restore_volume" 2> /dev/null || true ;;
-  *describe-volumes*"Attachments[0].InstanceId"*) cat "$W/vol_attached" 2> /dev/null || echo None ;;
-  *describe-volumes*VolumeType*) echo "${STUB_VTYPE:-gp3} 3000 125" ;;
-  *create-volume*) echo "vol-0c1 snap-0a1" > "$W/restore_volume"; echo vol-0c1 ;;
-  *attach-volume*) echo i-06e6577 > "$W/vol_attached" ;;
+  # restore: the new host's tags
   *"describe-instances --instance-ids"*BlotCycle*) cat "$W/cycle_tag" ;;
-  *"describe-instances --instance-ids"*Placement*) echo us-west-2a ;;
-  *"describe-instances --instance-ids"*BlockDeviceMappings*) echo /dev/xvda ;;
   *describe-instance-status*) echo ok ;;
   *"describe-instances --filters"*) cat "$W/cycle_instance" 2> /dev/null || true ;;
   *"describe-instances --instance-ids"*"State.Name"*) echo running ;;
@@ -145,8 +139,6 @@ case "$a" in
   *"describe-addresses"*) cat "$W/eip_id" ;;
   *associate-address*) m=${a##*--instance-id }; echo "${m%% *}" > "$W/eip_id"; echo new > "$W/eip_on"
     [ ! -e "$W/flaky_move" ] || echo 2 > "$W/ssh_resets" ;;
-  *"describe-volumes"*"Attachments"*) echo "i-old False" ;;
-  *"describe-volumes"*) cat "$W/replaced_at" ;;
   *"describe-instance-attribute"*) cat "$W/protection" ;;
 esac
 EOF
@@ -179,7 +171,6 @@ mkdir -p "$TMP/in"
 printf 'BLOT_HOST=blot.test\nexport BLOT_SESSION_SECRET=s\n' > "$TMP/in/secrets.env"
 printf 'BLOT_HOST=blot.test\nPROXY_PRIVATE_IP=127.0.0.1\n' > "$TMP/in/proxy.env"
 printf '[default]\naws_access_key_id = x\naws_secret_access_key = y\n' > "$TMP/in/credentials"
-touch "$TMP/tree/config/host/data-volume/host.sh"
 
 cat > "$TMP/tree/config/host/launch.sh" << 'EOF'
 #!/bin/bash
@@ -189,16 +180,7 @@ echo "i-0new 192.0.2.20" > "$W/cycle_instance"
 EOF
 cat > "$TMP/tree/config/host/deploy.sh" << 'EOF'
 #!/bin/bash
-echo "deploy.sh PUBLIC_IP=$PUBLIC_IP SSH_PORT=$SSH_PORT SSH_KEY=$SSH_KEY DATA_VOLUME_ID=$DATA_VOLUME_ID SSH_OPTS=${SSH_OPTS:-}" >> "$W/calls"
-EOF
-cat > "$TMP/tree/config/host/data-volume/resize.sh" << 'EOF'
-#!/bin/bash
-echo "resize.sh $*" >> "$W/calls"
-case "$*" in
-  *--dry-run*) exit 0 ;;
-  *"move status"*) echo "Move:       vol-old on old -> vol-0e at ec2-user@10.0.0.2:22, phase prepared"; echo "Target:     reachable" ;;
-  *"move freeze"*) [ -z "${STUB_FREEZE_FAILS:-}" ] || { echo "the final copy failed" >&2; exit 1; }; touch "$W/frozen" ;;
-esac
+echo "deploy.sh PUBLIC_IP=$PUBLIC_IP SSH_PORT=$SSH_PORT SSH_KEY=$SSH_KEY SSH_OPTS=${SSH_OPTS:-}" >> "$W/calls"
 EOF
 cat > "$TMP/tree/config/redis/promote.sh" << 'EOF'
 #!/bin/bash
@@ -215,7 +197,7 @@ touch "$W/units.new"
 grep -q '^BLOT_REDIS_SOCKET=/run/blot/redis/redis.sock$' "$W/etc.new/secrets.env" && echo '["BLOT_REDIS_SOCKET=/run/blot/redis/redis.sock"]' > "$W/env.new"
 echo "ghcr.io/blotcms/blot:$1" > "$W/image.new"
 EOF
-chmod +x "$TMP"/bin/* "$CYCLE" "$TMP"/tree/config/host/*.sh "$TMP/tree/config/host/data-volume/resize.sh" "$TMP/tree/config/redis/promote.sh" "$TMP/tree/config/redis/restore.sh" "$TMP/tree/scripts/deploy/units.sh"
+chmod +x "$TMP"/bin/* "$CYCLE" "$TMP"/tree/config/host/*.sh "$TMP/tree/config/redis/promote.sh" "$TMP/tree/config/redis/restore.sh" "$TMP/tree/scripts/deploy/units.sh"
 
 # ---- the world -----------------------------------------------------------
 
@@ -229,7 +211,6 @@ world() {
   echo i-06f6c64 > "$W/eip_id"
   echo False > "$W/protection"
   echo t1 > "$W/cycle_tag"
-  echo 2020-01-01T00:00:00Z > "$W/replaced_at"
   printf 'BLOT_HOST=blot.test\nBLOT_REDIS_HOST=10.0.0.200\nexport BLOT_SESSION_SECRET=s\n' > "$W/etc.old/secrets.env"
   printf 'BLOT_HOST=blot.test\nPROXY_REDIS_HOST=10.0.0.200\nPROXY_PRIVATE_IP=127.0.0.1\n' > "$W/etc.old/proxy.env"
   cp "$W/etc.old/secrets.env" "$W/etc.old/proxy.env" "$W/etc.new/"
@@ -349,13 +330,20 @@ has "a drill launches a drill host" "$CALLS" "--drill"
 has "the drill markers are set" "$CALLS" "/etc/blot/drill /etc/blot-redis/drill"
 before "launch.sh, then deploy.sh" "launch.sh" "deploy.sh PUBLIC_IP=192.0.2.20 SSH_PORT=2222"
 has "deploy.sh does not record the new host's key" "$CALLS" "SSH_OPTS=-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-has "no volume yet" "$CALLS" "DATA_VOLUME_ID="
+lacks "no data volume" "$CALLS" "DATA_VOLUME_ID"
+lacks "the root disk is launch.sh's default" "$CALLS" "--root-gb"
 has "it says what to add" "$OUT" "HostName 192.0.2.20"
 lacks "not npm run deploy-host" "$CALLS" "deploy-host"
 run --drill --type m6gd.xlarge --cycle c1 launch old
 status_is "launch runs again" 0
 lacks "it launches nothing the second time" "$CALLS" "launch.sh"
 has "it sets the host up again" "$CALLS" "bootstrap.sh ec2-user@192.0.2.20"
+world
+run --drill --type m6gd.xlarge --root-gb 30 --cycle c3 launch old
+status_is "launch with --root-gb works" 0
+has "--root-gb reaches launch.sh" "$CALLS" "--root-gb 30"
+run --drill --type m6gd.xlarge --root-gb big --cycle c3 launch old
+refused "a --root-gb that is not a number is refused"
 echo None > "$W/tag"
 run --production --type m6gd.xlarge --cycle c2 launch old
 status_is "a production launch works" 0
@@ -417,25 +405,13 @@ touch "$W/role.old"; echo slave > "$W/role.old"
 run --drill replicate old new
 refused "the old Redis has to be a master"
 
-# ---- data ----------------------------------------------------------------
+# ---- no data phase ------------------------------------------------------
 
 echo "# data"
 world
-run --drill --dry-run data old new
-status_is "data dry run works" 0
-has "resize.sh gets --dry-run" "$CALLS" "--dry-run"
-lacks "deploy.sh does not run" "$CALLS" "deploy.sh PUBLIC_IP"
 run --drill data old new
-status_is "data works" 0
-before "move prepare, then deploy.sh" "move prepare --to new" "deploy.sh PUBLIC_IP=192.0.2.20 SSH_PORT=2222"
-before "deploy.sh, then the copy" "DATA_VOLUME_ID=vol-0e" "move copy"
-has "the source is --host" "$CALLS" "--host old"
-has "a drill freezes the real app" "$CALLS" "--app-freeze"
-has "the profile is the operator's" "$CALLS" "--profile test --region test-1"
-echo master > "$W/role.new"; echo 100 > "$W/keys.new"
-run --drill data old new
-refused "after the switch data refuses"
-lacks "and copies nothing" "$CALLS" "move copy"
+refused "there is no data phase any more"
+no_changes "data"
 
 # ---- app -----------------------------------------------------------------
 
@@ -448,7 +424,7 @@ ready_for_switch
 rm "$W/units.new" "$W/paused.old" "$W/paused.new"
 touch "$W/nomount.new"
 run --drill app old new
-refused "app needs the disks mounted"
+refused "app needs the instance store mounted"
 rm "$W/nomount.new"
 run --drill --dry-run app old new
 status_is "app dry run works" 0
@@ -474,6 +450,8 @@ mode() { ls -l "$1" | cut -c1-10; }
 has "the site is checked through the private IP" "$CALLS" "--resolve blot.test:443:10.0.0.2 https://blot.test/health"
 has "and --verify-host" "$CALLS" "--resolve blog.blot.test:443:10.0.0.2 https://blog.blot.test/"
 lacks "a drill copies no backup key" "$CALLS" 'tar -C "$HOME" -cf - .aws'
+lacks "nor the storage offsite profile or bucket file" "$CALLS" "blot-b2-storage"
+[ ! -e "$W/storage-offsite.new" ] && ok "a drill gets no storage offsite bucket file" || fail "a drill got /etc/blot/storage-offsite-bucket"
 run --drill app old new
 status_is "app runs again" 0
 has "with nothing to change it forces nothing" "$CALLS" "force= skip_write=1"
@@ -513,6 +491,17 @@ run --production app old new
 status_is "a production app with working credentials works" 0
 lacks "it leaves them alone, as an old host on an instance profile has no key to copy" "$CALLS" 'tar -C "$HOME" -cf - .aws'
 has "and adds the offsite profile, which backup.sh needs" "$CALLS" '[blot-b2]'
+has "and the storage offsite profile's credentials, from the old app host" "$CALLS" "ssh old [old]: awk -v s='[blot-b2-storage]'"
+has "and its config section" "$CALLS" "awk -v s='[profile blot-b2-storage]'"
+[ "$(cat "$W/storage-offsite.new" 2> /dev/null)" = test-storage-offsite ] &&
+  ok "and the storage offsite bucket file" || fail "the storage offsite bucket file was not copied"
+rm -f "$W/storage-offsite.new"
+ready_for_switch
+echo None > "$W/tag"; rm "$W/units.new"
+STUB_NO_B2_STORAGE=1 run --production app old new
+status_is "a production app works without the storage offsite settings on the old host" 0
+lacks "and copies no storage offsite profile" "$CALLS" "awk -v s='[blot-b2-storage]'"
+[ ! -e "$W/storage-offsite.new" ] && ok "nor a bucket file" || fail "an empty storage offsite bucket file was written"
 ready_for_switch
 echo None > "$W/tag"; rm "$W/units.new"
 STUB_NEW_HAS_B2=1 run --production app old new
@@ -578,7 +567,7 @@ refused "a different image is refused"
 ready_for_switch
 STUB_PROMOTE_PRECHECK_FAILS=1 run "${SWITCH[@]}" --yes switch old new
 refused "promote.sh's own checks stop it before the freeze"
-lacks "nothing frozen" "$CALLS" "move freeze"
+lacks "nothing frozen" "$CALLS" "read-only.js on"
 
 echo "# switch"
 ready_for_switch
@@ -592,30 +581,33 @@ has "and prints the move" "$OUT" "would run: aws_cli ec2 associate-address"
 lacks "with no promotion" "$CALLS" "promote.sh --yes"
 run "${SWITCH[@]}" --yes --old-direct direct switch eipalias new
 status_is "switch works" 0
-before "bans leave the old host first" "bans.sh export direct" "move freeze"
-before "freeze, then re-arm" "move freeze" "read-only.js on --ttl 900 --reason 'data volume move'"
-before "freeze, then promote" "move freeze" "promote.sh --yes direct new"
-before "promote, then the cache" "promote.sh --yes direct new" "reset-cache.sh $OLD_SHA"
-before "the cache, then the Elastic IP" "reset-cache.sh $OLD_SHA" "associate-address"
-before "the Elastic IP, then the old units" "associate-address" "docker stop"
-before "the old units, then the bans" "docker stop" "bans.sh import new"
-before "the bans, then the check through the Elastic IP" "bans.sh import new" "--resolve blot.test:443:203.0.113.9"
+has "the freeze goes on through the old host's units" "$CALLS" "ssh direct [old]: sudo docker exec blot-blue node scripts/read-only.js on --ttl 900 --reason 'host cycle'"
+before "bans leave the old host first" "bans.sh export direct" "read-only.js on"
+before "freeze, then promote" "read-only.js on --ttl 900" "promote.sh --yes direct new"
+before "the locks, then promote" "ssh direct [old]: sudo docker exec blot-blue node scripts/read-only.js status" "promote.sh --yes direct new"
+before "freeze, then the cache" "read-only.js on --ttl 900" "reset-cache.sh $OLD_SHA"
+before "the cache, then promote" "reset-cache.sh $OLD_SHA" "promote.sh --yes direct new"
+[ "$(printf '%s\n' "$CALLS" | grep -c "reset-cache.sh")" = 1 ] && ok "the cache is emptied once, not again after the promotion" ||
+  fail "the cache is emptied $(printf '%s\n' "$CALLS" | grep -c "reset-cache.sh") times"
+before "promote, then the Elastic IP" "promote.sh --yes direct new" "associate-address"
+before "the Elastic IP, then the check through it" "associate-address" "--resolve blot.test:443:203.0.113.9"
 before "the check, then unfreeze" "--resolve blot.test:443:203.0.113.9" "read-only.js off"
+before "unfreeze, then the old units" "read-only.js off" "docker stop"
+before "the old units, then the bans" "docker stop" "bans.sh import new"
+lacks "no re-arm through the new host after the promotion" "$(printf '%s\n' "$CALLS" | sed -n '/promote.sh --yes direct new/,$p')" "ssh new [new]: sudo docker exec blot-blue node scripts/read-only.js on"
 before "promote, then the markers" "promote.sh --yes direct new" "ssh new [new]: sudo touch /etc/blot-redis/active"
+before "unfreeze, then the markers" "read-only.js off" "ssh new [new]: sudo touch /etc/blot-redis/active"
 has "the old Redis loses its active marker" "$CALLS" "ssh direct [old]: sudo rm -f /etc/blot-redis/active"
 has "the Elastic IP goes to the new instance" "$CALLS" "--allocation-id eipalloc-0a --instance-id $NEW_ID --allow-reassociation"
 has "the old units stop through --old-direct" "$CALLS" "ssh direct [old]: sudo bash -c"
 has "and any airlocks a host still has" "$CALLS" "docker ps --quiet --filter name=-airlock | xargs -r docker stop"
 lacks "they are only stopped" "$CALLS" "docker rm"
 has "the freeze goes through the new host" "$CALLS" "ssh new [new]: sudo docker exec blot-blue node scripts/read-only.js off"
-lacks "move thaw is for rollback" "$CALLS" "move thaw"
 has "ssh to the new host follows the Elastic IP once it moved" "$(cat "$W/override_calls")" "read-only.js off"
 lacks "and not before (the roles are read first)" "$(cat "$W/override_calls")" "INFO replication"
 has "through a config naming the Elastic IP" "$(cat "$W/override_cfg")" "HostName 203.0.113.9"
 has "and checking the key as known_hosts spells it" "$(cat "$W/override_cfg")" "HostKeyAlias [192.0.2.20]:2222"
 has "over the user's own config" "$(cat "$W/override_cfg")" "Include $HOME/.ssh/config"
-lacks "retag waits for settle" "$CALLS" "move retag"
-has "the freeze TTL reaches resize.sh" "$CALLS" "--freeze-ttl 900"
 [ ! -e "$W/frozen" ] && ok "nothing is frozen at the end" || fail "still frozen"
 
 echo "# switch: a master that was not promoted by this cycle"
@@ -624,7 +616,7 @@ echo master > "$W/role.new"; echo 100 > "$W/keys.new"
 run "${SWITCH[@]}" --yes switch old new
 refused "a master the old Redis does not follow is refused"
 has "and says so" "$OUT" "does not follow"
-lacks "nothing frozen" "$CALLS" "move freeze"
+lacks "nothing frozen" "$CALLS" "read-only.js on"
 lacks "nothing promoted" "$CALLS" "promote.sh --yes"
 # promote.sh finished FAILOVER but died before writing its marker.
 echo slave > "$W/role.old"; echo 10.0.0.2 > "$W/master.old"
@@ -632,7 +624,7 @@ touch "$W/flaky_move"
 run "${SWITCH[@]}" --yes switch old new
 rm -f "$W/flaky_move" "$W/ssh_resets"
 status_is "a master the old Redis follows resumes, past resets after the address moves" 0
-lacks "with no second freeze" "$CALLS" "move freeze"
+lacks "with no second freeze" "$CALLS" "[old]: sudo docker exec blot-blue node scripts/read-only.js on"
 lacks "and no second promotion" "$CALLS" "promote.sh --yes"
 has "and writes the markers promote.sh did not" "$CALLS" "ssh new [new]: sudo touch /etc/blot-redis/active"
 has "on both sides" "$CALLS" "sudo rm -f /etc/blot-redis/active"
@@ -659,11 +651,28 @@ no_changes "a finished switch"
 
 echo "# switch: stops and resumes"
 ready_for_switch
-STUB_FREEZE_FAILS=1 run "${SWITCH[@]}" --yes switch old new
-refused "a failed freeze stops it"
-has "it names the stage" "$OUT" "stopped during: freeze and final copy"
-has "and the way back" "$OUT" "move thaw"
+STUB_LOCKS=1 run "${SWITCH[@]}" --yes switch old new
+refused "folder locks that never go stop it"
+has "it names the stage" "$OUT" "stopped during: freeze"
+has "and says why" "$OUT" "folder locks still held"
 lacks "no promotion" "$CALLS" "promote.sh --yes"
+has "the freeze is lifted on the old host" "$CALLS" "ssh old [old]: sudo docker exec blot-blue node scripts/read-only.js off"
+has "and it says so" "$OUT" "the freeze is lifted"
+[ ! -e "$W/frozen" ] && ok "nothing is left frozen" || fail "still frozen after a failed freeze"
+ready_for_switch
+touch "$W/frozen"
+STUB_FREEZE_REASON=maintenance run "${SWITCH[@]}" --yes switch old new
+refused "someone else's freeze stops it"
+has "and says so" "$OUT" "read-only for something else"
+lacks "it is not extended" "$CALLS" "read-only.js on"
+lacks "or lifted" "$CALLS" "read-only.js off"
+lacks "no promotion" "$CALLS" "promote.sh --yes"
+ready_for_switch
+touch "$W/frozen"
+run "${SWITCH[@]}" --yes switch old new
+status_is "its own freeze from an interrupted run goes on" 0
+has "and promotes" "$CALLS" "promote.sh --yes old new"
+ready_for_switch
 ready_for_switch
 STUB_PROMOTE_FAILS=1 run "${SWITCH[@]}" --yes switch old new
 refused "a failed promotion stops it"
@@ -687,7 +696,7 @@ lacks "still frozen, for a person to decide" "$CALLS" "read-only.js off"
 [ -e "$W/frozen" ] && ok "the app stays frozen" || fail "unfrozen after a failed check"
 run "${SWITCH[@]}" --yes --old-direct direct switch eipalias new
 status_is "it resumes through --old-direct" 0
-lacks "with no second freeze" "$CALLS" "move freeze"
+lacks "with no second freeze" "$CALLS" "[old]: sudo docker exec blot-blue node scripts/read-only.js on"
 lacks "no second promotion" "$CALLS" "promote.sh --yes"
 lacks "no second cache wipe" "$CALLS" "reset-cache.sh"
 lacks "no second move" "$CALLS" "associate-address"
@@ -721,8 +730,8 @@ status_is "settle works" 0
 has "settle follows the Elastic IP without the alias being edited" "$(cat "$W/override_cfg")" "HostName 203.0.113.9"
 has "a forced rolling deploy of the same image" "$CALLS" "units.sh $OLD_SHA target=new ignore_pause=1 force=1 skip_write="
 has "the dashboard is checked" "$CALLS" "https://blot.test/sites/log-in"
-before "deploy, then retag" "units.sh" "move retag"
-before "retag, then deploys resume" "move retag" "rm -f /etc/blot/deploy-paused"
+before "deploy, then deploys resume" "units.sh" "rm -f /etc/blot/deploy-paused"
+lacks "no volumes to retag" "$CALLS" "create-tags"
 [ ! -e "$W/paused.new" ] && [ ! -e "$W/paused.old" ] && ok "deploys resume on both hosts" || fail "still paused"
 run --drill --eip eipalloc-0a settle old new
 status_is "settle runs again" 0
@@ -731,23 +740,18 @@ lacks "with no second deploy" "$CALLS" "units.sh"
 # ---- finish --------------------------------------------------------------
 
 echo "# finish"
-FINISH=(--drill --eip eipalloc-0a --old-volume vol-old)
-run --drill --eip eipalloc-0a --old-volume vol-old finish old new
+FINISH=(--drill --eip eipalloc-0a)
+run --drill --eip eipalloc-0a finish old new
 refused "finish without IDs is refused"
 has "and says so" "$OUT" "--old-instance"
-run --drill --eip eipalloc-0a --old-instance i-0aaa finish old new
-refused "finish without the volume is refused"
+run "${FINISH[@]}" --old-volume vol-old --old-instance i-0aaa --yes finish old new
+refused "--old-volume is gone: there is no data volume"
+lacks "and nothing is terminated" "$CALLS" "terminate-instances"
 run "${FINISH[@]}" --old-instance "$NEW_ID" --yes finish old new
 refused "the new host cannot be terminated"
 lacks "nothing is" "$CALLS" "terminate-instances"
-echo "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$W/replaced_at"
-run "${FINISH[@]}" --old-instance i-0aaa --yes finish old new
-refused "a volume replaced today is too soon"
-has "and says so" "$OUT" "--any-age"
-echo None > "$W/replaced_at"
-run "${FINISH[@]}" --old-instance i-0aaa --any-age --yes finish old new
-refused "a volume settle did not replace is refused"
-echo 2020-01-01T00:00:00Z > "$W/replaced_at"
+run "${FINISH[@]}" --old-instance nonsense --yes finish old new
+refused "something that is not an instance ID is refused"
 echo True > "$W/protection"
 run "${FINISH[@]}" --old-instance i-0aaa --old-instance i-0bbb --yes finish old new
 refused "termination protection stops it"
@@ -765,7 +769,7 @@ run "${FINISH[@]}" --old-instance i-0aaa --old-instance i-0bbb --yes finish old 
 status_is "finish works" 0
 has "it terminates the first" "$CALLS" "terminate-instances --instance-ids i-0aaa"
 has "and the second" "$CALLS" "terminate-instances --instance-ids i-0bbb"
-lacks "the volume is kept" "$CALLS" "delete-volume"
+lacks "and touches no volume" "$CALLS" "volume"
 touch "$W/paused.new"
 run "${FINISH[@]}" --old-instance i-0aaa --yes finish old new
 refused "before settle finish refuses"
@@ -775,20 +779,18 @@ rm "$W/paused.new"
 
 echo "# restore"
 COMMIT_SHA=2222222222222222222222222222222222222222
-INPUTS=(--type m6gd.xlarge --cycle t1 --old-volume vol-0a1b --eip eipalloc-0a --commit "$COMMIT_SHA"
+INPUTS=(--type m6gd.xlarge --cycle t1 --eip eipalloc-0a --commit "$COMMIT_SHA"
   --secrets-env "$TMP/in/secrets.env" --proxy-env "$TMP/in/proxy.env" --aws-credentials "$TMP/in/credentials")
 # restore_world: the lost host is gone, whose address the Elastic IP is still on.
-restore_world() { world; rm -rf "$W/units.old" "$W/etc.new"; mkdir -p "$W/etc.new"; echo vol-0c1 > "$W/marker"; }
-mutations() { # nothing that changes the lost volume, whatever else happens
-  lacks "$1: no detach" "$CALLS" "detach-volume"
-  lacks "$1: no modify-volume" "$CALLS" "modify-volume"
-  lacks "$1: no delete-volume" "$CALLS" "delete-volume"
-  lacks "$1: the lost volume is not attached" "$CALLS" "attach-volume --volume-id vol-0a1b"
+restore_world() { world; rm -rf "$W/units.old" "$W/etc.new"; mkdir -p "$W/etc.new"; }
+no_volumes() { # restore makes, attaches and tags no volume, whatever else happens
+  lacks "$1: no snapshot is read" "$CALLS" "describe-snapshots"
+  lacks "$1: no volume is made" "$CALLS" "create-volume"
+  lacks "$1: none is attached" "$CALLS" "attach-volume"
+  lacks "$1: no tags" "$CALLS" "create-tags"
 }
 
 restore_world
-run --drill "${INPUTS[@]}" --old-volume "" --dry-run restore
-refused "restore with no volume or snapshot is refused"
 run --drill "${INPUTS[@]}" --commit abc --dry-run restore
 refused "restore with a short commit is refused"
 run --drill "${INPUTS[@]}" --cycle "" --dry-run restore
@@ -800,37 +802,35 @@ run --drill "${INPUTS[@]}" --aws-credentials "$TMP/in/secrets.env" restore
 refused "credentials without a [default] profile are refused"
 run restore
 refused "restore with neither --drill nor --production is refused"
-touch "$W/nosnap"
-run --drill "${INPUTS[@]}" --yes restore
-refused "no completed snapshot is refused"
-has "and says so" "$OUT" "no completed snapshot"
-lacks "before launching anything" "$CALLS" "launch.sh"
-rm "$W/nosnap"
+for gone in "--old-volume vol-0a1b" "--snapshot snap-0a1" --wait-prewarm; do
+  # shellcheck disable=SC2086
+  run --drill "${INPUTS[@]}" $gone --dry-run restore
+  refused "restore no longer takes ${gone%% *}"
+done
 run --production "${INPUTS[@]}" --yes restore new
 refused "--production against a drill-tagged host is refused"
 has "naming the tag" "$OUT" "tagged BlotDrill=true"
-mutations "restore on the wrong world"
+no_volumes "restore on the wrong world"
 
 echo "# restore: first run launches"
 restore_world
-run --drill "${INPUTS[@]}" --yes restore
+run --drill "${INPUTS[@]}" --root-gb 30 --yes restore
 status_is "restore without a name launches" 0
 has "launch.sh is told the cycle" "$CALLS" "BlotCycle=t1"
+has "and the root disk size" "$CALLS" "--root-gb 30"
 has "the host is set up" "$CALLS" "deploy.sh PUBLIC_IP=192.0.2.20"
-lacks "no volume yet" "$CALLS" "create-volume"
 lacks "and no Redis restore" "$CALLS" "restore.sh"
 has "it says to run it again" "$OUT" "run the same restore command again"
-mutations "launch"
+no_volumes "launch"
 
 echo "# restore: dry run"
 restore_world
 run --drill "${INPUTS[@]}" --dry-run restore new
 status_is "restore dry run works" 0
 lacks "restores no Redis" "$CALLS" "restore.sh"
-lacks "creates no volume" "$CALLS" "create-volume"
 lacks "starts no units" "$CALLS" "units.sh"
 lacks "moves no address" "$CALLS" "associate-address"
-has "but prints what it would do" "$OUT" "would run: aws ec2 create-volume"
+has "but prints what it would do" "$OUT" "would run: aws_cli ec2 associate-address"
 
 echo "# restore: a fresh Redis"
 restore_world
@@ -841,7 +841,7 @@ unset STUB_RESTORE_NOOP
 refused "a Redis still fresh after restore.sh is refused"
 has "restore.sh ran on the fresh Redis, which holds a few sampler keys" "$CALLS" "restore.sh --yes new latest"
 has "and it says so" "$OUT" "looks fresh"
-lacks "no volume is made on an unrestored Redis" "$CALLS" "create-volume"
+lacks "no units start on an unrestored Redis" "$CALLS" "units.sh"
 
 echo "# restore: a drill"
 restore_world
@@ -851,29 +851,21 @@ run --drill "${INPUTS[@]}" --yes restore new
 status_is "restore works" 0
 has "the env files are private on the host whatever their mode here" "$(ls -l "$W/etc.new/secrets.env" "$W/etc.new/proxy.env" | cut -c1-10 | sort -u)" "-rw-------"
 lacks "and none is world-readable" "$(ls -l "$W/etc.new/secrets.env" "$W/etc.new/proxy.env" | cut -c1-10)" "r--r--"
-before "Redis is restored first" "restore.sh --yes new latest" "create-volume"
-before "then the volume is attached" "create-volume" "attach-volume --volume-id vol-0c1 --instance-id i-06e6577"
-before "then adopted from the snapshot's volume" "attach-volume" "host.sh adopt vol-0c1 vol-0a1b"
-before "the pre-warm starts" "host.sh adopt" "host.sh prewarm vol-0c1"
-before "and the volume is mounted by deploy.sh" "host.sh prewarm" "DATA_VOLUME_ID=vol-0c1"
+before "Redis is restored first" "restore.sh --yes new latest" "wildcard-cert.sh new"
 before "the env files and certificate come before the units" "wildcard-cert.sh new" "units.sh $COMMIT_SHA"
 before "the units come before the address moves" "units.sh $COMMIT_SHA" "associate-address"
+lacks "deploy.sh does not run again: launch did it" "$CALLS" "deploy.sh PUBLIC_IP"
 has "the units target the new host" "$CALLS" "target=new"
-has "the volume is made from the newest snapshot" "$CALLS" "create-volume --snapshot-id snap-0a1 --availability-zone us-west-2a --volume-type gp3 --volume-initialization-rate 300 --iops 3000 --throughput 125"
-has "tagged for this cycle" "$CALLS" "BlotRestoreCycle"
-has "a drill volume keeps its drill name" "$CALLS" "drill-data-volume"
-lacks "and never the production name" "$CALLS" "Blot /var/www/blot/data"
-lacks "no production tag" "$CALLS" "create-tags"
 has "the host is marked to back up" "$CALLS" "touch /etc/blot-redis/active"
 has "the credentials were installed" "$(ls "$W")" "creds.new"
-has "it prints cold read timings" "$OUT" "268 MB/s"
 has "and the time of each step" "$OUT" "timing: Redis from the backup took"
-has "and the snapshot's start for the reconcile" "$OUT" "reconcile.js --since 2026-11-01T03:00:00+00:00"
-mutations "restore"
+has "it says Redis is behind S3" "$OUT" "Redis is as of its backup"
+lacks "and names no reconcile" "$OUT" "reconcile"
+no_volumes "restore"
 
 before "the Elastic IP is followed before the public check" "associate-address" "--resolve blot.test:443:203.0.113.9"
 has "through a config naming the Elastic IP" "$(cat "$W/override_cfg")" "HostName 203.0.113.9"
-has "it reminds to edit the alias" "$OUT" "change HostName for new in ~/.ssh/config to 203.0.113.9"
+has "it reminds to edit the alias" "$OUT" "Change HostName for new in ~/.ssh/config to 203.0.113.9"
 [ ! -e "$W/etc.new/cycle-env-pending" ] && ok "the env marker is cleared once the units are verified" || fail "cycle-env-pending is still on the new host"
 
 echo "# restore: again after it finished"
@@ -884,11 +876,9 @@ status_is "restore can be run again" 0
 has "a resumed restore follows the Elastic IP before reaching the host" "$(cat "$W/override_cfg")" "HostName 203.0.113.9"
 rm -f "$W/gone.new"
 lacks "no second Redis restore" "$CALLS" "restore.sh"
-lacks "no second volume" "$CALLS" "create-volume"
-lacks "no second attach" "$CALLS" "attach-volume"
 lacks "the address is not moved again" "$CALLS" "associate-address"
 has "it says where it is" "$OUT" "is already on"
-mutations "second restore"
+no_volumes "second restore"
 
 echo "# restore: env marker left by an interrupted run"
 restore_world
@@ -900,21 +890,6 @@ status_is "restore with the marker present works" 0
 has "the units are redeployed by force" "$CALLS" "units.sh $COMMIT_SHA"
 [ ! -e "$W/etc.new/cycle-env-pending" ] && ok "and the marker is cleared afterwards" || fail "the marker is still there"
 
-echo "# restore: a gp2 source volume"
-restore_world
-echo 3 > "$W/keys.new"
-STUB_VTYPE=gp2 run --drill "${INPUTS[@]}" --yes restore new
-status_is "restore from a gp2 volume works" 0
-has "creates the volume as gp2" "$CALLS" "--volume-type gp2"
-lacks "without --iops, which gp2 rejects" "$CALLS" "--iops"
-lacks "or --throughput" "$CALLS" "--throughput"
-
-echo "# restore: a volume from another snapshot"
-echo "vol-0c1 snap-9999" > "$W/restore_volume"
-run --drill "${INPUTS[@]}" --yes restore new
-refused "a volume made from another snapshot is refused"
-has "and says so" "$OUT" "snap-9999"
-
 echo "# restore: production"
 restore_world
 echo None > "$W/tag"
@@ -923,10 +898,8 @@ refused "the production address needs a person at the terminal, --yes or not"
 has "and says why" "$OUT" "person at the terminal"
 has "the units had come up" "$CALLS" "units.sh $COMMIT_SHA"
 lacks "the address did not move" "$CALLS" "associate-address"
-lacks "and the volume has no production name yet" "$CALLS" "create-tags"
-has "the volume has a name of its own" "$CALLS" "restored for t1"
 has "it names the host losing the address" "$OUT" "is on: i-06f6c64"
-mutations "production restore"
+no_volumes "production restore"
 echo true > "$W/tag"
 
 # ---- status --------------------------------------------------------------

@@ -283,13 +283,16 @@ const walk = async (
   progress
 ) => {
   publish("Checking", dir);
-  const [remoteContents, localContents] = await Promise.all([
-    remoteReaddir(client, join(dropboxRoot, dir)).catch((err) => {
+  const remoteReading = remoteReaddir(client, join(dropboxRoot, dir)).catch(
+    (err) => {
       if (dir === "/" || !vanishedFolder(err)) throw err;
       summary.vanished.push({ dir, tag: dropboxTag(err) });
       return null;
-    }),
-    localReaddir(blogID, dir),
+    }
+  );
+  const [remoteContents, localContents] = await Promise.all([
+    remoteReading,
+    localReaddir(blogID, dir, remoteReading),
   ]);
 
   // Dropbox no longer has this folder: remove nothing, and check once the
@@ -628,20 +631,33 @@ const excuseRecentChanges = async (client, changed, dropboxRoot, summary) => {
   }
 };
 
-// A file's hash is undefined if it can't be read, which never matches Dropbox's
-const contentHash = async (blogID, path) => {
+// A file's hash is undefined if it can't be read, which never matches Dropbox's.
+// Hashing can mean reading the whole file, so when Dropbox's size for the file
+// is known it is compared first, from the index: files of different sizes
+// can't have the same bytes.
+const contentHash = async (blogID, path, size) => {
   try {
+    if (typeof size === "number") {
+      const stat = await storage.stat(blogID, path);
+      if (stat.isDirectory || stat.size !== size) return undefined;
+    }
     return (await storage.stat(blogID, path, { hash: true })).hash;
   } catch (e) {
     return undefined;
   }
 };
 
-const localReaddir = async (blogID, dir) => {
-  const contents = await storage.listNames(blogID, dir);
+// remoteContentsPromise is the same folder's listing in Dropbox (null if it
+// is gone), for the sizes
+const localReaddir = async (blogID, dir, remoteContentsPromise) => {
+  const [contents, remoteContents] = await Promise.all([
+    storage.listNames(blogID, dir),
+    remoteContentsPromise,
+  ]);
 
   return mapLimit(contents, HASH_CONCURRENCY, async ({ name, isDirectory }) => {
     const path_display = join(dir, name);
+    const remoteItem = (remoteContents || []).find((item) => item.name === name);
 
     return {
       name,
@@ -649,7 +665,11 @@ const localReaddir = async (blogID, dir) => {
       is_directory: isDirectory,
       content_hash: isDirectory
         ? undefined
-        : await contentHash(blogID, path_display),
+        : await contentHash(
+            blogID,
+            path_display,
+            remoteItem && !remoteItem.is_directory ? remoteItem.size : undefined
+          ),
     };
   });
 };

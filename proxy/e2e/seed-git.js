@@ -15,7 +15,7 @@
 // CI user's; it means nothing outside the job.
 //
 // Second form: changes a git blog's handle the way the dashboard does
-// (models/blog/set, which also moves the repository), for the handle-rename
+// (models/blog/set; the repository is keyed by blog ID, so nothing moves), for the handle-rename
 // check in git-checks.js.
 //
 // Only core modules and NODE_PATH-resolved app modules - the script is copied

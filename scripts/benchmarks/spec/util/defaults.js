@@ -74,15 +74,15 @@ const BENCHMARK_DEFAULTS = Object.freeze({
   // the existing flat mode rather than a change to its shape, so it does not
   // require a historySchemaVersion bump.
   distribution: "flat",
-  // Fraction of generated entries that get a hard link to a file from the
+  // Fraction of generated entries that get a copy of a file from the
   // shared media pool (generated on the fly by lib/generate-media.js into
-  // data/blogs/_benchmark-media-pool - see build-render.spec.js) instead of
+  // data/_benchmark-media-pool - see build-render.spec.js) instead of
   // plain text content. 0 in flat/default mode; the big-corpus mode below
   // turns this on.
   mediaFraction: 0,
   // Defaults for the opt-in big-corpus mode (--distribution skewed),
   // production-shaped: ~1000 sites, ~160k posts total, ~20% of posts
-  // reference a symlinked media file.
+  // reference a media file.
   corpusSites: 1000,
   corpusFiles: 160000,
   corpusMediaFraction: 0.2,
@@ -92,7 +92,7 @@ const BENCHMARK_DEFAULTS = Object.freeze({
   // "build": generate the workload (using whatever sites/files/distribution
   // is configured, typically the big skewed corpus) and rebuild every site,
   // then stop - used by build-corpus.js, which takes over from there to
-  // snapshot Redis + data/blogs.
+  // snapshot Redis + the MinIO data.
   // "render": skip workload generation and blog.rebuild() entirely and just
   // run the render + burst phases against blogs that already exist (loaded
   // from a corpus manifest) - used by benchmarks-render.yml against a
@@ -102,11 +102,11 @@ const BENCHMARK_DEFAULTS = Object.freeze({
   // manifest describing which blog IDs make up a built corpus.
   corpusManifestPath: ".benchmarks/corpus/manifest.json",
   // Bump whenever the *shape* of the corpus produced by build-corpus.js
-  // changes (site/post/tag/media distribution, symlink layout, etc) - this
-  // invalidates the cached Redis dump + data/blogs tarball
+  // changes (site/post/tag/media distribution, where folders are kept, etc) - this
+  // invalidates the cached Redis dump + MinIO data tarball
   // independently of historySchemaVersion, which only tracks metric
   // definitions for the render/build benchmark itself.
-  corpusSchemaVersion: 1,
+  corpusSchemaVersion: 2,
   // CI gate / trend-alert threshold, in percent, applied to timing metrics.
   regressionThresholdPercent: 15,
   // Tight threshold for near-deterministic metrics (output byte size).

@@ -10,7 +10,7 @@ that turns them into a PR comment and a master-branch regression watch.
 | [`benchmarks.yml`](../../.github/workflows/benchmarks.yml) | daily on master + PRs touching render or build code | small, built fresh every run (5 sites / 1000 files) | build + render + burst phases, smoke-scale |
 | [`benchmarks-corpus.yml`](../../.github/workflows/benchmarks-corpus.yml) | weekly + manual | large (1000 sites / ~160k posts) | nothing directly - builds and caches the corpus the next workflow reads |
 | [`benchmarks-render.yml`](../../.github/workflows/benchmarks-render.yml) | manual, until `benchmarks-corpus.yml` works again | the cached large corpus | render + burst phases only, against realistic production-shaped data |
-| [`benchmarks-converters.yml`](../../.github/workflows/benchmarks-converters.yml) | PR/push touching `app/build/converters/**` | tiny (a converter's own test fixtures) | per-converter conversion timing, in-process |
+| [`benchmarks-converters.yml`](../../.github/workflows/benchmarks-converters.yml) | PR/push touching `app/build/converters/**` | a converter's own test fixtures, then a generated typical corpus | per-converter conversion timing, in-process and with each sandbox job in its own process |
 | [`benchmarks-mega.yml`](../../.github/workflows/benchmarks-mega.yml) | manual, or the `mega-benchmark` label on a PR | two generated sites shaped like the blogs that hurt everyone else, plus four small ones | base vs head in one job: cold/warm/after-bump renders, template previews, other blogs' latency meanwhile, heap. See [`mega/README.md`](mega/README.md) |
 
 `benchmarks.yml` is unchanged in behavior from before this document's corpus
@@ -143,7 +143,7 @@ Its production-scale defaults (`corpusSites: 1000`, `corpusFiles: 160000`,
 `corpusMediaFraction: 0.2`) live in [`spec/util/defaults.js`](spec/util/defaults.js)
 and are what `build-corpus.js` uses unless overridden.
 
-## The shared media pool and hard-link trick
+## The shared media pool
 
 A configurable fraction of posts (`--media-fraction`, 0 by default, 0.2 in the
 corpus defaults) reference an image or GIF. Rather than writing unique media
@@ -152,28 +152,17 @@ generates a small, fixed (~24 file) pool of genuinely valid JPEG/PNG photos
 (synthesized gradients via `sharp`, palette-quantized/mozjpeg'd to stay tiny),
 short animated GIFs (`sharp` frames assembled with ImageMagick's `convert`),
 and a couple of hand-written SVGs - deterministically, from `--seed`, into
-`data/blogs/_benchmark-media-pool/` (a fixed directory *inside*
-`config.blog_folder_dir`, sibling to the per-blog folders) the first time a
-run needs media. Nothing here is committed to git; the pool is regenerated
-fresh (idempotently - only if missing) by every run that requests media.
+`data/_benchmark-media-pool/` (a fixed directory on disk, outside every blog's
+folder) the first time a run needs media. Nothing here is committed to git;
+the pool is regenerated fresh (idempotently - only if missing) by every run
+that requests media.
 
-Each post that wants media gets a **hard link** (`fs.link`, not a symlink) to
-one of the pool files, picked pseudo-randomly from the same seeded RNG. This
-is deliberately a hard link: [`app/helper/assertNoSymlinks.js`](../../app/helper/assertNoSymlinks.js)
-is called on every path inside a blog folder during sync
-([`app/sync/update/index.js`](../../app/sync/update/index.js)) and when
-serving assets ([`app/blog/routes/assets.js`](../../app/blog/routes/assets.js)),
-and unconditionally rejects any symlink - including the final path component
-itself - with `ELOOP`. A hard link is indistinguishable from an ordinary file
-to `lstat()`, so it passes that check, and because every post referencing the
-same pool file shares one inode, `tar` still only stores that file's bytes
-once per archive (subsequent hard-linked paths become link references) - so
-`data/blogs/` stays small exactly like a symlink approach would have, without
-tripping the no-symlinks guard. Putting the pool inside `data/blogs/` (rather
-than, say, the git checkout) also means it's swept up for free by whatever
-already tars/restores `data/blogs` (see the corpus lifecycle below), so a
-restored corpus's hard links keep resolving without needing a fourth cached
-artifact.
+Each post that wants media gets a copy of one of the pool files (written into
+the blog's folder with `storage/folder`'s `writeFrom`), picked
+pseudo-randomly from the same seeded RNG. Blog folders live only in the
+storage bucket (MinIO here), which has no links, so every such post stores its
+own copy of the bytes; the pool is just the source they are copied from, and
+is not part of the corpus snapshot.
 
 ## The corpus build/cache/restore lifecycle
 
@@ -187,11 +176,10 @@ enough that no PR should pay for it. Instead:
    `blog.rebuild()` every site, then stop - no render/burst phases), then
    snapshots two artifacts into `.benchmarks/corpus/`:
    - `redis-dump.rdb` - a Redis `SAVE` dump of every entry/tag/index key
-   - `blogs.tar.gz` - `data/blogs/` (raw source + hard-linked media - small)
-
-   (The images and thumbnails the build generates are uploaded to a throwaway
-   MinIO that `build-corpus.js` starts, and are not kept: the render benchmark
-   requests pages, never those files.)
+   - `minio.tar.gz` - the data of the throwaway MinIO that `build-corpus.js`
+     starts, copied out with `docker cp`: the blogs' folders (raw source +
+     media) and the images and thumbnails the build generated, which all live
+     only in the storage bucket
 
    plus `manifest.json` (blog IDs/handles, and each site's tags/search
    keywords/hub path, so a later render-only run doesn't need to recompute
@@ -208,8 +196,8 @@ enough that no PR should pay for it. Instead:
    corpus cache (read-only - it never saves back an amended corpus), loads
    the Redis dump into its job's `redis:6` service container (`docker cp` the
    dump into the container's `/data/dump.rdb`, then `redis-cli DEBUG RELOAD`
-   to make the running server pick it up without a restart), extracts the two
-   tarballs into place, then runs the spec in `--corpus-mode render`: skip
+   to make the running server pick it up without a restart), copies the MinIO
+   tarball into a stopped MinIO container (`docker cp -`) and starts it, then runs the spec in `--corpus-mode render`: skip
    workload generation and `blog.rebuild()` entirely and just run the render
    + burst phases against what's already there. History/regression tracking
    is entirely separate from `benchmarks.yml` (`render-benchmarks-history-
@@ -218,8 +206,8 @@ enough that no PR should pay for it. Instead:
 
 `CORPUS_SCHEMA_VERSION` (a workflow env, mirrored as `corpusSchemaVersion` in
 `defaults.js`) is independent of `historySchemaVersion`: bump it whenever the
-corpus's *shape* changes (site/post/tag/media distribution, the hard-link
-layout, the converter fixture set) so a stale cached corpus doesn't silently
+corpus's *shape* changes (site/post/tag/media distribution, where blog
+folders are kept, the converter fixture set) so a stale cached corpus doesn't silently
 get reused against code that no longer matches its assumptions.
 
 ## Running it locally
@@ -271,9 +259,8 @@ node scripts/benchmarks --corpus-mode render \
 ```
 
 The last command needs the corpus's Redis dump already loaded and its
-`data/blogs` tarball already extracted into wherever your
-local container mounts `/usr/src/app/data` - `build-corpus.js` writes its
-working `data/` under `--out-dir` for exactly this reason.
+MinIO data (`minio.tar.gz`) already restored into the MinIO
+the container is pointed at (`BLOT_STORAGE_*`), as `benchmarks-render.yml` does.
 
 ### Per-converter benchmark
 
@@ -281,7 +268,8 @@ working `data/` under `--out-dir` for exactly this reason.
 NODE_PATH=app node scripts/benchmarks/converter-bench.js --converter markdown --converter img --n 50
 # docx, odt and img upload what they produce to the storage bucket: start a
 # MinIO (see scripts/tests/invoke.sh) and set BLOT_STORAGE_BUCKET,
-# BLOT_STORAGE_ENDPOINT, BLOT_STORAGE_REGION, BLOT_AWS_KEY and BLOT_AWS_SECRET
+# BLOT_STORAGE_ENDPOINT, BLOT_STORAGE_REGION, BLOT_AWS_KEY and BLOT_AWS_SECRET.
+# gdoc does too; the other converters don't need it.
 ```
 
 No Docker needed for most converters - see "Per-converter benchmarks" below.
@@ -307,11 +295,11 @@ comes from trends, not single runs.
 - keeps **one** sticky comment ([`pr-comment.js`](pr-comment.js)) comparing the
   PR against the rolling master median. It has three states, all on the same
   comment:
-  - **running** (`⏳` in the header) — flipped on as soon as the job starts, so
+  - **running** ("running" in the header) — flipped on as soon as the job starts, so
     the PR shows a run is in flight. The previous run's table stays visible.
   - **done** — the table, plus the commit it was benchmarked from (and the one
     before it) in the footer.
-  - **run failed** — set if the job errors, so the comment never sticks on `⏳`.
+  - **run failed** — set if the job errors, so the comment never sticks on "running".
 - draft PRs are skipped entirely
 
 ### Daily on master
@@ -350,7 +338,7 @@ artifact, no comment, no issue.
   workflow gets a daily schedule like `benchmarks.yml`
 - restores the newest `benchmark-corpus-v*` cache (falls back to
   [`seed-corpus.js`](seed-corpus.js) if missing entirely), loads the Redis
-  dump into its job's `redis:6` service container, extracts `data/blogs`
+  dump into its job's `redis:6` service container, restores the MinIO data
 - runs render + all six burst phases via `--corpus-mode render`
 - its own sticky PR comment, its own `render-benchmarks-history-<arch>`
   cache, its own `render-benchmark-regression` issue label - not comparable
@@ -392,6 +380,34 @@ converters like image/docx. Most converters genuinely need nothing else, but
 `benchmarks-converters.yml` runs a `redis:6` service container for every
 converter, not just when `img` is in the changed set.
 
+Two options make it closer to what a build costs in production:
+
+- **`--corpus typical`** times realistic documents instead of the test
+  fixtures, which are mostly one-line edge cases: a short note, a typical
+  post and a long essay in Markdown, the typical post as org, rtf, html, docx
+  and odt (with and without two images), and a photo and a screenshot for
+  `img`. [`converter-corpus.js`](converter-corpus.js) generates them (with
+  pandoc and sharp) on each run, so nothing binary is committed. Results get a
+  `-typical` suffix and a p50 per file, since the overall percentiles blend a
+  1 KB note with a 40 KB essay. `--corpus tests --corpus typical` runs both.
+- **`--sandbox`** runs the sandbox jobs (pandoc, sharp, exiftool) through the
+  real broker, each job in a fresh `node app/sandbox/jobs/main.js <job>`
+  process, as production does but without nsjail
+  ([`lib/local-sandbox.js`](lib/local-sandbox.js)). In-process, which is what
+  every dev and test run uses, a job costs only its work; in production each
+  one also pays a process, Node's start and its requires (about 30 ms, 70 ms
+  with sharp), and nsjail's setup on top. Results get a `-sandbox` suffix and
+  report `sandbox_jobs_per_conversion`.
+
+```bash
+NODE_PATH=app node scripts/benchmarks/converter-bench.js --converter markdown --converter org --corpus typical --sandbox --n 30
+```
+
+The workflow runs the test fixtures in-process, as before, then the typical
+corpus with `--sandbox`, and installs the pandoc release production pins
+(`PANDOC_VERSION` in `config/versions.env`): the distribution's pandoc is
+older, and its speed differs.
+
 This intentionally has its own small metrics shape and its own simplified
 regression check (latest vs. median-of-last-20, single threshold) rather than
 reusing `lib/metrics.js`/`detect-regression.js`'s full apparatus, which is
@@ -409,6 +425,42 @@ mean forking a child process per converter and reading its own RSS) since
 this benchmark's primary signal is conversion timing, not memory; treat a
 `peak_rss_mb` regression as "something in this job's process grew," not
 necessarily "this specific converter grew."
+
+## Build-path micro benchmarks
+
+- [`build-posts.js`](build-posts.js) writes `--files` generated markdown posts
+  of about `--kb` KB into a fresh blog's folder, then runs `sync/rebuild`
+  `--passes` times: the first pass is a full build, later ones rebuild the
+  same, unchanged folder, as a resync does. Reports ms per file, how many
+  blog-wide proxy purges each pass asked for, and whether it bumped the
+  cacheID. Needs Redis, the test MinIO and pandoc; `--profile out.cpuprofile`
+  writes a CPU profile of the passes.
+- [`typeset-bench.js`](typeset-bench.js) times the typeset plugin's walk
+  against typeset's own on generated post HTML, and checks the output is the
+  same. Needs nothing running.
+
+```bash
+NODE_PATH=app node scripts/benchmarks/build-posts.js --files 60 --kb 12
+NODE_PATH=app node scripts/benchmarks/typeset-bench.js --kb 10,50,200
+```
+
+## Render-path micro benchmark (`render-pages.js`)
+
+Seeds one blog (`--shape typical`: 400 entries of about 6 KB, or
+`--shape heavy`: the mega benchmark's heavy site) into an empty Redis,
+serves it in-process through the real blog router and requests every entry
+page one at a time, as a crawler filling a cold proxy cache would. Besides
+p50/p95 it reports how many KB of entry JSON each request read from Redis
+with MGET, which stays exact when the timings are noisy. Run it on the base
+and head commits and compare; it is not wired into CI.
+
+```bash
+NODE_PATH=app node scripts/benchmarks/render-pages.js --shape heavy \
+  --phase entries --output .benchmarks/render/head-heavy.json
+```
+
+`--phase index` and `--phase notfound` time the index pages and 404s
+instead; `--template SITE:hypertext` switches the blog's template.
 
 ## How results are stored
 
@@ -470,7 +522,7 @@ information-only, and `detect-regression.js` will not open an issue.
 |------|-----------|---------|
 | `index.js` | container | run the spec once, write result JSON |
 | `spec/build-render.spec.js` | container | the Jasmine spec itself (build/render/burst phases, plus `--corpus-mode build/render` branches) |
-| `spec/util/workload.js` | container | flat + skewed workload generation, media hard-link assignment |
+| `spec/util/workload.js` | container | flat + skewed workload generation, media assignment |
 | `spec/util/corpusSetup.js` | container | loads blogs from a corpus manifest instead of creating fresh ones (`--corpus-mode render`) |
 | `spec/util/tagBurst.js` | container | tag-burst phase: solo vs. concurrent `/tagged/<slug>` timing |
 | `spec/util/archivesBurst.js` | container | archives-burst phase: solo vs. concurrent `/archives` timing |

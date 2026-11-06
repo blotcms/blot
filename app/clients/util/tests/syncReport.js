@@ -459,6 +459,7 @@ describe("clients/util syncReport", function () {
       if (options.changes) {
         syncReport.recordChanges(report, blog, { downloaded: 2 });
       }
+      if (options.checked) syncReport.recordChecked(report, blog);
 
       await syncReport.send(
         report,
@@ -479,11 +480,44 @@ describe("clients/util syncReport", function () {
       expect((await sweep()).length).toEqual(0);
     });
 
-    it("emails again once the error has cleared and come back", async function () {
+    it("does not forget an error while its blog goes unchecked, even for hours", async function () {
       expect((await sweep()).length).toEqual(1);
+      // the blog wasn't eligible for the next sweeps: nothing is recorded
       expect((await sweep({ error: false })).length).toEqual(0);
+      expect((await sweep({ error: false })).length).toEqual(0);
+      expect(Array.from(stored)).toEqual([blog.id + ":error:walk"]);
+      expect((await sweep()).length).toEqual(0);
+    });
+
+    it("emails again after a clean check cleared the error", async function () {
+      expect((await sweep()).length).toEqual(1);
+      expect((await sweep({ error: false, checked: true })).length).toEqual(0);
       expect(Array.from(stored)).toEqual([]);
       expect((await sweep()).length).toEqual(1);
+    });
+
+    it("keeps a stuck lock remembered while unchecked, clears it when checked", async function () {
+      expect((await sweep({ error: false, stuck: true })).length).toEqual(1);
+      await sweep({ error: false });
+      expect(Array.from(stored)).toEqual([blog.id + ":stuck-lock"]);
+      await sweep({ error: false, checked: true });
+      expect(Array.from(stored)).toEqual([]);
+    });
+
+    it("only clears the issues of the blog that was checked", async function () {
+      const other = { id: "blog_other", handle: "other" };
+      const sent = [];
+      const mail = (u, l, cb) => (sent.push(l), cb());
+      const report = syncReport.create();
+      syncReport.recordError(report, blog, "walk", new Error("a"));
+      syncReport.recordError(report, other, "walk", new Error("b"));
+      await syncReport.send(report, mail, "Test:", { client: "test" });
+
+      const next = syncReport.create();
+      syncReport.recordChecked(next, blog);
+      await syncReport.send(next, mail, "Test:", { client: "test" });
+
+      expect(Array.from(stored)).toEqual(["blog_other:error:walk"]);
     });
 
     it("remembers errors by phase", async function () {
@@ -497,7 +531,11 @@ describe("clients/util syncReport", function () {
       });
 
       expect(sent.length).toEqual(1);
-      expect(Array.from(stored)).toEqual([blog.id + ":error:fix"]);
+      // the walk error is remembered too: the blog wasn't checked
+      expect(Array.from(stored).sort()).toEqual([
+        blog.id + ":error:fix",
+        blog.id + ":error:walk",
+      ]);
     });
 
     it("suppresses a continuing stuck lock the same way", async function () {

@@ -2,12 +2,11 @@ describe("dropbox client", function () {
   // Create test user and tmp directory
   require("./setup")();
 
-  var fs = require("fs-extra");
+  var blogFolder = require("storage/folder");
   var write = require("../write");
   var sync = require("../sync");
 
   xit("syncs changes when the blog folder is moved", function (done) {
-    var blogDirectory = this.blogDirectory;
     var folder = this.folder;
     var newFolder =
       "/" + this.fake.random.word() + " " + this.fake.random.word();
@@ -38,14 +37,15 @@ describe("dropbox client", function () {
               sync(blog, function (err) {
                 if (err) return done.fail(err);
 
-                expect(
-                  fs.readFileSync(blogDirectory + path).toString("utf-8")
-                ).toEqual(contents);
-                expect(
-                  fs.readFileSync(blogDirectory + secondPath).toString("utf-8")
-                ).toEqual(secondContents);
+                Promise.all([
+                  blogFolder.read(blog.id, path),
+                  blogFolder.read(blog.id, secondPath),
+                ]).then(function (buffers) {
+                  expect(buffers[0].toString("utf-8")).toEqual(contents);
+                  expect(buffers[1].toString("utf-8")).toEqual(secondContents);
 
-                done();
+                  done();
+                }, done.fail);
               });
             });
           })

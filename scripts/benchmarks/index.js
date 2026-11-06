@@ -390,7 +390,7 @@ function printHelp() {
       "  --distribution <flat|skewed>   Workload shape (default: " +
         BENCHMARK_DEFAULTS.distribution +
         ")",
-      "  --media-fraction <0-1>         Fraction of posts hard-linked to a media fixture (default: " +
+      "  --media-fraction <0-1>         Fraction of posts given a media fixture (default: " +
         BENCHMARK_DEFAULTS.mediaFraction +
         ")",
       "  --corpus-mode <off|build|render>  Corpus lifecycle mode (default: " +

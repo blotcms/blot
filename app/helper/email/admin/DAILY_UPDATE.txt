@@ -10,8 +10,10 @@ Response time: {{render_time}}
 
 {{{server}}}
 
-{{{data_disk}}}
+{{#storage}}
+{{{storage}}}
 
+{{/storage}}
 Sync: {{sync_summary}}
 
 Newsletter subscribers: {{newsletter_subscribers}}

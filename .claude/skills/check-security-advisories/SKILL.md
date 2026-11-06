@@ -71,7 +71,7 @@ Then judge actual exposure for Blot:
 - **Production host** (Amazon Linux 2023, one host running the units and
   `redis6`): kernel, docker, containerd, runc, openssh, sudo, glibc. It is
   internet-facing through the proxy; Redis on it is not (a firewall closes
-  6379). Host patching is manual (see below).
+  6379). The host is patched by replacing it (see below).
 - **macserver** runs Node under pm2 on a Mac, outside the repo pins; it has
   its own Node version (`ssh macserver "node -v"`) and needs its own bump.
 
@@ -102,14 +102,16 @@ ssh macserver "node -v; sw_vers"
   `CLAUDE.md`: if hosts or the macserver need manual steps (re-run Node setup
   on the host, `npm i -g`/nvm on the macserver, deploying the proxy), add a
   **Deployment plan** section and the `manual-deploy` label.
-- **Host OS patches** (AL2023 `dnf update`) are manual and need the operator's
-  approval for each command; see `config/host/README.md` and
-  `.claude/skills/redis-host/SKILL.md`. **A fix that needs a reboot (a kernel
-  update, for example) is not applied until there are several hosts sharing
-  load**: with one host a reboot is downtime (`config/host/README.md`,
-  "Reboots"). Flag it to the operator with the advisory and its exposure, and
-  let them decide for a specific critical one. Updates that need no reboot can
-  be proposed as usual.
+- **Host OS patches** (kernel, docker, containerd, runc, openssh, glibc, ...)
+  are applied by cycling the host, not by patching it: `config/host/cycle.sh`
+  (README "Host cycle", the `redis-host` skill) builds a new host from the
+  newest AL2023 image, moves Redis and the Elastic IP over with a short write
+  freeze and no downtime, and keeps the old host for a day. A kernel fix needs
+  no reboot this way. Nothing upgrades packages on a running host (`setup.sh`
+  never upgrades), so a fix is only in once AWS ships it in a new AMI: check the
+  newest `al2023-ami-kernel-default-arm64` includes the fixed version before
+  proposing a cycle. Flag it to the operator with the advisory and its
+  exposure; the cycle itself is their call.
 - **EOL**: put a compact line in the root `TODO` and tell the operator. Alpine 3.20 is already past EOL; migrations are tracked there,
   not re-raised daily.
 - Third-party "your X is vulnerable" emails (Stripe, etc.): never follow their

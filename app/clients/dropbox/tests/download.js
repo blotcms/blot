@@ -1,6 +1,4 @@
-const fs = require("fs-extra");
-const path = require("path");
-const { blog_folder_dir } = require("config");
+const folder = require("storage/folder");
 
 const download = require("../util/download");
 
@@ -9,7 +7,7 @@ describe("dropbox download", function () {
   const destination = "/post.txt";
 
   afterEach(async function () {
-    await fs.remove(path.join(blog_folder_dir, blogID));
+    await folder.removeAll(blogID);
   });
 
   it("downloads a file without setting its mtime from client_modified", function (done) {
@@ -36,11 +34,11 @@ describe("dropbox download", function () {
       try {
         expect(err).toBeFalsy();
 
-        const contents = await fs.readFile(path.join(blog_folder_dir, blogID, destination));
+        const contents = await folder.read(blogID, destination);
         expect(contents.toString()).toBe("hello world");
 
-        const stat = await fs.stat(path.join(blog_folder_dir, blogID, destination));
-        expect(stat.mtime.getTime()).toBeGreaterThanOrEqual(
+        const stat = await folder.stat(blogID, destination);
+        expect(stat.modified).toBeGreaterThanOrEqual(
           beforeDownload - 1000
         );
 
