@@ -1,4 +1,6 @@
-module.exports = function (blogID, plugins, callback) {
+var withCallback = require("helper/withCallback");
+
+module.exports = withCallback(async function validatePlugins(blogID, plugins) {
   // For some reason (perhaps Disqus UI) we ran into an
   // issue where people's shortname included the Disqus
   // domain. This validator will strip the domain.
@@ -17,5 +19,5 @@ module.exports = function (blogID, plugins, callback) {
     plugins.disqus.options.shortname = shortname;
   }
 
-  callback(null, plugins);
-};
+  return plugins;
+});

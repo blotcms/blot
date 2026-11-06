@@ -4,6 +4,7 @@ var _ = require("lodash");
 var ensure = require("helper/ensure");
 var normalize = require("./normalize");
 var model = require("../entry/model");
+var withCallback = require("helper/withCallback");
 
 // a normalized tag is lowercased, and can be part of a url
 
@@ -23,8 +24,9 @@ var model = require("../entry/model");
 // SMEMBERS the normalized tag
 // lookup original tag against normalized tag
 
-module.exports = function (blogID, entry, callback) {
-  ensure(blogID, "string").and(entry, model).and(callback, "function");
+// Resolves to { changed }
+module.exports = withCallback(async function set(blogID, entry) {
+  ensure(blogID, "string").and(entry, model);
 
   // Clone the list of tags
   var prettyTags = entry.tags.slice();
@@ -67,78 +69,72 @@ module.exports = function (blogID, entry, callback) {
 
   // First we retrieve a list of all the tags used
   // across the user's blog
-  (async function () {
-    try {
-      var existing = (await client.sMembers(existingKey)) || [];
+  var existing = (await client.sMembers(existingKey)) || [];
 
-      // Then we compute a list of tags which the entry
-      // should NOT be present on (intersection of entry's
-      // current tags and all the tags used on the blog)
-      var removed = _.difference(existing, tags);
-      var added = _.difference(tags, existing);
+  // Then we compute a list of tags which the entry
+  // should NOT be present on (intersection of entry's
+  // current tags and all the tags used on the blog)
+  var removed = _.difference(existing, tags);
+  var added = _.difference(tags, existing);
 
-      // A tag's display name is shared by every entry whose tag has the same
-      // slug ("Cats" and "cats"), and the last entry saved sets it, so saving
-      // an entry can rename a tag on others even when the entry is unchanged
-      var nameKeys = tags.map(function (tag) {
-        return key.name(blogID, tag);
-      });
-      var storedNames = nameKeys.length ? await client.mGet(nameKeys) : [];
-      var renamed = storedNames.some(function (name, i) {
-        return name !== prettyTags[i];
-      });
+  // A tag's display name is shared by every entry whose tag has the same
+  // slug ("Cats" and "cats"), and the last entry saved sets it, so saving
+  // an entry can rename a tag on others even when the entry is unchanged
+  var nameKeys = tags.map(function (tag) {
+    return key.name(blogID, tag);
+  });
+  var storedNames = nameKeys.length ? await client.mGet(nameKeys) : [];
+  var renamed = storedNames.some(function (name, i) {
+    return name !== prettyTags[i];
+  });
 
-      var multi = client.multi();
-      var popularityKey = key.popular(blogID);
+  var multi = client.multi();
+  var popularityKey = key.popular(blogID);
 
-      added.forEach(function (tag) {
-        multi.zIncrBy(popularityKey, 1, tag);
-      });
+  added.forEach(function (tag) {
+    multi.zIncrBy(popularityKey, 1, tag);
+  });
 
-      tags.forEach(function (tag, i) {
-        var score = entry.dateStamp;
-        if (typeof score !== "number" || isNaN(score)) {
-          score = Date.now();
-        }
-
-        multi.set(key.name(blogID, tag), prettyTags[i]);
-        multi.zAdd(key.sortedTag(blogID, tag), {
-          score: score,
-          value: entry.id,
-        });
-      });
-
-      // For each tagName in the list of tags which the
-      // entry is NOT on, make sure that is so. This is
-      // neccessary when the user updates an entry and
-      // removes a previously existing tag
-      removed.forEach(function (tag) {
-        multi.zRem(key.sortedTag(blogID, tag), entry.id);
-        multi.sRem(existingKey, tag);
-        multi.zIncrBy(popularityKey, -1, tag);
-      });
-
-      // Finally add all the entry's tags to the
-      // list of tags used across the blog...
-      if (tags.length) {
-        multi.sAdd(key.all(blogID), tags);
-        multi.sAdd(existingKey, tags);
-      }
-
-      multi.zRemRangeByScore(popularityKey, "-inf", 0);
-
-      await multi.exec();
-
-      // changed: whether this moved any tag data other entries render: a
-      // display name, or which tags the entry is on
-      callback(null, {
-        changed: renamed || added.length > 0 || removed.length > 0,
-      });
-    } catch (err) {
-      callback(err);
+  tags.forEach(function (tag, i) {
+    var score = entry.dateStamp;
+    if (typeof score !== "number" || isNaN(score)) {
+      score = Date.now();
     }
-  })();
-};
+
+    multi.set(key.name(blogID, tag), prettyTags[i]);
+    multi.zAdd(key.sortedTag(blogID, tag), {
+      score: score,
+      value: entry.id,
+    });
+  });
+
+  // For each tagName in the list of tags which the
+  // entry is NOT on, make sure that is so. This is
+  // neccessary when the user updates an entry and
+  // removes a previously existing tag
+  removed.forEach(function (tag) {
+    multi.zRem(key.sortedTag(blogID, tag), entry.id);
+    multi.sRem(existingKey, tag);
+    multi.zIncrBy(popularityKey, -1, tag);
+  });
+
+  // Finally add all the entry's tags to the
+  // list of tags used across the blog...
+  if (tags.length) {
+    multi.sAdd(key.all(blogID), tags);
+    multi.sAdd(existingKey, tags);
+  }
+
+  multi.zRemRangeByScore(popularityKey, "-inf", 0);
+
+  await multi.exec();
+
+  // changed: whether this moved any tag data other entries render: a
+  // display name, or which tags the entry is on
+  return {
+    changed: renamed || added.length > 0 || removed.length > 0,
+  };
+});
 
 // we need a better way to determine if we should ignore the entry (i.e. if has an underscore in its path)
 

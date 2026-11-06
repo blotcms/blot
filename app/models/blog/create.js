@@ -14,17 +14,6 @@ var _ = require("lodash");
 
 var UID_PLACEHOLDER = "";
 
-// validate calls back (errors), errors being null or an object of messages
-// keyed by field
-function validateAsync(blog) {
-  return new Promise(function (resolve, reject) {
-    validate(UID_PLACEHOLDER, blog, function (errors) {
-      if (errors) return reject(errors);
-      resolve();
-    });
-  });
-}
-
 // User.set has no promise form yet. Looked up when called, not when this
 // file loads: models/user and models/blog require each other.
 function setUser(uid, updates) {
@@ -66,7 +55,7 @@ module.exports = withCallback(async function create(uid, info) {
 
   extend(blog).and(info).and(blogDefaults);
 
-  await validateAsync(blog);
+  await validate(UID_PLACEHOLDER, blog);
 
   var user = await User.getById(uid);
   if (!user) throw new Error("No user");

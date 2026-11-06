@@ -1,5 +1,6 @@
 var nsv = require("helper/nsv");
 var ensure = require("helper/ensure");
+var withCallback = require("helper/withCallback");
 
 var NO_HANDLE = "Please enter a username.";
 var BAD_CHARS = "Please use only letters and numbers for your username.";
@@ -11,34 +12,35 @@ var BANNED_NAMES = nsv(__dirname + "/banned.txt");
 
 var ONLY_ALPA_NUM = /^[a-zA-Z0-9]+$/;
 
-module.exports = function (blogID, handle, callback) {
+// Resolves to the valid handle. Rejects with an Error.
+module.exports = withCallback(async function validateHandle(blogID, handle) {
   var get = require("../get");
 
-  ensure(blogID, "string").and(handle, "string").and(callback, "function");
+  ensure(blogID, "string").and(handle, "string");
 
   handle = handle.toLowerCase().trim();
 
-  if (handle === "") return callback(new Error(NO_HANDLE));
+  if (handle === "") throw new Error(NO_HANDLE);
+  if (!ONLY_ALPA_NUM.test(handle)) throw new Error(BAD_CHARS);
+  if (BANNED_NAMES.indexOf(handle) > -1) throw new Error(IN_USE);
+  if (handle.length < 2) throw new Error(TOO_SHORT);
+  if (handle.length > 70) throw new Error(TOO_LONG);
 
-  if (!ONLY_ALPA_NUM.test(handle)) return callback(new Error(BAD_CHARS));
+  // A failed lookup is treated as the handle being free, as it was
+  var blog;
+  try {
+    blog = await get({ handle: handle });
+  } catch (err) {}
 
-  if (BANNED_NAMES.indexOf(handle) > -1) return callback(new Error(IN_USE));
+  // Sometimes we want to check if
+  // a handle is in use before creating
+  // a new blog. If so, we don't know
+  // the blog's ID yet.
+  if (blog && blog.id && blogID !== blog.id && blog.handle === handle) {
+    var err = new Error(IN_USE);
+    err.code = "EEXISTS";
+    throw err;
+  }
 
-  if (handle.length < 2) return callback(new Error(TOO_SHORT));
-
-  if (handle.length > 70) return callback(new Error(TOO_LONG));
-
-  get({ handle: handle }, function (err, blog) {
-    // Sometimes we want to check if
-    // a handle is in use before creating
-    // a new blog. If so, we don't know
-    // the blog's ID yet.
-    if (blog && blog.id && blogID !== blog.id && blog.handle === handle) {
-      err = new Error(IN_USE);
-      err.code = "EEXISTS";
-      return callback(err);
-    }
-
-    callback(null, handle);
-  });
-};
+  return handle;
+});
