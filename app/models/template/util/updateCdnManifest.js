@@ -1,10 +1,10 @@
-const { promisify } = require("util");
 const ensure = require("helper/ensure");
 const hash = require("helper/hash");
 const client = require("models/client");
 const key = require("../key");
 const getMetadata = require("../getMetadata");
 const getView = require("../getView");
+const withCallback = require("helper/withCallback");
 const getAllViews = require("../getAllViews");
 const parseTemplate = require("../parseTemplate");
 const generateCdnUrl = require("./generateCdnUrl");
@@ -26,9 +26,6 @@ const {
   isReservedStaticPath,
 } = require("blog/lib/staticPaths");
 
-// Promisify callback-based functions
-const getMetadataAsync = promisify(getMetadata);
-const getViewAsync = promisify(getView);
 const hsetAsync = client.hSet.bind(client);
 
 // Maximum size for rendered output (2MB)
@@ -79,7 +76,7 @@ function isValidTarget(target) {
 // created later regenerates the manifest. See key.templateDependents.
 async function viewExists(templateID, target) {
   try {
-    return !!(await getViewAsync(templateID, target));
+    return !!(await getView(templateID, target));
   } catch (err) {
     const isNonFatalError =
       err.code === "ENOENT" ||
@@ -300,7 +297,7 @@ async function processTarget(templateID, target) {
 
   // Check if view exists
   try {
-    const view = await getViewAsync(templateID, target);
+    const view = await getView(templateID, target);
     if (!view) {
       return null;
     }
@@ -394,209 +391,189 @@ async function cleanupOldHash(templateID, target, oldHash) {
   }
 }
 
-module.exports = function updateCdnManifest(templateID, callback) {
-  callback = callback || function () {};
+module.exports = withCallback(async function updateCdnManifest(templateID) {
+  ensure(templateID, "string");
 
-  (async () => {
-    try {
-      ensure(templateID, "string");
-    } catch (err) {
-      return callback(err);
+  const metadata = await getMetadata(templateID);
+
+  if (!metadata) {
+    throw new Error("Template metadata not found");
+  }
+
+  if (!metadata.owner) {
+    throw new Error("Template metadata missing owner");
+  }
+
+  // Immediately exit without changes if the template is owned by SITE
+  if (metadata.owner === "SITE") {
+    return metadata.cdn || {};
+  }
+
+  const oldManifest =
+    metadata && typeof metadata.cdn === "object" ? metadata.cdn : {};
+
+  // Skip CDN manifest computation when the template is not installed on the owner blog.
+  //
+  // Safety: Templates are siloed per blog and preview subdomains do not use CDN manifests
+  // for non-SITE templates (see app/blog/render/retrieve/cdn.js lines 12-15). There is no
+  // other way to view a template that isn't installed on a blog, so the manifest would go
+  // unused.
+  // Require Blog.get here to avoid dependency loops
+  const Blog = require("models/blog");
+
+  const blog = await Blog.get({ id: metadata.owner });
+  const templateInstalled = blog && blog.template === templateID;
+
+  if (!templateInstalled) {
+    metadata.cdn = {};
+    await hsetAsync(key.metadata(templateID), "cdn", JSON.stringify({}));
+
+    for (const target in oldManifest) {
+      await cleanupOldHash(templateID, target, oldManifest[target]);
     }
 
+    await updateDependencyIndex(
+      templateID,
+      metadata.owner,
+      metadata.fileDependencies,
+      []
+    );
+
+    return {};
+  }
+
+  // Get all views and collect their CDN targets, including the literal
+  // folder links the render wraps in {{#cdn}}, locals and {{#asset}}
+  const { views } = await getAllViews(templateID);
+  const { viewTargets: sortedTargets, folderTargets } = await collectTargets(
+    templateID,
+    views,
+    extraFolderTargets(metadata, views, blogHosts(blog))
+  );
+
+  const manifest = {};
+  const staleHashes = [];
+  const inProgressManifest = {};
+
+  // Rendered views keep their previous hash until they are re-rendered
+  for (const target in oldManifest) {
+    if (typeof oldManifest[target] === "string") {
+      inProgressManifest[target] = oldManifest[target];
+    }
+  }
+
+  // Folder files go first, and are saved before any view is rendered:
+  // renderView reads the manifest back from Redis, so a stylesheet that
+  // links to /images/a.png renders with its new URL and gets a new hash
+  // when the image changes.
+  const folder = await resolveFolderTargets(
+    metadata.owner,
+    Array.from(folderTargets).sort()
+  );
+
+  for (const target of folderTargets) {
+    if (folder.entries[target]) {
+      manifest[target] = folder.entries[target];
+      inProgressManifest[target] = folder.entries[target];
+    } else {
+      delete inProgressManifest[target];
+    }
+  }
+
+  metadata.cdn = inProgressManifest;
+
+  if (JSON.stringify(inProgressManifest) !== JSON.stringify(oldManifest)) {
+    await hsetAsync(
+      key.metadata(templateID),
+      "cdn",
+      JSON.stringify(inProgressManifest)
+    );
+  }
+
+  await updateDependencyIndex(
+    templateID,
+    metadata.owner,
+    metadata.fileDependencies,
+    folder.dependencies
+  );
+
+  // Process each target sequentially
+  for (const target of sortedTargets) {
     try {
-      const metadata = await getMetadataAsync(templateID);
+      let manifestChanged = false;
+      const output = await processTarget(templateID, target);
+      const result = output && output.hash;
+      if (result && typeof result === "string") {
+        const previousHash = inProgressManifest[target];
+        inProgressManifest[target] = result;
 
-      if (!metadata) {
-        return callback(new Error("Template metadata not found"));
-      }
-
-      if (!metadata.owner) {
-        return callback(new Error("Template metadata missing owner"));
-      }
-
-      // Immediately exit without changes if the template is owned by SITE
-      if (metadata.owner === "SITE") {
-        return callback(null, metadata.cdn || {});
-      }
-
-      const oldManifest =
-        metadata && typeof metadata.cdn === "object" ? metadata.cdn : {};
-
-      // Skip CDN manifest computation when the template is not installed on the owner blog.
-      //
-      // Safety: Templates are siloed per blog and preview subdomains do not use CDN manifests
-      // for non-SITE templates (see app/blog/render/retrieve/cdn.js lines 12-15). There is no
-      // other way to view a template that isn't installed on a blog, so the manifest would go
-      // unused.
-      // Require Blog.get here to avoid dependency loops
-      const Blog = require("models/blog");
-      const getBlogAsync = promisify(Blog.get);
-
-      const blog = await getBlogAsync({ id: metadata.owner });
-      const templateInstalled = blog && blog.template === templateID;
-
-      if (!templateInstalled) {
-        metadata.cdn = {};
-        await hsetAsync(key.metadata(templateID), "cdn", JSON.stringify({}));
-
-        for (const target in oldManifest) {
-          await cleanupOldHash(templateID, target, oldManifest[target]);
+        // Write the output and the manifest that references it together,
+        // so a concurrent cleanup of this hash sees both or neither.
+        // If storage fails, keep the target out of the manifest.
+        try {
+          await client
+            .multi()
+            .set(key.renderedOutput(result), output.content)
+            .hSet(
+              key.metadata(templateID),
+              "cdn",
+              JSON.stringify(inProgressManifest)
+            )
+            .exec();
+        } catch (err) {
+          if (previousHash === undefined) delete inProgressManifest[target];
+          else inProgressManifest[target] = previousHash;
+          throw err;
         }
 
-        await updateDependencyIndex(
-          templateID,
-          metadata.owner,
-          metadata.fileDependencies,
-          []
-        );
+        manifest[target] = result;
 
-        return callback(null, {});
-      }
-
-      // Get all views and collect their CDN targets, including the literal
-      // folder links the render wraps in {{#cdn}}, locals and {{#asset}}
-      const { views } = await getAllViews(templateID);
-      const { viewTargets: sortedTargets, folderTargets } =
-        await collectTargets(
-          templateID,
-          views,
-          extraFolderTargets(metadata, views, blogHosts(blog))
-        );
-
-      const manifest = {};
-      const staleHashes = [];
-      const inProgressManifest = {};
-
-      // Rendered views keep their previous hash until they are re-rendered
-      for (const target in oldManifest) {
-        if (typeof oldManifest[target] === "string") {
-          inProgressManifest[target] = oldManifest[target];
+        // Clean up old hash if it changed
+        const oldHash = oldManifest[target];
+        if (oldHash && oldHash !== result && typeof oldHash === "string") {
+          // Cleaned up once the new manifest is saved, see below
+          staleHashes.push([target, oldHash]);
         }
-      }
-
-      // Folder files go first, and are saved before any view is rendered:
-      // renderView reads the manifest back from Redis, so a stylesheet that
-      // links to /images/a.png renders with its new URL and gets a new hash
-      // when the image changes.
-      const folder = await resolveFolderTargets(
-        metadata.owner,
-        Array.from(folderTargets).sort()
-      );
-
-      for (const target of folderTargets) {
-        if (folder.entries[target]) {
-          manifest[target] = folder.entries[target];
-          inProgressManifest[target] = folder.entries[target];
-        } else {
+      } else {
+        if (Object.prototype.hasOwnProperty.call(inProgressManifest, target)) {
           delete inProgressManifest[target];
+          manifestChanged = true;
         }
       }
 
-      metadata.cdn = inProgressManifest;
-
-      if (JSON.stringify(inProgressManifest) !== JSON.stringify(oldManifest)) {
+      if (manifestChanged) {
         await hsetAsync(
           key.metadata(templateID),
           "cdn",
           JSON.stringify(inProgressManifest)
         );
       }
-
-      await updateDependencyIndex(
-        templateID,
-        metadata.owner,
-        metadata.fileDependencies,
-        folder.dependencies
-      );
-
-      // Process each target sequentially
-      for (const target of sortedTargets) {
-        try {
-          let manifestChanged = false;
-          const output = await processTarget(templateID, target);
-          const result = output && output.hash;
-          if (result && typeof result === "string") {
-            const previousHash = inProgressManifest[target];
-            inProgressManifest[target] = result;
-
-            // Write the output and the manifest that references it together,
-            // so a concurrent cleanup of this hash sees both or neither.
-            // If storage fails, keep the target out of the manifest.
-            try {
-              await client
-                .multi()
-                .set(key.renderedOutput(result), output.content)
-                .hSet(
-                  key.metadata(templateID),
-                  "cdn",
-                  JSON.stringify(inProgressManifest)
-                )
-                .exec();
-            } catch (err) {
-              if (previousHash === undefined) delete inProgressManifest[target];
-              else inProgressManifest[target] = previousHash;
-              throw err;
-            }
-
-            manifest[target] = result;
-
-            // Clean up old hash if it changed
-            const oldHash = oldManifest[target];
-            if (oldHash && oldHash !== result && typeof oldHash === "string") {
-              // Cleaned up once the new manifest is saved, see below
-              staleHashes.push([target, oldHash]);
-            }
-          } else {
-            if (
-              Object.prototype.hasOwnProperty.call(inProgressManifest, target)
-            ) {
-              delete inProgressManifest[target];
-              manifestChanged = true;
-            }
-          }
-
-          if (manifestChanged) {
-            await hsetAsync(
-              key.metadata(templateID),
-              "cdn",
-              JSON.stringify(inProgressManifest)
-            );
-          }
-        } catch (err) {
-          console.error(`Error processing CDN target ${target}:`, err);
-        }
-      }
-
-      // Clean up rendered outputs for targets that were removed entirely
-      for (const target in oldManifest) {
-        // Folder entries ({ path, version }) have no rendered output to
-        // clean up; cleanupOldHash skips them
-        if (typeof manifest[target] !== "string") {
-          staleHashes.push([target, oldManifest[target]]);
-        }
-      }
-
-      // Save manifest to Redis
-      await hsetAsync(
-        key.metadata(templateID),
-        "cdn",
-        JSON.stringify(manifest)
-      );
-
-      // Run cleanup in background - don't await. It re-reads the saved
-      // manifest so it must start after the save above.
-      for (const [target, oldHash] of staleHashes) {
-        cleanupOldHash(templateID, target, oldHash).catch((err) => {
-          // Error already logged in cleanupOldHash, but catch to prevent unhandled rejection
-        });
-      }
-
-      callback(null, manifest);
     } catch (err) {
-      callback(err);
+      console.error(`Error processing CDN target ${target}:`, err);
     }
-  })();
-};
+  }
+
+  // Clean up rendered outputs for targets that were removed entirely
+  for (const target in oldManifest) {
+    // Folder entries ({ path, version }) have no rendered output to
+    // clean up; cleanupOldHash skips them
+    if (typeof manifest[target] !== "string") {
+      staleHashes.push([target, oldManifest[target]]);
+    }
+  }
+
+  // Save manifest to Redis
+  await hsetAsync(key.metadata(templateID), "cdn", JSON.stringify(manifest));
+
+  // Run cleanup in background - don't await. It re-reads the saved
+  // manifest so it must start after the save above.
+  for (const [target, oldHash] of staleHashes) {
+    cleanupOldHash(templateID, target, oldHash).catch((err) => {
+      // Error already logged in cleanupOldHash, but catch to prevent unhandled rejection
+    });
+  }
+
+  return manifest;
+});
 
 module.exports.cleanupOldHash = cleanupOldHash;

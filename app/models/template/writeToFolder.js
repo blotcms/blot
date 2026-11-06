@@ -1,110 +1,75 @@
 var joinpath = require("path").join;
 var sep = require("path").sep;
-var async = require("async");
-var callOnce = require("helper/callOnce");
 var isOwner = require("./isOwner");
 var getAllViews = require("./getAllViews");
 var withCallback = require("helper/withCallback");
 var folder = require("storage/folder"); // reads only
 var blogFolder = require("clients/folder");
-var callbackify = require("util").callbackify;
 var generatePackage = require("./package").generate;
 var determineTemplateFolder = require("./determineTemplateFolder");
 var withFolderLock = require("./withFolderLock");
 var PACKAGE = "package.json";
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 
-function writeToFolderUnlocked(blogID, templateID, callback) {
-  isOwner(blogID, templateID, function (err, owner) {
-    if (err) return callback(err);
+async function writeToFolderUnlocked(blogID, templateID) {
+  var owner = await isOwner(blogID, templateID);
 
-    if (!owner) return callback(badPermission(blogID, templateID));
+  if (!owner) throw badPermission(blogID, templateID);
 
-    withCallback(getAllViews)(templateID, function (err, result) {
-      if (err) return callback(err);
+  var result = await getAllViews(templateID);
+  var views = result.views;
+  var metadata = result.metadata;
 
-      var views = result.views;
-      var metadata = result.metadata;
+  if (!views || !metadata) throw noTemplate(blogID, templateID);
 
-      if (!views || !metadata) return callback(noTemplate(blogID, templateID));
+  var folderName = await determineTemplateFolder(blogID);
+  var dir = joinpath(folderName, metadata.slug);
+  var shouldCompareWrites = true;
+  var existingFiles = await listLocalFiles(blogID, dir);
 
-      determineTemplateFolder(blogID, function (folderErr, folderName) {
-        if (folderErr) {
-          return callback(folderErr);
-        }
-
-        var dir = joinpath(folderName, metadata.slug);
-        var shouldCompareWrites = true;
-
-        listLocalFiles(blogID, dir, function (err, existingFiles) {
-          if (err) {
-            return callback(err);
-          }
-
-          writeTemplateContents(
-            blogID,
-            dir,
-            metadata,
-            views,
-            {
-              compare: shouldCompareWrites,
-              existingFiles: existingFiles,
-            },
-            callback
-          );
-        });
-      });
-    });
+  await writeTemplateContents(blogID, dir, metadata, views, {
+    compare: shouldCompareWrites,
+    existingFiles: existingFiles,
   });
 }
 
-function writePackage(blogID, dir, metadata, views, compare, callback) {
+function writePackage(blogID, dir, metadata, views, compare) {
   var Package = generatePackage(blogID, metadata, views);
-  writeFile(blogID, joinpath(dir, PACKAGE), Package, compare, callback);
+  return writeFile(blogID, joinpath(dir, PACKAGE), Package, compare);
 }
 
-function write(blogID, dir, view, compare, callback) {
-  callback = callOnce(callback);
-
+function write(blogID, dir, view, compare) {
   var path = joinpath(dir, view.name);
   var content = view.content;
 
-  writeFile(blogID, path, content, compare, callback);
+  return writeFile(blogID, path, content, compare);
 }
 
-function writeFile(blogID, path, content, compare, callback) {
+async function writeFile(blogID, path, content, compare) {
   if (shouldIgnoreFile(path)) {
     // Silently skip ignored files to avoid breaking legacy templates
     // that may have ignored files in their stored views
-    return callback();
+    return;
   }
 
-  if (typeof compare === "function") {
-    callback = compare;
-    compare = true;
+  if (compare) {
+    var existing;
+    var unreadable = false;
+
+    try {
+      existing = await folder.read(blogID, path);
+    } catch (err) {
+      unreadable = true;
+    }
+
+    if (!unreadable && existing.toString("utf-8") === content) return;
   }
 
   // The client's write also writes Blot's copy of the folder
-  function writeThroughClient() {
-    callbackify(blogFolder.write)(blogID, path, content, callback);
-  }
-
-  if (!compare) return writeThroughClient();
-
-  callbackify(folder.read)(blogID, path, function (err, existing) {
-    if (!err && existing.toString("utf-8") === content) return callback();
-    writeThroughClient();
-  });
+  return blogFolder.write(blogID, path, content);
 }
 
-function writeTemplateContents(
-  blogID,
-  dir,
-  metadata,
-  views,
-  options,
-  callback
-) {
+async function writeTemplateContents(blogID, dir, metadata, views, options) {
   options = options || {};
 
   var compare = options.compare !== false;
@@ -113,79 +78,63 @@ function writeTemplateContents(
     : null;
   var written = existingFiles ? new Set([normalizePath(PACKAGE)]) : null;
 
-  writePackage(blogID, dir, metadata, views, compare, function (err) {
-    if (err) {
-      return callback(err);
-    }
+  await writePackage(blogID, dir, metadata, views, compare);
 
-    async.eachOfSeries(
-      views,
-      function (view, name, next) {
-        if (!view || !view.name || !view.content) return next();
+  for (var name of Object.keys(views)) {
+    var view = views[name];
 
-        write(blogID, dir, view, compare, function (err) {
-          if (!err && written) written.add(normalizePath(view.name));
-          next(err);
-        });
-      },
-      function (err) {
-        if (err) return callback(err);
+    if (!view || !view.name || !view.content) continue;
 
-        if (written) {
-          removeOrphanedFiles(blogID, dir, existingFiles, written, callback);
-        } else {
-          callback();
-        }
-      }
-    );
-  });
+    await write(blogID, dir, view, compare);
+
+    if (written) written.add(normalizePath(view.name));
+  }
+
+  if (written) {
+    await removeOrphanedFiles(blogID, dir, existingFiles, written);
+  }
 }
 
-function listLocalFiles(blogID, dir, callback) {
-  callbackify(folder.listNames)(blogID, dir, function (err, entries) {
-    if (err) {
-      if (err.code === "ENOENT" || err.code === "ENOTDIR")
-        return callback(null, []);
-      return callback(err);
-    }
+async function listLocalFiles(blogID, dir) {
+  var entries;
 
-    // Only the files directly inside the template's folder count. A view's
-    // name can't hold a backslash, so a file with one is never an orphan.
-    callback(
-      null,
-      entries
-        .filter(function (entry) {
-          return (
-            !entry.isDirectory &&
-            !/\\/.test(entry.name) &&
-            !shouldIgnoreFile(entry.name)
-          );
-        })
-        .map(function (entry) {
-          return normalizePath(entry.name);
-        })
-    );
-  });
+  try {
+    entries = await folder.listNames(blogID, dir);
+  } catch (err) {
+    if (err.code === "ENOENT" || err.code === "ENOTDIR") return [];
+    throw err;
+  }
+
+  // Only the files directly inside the template's folder count. A view's
+  // name can't hold a backslash, so a file with one is never an orphan.
+  return entries
+    .filter(function (entry) {
+      return (
+        !entry.isDirectory &&
+        !/\\/.test(entry.name) &&
+        !shouldIgnoreFile(entry.name)
+      );
+    })
+    .map(function (entry) {
+      return normalizePath(entry.name);
+    });
 }
 
-function removeOrphanedFiles(blogID, dir, existingFiles, written, callback) {
+async function removeOrphanedFiles(blogID, dir, existingFiles, written) {
   var toRemove = existingFiles.filter(function (file) {
     return !written.has(normalizePath(file));
   });
 
-  async.eachSeries(
-    toRemove,
-    function (file, next) {
-      var relativePath = joinpath(dir, file);
+  for (var file of toRemove) {
+    var relativePath = joinpath(dir, file);
 
-      // The client's remove also removes Blot's copy
-      callbackify(blogFolder.remove)(blogID, relativePath, function (err) {
-        if (err && err.code !== "ENOENT") return next(err);
-        next();
-      });
-    },
-    callback
-  );
+    // The client's remove also removes Blot's copy
+    try {
+      await blogFolder.remove(blogID, relativePath);
+    } catch (err) {
+      if (err.code !== "ENOENT") throw err;
+    }
+  }
 }
 
 function normalizePath(path) {
@@ -200,4 +149,4 @@ function noTemplate(blogID, templateID) {
   return new Error("No template for " + blogID + " and " + templateID);
 }
 
-module.exports = withFolderLock(writeToFolderUnlocked);
+module.exports = withCallback(withFolderLock(writeToFolderUnlocked));
