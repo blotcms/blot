@@ -1,26 +1,21 @@
 var ensure = require("helper/ensure");
+var withCallback = require("helper/withCallback");
 var client = require("models/client");
 var key = require("./key");
 
-module.exports = function getById(uid, callback) {
-  ensure(uid, "string").and(callback, "function");
+module.exports = withCallback(async function getById(uid) {
+  ensure(uid, "string");
 
-  (async function () {
-    try {
-      var user = await client.get(key.user(uid));
+  var user = await client.get(key.user(uid));
 
-      if (!user) return callback(null, null);
+  if (!user) return null;
 
-      try {
-        user = JSON.parse(user);
-        ensure(user, "object");
-      } catch (err) {
-        return callback(new Error("BADJSON"));
-      }
+  try {
+    user = JSON.parse(user);
+    ensure(user, "object");
+  } catch (err) {
+    throw new Error("BADJSON", { cause: err });
+  }
 
-      return callback(null, user);
-    } catch (err) {
-      return callback(err);
-    }
-  })();
-};
+  return user;
+});

@@ -1,13 +1,14 @@
 var bcrypt = require("bcryptjs");
 var getById = require("./getById");
 var ensure = require("helper/ensure");
+var withCallback = require("helper/withCallback");
 
-module.exports = function (uid, password, callback) {
-  ensure(uid, "string").and(password, "string").and(callback, "function");
+module.exports = withCallback(async function checkPassword(uid, password) {
+  ensure(uid, "string").and(password, "string");
 
-  getById(uid, function (err, user) {
-    if (err || !user) return callback(err || new Error("No user"));
+  var user = await getById(uid);
 
-    bcrypt.compare(password, user.passwordHash, callback);
-  });
-};
+  if (!user) throw new Error("No user");
+
+  return await bcrypt.compare(password, user.passwordHash);
+});

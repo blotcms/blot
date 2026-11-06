@@ -2,7 +2,6 @@ var syncPaymentMethods = require("../syncPaymentMethods");
 var User = require("../index");
 var promisify = require("util").promisify;
 var setUser = promisify(User.set);
-var getUser = promisify(User.getById);
 
 function baseStripeClient(overrides) {
   return Object.assign(
@@ -59,7 +58,7 @@ describe("user syncPaymentMethods", function () {
         function (err) {
           if (err) return done.fail(err);
 
-          getUser(test.user.uid, function (err, user) {
+          User.getById(test.user.uid, function (err, user) {
             if (err) return done.fail(err);
             test.user = user;
             done();
@@ -133,7 +132,7 @@ describe("user syncPaymentMethods", function () {
           })
         );
 
-        getUser(test.user.uid, function (err, user) {
+        User.getById(test.user.uid, function (err, user) {
           if (err) return done.fail(err);
           expect(user.paymentMethods.length).toBe(2);
           done();

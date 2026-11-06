@@ -1,3 +1,4 @@
+var withCallback = require("helper/withCallback");
 var client = require("models/client");
 var key = require("./key");
 
@@ -7,17 +8,11 @@ var key = require("./key");
 // (in the case of creating a new account) or it might
 // be an existing user's UID, in the case of the forgot
 // password flow.
-module.exports = function (token, callback) {
-  (async function () {
-    try {
-      // GETDEL is atomic, so only one concurrent caller can consume the token.
-      var value = await client.getDel(key.accessToken(token));
+module.exports = withCallback(async function checkAccessToken(token) {
+  // GETDEL is atomic, so only one concurrent caller can consume the token.
+  var value = await client.getDel(key.accessToken(token));
 
-      if (!value) return callback(new Error("Invalid access token"));
+  if (!value) throw new Error("Invalid access token");
 
-      return callback(null, value);
-    } catch (err) {
-      return callback(err);
-    }
-  })();
-};
+  return value;
+});
