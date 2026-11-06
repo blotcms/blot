@@ -315,8 +315,48 @@ describe("folderAssets plugin", function () {
 
     var entry = await buildEntry(this.blog, path);
 
-    expect(entry.html).not.toContain(BLOT_CDN_TOKEN);
+    expect(entry.html).toContain(
+      `src="${BLOT_CDN_TOKEN}/folder/v-pending/${this.blog.id}/Photo.JPG"`
+    );
     expect(entry.dependencies).toContain("/Photo.JPG");
+  });
+
+  it("bakes a missing image in src, poster and srcset as a pending CDN URL", async function () {
+    var path = "/posts/Hello.txt";
+    var pending = (file) => `${BLOT_CDN_TOKEN}/folder/v-pending/${this.blog.id}${file}`;
+    var contents =
+      '<video poster="still.png"></video>\n\n' +
+      '<img src="/a%20b.jpg?w=1#top" loading="lazy" srcset="/here.jpg 1x, /gone.webp 2x">';
+
+    await folder.write(this.blog.id, path, contents);
+    await folder.write(this.blog.id, "/here.jpg", "here");
+
+    var entry = await buildEntry(this.blog, path);
+
+    expect(entry.html).toContain(`poster="${pending("/posts/still.png")}"`);
+    expect(entry.html).toContain(`src="${pending("/a%20b.jpg")}?w=1#top"`);
+    expect(entry.html).toContain('loading="lazy"');
+    expect(entry.html).toMatch(
+      new RegExp('srcset="' + tokenRegex("/here\\.jpg 1x").source + ", " + pending("/gone.webp") + ' 2x"')
+    );
+    expect(entry.dependencies).toContain("/posts/still.png");
+    expect(entry.dependencies).toContain("/a b.jpg");
+    expect(entry.dependencies).toContain("/gone.webp");
+  });
+
+  it("leaves a missing image in an href, a missing non-image and a dot segment on the blog's domain", async function () {
+    var path = "/Hello.txt";
+    var contents =
+      '<a href="/big.jpg">Big</a> <video src="/clip.mp4"></video> <img src="/.hidden/pic.jpg">';
+
+    await folder.write(this.blog.id, path, contents);
+
+    var entry = await buildEntry(this.blog, path);
+
+    expect(entry.html).toContain('href="/big.jpg"');
+    expect(entry.html).toContain('src="/clip.mp4"');
+    expect(entry.html).toContain('src="/.hidden/pic.jpg"');
+    expect(entry.html).not.toContain(BLOT_CDN_TOKEN);
   });
 
   it("decodes the path of a missing poster and srcset file before recording it as a dependency", async function () {
@@ -432,7 +472,10 @@ describe("folderAssets plugin", function () {
     var entry = await buildEntry(this.blog, path);
 
     expect(entry.html).toMatch(
-      new RegExp('srcset="' + tokenRegex("/my%20pic\\.jpg 2x").source + ', /gone%20pic\\.jpg 1x"')
+      new RegExp(
+        'srcset="' + tokenRegex("/my%20pic\\.jpg 2x").source + ", " +
+          `${BLOT_CDN_TOKEN}/folder/v-pending/${this.blog.id}/gone%20pic\\.jpg 1x"`
+      )
     );
     expect(entry.html).not.toContain("v-deadbeef");
     expect(entry.dependencies).toContain("/my pic.jpg");

@@ -364,6 +364,15 @@ SafeHop on.
      conditions; `*` matches across `/`, so every pattern names the host (a
      host-less `*/fonts/*` would let `/.env/fonts/x` through). Rollback: switch
      the rule off.
+  8. "Short cache for pending folder images": Override Cache Time 3600 s and
+     Bypass Perma-Cache on `*://cdn.blot.im/folder/v-pending/*` (and the same
+     for `cdn.blot.site` and `blot-cdn.b-cdn.net`). The build links an image
+     that hasn't synced yet there (`app/build/plugins/folderAssets`), and the
+     rebuild when it arrives moves the post to the image's content-versioned
+     URL, but feed readers and cached pages keep the pending one. Its 404 is
+     held for the 5 s of "cache error responses"; without this rule the image
+     it then serves would be cached for a year, and perma-cached, so a
+     replaced image would stay stale on those copies.
 
 Large folder files and generated assets (`/_image_cache/`, `/_assets/`, ...)
 requested on a blog host answer with a 302 to this CDN (see
