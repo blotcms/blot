@@ -37,7 +37,7 @@ Fix this: Dev differs from prod: the test Redis is redis:alpine, unpinned (scrip
 
 Remove customer info from TODO (and gmail links)
 
-Fix this: The agent instructions aren’t maintained. CLAUDE.md has two near-identical sections, “Pull request review” and “Pull request reviews”. One calls you “operator”, the other “maintainer”. A careful reviewer reads this as rules piled up and never edited.
+Fix this: The agent instructions aren’t maintained. AGENTS.md has two near-identical sections, “Pull request review” and “Pull request reviews”. One calls you “operator”, the other “maintainer”. A careful reviewer reads this as rules piled up and never edited.
 
 Research then implement this if sound: Make the version the only invalidation. Put cacheID in the proxy cache key, and drop the purge RPCs, the pending-purge queue, the per-file purges during sync, and most of the LRUs. Old entries age out by eviction. This is cheap and removes a whole failure class. Full pre-rendering is the logical end point, but don’t go all the way: search, arbitrary query strings and very large catalogs make it a lazy-render-into-versioned-store design, not an SSG.
 - I wonder if we could store the cacheID against the host and then as the ssl cert was read, we could seed this info automatically?
@@ -1326,7 +1326,7 @@ Self-hosting:
 
 ---
 
-Flaky specs (newest first; see "Flaky specs" in CLAUDE.md). Remove an entry when its fix merges.
+Flaky specs (newest first; see "Flaky specs" in AGENTS.md). Remove an entry when its fix merges.
 - 5 Nov 2026, `app/helper/tests/drain.js` "drain lets an in-flight request finish before resolving": `Expected true to be false.` (line 48), on a shell-and-docs-only PR (#2552, 1fb8999e0). Run: https://github.com/blotcms/blot/actions/runs/42108964359/job/127531835056. Timing: the request it waits on probably finished before drain's check (419 ms spec); investigate the ordering it assumes.
 - 5 Nov 2026, `app/helper/tests/drain.js` "drain lets an in-flight request finish before resolving": `Expected true to be false.` (line 48) on master 26fdffd73 (#2458) and again on 94c4327de (#2537), neither of which touches drain; passed on re-run. Runs: https://github.com/blotcms/blot/actions/runs/42022737821, https://github.com/blotcms/blot/actions/runs/42026054270/job/127240433491. Investigate: not yet read; check whether the assertion at line 48 depends on timers, so drain can resolve before the in-flight request ends on a slow runner.
 - 5 Nov 2026, `app/storage/folder/tests/cache.js` "storage/folder cache put counts towards the budget like any other entry" (line 522): it saw 2 evictions, not the count it expected, on an unrelated PR (#2540, store-perf-push, git store push pipelining only); passed on re-run. Run: https://github.com/blotcms/blot/actions/runs/42019107506. Investigate: whether eviction order or count depends on mtime/atime resolution or on a background sweep finishing, and make the spec wait for the put to settle or compare against the budget rather than an exact count.
