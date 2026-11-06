@@ -1,4 +1,5 @@
 const ensure = require("helper/ensure");
+const withCallback = require("helper/withCallback");
 const client = require("models/client");
 const { promisify } = require("util");
 const { sortEntries } = require("blog/sortOptions");
@@ -66,14 +67,14 @@ function isFalsy(value) {
   return value === "false" || value === "no" || value === "0";
 }
 
-module.exports = async function (blogID, query, options, callback) {
-  if (typeof options === "function") {
-    callback = options;
-    options = {};
-  }
+module.exports = withCallback(async function search(
+  blogID,
+  query,
+  options = {}
+) {
   options = options || {};
 
-  ensure(blogID, "string").and(query, "string").and(callback, "function");
+  ensure(blogID, "string").and(query, "string");
 
   const terms = query
     .split(/\s+/)
@@ -81,7 +82,7 @@ module.exports = async function (blogID, query, options, callback) {
     .filter(Boolean);
 
   if (!terms.length) {
-    return callback(null, []);
+    return [];
   }
 
   // Callers always order the result (blog/sortOptions.js normalises a missing
@@ -118,14 +119,10 @@ module.exports = async function (blogID, query, options, callback) {
     } while (cursor !== "0");
   };
 
-  try {
-    // The 'entries' list (rather than 'all') skips deleted entries; the 'pages'
-    // list picks up any pages opted into search via metadata.
-    await scanList("blog:" + blogID + ":entries");
-    await scanList("blog:" + blogID + ":pages");
+  // The 'entries' list (rather than 'all') skips deleted entries; the 'pages'
+  // list picks up any pages opted into search via metadata.
+  await scanList("blog:" + blogID + ":entries");
+  await scanList("blog:" + blogID + ":pages");
 
-    return callback(null, sortEntries(results, options).slice(0, MAX_RESULTS));
-  } catch (error) {
-    return callback(error);
-  }
-};
+  return sortEntries(results, options).slice(0, MAX_RESULTS);
+});

@@ -97,6 +97,8 @@ List keys written by `_assign.js`:
 
 ## Public API
 
+`search` returns a promise when called without a callback (`helper/withCallback`, #2559). New code should `await` it; the callback form remains for existing callers. `get`, `getByPath` and `getByUrl` call back without an error argument, so they stay callback-only for now.
+
 ### `get(blogID, entryIDs, callback)`
 
 Retrieves one or more entries from Redis.
@@ -141,7 +143,7 @@ Marks an entry as deleted.
 - Constructs a sanitised object with `deleted: true` and all other content fields blanked.
 - Delegates to `set`, which handles TTL, list removal, dependency cleanup, and backlink removal.
 
-### `search(blogID, query, callback)`
+### `search(blogID, query, [options], callback)`
 
 Performs a case-insensitive substring search across a blog's entries.
 
