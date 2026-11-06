@@ -2,13 +2,16 @@ describe("/default template-editor shim", function () {
   const router = require("../index");
 
   // The shim is registered with TemplateEditor.use("/default", fn). Pick it
-  // out of the router stack by the "default" fragment in its compiled path
-  // regexp so we can exercise it in isolation, the way install.js does.
+  // out of the router stack by the path its layer matches so we can exercise
+  // it in isolation, the way install.js does.
   const defaultShim = router.stack
     .filter(function (layer) {
-      return (
-        !layer.route && layer.regexp && layer.regexp.source.includes("default")
-      );
+      if (layer.route || !layer.matchers) return false;
+
+      return layer.matchers.some(function (matcher) {
+        const match = matcher("/default");
+        return match && match.path === "/default";
+      });
     })
     .map(function (layer) {
       return layer.handle;
