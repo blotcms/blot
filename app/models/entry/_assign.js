@@ -1,3 +1,4 @@
+var { promisify } = require("util");
 var Blog = require("models/blog");
 var ensure = require("helper/ensure");
 var debug = require("debug")("blot:entry:assign");
@@ -26,8 +27,8 @@ var lists = [
   "deleted",
 ];
 
-module.exports = function (blogID, entry, callback) {
-  ensure(blogID, "string").and(entry, model).and(callback, "function");
+module.exports = async function (blogID, entry) {
+  ensure(blogID, "string").and(entry, model);
 
   var multi = redis.multi();
 
@@ -118,37 +119,32 @@ module.exports = function (blogID, entry, callback) {
     drop(SCHEDULED);
   }
 
-  multi
-    .exec()
-    .then(function () {
-      // Any write to a blog clears out ids whose deleted entry has since
-      // expired, so they don't linger in "all"/"deleted" until the next
-      // Fix(). A failure here only delays that cleanup, so it shouldn't
-      // fail the write.
-      sweepExpiredDeleted(blogID, function (err) {
-        if (err) {
-          console.error(
-            clfdate(),
-            blogID.slice(0, 12),
-            "Error sweeping expired deleted entries",
-            err
-          );
-        }
+  await multi.exec();
 
-        if (entry.menu) {
-          addToMenu(blogID, entry, callback);
-        } else {
-          dropFromMenu(blogID, entry, callback);
-        }
-      });
-    })
-    .catch(function (err) {
-      return callback(err);
-    });
+  // Any write to a blog clears out ids whose deleted entry has since
+  // expired, so they don't linger in "all"/"deleted" until the next
+  // Fix(). A failure here only delays that cleanup, so it shouldn't
+  // fail the write.
+  try {
+    await promisify(sweepExpiredDeleted)(blogID);
+  } catch (err) {
+    console.error(
+      clfdate(),
+      blogID.slice(0, 12),
+      "Error sweeping expired deleted entries",
+      err
+    );
+  }
+
+  if (entry.menu) {
+    await addToMenu(blogID, entry);
+  } else {
+    await dropFromMenu(blogID, entry);
+  }
 };
 
-function addToMenu(blogID, entry, callback) {
-  ensure(blogID, "string").and(entry, "object").and(callback, "function");
+async function addToMenu(blogID, entry) {
+  ensure(blogID, "string").and(entry, "object");
 
   var newLink = {
     label: entry.title,
@@ -157,69 +153,67 @@ function addToMenu(blogID, entry, callback) {
     id: entry.id,
   };
 
-  Blog.get({ id: blogID }, function (err, blog) {
-    if (err) return callback(err);
-    if (!blog) return callback(new Error("Blog not found"));
+  var blog = await Blog.get({ id: blogID });
 
-    var menu = blog.menu;
+  if (!blog) throw new Error("Blog not found");
 
-    if (!menu || !menu.length) {
-      return Blog.set(blogID, { menu: [newLink] }, callback);
+  var menu = blog.menu;
+
+  if (!menu || !menu.length) {
+    await Blog.set(blogID, { menu: [newLink] });
+    return;
+  }
+
+  for (var i = 0; i < menu.length; i++) {
+    if (menu[i].id == entry.id || menu[i].url === entry.url) {
+      menu[i] = newLink;
+      await Blog.set(blogID, { menu: menu });
+      return;
     }
+  }
 
-    for (var i = 0; i < menu.length; i++) {
-      if (menu[i].id == entry.id || menu[i].url === entry.url) {
-        menu[i] = newLink;
-        return Blog.set(blogID, { menu: menu }, callback);
-      }
-    }
-
-    menu.push(newLink);
-    return Blog.set(blogID, { menu: menu }, callback);
-  });
+  menu.push(newLink);
+  await Blog.set(blogID, { menu: menu });
 }
 
 // Removes the entry from the list of links in the header
-function dropFromMenu(blogID, entry, callback) {
-  ensure(blogID, "string").and(entry, "object").and(callback, "function");
+async function dropFromMenu(blogID, entry) {
+  ensure(blogID, "string").and(entry, "object");
 
   var debugEntry = debug.bind(this, "Blog:", blogID, "Entry:", entry.path);
 
   debugEntry("removing from menu");
 
-  Blog.get({ id: blogID }, function (err, blog) {
-    if (err) return callback(err);
+  var blog = await Blog.get({ id: blogID });
 
-    if (!blog || !blog.menu || !blog.menu.length) {
-      debugEntry("this blog does not have a menu");
-      return callback();
-    }
+  if (!blog || !blog.menu || !blog.menu.length) {
+    debugEntry("this blog does not have a menu");
+    return;
+  }
 
-    // clone the menu
-    var menu = blog.menu.slice();
+  // clone the menu
+  var menu = blog.menu.slice();
 
-    menu = menu.filter(function (item) {
-      return item.id !== entry.id;
-    });
-
-    if (menu.length === blog.menu.length) {
-      debugEntry("Warning! Did not find this on the menu");
-    } else {
-      debugEntry("Was removed from the menu!");
-    }
-
-    Blog.set(blogID, { menu: menu }, function (errors) {
-      // Blog.set passes validation errors keyed by field, but a failed
-      // Redis write arrives as an Error with no .menu property.
-      if (errors) {
-        debugEntry("error saving menu:", errors);
-        return callback(errors.menu || errors);
-      }
-
-      debugEntry("updated menu!");
-      return callback();
-    });
+  menu = menu.filter(function (item) {
+    return item.id !== entry.id;
   });
+
+  if (menu.length === blog.menu.length) {
+    debugEntry("Warning! Did not find this on the menu");
+  } else {
+    debugEntry("Was removed from the menu!");
+  }
+
+  try {
+    await Blog.set(blogID, { menu: menu });
+  } catch (errors) {
+    // Blog.set rejects with validation errors keyed by field, but a failed
+    // Redis write arrives as an Error with no .menu property.
+    debugEntry("error saving menu:", errors);
+    throw errors.menu || errors;
+  }
+
+  debugEntry("updated menu!");
 }
 
 function listKey(blogID, list) {
