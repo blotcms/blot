@@ -84,6 +84,7 @@ jobs:
           attempt_delay: 10000
           with: |
             context: .
+            file: config/docker/Dockerfile
             target: prod
             # JSON-encoded: wretry reads this block as YAML, and the value spans lines
             build-args: ${{ toJSON(steps.versions.outputs.build-args) }}

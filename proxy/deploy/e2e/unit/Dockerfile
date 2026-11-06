@@ -1,4 +1,4 @@
-# A stand-in for the unit image (the root Dockerfile's `unit` target), for
+# A stand-in for the unit image (config/docker/Dockerfile's `unit` target), for
 # proxy-deploy-e2e.yml: a proxy image plus a stub in place of the app, so
 # the real blue-green.sh can deploy a "unit" against real Docker without
 # building and booting the app (which unit-image.yml's smoke test covers). The

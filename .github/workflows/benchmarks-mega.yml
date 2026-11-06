@@ -128,6 +128,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: head
+          file: head/config/docker/Dockerfile
           target: dev
           build-args: ${{ steps.versions.outputs.build-args }}
           load: true

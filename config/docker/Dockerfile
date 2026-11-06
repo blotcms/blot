@@ -1,6 +1,6 @@
 # The versions below have no defaults here: config/versions.env holds them, and
 # whatever builds this image passes them as build args (scripts/development/start.sh,
-# config/docker-bake.hcl, the workflows). A build without them fails.
+# config/docker/docker-bake.hcl, the workflows). A build without them fails.
 # NODE_BASE is shared with the proxy image (proxy/Dockerfile).
 ARG NODE_BASE
 ## Stage 1 (base)

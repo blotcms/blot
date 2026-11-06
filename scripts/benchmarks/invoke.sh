@@ -74,6 +74,7 @@ docker run -d \
   sh -c "rm -f /data/dump.rdb && redis-server" >/dev/null
 
 docker build \
+  -f "$ROOT_DIR/config/docker/Dockerfile" \
   --target dev \
   --build-arg NODE_BASE="$NODE_BASE" \
   --build-arg PANDOC_VERSION="$PANDOC_VERSION" \

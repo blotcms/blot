@@ -98,7 +98,7 @@ on any change under `proxy/` (plus `package.json` and
 ## Local development
 
 `npm start` (`scripts/development/start.sh`) serves `local.blot` with this
-config. The stack's `node-app` is a unit (the root `Dockerfile`'s `dev-unit`
+config. The stack's `node-app` is a unit (`config/docker/Dockerfile`'s `dev-unit`
 target: the `dev` image plus OpenResty from this Dockerfile's `runtime` stage,
 tagged `blot-proxy-runtime`), running node-a under nodemon and the node-b it
 forks. On every start
@@ -363,18 +363,18 @@ root-owned); it does **not** recurse into the cache.
 container and the three Node containers it fronted with two identical units, `blot-blue`
 and `blot-green`, each one container running OpenResty, node-a (the Node main
 process) and node-b (the worker child node-a forks, `helper/workerChild`). The
-image is the `unit` target of the root `Dockerfile`: the `prod` app image plus
+image is the `unit` target of `config/docker/Dockerfile`: the `prod` app image plus
 OpenResty and the files in this image, which `COPY --from` this image's
-Dockerfile (the root `Dockerfile` names it `blot-proxy`). [`unit-image.yml`](../.github/workflows/unit-image.yml)
-builds both in one `docker buildx bake unit` ([`config/docker-bake.hcl`](../config/docker-bake.hcl)
+Dockerfile (`config/docker/Dockerfile` names it `blot-proxy`). [`unit-image.yml`](../.github/workflows/unit-image.yml)
+builds both in one `docker buildx bake unit` ([`config/docker/docker-bake.hcl`](../config/docker/docker-bake.hcl)
 makes the proxy build the `blot-proxy` context, so no proxy image is published),
 checks OpenResty in the result, boots it with [`unit/smoke.sh`](unit/smoke.sh) and publishes
 `ghcr.io/<owner>/blot:<sha>` (the Node-only image is now `blot:prod-<sha>-arm64`, CI only). The Deploy workflow deploys it.
 
 To build it locally, generate the config and build this image as `blot-proxy`
-(see "Build and run locally"), then `docker build --target unit .` from the
+(see "Build and run locally"), then `docker build -f config/docker/Dockerfile --target unit .` from the
 repository root with the `--build-arg`s for the pairs in `config/versions.env`,
-or `set -a; . config/versions.env; set +a` and `docker buildx bake -f config/docker-bake.hcl unit` from the repository root to build
+or `set -a; . config/versions.env; set +a` and `docker buildx bake -f config/docker/docker-bake.hcl unit` from the repository root to build
 both as CI does.
 
 - **User.** One user at uid 1000, `ec2-user` (the Node image's `node` user,

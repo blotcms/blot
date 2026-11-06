@@ -10,5 +10,5 @@
 set -euo pipefail
 BUILD_SETTINGS=arm64-zstd-1
 cd "$(dirname "$0")/../../.."
-HASH=$( (cat Dockerfile .dockerignore package.json package-lock.json config/versions.env; echo "$BUILD_SETTINGS") | sha256sum | cut -d ' ' -f 1)
+HASH=$( (cat config/docker/Dockerfile config/docker/Dockerfile.dockerignore package.json package-lock.json config/versions.env; echo "$BUILD_SETTINGS") | sha256sum | cut -d ' ' -f 1)
 echo "ghcr.io/${GITHUB_REPOSITORY_OWNER:-blotcms}/blot:test-$HASH"
