@@ -1,43 +1,35 @@
 var getById = require("./getById");
 var ensure = require("helper/ensure");
+var withCallback = require("helper/withCallback");
 var client = require("models/client");
 var key = require("./key");
 
-module.exports = function remove(uid, callback) {
-  ensure(uid, "string").and(callback, "function");
+module.exports = withCallback(async function remove(uid) {
+  ensure(uid, "string");
 
-  getById(uid, function (err, user) {
-    if (err) return callback(err);
-    if (!user) return callback(new Error("No user"));
+  var user = await getById(uid);
 
-    var keys = [
-      key.user(uid),
-      key.email(user.email),
-      "sync:lease:" + uid,
-      "sync:again:" + uid,
-    ];
+  if (!user) throw new Error("No user");
 
-    if (user.subscription && user.subscription.customer) {
-      keys.push(key.customer(user.subscription.customer));
-    }
+  var keys = [
+    key.user(uid),
+    key.email(user.email),
+    "sync:lease:" + uid,
+    "sync:again:" + uid,
+  ];
 
-    if (user.paypal && user.paypal.id) {
-      keys.push(key.paypal(user.paypal.id));
-    }
+  if (user.subscription && user.subscription.customer) {
+    keys.push(key.customer(user.subscription.customer));
+  }
 
-    (async function () {
-      try {
-        var multi = client.multi();
+  if (user.paypal && user.paypal.id) {
+    keys.push(key.paypal(user.paypal.id));
+  }
 
-        multi.sRem(key.uids, uid);
-        multi.del(keys);
+  var multi = client.multi();
 
-        await multi.exec();
+  multi.sRem(key.uids, uid);
+  multi.del(keys);
 
-        return callback(null);
-      } catch (err) {
-        return callback(err);
-      }
-    })();
-  });
-};
+  await multi.exec();
+});

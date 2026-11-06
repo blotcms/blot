@@ -1,20 +1,13 @@
-var async = require("async");
 var ensure = require("helper/ensure");
+var withCallback = require("helper/withCallback");
 var setBlog = require("models/blog/set");
 var set = require("./set");
 
-module.exports = function disable(user, updates, callback) {
-  if (typeof updates === "function") {
-    callback = updates;
-    updates = {};
-  }
-
+module.exports = withCallback(async function disable(user, updates) {
   updates = updates || {};
-  callback = callback || function () {};
 
   ensure(user, "object");
   ensure(updates, "object");
-  ensure(callback, "function");
 
   var blogs = Array.isArray(user.blogs) ? user.blogs.slice() : [];
 
@@ -22,14 +15,11 @@ module.exports = function disable(user, updates, callback) {
 
   // Keep the persisted account flag unchanged until every blog is updated.
   // If a blog write fails, webhook redelivery can still retry this transition.
-  async.each(
-    blogs,
-    function (blogID, next) {
-      setBlog(blogID, { isDisabled: true }, next);
-    },
-    function (err) {
-      if (err) return callback(err);
-      set(user.uid, updates, callback);
-    }
+  await Promise.all(
+    blogs.map(function (blogID) {
+      return setBlog(blogID, { isDisabled: true });
+    })
   );
-};
+
+  return await set(user.uid, updates);
+});

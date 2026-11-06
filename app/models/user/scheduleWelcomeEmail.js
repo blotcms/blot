@@ -2,6 +2,7 @@ const ensure = require("helper/ensure");
 const debug = require("debug")("blot:user:scheduleWelcomeEmail");
 const alarm = require("helper/alarm");
 const lock = require("helper/lock");
+const withCallback = require("helper/withCallback");
 const client = require("models/client");
 
 const email = require("helper/email");
@@ -37,12 +38,7 @@ function getCreatedDate(user) {
 }
 
 function getUser(uid) {
-  return new Promise(function (resolve, reject) {
-    getById(uid, function (err, user) {
-      if (err) return reject(err);
-      resolve(user);
-    });
-  });
+  return getById(uid);
 }
 
 function sendWelcome(uid) {
@@ -54,13 +50,8 @@ function sendWelcome(uid) {
   });
 }
 
-function setUser(uid, updates) {
-  return new Promise(function (resolve, reject) {
-    set(uid, updates, function (err) {
-      if (err) return reject(err);
-      resolve();
-    });
-  });
+async function setUser(uid, updates) {
+  await set(uid, updates);
 }
 
 // Runs in whichever process claims the alarm, and again if the alarm is
@@ -96,48 +87,36 @@ async function handler(uid) {
 
 const alarms = alarm("welcome-email", handler);
 
-function scheduleWelcomeEmail(uid, callback = function () {}) {
-  try {
-    ensure(uid, "string").and(callback, "function");
-  } catch (err) {
-    return callback(err);
+async function schedule(uid) {
+  ensure(uid, "string");
+
+  const user = await getById(uid);
+
+  if (!user) throw new Error("No user");
+
+  if (user.welcomeEmailSent) {
+    debug(uid, "Welcome email already sent, cancelling alarm");
+    await alarms.cancel(uid);
+    return;
   }
 
-  getById(uid, function (err, user) {
-    if (err) return callback(err);
+  // A time in the past is claimed on the next poll
+  const scheduledTime = new Date(
+    getCreatedDate(user).getTime() + WELCOME_EMAIL_DELAY_MS
+  );
 
-    if (!user) return callback(new Error("No user"));
-
-    if (user.welcomeEmailSent) {
-      debug(uid, "Welcome email already sent, cancelling alarm");
-      return alarms.cancel(uid).then(function () {
-        callback();
-      }, callback);
-    }
-
-    // A time in the past is claimed on the next poll
-    const scheduledTime = new Date(
-      getCreatedDate(user).getTime() + WELCOME_EMAIL_DELAY_MS
-    );
-
-    alarms.set(uid, scheduledTime).then(function () {
-      debug(uid, "Scheduled welcome email for", scheduledTime);
-      callback();
-    }, callback);
-  });
+  await alarms.set(uid, scheduledTime);
+  debug(uid, "Scheduled welcome email for", scheduledTime);
 }
+
+const scheduleWelcomeEmail = withCallback(schedule);
 
 // Re-arms the alarm for recent users who haven't been sent the email and have
 // no alarm (e.g. the sign-up route's scheduling failed after the user was
 // committed). Resolves to the number of alarms set.
 async function reconcile({ days = 7 } = {}) {
   const since = Date.now() - days * 24 * 60 * 60 * 1000;
-  const uids = await new Promise(function (resolve, reject) {
-    getAllIds(function (err, uids) {
-      if (err) return reject(err);
-      resolve(uids);
-    });
-  });
+  const uids = await getAllIds();
   let scheduled = 0;
 
   for (const uid of uids) {
@@ -147,12 +126,7 @@ async function reconcile({ days = 7 } = {}) {
       if (!user || user.welcomeEmailSent || !(user.created >= since)) continue;
       if ((await alarms.when(uid)) !== null) continue;
 
-      await new Promise(function (resolve, reject) {
-        scheduleWelcomeEmail(uid, function (err) {
-          if (err) return reject(err);
-          resolve();
-        });
-      });
+      await schedule(uid);
       scheduled++;
     } catch (err) {
       console.error("Error reconciling welcome email alarm for", uid, err);
