@@ -6,7 +6,8 @@
   th[data-sort-key]      a sortable column; holds a .data-table__sort button
                          and shows aria-sort as an arrow
   .data-table__resize    the column resize handle js/data-table.js adds
-  .is-resizing           set on the table while a column is dragged
+  .is-resizing           set on the table while a column is dragged, and on
+                         the handle being dragged
 
   Columns get their starting widths from inline styles on the <th>s; the
   resizer replaces them with the widths a viewer has chosen.
@@ -218,7 +219,7 @@
 
 .data-table__resize:hover::after,
 .data-table__resize:focus-visible::after,
-.data-table.is-resizing .data-table__resize::after {
+.data-table__resize.is-resizing::after {
   background-color: var(--accent-color);
 }
 

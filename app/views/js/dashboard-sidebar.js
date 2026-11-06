@@ -56,8 +56,9 @@
 
       handle.addEventListener("pointerdown", function (event) {
         if (event.button !== undefined && event.button !== 0) return;
+        // No focus() here: a handle focused by the mouse would keep the
+        // :focus-visible colour after the drag
         event.preventDefault();
-        handle.focus();
         drag = {
           pointerId: event.pointerId,
           startX: event.clientX,

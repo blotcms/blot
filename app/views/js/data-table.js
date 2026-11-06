@@ -33,6 +33,12 @@ function save(key, value) {
   } catch (e) {}
 }
 
+function remove(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch (e) {}
+}
+
 function sortableHeaders(table) {
   return Array.prototype.slice.call(
     table.querySelectorAll("thead th[data-sort-key]")
@@ -56,20 +62,24 @@ function defaultOrder(th) {
 // Also kept in a cookie of the same name, so a table marked
 // data-sorted-on-server comes from the server already in this order (the
 // Sites list, app/dashboard/index.js)
+// Data-sorted-on-server tables (the Sites list, app/dashboard/index.js).
+// No sort expires it, for the default order.
 function saveCookie(key, state) {
-  document.cookie =
-    key +
-    "=" +
-    encodeURIComponent(state.sort + "." + state.order) +
-    "; path=/sites; max-age=31536000; SameSite=Lax";
+  document.cookie = state.sort
+    ? key +
+      "=" +
+      encodeURIComponent(state.sort + "." + state.order) +
+      "; path=/sites; max-age=31536000; SameSite=Lax"
+    : key + "=; path=/sites; max-age=0; SameSite=Lax";
 }
 
-// Sorts the rows in the page by one column
+// Sorts the rows in the page by one column. With no column chosen, rows are
+// in the default order: by data-default-sort, in that column's own direction.
 function clientSorter(table) {
   var storageKey = table.getAttribute("data-table-sort-key");
   var headers = Array.prototype.slice.call(table.querySelectorAll("thead th"));
   var rendered = {
-    sort: table.getAttribute("data-sort"),
+    sort: table.getAttribute("data-sort") || null,
     order: table.getAttribute("data-order") || "asc",
   };
   var initial = (storageKey && load(storageKey)) || rendered;
@@ -91,13 +101,13 @@ function clientSorter(table) {
   }
 
   function apply() {
-    var th = table.querySelector(
-      'thead th[data-sort-key="' + state.sort + '"]'
-    );
+    var key = state.sort || table.getAttribute("data-default-sort");
+    var th = table.querySelector('thead th[data-sort-key="' + key + '"]');
     if (!th) return;
     var index = headers.indexOf(th);
     var numeric = th.getAttribute("data-sort-type") === "number";
-    var direction = state.order === "desc" ? -1 : 1;
+    var order = state.sort ? state.order : defaultOrder(th);
+    var direction = order === "desc" ? -1 : 1;
     var tbody = table.tBodies[0];
     var rows = Array.prototype.slice.call(tbody.rows);
 
@@ -136,7 +146,8 @@ function clientSorter(table) {
       state = { sort: sort, order: order };
       apply();
       if (storageKey) {
-        save(storageKey, state);
+        if (sort) save(storageKey, state);
+        else remove(storageKey);
         if (table.hasAttribute("data-sorted-on-server"))
           saveCookie(storageKey, state);
       }
@@ -151,17 +162,23 @@ function bindSorting(table) {
 
   sortableHeaders(table).forEach(function (th) {
     // The button takes focus and the keyboard; the header cell stays
-    // clickable as a whole
+    // clickable as a whole. Clicks cycle through the column's own direction,
+    // the other direction, then the table's default order (no arrow).
     th.addEventListener("click", function (event) {
       if (event.target.closest(".data-table__resize")) return;
       var key = th.getAttribute("data-sort-key");
       var state = sorter.getState();
+      var first = defaultOrder(th);
+
+      if (state.sort === key && state.order !== first) {
+        updateIndicators(table, null);
+        sorter.onSort(null, null);
+        announce("Default order restored");
+        return;
+      }
+
       var order =
-        state.sort === key
-          ? state.order === "asc"
-            ? "desc"
-            : "asc"
-          : defaultOrder(th);
+        state.sort === key ? (first === "asc" ? "desc" : "asc") : first;
       updateIndicators(table, key, order);
       sorter.onSort(key, order);
       // aria-sort on the header isn't read when the button is pressed
@@ -250,6 +267,7 @@ function bindResizing(table) {
       var moved = false;
 
       table.classList.add("is-resizing");
+      handle.classList.add("is-resizing");
       document.addEventListener("pointermove", move);
       document.addEventListener("pointerup", stop);
       document.addEventListener("pointercancel", stop);
@@ -264,6 +282,7 @@ function bindResizing(table) {
         document.removeEventListener("pointerup", stop);
         document.removeEventListener("pointercancel", stop);
         table.classList.remove("is-resizing");
+        handle.classList.remove("is-resizing");
         // A click without a drag changes nothing
         if (moved) persist();
       }

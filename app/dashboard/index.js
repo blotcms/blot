@@ -218,7 +218,8 @@ dashboard.get("/", require("dashboard/util/load-blogs"), async (req, res) => {
       return result * direction;
     });
   }
-  res.locals.sitesSort = sort;
+  // No cookie is the default order, which shows no arrow
+  res.locals.sitesSort = Object.hasOwn(sortValues, cookieSort) ? sort : "";
   res.locals.sitesOrder = order;
 
   res.locals.title = "Sites";

@@ -89,14 +89,25 @@ function byDisplayName(a, b) {
   });
 }
 
-// Dotfiles and previews are not shown, and the rest is in display order
+// Dotfiles and previews are not shown, and the rest is in display order:
+// folders above files, as Finder lists them
 function visible(entries) {
   return entries
     .filter(
       (item) =>
         !item.name.startsWith(".") && !item.name.endsWith(".preview.html")
     )
-    .sort((a, b) => byDisplayName(a.name, b.name));
+    .sort(
+      (a, b) =>
+        !!b.isDirectory - !!a.isDirectory || byDisplayName(a.name, b.name)
+    );
+}
+
+// Z to A by name, keeping folders above files
+function reverseNames(entries) {
+  const folders = entries.filter((entry) => entry.isDirectory);
+  const files = entries.filter((entry) => !entry.isDirectory);
+  return folders.reverse().concat(files.reverse());
 }
 
 // entry is a listing's entry or a stat of storage/folder, which both carry
@@ -273,7 +284,7 @@ async function getContents(blog, dir, options = {}) {
     // A listing carries each entry's size and modified time, so the page is
     // built from it without a second read per file
     const entries = visible(await folder.listAll(blog.id, dir));
-    const ordered = descending ? entries.slice().reverse() : entries;
+    const ordered = descending ? reverseNames(entries) : entries;
     total = ordered.length;
     page = clampPage(options.page, total, pageSize);
     startIndex = (page - 1) * pageSize;

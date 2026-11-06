@@ -589,6 +589,9 @@
     pageSize: meta.pageSize || null,
     sort: meta.sort || "name",
     order: meta.order || "asc",
+    // Only a sort the viewer chose (in the address) shows an arrow; the
+    // default order (name, folders first) shows none
+    chosen: /[?&](sort|order)=/.test(window.location.search),
     hasNext: !!meta.hasNext,
     total: meta.total || 0,
     loading: false,
@@ -603,7 +606,11 @@
 
   function applySortIndicators() {
     if (!table || !window.DataTable) return;
-    window.DataTable.updateIndicators(table, listState.sort, listState.order);
+    window.DataTable.updateIndicators(
+      table,
+      listState.chosen ? listState.sort : null,
+      listState.order
+    );
   }
 
   // Kept for callers elsewhere in this file (upload / remove flows).
@@ -703,10 +710,11 @@
       });
   }
 
+  // A null key goes back to the default order
   function setSort(key, order) {
-    if (!key) return;
-    listState.sort = key;
-    listState.order = order;
+    listState.chosen = !!key;
+    listState.sort = key || "name";
+    listState.order = key ? order : "asc";
 
     applySortIndicators();
     if (scrollBox) scrollBox.scrollTop = 0;
@@ -719,7 +727,10 @@
   if (table) {
     table.dataTableSort = {
       getState: function () {
-        return listState;
+        return {
+          sort: listState.chosen ? listState.sort : null,
+          order: listState.order,
+        };
       },
       onSort: setSort,
     };
