@@ -1,0 +1,1428 @@
+{
+  ".claude/skills/investigate-slow-upstream-responses/join-app-log.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/blog/middleware/loadTemplate.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/blog/render/load/augment.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/blog/render/replaceFolderLinks/folderFile.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/blog/render/retrieve/absolute_urls.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/blog/render/retrieve/encode_json.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/blog/render/retrieve/encode_uri_component.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/blog/render/retrieve/encode_xml.js": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "app/blog/render/retrieve/rgb.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/blog/render/retrieve/tests/absoluteURLs.js": {
+    "no-unused-vars": {
+      "count": 3
+    }
+  },
+  "app/blog/render/retrieve/tests/archives.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/blog/render/retrieve/tests/cdn.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/blog/render/retrieve/tests/encodeXML.js": {
+    "no-unused-vars": {
+      "count": 3
+    }
+  },
+  "app/blog/render/retrieve/updated.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/blog/routes/draft.js": {
+    "no-empty": {
+      "count": 3
+    }
+  },
+  "app/blog/static/fonts/build.js": {
+    "no-empty": {
+      "count": 2
+    },
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/blog/static/syntax-highlighter/build.js": {
+    "no-empty": {
+      "count": 2
+    },
+    "no-self-assign": {
+      "count": 1
+    },
+    "no-useless-escape": {
+      "count": 1
+    }
+  },
+  "app/blog/tests/assets.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/build/converters/gdoc/images.js": {
+    "no-empty": {
+      "count": 2
+    }
+  },
+  "app/build/converters/gdoc/index.js": {
+    "no-undef": {
+      "count": 1
+    }
+  },
+  "app/build/converters/gdoc/linebreaks.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/build/converters/gdoc/tests/index.js": {
+    "no-useless-escape": {
+      "count": 3
+    }
+  },
+  "app/build/converters/img/tests/index.js": {
+    "no-dupe-keys": {
+      "count": 1
+    },
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/build/converters/markdown/extractBibAndCSL.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/build/converters/markdown/tests/indentation.js": {
+    "no-unused-vars": {
+      "count": 2
+    }
+  },
+  "app/build/converters/org/tests/index.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/build/converters/rtf/tests/index.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/build/converters/webloc/index.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/build/dependencies/index.js": {
+    "no-extra-boolean-cast": {
+      "count": 2
+    },
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/build/metadata.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/build/multiple.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/build/plugins/autoImage/index.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/build/plugins/bluesky/index.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/build/plugins/codeHighlighting/index.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/build/plugins/externalLinks/index.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/build/plugins/flickr/index.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/build/plugins/image/index.js": {
+    "no-irregular-whitespace": {
+      "count": 1
+    }
+  },
+  "app/build/plugins/index.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/build/plugins/katex/index.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/build/plugins/katex/tests/index.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/build/plugins/titlecase/index.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/build/plugins/twitter/index.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/build/plugins/typeset/index.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/build/plugins/videoEmbeds/vimeo.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/build/plugins/videoEmbeds/youtube.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/build/plugins/wikilinks/byFilename.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/build/plugins/zoom/index.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/build/prepare/dateStamp/fromMetadata.js": {
+    "no-empty": {
+      "count": 5
+    }
+  },
+  "app/build/prepare/permalink.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/build/prepare/title.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/build/tests/index.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/build/tests/scheduled-post.js": {
+    "no-undef": {
+      "count": 4
+    }
+  },
+  "app/build/thumbnail/candidates.js": {
+    "no-empty": {
+      "count": 1
+    },
+    "no-irregular-whitespace": {
+      "count": 1
+    }
+  },
+  "app/cdn/index.js": {
+    "no-useless-escape": {
+      "count": 1
+    }
+  },
+  "app/clients/dropbox/delta.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/clients/dropbox/getHealth.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/clients/dropbox/init.js": {
+    "no-useless-assignment": {
+      "count": 2
+    }
+  },
+  "app/clients/dropbox/routes/site.js": {
+    "no-extra-boolean-cast": {
+      "count": 1
+    }
+  },
+  "app/clients/dropbox/sync/reset-to-blot.js": {
+    "no-empty": {
+      "count": 2
+    }
+  },
+  "app/clients/dropbox/tests/index.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/clients/dropbox/util/upload.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/clients/git/create.js": {
+    "preserve-caught-error": {
+      "count": 1
+    }
+  },
+  "app/clients/git/disconnect.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/clients/git/receivePack.js": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "app/clients/git/renameRepo.js": {
+    "preserve-caught-error": {
+      "count": 1
+    }
+  },
+  "app/clients/git/repo.js": {
+    "no-useless-escape": {
+      "count": 1
+    }
+  },
+  "app/clients/git/shadow/file-log.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/clients/git/shadow/tests/file-log.js": {
+    "no-unused-vars": {
+      "count": 1
+    },
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/clients/git/shadow/tests/maintenance.js": {
+    "no-unused-vars": {
+      "count": 1
+    },
+    "require-yield": {
+      "count": 1
+    }
+  },
+  "app/clients/git/store/clone.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/clients/git/store/import.js": {
+    "no-control-regex": {
+      "count": 1
+    },
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/clients/git/store/manifest.js": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "app/clients/git/store/receive.js": {
+    "no-control-regex": {
+      "count": 1
+    },
+    "no-empty": {
+      "count": 1
+    },
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/clients/git/store/sweep.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/clients/git/store/tests/commit.js": {
+    "no-empty": {
+      "count": 1
+    },
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/clients/git/store/tests/s3.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/clients/git/store/tests/scratch.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/clients/git/store/tests/standalone.js": {
+    "no-unused-vars": {
+      "count": 2
+    }
+  },
+  "app/clients/git/store/tests/sweep.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/clients/git/sync.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/clients/git/tests/authenticate-paths-anonymous.js": {
+    "no-redeclare": {
+      "count": 1
+    }
+  },
+  "app/clients/git/tests/authenticate-paths-credentialed.js": {
+    "no-redeclare": {
+      "count": 1
+    }
+  },
+  "app/clients/git/tests/blot-writes.js": {
+    "no-redeclare": {
+      "count": 1
+    }
+  },
+  "app/clients/git/tests/plumbing.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/clients/git/tests/sync-history.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/clients/git/tests/sync.js": {
+    "no-redeclare": {
+      "count": 1
+    }
+  },
+  "app/clients/google-drive/database/tests/folder.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/clients/google-drive/routes/site.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/clients/google-drive/serviceAccount/watchChanges.js": {
+    "preserve-caught-error": {
+      "count": 2
+    }
+  },
+  "app/clients/google-drive/util/download.js": {
+    "no-async-promise-executor": {
+      "count": 1
+    },
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/clients/icloud/init.js": {
+    "no-unused-vars": {
+      "count": 2
+    }
+  },
+  "app/clients/icloud/macserver/httpClient/resync.js": {
+    "no-unsafe-finally": {
+      "count": 1
+    }
+  },
+  "app/clients/icloud/macserver/httpClient/upload.js": {
+    "preserve-caught-error": {
+      "count": 3
+    }
+  },
+  "app/clients/icloud/macserver/routes/readdir.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/clients/icloud/macserver/routes/setup.js": {
+    "no-constant-binary-expression": {
+      "count": 1
+    }
+  },
+  "app/clients/icloud/macserver/watcher/index.js": {
+    "no-undef": {
+      "count": 1
+    }
+  },
+  "app/clients/icloud/routes/dashboard.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/clients/icloud/routes/site/index.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/clients/icloud/sync/tests/fromiCloud.js": {
+    "no-undef": {
+      "count": 1
+    }
+  },
+  "app/clients/icloud/sync/toiCloud.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/clients/icloud/tests/routes-redis-unavailable.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/clients/icloud/util/rateLimitedFetchWithRetriesAndTimeout.js": {
+    "preserve-caught-error": {
+      "count": 1
+    }
+  },
+  "app/clients/util/resyncProgress.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/configure-local-blogs.js": {
+    "no-undef": {
+      "count": 2
+    }
+  },
+  "app/dashboard/account/delete.js": {
+    "no-empty": {
+      "count": 3
+    }
+  },
+  "app/dashboard/account/subscription.js": {
+    "no-redeclare": {
+      "count": 1
+    }
+  },
+  "app/dashboard/account/tests/delete.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/dashboard/account/util/handleFromTitle.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/dashboard/account/util/logout.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/dashboard/index.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/dashboard/sign-up/index.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/dashboard/site/folder/breadcrumbs.js": {
+    "no-useless-catch": {
+      "count": 1
+    }
+  },
+  "app/dashboard/site/folder/file.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/dashboard/site/folder/index.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/dashboard/site/folder/upload.js": {
+    "no-useless-catch": {
+      "count": 1
+    }
+  },
+  "app/dashboard/site/import/helper/download.js": {
+    "no-unused-vars": {
+      "count": 3
+    }
+  },
+  "app/dashboard/site/import/helper/extract.js": {
+    "no-useless-escape": {
+      "count": 1
+    }
+  },
+  "app/dashboard/site/import/helper/for_each.js": {
+    "no-unused-vars": {
+      "count": 2
+    }
+  },
+  "app/dashboard/site/import/helper/normalize_identifier.js": {
+    "no-control-regex": {
+      "count": 1
+    },
+    "no-useless-escape": {
+      "count": 1
+    }
+  },
+  "app/dashboard/site/import/helper/replace_embeds.js": {
+    "no-undef": {
+      "count": 3
+    },
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/dashboard/site/import/helper/slugify.js": {
+    "no-useless-escape": {
+      "count": 3
+    }
+  },
+  "app/dashboard/site/import/helper/tests/normalize_identifier.js": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "app/dashboard/site/import/helper/to_markdown.js": {
+    "no-useless-escape": {
+      "count": 1
+    }
+  },
+  "app/dashboard/site/import/index.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/dashboard/site/import/lifecycle.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/dashboard/site/import/list.js": {
+    "no-empty": {
+      "count": 6
+    },
+    "no-extra-boolean-cast": {
+      "count": 1
+    }
+  },
+  "app/dashboard/site/import/sources/arena/sanitize.js": {
+    "no-useless-escape": {
+      "count": 34
+    }
+  },
+  "app/dashboard/site/import/sources/blogger/parse.js": {
+    "preserve-caught-error": {
+      "count": 1
+    }
+  },
+  "app/dashboard/site/import/sources/wordpress/index.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/dashboard/site/import/tests/lifecycle.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/dashboard/site/load/plugins.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/dashboard/site/save/format.js": {
+    "no-redeclare": {
+      "count": 2
+    }
+  },
+  "app/dashboard/site/save/redirects.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/dashboard/site/template/save/photo.js": {
+    "no-ex-assign": {
+      "count": 1
+    }
+  },
+  "app/dashboard/site/template/syntax-highlighter-preview.js": {
+    "no-useless-escape": {
+      "count": 2
+    }
+  },
+  "app/dashboard/site/template/tests/upload.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/dashboard/tests/template-upload-client.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/dashboard/util/load-blog.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/documentation/about.js": {
+    "no-empty": {
+      "count": 3
+    }
+  },
+  "app/documentation/build/favicon.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/documentation/build/generate-thumbnail.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/documentation/build/tools.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/documentation/featured/build.js": {
+    "no-unused-vars": {
+      "count": 1
+    },
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/documentation/featured/check.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/documentation/fonts.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/documentation/questions/render.js": {
+    "no-control-regex": {
+      "count": 1
+    },
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/documentation/tests/index.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/documentation/tools/finder/build.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/documentation/tools/finder/determine_icon.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/documentation/tools/finder/index.js": {
+    "no-undef": {
+      "count": 1
+    },
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/documentation/tools/toc.js": {
+    "no-useless-escape": {
+      "count": 1
+    }
+  },
+  "app/documentation/tools/typeset/punctuation.js": {
+    "no-useless-escape": {
+      "count": 3
+    }
+  },
+  "app/documentation/tools/typeset/quotes.js": {
+    "no-useless-escape": {
+      "count": 3
+    }
+  },
+  "app/helper/amountInWords.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/helper/express-mustache/index.js": {
+    "no-unused-vars": {
+      "count": 2
+    }
+  },
+  "app/helper/express-mustache/load.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/helper/express-mustache/loadPartials.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/helper/firstSentence.js": {
+    "no-useless-escape": {
+      "count": 4
+    }
+  },
+  "app/helper/flushCache.js": {
+    "preserve-caught-error": {
+      "count": 1
+    }
+  },
+  "app/helper/makeSlug.js": {
+    "no-useless-assignment": {
+      "count": 2
+    },
+    "no-useless-escape": {
+      "count": 33
+    }
+  },
+  "app/helper/move.js": {
+    "no-empty": {
+      "count": 1
+    },
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/helper/nameFrom.js": {
+    "no-empty": {
+      "count": 1
+    },
+    "no-useless-escape": {
+      "count": 1
+    }
+  },
+  "app/helper/readOnly.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/helper/redisSubscriber.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/helper/screenshot/index.js": {
+    "no-undef": {
+      "count": 1
+    }
+  },
+  "app/helper/sse.js": {
+    "no-empty": {
+      "count": 3
+    }
+  },
+  "app/helper/tests/flushCache.js": {
+    "no-empty": {
+      "count": 3
+    }
+  },
+  "app/helper/tests/prettyPrice.js": {
+    "no-octal": {
+      "count": 1
+    }
+  },
+  "app/helper/tinyColor.js": {
+    "no-prototype-builtins": {
+      "count": 3
+    },
+    "no-useless-assignment": {
+      "count": 3
+    }
+  },
+  "app/helper/transformer/download/tidy.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/helper/transformer/index.js": {
+    "no-empty": {
+      "count": 2
+    },
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/helper/transformer/tests/lookup.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/models/blog/remove.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/models/blog/scheme.js": {
+    "no-redeclare": {
+      "count": 2
+    }
+  },
+  "app/models/blog/set.js": {
+    "no-self-assign": {
+      "count": 1
+    }
+  },
+  "app/models/blog/validate/domain.js": {
+    "no-useless-escape": {
+      "count": 2
+    }
+  },
+  "app/models/blog/validate/timeZone.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/models/entries/tests.js": {
+    "no-dupe-keys": {
+      "count": 2
+    }
+  },
+  "app/models/entry/_rebuildDependencyGraph.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/models/entry/get.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/models/file/index.js": {
+    "no-redeclare": {
+      "count": 8
+    }
+  },
+  "app/models/question/import.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/models/question/tests/export.js": {
+    "no-unused-vars": {
+      "count": 3
+    }
+  },
+  "app/models/question/tests/import.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/models/question/tests/list.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/models/question/tests/search.js": {
+    "no-unused-vars": {
+      "count": 3
+    }
+  },
+  "app/models/question/tests/tags.js": {
+    "no-unused-vars": {
+      "count": 5
+    }
+  },
+  "app/models/redirects/get.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/models/template/getMultipleViews.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/models/template/getPartials.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/models/template/parseTemplate.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/models/template/readFromFolder.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/models/template/tests/getTemplateList.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/models/template/tests/setView.js": {
+    "no-unused-vars": {
+      "count": 2
+    }
+  },
+  "app/models/template/tests/updateCdnManifest.js": {
+    "no-unused-vars": {
+      "count": 2
+    }
+  },
+  "app/models/template/tests/writeToFolder.js": {
+    "no-unused-vars": {
+      "count": 2
+    }
+  },
+  "app/models/template/util/deserialize.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/models/template/util/generateCdnUrl.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/models/tests/redis.js": {
+    "no-empty": {
+      "count": 2
+    }
+  },
+  "app/models/user/set.js": {
+    "preserve-caught-error": {
+      "count": 1
+    }
+  },
+  "app/models/user/tests/disableEnable.js": {
+    "no-unused-vars": {
+      "count": 5
+    }
+  },
+  "app/models/user/tests/scheduleWelcomeEmail.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/sandbox/jobs/fetch.js": {
+    "no-irregular-whitespace": {
+      "count": 1
+    }
+  },
+  "app/sandbox/jobs/screenshot.js": {
+    "no-empty": {
+      "count": 2
+    }
+  },
+  "app/sandbox/tests/screenshot.js": {
+    "no-empty": {
+      "count": 2
+    }
+  },
+  "app/scheduler/check-card-testers.js": {
+    "no-undef": {
+      "count": 4
+    }
+  },
+  "app/scheduler/check-ssl-certificates.js": {
+    "preserve-caught-error": {
+      "count": 2
+    }
+  },
+  "app/scheduler/index.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/scheduler/renew-wildcard-ssl.js": {
+    "preserve-caught-error": {
+      "count": 1
+    }
+  },
+  "app/site/tests/config.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/storage/backfill.js": {
+    "no-control-regex": {
+      "count": 1
+    },
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/storage/folder/local.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/storage/folder/reconcile.js": {
+    "no-useless-assignment": {
+      "count": 2
+    }
+  },
+  "app/storage/folder/s3.js": {
+    "no-empty": {
+      "count": 1
+    },
+    "no-useless-escape": {
+      "count": 1
+    }
+  },
+  "app/storage/tests/folder-reconcile.js": {
+    "require-yield": {
+      "count": 1
+    }
+  },
+  "app/sync/update/drafts.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "app/views/dashboard/template/controls/font.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/views/dashboard/template/controls/profile-photo-crop.js": {
+    "no-unused-vars": {
+      "count": 3
+    }
+  },
+  "app/views/dashboard/template/js/ajax.js": {
+    "no-self-assign": {
+      "count": 1
+    }
+  },
+  "app/views/dashboard/template/js/sidebar-action-menu.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "app/views/dashboard/template/js/template-editor-preview-iframe.js": {
+    "no-empty": {
+      "count": 3
+    }
+  },
+  "app/views/dashboard/template/js/template-editor.js": {
+    "no-empty": {
+      "count": 5
+    }
+  },
+  "app/views/js/account-card-form.js": {
+    "no-undef": {
+      "count": 1
+    }
+  },
+  "app/views/js/dashboard-import.js": {
+    "no-empty": {
+      "count": 2
+    }
+  },
+  "app/views/js/redirects.js": {
+    "no-undef": {
+      "count": 1
+    },
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/views/js/relativeDate.js": {
+    "no-shadow-restricted-names": {
+      "count": 1
+    }
+  },
+  "app/views/js/sync_status.js": {
+    "no-undef": {
+      "count": 3
+    }
+  },
+  "app/views/js/truncate.js": {
+    "no-undef": {
+      "count": 2
+    },
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "app/views/js/watch.js": {
+    "no-empty": {
+      "count": 2
+    }
+  },
+  "proxy/deploy/e2e/swap-load.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "proxy/e2e/diskcache-checks.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "proxy/e2e/git-checks.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "proxy/e2e/parity-checks.js": {
+    "no-unused-vars": {
+      "count": 3
+    }
+  },
+  "proxy/e2e/run.js": {
+    "no-useless-assignment": {
+      "count": 3
+    }
+  },
+  "proxy/tests/util/setup.js": {
+    "no-empty": {
+      "count": 1
+    },
+    "no-unused-vars": {
+      "count": 2
+    },
+    "preserve-caught-error": {
+      "count": 1
+    }
+  },
+  "proxy/unit/sandbox/broker.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "scripts/blog/purge-entry-database.js": {
+    "no-useless-catch": {
+      "count": 1
+    }
+  },
+  "scripts/blog/reset-ssl-certificate-for-expired-domain.js": {
+    "no-unused-vars": {
+      "count": 3
+    }
+  },
+  "scripts/build-probe/index.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/build-probe/probe.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "scripts/deploy/util/sshCommand.js": {
+    "preserve-caught-error": {
+      "count": 2
+    }
+  },
+  "scripts/deploy/verify-container/checks.js": {
+    "preserve-caught-error": {
+      "count": 3
+    }
+  },
+  "scripts/development/open-folder-server.js": {
+    "no-useless-escape": {
+      "count": 3
+    }
+  },
+  "scripts/dropbox/sync.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/each/blog.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "scripts/each/template.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/entry/rebuild-all.js": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "scripts/fix-probe/index.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/get/blog.js": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "scripts/git/verify-store.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/google-drive/backfill-applied-modified-times.js": {
+    "no-empty": {
+      "count": 1
+    },
+    "preserve-caught-error": {
+      "count": 1
+    }
+  },
+  "scripts/paypal/plan/create.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/paypal/plan/list.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/paypal/product/create.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/paypal/product/list.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/probe/run.js": {
+    "preserve-caught-error": {
+      "count": 1
+    }
+  },
+  "scripts/render-probe/index.js": {
+    "no-unused-vars": {
+      "count": 2
+    }
+  },
+  "scripts/security/check-advisories.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/storage/scan-folder-filenames.js": {
+    "no-control-regex": {
+      "count": 2
+    },
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/template/replaceCssAndScriptUrls.js": {
+    "preserve-caught-error": {
+      "count": 2
+    }
+  },
+  "scripts/tests/util/bucket.js": {
+    "preserve-caught-error": {
+      "count": 1
+    }
+  },
+  "scripts/tests/util/checkBrokenLinks.js": {
+    "preserve-caught-error": {
+      "count": 2
+    }
+  },
+  "scripts/tests/util/site.js": {
+    "no-async-promise-executor": {
+      "count": 1
+    }
+  },
+  "scripts/tests/util/templates.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/user/remove-password-hash.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/user/set-subscription.js": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  }
+}

@@ -8,6 +8,7 @@
     "download-folder": "./scripts/development/download-folder.sh",
     "fork": "./scripts/development/fork.sh",
     "test": "./scripts/tests/invoke.sh",
+    "lint": "eslint .",
     "benchmark": "node scripts/benchmarks/compare.js",
     "benchmark:ci": "node scripts/benchmarks --ci",
     "start": "./scripts/development/start.sh",
@@ -102,10 +103,13 @@
     "zoom-vanilla.js": "2.0.6"
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
     "blessed": "0.1.81",
     "depcheck": "1.4.7",
     "dir-compare": "4.0.0",
+    "eslint": "10.13.0",
     "faker": "4.1.0",
+    "globals": "17.13.0",
     "jasmine": "3.3.1",
     "nock": "13.5.4",
     "nodemon": "3.1.0",
