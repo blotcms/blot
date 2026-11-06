@@ -22,22 +22,13 @@ Never credit Claude in a commit or pull request: no `Co-Authored-By: Claude` tra
 When you open a pull request in this repo, once you have reviewed it and are happy with it:
 
 - Mark it ready for review, then comment `@codex review` on it. Skip the Codex review for PRs that only touch docs, READMEs, `TODO`, comments or log lines: mark them ready once you've reviewed them yourself.
-- Go through up to 3 Codex review cycles, stopping earlier once you are confident the PR is ready to merge.
+- Go through up to 3 Codex review cycles, stopping earlier once you are confident the PR is ready to merge. A cycle that finds only P2s ends the loop: fix or push back on them and don't ask for another.
 - Push back on the thread if Codex flags a nitpicky edge case, and raise anything you want the operator's view on during the cycle.
 - Never merge a PR without the operator's explicit approval.
 
 # Flaky specs
 
 When a spec fails in CI for a reason unrelated to the change (it passes on a re-run, or fails on a PR that doesn't touch its code), log it in the "Flaky specs" list in the root `TODO` before moving on: the date, the spec file and its name, the error, the PR or branch and commit it failed on, a link to the failed job, and what to investigate. One entry per spec; add later failures to the same entry. Remove the entry when its fix merges.
-
-# Pull request reviews
-
-After opening a pull request in this repo:
-
-- Review it yourself first. Once you're happy with it, mark it ready for review and comment `@codex review`. Docs, README, `TODO`, comment-only and log-line-only PRs don't need a Codex review.
-- Go through up to 3 Codex review cycles, until you're confident the PR is ready to merge.
-- Push back on nitpicky edge cases Codex flags, and discuss anything with the maintainer during the cycle.
-- Never merge a PR without the maintainer's explicit approval.
 
 # Squash merges
 
