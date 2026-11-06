@@ -83,28 +83,26 @@ function getPage(blogID, options) {
   return Entries.getPage(blogID, options);
 }
 
-// Entry.get / getByUrl and several Entries helpers are NOT err-first —
-// they omit the error argument. Mirror the adapter used in models/entry/search.js.
+// A failed read is the same as no entry (undefined, or [] for a list of IDs),
+// as it was when Entry.get called back without an error argument.
 function getEntry(blogID, entryIDs) {
-  return new Promise((resolve) => {
-    Entry.get(blogID, entryIDs, (entries) => resolve(entries));
-  });
+  return Entry.get(blogID, entryIDs).catch(() =>
+    Array.isArray(entryIDs) ? [] : undefined
+  );
 }
 
+// A failed lookup is the same as no entry
 function getEntryByUrl(blogID, entryUrl) {
-  return new Promise((resolve) => {
-    Entry.getByUrl(blogID, entryUrl, (entry) => resolve(entry));
-  });
+  return Entry.getByUrl(blogID, entryUrl).catch(() => undefined);
 }
 
 // Like getEntryByUrl, but also reports the Redis error Entry.getByUrl
-// otherwise swallows, for callers that must not cache a failed lookup.
+// rejects with, for callers that must not cache a failed lookup.
 function lookupEntryByUrl(blogID, entryUrl) {
-  return new Promise((resolve) => {
-    Entry.getByUrl(blogID, entryUrl, (entry, error) =>
-      resolve({ entry, error })
-    );
-  });
+  return Entry.getByUrl(blogID, entryUrl).then(
+    (entry) => ({ entry, error: undefined }),
+    (error) => ({ entry: undefined, error })
+  );
 }
 
 function adjacentTo(blogID, entryID) {
@@ -121,13 +119,10 @@ function randomEntry(blogID) {
   });
 }
 
-// getAll calls back with (entries) only, never an error argument, and
-// resolves [] on a Redis failure. onError makes it reject on a Redis outage
-// instead, so that no caller renders or caches an empty list as real.
+// Resolves [] on a Redis failure. rejectOnOutage makes it reject on a Redis
+// outage instead, so that no caller renders or caches an empty list as real.
 function getAll(blogID) {
-  return new Promise((resolve, reject) => {
-    Entries.getAll(blogID, { onError: reject }, (entries) => resolve(entries));
-  });
+  return Entries.getAll(blogID, { rejectOnOutage: true });
 }
 
 function getTotal(blogID) {

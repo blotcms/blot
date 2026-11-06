@@ -1,5 +1,6 @@
 var async = require("async");
 var Entry = require("models/entry");
+var withCallback = require("helper/withCallback");
 var client = require("models/client");
 var Blog = require("models/blog");
 var dependentsKey = Entry.key.dependents;
@@ -51,49 +52,54 @@ module.exports = function (blogID, path, callback) {
         async.eachSeries(
           dependent_paths,
           function (dependent_path, next) {
-            Entry.get(blogID, dependent_path, function (entry) {
-              if (!entry) {
-                log("No entry for dependent_path:", dependent_path);
-                return next();
-              }
-
-              // Folder posts are rebuilt through their source folder, see
-              // rebuildEntry.
-              rebuildEntry(blog, entry, function (err) {
-                if (err) {
-                  // The dependent's own source file is gone, usually deleted
-                  // in the same batch as this file. Dropping it below is the
-                  // whole fix, so don't report it as an error.
-                  if (isMissingFile(err)) {
-                    log("Dependent no longer exists:", dependent_path);
-                  } else {
-                    log(
-                      "Error rebuilding dependent_path:",
-                      dependent_path,
-                      err
-                    );
-                  }
-
-                  if (shouldDropDependent(err)) {
-                    dropDependent(blogID, dependent_path, function (dropErr) {
-                      if (dropErr)
-                        log(
-                          "Error dropping invalid dependent:",
-                          dependent_path,
-                          dropErr
-                        );
-                      next();
-                    });
-                  } else {
-                    next();
-                  }
-
-                  return;
+            // A failed read is the same as no entry
+            withCallback(Entry.get)(
+              blogID,
+              dependent_path,
+              function (err, entry) {
+                if (!entry) {
+                  log("No entry for dependent_path:", dependent_path);
+                  return next();
                 }
 
-                next();
-              });
-            });
+                // Folder posts are rebuilt through their source folder, see
+                // rebuildEntry.
+                rebuildEntry(blog, entry, function (err) {
+                  if (err) {
+                    // The dependent's own source file is gone, usually deleted
+                    // in the same batch as this file. Dropping it below is the
+                    // whole fix, so don't report it as an error.
+                    if (isMissingFile(err)) {
+                      log("Dependent no longer exists:", dependent_path);
+                    } else {
+                      log(
+                        "Error rebuilding dependent_path:",
+                        dependent_path,
+                        err
+                      );
+                    }
+
+                    if (shouldDropDependent(err)) {
+                      dropDependent(blogID, dependent_path, function (dropErr) {
+                        if (dropErr)
+                          log(
+                            "Error dropping invalid dependent:",
+                            dependent_path,
+                            dropErr
+                          );
+                        next();
+                      });
+                    } else {
+                      next();
+                    }
+
+                    return;
+                  }
+
+                  next();
+                });
+              }
+            );
           },
           function (err) {
             if (err) return callback(err);
@@ -150,7 +156,8 @@ function shouldDropDependent(err) {
 }
 
 function dropDependent(blogID, path, callback) {
-  Entry.get(blogID, path, function (entry) {
+  // A failed read is the same as no entry
+  withCallback(Entry.get)(blogID, path, function (getErr, entry) {
     if (!entry) return callback();
 
     Entry.drop(blogID, path, function (err) {

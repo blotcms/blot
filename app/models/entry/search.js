@@ -1,15 +1,12 @@
 const ensure = require("helper/ensure");
 const withCallback = require("helper/withCallback");
 const client = require("models/client");
-const { promisify } = require("util");
 const { sortEntries } = require("blog/sortOptions");
 const metadataCaseInsensitive = require("helper/metadataCaseInsensitive");
 const { decodeFolderPath } = require("blog/render/replaceFolderLinks/shared");
-const get = promisify((blogID, entryIDs, callback) =>
-  require("./get")(blogID, entryIDs, function (entries) {
-    callback(null, entries);
-  })
-);
+// A failed read is the same as no entries
+const get = (blogID, entryIDs) =>
+  require("./get")(blogID, entryIDs).catch(() => []);
 
 const TIMEOUT = 8000;
 const MAX_RESULTS = 25;

@@ -47,11 +47,11 @@ const taggedCache = createRenderCache("tagged", {
     // tagged)
     const result = await require("models/tags").tagged(blogID, slugs, query);
     const entryIDs = result.entryIDs || [];
-    const entries = await new Promise((resolve) => {
-      // Required here: models/entry requires models/tags. Entry.get calls
-      // back with the entries only, never an error.
-      require("models/entry").get(blogID, entryIDs, resolve);
-    });
+    // Required here: models/entry requires models/tags. A failed read is
+    // the same as no entries (see below).
+    const entries = await require("models/entry")
+      .get(blogID, entryIDs)
+      .catch(() => []);
 
     const payload = {
       ...result,

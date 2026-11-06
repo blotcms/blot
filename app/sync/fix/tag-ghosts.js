@@ -147,41 +147,52 @@ module.exports = function main(blog, callback) {
                 // Rare - re-fetch the full entry (content included) only
                 // for this mismatched id, so it can be re-saved as-is
                 // under the correct key.
-                Entry.get(blog.id, entryID, function (entry) {
-                  if (!entry) {
-                    resolved.delete(entryID);
-                    report.push(["MISSING", entryID]);
-                    const multi = client.multi();
+                // A failed read is the same as no entry
+                withCallback(Entry.get)(
+                  blog.id,
+                  entryID,
+                  function (getErr, entry) {
+                    if (!entry) {
+                      resolved.delete(entryID);
+                      report.push(["MISSING", entryID]);
+                      const multi = client.multi();
+                      multi.zRem(tagKey, entryID);
+                      return execTransaction(multi, next);
+                    }
+
+                    report.push(["MISMATCH", entryID, entry.id]);
+                    var multi = client.multi();
+                    var entryKeyForIncorrectID = Tags.key.entry(
+                      blog.id,
+                      entryID
+                    );
+                    var entryKeyForCorrectID = Tags.key.entry(
+                      blog.id,
+                      entry.id
+                    );
+                    var score = entry.dateStamp;
+                    if (typeof score !== "number" || isNaN(score)) {
+                      score = Date.now();
+                    }
+
+                    multi.rename(entryKeyForIncorrectID, entryKeyForCorrectID);
                     multi.zRem(tagKey, entryID);
-                    return execTransaction(multi, next);
-                  }
-
-                  report.push(["MISMATCH", entryID, entry.id]);
-                  var multi = client.multi();
-                  var entryKeyForIncorrectID = Tags.key.entry(blog.id, entryID);
-                  var entryKeyForCorrectID = Tags.key.entry(blog.id, entry.id);
-                  var score = entry.dateStamp;
-                  if (typeof score !== "number" || isNaN(score)) {
-                    score = Date.now();
-                  }
-
-                  multi.rename(entryKeyForIncorrectID, entryKeyForCorrectID);
-                  multi.zRem(tagKey, entryID);
-                  multi.zAdd(tagKey, { score: score, value: entry.id });
-                  execTransaction(multi, function (err) {
-                    if (err) return next(err);
-                    Entry.set(blog.id, entry.id, entry, function (err) {
+                    multi.zAdd(tagKey, { score: score, value: entry.id });
+                    execTransaction(multi, function (err) {
                       if (err) return next(err);
-                      // Leave entryID resolved as a mismatch, and remember
-                      // it's been fully repaired, so another tag holding
-                      // the same stale id just drops it instead of
-                      // repeating the now-impossible rename.
-                      resolved.set(entry.id, { id: entry.id });
-                      repaired.add(entryID);
-                      next();
+                      Entry.set(blog.id, entry.id, entry, function (err) {
+                        if (err) return next(err);
+                        // Leave entryID resolved as a mismatch, and remember
+                        // it's been fully repaired, so another tag holding
+                        // the same stale id just drops it instead of
+                        // repeating the now-impossible rename.
+                        resolved.set(entry.id, { id: entry.id });
+                        repaired.add(entryID);
+                        next();
+                      });
                     });
-                  });
-                });
+                  }
+                );
               },
               next
             );

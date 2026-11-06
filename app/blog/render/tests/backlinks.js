@@ -8,8 +8,8 @@ describe("backlinks", function () {
   }
 
   function stubLookups(entriesByUrl, error) {
-    return spyOn(Entry, "getByUrl").and.callFake((blogID, url, callback) =>
-      callback(entriesByUrl[url], error)
+    return spyOn(Entry, "getByUrl").and.callFake((blogID, url) =>
+      error ? Promise.reject(error) : Promise.resolve(entriesByUrl[url])
     );
   }
 
@@ -112,8 +112,8 @@ describe("backlinks", function () {
 
   it("shares one lookup between spellings of a URL that decode the same", async function () {
     const target = { path: "/a b.txt" };
-    const getByUrl = spyOn(Entry, "getByUrl").and.callFake(
-      (blogID, url, callback) => callback(target)
+    const getByUrl = spyOn(Entry, "getByUrl").and.callFake((blogID, url) =>
+      Promise.resolve(target)
     );
     const backlinks = createBacklinks("blog");
 

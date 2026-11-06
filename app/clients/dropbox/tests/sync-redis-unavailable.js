@@ -140,7 +140,7 @@ describe("dropbox sync when Redis is unavailable", function () {
         expect(store.account.cursor).toEqual("cursor-0");
         expect(saved.some((values) => "cursor" in values)).toBe(false);
 
-        Entry.get(blog.id, path, function (entry) {
+        Entry.get(blog.id, path).then(function (entry) {
           expect(entry).toBeFalsy();
 
           // The freeze is over
@@ -156,7 +156,7 @@ describe("dropbox sync when Redis is unavailable", function () {
               done();
             });
           });
-        });
+        }, done.fail);
       }, done.fail);
     });
   });

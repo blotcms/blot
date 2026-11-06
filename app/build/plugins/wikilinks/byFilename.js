@@ -1,3 +1,4 @@
+const withCallback = require("helper/withCallback");
 const folder = require("storage/folder");
 const { dirname, join, basename, normalize } = require("path");
 const debug = require("debug")("blot:entry:build:plugins:wikilinks:byFilename");
@@ -24,7 +25,8 @@ module.exports = function byFilename(
     return callback(new Error("No filename"));
   }
 
-  const getEntry = require("models/entry").get;
+  // A failed read is the same as no entry
+  const getEntry = withCallback(require("models/entry").get);
   const startDir = normalizeDir(dirname(pathOfPost));
   const visited = new Set();
   const queue = [];
@@ -79,7 +81,7 @@ module.exports = function byFilename(
 
             debug("Found match at", resolvedPath);
 
-            return getEntry(blogID, resolvedPath, function (entry) {
+            return getEntry(blogID, resolvedPath, function (err, entry) {
               if (entry) {
                 debug("Entry found for", resolvedPath, entry);
                 return callback(null, entry);

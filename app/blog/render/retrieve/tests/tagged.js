@@ -337,9 +337,11 @@ describe("tagged block", function () {
       };
     });
 
-    spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
+    spyOn(Entry, "get").and.callFake(function (blogID, entryIDs) {
       expect(entryIDs).toEqual(["/blog/one.txt"]);
-      callback([{ id: "/blog/one.txt", title: "One", dateStamp: 1 }]);
+      return Promise.resolve([
+        { id: "/blog/one.txt", title: "One", dateStamp: 1 },
+      ]);
     });
 
     const req = {
@@ -528,8 +530,8 @@ describe("tagged cache", function () {
       };
     });
 
-    spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
-      callback([
+    spyOn(Entry, "get").and.callFake(function (blogID, entryIDs) {
+      return Promise.resolve([
         { id: "1", dateStamp: 1, title: "First" },
         { id: "2", dateStamp: 2, title: "Second" },
       ]);
@@ -559,8 +561,8 @@ describe("tagged cache", function () {
       };
     });
 
-    spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
-      callback([{ id: "1", dateStamp: 1, title: "First" }]);
+    spyOn(Entry, "get").and.callFake(function (blogID, entryIDs) {
+      return Promise.resolve([{ id: "1", dateStamp: 1, title: "First" }]);
     });
 
     tagged(
@@ -592,8 +594,8 @@ describe("tagged cache", function () {
       };
     });
 
-    spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
-      callback([{ id: "1", title: "Original" }]);
+    spyOn(Entry, "get").and.callFake(function (blogID, entryIDs) {
+      return Promise.resolve([{ id: "1", title: "Original" }]);
     });
 
     tagged(makeReq(), { locals: {} }, function (err, first) {
@@ -711,8 +713,8 @@ describe("tagged cache", function () {
       }
     );
 
-    spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
-      callback([]);
+    spyOn(Entry, "get").and.callFake(function (blogID, entryIDs) {
+      return Promise.resolve([]);
     });
 
     tagged(
@@ -746,8 +748,8 @@ describe("tagged cache", function () {
       };
     });
 
-    spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
-      callback([]);
+    spyOn(Entry, "get").and.callFake(function (blogID, entryIDs) {
+      return Promise.resolve([]);
     });
 
     tagged(makeReq(), { locals: {} }, function () {
@@ -772,8 +774,8 @@ describe("tagged cache", function () {
       };
     });
 
-    spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
-      callback([]);
+    spyOn(Entry, "get").and.callFake(function (blogID, entryIDs) {
+      return Promise.resolve([]);
     });
 
     tagged(makeReq(), { locals: {} }, function () {
@@ -800,8 +802,8 @@ describe("tagged cache", function () {
       }
     );
 
-    spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
-      callback([{ id: "1", title: "Shared" }]);
+    spyOn(Entry, "get").and.callFake(function (blogID, entryIDs) {
+      return Promise.resolve([{ id: "1", title: "Shared" }]);
     });
 
     tagged(

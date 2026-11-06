@@ -44,7 +44,8 @@ const identifier = positional[0];
 const asJSON = process.argv.includes("--json");
 
 function getEntry(blogID, path) {
-  return new Promise((resolve) => Entry.get(blogID, path, resolve));
+  // A failed read is the same as no entry (as before)
+  return Entry.get(blogID, path).catch(() => undefined);
 }
 
 // Lists the blog's entry paths (just strings), then handles them one at a

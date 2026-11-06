@@ -141,8 +141,9 @@ const getBlogBy = (query) =>
     ? Promise.resolve(null)
     : Blog.get(query).catch(() => null);
 
+// A failed read is the same as no entry (as before)
 const getEntry = (blogID, path) =>
-  new Promise((resolve) => Entry.get(blogID, path, resolve));
+  Entry.get(blogID, path).catch(() => undefined);
 
 // Paths of the blog's entries which aren't deleted, in list order. Only paths
 // are held, so a blog with thousands of entries isn't held in memory at once.

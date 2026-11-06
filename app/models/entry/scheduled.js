@@ -23,14 +23,8 @@ function fromID(id) {
 
 function getEntry(blogID, path) {
   var get = require("./get");
-  return new Promise(function (resolve, reject) {
-    // Entry.get calls back (entry, err); on a read error entry is undefined,
-    // which must not be mistaken for "no such entry"
-    get(blogID, path, function (entry, err) {
-      if (err) reject(err);
-      else resolve(entry);
-    });
-  });
+  // A read error rejects, so it is not mistaken for "no such entry"
+  return get(blogID, path);
 }
 
 function setEntry(blogID, path) {
@@ -159,10 +153,7 @@ async function reconcile() {
       Entries.getListIDs(blogID, "scheduled", {}, function (err, ids) {
         if (err) return reject(err);
         if (!ids.length) return resolve([]);
-        Entry.get(blogID, ids, function (entries, err) {
-          if (err) reject(err);
-          else resolve(entries);
-        });
+        Entry.get(blogID, ids).then(resolve, reject);
       });
     });
   }

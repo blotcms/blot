@@ -142,8 +142,10 @@ describe("archives cache", function () {
   it("reuses the cached grouping for identical cacheIDs", function (done) {
     const { archives } = loadArchives();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([{ id: "1", title: "A", dateStamp: Date.parse("2020-01-02") }]);
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve([
+        { id: "1", title: "A", dateStamp: Date.parse("2020-01-02") },
+      ]);
     });
 
     const req = makeReq({ id: "blog-1", cacheID: 100, timeZone: "UTC" });
@@ -159,8 +161,10 @@ describe("archives cache", function () {
   it("yields to the event loop between the passes of a cold fill, but not on a hit", function (done) {
     const { archives } = loadArchives();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([{ id: "1", title: "A", dateStamp: Date.parse("2020-01-02") }]);
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve([
+        { id: "1", title: "A", dateStamp: Date.parse("2020-01-02") },
+      ]);
     });
     const yields = spyOn(global, "setImmediate").and.callThrough();
 
@@ -181,8 +185,10 @@ describe("archives cache", function () {
   it("refetches when cacheID changes", function (done) {
     const { archives } = loadArchives();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([{ id: "1", title: "A", dateStamp: Date.parse("2020-01-02") }]);
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve([
+        { id: "1", title: "A", dateStamp: Date.parse("2020-01-02") },
+      ]);
     });
 
     archives(
@@ -204,8 +210,8 @@ describe("archives cache", function () {
   it("returns isolated copies so caller mutations do not taint cache", function (done) {
     const { archives } = loadArchives();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve([
         { id: "1", title: "Original", dateStamp: Date.parse("2020-01-02") },
       ]);
     });
@@ -226,8 +232,10 @@ describe("archives cache", function () {
     const { archives } = loadArchives();
     const allEntries = require("../all_entries");
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([{ id: "1", title: "A", dateStamp: Date.parse("2020-01-02") }]);
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve([
+        { id: "1", title: "A", dateStamp: Date.parse("2020-01-02") },
+      ]);
     });
 
     const req = makeReq({ id: "blog-1", cacheID: 100, timeZone: "UTC" });
@@ -243,8 +251,8 @@ describe("archives cache", function () {
   it("stores separate entries per referenced field set so a stripped cache entry can't leak into a view that needs more", function (done) {
     const { archives } = loadArchives();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve([
         {
           id: "1",
           title: "A",
@@ -279,8 +287,8 @@ describe("archives cache", function () {
   it("serves a title-only view from a catalog cached with html, without leaking html", function (done) {
     const { archives } = loadArchives();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve([
         {
           id: "1",
           title: "A",
@@ -315,8 +323,8 @@ describe("archives cache", function () {
     const { archives } = loadArchives();
     const allEntries = require("../all_entries");
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve([
         {
           id: "1",
           title: "A",
@@ -351,8 +359,10 @@ describe("archives cache", function () {
   it("shares the catalog, but not its own cache, with preview requests", function (done) {
     const { archives } = loadArchives();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([{ id: "1", title: "A", dateStamp: Date.parse("2020-01-02") }]);
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve([
+        { id: "1", title: "A", dateStamp: Date.parse("2020-01-02") },
+      ]);
     });
 
     const req = makeReq({ id: "blog-1", cacheID: 100, timeZone: "UTC" });
@@ -374,8 +384,8 @@ describe("archives cache", function () {
     // empty array from it is ambiguous between "no posts" and "Redis
     // hiccup." Caching it either way risks hiding every post until the
     // cacheID changes; refetching on every miss is the safe default.
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([]);
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve([]);
     });
 
     const req = makeReq({ id: "blog-1", cacheID: 100, timeZone: "UTC" });
@@ -420,8 +430,8 @@ describe("archives shared augmentation", function () {
     require("models/entries/catalog")._clear();
     const archives = require("../archives");
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve([
         new Entry({
           id: "/a.txt",
           path: "/a.txt",

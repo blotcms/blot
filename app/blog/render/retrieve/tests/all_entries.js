@@ -191,8 +191,8 @@ describe("all_entries cache", function () {
   it("reuses cached entries for identical cacheIDs", function (done) {
     const allEntries = loadAllEntries();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([{ id: "1", title: "A" }]);
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve([{ id: "1", title: "A" }]);
     });
 
     const req = makeReq({ id: "blog-1", cacheID: 100 });
@@ -208,8 +208,8 @@ describe("all_entries cache", function () {
   it("refetches when cacheID changes", function (done) {
     const allEntries = loadAllEntries();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([{ id: "1", title: "A" }]);
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve([{ id: "1", title: "A" }]);
     });
 
     allEntries(
@@ -231,8 +231,8 @@ describe("all_entries cache", function () {
   it("returns isolated copies so caller mutations do not taint cache", function (done) {
     const allEntries = loadAllEntries();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([{ id: "1", title: "Original" }]);
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve([{ id: "1", title: "Original" }]);
     });
 
     const req = makeReq({ id: "blog-1", cacheID: 100 });
@@ -251,8 +251,10 @@ describe("all_entries cache", function () {
     const allEntries = loadAllEntries();
 
     let resolveGetAll;
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      resolveGetAll = () => callback([{ id: "1", title: "A" }]);
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return new Promise((resolve) => {
+        resolveGetAll = () => resolve([{ id: "1", title: "A" }]);
+      });
     });
 
     const req = makeReq({ id: "blog-1", cacheID: 100 });
@@ -276,8 +278,8 @@ describe("all_entries cache", function () {
   it("stores separate entries per referenced field set so a stripped cache entry can't leak into a view that needs more", function (done) {
     const allEntries = loadAllEntries();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([{ id: "1", title: "A", html: "<p>A body</p>" }]);
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve([{ id: "1", title: "A", html: "<p>A body</p>" }]);
     });
 
     const blog = { id: "blog-1", cacheID: 100 };
@@ -305,8 +307,8 @@ describe("all_entries cache", function () {
   it("serves a title-only view from a catalog cached with html, without leaking html", function (done) {
     const allEntries = loadAllEntries();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([{ id: "1", title: "A", html: "<p>A body</p>" }]);
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve([{ id: "1", title: "A", html: "<p>A body</p>" }]);
     });
 
     const blog = { id: "blog-1", cacheID: 100 };
@@ -333,8 +335,8 @@ describe("all_entries cache", function () {
   it("shares the catalog, but not its own cache, with preview requests", function (done) {
     const allEntries = loadAllEntries();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([{ id: "1", title: "A" }]);
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve([{ id: "1", title: "A" }]);
     });
 
     const req = makeReq({ id: "blog-1", cacheID: 100 });
@@ -356,8 +358,8 @@ describe("all_entries cache", function () {
     // empty array from it is ambiguous between "no posts" and "Redis
     // hiccup." Caching it either way risks hiding every post until the
     // cacheID changes; refetching on every miss is the safe default.
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([]);
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve([]);
     });
 
     const req = makeReq({ id: "blog-1", cacheID: 100 });
@@ -405,8 +407,8 @@ describe("all_entries shared augmentation", function () {
   }
 
   function stubCatalog(backlinks) {
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
+      return Promise.resolve([
         new Entry({
           id: "/a.txt",
           path: "/a.txt",
@@ -524,13 +526,11 @@ describe("all_entries shared augmentation", function () {
     const allEntries = loadAllEntries();
     stubCatalog(["/b"]);
 
-    spyOn(EntryModel, "getByUrl").and.callFake(
-      function (blogID, url, callback) {
-        callback(
-          new Entry({ id: "/b.txt", path: "/b.txt", url: "/b", title: "B" })
-        );
-      }
-    );
+    spyOn(EntryModel, "getByUrl").and.callFake(function (blogID, url) {
+      return Promise.resolve(
+        new Entry({ id: "/b.txt", path: "/b.txt", url: "/b", title: "B" })
+      );
+    });
 
     const without = makeReq();
     without.usesBacklinks = false;
@@ -549,13 +549,11 @@ describe("all_entries shared augmentation", function () {
     const allEntries = loadAllEntries();
     stubCatalog(["/b"]);
 
-    spyOn(EntryModel, "getByUrl").and.callFake(
-      function (blogID, url, callback) {
-        callback(
-          new Entry({ id: "/b.txt", path: "/b.txt", url: "/b", title: "B" })
-        );
-      }
-    );
+    spyOn(EntryModel, "getByUrl").and.callFake(function (blogID, url) {
+      return Promise.resolve(
+        new Entry({ id: "/b.txt", path: "/b.txt", url: "/b", title: "B" })
+      );
+    });
 
     const first = await allEntries(makeReq(), { locals: {} });
     await allEntries(makeReq(), { locals: {} });
@@ -568,11 +566,9 @@ describe("all_entries shared augmentation", function () {
     const allEntries = loadAllEntries();
     stubCatalog(["/b"]);
 
-    spyOn(EntryModel, "getByUrl").and.callFake(
-      function (blogID, url, callback) {
-        callback(undefined, new Error("mGet failed"));
-      }
-    );
+    spyOn(EntryModel, "getByUrl").and.callFake(function (blogID, url) {
+      return Promise.reject(new Error("mGet failed"));
+    });
 
     const first = await allEntries(makeReq(), { locals: {} });
     await allEntries(makeReq(), { locals: {} });
@@ -585,11 +581,9 @@ describe("all_entries shared augmentation", function () {
     const allEntries = loadAllEntries();
     stubCatalog(["/deleted"]);
 
-    spyOn(EntryModel, "getByUrl").and.callFake(
-      function (blogID, url, callback) {
-        callback();
-      }
-    );
+    spyOn(EntryModel, "getByUrl").and.callFake(function (blogID, url) {
+      return Promise.resolve();
+    });
 
     await allEntries(makeReq(), { locals: {} });
     await allEntries(makeReq(), { locals: {} });
@@ -603,9 +597,11 @@ describe("all_entries shared augmentation", function () {
     delete require.cache[retrievePath];
     const retrieve = require("../index");
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
       // tags must be an array - augment() reads tags.length
-      callback([new Entry({ id: "/a.txt", path: "/a.txt", url: "/a" })]);
+      return Promise.resolve([
+        new Entry({ id: "/a.txt", path: "/a.txt", url: "/a" }),
+      ]);
     });
 
     let error;

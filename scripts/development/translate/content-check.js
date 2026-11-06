@@ -79,9 +79,9 @@ async function dateRange(blogID) {
   };
 }
 
-// Entry.get calls back with (entry) — no error argument.
+// A failed read is the same as no entry (as before)
 function getEntry(blogID, path) {
-  return new Promise((resolve) => Entry.get(blogID, path, resolve));
+  return Entry.get(blogID, path).catch(() => undefined);
 }
 
 async function countTags(blogID) {

@@ -4,12 +4,19 @@ describe("entry.getByPath", function () {
   var getByPath = require("../getByPath");
 
   var lookup = function (blogID, path) {
-    return new Promise(function (resolve) {
-      getByPath(blogID, path, function (entry) {
-        resolve(entry);
-      });
-    });
+    return getByPath(blogID, path);
   };
+
+  it("treats a failed read as finding nothing, and never rejects", async function () {
+    await this.set("/Pages/Home.txt", "Hello from home");
+
+    spyOn(console, "error");
+    var redis = require("models/client");
+    spyOn(redis, "mGet").and.returnValue(Promise.reject(new Error("boom")));
+    spyOn(redis, "zRange").and.returnValue(Promise.reject(new Error("boom")));
+
+    expect(await lookup(this.blog.id, "/pages/home.txt")).toBeUndefined();
+  });
 
   it("returns the entry when the path matches exactly", async function () {
     await this.set("/Pages/Home.txt", "Hello from home");

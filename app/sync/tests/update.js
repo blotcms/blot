@@ -50,9 +50,7 @@ describe("update", function () {
 
   function getEntry(blogID, path) {
     const Entry = require("models/entry");
-    return new Promise(function (resolve) {
-      Entry.get(blogID, path, resolve);
-    });
+    return Entry.get(blogID, path);
   }
 
   // The "rebuilds an entry if the source file changes" spec below writes

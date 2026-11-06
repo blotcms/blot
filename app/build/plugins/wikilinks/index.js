@@ -8,6 +8,7 @@ const byTitle = require("./byTitle");
 const byHeadingAnchor = require("./byHeadingAnchor");
 const { decode } = require("he");
 const makeSlug = require("helper/makeSlug");
+const withCallback = require("helper/withCallback");
 const debug = require("debug")("blot:entry:build:plugins:wikilinks");
 
 const basename = (path.posix || path).basename;
@@ -194,7 +195,8 @@ function render($, callback, { blogID, path }) {
           if (isMarkdownFile(linkedPath)) {
             const { get } = require("models/entry");
 
-            return get(blogID, linkedPath, function (entry) {
+            // A failed read is the same as no entry
+            return withCallback(get)(blogID, linkedPath, function (err, entry) {
               if (!entry) {
                 debug(
                   "No entry found for markdown media target, falling back to src",

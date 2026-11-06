@@ -1,3 +1,4 @@
+const withCallback = require("helper/withCallback");
 const Entry = require("models/entry");
 const Blog = require("models/blog");
 const async = require("async");
@@ -24,7 +25,8 @@ function main(blog, callback) {
   async.map(
     blog.menu,
     function (item, next) {
-      Entry.get(blog.id, item.id, function (entry) {
+      // A failed read is the same as no entry
+      withCallback(Entry.get)(blog.id, item.id, function (getErr, entry) {
         if (entry && entry.deleted) {
           report.push(["Delete", item]);
           removeIDs.add(item.id);

@@ -12,6 +12,7 @@ var Key = require("./key").url;
 var model = require("./model");
 var Blog = require("models/blog");
 var get = require("./get");
+var withCallback = require("helper/withCallback");
 var debug = require("debug")("blot:entry:set");
 
 var MIN_SUMMARY_SLUG_WORDS = 3;
@@ -166,7 +167,8 @@ function check(blogID, candidate, entryID, callback) {
       if (existingID === entryID) return callback(null, false, null);
 
       // This url points to a different entry
-      get(blogID, existingID, function (existingEntry) {
+      // A failed read is the same as no entry
+      withCallback(get)(blogID, existingID, function (err, existingEntry) {
         // For some reason (bug) the url key was
         // set but the entry does not exist. Claim the url.
         if (!existingEntry) return callback(null, false, null);

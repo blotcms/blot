@@ -123,10 +123,7 @@ describe("entry", function () {
     await this.write({ path: "/a.txt", content: "Link: a\nHello, A!" });
     await this.write({ path: "/a1.txt", content: "Link: a\nHello, A1!" });
 
-    const getEntryByPath = (path) =>
-      new Promise((resolve) => {
-        getEntry(this.blog.id, path, (entry) => resolve(entry));
-      });
+    const getEntryByPath = (path) => getEntry(this.blog.id, path);
 
     const secondEntry = await getEntryByPath("/a1.txt");
 

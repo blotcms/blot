@@ -1,3 +1,4 @@
+const withCallback = require("helper/withCallback");
 const folder = require("storage/folder");
 const { callbackify } = require("util");
 const {
@@ -34,7 +35,8 @@ const { tryEach } = require("async");
 // target: /Posts/target.txt
 
 module.exports = function byPath(blogID, pathOfPost, href, isLink, callback) {
-  const getEntry = require("models/entry").get;
+  // A failed read is the same as no entry
+  const getEntry = withCallback(require("models/entry").get);
 
   // if pathOfPost is '/Posts/foo.txt' then dirOfPost is '/Posts'
   const dirOfPost = dirname(pathOfPost);
@@ -80,7 +82,7 @@ module.exports = function byPath(blogID, pathOfPost, href, isLink, callback) {
   }
 
   function exact(blogID, path, done) {
-    getEntry(blogID, path, (entry) => {
+    getEntry(blogID, path, (err, entry) => {
       if (!entry || !entry.url || entry.deleted)
         return done(new Error("No entry"));
       done(null, entry);
@@ -90,7 +92,7 @@ module.exports = function byPath(blogID, pathOfPost, href, isLink, callback) {
   function rough(blogID, path, done) {
     searchForExtension(blogID, path, function (err, finalPath) {
       if (err || !finalPath) return done(new Error("No path"));
-      getEntry(blogID, finalPath, (entry) => {
+      getEntry(blogID, finalPath, (err, entry) => {
         if (!entry || !entry.url || entry.deleted)
           return done(new Error("No entry"));
         done(null, entry);
@@ -102,7 +104,7 @@ module.exports = function byPath(blogID, pathOfPost, href, isLink, callback) {
     resolveCase(blogID, path, function (err, correctPath) {
       if (err || !correctPath) return done(err || new Error("No path"));
 
-      getEntry(blogID, correctPath, (entry) => {
+      getEntry(blogID, correctPath, (err, entry) => {
         if (!entry || !entry.url || entry.deleted)
           return done(new Error("No entry"));
         done(null, entry);

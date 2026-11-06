@@ -7,11 +7,7 @@ var folder = require("./folder");
 // Resolves with the blog's entry at a path (a deleted entry stays in the
 // database as a tombstone with deleted: true), or undefined if there is none.
 exports.entry = function (blogID, path) {
-  return new Promise(function (resolve) {
-    Entry.get(blogID, path, function (entry) {
-      resolve(entry);
-    });
-  });
+  return Entry.get(blogID, path);
 };
 
 // A path made only of lowercase latin words, so a spec's failure is never

@@ -222,13 +222,12 @@ async function decorate(blog, dir, pageStats) {
       );
 
       Promise.all(
-        uniquePaths.map(
-          (entryPath) =>
-            new Promise((res) => {
-              Entry.get(blog.id, entryPath, ["html", "deleted"], (entry) =>
-                res(entry || null)
-              );
-            })
+        uniquePaths.map((entryPath) =>
+          // A failed read is the same as no entry
+          Entry.get(blog.id, entryPath).then(
+            (entry) => entry || null,
+            () => null
+          )
         )
       )
         .then((fetched) => {
