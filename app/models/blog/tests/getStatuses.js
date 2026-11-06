@@ -1,7 +1,6 @@
 describe("Blog.getStatuses", function () {
-  const { promisify } = require("util");
-  const setStatus = promisify(require("../setStatus"));
-  const getStatuses = promisify(require("../getStatuses"));
+  const setStatus = require("../setStatus");
+  const getStatuses = require("../getStatuses");
   const { v4: uuid } = require("uuid");
 
   // Create a test user before each spec

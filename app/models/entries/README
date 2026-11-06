@@ -47,9 +47,9 @@ All functions are properties of the object exported by `index.js`. Require the m
 const Entries = require('models/entries');
 ```
 
-`getTotal`, `getAllTotal`, `getAllIDs`, `getListIDs`, `getCreated`, `getDeleted` and `lastUpdate` return promises when called without a callback (via `helper/withCallback`); with a callback they behave as before.
+`getPage` and `getRecent` return promises and take no callback. `getTotal`, `getAllTotal`, `getAllIDs`, `getListIDs`, `getCreated`, `getDeleted` and `lastUpdate` return promises when called without a callback (via `helper/withCallback`); with a callback they behave as before.
 
-### `getPage(blogID, options, callback)`
+### `async getPage(blogID, options = {})`
 
 Returns a single page of published entries from the `entries` list with full pagination metadata.
 
@@ -62,7 +62,7 @@ Returns a single page of published entries from the `entries` list with full pag
   - `sortBy` — `"date"` (default) or `"id"` (lexicographic sort on entry ID).
   - `order` — `"asc"` (default) or `"desc"`.
   - `pathPrefix` — string; when provided, restricts results to entries whose ID begins with this prefix, using the `entries:lex` index.
-- `callback(err, entries, pagination)` — called with an array of `Entry` instances and a pagination object, or `(err, null, null)` on validation failure.
+- Resolves to `{ entries, pagination }`: an array of `Entry` instances and a pagination object. Rejects with a `400` error (`Invalid page number`) on validation failure, or with the Redis error.
 
 **Pagination object:**
 
@@ -148,11 +148,12 @@ Returns the IDs of entries in a named list.
 - `options.ascending` — when true, returns IDs in ascending-score order.
 - `callback(err, ids)` — array of string IDs in reverse-score order by default.
 
-### `getRecent(blogID, callback)`
+### `async getRecent(blogID, options = {})`
 
 Returns the 31 most recently published entries (index range `0..30` from the `entries` list) with `index` properties attached.
 
-- `callback(entries)` — array of `Entry` instances.
+- `options.rejectOnOutage` — when set, a Redis outage rejects with the error instead of resolving `[]` (the cached read in `cachedRecent.js` sets it).
+- Resolves to an array of `Entry` instances; `[]` on other Redis failures.
 
 ### `getCreated(blogID, after, callback)`
 
@@ -234,13 +235,13 @@ The lex index is only updated incrementally by `_assign.js` when the ready flag 
 `index.js` is a self-invoking function that closes over private helpers:
 
 - `listKey(blogID, list)` — constructs and validates Redis key strings. Throws if `list` is not one of the eight recognised list names.
-- `getRange(blogID, start, end, options, callback)` — the internal paginated fetch used by `getAll`, `getRecent`, `lastUpdate`, and `getPage`. Issues a `ZREVRANGE` and optionally hydrates results via `Entry.get`.
+- `async getRange(blogID, start, end, options)` — the internal paginated fetch used by `getAll`, `get`, `getRecent` and `lastUpdate`; resolves to the entries (`[]` on a Redis failure, a rejection on an outage with `options.rejectOnOutage`). `getAll` and `get` still call back, through `getRangeWithCallback`. Issues a `ZREVRANGE` and optionally hydrates results via `Entry.get`.
 - `validatePageNumber`, `validatePageSize`, `validateSortBy`, `validateSortOrder` — input sanitisation helpers used by `getPage`. Not exported.
 - `normalizePathPrefix` — normalises a path prefix string (trims, ensures leading `/`).
 - `fetchEntryScores` — fetches scores for a list of entry IDs from the `entries` sorted set using concurrent `zscore` calls via `Promise.all`. Used for date-sorting within path-prefix–filtered result sets.
 - `Migration note` — avoid `client.batch()` in this module to stay Redis 5-compatible. For read fan-out, prefer `await Promise.all([...])`; use `client.multi()...exec()` only when atomic write semantics are required.
 - `getPrefixFilteredPage` — handles `getPage` calls when a `pathPrefix` is provided. Performs a `ZRANGEBYLEX` on the lex index and then sorts and paginates the matching IDs.
-- `handlePaginationAndCallback` — shared final step for all `getPage` code paths. Hydrates entry IDs, attaches `index` properties, constructs the pagination object, and attaches it to the last entry in the result.
+- `handlePagination` — shared final step for all `getPage` code paths. Hydrates entry IDs, attaches `index` properties, constructs the pagination object, and attaches it to the last entry in the result.
 
 ---
 

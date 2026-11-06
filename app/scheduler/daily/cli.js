@@ -1,7 +1,12 @@
 module.exports = function (main) {
-  main(function (err, result) {
-    if (err) throw err;
-    console.log(result);
-    process.exit();
-  });
+  main().then(
+    function (result) {
+      console.log(result);
+      process.exit();
+    },
+    function (err) {
+      console.error(err);
+      process.exit(1);
+    }
+  );
 };

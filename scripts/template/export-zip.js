@@ -11,6 +11,7 @@ var archiver = require("archiver");
 // Blog.get rather than scripts/get/blog, which mints a dashboard login token
 var Blog = require("models/blog");
 var Template = require("models/template");
+var withCallback = require("helper/withCallback");
 var shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 
 var LOCAL_EDITING_EXIT_CODE = 3;
@@ -28,8 +29,11 @@ Blog.get({ id: process.argv[2] }, function (err, blog) {
 
   if (!blog.template) fail("Blog " + blog.id + " has no template");
 
-  Template.getAllViews(blog.template, function (err, views, metadata) {
+  withCallback(Template.getAllViews)(blog.template, function (err, result) {
     if (err) fail(err.message);
+
+    var views = result && result.views;
+    var metadata = result && result.metadata;
     if (!views || !metadata) fail("No template found for " + blog.template);
 
     if (metadata.localEditing) {

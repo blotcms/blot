@@ -2,9 +2,6 @@ var client = require("models/client");
 var key = require("../key");
 var generateAccessToken = require("../generateAccessToken");
 var checkAccessToken = require("../checkAccessToken");
-var promisify = require("util").promisify;
-var generate = promisify(generateAccessToken);
-var check = promisify(checkAccessToken);
 
 describe("user generateAccessToken", function () {
   var generatedTokens = [];
@@ -18,7 +15,7 @@ describe("user generateAccessToken", function () {
 
   it("generates a token with specified UID", async function () {
     var uid = "user_token_test";
-    var token = await generate({ uid: uid });
+    var token = await generateAccessToken({ uid: uid });
     generatedTokens.push(token);
     expect(token).toBeDefined();
     expect(token.length).toBe(32);
@@ -27,14 +24,14 @@ describe("user generateAccessToken", function () {
   });
 
   it("generates unique tokens", async function () {
-    var token1 = await generate({ uid: "user_unique_1" });
-    var token2 = await generate({ uid: "user_unique_2" });
+    var token1 = await generateAccessToken({ uid: "user_unique_1" });
+    var token2 = await generateAccessToken({ uid: "user_unique_2" });
     generatedTokens.push(token1, token2);
     expect(token1).not.toEqual(token2);
   });
 
   it("sets default TTL of 24 hours", async function () {
-    var token = await generate({ uid: "user_ttl_test" });
+    var token = await generateAccessToken({ uid: "user_ttl_test" });
     generatedTokens.push(token);
     var ttl = await client.ttl(key.accessToken(token));
     expect(ttl).toBeGreaterThan(86000);
@@ -42,7 +39,10 @@ describe("user generateAccessToken", function () {
   });
 
   it("respects custom expiry time", async function () {
-    var token = await generate({ uid: "user_expiry_test", expires: 60 });
+    var token = await generateAccessToken({
+      uid: "user_expiry_test",
+      expires: 60,
+    });
     generatedTokens.push(token);
     var ttl = await client.ttl(key.accessToken(token));
     expect(ttl).toBeGreaterThan(0);
@@ -50,7 +50,7 @@ describe("user generateAccessToken", function () {
   });
 
   it("token is hex encoded", async function () {
-    var token = await generate({ uid: "user_hex_test" });
+    var token = await generateAccessToken({ uid: "user_hex_test" });
     generatedTokens.push(token);
     expect(/^[0-9a-f]+$/.test(token)).toBe(true);
   });
@@ -59,12 +59,12 @@ describe("user generateAccessToken", function () {
 describe("user checkAccessToken integration", function () {
   it("validates and consumes a token", async function () {
     var uid = "user_check_token";
-    var token = await generate({ uid: uid });
+    var token = await generateAccessToken({ uid: uid });
 
-    var result = await check(token);
+    var result = await checkAccessToken(token);
     expect(result).toEqual(uid);
 
-    var error = await check(token).then(
+    var error = await checkAccessToken(token).then(
       function () {
         return null;
       },

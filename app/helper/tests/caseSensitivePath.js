@@ -1,8 +1,10 @@
 describe("caseSensitivePath ", function () {
-  var resolveCaseInsensitivePathToFile = require("../caseSensitivePath");
+  var { promisify } = require("util");
+  var resolveCaseInsensitivePathToFile = promisify(
+    require("../caseSensitivePath")
+  );
   var fs = require("fs-extra");
   var os = require("os");
-  var async = require("async");
 
   // The helper reads a real directory, so give it one of its own
   beforeEach(async function () {
@@ -13,30 +15,22 @@ describe("caseSensitivePath ", function () {
     await fs.remove(this.cwd);
   });
 
-  it("resolves case insensitive paths to a file", function (done) {
+  it("resolves case insensitive paths to a file", async function () {
     var cwd = this.cwd;
 
-    async.timesSeries(
-      100,
-      function (i, next) {
-        var truePath = global.test.fake.path(Date.now().toString() + ".txt");
-        var randomizedPath = addSlashes(randomizeCase(truePath));
-        fs.outputFileSync(cwd + truePath, "");
+    for (var i = 0; i < 100; i++) {
+      var truePath = global.test.fake.path(Date.now().toString() + ".txt");
+      var randomizedPath = addSlashes(randomizeCase(truePath));
+      fs.outputFileSync(cwd + truePath, "");
 
-        resolveCaseInsensitivePathToFile(
-          cwd,
-          randomizedPath,
-          function (err, resolvedPath) {
-            if (err) return done.fail(err);
+      var resolvedPath = await resolveCaseInsensitivePathToFile(
+        cwd,
+        randomizedPath
+      );
 
-            expect(resolvedPath).toEqual(cwd + truePath);
-            fs.emptyDirSync(cwd);
-            next();
-          }
-        );
-      },
-      done
-    );
+      expect(resolvedPath).toEqual(cwd + truePath);
+      fs.emptyDirSync(cwd);
+    }
   });
 });
 

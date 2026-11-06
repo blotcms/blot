@@ -22,7 +22,7 @@ describe("template", function () {
   const setView = promisify(setViewCb);
   const getBlog = promisify(Blog.get);
   const setBlog = promisify(Blog.set);
-  const getAllViews = promisify(require("../index").getAllViews);
+  const getAllViews = require("../index").getAllViews;
   const createShareID = promisify(require("../index").createShareID);
   const getByShareID = promisify(require("../index").getByShareID);
 
@@ -320,7 +320,7 @@ describe("template", function () {
 
     const blog = await getBlog({ id: this.blog.id });
     const installed = await getMetadata(blog.template);
-    const views = await getAllViews(blog.template);
+    const { views } = await getAllViews(blog.template);
 
     expect(installed.localEditing).toEqual(false);
     expect(Object.keys(views).length).toBeGreaterThan(0);

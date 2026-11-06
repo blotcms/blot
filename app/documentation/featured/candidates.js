@@ -8,6 +8,7 @@ var Entries = require("models/entries");
 var User = require("models/user");
 var colors = require("colors/safe");
 var async = require("async");
+var withCallback = require("helper/withCallback");
 var verifySiteIsOnline = require("./verifySiteIsOnline");
 
 if (require.main === module) {
@@ -54,11 +55,13 @@ function main(callback) {
           User.getById(blog.owner, function (err, user) {
             if (err || !user || user.isDisabled) return next();
 
-            Entries.getPage(
+            withCallback(Entries.getPage)(
               blog.id,
               { pageNumber: 1, pageSize: 1 },
-              function (error, entries) {
+              function (error, page) {
                 if (error) return next();
+
+                var entries = page.entries;
                 if (!entries || !entries.length) return next();
 
                 next(null, {

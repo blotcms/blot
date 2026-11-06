@@ -38,15 +38,20 @@ module.exports = function loadFavicon(req, res, next) {
     return next();
   }
 
-  Template.getAllViews(req.template.id, function (err, views) {
-    if (err) return next(err);
+  Template.getAllViews(req.template.id)
+    .then(function ({ views }) {
+      res.locals.favicon_supported = templateSupportsFavicon(
+        req.template,
+        views
+      );
 
-    res.locals.favicon_supported = templateSupportsFavicon(req.template, views);
+      if (req.template.cacheID) {
+        supported.set(key, res.locals.favicon_supported);
+      }
 
-    if (req.template.cacheID) supported.set(key, res.locals.favicon_supported);
-
-    next();
-  });
+      next();
+    })
+    .catch(next);
 };
 
 module.exports.hasFaviconLocal = hasFaviconLocal;

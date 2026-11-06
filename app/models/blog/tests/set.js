@@ -29,77 +29,47 @@ describe("Blog.set", function () {
     });
   });
 
-  it("will set the domain", function (done) {
-    var test = this;
+  it("will set the domain", async function () {
     var domain = "example.com";
 
-    set(test.blog.id, { domain: domain }, function (err) {
-      if (err) return done.fail(err);
+    await set(this.blog.id, { domain: domain });
+  });
 
-      done();
+  it("disables image metadata when turned off", async function () {
+    await set(this.blog.id, { imageExif: "off" });
+
+    const blog = await get({ id: this.blog.id });
+
+    expect(blog.imageExif).toBe("off");
+    expect(blog.isImageExifOff).toBe(true);
+    expect(blog.isImageExifBasic).toBe(false);
+  });
+
+  it("saves full image metadata preference", async function () {
+    await set(this.blog.id, { imageExif: "full" });
+
+    const blog = await get({ id: this.blog.id });
+
+    expect(blog.imageExif).toBe("full");
+    expect(blog.isImageExifFull).toBe(true);
+    expect(blog.isImageExifOff).toBe(false);
+  });
+
+  it("normalizes converter preferences", async function () {
+    await set(this.blog.id, {
+      converters: { img: false, markdown: "true", unknown: false },
     });
+
+    const blog = await get({ id: this.blog.id });
+
+    expect(blog.converters.img).toBe(false);
+    expect(blog.converters.markdown).toBe(true);
+    expect(blog.converters.docx).toBe(true);
+    expect(blog.converters.unknown).toBe(undefined);
   });
 
-  it("disables image metadata when turned off", function (done) {
-    var test = this;
-
-    set(test.blog.id, { imageExif: "off" }, function (errors) {
-      if (errors) return done.fail(errors);
-
-      get({ id: test.blog.id }, function (err, blog) {
-        if (err) return done.fail(err);
-
-        expect(blog.imageExif).toBe("off");
-        expect(blog.isImageExifOff).toBe(true);
-        expect(blog.isImageExifBasic).toBe(false);
-        done();
-      });
-    });
-  });
-
-  it("saves full image metadata preference", function (done) {
-    var test = this;
-
-    set(test.blog.id, { imageExif: "full" }, function (errors) {
-      if (errors) return done.fail(errors);
-
-      get({ id: test.blog.id }, function (err, blog) {
-        if (err) return done.fail(err);
-
-        expect(blog.imageExif).toBe("full");
-        expect(blog.isImageExifFull).toBe(true);
-        expect(blog.isImageExifOff).toBe(false);
-        done();
-      });
-    });
-  });
-
-  it("normalizes converter preferences", function (done) {
-    var test = this;
-
-    set(
-      test.blog.id,
-      { converters: { img: false, markdown: "true", unknown: false } },
-      function (errors) {
-        if (errors) return done.fail(errors);
-
-        get({ id: test.blog.id }, function (err, blog) {
-          if (err) return done.fail(err);
-
-          expect(blog.converters.img).toBe(false);
-          expect(blog.converters.markdown).toBe(true);
-          expect(blog.converters.docx).toBe(true);
-          expect(blog.converters.unknown).toBe(undefined);
-
-          done();
-        });
-      }
-    );
-  });
-
-  it("updates the handle host without touching custom domains", function (done) {
-    var test = this;
-    var originalHandle = test.blog.handle;
+  it("updates the handle host without touching custom domains", async function () {
+    var originalHandle = this.blog.handle;
     var newHandle = originalHandle + "new";
     var oldHostKey = key.domain(originalHandle + "." + config.host);
     var newHostKey = key.domain(newHandle + "." + config.host);
@@ -107,109 +77,78 @@ describe("Blog.set", function () {
     var customDomain = "custom-domain.test";
     var customDomainKey = key.domain(customDomain);
 
-    client
-      .set(preservedKey, "keep")
-      .then(function () {
-        set(test.blog.id, { domain: customDomain }, function (err) {
-          if (err) return done.fail(err);
+    await client.set(preservedKey, "keep");
 
-          client
-            .mGet([oldHostKey, customDomainKey])
-            .then(function (valuesBefore) {
-              expect(valuesBefore[0]).toBe(test.blog.id);
-              expect(valuesBefore[1]).toBe(test.blog.id);
+    await set(this.blog.id, { domain: customDomain });
 
-              set(test.blog.id, { handle: newHandle }, function (err) {
-                if (err) return done.fail(err);
+    const valuesBefore = await client.mGet([oldHostKey, customDomainKey]);
+    expect(valuesBefore[0]).toBe(this.blog.id);
+    expect(valuesBefore[1]).toBe(this.blog.id);
 
-                client
-                  .mGet([oldHostKey, preservedKey, newHostKey, customDomainKey])
-                  .then(function (values) {
-                    expect(values[0]).toBe(null);
-                    expect(values[1]).toBe("keep");
-                    expect(values[2]).toBe(test.blog.id);
-                    expect(values[3]).toBe(test.blog.id);
-                    done();
-                  })
-                  .catch(function (err) {
-                    done.fail(err);
-                  });
-              });
-            })
-            .catch(function (err) {
-              done.fail(err);
-            });
-        });
-      })
-      .catch(function (err) {
-        done.fail(err);
-      });
+    await set(this.blog.id, { handle: newHandle });
+
+    const values = await client.mGet([
+      oldHostKey,
+      preservedKey,
+      newHostKey,
+      customDomainKey,
+    ]);
+    expect(values[0]).toBe(null);
+    expect(values[1]).toBe("keep");
+    expect(values[2]).toBe(this.blog.id);
+    expect(values[3]).toBe(this.blog.id);
   });
 
-  it("updates the cacheID when the menu changes", function (done) {
-    var test = this;
+  it("updates the cacheID when the menu changes", async function () {
+    const before = await get({ id: this.blog.id });
 
-    get({ id: test.blog.id }, function (err, before) {
-      if (err) return done.fail(err);
-
-      var updatedMenu = before.menu.map(function (item, index) {
-        if (index === 0) {
-          return Object.assign({}, item, {
-            label: item.label + " Updated",
-          });
-        }
-
-        return item;
-      });
-
-      var originalCacheID = before.cacheID;
-
-      set(test.blog.id, { menu: updatedMenu }, function (err) {
-        if (err) return done.fail(err);
-
-        get({ id: test.blog.id }, function (err, after) {
-          if (err) return done.fail(err);
-
-          expect(after.menu[0].label).toBe(updatedMenu[0].label);
-          expect(after.cacheID).toBeGreaterThan(originalCacheID);
-
-          done();
+    var updatedMenu = before.menu.map(function (item, index) {
+      if (index === 0) {
+        return Object.assign({}, item, {
+          label: item.label + " Updated",
         });
-      });
+      }
+
+      return item;
     });
+
+    var originalCacheID = before.cacheID;
+
+    await set(this.blog.id, { menu: updatedMenu });
+
+    const after = await get({ id: this.blog.id });
+
+    expect(after.menu[0].label).toBe(updatedMenu[0].label);
+    expect(after.cacheID).toBeGreaterThan(originalCacheID);
   });
 
-  it("increments cacheID monotonically when Date.now() would not advance", function (done) {
-    var test = this;
+  it("increments cacheID monotonically when Date.now() would not advance", async function () {
     var frozenNow = 1000000000000;
 
-    get({ id: test.blog.id }, function (err, before) {
-      if (err) return done.fail(err);
+    const before = await get({ id: this.blog.id });
 
-      var originalCacheID = Number(before.cacheID) || 0;
-      var dateNow = Date.now;
-      Date.now = function () {
-        return frozenNow;
-      };
+    var originalCacheID = Number(before.cacheID) || 0;
+    var dateNow = Date.now;
 
-      var menuWithChange = before.menu.map(function (item, index) {
-        return index === 0
-          ? Object.assign({}, item, { label: item.label + " X" })
-          : item;
-      });
-
-      set(test.blog.id, { menu: menuWithChange }, function (err) {
-        Date.now = dateNow;
-        if (err) return done.fail(err);
-
-        get({ id: test.blog.id }, function (err, after) {
-          if (err) return done.fail(err);
-
-          expect(after.cacheID).toBeGreaterThan(originalCacheID);
-          expect(after.cacheID).toBeGreaterThanOrEqual(frozenNow);
-          done();
-        });
-      });
+    var menuWithChange = before.menu.map(function (item, index) {
+      return index === 0
+        ? Object.assign({}, item, { label: item.label + " X" })
+        : item;
     });
+
+    Date.now = function () {
+      return frozenNow;
+    };
+
+    try {
+      await set(this.blog.id, { menu: menuWithChange });
+    } finally {
+      Date.now = dateNow;
+    }
+
+    const after = await get({ id: this.blog.id });
+
+    expect(after.cacheID).toBeGreaterThan(originalCacheID);
+    expect(after.cacheID).toBeGreaterThanOrEqual(frozenNow);
   });
 });

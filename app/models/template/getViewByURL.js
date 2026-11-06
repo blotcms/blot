@@ -10,21 +10,21 @@ const { matchViewPatterns, parseViewPatterns } = require("./viewURLPatterns");
  *
  * @param {string} templateID - The ID of the template.
  * @param {string} url - The URL to match.
- * @param {function} callback - Callback function (err, viewName, params, query).
+ * @returns {Promise<{viewName: ?string, params: ?object, query: ?object}>}
  */
-module.exports = async function getViewByURLPattern(templateID, url, callback) {
+module.exports = async function getViewByURLPattern(templateID, url) {
   debug("Looking up views for templateID:", templateID, "URL:", url);
 
   if (!templateID || typeof templateID !== "string") {
     const err = new Error("Invalid templateID");
     debug(err.message);
-    return callback(err);
+    throw err;
   }
 
   if (!url || typeof url !== "string") {
     const err = new Error("Invalid URL");
     debug(err.message);
-    return callback(err);
+    throw err;
   }
 
   try {
@@ -50,7 +50,7 @@ module.exports = async function getViewByURLPattern(templateID, url, callback) {
           "in view:",
           matched.viewName
         );
-        return callback(null, matched.viewName, matched.params, query);
+        return { viewName: matched.viewName, params: matched.params, query };
       }
 
       debug("No matching URL pattern found for URL:", url);
@@ -63,13 +63,13 @@ module.exports = async function getViewByURLPattern(templateID, url, callback) {
 
     if (viewName) {
       debug("Found view by URL:", viewName);
-      return callback(null, viewName, null, query);
+      return { viewName, params: null, query };
     }
 
     debug("No view found for URL:", url);
-    return callback(null, null, null, null);
+    return { viewName: null, params: null, query: null };
   } catch (error) {
     debug("Error while processing URL:", error);
-    return callback(error, null, null, null);
+    throw error;
   }
 };

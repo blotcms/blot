@@ -28,7 +28,6 @@ const {
 
 // Promisify callback-based functions
 const getMetadataAsync = promisify(getMetadata);
-const getAllViewsAsync = promisify(getAllViews);
 const getViewAsync = promisify(getView);
 const hsetAsync = client.hSet.bind(client);
 
@@ -457,7 +456,7 @@ module.exports = function updateCdnManifest(templateID, callback) {
 
       // Get all views and collect their CDN targets, including the literal
       // folder links the render wraps in {{#cdn}}, locals and {{#asset}}
-      const views = await getAllViewsAsync(templateID);
+      const { views } = await getAllViews(templateID);
       const { viewTargets: sortedTargets, folderTargets } =
         await collectTargets(
           templateID,

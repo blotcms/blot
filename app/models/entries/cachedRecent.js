@@ -32,15 +32,11 @@ const recentEntriesCache = createRenderCache("recentEntries", {
   // Coalesce concurrent misses on the same key into one in-flight
   // getRecent call.
   fetchMethod: async (key, staleValue, { context }) => {
-    const recent = await new Promise((resolve, reject) => {
-      // Required here: models/entries requires this module (and specs spy
-      // on getRecent). onError makes a Redis outage reject rather than
-      // resolve [].
-      require("models/entries").getRecent(
-        context.blogID,
-        { onError: reject },
-        resolve
-      );
+    // Required here: models/entries requires this module (and specs spy
+    // on getRecent). rejectOnOutage makes a Redis outage reject rather than
+    // resolve [].
+    const recent = await require("models/entries").getRecent(context.blogID, {
+      rejectOnOutage: true,
     });
     const prepared = prepareCacheValue(recent, {
       preserveEntryInstances: true,

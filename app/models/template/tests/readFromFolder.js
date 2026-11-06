@@ -5,7 +5,9 @@ describe("template", function () {
   var create = require("../index").create;
   var readFromFolder = require("../index").readFromFolder;
   var setView = require("../index").setView;
-  var getViewByURL = require("../index").getViewByURL;
+  var getViewByURL = require("helper/withCallback")(
+    require("../index").getViewByURL
+  );
 
   require("./setup")({ createTemplate: true });
 
@@ -112,10 +114,10 @@ describe("template", function () {
         readFromFolder(this.blog.id, this.dir, function (err, template) {
           if (err) return done.fail(err);
 
-          getViewByURL(template.id, "/style.css", function (err, name) {
+          getViewByURL(template.id, "/style.css", function (err, result) {
             if (err) return done.fail(err);
 
-            expect(name).toEqual(null);
+            expect(result.viewName).toEqual(null);
             done();
           });
         });
@@ -138,10 +140,10 @@ describe("template", function () {
       readFromFolder(this.blog.id, this.dir, function (err, template) {
         if (err) return done.fail(err);
 
-        getViewByURL(template.id, "/test", function (err, name) {
+        getViewByURL(template.id, "/test", function (err, result) {
           if (err) return done.fail(err);
 
-          expect(name).toEqual("style.css");
+          expect(result.viewName).toEqual("style.css");
           done();
         });
       });
@@ -153,10 +155,10 @@ describe("template", function () {
       readFromFolder(this.blog.id, this.dir, function (err, template) {
         if (err) return done.fail(err);
 
-        getViewByURL(template.id, "/style.css", function (err, name) {
+        getViewByURL(template.id, "/style.css", function (err, result) {
           if (err) return done.fail(err);
 
-          expect(name).toEqual("style.css");
+          expect(result.viewName).toEqual("style.css");
           done();
         });
       });
@@ -185,10 +187,10 @@ describe("template", function () {
             readFromFolder(blogID, templateFolder, function (err, template) {
               if (err) return done.fail(err);
 
-              getViewByURL(template.id, "/foo", function (err, name) {
+              getViewByURL(template.id, "/foo", function (err, result) {
                 if (err) return done.fail(err);
 
-                expect(name).toEqual("style.css");
+                expect(result.viewName).toEqual("style.css");
                 done();
               });
             });

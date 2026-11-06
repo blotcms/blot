@@ -4,20 +4,20 @@ var ensure = require("helper/ensure");
 var getMultipleViews = require("./getMultipleViews");
 var getMetadata = require("./getMetadata");
 
-module.exports = function getAllViews(name, callback) {
-  ensure(name, "string").and(callback, "function");
+// Resolves to { views, metadata }. Rejects with an ENOENT error when the
+// template has no metadata.
+module.exports = async function getAllViews(name) {
+  ensure(name, "string");
 
-  client
-    .sMembers(key.allViews(name))
-    .then(function (viewNames) {
-      getMetadata(name, function (err, metadata) {
-        if (err) return callback(err);
+  const viewNames = await client.sMembers(key.allViews(name));
+  const metadata = await getMetadata(name);
 
-        getMultipleViews(name, viewNames, function (viewErr, views) {
-          if (viewErr) return callback(viewErr);
-          callback(null, views, metadata);
-        });
-      });
-    })
-    .catch(callback);
+  const views = await new Promise(function (resolve, reject) {
+    getMultipleViews(name, viewNames, function (viewErr, views) {
+      if (viewErr) return reject(viewErr);
+      resolve(views);
+    });
+  });
+
+  return { views, metadata };
 };

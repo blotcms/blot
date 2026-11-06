@@ -20,7 +20,7 @@ describe("entry.search", function () {
     expect(err instanceof Error).toBe(true);
   });
 
-  it("works with a single entry", async function (done) {
+  it("works with a single entry", async function () {
     const path = "/post.txt";
     const contents = `Custom: Metadata hello!
     Tags: apple, pear, orange
@@ -54,11 +54,9 @@ describe("entry.search", function () {
 
     // Tags
     check(await this.search("apple"));
-
-    done();
   });
 
-  it("matches the decoded file name of a baked folder link, not its prefix", async function (done) {
+  it("matches the decoded file name of a baked folder link, not its prefix", async function () {
     const folder = require("storage/folder");
     const path = "/post.txt";
 
@@ -76,11 +74,9 @@ describe("entry.search", function () {
     ]);
     expect((await this.search("été")).map((r) => r.id)).toEqual([path]);
     expect(await this.search("folder")).toEqual([]);
-
-    done();
   });
 
-  it("works with two entries", async function (done) {
+  it("works with two entries", async function () {
     const path1 = "/post.txt";
     const contents1 = `Custom: Metadata hello!
     Tags: apple, pear, orange
@@ -110,11 +106,9 @@ describe("entry.search", function () {
 
     // Lowercase
     check(await this.search("hello"));
-
-    done();
   });
 
-  it("supports non-latin characters", async function (done) {
+  it("supports non-latin characters", async function () {
     const path = "/post.txt";
     const contents = `Custom: Metadata hello!
     Tags: apple, pear, orange
@@ -133,11 +127,9 @@ describe("entry.search", function () {
 
     // Lowercase
     check(await this.search("你好"));
-
-    done();
   });
 
-  it("ignores deleted entries", async function (done) {
+  it("ignores deleted entries", async function () {
     const path = "/post.txt";
     const contents = `Hello, world!`;
 
@@ -148,11 +140,9 @@ describe("entry.search", function () {
     await this.remove(path);
 
     expect((await this.search("Hello")).length).toEqual(0);
-
-    done();
   });
 
-  it("ignores draft entries", async function (done) {
+  it("ignores draft entries", async function () {
     const path = "/post.txt";
     const contents = `Draft: true
 
@@ -161,11 +151,9 @@ describe("entry.search", function () {
     await this.set(path, contents);
 
     expect((await this.search("Hello")).length).toEqual(0);
-
-    done();
   });
 
-  it("ignores entries with Search: no metadata", async function (done) {
+  it("ignores entries with Search: no metadata", async function () {
     const path = "/post.txt";
     const contents = `Search: no
     Custom: Metadata hello!
@@ -181,11 +169,9 @@ describe("entry.search", function () {
 
     // Exact match
     check(await this.search("Hello"));
-
-    done();
   });
 
-  it("ignores entries with mixed-case Search metadata set to no", async function (done) {
+  it("ignores entries with mixed-case Search metadata set to no", async function () {
     const path = "/post-mixed-search.txt";
     const contents = `SeArCh: no
     Hello, world!`;
@@ -193,11 +179,9 @@ describe("entry.search", function () {
     await this.set(path, contents);
 
     expect((await this.search("Hello")).length).toEqual(0);
-
-    done();
   });
 
-  it("includes pages with Search: yes metadata", async function (done) {
+  it("includes pages with Search: yes metadata", async function () {
     const path = "/Pages/About.txt";
     const contents = `Search: yes
     Custom: Metadata hello!
@@ -214,11 +198,9 @@ describe("entry.search", function () {
 
     // Exact match
     check(await this.search("Hello"));
-
-    done();
   });
 
-  it("includes pages with Search: true metadata", async function (done) {
+  it("includes pages with Search: true metadata", async function () {
     const path = "/Pages/About.txt";
     const contents = `Search: true
     Custom: Metadata hello!
@@ -235,17 +217,13 @@ describe("entry.search", function () {
 
     // Exact match
     check(await this.search("Hello"));
-
-    done();
   });
 
-  it("requires boths terms to be present in multi-term search", async function (done) {
+  it("requires boths terms to be present in multi-term search", async function () {
     await this.set("/post.txt", `Hello, world!`);
 
     await this.set("/second.txt", `Hello, goodbye!`);
 
     expect((await this.search("Hello world")).length).toEqual(1);
-
-    done();
   });
 });

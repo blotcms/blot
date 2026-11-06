@@ -114,7 +114,7 @@ Stored as a Redis hash at key `template:{id}:view:{viewName}`.
 
 All functions below are exported from `index.js`. All callbacks follow the Node.js `(err, result)` convention unless noted.
 
-`getMetadata`, `getView`, `getViewsByURLs`, `getTemplateList`, `getByShareID` and `isOwner` return a promise when called without a callback (`helper/withCallback`, #2559); with one they behave as before. `getViewByURL` and `getAllViews` are still callback-only. `getPartials` is an `async` function with no callback form.
+`getMetadata`, `getView`, `getViewsByURLs`, `getTemplateList`, `getByShareID` and `isOwner` return a promise when called without a callback (`helper/withCallback`, #2559); with one they behave as before. `getViewByURL`, `getPartials` and `getAllViews` are `async` functions with no callback form.
 
 ### Template lifecycle
 
@@ -163,9 +163,9 @@ dropView(templateID, viewName, callback)
 Removes a single view and its URL mapping from Redis. Gives the template a new `cacheID`, bumps the owner blog's if the blog has the template installed, and triggers CDN manifest regeneration.
 
 ```js
-getAllViews(name, callback)
+getAllViews(name)
 ```
-Returns `(err, views, metadata)` where `views` is an object of all views keyed by name.
+Returns a promise (no callback form) resolving to `{ views, metadata }`, where `views` is an object of all views keyed by name. Rejects with `code: "ENOENT"` if the template has no metadata.
 
 ```js
 getMultipleViews(templateName, viewNames, callback)
@@ -188,9 +188,9 @@ getPartials(blogID, templateID, partials, contextMap, parentContextPath, wrapOpt
 Async; returns a promise (no callback form). Resolves to `{ allPartials, retrieve }`. `contextMap`, `parentContextPath` and `wrapOptions` are optional. Resolves a partial map: partials starting with `/` are fetched as entry HTML from `models/entry`; others are fetched as named template views, recursively.
 
 ```js
-getViewByURL(templateID, url, callback)
+async getViewByURL(templateID, url)
 ```
-Returns `(err, viewName, params, query)`. First attempts pattern matching against stored URL patterns using `path-to-regexp`. Falls back to exact URL lookup. Returns `null` values for all results when no match exists.
+Resolves to `{ viewName, params, query }` and rejects on an invalid argument or a Redis error. First attempts pattern matching against stored URL patterns using `path-to-regexp`. Falls back to exact URL lookup. Returns `null` values for all results when no match exists.
 
 ### Template listing and sharing
 

@@ -3,9 +3,9 @@ var key = require("../key");
 var User = require("../index");
 var promisify = require("util").promisify;
 var remove = promisify(User.remove);
-var getById = promisify(User.getById);
 var create = promisify(User.create);
-var hashPassword = promisify(User.hashPassword);
+var getById = User.getById;
+var hashPassword = User.hashPassword;
 
 describe("user remove", function () {
   var email = "remove@example.com";

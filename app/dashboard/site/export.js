@@ -7,6 +7,7 @@ const { finished } = require("stream/promises");
 const folder = require("storage/folder");
 const assets = require("storage/assets");
 const Template = require("models/template");
+const withCallback = require("helper/withCallback");
 const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
 
 Export.get("/", function (req, res) {
@@ -120,7 +121,10 @@ const getAllTemplates = async (blogID) => {
 
 const addTemplate = async (templateID, archive) => {
   return new Promise((resolve, reject) => {
-    Template.getAllViews(templateID, function (err, views, template) {
+    withCallback(Template.getAllViews)(templateID, function (err, result) {
+      var views = result && result.views;
+      var template = result && result.metadata;
+
       if (err || !views || !template)
         return reject(err || new Error("No views or template found"));
 

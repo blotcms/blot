@@ -4,7 +4,7 @@ describe("redirects.conflicts", function () {
   const build = require("build");
   const Entry = require("models/entry");
   const Template = require("models/template");
-  const conflicts = promisify(require("../conflicts"));
+  const conflicts = require("../conflicts");
 
   global.test.blog();
 

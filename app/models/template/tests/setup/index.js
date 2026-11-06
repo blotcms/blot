@@ -78,21 +78,7 @@ module.exports = function setup(options) {
         });
       };
 
-      this.getViewByURL = (url) => {
-        return new Promise((resolve, reject) => {
-          getViewByURL(
-            this.template.id,
-            url,
-            (err, viewName, params, query) => {
-              if (err) {
-                reject(err);
-              } else {
-                resolve({ viewName, params, query });
-              }
-            }
-          );
-        });
-      };
+      this.getViewByURL = (url) => getViewByURL(this.template.id, url);
     });
   }
 

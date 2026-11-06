@@ -139,7 +139,7 @@ module.exports = (function () {
     // entry info when getting every entry
     if (options.skinny === undefined) options.skinny = true;
 
-    return getRange(blogID, 0, -1, options, callback);
+    return getRangeWithCallback(blogID, 0, -1, options, callback);
   }
 
   function get(blogID, options, callback) {
@@ -161,7 +161,7 @@ module.exports = (function () {
     for (var i in lists) {
       totalToFetch++;
       options.list = lists[i];
-      getRange(blogID, 0, -1, options, onComplete(options.list));
+      getRangeWithCallback(blogID, 0, -1, options, onComplete(options.list));
     }
 
     function onComplete(listName) {
@@ -386,33 +386,60 @@ module.exports = (function () {
     return entries || [];
   });
 
-  function getRange(blogID, start, end, options, callback) {
+  // Resolves to the entries in the list from start to end, newest first: their
+  // IDs, or the entries themselves with options.full or options.skinny. A
+  // Redis failure resolves [], so that a caller that doesn't care renders an
+  // empty list. Callers that would cache or render an empty list as if it
+  // were real pass options.rejectOnOutage: a Redis outage then rejects with
+  // the error instead.
+  async function getRange(blogID, start, end, options) {
     ensure(blogID, "string")
       .and(start, "number")
       .and(end, "number")
-      .and(options, "object")
-      .and(callback, "function");
+      .and(options, "object");
 
     var listName = options.list || "entries";
     var key = listKey(blogID, listName);
+    var entryIDs;
 
-    redis
-      .zRange(key, start, end, { REV: true })
-      .then(function (entryIDs) {
-        if (!options.full && !options.skinny) return callback(entryIDs);
+    try {
+      entryIDs = await redis.zRange(key, start, end, { REV: true });
+    } catch (err) {
+      if (options.rejectOnOutage && isRedisUnavailableError(err)) throw err;
 
-        Entry.get(blogID, entryIDs, function (entries) {
-          return callback(entries);
-        });
-      })
-      .catch(function (err) {
-        // Callers that would cache or render an empty list as if it were real
-        // pass onError to hear about an outage; everyone else gets []
-        if (options.onError && isRedisUnavailableError(err))
-          return options.onError(err);
+      return [];
+    }
 
-        return callback([]);
-      });
+    if (!options.full && !options.skinny) return entryIDs;
+
+    return await new Promise(function (resolve) {
+      Entry.get(blogID, entryIDs, resolve);
+    });
+  }
+
+  // getRange for the callback functions above: calls back with the entries and
+  // no error argument. options.onError, if given, hears of a Redis outage
+  // (or bad arguments) instead, and then the callback is never called.
+  function getRangeWithCallback(blogID, start, end, options, callback) {
+    withCallback(getRange)(
+      blogID,
+      start,
+      end,
+      Object.assign({}, options, { rejectOnOutage: !!options.onError }),
+      function (err, entries) {
+        if (err) {
+          if (options.onError) return options.onError(err);
+
+          // Only bad arguments get here (getRange resolves [] for any other
+          // error without rejectOnOutage): log, and call back with [] as it
+          // does for those, rather than leaving the caller hanging
+          console.error("Entries: getRange failed", err);
+          return callback([]);
+        }
+
+        callback(entries);
+      }
+    );
   }
 
   function random(blogID, callback) {
@@ -570,33 +597,33 @@ module.exports = (function () {
     return defaultSortOrder; // Default sort order
   }
 
-  function fetchEntryScores(blogID, entryIDs, callback) {
-    if (!entryIDs.length) return callback(null, []);
+  async function fetchEntryScores(blogID, entryIDs) {
+    if (!entryIDs.length) return [];
 
     var key = listKey(blogID, "entries");
 
-    Promise.all(
+    var rawScores = await Promise.all(
       entryIDs.map(function (entryID) {
         return redis.zScore(key, entryID);
       })
-    ).then(function (rawScores) {
-      var withScores = [];
+    );
 
-      for (var i = 0; i < entryIDs.length; i++) {
-        var score = rawScores && rawScores[i];
-        if (score === null || score === undefined) continue;
+    var withScores = [];
 
-        withScores.push({
-          id: entryIDs[i],
-          score: parseFloat(score),
-        });
-      }
+    for (var i = 0; i < entryIDs.length; i++) {
+      var score = rawScores && rawScores[i];
+      if (score === null || score === undefined) continue;
 
-      callback(null, withScores);
-    }, callback);
+      withScores.push({
+        id: entryIDs[i],
+        score: parseFloat(score),
+      });
+    }
+
+    return withScores;
   }
 
-  function getPrefixFilteredPage(
+  async function getPrefixFilteredPage(
     blogID,
     pathPrefix,
     sortBy,
@@ -605,99 +632,71 @@ module.exports = (function () {
     end,
     pageSize,
     zeroIndexedPageNo,
-    pageNo,
-    callback
+    pageNo
   ) {
     var min = "[" + pathPrefix;
     var max = "[" + pathPrefix + "\xff";
+    var matchingIDs, pagedIDs, totalEntries;
 
-    redis
-      .zRangeByLex(pathIndex.lexKey(blogID), min, max)
-      .then(function (matchingIDs) {
-        var totalEntries = matchingIDs.length;
+    try {
+      matchingIDs = await redis.zRangeByLex(pathIndex.lexKey(blogID), min, max);
+      totalEntries = matchingIDs.length;
 
-        if (!totalEntries) {
-          return handlePaginationAndCallback(
-            blogID,
-            [],
-            0,
-            zeroIndexedPageNo,
-            pageSize,
-            start,
-            end,
-            pageNo,
-            callback
-          );
-        }
+      if (!totalEntries) {
+        pagedIDs = [];
+      } else if (sortBy === "id") {
+        var ids =
+          order === "desc"
+            ? matchingIDs.slice().reverse()
+            : matchingIDs.slice();
 
-        if (sortBy === "id") {
-          var ids =
-            order === "desc"
-              ? matchingIDs.slice().reverse()
-              : matchingIDs.slice();
+        pagedIDs = ids.slice(start, end + 1);
+      } else {
+        var scoredEntries = await fetchEntryScores(blogID, matchingIDs);
 
-          return handlePaginationAndCallback(
-            blogID,
-            ids.slice(start, end + 1),
-            totalEntries,
-            zeroIndexedPageNo,
-            pageSize,
-            start,
-            end,
-            pageNo,
-            callback
-          );
-        }
+        scoredEntries.sort(function (a, b) {
+          var scoreDifference =
+            order === "asc" ? b.score - a.score : a.score - b.score;
 
-        fetchEntryScores(blogID, matchingIDs, function (error, scoredEntries) {
-          if (error) {
-            console.error(error);
-            return callback(error, [], null);
-          }
+          if (scoreDifference !== 0) return scoreDifference;
 
-          scoredEntries.sort(function (a, b) {
-            var scoreDifference =
-              order === "asc" ? b.score - a.score : a.score - b.score;
+          // Redis-compatible tie handling: equal scores are ordered by member
+          // lexicographically (reverse for ZREVRANGE semantics, forward for ZRANGE).
+          if (a.id === b.id) return 0;
 
-            if (scoreDifference !== 0) return scoreDifference;
+          if (order === "asc") return a.id < b.id ? 1 : -1;
 
-            // Redis-compatible tie handling: equal scores are ordered by member
-            // lexicographically (reverse for ZREVRANGE semantics, forward for ZRANGE).
-            if (a.id === b.id) return 0;
-
-            if (order === "asc") return a.id < b.id ? 1 : -1;
-
-            return a.id < b.id ? -1 : 1;
-          });
-
-          totalEntries = scoredEntries.length;
-
-          var pagedIDs = scoredEntries
-            .slice(start, end + 1)
-            .map(function (item) {
-              return item.id;
-            });
-
-          handlePaginationAndCallback(
-            blogID,
-            pagedIDs,
-            totalEntries,
-            zeroIndexedPageNo,
-            pageSize,
-            start,
-            end,
-            pageNo,
-            callback
-          );
+          return a.id < b.id ? -1 : 1;
         });
-      })
-      .catch(function (error) {
-        console.error(error);
-        return callback(error, [], null);
-      });
+
+        totalEntries = scoredEntries.length;
+
+        pagedIDs = scoredEntries.slice(start, end + 1).map(function (item) {
+          return item.id;
+        });
+      }
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }
+
+    return await handlePagination(
+      blogID,
+      pagedIDs,
+      totalEntries,
+      zeroIndexedPageNo,
+      pageSize,
+      start,
+      end,
+      pageNo
+    );
   }
-  function getPage(blogID, options = {}, callback) {
-    ensure(blogID, "string").and(callback, "function");
+
+  // Resolves to { entries, pagination }: a page of published entries with its
+  // pagination. Rejects with a 400 for an invalid page number, or with the
+  // Redis error.
+  async function getPage(blogID, options = {}) {
+    ensure(blogID, "string");
 
     // Extract and validate options
     const {
@@ -714,7 +713,7 @@ module.exports = (function () {
       const error = new Error("Invalid page number");
       error.statusCode = 400;
       error.invalidInput = pageNoInput;
-      return callback(error, null, null);
+      throw error;
     }
 
     // Validate and set page size
@@ -732,7 +731,7 @@ module.exports = (function () {
 
     // Determine how to fetch the sorted list
     if (pathPrefix) {
-      return getPrefixFilteredPage(
+      return await getPrefixFilteredPage(
         blogID,
         pathPrefix,
         sortBy,
@@ -741,76 +740,58 @@ module.exports = (function () {
         end,
         pageSize,
         zeroIndexedPageNo,
-        pageNo,
-        callback
+        pageNo
       );
     }
 
-    if (sortBy === "id") {
-      var entriesKey = listKey(blogID, "entries");
-      var entriesLexKey = pathIndex.lexKey(blogID);
-      var rangePromise =
-        order === "desc"
-          ? redis.zRange(entriesLexKey, start, end, { REV: true })
-          : redis.zRange(entriesLexKey, start, end);
+    var results;
 
-      Promise.all([rangePromise, redis.zCard(entriesKey)])
-        .then(function (results) {
-          var entryIDs = results[0];
-          var totalEntries = results[1];
+    try {
+      if (sortBy === "id") {
+        var entriesKey = listKey(blogID, "entries");
+        var entriesLexKey = pathIndex.lexKey(blogID);
+        var lexRangePromise =
+          order === "desc"
+            ? redis.zRange(entriesLexKey, start, end, { REV: true })
+            : redis.zRange(entriesLexKey, start, end);
 
-          handlePaginationAndCallback(
-            blogID,
-            entryIDs,
-            totalEntries,
-            zeroIndexedPageNo,
-            pageSize,
-            start,
-            end,
-            pageNo,
-            callback
-          );
-        })
-        .catch(function (error) {
-          console.error(error);
-          return callback(error, [], null);
-        });
-    } else {
-      // Default sorting by date (Redis scores)
+        results = await Promise.all([lexRangePromise, redis.zCard(entriesKey)]);
+      } else {
+        // Default sorting by date (Redis scores)
 
-      const rangePromise =
-        order === "asc"
-          ? redis.zRange(listKey(blogID, "entries"), start, end, { REV: true })
-          : redis.zRange(listKey(blogID, "entries"), start, end);
+        const rangePromise =
+          order === "asc"
+            ? redis.zRange(listKey(blogID, "entries"), start, end, {
+                REV: true,
+              })
+            : redis.zRange(listKey(blogID, "entries"), start, end);
 
-      Promise.all([rangePromise, redis.zCard(listKey(blogID, "entries"))])
-        .then(function (results) {
-          var entryIDs = results[0];
-          var totalEntries = results[1];
-
-          handlePaginationAndCallback(
-            blogID,
-            entryIDs,
-            totalEntries,
-            zeroIndexedPageNo,
-            pageSize,
-            start,
-            end,
-            pageNo,
-            callback
-          );
-        })
-        .catch(function (error) {
-          console.error(error);
-          return callback(error, [], null);
-        });
+        results = await Promise.all([
+          rangePromise,
+          redis.zCard(listKey(blogID, "entries")),
+        ]);
+      }
+    } catch (error) {
+      console.error(error);
+      throw error;
     }
+
+    return await handlePagination(
+      blogID,
+      results[0],
+      results[1],
+      zeroIndexedPageNo,
+      pageSize,
+      start,
+      end,
+      pageNo
+    );
   }
 
   /**
-   * Handles pagination and invokes the callback with the appropriate data.
+   * Fetches the page's entries and resolves to { entries, pagination }.
    */
-  function handlePaginationAndCallback(
+  async function handlePagination(
     blogID,
     entryIDs,
     totalEntries,
@@ -818,86 +799,78 @@ module.exports = (function () {
     pageSize,
     start,
     end,
-    pageNo,
-    callback
+    pageNo
   ) {
-    Entry.get(blogID, entryIDs, function (entries) {
-      var pagination = {};
-
-      totalEntries = parseInt(totalEntries);
-
-      pagination.total = Math.max(1, Math.ceil(totalEntries / pageSize));
-      pagination.current = pageNo;
-      pagination.page_size = pageSize;
-      pagination.total_entries = totalEntries;
-
-      // total entries is not 0 indexed, remove 1
-      pagination.next = totalEntries - 1 > end ? zeroIndexedPageNo + 2 : null;
-
-      pagination.previous = zeroIndexedPageNo > 0 ? zeroIndexedPageNo : null;
-
-      // The first entry published should have an index of 1
-      // The fifth entry published should have an index of 5
-      // The most recently published entry should have an index
-      // equal to the number of total entries published.
-      let index = totalEntries - start;
-      entries.forEach(function (entry) {
-        entry.index = index;
-        index--;
-      });
-
-      if (entries && entries.length > 0) {
-        entries.at(-1).pagination = pagination;
-      }
-
-      return callback(null, entries, pagination);
+    var entries = await new Promise(function (resolve) {
+      Entry.get(blogID, entryIDs, resolve);
     });
+
+    var pagination = {};
+
+    totalEntries = parseInt(totalEntries);
+
+    pagination.total = Math.max(1, Math.ceil(totalEntries / pageSize));
+    pagination.current = pageNo;
+    pagination.page_size = pageSize;
+    pagination.total_entries = totalEntries;
+
+    // total entries is not 0 indexed, remove 1
+    pagination.next = totalEntries - 1 > end ? zeroIndexedPageNo + 2 : null;
+
+    pagination.previous = zeroIndexedPageNo > 0 ? zeroIndexedPageNo : null;
+
+    // The first entry published should have an index of 1
+    // The fifth entry published should have an index of 5
+    // The most recently published entry should have an index
+    // equal to the number of total entries published.
+    let index = totalEntries - start;
+    entries.forEach(function (entry) {
+      entry.index = index;
+      index--;
+    });
+
+    if (entries && entries.length > 0) {
+      entries.at(-1).pagination = pagination;
+    }
+
+    return { entries, pagination };
   }
 
   var lastUpdate = withCallback(async function lastUpdate(blogID) {
-    // getRange calls back with the entries and no error argument
-    var entries = await new Promise(function (resolve) {
-      getRange(blogID, 0, 1, { skinny: true }, resolve);
-    });
+    var entries = await getRange(blogID, 0, 1, { skinny: true });
 
     if (entries && entries.length) return entries[0].dateStamp;
   });
 
-  function getRecent(blogID, options, callback) {
-    if (typeof options === "function") {
-      callback = options;
-      options = {};
+  // Resolves to the most recent entries, each with its index. A Redis failure
+  // resolves [], unless options.rejectOnOutage is set: an outage then rejects
+  // with the error, so that no caller renders or caches an empty list as real.
+  async function getRecent(blogID, options = {}) {
+    var entries = await getRange(blogID, 0, 30, {
+      skinny: true,
+      rejectOnOutage: options.rejectOnOutage,
+    });
+    var totalEntries;
+
+    try {
+      totalEntries = await redis.zCard(listKey(blogID, "entries"));
+    } catch (err) {
+      if (options.rejectOnOutage && isRedisUnavailableError(err)) throw err;
+
+      return [];
     }
 
-    getRange(
-      blogID,
-      0,
-      30,
-      { skinny: true, onError: options.onError },
-      function (entries) {
-        redis
-          .zCard(listKey(blogID, "entries"))
-          .then(function (totalEntries) {
-            // The first entry published should have an index of 1
-            // The fifth entry published should have an index of 5
-            // The most recently published entry should have an index
-            // equal to the number of total entries published.
-            let index = totalEntries;
-            entries.forEach(function (entry) {
-              entry.index = index;
-              index--;
-            });
+    // The first entry published should have an index of 1
+    // The fifth entry published should have an index of 5
+    // The most recently published entry should have an index
+    // equal to the number of total entries published.
+    let index = totalEntries;
+    entries.forEach(function (entry) {
+      entry.index = index;
+      index--;
+    });
 
-            callback(entries);
-          })
-          .catch(function (err) {
-            if (options.onError && isRedisUnavailableError(err))
-              return options.onError(err);
-
-            callback([]);
-          });
-      }
-    );
+    return entries;
   }
 
   function listKey(blogID, list) {

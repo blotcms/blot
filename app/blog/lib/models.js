@@ -78,24 +78,9 @@ function getUserById(id) {
   });
 }
 
-// getPage's callback is (err, entries, pagination) — promisify would drop pagination.
+// Resolves to { entries, pagination }
 function getPage(blogID, options) {
-  return new Promise((resolve, reject) => {
-    Entries.getPage(blogID, options, (err, entries, pagination) => {
-      if (err) return reject(err);
-      resolve({ entries, pagination });
-    });
-  });
-}
-
-// getViewByURL's callback is (err, viewName, params).
-function getViewByURL(template, url) {
-  return new Promise((resolve, reject) => {
-    Template.getViewByURL(template, url, (err, viewName, params) => {
-      if (err) return reject(err);
-      resolve({ viewName, params });
-    });
-  });
+  return Entries.getPage(blogID, options);
 }
 
 // Entry.get / getByUrl and several Entries helpers are NOT err-first —
@@ -163,7 +148,7 @@ module.exports = {
   popularTags,
   checkRedirect,
   getUserById,
-  getViewByURL,
+  getViewByURL: (...args) => Template.getViewByURL(...args),
   getEntry,
   getEntryByUrl,
   lookupEntryByUrl,

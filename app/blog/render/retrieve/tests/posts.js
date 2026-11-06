@@ -312,17 +312,18 @@ describe("posts cache", function () {
   });
 
   it("forwards raw, unnormalized pageNumber/pageSize to models/entries.getPage", function (done) {
-    spyOn(entriesModel, "getPage").and.callFake(
-      function (blogID, options, callback) {
-        // models/entries.getPage does its own validation (default page size 5,
-        // max 100, and a 400 for a non-digit page). If posts.js pre-normalizes
-        // these with lib/pagination (default 100, max 500, never rejects)
-        // before calling getPage, that validation is silently bypassed.
-        expect(options.pageSize).toBeUndefined();
-        expect(options.pageNumber).toBe("not-a-number");
-        callback(null, [], { page: 1, pages: 1 });
-      }
-    );
+    spyOn(entriesModel, "getPage").and.callFake(function (blogID, options) {
+      // models/entries.getPage does its own validation (default page size 5,
+      // max 100, and a 400 for a non-digit page). If posts.js pre-normalizes
+      // these with lib/pagination (default 100, max 500, never rejects)
+      // before calling getPage, that validation is silently bypassed.
+      expect(options.pageSize).toBeUndefined();
+      expect(options.pageNumber).toBe("not-a-number");
+      return Promise.resolve({
+        entries: [],
+        pagination: { page: 1, pages: 1 },
+      });
+    });
 
     posts(
       {
@@ -342,13 +343,14 @@ describe("posts cache", function () {
   });
 
   it("passes nested sort locals into getPage", function (done) {
-    spyOn(entriesModel, "getPage").and.callFake(
-      function (blogID, options, callback) {
-        expect(options.sortBy).toBe("id");
-        expect(options.order).toBe("desc");
-        callback(null, [], { page: 1, pages: 1 });
-      }
-    );
+    spyOn(entriesModel, "getPage").and.callFake(function (blogID, options) {
+      expect(options.sortBy).toBe("id");
+      expect(options.order).toBe("desc");
+      return Promise.resolve({
+        entries: [],
+        pagination: { page: 1, pages: 1 },
+      });
+    });
 
     posts(
       {
@@ -408,11 +410,12 @@ describe("posts cache", function () {
   });
 
   it("reuses cached untagged responses for identical inputs", function (done) {
-    spyOn(entriesModel, "getPage").and.callFake(
-      function (blogID, options, callback) {
-        callback(null, [{ id: "1", title: "A" }], { page: 1, pages: 1 });
-      }
-    );
+    spyOn(entriesModel, "getPage").and.callFake(function (blogID, options) {
+      return Promise.resolve({
+        entries: [{ id: "1", title: "A" }],
+        pagination: { page: 1, pages: 1 },
+      });
+    });
 
     const req = {
       blog: { id: "blog-1", cacheID: 100 },
@@ -462,15 +465,16 @@ describe("posts cache", function () {
   });
 
   it("returns isolated copies so caller mutations do not taint cache", function (done) {
-    spyOn(entriesModel, "getPage").and.callFake(
-      function (blogID, options, callback) {
-        callback(null, [{ title: "Original" }], {
+    spyOn(entriesModel, "getPage").and.callFake(function (blogID, options) {
+      return Promise.resolve({
+        entries: [{ title: "Original" }],
+        pagination: {
           page: 1,
           pages: 3,
           nested: { total: 10 },
-        });
-      }
-    );
+        },
+      });
+    });
 
     const req = {
       blog: { id: "blog-1", cacheID: 100 },
@@ -604,15 +608,12 @@ describe("posts cache", function () {
   });
 
   it("drops heavy fields the view does not reference before caching", async function () {
-    spyOn(entriesModel, "getPage").and.callFake(
-      function (blogID, options, callback) {
-        callback(
-          null,
-          [{ id: "1", title: "A", html: "<p>A</p>", body: "A" }],
-          {}
-        );
-      }
-    );
+    spyOn(entriesModel, "getPage").and.callFake(function (blogID, options) {
+      return Promise.resolve({
+        entries: [{ id: "1", title: "A", html: "<p>A</p>", body: "A" }],
+        pagination: {},
+      });
+    });
 
     const result = await new Promise((resolve, reject) =>
       posts(

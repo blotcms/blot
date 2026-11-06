@@ -24,24 +24,14 @@ describe("scheduler/daily/revenue sites per customer", function () {
     );
   }
 
-  const collect = () =>
-    new Promise((resolve, reject) =>
-      revenue((err, result) => (err ? reject(err) : resolve(result)))
-    );
+  const collect = () => revenue();
 
   beforeEach(function () {
     users = [];
     originalPlans = config.paypal.plans;
     config.paypal.plans = { monthly_5: "P-TEST-MONTHLY-5" };
-    spyOn(User, "getAllIds").and.callFake((callback) =>
-      callback(
-        null,
-        users.map((_, i) => i)
-      )
-    );
-    spyOn(User, "getById").and.callFake((id, callback) =>
-      callback(null, users[id])
-    );
+    spyOn(User, "getAllIds").and.callFake(async () => users.map((_, i) => i));
+    spyOn(User, "getById").and.callFake(async (id) => users[id]);
   });
 
   afterEach(function () {

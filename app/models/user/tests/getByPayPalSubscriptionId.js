@@ -1,8 +1,6 @@
 var client = require("models/client");
 var key = require("../key");
 var getByPayPalSubscriptionId = require("../getByPayPalSubscriptionId");
-var promisify = require("util").promisify;
-var get = promisify(getByPayPalSubscriptionId);
 
 describe("user getByPayPalSubscriptionId", function () {
   var uid = "user_paypal_test";
@@ -30,19 +28,19 @@ describe("user getByPayPalSubscriptionId", function () {
   });
 
   it("returns null for non-existent PayPal subscription ID", async function () {
-    var result = await get("I-NONEXISTENT");
+    var result = await getByPayPalSubscriptionId("I-NONEXISTENT");
     expect(result).toBeNull();
   });
 
   it("retrieves a user by PayPal subscription ID", async function () {
-    var result = await get(subscriptionId);
+    var result = await getByPayPalSubscriptionId(subscriptionId);
     expect(result.uid).toEqual(uid);
     expect(result.paypal.id).toEqual(subscriptionId);
   });
 
   it("returns null when PayPal index exists but user does not", async function () {
     await client.del(key.user(uid));
-    var result = await get(subscriptionId);
+    var result = await getByPayPalSubscriptionId(subscriptionId);
     expect(result).toBeNull();
   });
 });
