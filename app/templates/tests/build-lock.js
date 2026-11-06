@@ -29,7 +29,7 @@ describe("templates startup build locks", function () {
       fsExtra.readdirSync = fakeSourceReaddir(originalReaddirSync, () => []);
       getTemplateList = jasmine
         .createSpy("getTemplateList")
-        .and.callFake((_owner, callback) => callback(null, []));
+        .and.callFake(async () => []);
       Template.getTemplateList = getTemplateList;
     });
 

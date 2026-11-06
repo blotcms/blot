@@ -1,4 +1,3 @@
-const async = require("async");
 const fs = require("fs-extra");
 const archiver = require("archiver");
 const config = require("config");
@@ -61,108 +60,103 @@ const buildDisplayTree = (nodes) => {
   });
 };
 
-const main = () => {
+// Resolves once the ZIP of one folder is written to tmpPath and copied to
+// outputPath, or rejects on an archive error
+const archiveFolder = (folder, tmpPath, outputPath) => {
   return new Promise((resolve, reject) => {
-    const folders = fs
-      .readdirSync(FOLDER_DIRECTORY)
-      .filter((i) => i.indexOf(".") === -1)
-      .filter((i) => fs.statSync(FOLDER_DIRECTORY + "/" + i).isDirectory());
+    fs.removeSync(tmpPath);
 
-    const manifest = {};
+    fs.ensureDirSync(tmp + "folder-zips");
 
-    async.eachSeries(
-      folders,
-      (folder, next) => {
-        const fullTree = buildFolderTree(FOLDER_DIRECTORY + "/" + folder);
-        manifest[folder] = {
-          fullTree,
-          displayTree: buildDisplayTree(fullTree),
-        };
+    const output = fs.createWriteStream(tmpPath);
 
-        if (cache[folder]) {
-          return fs.copy(
-            cache[folder],
-            VIEW_DIRECTORY + "/" + folder + ".zip",
-            next
-          );
-        }
+    const archive = archiver("zip", {
+      zlib: { level: 9 }, // Sets the compression level.
+    });
 
-        const tmpPath = tmp + "folder-zips/" + folder + ".zip";
+    output.on("close", function () {
+      console.log(archive.pointer() + " total bytes for", folder);
+      cache[folder] = tmpPath;
+      fs.removeSync(outputPath);
+      fs.copy(tmpPath, outputPath).then(resolve, reject);
+    });
 
-        if (config.environment === "development") {
-          if (fs.existsSync(tmpPath)) {
-            console.log(
-              clfdate(),
-              folder,
-              "Copying cached ZIP since we are in development environment"
-            );
-            return fs.copy(
-              tmpPath,
-              VIEW_DIRECTORY + "/" + folder + ".zip",
-              next
-            );
-          }
-        }
+    // good practice to catch warnings (ie stat failures and other non-blocking errors)
+    archive.on("warning", function (err) {
+      console.log(err);
 
-        fs.removeSync(tmpPath);
-
-        fs.ensureDirSync(tmp + "folder-zips");
-
-        const output = fs.createWriteStream(tmpPath);
-
-        const archive = archiver("zip", {
-          zlib: { level: 9 }, // Sets the compression level.
-        });
-
-        output.on("close", function () {
-          console.log(archive.pointer() + " total bytes for", folder);
-          cache[folder] = tmpPath;
-          const outputPath = VIEW_DIRECTORY + "/" + folder + ".zip";
-          fs.removeSync(outputPath);
-          fs.copy(tmpPath, outputPath, next);
-        });
-
-        // good practice to catch warnings (ie stat failures and other non-blocking errors)
-        archive.on("warning", function (err) {
-          console.log(err);
-
-          if (err.code === "ENOENT") {
-            // log warning
-          } else {
-            // throw error
-            reject(err);
-          }
-        });
-
-        // good practice to catch this error explicitly
-        archive.on("error", function (err) {
-          console.log(err);
-          reject(err);
-        });
-
-        archive.pipe(output);
-        archive.directory(FOLDER_DIRECTORY + "/" + folder + "/", false);
-        archive.finalize();
-      },
-      (err) => {
-        if (err) {
-          return reject(err);
-        }
-
-        fs.ensureDirSync(VIEW_DIRECTORY);
-        fs.writeJsonSync(MANIFEST_PATH, manifest, { spaces: 2 });
-
-        resolve();
+      if (err.code === "ENOENT") {
+        // log warning
+      } else {
+        // throw error
+        reject(err);
       }
-    );
+    });
+
+    // good practice to catch this error explicitly
+    archive.on("error", function (err) {
+      console.log(err);
+      reject(err);
+    });
+
+    archive.pipe(output);
+    archive.directory(FOLDER_DIRECTORY + "/" + folder + "/", false);
+    archive.finalize();
   });
 };
 
+const main = async () => {
+  const folders = fs
+    .readdirSync(FOLDER_DIRECTORY)
+    .filter((i) => i.indexOf(".") === -1)
+    .filter((i) => fs.statSync(FOLDER_DIRECTORY + "/" + i).isDirectory());
+
+  const manifest = {};
+
+  for (const folder of folders) {
+    const fullTree = buildFolderTree(FOLDER_DIRECTORY + "/" + folder);
+    manifest[folder] = {
+      fullTree,
+      displayTree: buildDisplayTree(fullTree),
+    };
+
+    if (cache[folder]) {
+      await fs.copy(cache[folder], VIEW_DIRECTORY + "/" + folder + ".zip");
+      continue;
+    }
+
+    const tmpPath = tmp + "folder-zips/" + folder + ".zip";
+
+    if (config.environment === "development") {
+      if (fs.existsSync(tmpPath)) {
+        console.log(
+          clfdate(),
+          folder,
+          "Copying cached ZIP since we are in development environment"
+        );
+        await fs.copy(tmpPath, VIEW_DIRECTORY + "/" + folder + ".zip");
+        continue;
+      }
+    }
+
+    await archiveFolder(
+      folder,
+      tmpPath,
+      VIEW_DIRECTORY + "/" + folder + ".zip"
+    );
+  }
+
+  fs.ensureDirSync(VIEW_DIRECTORY);
+  fs.writeJsonSync(MANIFEST_PATH, manifest, { spaces: 2 });
+};
+
 if (require.main === module) {
-  main(function (err) {
-    if (err) throw err;
-    process.exit();
-  });
+  main().then(
+    () => process.exit(),
+    (err) => {
+      throw err;
+    }
+  );
 }
 
 module.exports = main;
