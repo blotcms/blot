@@ -1,5 +1,6 @@
 var fs = require("fs");
 var Path = require("path");
+var withCallback = require("helper/withCallback");
 
 // Picks which entry of a directory listing a name refers to: the exact name
 // if present, otherwise the first entry (in listing order) which matches
@@ -21,7 +22,7 @@ function pick(contents, name) {
   return similar;
 }
 
-function caseSensitivePath(cwd, path, callback) {
+async function caseSensitivePath(cwd, path) {
   // Will do many things, importantly it will
   // replace double slashes, e.g. /a/b//c -> /a/b/c
   path = Path.normalize(path);
@@ -41,26 +42,23 @@ function caseSensitivePath(cwd, path, callback) {
   var dirs = path.split("/");
   var name = dirs.shift();
 
-  fs.readdir(cwd, function guess(err, contents) {
-    if (err) return callback(err);
-    var match = pick(contents, name);
+  while (true) {
+    const contents = await fs.promises.readdir(cwd);
+    const match = pick(contents, name);
 
     if (match === undefined) {
-      err = new Error("No path matches: " + path);
+      const err = new Error("No path matches: " + path);
       err.code = "ENOENT";
-      return callback(err);
+      throw err;
     }
 
     cwd += "/" + match;
 
-    if (dirs.length) {
-      name = dirs.shift();
-      fs.readdir(cwd, guess);
-    } else {
-      callback(null, cwd);
-    }
-  });
+    if (!dirs.length) return cwd;
+
+    name = dirs.shift();
+  }
 }
 
-module.exports = caseSensitivePath;
+module.exports = withCallback(caseSensitivePath);
 module.exports.pick = pick;
