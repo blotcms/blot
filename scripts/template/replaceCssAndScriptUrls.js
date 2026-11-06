@@ -567,7 +567,6 @@ function logReport(callback) {
 function processBlogViews(user, blog, callback) {
   const async = require("async");
   const getTemplateListAsync = promisify(Template.getTemplateList);
-  const getAllViewsAsync = promisify(Template.getAllViews);
 
   getTemplateListAsync(blog.id)
     .then(function (templates) {
@@ -584,8 +583,8 @@ function processBlogViews(user, blog, callback) {
           if (template.owner !== blog.id) return nextTemplate();
 
           // Get all views for this template
-          getAllViewsAsync(template.id)
-            .then(function (views) {
+          Template.getAllViews(template.id)
+            .then(function ({ views }) {
               // Process each view
               async.eachOfSeries(
                 views,

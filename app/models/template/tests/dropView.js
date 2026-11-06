@@ -28,18 +28,20 @@ describe("template", function () {
 
   it("dropView removes a view from the list of views", function (done) {
     var test = this;
-    getAllViews(test.template.id, function (err, views) {
-      if (err) return done.fail(err);
-      expect(views[test.view.name].content).toEqual(test.view.content);
-      dropView(test.template.id, test.view.name, function (dropErr) {
-        if (dropErr) return done.fail(dropErr);
-        getAllViews(test.template.id, function (allErr, allViews) {
-          if (allErr) return done.fail(allErr);
-          expect(allViews).toEqual({});
-          done();
+    getAllViews(test.template.id)
+      .then(function ({ views }) {
+        expect(views[test.view.name].content).toEqual(test.view.content);
+        dropView(test.template.id, test.view.name, function (dropErr) {
+          if (dropErr) return done.fail(dropErr);
+          getAllViews(test.template.id)
+            .then(function ({ views: allViews }) {
+              expect(allViews).toEqual({});
+              done();
+            })
+            .catch(done.fail);
         });
-      });
-    });
+      })
+      .catch(done.fail);
   });
 
   function expectKeyDeleted(searchPattern, templateID, viewName, done) {

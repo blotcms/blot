@@ -114,7 +114,7 @@ Stored as a Redis hash at key `template:{id}:view:{viewName}`.
 
 All functions below are exported from `index.js`. All callbacks follow the Node.js `(err, result)` convention unless noted.
 
-`getMetadata`, `getView`, `getViewsByURLs`, `getTemplateList`, `getByShareID` and `isOwner` return a promise when called without a callback (`helper/withCallback`, #2559); with one they behave as before. `getAllViews` is still callback-only. `getViewByURL` and `getPartials` are `async` functions with no callback form.
+`getMetadata`, `getView`, `getViewsByURLs`, `getTemplateList`, `getByShareID` and `isOwner` return a promise when called without a callback (`helper/withCallback`, #2559); with one they behave as before. `getViewByURL`, `getPartials` and `getAllViews` are `async` functions with no callback form.
 
 ### Template lifecycle
 
@@ -163,9 +163,9 @@ dropView(templateID, viewName, callback)
 Removes a single view and its URL mapping from Redis. Gives the template a new `cacheID`, bumps the owner blog's if the blog has the template installed, and triggers CDN manifest regeneration.
 
 ```js
-getAllViews(name, callback)
+getAllViews(name)
 ```
-Returns `(err, views, metadata)` where `views` is an object of all views keyed by name.
+Returns a promise (no callback form) resolving to `{ views, metadata }`, where `views` is an object of all views keyed by name. Rejects with `code: "ENOENT"` if the template has no metadata.
 
 ```js
 getMultipleViews(templateName, viewNames, callback)

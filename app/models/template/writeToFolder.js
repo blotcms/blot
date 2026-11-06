@@ -4,6 +4,7 @@ var async = require("async");
 var callOnce = require("helper/callOnce");
 var isOwner = require("./isOwner");
 var getAllViews = require("./getAllViews");
+var withCallback = require("helper/withCallback");
 var folder = require("storage/folder"); // reads only
 var blogFolder = require("clients/folder");
 var callbackify = require("util").callbackify;
@@ -19,8 +20,11 @@ function writeToFolderUnlocked(blogID, templateID, callback) {
 
     if (!owner) return callback(badPermission(blogID, templateID));
 
-    getAllViews(templateID, function (err, views, metadata) {
+    withCallback(getAllViews)(templateID, function (err, result) {
       if (err) return callback(err);
+
+      var views = result.views;
+      var metadata = result.metadata;
 
       if (!views || !metadata) return callback(noTemplate(blogID, templateID));
 
