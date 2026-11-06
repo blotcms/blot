@@ -470,3 +470,18 @@ Entry template:
 - Follow-up: if the alert returns, look at `CLIENT LIST` for short-lived
   clients, and ask whoever is running scripts in the units.
 
+### 2026-11-06 — host cycle onto a 30 GB root disk (blotcms/blot#2552)
+
+- Trigger / evidence: the data volume was retired (#2258, #2259), so the host
+  was moved to a new one with a 30 GB root disk and the newest AL2023 image,
+  by the volume-free `cycle.sh` after two drills.
+- Fix / outcome: 06:06-06:35 UTC. launch 306s, replicate 94s, app (third
+  try: `units.sh` refused a detached worktree, then one ssh connect timed out
+  from the Mac), switch 172s, settle about 2.5 min. FAILOVER took 114ms with
+  the replica 856 bytes behind. Writes were frozen 110s (41s in the drill);
+  the per-step timing isn't logged. Probes of the site and a test blog every
+  2s through switch and the first normal deploy afterwards: no failures.
+  `finish` ran the same day at the operator's request; the old host is
+  terminated, so rollback is now a restore from backups.
+- Follow-up: under "Host cycle follow-ups" in `TODO` (the first offsite sync
+  from the new host, timing the freeze, host keys at launch).
