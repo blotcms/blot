@@ -36,7 +36,7 @@ async function thumbnail(blog, path, metadata, html) {
   }
 
   // The first candidate which produces thumbnails wins
-  var thumbnails;
+  var thumbnails = null;
 
   for (var candidate of candidates) {
     var found = await lookup(store, candidate, createOrReject);

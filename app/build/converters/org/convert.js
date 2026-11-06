@@ -1,12 +1,13 @@
 const time = require("helper/time");
 const pandoc = require("build/converters/pandoc");
 const debug = require("debug")("blot:converters:org");
+const withResults = require("build/withResults");
 const cheerio = require("cheerio");
 const extractMetadata = require("build/metadata");
 const loosenDisplayMath = require("build/math/loosenDisplayMath");
 
 // Resolves to [html, metadata]
-module.exports = async function (blog, text) {
+async function convert(blog, text) {
   // Org always emits katex spans (see --katex below), so, as with the
   // markdown converter, display math ($$...$$) that occupies a whole
   // source line by itself but is glued to surrounding prose by a single
@@ -61,4 +62,7 @@ module.exports = async function (blog, text) {
 
   debug("Final:", parsed.html);
   return [parsed.html, parsed.metadata];
-};
+}
+
+// The katex specs call this with a callback
+module.exports = withResults(convert);
