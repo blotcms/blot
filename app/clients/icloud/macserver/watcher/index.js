@@ -120,8 +120,12 @@ const stopFsWatch = () => stopFsWatchInternal();
 const MAX_WALK_RESTARTS = 3;
 
 const syncDirectoryContents = async (blogID, pathInBlogDirectory) => {
+  // subfolders this walk went into, walked again on a restart even though
+  // they are known by then
+  const entered = new Set();
+
   for (let attempt = 0; attempt <= MAX_WALK_RESTARTS; attempt++) {
-    const interrupted = await walkDirectoryContents(blogID, pathInBlogDirectory);
+    const interrupted = await walkDirectoryContents(blogID, pathInBlogDirectory, entered);
 
     if (!interrupted) return;
 
@@ -136,7 +140,7 @@ const syncDirectoryContents = async (blogID, pathInBlogDirectory) => {
 };
 
 // Returns true if any entry was skipped because of eviction suppression.
-const walkDirectoryContents = async (blogID, pathInBlogDirectory) => {
+const walkDirectoryContents = async (blogID, pathInBlogDirectory, entered) => {
   let entries;
   let interrupted = false;
 
@@ -164,7 +168,7 @@ const walkDirectoryContents = async (blogID, pathInBlogDirectory) => {
     // reports it, so it is neither created again nor walked from here:
     // re-walking whole subtrees (and one /mkdir per subfolder) on every
     // report of a big folder would crowd out every blog's uploads
-    if (isDirectory && isKnownDirectory(blogID, childPath)) continue;
+    if (isDirectory && isKnownDirectory(blogID, childPath) && !entered.has(childPath)) continue;
 
     try {
       if (!(await exactCaseViaRealpath(buildBlogPath(blogID, childPath)))) continue;
@@ -173,7 +177,8 @@ const walkDirectoryContents = async (blogID, pathInBlogDirectory) => {
         if (!hasRecentChokidarEvent(blogID, childPath, "mkdir")) {
           await performAction(blogID, childPath, "mkdir");
         }
-        if (await walkDirectoryContents(blogID, childPath)) interrupted = true;
+        entered.add(childPath);
+        if (await walkDirectoryContents(blogID, childPath, entered)) interrupted = true;
       } else if (!hasRecentChokidarEvent(blogID, childPath, "upload")) {
         // if chokidar did report the file it is already being uploaded.
         // Files unchanged since their last push are skipped here, without
