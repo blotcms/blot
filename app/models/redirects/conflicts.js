@@ -8,6 +8,7 @@ var urlNormalizer = require("helper/urlNormalizer");
 var Entry = require("models/entry");
 var Template = require("models/template");
 var isRegex = require("./util").isRegex;
+var withCallback = require("helper/withCallback");
 
 // Blot only checks a site's redirects once it has failed to find anything
 // else to serve for a URL (see app/blog/index.js for the order of routes).
@@ -24,8 +25,8 @@ var MAX_PATHS_CHECKED_ON_DISK = 500;
 // Stands in for the blog's folder when joining candidate paths
 var FOLDER = "/folder";
 
-module.exports = function conflicts(blog, redirects, callback) {
-  ensure(blog, "object").and(redirects, "array").and(callback, "function");
+module.exports = withCallback(async function conflicts(blog, redirects) {
+  ensure(blog, "object").and(redirects, "array");
 
   var paths = redirects.map(function (redirect) {
     return comparablePath(redirect && redirect.from);
@@ -37,24 +38,28 @@ module.exports = function conflicts(blog, redirects, callback) {
 
   checkBlotRoutes(paths, results);
 
-  async.series(
-    [
-      function (next) {
-        checkEntries(blog.id, paths, results, next);
-      },
-      function (next) {
-        checkTemplateViews(blog.template, paths, results, next);
-      },
-      function (next) {
-        checkFolder(blog.id, paths, results, next);
-      },
-    ],
-    function (err) {
-      if (err) return callback(err);
-      callback(null, results);
-    }
-  );
-};
+  await new Promise(function (resolve, reject) {
+    async.series(
+      [
+        function (next) {
+          checkEntries(blog.id, paths, results, next);
+        },
+        function (next) {
+          checkTemplateViews(blog.template, paths, results, next);
+        },
+        function (next) {
+          checkFolder(blog.id, paths, results, next);
+        },
+      ],
+      function (err) {
+        if (err) return reject(err);
+        resolve(results);
+      }
+    );
+  });
+
+  return results;
+});
 
 // Returns the path a request would need to use for this redirect to match,
 // or null when we can't say anything useful about it. Redirects.check tests

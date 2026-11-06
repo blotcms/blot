@@ -47,6 +47,8 @@ All functions are properties of the object exported by `index.js`. Require the m
 const Entries = require('models/entries');
 ```
 
+`getTotal`, `getAllTotal`, `getAllIDs`, `getListIDs`, `getCreated`, `getDeleted` and `lastUpdate` return promises when called without a callback (via `helper/withCallback`); with a callback they behave as before.
+
 ### `getPage(blogID, options, callback)`
 
 Returns a single page of published entries from the `entries` list with full pagination metadata.

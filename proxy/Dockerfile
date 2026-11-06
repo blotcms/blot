@@ -4,7 +4,7 @@
 #
 # Every version, commit and checksum ARG below is declared without a default:
 # config/versions.env holds them, and whatever builds this image passes them as
-# build args (proxy/build/image.sh, docker-bake.hcl, the workflows). A build
+# build args (proxy/build/image.sh, config/docker/docker-bake.hcl, the workflows). A build
 # without them fails. scripts/security/check-versions.js (CI, and the daily
 # advisories check) fails if a default creeps back in.
 #
@@ -332,7 +332,7 @@ ENTRYPOINT ["/entrypoint.sh"]
 
 # The proxy image is `runtime` plus the generated configuration. Local
 # development builds `runtime` alone (--target runtime, tagged
-# blot-proxy-runtime) for the root Dockerfile's dev-unit, which renders the
+# blot-proxy-runtime) for config/docker/Dockerfile's dev-unit, which renders the
 # config from proxy/config each time it starts
 # (scripts/development/unit/start.sh).
 FROM runtime

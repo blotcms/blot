@@ -1198,4 +1198,30 @@ describe("entries", function () {
       });
     });
   });
+
+  describe("promise form of the reads", function () {
+    it("returns promises when called without a callback", async function () {
+      const key = `blog:${this.blog.id}:entries`;
+
+      await redis.zAdd(key, [
+        { score: 1, value: "/a" },
+        { score: 2, value: "/b" },
+      ]);
+
+      expect(await Entries.getTotal(this.blog.id)).toBe(2);
+      expect(await Entries.getListIDs(this.blog.id, "entries", {})).toEqual([
+        "/b",
+        "/a",
+      ]);
+      expect(await Entries.getAllIDs(this.blog.id)).toEqual([]);
+      expect(await Entries.getAllTotal(this.blog.id)).toBe(0);
+      expect(await Entries.getCreated(this.blog.id, 0)).toEqual([]);
+      expect(await Entries.getDeleted(this.blog.id, 0)).toEqual([]);
+      expect(await Entries.lastUpdate(this.blog.id)).toBeUndefined();
+    });
+
+    it("rejects for invalid arguments", async function () {
+      await expectAsync(Entries.getCreated(this.blog.id)).toBeRejected();
+    });
+  });
 });

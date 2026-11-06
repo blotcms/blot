@@ -2,7 +2,7 @@
 
 Production runs two units, `blot-blue` and `blot-green` (#2119): each one
 container holding OpenResty and the Node app (node-a, and node-b which it forks),
-built from the `unit` target of the root Dockerfile (`ghcr.io/blotcms/blot`, labelled `im.blot.kind=unit`).
+built from the `unit` target of config/docker/Dockerfile (`ghcr.io/blotcms/blot`, labelled `im.blot.kind=unit`).
 Deploy a new image with the **Deploy** workflow
 (`.github/workflows/deploy.yml`, manual), or from a checkout:
 

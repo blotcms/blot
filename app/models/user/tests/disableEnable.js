@@ -33,11 +33,11 @@ describe("user disable", function () {
 
   it("works with callback signature without updates", function (done) {
     var context = this;
-    getUser(context.user.uid, function (err, user) {
+    User.getById(context.user.uid, function (err, user) {
       if (err) return done.fail(err);
       User.disable(user, function (err) {
         if (err) return done.fail(err);
-        getUser(context.user.uid, function (err, updated) {
+        User.getById(context.user.uid, function (err, updated) {
           if (err) return done.fail(err);
           expect(updated.isDisabled).toBe(true);
           done();
@@ -76,11 +76,11 @@ describe("user enable", function () {
 
   it("works with callback signature without updates", function (done) {
     var context = this;
-    getUser(context.user.uid, function (err, user) {
+    User.getById(context.user.uid, function (err, user) {
       if (err) return done.fail(err);
       User.enable(user, function (err) {
         if (err) return done.fail(err);
-        getUser(context.user.uid, function (err, updated) {
+        User.getById(context.user.uid, function (err, updated) {
           if (err) return done.fail(err);
           expect(updated.isDisabled).toBe(false);
           done();

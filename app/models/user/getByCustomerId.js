@@ -1,20 +1,15 @@
 var ensure = require("helper/ensure");
+var withCallback = require("helper/withCallback");
 var client = require("models/client");
 var key = require("./key");
 var getById = require("./getById");
 
-module.exports = function getByCustomerId(customerId, callback) {
-  ensure(customerId, "string").and(callback, "function");
+module.exports = withCallback(async function getByCustomerId(customerId) {
+  ensure(customerId, "string");
 
-  (async function () {
-    try {
-      var uid = await client.get(key.customer(customerId));
+  var uid = await client.get(key.customer(customerId));
 
-      if (!uid) return callback(null, null);
+  if (!uid) return null;
 
-      return getById(uid, callback);
-    } catch (err) {
-      return callback(err);
-    }
-  })();
-};
+  return await getById(uid);
+});

@@ -19,7 +19,7 @@ services:
     mem_limit: ${BLOT_CONTAINER_MEMORY:-1365m}
     build:
       context: ../../
-      dockerfile: Dockerfile
+      dockerfile: config/docker/Dockerfile
       target: dev-unit
       args:
         NODE_BASE: ${NODE_BASE:?run via scripts/development/start.sh, or export config/versions.env first}

@@ -287,7 +287,7 @@ comes from trends, not single runs.
 
 ### On a pull request (once it's marked *ready for review*)
 
-- runs only if the PR touches the benchmark itself, the `Dockerfile`,
+- runs only if the PR touches the benchmark itself, `config/docker/Dockerfile`,
   `package.json`, `app/blog/**`, `app/models/**`, `app/templates/**`,
   `app/build/**`, `app/cdn/**` or `app/helper/**`
 - runs on **amd64 only**, `2` iterations, aggregated to medians

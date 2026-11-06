@@ -2,20 +2,16 @@ const client = require("models/client");
 const ensure = require("helper/ensure");
 const type = require("helper/type");
 const key = require("./key");
+const withCallback = require("helper/withCallback");
 
-module.exports = function getPopular(blogID, options, callback) {
-  if (typeof options === "function") {
-    callback = options;
-    options = {};
-  }
-
+module.exports = withCallback(async function getPopular(blogID, options) {
   if (typeof options === "number") {
     options = { limit: options };
   }
 
   options = options || {};
 
-  ensure(blogID, "string").and(callback, "function");
+  ensure(blogID, "string");
 
   if (!type(options, "object"))
     throw new TypeError("Options must be an object");
@@ -28,72 +24,61 @@ module.exports = function getPopular(blogID, options, callback) {
   var offset =
     options.offset !== undefined ? Math.max(0, Math.floor(options.offset)) : 0;
 
-  if (limit === 0) return callback(null, []);
+  if (limit === 0) return [];
 
   const popularityKey = key.popular(blogID);
 
-  (async function () {
-    try {
-      const total = await client.zCard(popularityKey);
+  const total = await client.zCard(popularityKey);
 
-      if (!total) return callback(null, []);
+  if (!total) return [];
 
-      var start = offset;
-      var stop = offset + limit - 1;
+  var start = offset;
+  var stop = offset + limit - 1;
 
-      const tagScores = await client.zRangeWithScores(
-        popularityKey,
-        start,
-        stop,
-        {
-          REV: true,
-        }
-      );
+  const tagScores = await client.zRangeWithScores(popularityKey, start, stop, {
+    REV: true,
+  });
 
-      if (!tagScores || tagScores.length === 0) {
-        return callback(null, []);
-      }
+  if (!tagScores || tagScores.length === 0) {
+    return [];
+  }
 
-      const tagsWithCounts = [];
+  const tagsWithCounts = [];
 
-      tagScores.forEach(function (item) {
-        if (!item || !item.value) return;
+  tagScores.forEach(function (item) {
+    if (!item || !item.value) return;
 
-        tagsWithCounts.push({
-          slug: item.value,
-          count: parseInt(item.score, 10) || 0,
-        });
-      });
+    tagsWithCounts.push({
+      slug: item.value,
+      count: parseInt(item.score, 10) || 0,
+    });
+  });
 
-      if (!tagsWithCounts.length) {
-        return callback(null, []);
-      }
+  if (!tagsWithCounts.length) {
+    return [];
+  }
 
-      const details = await Promise.all(
-        tagsWithCounts.map(function ({ slug }) {
-          return client.get(key.name(blogID, slug));
-        })
-      );
+  const details = await Promise.all(
+    tagsWithCounts.map(function ({ slug }) {
+      return client.get(key.name(blogID, slug));
+    })
+  );
 
-      const hydrated = [];
+  const hydrated = [];
 
-      tagsWithCounts.forEach(function ({ slug, count }, index) {
-        if (!count) return;
+  tagsWithCounts.forEach(function ({ slug, count }, index) {
+    if (!count) return;
 
-        const name = details[index] || slug;
-        const entries = Array.from({ length: count });
+    const name = details[index] || slug;
+    const entries = Array.from({ length: count });
 
-        hydrated.push({
-          name,
-          slug,
-          entries,
-          count,
-        });
-      });
+    hydrated.push({
+      name,
+      slug,
+      entries,
+      count,
+    });
+  });
 
-      return callback(null, hydrated);
-    } catch (err) {
-      return callback(err);
-    }
-  })();
-};
+  return hydrated;
+});

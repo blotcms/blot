@@ -1,20 +1,17 @@
 var ensure = require("helper/ensure");
+var withCallback = require("helper/withCallback");
 var client = require("models/client");
 var key = require("./key");
 var getById = require("./getById");
 
-module.exports = function getByPayPalSubscriptionId(subscriptionId, callback) {
-  ensure(subscriptionId, "string").and(callback, "function");
+module.exports = withCallback(
+  async function getByPayPalSubscriptionId(subscriptionId) {
+    ensure(subscriptionId, "string");
 
-  (async function () {
-    try {
-      var uid = await client.get(key.paypal(subscriptionId));
+    var uid = await client.get(key.paypal(subscriptionId));
 
-      if (!uid) return callback(null, null);
+    if (!uid) return null;
 
-      return getById(uid, callback);
-    } catch (err) {
-      return callback(err);
-    }
-  })();
-};
+    return await getById(uid);
+  }
+);

@@ -1,6 +1,7 @@
 var redis = require("models/client");
 var async = require("async");
 var ensure = require("helper/ensure");
+var withCallback = require("helper/withCallback");
 var Entry = require("../entry");
 var entryKey = require("../entry/key").entry;
 var pathNormalizer = require("helper/pathNormalizer");
@@ -96,62 +97,34 @@ module.exports = (function () {
     });
   }
 
-  function getTotal(blogID, callback) {
+  var getTotal = withCallback(async function getTotal(blogID) {
     var entriesKey = listKey(blogID, "entries");
 
-    redis
-      .zCard(entriesKey)
-      .then(function (count) {
-        callback(null, count);
-      })
-      .catch(function (err) {
-        callback(err);
-      });
-  }
+    return await redis.zCard(entriesKey);
+  });
 
-  function getListTotal(blogID, listName, callback) {
-    var list = listKey(blogID, listName);
-
-    redis
-      .zCard(list)
-      .then(function (count) {
-        callback(null, count);
-      })
-      .catch(function (err) {
-        callback(err);
-      });
-  }
+  var getListTotal = withCallback(
+    async function getListTotal(blogID, listName) {
+      return await redis.zCard(listKey(blogID, listName));
+    }
+  );
 
   // Count of the "all" list, the same set Fix()'s each()-based checks (e.g.
   // entry-ghosts) scan one Redis round trip at a time - includes drafts,
   // pages, scheduled and deleted entries that getTotal's "entries" list
   // excludes, so this is the count that actually predicts that workload.
-  function getAllTotal(blogID, callback) {
+  var getAllTotal = withCallback(async function getAllTotal(blogID) {
     var allKey = listKey(blogID, "all");
 
-    redis
-      .zCard(allKey)
-      .then(function (count) {
-        callback(null, count);
-      })
-      .catch(function (err) {
-        callback(err);
-      });
-  }
+    return await redis.zCard(allKey);
+  });
 
   // includes deleted entries
-  function getAllIDs(blogID, callback) {
+  var getAllIDs = withCallback(async function getAllIDs(blogID) {
     var allKey = listKey(blogID, "all");
 
-    redis
-      .zRange(allKey, 0, -1, { REV: true })
-      .then(function (ids) {
-        callback(null, ids);
-      })
-      .catch(function (err) {
-        callback(err);
-      });
-  }
+    return await redis.zRange(allKey, 0, -1, { REV: true });
+  });
 
   // includes deleted entries
   function getAll(blogID, options, callback) {
@@ -204,34 +177,26 @@ module.exports = (function () {
     }
   }
 
-  function getListIDs(blogID, listName, options, callback) {
-    ensure(blogID, "string")
-      .and(listName, "string")
-      .and(options, "object")
-      .and(callback, "function");
+  var getListIDs = withCallback(
+    async function getListIDs(blogID, listName, options) {
+      ensure(blogID, "string").and(listName, "string").and(options, "object");
 
-    var list = listKey(blogID, listName);
+      var list = listKey(blogID, listName);
 
-    var start = 0;
-    var end = -1;
+      var start = 0;
+      var end = -1;
 
-    if (options.first) {
-      start = 0;
-      end = options.first - 1;
+      if (options.first) {
+        start = 0;
+        end = options.first - 1;
+      }
+
+      // Scheduled posts list the soonest first
+      return options.ascending
+        ? await redis.zRange(list, start, end)
+        : await redis.zRange(list, start, end, { REV: true });
     }
-
-    var range = options.ascending
-      ? redis.zRange(list, start, end)
-      : redis.zRange(list, start, end, { REV: true });
-
-    range
-      .then(function (ids) {
-        return callback(null, ids);
-      })
-      .catch(function (err) {
-        return callback(err);
-      });
-  }
+  );
 
   // includes deleted entries
   function each(blogID, dothis, callback) {
@@ -391,39 +356,35 @@ module.exports = (function () {
     );
   }
 
-  function getCreated(blogID, after, callback) {
-    ensure(blogID, "string").and(after, "number").and(callback, "function");
+  var getCreated = withCallback(async function getCreated(blogID, after) {
+    ensure(blogID, "string").and(after, "number");
 
     var key = listKey(blogID, "created");
 
-    redis
-      .zRangeByScore(key, after, Date.now())
-      .then(function (ids) {
-        Entry.get(blogID, ids, function (entries) {
-          callback(null, entries || []);
-        });
-      })
-      .catch(function (err) {
-        callback(err);
-      });
-  }
+    var ids = await redis.zRangeByScore(key, after, Date.now());
 
-  function getDeleted(blogID, after, callback) {
-    ensure(blogID, "string").and(after, "number").and(callback, "function");
+    // Entry.get calls back with the entries and no error argument
+    var entries = await new Promise(function (resolve) {
+      Entry.get(blogID, ids, resolve);
+    });
+
+    return entries || [];
+  });
+
+  var getDeleted = withCallback(async function getDeleted(blogID, after) {
+    ensure(blogID, "string").and(after, "number");
 
     var key = listKey(blogID, "deleted");
 
-    redis
-      .zRangeByScore(key, after, Date.now())
-      .then(function (ids) {
-        Entry.get(blogID, ids, function (entries) {
-          callback(null, entries || []);
-        });
-      })
-      .catch(function (err) {
-        callback(err);
-      });
-  }
+    var ids = await redis.zRangeByScore(key, after, Date.now());
+
+    // Entry.get calls back with the entries and no error argument
+    var entries = await new Promise(function (resolve) {
+      Entry.get(blogID, ids, resolve);
+    });
+
+    return entries || [];
+  });
 
   function getRange(blogID, start, end, options, callback) {
     ensure(blogID, "string")
@@ -893,14 +854,14 @@ module.exports = (function () {
     });
   }
 
-  function lastUpdate(blogID, callback) {
-    getRange(blogID, 0, 1, { skinny: true }, function (entries) {
-      if (entries && entries.length)
-        return callback(null, entries[0].dateStamp);
-
-      return callback();
+  var lastUpdate = withCallback(async function lastUpdate(blogID) {
+    // getRange calls back with the entries and no error argument
+    var entries = await new Promise(function (resolve) {
+      getRange(blogID, 0, 1, { skinny: true }, resolve);
     });
-  }
+
+    if (entries && entries.length) return entries[0].dateStamp;
+  });
 
   function getRecent(blogID, options, callback) {
     if (typeof options === "function") {

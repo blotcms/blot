@@ -1,35 +1,26 @@
 var client = require("models/client");
-var ensure = require("helper/ensure");
 var key = require("./key");
 var getAllIDs = require("./getAllIDs");
+var withCallback = require("helper/withCallback");
 
 var HOST = require("config").host;
 
-// returns list of pairs [host, blogID]
+// Resolves to a list of [host, blogID] pairs
+module.exports = withCallback(async function getHosts() {
+  var ids = await getAllIDs();
 
-module.exports = function getHosts(callback) {
-  ensure(callback, "function");
+  var res = await Promise.all(
+    ids.map(function (id) {
+      return client.hmGet(key.info(id), ["domain", "handle"]);
+    })
+  );
 
-  getAllIDs(function (err, ids) {
-    if (err) throw err;
+  var hosts = [];
 
-    Promise.all(
-      ids.map(function (id) {
-        return client.hmGet(key.info(id), ["domain", "handle"]);
-      })
-    )
-      .then(function (res) {
-        var hosts = [];
-
-        res.forEach(function (keys, i) {
-          if (keys && keys[0]) hosts.push([keys[0], ids[i]]);
-          if (keys && keys[1]) hosts.push([keys[1] + "." + HOST, ids[i]]);
-        });
-
-        return callback(null, hosts);
-      })
-      .catch(function (err) {
-        return callback(err);
-      });
+  res.forEach(function (keys, i) {
+    if (keys && keys[0]) hosts.push([keys[0], ids[i]]);
+    if (keys && keys[1]) hosts.push([keys[1] + "." + HOST, ids[i]]);
   });
-};
+
+  return hosts;
+});
