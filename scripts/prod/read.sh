@@ -14,12 +14,18 @@ set -euo pipefail
 #   scripts/prod/read.sh logs <unit> [opts]         a unit's container logs, with timestamps
 #   scripts/prod/read.sh access [opts]              openresty access log
 #   scripts/prod/read.sh error-log [opts]           openresty error log
+#   scripts/prod/read.sh log-files                  list the log directory, with rotated days
+#   scripts/prod/read.sh release                    the release (commit) each unit runs
+#   scripts/prod/read.sh health-check-log [opts]    restarts made by the health-check script
+#   scripts/prod/read.sh node-reports <unit>        newest Node diagnostic reports for a unit
 #   scripts/prod/read.sh host                       uptime, disk, memory, overcommit
 #   scripts/prod/read.sh dmesg-oom                  kernel OOM kills
 #   scripts/prod/read.sh tcpmem                     socket memory against tcp_mem, and its 5-minute log
-#   scripts/prod/read.sh cron-logs                  tails of the Redis host's cron logs, and the cron file
+#   scripts/prod/read.sh cron-logs [lines]          tails of the Redis host's cron logs, and the cron file
+#   scripts/prod/read.sh backups                    the backup disk, its mount and service, and the backup log
 #   scripts/prod/read.sh redis-info [section]       redis6-cli INFO (server, clients, memory, ...)
 #   scripts/prod/read.sh redis-config <param>       redis6-cli CONFIG GET for a known parameter
+#   scripts/prod/read.sh redis-memory-conf          /etc/redis6/blot-memory.conf
 #   scripts/prod/read.sh redis-role                 replication role and the active marker
 #   scripts/prod/read.sh redis-slowlog [count]      redis6-cli SLOWLOG GET
 #   scripts/prod/read.sh redis-clients              client connections per address
@@ -27,11 +33,13 @@ set -euo pipefail
 #   scripts/prod/read.sh redis-journal [hours]      journalctl for the redis6 unit
 #   scripts/prod/read.sh fail2ban <jail>            a fail2ban jail's status
 #
-# Options for logs, access, error-log and redis-log:
+# Options for logs, access, error-log, health-check-log and redis-log:
 #   --since <30m|6h|2d|ISO time>   logs only: start of the window
 #   --tail <n>                     last n lines (after --grep)
 #   --grep <text>                  keep lines containing the text (fixed string)
 #   --yesterday                    access only: read yesterday's rotated file too
+#   --day <YYYYMMDD>               access only: one whole rotated day instead (gzipped or not)
+#   --rotated                      error-log only: include the rotated (and gzipped) files
 #
 # Writes nothing on the host. Anything else (scripts in a container, docker cp,
 # redis writes) is a normal production command and needs the operator's OK.
@@ -67,12 +75,17 @@ unit_name() {
 }
 
 remote() {
+  ssh -n -o BatchMode=yes blot "$1"
+}
+
+# Like remote, but passes this script's stdin to the remote command
+remote_stdin() {
   ssh -o BatchMode=yes blot "$1"
 }
 
 # Parses --since/--tail/--grep/--yesterday into SINCE, TAIL, PATTERN and YESTERDAY
 parse_options() {
-  SINCE="" TAIL="" PATTERN="" YESTERDAY=""
+  SINCE="" TAIL="" PATTERN="" YESTERDAY="" DAY="" ROTATED=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --since)
@@ -81,6 +94,10 @@ parse_options() {
       --tail) number "${2:-}"; TAIL="$2"; shift 2 ;;
       --grep) [[ -n "${2:-}" ]] || fail "--grep needs text"; PATTERN="$2"; shift 2 ;;
       --yesterday) YESTERDAY=1; shift ;;
+      --day)
+        [[ "${2:-}" =~ ^20[0-9]{6}$ ]] || fail "bad --day '${2:-}' (YYYYMMDD)"
+        DAY="$2"; shift 2 ;;
+      --rotated) ROTATED=1; shift ;;
       *) fail "unknown option '$1'" ;;
     esac
   done
@@ -96,7 +113,7 @@ filtered() {
   if [[ -n "$TAIL" ]]; then
     filters="$filters | tail -n $TAIL"
   fi
-  printf '%s' "$PATTERN" | remote "pattern=\$(cat); { $command; }$filters"
+  printf '%s' "$PATTERN" | remote_stdin "pattern=\$(cat); { $command; }$filters"
 }
 
 [[ $# -ge 1 ]] || usage
@@ -113,27 +130,52 @@ case "$command" in
   logs)
     name=$(unit_name "${1:-}"); shift
     parse_options "$@"
+    [[ -z "$YESTERDAY$DAY$ROTATED" ]] || fail "logs takes only --since, --grep and --tail"
     since=""
     [[ -n "$SINCE" ]] && since="--since $SINCE"
     filtered "docker logs --timestamps $since $name 2>&1" ;;
   access)
     parse_options "$@"
-    [[ -z "$SINCE" ]] || fail "access has no --since; use --grep or --tail"
-    files="$LOG_DIRECTORY/access.log"
-    [[ -n "$YESTERDAY" ]] && files="$LOG_DIRECTORY/access.log-\$(date -d yesterday +%Y%m%d) $files"
-    filtered "cat $files" ;;
+    [[ -z "$SINCE$ROTATED" ]] || fail "access takes --grep, --tail, --yesterday and --day"
+    [[ -z "$DAY" || -z "$YESTERDAY" ]] || fail "use --day or --yesterday, not both"
+    if [[ -n "$DAY" ]]; then
+      filtered "zcat -f $LOG_DIRECTORY/access.log-$DAY $LOG_DIRECTORY/access.log-$DAY.gz 2>/dev/null"
+    else
+      files="$LOG_DIRECTORY/access.log"
+      [[ -n "$YESTERDAY" ]] && files="$LOG_DIRECTORY/access.log-\$(date -d yesterday +%Y%m%d) $files"
+      filtered "cat $files"
+    fi ;;
   error-log)
     parse_options "$@"
-    [[ -z "$SINCE$YESTERDAY" ]] || fail "error-log takes only --grep and --tail"
-    filtered "cat $LOG_DIRECTORY/error.log" ;;
+    [[ -z "$SINCE$YESTERDAY$DAY" ]] || fail "error-log takes only --grep, --tail and --rotated"
+    if [[ -n "$ROTATED" ]]; then
+      filtered "ls -tr $LOG_DIRECTORY/error.log* | xargs zcat -f"
+    else
+      filtered "cat $LOG_DIRECTORY/error.log"
+    fi ;;
+  log-files)
+    remote "ls -la $LOG_DIRECTORY/" ;;
+  release)
+    # Prints only BLOT_RELEASE_ID: the rest of the environment holds secrets
+    remote "for c in $(for u in $UNITS; do printf 'blot-%s ' "$u"; done); do printf '%s ' \$c; docker inspect \$c --format '{{range .Config.Env}}{{println .}}{{end}}' | grep '^BLOT_RELEASE_ID='; done" ;;
+  health-check-log)
+    parse_options "$@"
+    [[ -z "$SINCE$YESTERDAY$DAY$ROTATED" ]] || fail "health-check-log takes only --grep and --tail"
+    filtered "cat ~/docker-health-check.log" ;;
+  node-reports)
+    name=$(unit_name "${1:-}")
+    remote "ls -lt /var/www/blot/data/node-reports/$name/ | head -20" ;;
   host)
     remote "uptime; echo; df -h / /backups $LOG_DIRECTORY 2>/dev/null; echo; free -m; echo; sysctl vm.overcommit_memory" ;;
   dmesg-oom)
     remote "sudo -n dmesg -T | grep -i -E 'oom|killed process' | tail -n 50" ;;
   tcpmem)
-    remote "grep TCP: /proc/net/sockstat; cat /proc/sys/net/ipv4/tcp_mem; nstat -az TcpExtTCPMemoryPressures TcpExtTCPMemoryPressuresChrono TcpExtPruneCalled TcpExtTCPRcvQDrop; echo; tail -n 30 ~/tcpmem.log" ;;
+    remote "grep TCP: /proc/net/sockstat; cat /proc/sys/net/ipv4/tcp_mem; nstat -az TcpExtTCPMemoryPressures TcpExtTCPMemoryPressuresChrono TcpExtPruneCalled TcpExtTCPRcvQDrop TcpExtTCPOFODrop; echo; tail -n 30 ~/tcpmem.log" ;;
   cron-logs)
-    remote "for f in ~/tcpmem.log ~/redis-mem.log ~/backup.log; do echo \"== \$f\"; tail -n 10 \"\$f\"; done; echo '== /etc/cron.d/blot-redis'; cat /etc/cron.d/blot-redis; systemctl is-active crond" ;;
+    lines="${1:-10}"; number "$lines"
+    remote "for f in ~/tcpmem.log ~/redis-mem.log ~/backup.log; do echo \"== \$f\"; tail -n $lines \"\$f\"; done; echo '== /etc/cron.d/blot-redis'; cat /etc/cron.d/blot-redis; systemctl is-active crond" ;;
+  backups)
+    remote "df -h /backups; findmnt /backups; systemctl status blot-instance-store --no-pager | head; echo; ls -l /etc/blot-redis; echo; tail -n 20 ~/backup.log" ;;
   redis-info)
     section="${1:-}"
     [[ -z "$section" ]] || one_of "$section" "$REDIS_SECTIONS" || fail "section must be one of: $REDIS_SECTIONS"
@@ -141,6 +183,8 @@ case "$command" in
   redis-config)
     one_of "${1:-}" "$REDIS_PARAMS" || fail "parameter must be one of: $REDIS_PARAMS"
     remote "redis6-cli CONFIG GET $1" ;;
+  redis-memory-conf)
+    remote "cat /etc/redis6/blot-memory.conf" ;;
   redis-role)
     remote "redis6-cli ROLE; ls /etc/blot-redis/active 2>&1" ;;
   redis-slowlog)
@@ -150,7 +194,7 @@ case "$command" in
     remote "redis6-cli INFO clients | grep -E '^(connected|blocked|maxclients)'; redis6-cli CLIENT LIST | grep -o ' addr=[^ ]*' | sed 's/:[0-9]*\$//' | sort | uniq -c | sort -rn | head -20" ;;
   redis-log)
     parse_options "$@"
-    [[ -z "$SINCE$YESTERDAY" ]] || fail "redis-log takes only --grep and --tail"
+    [[ -z "$SINCE$YESTERDAY$DAY$ROTATED" ]] || fail "redis-log takes only --grep and --tail"
     [[ -n "$TAIL" ]] || TAIL=100
     filtered "sudo -n cat /var/log/redis6/redis6.log" ;;
   redis-journal)
