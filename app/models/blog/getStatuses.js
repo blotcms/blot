@@ -1,14 +1,11 @@
 const key = require("./key");
 const client = require("models/client");
 const ensure = require("helper/ensure");
+const withCallback = require("helper/withCallback");
 
-module.exports = function getStatuses(blogID, options, callback) {
-  if (typeof options === "function" && callback === undefined) {
-    callback = options;
-    options = {};
-  }
-
-  ensure(blogID, "string").and(options, "object").and(callback, "function");
+// Resolves to { statuses, next, previous }
+module.exports = withCallback(async function getStatuses(blogID, options = {}) {
+  ensure(blogID, "string").and(options, "object");
 
   // Fetch the first page by default
   options.page = options.page === undefined ? 1 : options.page;
@@ -48,18 +45,16 @@ module.exports = function getStatuses(blogID, options, callback) {
 
   ensure(offset, "number").and(limit, "number");
 
-  Promise.all([
+  const [statusesResult, total] = await Promise.all([
     client.lRange(key.status(blogID), offset, limit),
     client.lLen(key.status(blogID)),
-  ])
-    .then(function ([statusesResult, total]) {
-      const statuses = statusesResult.map(JSON.parse);
+  ]);
 
-      // Work out if there are more pages of statuses
-      const next = total > limit + 1 ? options.page + 1 : null;
-      const previous = options.page > 1 ? options.page - 1 : null;
+  const statuses = statusesResult.map(JSON.parse);
 
-      callback(null, { statuses, next, previous });
-    })
-    .catch(callback);
-};
+  // Work out if there are more pages of statuses
+  const next = total > limit + 1 ? options.page + 1 : null;
+  const previous = options.page > 1 ? options.page - 1 : null;
+
+  return { statuses, next, previous };
+});

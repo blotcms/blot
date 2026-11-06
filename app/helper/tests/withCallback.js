@@ -1,0 +1,73 @@
+describe("withCallback", function () {
+  const withCallback = require("../withCallback");
+
+  const double = withCallback(async function double(x) {
+    return x * 2;
+  });
+
+  const fail = withCallback(async function fail() {
+    throw new Error("nope");
+  });
+
+  it("returns a promise without a callback", async function () {
+    expect(await double(2)).toBe(4);
+    const err = await fail().catch((err) => err);
+    expect(err.message).toBe("nope");
+  });
+
+  it("calls back with the result", function (done) {
+    const returned = double(2, function (err, result) {
+      expect(err).toBe(null);
+      expect(result).toBe(4);
+      done();
+    });
+
+    expect(returned).toBeUndefined();
+  });
+
+  it("calls back with the error", function (done) {
+    fail(function (err, result) {
+      expect(err.message).toBe("nope");
+      expect(result).toBeUndefined();
+      done();
+    });
+  });
+
+  it("calls back with a synchronous throw from a plain function", function (done) {
+    const sync = withCallback(function sync() {
+      throw new Error("sync");
+    });
+
+    sync(function (err) {
+      expect(err.message).toBe("sync");
+      done();
+    });
+  });
+
+  it("keeps this", async function () {
+    const object = {
+      value: 3,
+      get: withCallback(async function () {
+        return this.value;
+      }),
+    };
+
+    expect(await object.get()).toBe(3);
+  });
+
+  it("calls a throwing callback once and does not reject", function (done) {
+    spyOn(console, "error");
+    let calls = 0;
+
+    double(2, function () {
+      calls++;
+      throw new Error("in callback");
+    });
+
+    setTimeout(function () {
+      expect(calls).toBe(1);
+      expect(console.error).toHaveBeenCalled();
+      done();
+    }, 10);
+  });
+});
