@@ -18,14 +18,7 @@ module.exports = function () {
       });
     };
 
-    this.search = async (query) => {
-      return new Promise((resolve, reject) => {
-        search(this.blog.id, query, (err, ids) => {
-          if (err) reject(err);
-          else resolve(ids);
-        });
-      });
-    };
+    this.search = (query) => search(this.blog.id, query);
 
     this.drop = async (path) => {
       return new Promise((resolve) => {

@@ -1,6 +1,6 @@
 var client = require("models/client");
 var key = require("../key");
-var check = require("util").promisify(require("../checkAccessToken"));
+var check = require("../checkAccessToken");
 
 describe("one-time access tokens", function () {
   var token = "atomic-access-token-test";

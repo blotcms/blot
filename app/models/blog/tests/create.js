@@ -7,131 +7,71 @@ describe("Blog.create", function () {
   // Create a test user before each spec
   global.test.user();
 
-  // Clean up a blog created during tests
-  afterEach(function (done) {
+  // Clean up blogs created during tests
+  afterEach(async function () {
     var blogs = (this.blogs || []).slice();
 
     if (this.blog) blogs.push(this.blog);
 
-    if (!blogs.length) return done();
-
-    var pending = blogs.length;
-
-    blogs.forEach(function (blog) {
-      remove(blog.id, function () {
-        pending -= 1;
-
-        if (!pending) done();
-      });
-    });
+    // Cleanup errors are ignored, as they were when this used callbacks
+    await Promise.all(blogs.map((blog) => remove(blog.id).catch(() => {})));
   });
 
-  it("creates a blog", function (done) {
-    var test = this;
+  it("creates a blog", async function () {
+    this.blog = await create(this.user.uid, { handle: "exampleblog" }); // will be cleaned up at the end of this test
 
-    create(test.user.uid, { handle: "exampleblog" }, function (err, blog) {
-      if (err) return done.fail(err);
-
-      test.blog = blog; // will be cleaned up at the end of this test
-
-      expect(blog).toEqual(jasmine.any(Object));
-      done();
-    });
+    expect(this.blog).toEqual(jasmine.any(Object));
   });
 
-  it("creates the blog's folder", function (done) {
-    var test = this;
+  it("creates the blog's folder", async function () {
     var folder = require("storage/folder");
 
-    create(test.user.uid, { handle: "exampleblog" }, function (err, blog) {
-      if (err) return done.fail(err);
+    this.blog = await create(this.user.uid, { handle: "exampleblog" });
 
-      test.blog = blog;
+    expect(await folder.exists(this.blog.id, "/")).toBe(true);
+    expect(await folder.listNames(this.blog.id, "/")).toEqual([]);
+  });
 
-      folder
-        .exists(blog.id, "/")
-        .then(function (exists) {
-          expect(exists).toBe(true);
+  it("defaults image exif preferences", async function () {
+    this.blog = extend(await create(this.user.uid, { handle: "exampleblog" }));
 
-          return folder.listNames(blog.id, "/");
-        })
-        .then(function (names) {
-          expect(names).toEqual([]);
-          done();
-        })
-        .catch(done.fail);
+    expect(this.blog.imageExif).toBe("basic");
+    expect(this.blog.isImageExifBasic).toBe(true);
+    expect(this.blog.isImageExifOff).toBe(false);
+
+    expect(this.blog.converters).toEqual({
+      html: true,
+      img: true,
+      webloc: true,
+      gdoc: true,
+      docx: true,
+      rtf: true,
+      odt: true,
+      org: true,
+      markdown: true,
     });
   });
 
-  it("defaults image exif preferences", function (done) {
-    var test = this;
+  it("adds created blog to list of all blogs", async function () {
+    this.blog = await create(this.user.uid, { handle: "exampleblog" }); // will be cleaned up at the end of this test
 
-    create(test.user.uid, { handle: "exampleblog" }, function (err, blog) {
-      if (err) return done.fail(err);
-
-      test.blog = extend(blog);
-
-      expect(test.blog.imageExif).toBe("basic");
-      expect(test.blog.isImageExifBasic).toBe(true);
-      expect(test.blog.isImageExifOff).toBe(false);
-
-      expect(test.blog.converters).toEqual({
-        html: true,
-        img: true,
-        webloc: true,
-        gdoc: true,
-        docx: true,
-        rtf: true,
-        odt: true,
-        org: true,
-        markdown: true,
-      });
-
-      done();
-    });
+    expect(await getAllIDs()).toContain(this.blog.id);
   });
 
-  it("adds created blog to list of all blogs", function (done) {
-    var test = this;
+  it("creates blogs with isolated plugin defaults", async function () {
+    var firstBlog = await create(this.user.uid, { handle: "firstblog" });
 
-    create(test.user.uid, { handle: "exampleblog" }, function (err, blog) {
-      if (err) return done.fail(err);
+    this.blogs = [firstBlog];
 
-      test.blog = blog; // will be cleaned up at the end of this test
+    firstBlog.plugins.typeset.enabled = false;
+    firstBlog.plugins.typeset.options.smallCaps = false;
 
-      getAllIDs(function (err, ids) {
-        expect(ids).toContain(blog.id);
-        done();
-      });
-    });
-  });
+    var secondBlog = await create(this.user.uid, { handle: "secondblog" });
 
-  it("creates blogs with isolated plugin defaults", function (done) {
-    var test = this;
+    this.blogs.push(secondBlog);
 
-    create(test.user.uid, { handle: "firstblog" }, function (err, firstBlog) {
-      if (err) return done.fail(err);
-
-      test.blogs = [firstBlog];
-
-      firstBlog.plugins.typeset.enabled = false;
-      firstBlog.plugins.typeset.options.smallCaps = false;
-
-      create(
-        test.user.uid,
-        { handle: "secondblog" },
-        function (err, secondBlog) {
-          if (err) return done.fail(err);
-
-          test.blogs.push(secondBlog);
-
-          expect(secondBlog.plugins.typeset.enabled).toBe(true);
-          expect(secondBlog.plugins.typeset.options.smallCaps).toBe(true);
-
-          done();
-        }
-      );
-    });
+    expect(secondBlog.plugins.typeset.enabled).toBe(true);
+    expect(secondBlog.plugins.typeset.options.smallCaps).toBe(true);
   });
 
   it("returns a promise without a callback", async function () {

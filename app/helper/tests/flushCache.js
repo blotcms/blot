@@ -117,18 +117,20 @@ describe("flushCache", function () {
     expect(timestamps.at(-1) - timestamps[0]).toBeGreaterThanOrEqual(3000);
   });
 
-  it("handles failed requests appropriately", async function (done) {
+  it("handles failed requests appropriately", async function () {
     await this.setup({
       onPurge: (req, res) => res.status(500).send("error"),
     });
 
+    let error;
+
     try {
       await this.flush("example.com");
-      done.fail("Should have thrown an error");
-    } catch (error) {
-      expect(error instanceof Error).toBe(true);
-      done();
+    } catch (e) {
+      error = e;
     }
+
+    expect(error instanceof Error).toBe(true);
   });
 
   it("handles multiple reverse proxies", async function () {
@@ -170,18 +172,20 @@ describe("flushCache", function () {
     server2.close();
   });
 
-  it("validates input parameters", async function (done) {
+  it("validates input parameters", async function () {
     await this.setup({
       onPurge: (req, res) => res.send("ok"),
     });
 
+    let error;
+
     try {
       await this.flush({ invalid: "input" });
-      done.fail("Should have thrown an error");
-    } catch (error) {
-      expect(error instanceof Error).toBe(true);
-      done();
+    } catch (e) {
+      error = e;
     }
+
+    expect(error instanceof Error).toBe(true);
   });
 
   it("handles network errors gracefully", async function () {

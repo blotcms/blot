@@ -1,6 +1,7 @@
 describe("removal", function () {
   var removal = require("../removal");
   var subscriptionLifecycle = require("../subscriptionLifecycle");
+  var promisify = require("util").promisify;
 
   var ONE_MONTH_MS = subscriptionLifecycle.ONE_MONTH_MS;
   var now = Date.now();
@@ -94,7 +95,7 @@ describe("removal", function () {
   });
 
   describe("overdueFor", function () {
-    it("reports not overdue for a paused subscription with a stale unpaid status", function (done) {
+    it("reports not overdue for a paused subscription with a stale unpaid status", async function () {
       var user = {
         subscription: {
           id: "sub_1",
@@ -104,11 +105,8 @@ describe("removal", function () {
         },
       };
 
-      removal.overdueFor(user, function (err, overdue) {
-        expect(err).toBeNull();
-        expect(overdue.overdue).toBe(false);
-        done();
-      });
+      var overdue = await promisify(removal.overdueFor)(user);
+      expect(overdue.overdue).toBe(false);
     });
   });
 });
