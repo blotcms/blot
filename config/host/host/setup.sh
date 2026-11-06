@@ -423,7 +423,7 @@ say "Firewall for the app"
 # misses it (#2257). Refused, not dropped, so such a request fails at once.
 # Only sockets in system.slice, where docker puts the units' scopes: ec2-user is
 # uid 1000 on the host too, and its ssh sessions and cron jobs (user.slice)
-# still need the metadata service (cycle.sh, drill.sh, instance-profile
+# still need the metadata service (cycle.sh, instance-profile
 # backups). The jails run as other uids. Loopback stays open: the purge
 # listener, the proxy jails' ports and the resolved stub are on it. The VPC's
 # resolver is the one private address the units need, for DNS (docker gives a
