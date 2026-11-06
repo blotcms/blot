@@ -150,9 +150,10 @@
   font-size: var(--text-sm);
 }
 
-.folder-view-heading {
+/* h1. outranks base.css's h1:first-child, which sets line-height: 1 */
+h1.folder-view-heading {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-3);
   margin: 0 0 var(--space-4);
   padding: 0;
@@ -169,6 +170,8 @@
   flex: 0 0 auto;
   width: 1em;
   height: 1em;
+  /* Centred on the first line when a long name wraps */
+  margin-top: calc((var(--leading-tight) * 1em - 1em) / 2);
   mask-size: contain;
   vertical-align: middle;
   top: 0;
