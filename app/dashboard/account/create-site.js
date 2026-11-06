@@ -22,6 +22,13 @@ CreateBlog.use(function (req, res, next) {
   res.locals.breadcrumbs.forEach(function (link) {
     if (link.label === "Account") link.label = "Sites";
   });
+  // Creating a site belongs to Sites, not Account, in the sidebar
+  res.locals.selected = {
+    ...res.locals.selected,
+    sites: "is-active",
+    account: "",
+  };
+  res.locals.ariaCurrent = { sites: "page", account: "", support: "" };
   next();
 });
 
@@ -79,8 +86,6 @@ CreateBlog.route("/inform-paypal")
 CreateBlog.route("/")
 
   .get(function (req, res) {
-    res.locals.blog = {};
-
     const first_site = req.user.blogs.length === 0;
 
     // remove breadcrumbs for first site
@@ -137,7 +142,7 @@ CreateBlog.route("/")
     // For the first site, we immediately redirect to the client
     // setup page so they can sync their folder
     if (req.user.blogs.length === 0) {
-      res.redirect("/sites/" + req.blog.handle + "/client");
+      res.redirect("/sites/" + req.blog.handle + "/settings/folder");
     } else {
       res.message("/sites/" + req.blog.handle, "Created site");
     }

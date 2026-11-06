@@ -1,9 +1,15 @@
-{{> close-button}}
 
 {{> message}}
 
+<div class="dashboard-form-panel">
+    <div class="dashboard-form-panel__body">
+<header class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">Title</h1>
+  </div>
+</header>
 <form class="dashboard-form" method="POST">
-    <div style="border:1px solid var(--border-color);border-radius: var(--border-radius);padding:20px">
+    <div>
     <input type="hidden" name="_csrf" value="{{csrftoken}}" />
     <label>Title</label>
     <input type="text" name="title" value="{{blog.title}}" autofocus placeholder="Title" />
@@ -16,3 +22,5 @@
     </div>
     </div>
 </form>
+</div>
+</div>

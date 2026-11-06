@@ -71,13 +71,14 @@ input[type="url"] {
 }
 
 
+/* One focus ring: the accent border with a soft halo round it */
 input[type="text"]:focus,
 input[type="password"]:focus,
 input[type="url"]:focus {
-  outline: none !important;
+  outline: none;
   z-index: 2;
   border: 1px solid var(--accent-color);
-  box-shadow: inset 0 0 1px var(--accent-color);
+  box-shadow: 0 0 0 3px rgba(0, 102, 222, 0.25);
 }
 
 input::-webkit-input-placeholder {

@@ -1,0 +1,25 @@
+/* The Settings tabs (settings-tabs.html) and the pages under them */
+
+.settings-page .settings-section + .settings-section {
+  margin-top: var(--space-6);
+}
+
+.settings-page .dashboard-form > h2 {
+  margin-top: var(--space-6);
+}
+
+.settings-page .dashboard-form > h2:first-of-type {
+  margin-top: 0;
+}
+
+.settings-page .setting-note {
+  margin: 0 0 var(--space-3);
+  color: var(--medium-text-color);
+  font-size: var(--text-md);
+}
+
+.settings-page .dashboard-form label {
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: var(--text-base);
+}

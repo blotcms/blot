@@ -221,11 +221,18 @@ module.exports = function syncPaymentMethods(user, callback) {
                 })
               );
 
-              set(user.uid, { paymentMethods: paymentMethods }, function (err) {
-                if (err) return callback(err);
+              set(
+                user.uid,
+                {
+                  paymentMethods: paymentMethods,
+                  paymentMethodsSyncedAt: Date.now(),
+                },
+                function (err) {
+                  if (err) return callback(err);
 
-                callback(null, paymentMethods);
-              });
+                  callback(null, paymentMethods);
+                }
+              );
             }
           );
         });

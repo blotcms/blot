@@ -12,9 +12,9 @@ if (form && cardContainer && window.Stripe) {
       base: {
         fontSize: "16px",
         color: "#000",
-        iconColor: "#9ba0ac",
+        iconColor: "#6b7280",
         "::placeholder": {
-          color: "#9ba0ac",
+          color: "#6b7280",
         },
       },
     };

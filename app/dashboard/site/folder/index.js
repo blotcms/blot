@@ -1,4 +1,3 @@
-const getBreadcrumbs = require("./breadcrumbs");
 const getFile = require("./file");
 const getFolder = require("./folder");
 const getFolderPost = require("./folderPost");
@@ -24,11 +23,16 @@ async function middleware(req, res, next) {
 
     addPaginationUrls(res.locals.folder, res.locals.base, dir, req.query);
 
-    for (const breadcrumb of res.locals.folder.breadcrumbs) {
-      res.locals.breadcrumbs.add(breadcrumb.name, breadcrumb.url);
-    }
-
     if (req.params.path) {
+      // Sites › <site> › Essays › Imagination.md: the site is its folder
+      for (const crumb of getFolderTrail(res.locals.base, dir)) {
+        res.locals.breadcrumbs.add(crumb.label, crumb.url);
+      }
+
+      // "Imagination.md · Local - Blot"
+      res.locals.title =
+        dir.split("/").filter(Boolean).pop() + " · " + req.blog.pretty.label;
+
       if (res.locals.folder.folderPost) {
         res.render("dashboard/folder/folder-post");
       } else if (res.locals.folder.directory) {
@@ -51,6 +55,25 @@ async function middleware(req, res, next) {
       next(err);
     }
   }
+}
+
+// The breadcrumbs for a file or subfolder: Essays > Imagination.md. Every
+// part but the last links to its folder
+function getFolderTrail(base, dir) {
+  const names = dir.split("/").filter(Boolean);
+  const trail = [];
+
+  names.forEach((name, i) => {
+    const path = names
+      .slice(0, i + 1)
+      .map(encodeURIComponent)
+      .join("/");
+    trail.push({ label: name, url: base + "/folder/" + path });
+  });
+
+  trail[trail.length - 1].isCurrent = true;
+
+  return trail;
 }
 
 // Cache the root directory folder data for 100 folders
@@ -146,23 +169,18 @@ const loadFolder = async (blog, dir, options = {}) => {
   };
 
   if (stat.file) {
-    const [breadcrumbs, fileStat] = await Promise.all([
-      getBreadcrumbs(blog.id, dir, blog.cacheID),
-      getFile(blog, dir),
-    ]);
+    const fileStat = await getFile(blog, dir);
 
-    folder.breadcrumbs = breadcrumbs;
     folder.stat = { ...folder.stat, ...fileStat };
   } else if (stat.directory) {
-    const [breadcrumbs, folderContents, folderPost] = await Promise.all([
-      getBreadcrumbs(blog.id, dir, blog.cacheID),
+    const [folderContents, folderPost] = await Promise.all([
       getFolder(blog, dir, { page, pageSize, sort, order }),
       getFolderPost(blog, dir),
     ]);
 
     folder.contents = folderContents.contents;
     folder.pagination = folderContents.pagination;
-    folder.breadcrumbs = breadcrumbs;
+    folder.currentName = dir.split("/").filter(Boolean).pop();
 
     // A "+" folder that has produced a published entry is shown as a single
     // aggregated post instead of a plain directory listing.

@@ -1,69 +1,76 @@
 <div class="sites-list-container">
-	<div class="sites">
-		{{#blogs}}
-		<div class="site{{#healthIssue}} has-health-issue{{/healthIssue}}">
-			<a href="/sites/{{handle}}" class="blog-link" style="padding-left: 1rem;">
-				<span class="text-info">
-					<span class="title truncate">{{pretty.label}}</span>
-					<span class="truncate url">{{pretty.url}}</span>
-				</span>
-				<span class="icon-chevron"></span>
-			</a>
-			{{#healthIssue}}
-			<a href="/sites/{{handle}}/client" class="health-badge" data-health="{{code}}" title="{{message}}">{{label}}</a>
-			{{/healthIssue}}
-			<!-- <div class="preview-holder">
-				<div class="site-preview" data-url="{{{previewURL}}}" data-cache-id="{{cacheID}}"></div>
-			</div> -->
-		</div>
-		{{/blogs}}
+  <p class="visually-hidden" id="sites-sync-announcer" role="status" aria-live="polite" aria-atomic="true"></p>
+  <header class="page-header page-header--no-rule">
+    <div class="page-header__text"><h1 class="page-header__title">Sites</h1></div>
+    <form class="create-site-button page-header__actions" action="/sites/account/create-site" method="POST">
+      <input type="hidden" name="timeZone" value="">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <input type="hidden" name="title" value="Untitled site">
+      <button type="submit"><span class="icon-plus" aria-hidden="true"></span>&thinsp; Create site</button>
+    </form>
+  </header>
 
-		<form class="create-site-button" action="/sites/account/create-site" method="POST">
-			<input type="hidden" name="timeZone" value="">
-			<input type="hidden" name="_csrf" value="{{csrftoken}}">
-			<input type="hidden" name="title" value="Untitled site">
-			<button>
-				<span class="icon-plus"></span>&thinsp; Create site
-			</button>
-		</form>
-	</div>
+  <div class="sites-list-container__table-wrap">
+    <table class="data-table data-table--zebra sites-table" data-table-sort="client" data-table-sort-key="sites-sort" data-sort="{{sitesSort}}" data-order="{{sitesOrder}}" data-sorted-on-server data-table-resizable data-table-resize-key="sites-columns">
+      <thead>
+        <tr>
+          <th scope="col" data-sort-key="name" style="width:var(--sites-columns-name, 40%)"><button type="button" class="data-table__sort">Name</button></th>
+          <th scope="col" data-sort-key="domain" style="width:var(--sites-columns-domain, 35%)"><button type="button" class="data-table__sort">Domain</button></th>
+          <th scope="col" data-sort-key="lastPublished" data-sort-type="number" data-sort-default="desc" style="width:var(--sites-columns-lastPublished, 25%)"><button type="button" class="data-table__sort">Synced</button></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#blogs}}
+        <tr class="sites-table__row row-action-menu-row">
+          <td data-sort-value="{{pretty.label}}">
+            <a class="sites-table__name" href="/sites/{{handle}}"><span class="icon-folder" aria-hidden="true"></span><span class="sites-table__name-text">{{pretty.label}}</span></a>
+            <a class="sites-table__cover-link" href="/sites/{{handle}}" aria-hidden="true" tabindex="-1"></a>
+          </td>
+          <td data-sort-value="{{pretty.url}}">
+            <span class="sites-table__domain">
+              <span class="template-live-dot" aria-hidden="true"></span>
+              <span class="sites-table__domain-text">{{pretty.url}}</span>
+            </span>
+            <a class="sites-table__cover-link" href="/sites/{{handle}}" aria-hidden="true" tabindex="-1"></a>
+          </td>
+          <td data-sort-value="{{lastPublishedTimestamp}}">
+            <div class="sites-table__last-published">
+              <span class="sites-sync is-{{sync.state}} {{sync.progressClass}}" data-sites-sync="{{handle}}" data-site-name="{{pretty.label}}" style="{{sync.progressStyle}}">
+                <span class="global-sync__icon" aria-hidden="true"></span>
+                <span class="sites-sync__text">{{#sync.isSyncing}}<span class="sites-sync__label">{{sync.text}}</span><span class="global-sync__count">{{sync.count}}</span>{{/sync.isSyncing}}{{^sync.isSyncing}}{{#lastPublishedDatetime}}<time datetime="{{lastPublishedDatetime}}">{{lastPublished}}</time>{{/lastPublishedDatetime}}{{^lastPublishedDatetime}}{{lastPublished}}{{/lastPublishedDatetime}}{{/sync.isSyncing}}</span>
+              </span>
+              <div class="sites-table__actions">
+                {{#healthIssue}}
+                <a class="sites-table__health" href="/sites/{{handle}}/settings/folder" data-health="{{code}}" title="{{message}}">{{label}}</a>
+                {{/healthIssue}}
+                <button type="button" class="row-action-menu__trigger" aria-haspopup="true" aria-expanded="false" aria-label="Actions for {{pretty.label}}"
+                  data-overview-url="/sites/{{handle}}"
+                  data-visit-url="https://{{pretty.url}}"
+                  data-template-url="/sites/{{handle}}/template/{{template.slug}}"
+                  data-settings-url="/sites/{{handle}}/settings"
+                  data-delete-url="/sites/{{handle}}/delete">
+                  <span class="icon-dots" aria-hidden="true"></span>
+                </button>
+              </div>
+            </div>
+            <a class="sites-table__cover-link" href="/sites/{{handle}}" aria-hidden="true" tabindex="-1"></a>
+          </td>
+        </tr>
+        {{/blogs}}
+      </tbody>
+    </table>
+  </div>
 
-	<div>
-		<form class="foot" action="/sites/account/log-out" method="post" style="float:right;background:none;padding:0 0 0;font-size: 14px;color: var(--border-color);">
-			<input type="hidden" name="_csrf" value="{{csrftoken}}">
-			<button type="submit" class="logout">
-				Log out 
-			</button>
-		</form>
+  <div id="sites-row-menu" class="row-action-menu menu" aria-hidden="true">
+    <ul>
+      <li><a data-menu-link="overview" href="#">Overview</a></li>
+      <li><a data-menu-link="visit" href="#" target="_blank" rel="noopener">Visit site</a></li>
+      <li><a data-menu-link="template" href="#">Edit template</a></li>
+      <li><a data-menu-link="settings" href="#">Settings</a></li>
+      <li class="menu__separator" role="separator"></li>
+      <li><a data-menu-link="delete" href="#">Delete site</a></li>
+    </ul>
+  </div>
 
-		<span style="padding:11px 0;display:block;font-weight: 400;color: var(--medium-text-color);">Account</span>
-	</div>
-
-	<!-- Account rows use the shared .line/.label/.center/.right layout in dashboard-line.css. -->
-	<div style="border-radius: 4px;border:1px solid var(--border-color);overflow: hidden;">
-		<a class="line" href="/sites/account/email">
-			<span class="label">Email</span>
-			<span class="center">{{user.email}}</span>
-			<span class="right">Edit</span>
-		</a>
-
-		{{#user.hasPassword}}
-		<a class="line" href="/sites/account/password">
-			<span class="label">Password</span>
-			<span class="center">&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
-			<span class="right">Edit</span>
-		</a>
-		{{/user.hasPassword}}
-		{{^user.hasPassword}}
-		<a class="line" href="/sites/account/password/set">
-			<span class="label">Password</span>
-			<span class="center"><span class="link">Set password</span></span>
-		</a>
-		{{/user.hasPassword}}
-
-		<a class="line" href="/sites/account/subscription" style="border-bottom: none;">
-			<span class="label">Subscription</span>
-			<span class="center"><span class="link">Manage subscription</span></span>
-		</a>
-	</div>
+  <p class="sites-list-container__count">{{siteCount}} {{siteCountNoun}}</p>
 </div>

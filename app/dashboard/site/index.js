@@ -16,6 +16,7 @@ var load = require("./load");
 var save = require("./save");
 var trace = require("helper/trace");
 var flags = require("./flags");
+var loadClient = require("dashboard/site/load/client");
 const sse = require("helper/sse")({
   channel: (req) => `sync:status:${req.blog.id}`,
 });
@@ -39,19 +40,244 @@ site.post(
   save.finish
 );
 
-site.get("/", require("./load/scheduled"));
+function getSidebarSelection(path) {
+  // The overview and everything it leads to (all files, a file or
+  // subfolder, posts, recent activity, folder settings) are under Folder
+  if (
+    path === "/" ||
+    path === "/files" ||
+    path === "/search" ||
+    path === "/activity" ||
+    path === "/recents" ||
+    path === "/posts" ||
+    path.startsWith("/posts/") ||
+    path === "/pages" ||
+    path === "/drafts" ||
+    path === "/scheduled" ||
+    path.startsWith("/folder/") ||
+    path.startsWith("/settings/folder")
+  )
+    return "folder";
+  if (path.startsWith("/settings/title")) return "title";
+  if (path.startsWith("/settings/domain")) return "domain";
+  if (path === "/settings" || path.startsWith("/settings/"))
+    return "siteSettings";
+  if (
+    path === "/template" ||
+    path.startsWith("/template/") ||
+    path.startsWith("/template-folder")
+  )
+    return "template";
+  if (path.startsWith("/import")) return "import";
+  if (path.startsWith("/export")) return "export";
+  if (path.startsWith("/delete")) return "delete";
+  return null;
+}
+
+// What the phone navigation bar shows as the current section
+const sidebarLabels = {
+  folder: "Folder",
+  template: "Template",
+  title: "Title",
+  domain: "Domain",
+  siteSettings: "Settings",
+  import: "Import",
+  export: "Export",
+  delete: "Delete",
+};
+
+site.use((req, res, next) => {
+  const path = req.path.replace(/\/$/, "") || "/";
+  const selectedItem = getSidebarSelection(path);
+
+  if (selectedItem) {
+    res.locals.selected = {
+      ...res.locals.selected,
+      [selectedItem]: "is-active",
+    };
+    res.locals.ariaCurrent = { [selectedItem]: "page" };
+    res.locals.currentSectionLabel = sidebarLabels[selectedItem];
+  }
+
+  res.locals.siteDashboardSidebarClass =
+    "dashboard-sidebar dashboard-sidebar--site";
+
+  next();
+});
+
+// The sidebar's site switcher lists the user's sites on every page: one
+// HGETALL per site, sent together. Only for pages, not the status stream,
+// image redirects or other non-HTML requests.
+const loadBlogs = require("dashboard/util/load-blogs").basic;
+const syncSummary = require("dashboard/util/sync-summary");
+
+site.use((req, res, next) => {
+  if (req.method !== "GET" || !req.accepts("html")) return next();
+
+  // The sync status at the top right of the page, from the status and
+  // health already loaded with the blog
+  const sync = syncSummary(req.blog);
+  res.locals.globalSync = {
+    ...sync,
+    title: sync.title || sync.label,
+    text: sync.text || sync.label,
+    count: sync.count || "",
+    progressClass: sync.progress === undefined ? "" : "has-progress",
+    progressStyle:
+      sync.progress === undefined ? "" : `--progress: ${sync.progress}%`,
+    url:
+      sync.state === "off"
+        ? `${res.locals.base}/settings/folder`
+        : `${res.locals.base}/activity`,
+  };
+
+  loadBlogs(req, res, (err) => {
+    if (err) return next(err);
+    // In name order, like the Sites list
+    (res.locals.blogs || []).sort((a, b) =>
+      a.pretty.label.localeCompare(b.pretty.label, undefined, {
+        sensitivity: "base",
+      })
+    );
+    (res.locals.blogs || []).forEach((blog) => {
+      blog.isCurrent = blog.id === req.blog.id;
+      // Plain values for the switcher's attributes (no sections in attributes)
+      blog.switcherClass = blog.isCurrent
+        ? "site-switcher__site is-current"
+        : "site-switcher__site";
+      blog.ariaCurrent = blog.isCurrent ? "page" : "";
+    });
+    next();
+  });
+});
+
+// Each filter of the Posts page has its own URL: /posts, /pages, /drafts
+// and /scheduled
+const postFilterLabels = {
+  posts: "Posts",
+  pages: "Pages",
+  drafts: "Drafts",
+  scheduled: "Scheduled",
+};
+
+// Each view only loads the data it renders
+const setView = (view) => (req, res, next) => {
+  const filter = view === "posts" ? req.path.slice(1) : "all";
+
+  res.locals.dashboardView = view;
+  res.locals.pageHeading = {
+    folder: "Overview",
+    recent: "Activity",
+    posts: postFilterLabels[filter],
+    search: "Search results",
+  }[view];
+  res.locals.showPageHeading = view === "recent";
+  res.locals.dashboardFilter = view === "posts" ? filter : "all";
+  res.locals.isFolderView = view === "folder";
+  res.locals.isOverviewView = view === "folder";
+  res.locals.isRecentView = view === "recent";
+  res.locals.isPostsView = view === "posts";
+  res.locals.isSearchView = view === "search";
+  res.locals.showPostsPanel = view === "folder" || view === "posts";
+  res.locals.showDashboardSearch = view === "folder" || view === "search";
+  res.locals.isAllPostsFilter = res.locals.dashboardFilter === "all";
+  res.locals.dashboardViewClass = [
+    "collapse-on-small-screens site-dashboard",
+    res.locals.isFolderView && "is-folder-view",
+    res.locals.isOverviewView && "is-overview-view",
+    res.locals.isRecentView && "is-recent-view",
+    res.locals.isSearchView && "is-search-view",
+    res.locals.isPostsView && "is-posts-view",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (view === "recent") res.locals.breadcrumbs.add("Activity", "activity");
+  if (view === "search") res.locals.breadcrumbs.add("Search", "search");
+
+  if (view === "posts")
+    res.locals.breadcrumbs.add(postFilterLabels[filter], filter);
+
+  next();
+};
+
+// Each page names itself before the site, e.g. "Drafts · David - Blot"
+const renderDashboard = (req, res) => {
+  res.render("dashboard/site", {
+    title: res.locals.isOverviewView
+      ? req.blog.pretty.label
+      : res.locals.pageHeading + " · " + req.blog.pretty.label,
+    bodyClass: "dashboard-page site-dashboard-page",
+  });
+};
+
+site.get(
+  "/",
+  setView("folder"),
+  require("./folder"),
+  require("./load/posts"),
+  loadClient,
+  renderDashboard
+);
+// The overview lists every file now, so the separate Files page went
+site.get("/files", (req, res) => {
+  const query = req.originalUrl.includes("?")
+    ? req.originalUrl.slice(req.originalUrl.indexOf("?"))
+    : "";
+  res.redirect(302, `${res.locals.base}${query}`);
+});
+// The page was at /recents
+site.get("/recents", (req, res) => {
+  const query = req.originalUrl.includes("?")
+    ? req.originalUrl.slice(req.originalUrl.indexOf("?"))
+    : "";
+  res.redirect(302, `${res.locals.base}/activity${query}`);
+});
+site.get(
+  "/activity",
+  setView("recent"),
+  require("./load/recent-activity"),
+  loadClient,
+  renderDashboard
+);
+site.get(
+  "/search",
+  setView("search"),
+  require("./load/search"),
+  loadClient,
+  renderDashboard
+);
+// The filters were at /posts/pages and so on
+site.get("/posts/:filter", (req, res) => {
+  const filter = req.params.filter;
+  res.redirect(
+    302,
+    `${res.locals.base}/${Object.hasOwn(postFilterLabels, filter) ? filter : "posts"}`
+  );
+});
+site.get(
+  Object.keys(postFilterLabels).map((filter) => "/" + filter),
+  setView("posts"),
+  require("./load/posts"),
+  loadClient,
+  renderDashboard
+);
 
 // Load the files and folders inside a blog's folder
-site.get(["/", "/folder/:path(*)"], require("./folder"));
+site.get("/folder/:path(*)", load.client, require("./folder"));
 site.post("/folder/upload", require("./folder/upload"));
 site.post("/folder/remove/:path(*)", require("./folder/remove"));
 
 site.get("/folder", (req, res) => {
-  // redirect to client settings page
-  res.redirect(`/sites/${req.params.handle}/client`);
+  // Keep the old root folder URL pointed at the combined Folder view.
+  res.redirect(res.locals.base);
 });
 
 const templateEditor = require("./template");
+site.use("/template", (req, res, next) => {
+  res.locals.breadcrumbs.add("Template", "template");
+  next();
+});
 site.use("/template", templateEditor);
 // A template the blog has moved into its local editing folder is reachable
 // at the same slug under /template-folder/ too (see templates.js, which
@@ -64,51 +290,154 @@ site.use("/template-folder", templateEditor);
 site.use("/delete", require("./delete"));
 site.use("/import", require("./import"));
 site.use("/export", require("./export"));
-site.use("/domain", require("./domain"));
-site.use("/client", require("./client"));
-site.use("/title", require("./title"));
+const domain = require("./domain");
+const title = require("./title");
 
-site.use("/settings/date", require("./date"));
-site.use("/settings/links", load.plugins, require("./link-format"));
+const dateSettings = require("./date");
+const linkFormat = require("./link-format");
 
 site.get("/status", sse);
 
-// allow the download of files directly
-site.use("/folder-download/:path(*)", require("./folder/download"));
-
-site.get("/", require("dashboard/site/load/client"), (req, res) => {
-  res.render("dashboard/site", {
-    title: req.blog.pretty.label,
+// The stored sync status, which js/global-sync.js reads when its stream opens
+// (the stream only sends what is published after that)
+site.get("/sync-status", (req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.json({
+    message: (req.blog.status && req.blog.status.message) || "Synced",
   });
 });
+
+// allow the download of files directly
+site.use("/folder-download/:path(*)", require("./folder/download"));
 
 site.use("/settings", (req, res, next) => {
   res.locals.breadcrumbs.add("Settings", "settings");
   next();
 });
 
-site.get("/settings", load.plugins, (req, res) => {
-  res.render("dashboard/site/settings");
+site.use("/settings/folder", require("./client"));
+
+// Keep old dashboard bookmarks working while the folder settings move under
+// the Settings section. These paths are dashboard routes; provider callbacks
+// and public client endpoints are mounted elsewhere.
+// Except provider OAuth callbacks: the proxy pins /client/:client/authenticate
+// to its own upstream (proxy/config/blot-site.conf) because the callback
+// starts the first full sync, so serve them here rather than redirecting.
+const clientSettings = require("./client");
+site.use("/client", (req, res, next) => {
+  if (/^\/[^/]+\/authenticate(\/|$)/.test(req.path)) {
+    return clientSettings(req, res, next);
+  }
+  const suffix = req.url === "/" ? "" : req.url;
+  res.redirect(308, `${res.locals.base}/settings/folder${suffix}`);
 });
 
-site.get("/settings/images", load.plugins, (req, res) => {
-  res.render("dashboard/site/settings/images");
-});
+// The title and domain pages also moved under Settings
+for (const page of ["title", "domain"]) {
+  site.use("/" + page, (req, res) => {
+    const suffix = req.url === "/" ? "" : req.url;
+    res.redirect(308, `${res.locals.base}/settings/${page}${suffix}`);
+  });
+}
 
-site.get("/settings/embeds", load.plugins, (req, res) => {
-  res.render("dashboard/site/settings/embeds");
-});
+site.use("/settings/title", title);
+site.use("/settings/domain", domain);
 
-site.get("/settings/services", load.plugins, (req, res) => {
-  res.render("dashboard/site/settings/services");
-});
+// The Settings page: one tab per group of settings, each its own page
+const settingsTabs = [
+  ["writing", "Writing"],
+  ["images", "Images"],
+  ["date", "Date & time"],
+  ["links", "Links"],
+  ["redirects", "Redirects"],
+  ["integrations", "Integrations"],
+];
+
+const settingsTab = (tab) => (req, res, next) => {
+  res.locals.settingsTabs = settingsTabs.map(([slug, label]) => ({
+    label,
+    url: `${res.locals.base}/settings/${slug}`,
+    current: slug === tab ? "page" : "",
+  }));
+  next();
+};
+
+const settingsRedirect = (to) => (req, res) => {
+  const query = req.originalUrl.includes("?")
+    ? req.originalUrl.slice(req.originalUrl.indexOf("?"))
+    : "";
+  res.redirect(302, `${res.locals.base}/settings/${to}${query}`);
+};
+
+site.get("/settings", settingsRedirect("writing"));
+
+// Earlier versions of this page
+site.get("/settings/content", settingsRedirect("writing"));
+site.get("/settings/embeds", settingsRedirect("integrations#embeds"));
+site.get("/settings/services", settingsRedirect("integrations#services"));
+// The 404 log links to ?create=<path> to prefill a redirect
+site.get("/settings/urls", (req, res, next) =>
+  settingsRedirect(req.query.create ? "redirects" : "links")(req, res, next)
+);
+
+site.get(
+  "/settings/writing",
+  settingsTab("writing"),
+  load.plugins,
+  (req, res) => {
+    res.render("dashboard/site/settings/settings-writing");
+  }
+);
+
+site.get(
+  "/settings/images",
+  settingsTab("images"),
+  load.plugins,
+  (req, res) => {
+    res.locals.publishImagesAsPostsChecked = req.blog.isImgConverterEnabled
+      ? "checked"
+      : "";
+    res.locals.imageConverterPluginClass = req.blog.isImgConverterEnabled
+      ? "checked"
+      : "";
+    res.locals.imageExifOffChecked = req.blog.isImageExifOff ? "checked" : "";
+    res.locals.imageExifBasicChecked = req.blog.isImageExifBasic
+      ? "checked"
+      : "";
+    res.locals.imageExifFullChecked = req.blog.isImageExifFull ? "checked" : "";
+    res.render("dashboard/site/settings/settings-images");
+  }
+);
+
+site.get(
+  "/settings/date",
+  settingsTab("date"),
+  dateSettings.loadSettings,
+  (req, res) => {
+    res.render("dashboard/site/settings/settings-date");
+  }
+);
+
+site.use("/settings/links", settingsTab("links"), load.plugins, linkFormat);
 
 site.get(
   "/settings/redirects",
+  settingsTab("redirects"),
   load.redirects,
   load.redirectWarnings,
   (req, res) => {
-    res.render("dashboard/site/settings/redirects");
+    res.locals.forceSSLPluginClass = req.blog.forceSSL ? "checked" : "";
+    res.locals.forceSSLChecked = req.blog.forceSSL ? "checked" : "";
+    res.render("dashboard/site/settings/settings-redirects");
+  }
+);
+
+site.get(
+  "/settings/integrations",
+  settingsTab("integrations"),
+  load.plugins,
+  (req, res) => {
+    res.render("dashboard/site/settings/integrations");
   }
 );
 

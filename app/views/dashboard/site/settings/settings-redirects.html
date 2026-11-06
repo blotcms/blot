@@ -1,0 +1,35 @@
+{{> message}}
+{{> settings-tabs}}
+
+<div class="dashboard-form-panel settings-page">
+  <div class="dashboard-form-panel__body">
+    <h2>Redirects</h2>
+    <p class="setting-note">Changes save as soon as you make them.</p>
+    <!-- Its own form: the switch saves as soon as it changes, which must not
+         also save half-edited redirects below -->
+    <form method="post" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <input type="hidden" name="redirect" value="{{{base}}}/settings/redirects">
+    <div class="line plugins" style="max-width: 400px;">
+      <span class="center">
+        <div class="plugin {{{forceSSLPluginClass}}}">
+          <label class="setting-check">
+            <span class="setting-check__text">Redirect HTTP to HTTPS</span>
+            <span>
+              <input name='forceSSL' type='hidden' value='off' >
+              <input name='forceSSL' type="checkbox" {{{forceSSLChecked}}}/>
+              &nbsp;
+            </span>
+          </label>
+  
+        </div>
+      </span>
+    </div>
+    </form>
+    <h2 id="redirect-rows-heading">Redirect rules</h2>
+    <form method="post" aria-labelledby="redirect-rows-heading" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      {{> redirect-fields}}
+    </form>
+  </div>
+</div>

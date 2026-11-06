@@ -2,22 +2,22 @@
     <span class="center">
       {{#plugins}}
       <div class="plugin {{checked}}">
-        <label style="margin:0;display:flex">
-          <span style="">
+        <label class="setting-check">
+          <span>
             <input name='plugins.{{id}}.enabled' type='hidden' value='off' >
             <input name='plugins.{{id}}.enabled' type="checkbox" {{checked}}/>
             &nbsp;
           </span>
-          <span style="flex-grow: 1;">{{{description}}}</span>
+          <span class="setting-check__text">{{{description}}}</span>
         </label>
-        <div class="pluginOptions" style="clear:both;margin:0;padding-left:2.75em">
+        <div class="pluginOptions">
           {{{formHTML}}}
-          {{#formHTML}}
+          {{#needsSaveButton}}
           <div class="buttons">
             <button type="submit">Save changes</button>
             <a href="">Cancel</a>
           </div>
-          {{/formHTML}}
+          {{/needsSaveButton}}
         </div>
       </div>
       {{/plugins}}

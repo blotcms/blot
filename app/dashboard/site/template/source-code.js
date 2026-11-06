@@ -9,6 +9,16 @@ const previewReload = require("helper/publishPreviewReload");
 
 SourceCode.param("viewSlug", require("./load/template-views"));
 SourceCode.param("viewSlug", require("./load/template-view"));
+// The file is the breadcrumbs' last part: Template › Blog › entry.html
+SourceCode.param("viewSlug", (req, res, next) => {
+  if (req.view) {
+    res.locals.breadcrumbs.add(
+      req.view.name,
+      `${res.locals.base}/source-code/${encodeURIComponent(req.view.name)}/edit`
+    );
+  }
+  next();
+});
 
 SourceCode.use((req, res, next) => {
   res.locals.selected = { ...res.locals.selected, source: "selected" };
@@ -68,6 +78,43 @@ SourceCode.route("/create")
       });
     });
   });
+
+// Views with no URL that can be visited directly (e.g. only parameterised
+// patterns) have no preview, so send the visitor to the editor instead.
+function renderViewPreview(req, res, mode) {
+  if (!req.view.previewUrl) {
+    return res.redirect(
+      res.locals.base + "/source-code/" + req.view.name + "/edit"
+    );
+  }
+
+  req.view.activePreviewUrl = {
+    preview: req.view.previewUrl,
+    output: req.view.outputUrl,
+    json: req.view.jsonUrl,
+  }[mode];
+  req.view.previewMode = {
+    preview: "Preview",
+    output: "Output",
+    json: "JSON",
+  }[mode];
+  res.locals.selected = { ...res.locals.selected, [mode]: "selected" };
+  res.locals.title = `${req.view.name} - ${req.template.displayName}`;
+  res.locals.layout = "dashboard/template/layout";
+  res.render("dashboard/template/source-code/preview");
+}
+
+SourceCode.route("/:viewSlug/preview").get(function (req, res) {
+  renderViewPreview(req, res, "preview");
+});
+
+SourceCode.route("/:viewSlug/output").get(function (req, res) {
+  renderViewPreview(req, res, "output");
+});
+
+SourceCode.route("/:viewSlug/json").get(function (req, res) {
+  renderViewPreview(req, res, "json");
+});
 
 SourceCode.route("/:viewSlug/edit")
   .get(function (req, res) {
@@ -353,7 +400,7 @@ SourceCode.route("/:viewSlug/rename")
 SourceCode.route("/:viewSlug/delete")
   .get(function (req, res) {
     res.locals.title = `Delete - ${req.view.name} - ${req.template.displayName}`;
-    res.locals.selected = { ...res.locals.selected, delete: "selected" };
+    res.locals.selected = { ...res.locals.selected, fileDelete: "selected" };
     res.render("dashboard/template/source-code/delete");
   })
   .post(require("./save/fork-if-needed"), function (req, res, next) {

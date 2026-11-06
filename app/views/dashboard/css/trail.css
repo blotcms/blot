@@ -1,0 +1,108 @@
+/*
+  Breadcrumb trails: the dashboard's breadcrumbs (partials/dashboard-trail.html,
+  from res.locals.breadcrumbs), on every page more than one level deep.
+
+  <nav class="trail" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="…">Folder</a></li>
+      <li><span class="truncate" aria-current="page">A long file name.jpg</span></li>
+    </ol>
+  </nav>
+
+  One line. The current page fills what the links leave and takes a middle
+  ellipsis (js/truncate.js); links past their share end in an ellipsis.
+*/
+
+.trail {
+  min-width: 0;
+}
+
+.trail ol {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.trail li {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  min-width: 0;
+  max-width: 40%;
+  margin: 0;
+  padding: 0;
+  color: var(--secondary-text-color);
+}
+
+/* Its width never depends on its text, so truncate.js can fit it */
+.trail li:last-child {
+  flex: 1 1 0;
+  min-width: 4em;
+  max-width: none;
+  color: var(--text-color);
+}
+
+.trail li + li::before {
+  flex: 0 0 auto;
+  padding: 0 var(--space-2);
+  color: var(--secondary-text-color);
+  content: "\203A";
+}
+
+.trail a {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--secondary-text-color);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  transition: color 150ms ease;
+}
+
+.trail a:hover {
+  color: var(--accent-hover-color);
+  text-decoration: underline;
+}
+
+.trail a:active {
+  color: var(--accent-active-color);
+}
+
+.trail a:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+/* The dashboard's breadcrumbs (partials/dashboard-trail.html): smaller and
+   lighter than the page's own heading */
+.dashboard-trail {
+  flex: 1 1 auto;
+}
+
+.dashboard-trail ol {
+  font-size: var(--text-sm);
+}
+
+.dashboard-trail li,
+.dashboard-trail a {
+  color: var(--light-text-color);
+}
+
+/* Each part is kept short: the folders on the way end in an ellipsis, the
+   current page takes a middle one (js/truncate.js). The page's heading
+   shows its name in full. Its width is set rather than taken from its text,
+   so truncate.js can fit it. */
+.dashboard-trail li {
+  max-width: 10em;
+}
+
+.dashboard-trail li:last-child {
+  flex: 0 1 16em;
+  max-width: 16em;
+  color: var(--medium-text-color);
+}

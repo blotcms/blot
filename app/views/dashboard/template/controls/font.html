@@ -13,7 +13,7 @@
     data-font-picker-value
   >
 
-  {{^singleFontInput}}<span class="font-row-label">{{label}}</span>{{/singleFontInput}}
+  {{^singleFontInput}}<span class="template-setting-label font-row-label" id="font_label_{{key}}">{{label}}:</span>{{/singleFontInput}}
 
   <button
     type="button"
@@ -22,6 +22,7 @@
     aria-haspopup="listbox"
     aria-expanded="false"
     aria-controls="template-font-picker"
+    aria-describedby="font_label_{{key}}"
   >
     <span data-font-picker-label>
       {{#value}}
@@ -44,6 +45,7 @@
     data-number-stepper
     data-number-stepper-label="font size"
     id="locals.{{key}}.font_size"
+    aria-label="{{label}} font size"
     name="locals.{{key}}.font_size"
     value="{{font_size}}"
     min="9"

@@ -1,16 +1,26 @@
 :root {
-  --input-control-padding: 0.5em 1em;
+  --input-control-padding: var(--template-setting-row-padding);
 }
 
 .number-input {
+  display: flex;
+  align-items: center;
   padding: var(--input-control-padding);
-  border-bottom: 1px solid var(--light-border-color);
+  border-bottom: 1px solid var(--template-editor-divider-color);
 }
 
 .number-input:hover {
-  background-color: var(--light-background-color);
+  background-color: var(--hover-background-color);
+}
+
+.number-input:active {
+  background-color: var(--active-background-color);
 }
 
 .number-input:last-child {
   border-bottom: none;
+}
+
+.number-input .template-setting-label {
+  flex-grow: 1;
 }

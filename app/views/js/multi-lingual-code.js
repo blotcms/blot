@@ -17,7 +17,7 @@ document
 
     // Iterate over each <pre> element within the block
     block.querySelectorAll("pre").forEach(function (code, i) {
-      var lang = code.getAttribute("lang");
+      var lang = code.getAttribute("data-lang") || code.getAttribute("lang");
 
       // If it's not the first code block, hide it
       if (i > 0) {

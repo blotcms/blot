@@ -1,0 +1,25 @@
+<aside class="dashboard-sidebar dashboard-sidebar--sites" aria-label="Dashboard" data-dashboard-sidebar>
+  <a class="dashboard-sidebar__brand" href="/sites" aria-label="Blot sites">
+    <span class="icon-folder dashboard-sidebar__brand-icon" aria-hidden="true"></span>
+  </a>
+  <nav class="dashboard-sidebar__nav" aria-label="Main navigation">
+    <a class="dashboard-sidebar__link {{selected.sites}}" aria-current="{{ariaCurrent.sites}}" href="/sites">Sites</a>
+    <a class="dashboard-sidebar__link {{selected.account}}" aria-current="{{ariaCurrent.account}}" href="/sites/account">Account</a>
+    <a class="dashboard-sidebar__link {{selected.support}}" aria-current="{{ariaCurrent.support}}" href="/sites/support">Support</a>
+  </nav>
+  <nav class="dashboard-sidebar__footer dashboard-sidebar__nav--desktop" aria-label="Help and examples">
+    <a class="dashboard-sidebar__footer-link" href="/how">Documentation</a>
+    <a class="dashboard-sidebar__footer-link" href="/questions">Questions</a>
+    <a class="dashboard-sidebar__footer-link" href="/examples">Examples</a>
+  </nav>
+  <!-- Phones: the help links move into a Menu disclosure -->
+  <details class="dashboard-sidebar__menu">
+    <summary>Menu</summary>
+    <nav class="dashboard-sidebar__menu-panel" aria-label="Help and examples menu">
+      <a class="dashboard-sidebar__link" href="/how">Documentation</a>
+      <a class="dashboard-sidebar__link" href="/questions">Questions</a>
+      <a class="dashboard-sidebar__link" href="/examples">Examples</a>
+    </nav>
+  </details>
+  {{> dashboard-sidebar-resize-handle}}
+</aside>

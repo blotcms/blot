@@ -64,6 +64,10 @@ PaymentMethod.use(function (req, res, next) {
 
 PaymentMethod.route("/")
 
+  // The list renders from the copy of the cards stored on the user, which
+  // every change made here refreshes, then refreshes that copy from Stripe
+  // after responding, so a change made on Stripe shows up on the next view.
+  // Only a user whose cards have never been read from Stripe waits for it.
   .get(function (req, res, next) {
     if (req.user.usesPaypal) {
       return res.render("dashboard/account/payment-method", {
@@ -73,16 +77,32 @@ PaymentMethod.route("/")
       });
     }
 
-    syncPaymentMethods(req.user, function (err, paymentMethods) {
-      if (err) return next(err);
-
+    function render(paymentMethods) {
       res.render("dashboard/account/payment-method", {
-        stripe_key: config.stripe.key,
         breadcrumb: "Payment methods",
         title: "Payment methods",
+        addUrl: req.baseUrl + "/add",
         paymentMethods: presentPaymentMethods(req, paymentMethods),
         hasPaymentMethods: paymentMethods.length > 0,
       });
+    }
+
+    var stored = req.user.paymentMethods;
+
+    var syncedAt = req.user.paymentMethodsSyncedAt;
+
+    if (stored && syncedAt) {
+      render(stored);
+      // At most once a minute, so repeated views don't each call Stripe
+      if (Date.now() - syncedAt < 60 * 1000) return;
+      return syncPaymentMethods(req.user, function (err) {
+        if (err) console.error("Failed to refresh payment methods", err);
+      });
+    }
+
+    syncPaymentMethods(req.user, function (err, paymentMethods) {
+      if (err) return next(err);
+      render(paymentMethods);
     });
   })
 
@@ -221,6 +241,18 @@ PaymentMethod.route("/")
       );
     });
   });
+
+// Only this page loads Stripe.js, for the card form
+PaymentMethod.route("/add").get(function (req, res) {
+  if (req.user.usesPaypal) return res.redirect(req.baseUrl);
+
+  res.render("dashboard/account/payment-method-add", {
+    stripe_key: config.stripe.key,
+    breadcrumb: "Add payment method",
+    title: "Add payment method",
+    paymentMethodsUrl: req.baseUrl,
+  });
+});
 
 PaymentMethod.route("/:id/default").post(function (req, res, next) {
   var stripe = getStripeClient();
@@ -375,7 +407,9 @@ function makeDefault(stripe, user, paymentMethod, callback) {
 // dashboard error page.
 PaymentMethod.use(function (err, req, res, next) {
   if (req.method === "GET") return next(err);
-  res.message(req.baseUrl, err);
+  // A card that couldn't be added goes back to the form
+  var page = req.path === "/" ? req.baseUrl + "/add" : req.baseUrl;
+  res.message(page, err);
 });
 
 module.exports = PaymentMethod;

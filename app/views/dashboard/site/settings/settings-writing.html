@@ -1,0 +1,16 @@
+{{> message}}
+{{> settings-tabs}}
+
+<div class="dashboard-form-panel settings-page">
+  <div class="dashboard-form-panel__body">
+    <form method="post" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data" aria-labelledby="writing-heading">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <input type="hidden" name="redirect" value="{{{base}}}/settings/writing">
+      <h2 id="writing-heading">Writing and formatting</h2>
+      <p class="setting-note">Choose how Blot formats the posts in your folder. Changes save as soon as you make them.</p>
+      {{#categories.Headings}}{{> plugin-row}}{{/categories.Headings}}
+      {{#categories.Codemath}}{{> plugin-row}}{{/categories.Codemath}}
+      {{#categories.Typography}}{{> plugin-row}}{{/categories.Typography}}
+    </form>
+  </div>
+</div>

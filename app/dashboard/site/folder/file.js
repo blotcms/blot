@@ -127,6 +127,12 @@ module.exports = async function (blog, path) {
 
         file.entry = entry;
         file.ignored = ignored;
+        // These paths are never served, so their URL is shown as text
+        file.notServed = !!(
+          ignored.templateFile ||
+          ignored.underscorePath ||
+          ignored.underscoreName
+        );
 
         if (entry) {
           // Replace with case-preserving
@@ -165,16 +171,16 @@ module.exports = async function (blog, path) {
             entry.url = "/draft/view" + entry.path;
           }
 
-          entry.backlinks = entry.backlinks.map((backlink) => {
-            return { backlink };
+          entry.backlinks = entry.backlinks.map((backlink, i, arr) => {
+            return { backlink, last: i === arr.length - 1 };
           });
 
           entry.dependencies = entry.dependencies
             .filter((dependency) => {
               return !isSyntheticDependency(dependency);
             })
-            .map((dependency) => {
-              return { dependency };
+            .map((dependency, i, arr) => {
+              return { dependency, last: i === arr.length - 1 };
             });
 
           entry.internalLinks = entry.internalLinks.map((internalLink) => {

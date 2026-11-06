@@ -1,0 +1,10 @@
+{{#blog.client}}
+<a class="folder-sync folder-sync__pill" href="{{{dashboardBase}}}/settings/folder/{{blog.client}}">
+  <span class="folder-sync__label">Syncs with</span>
+  <span class="folder-sync__client"><img class="client-icon" alt="" width="16" height="16" src="{{#cdn}}/images/sync/{{blog.client}}.svg{{/cdn}}"> {{client.display_name}}</span>
+  <span class="folder-sync__edit">Edit</span>
+</a>
+{{/blog.client}}
+{{^blog.client}}
+<a class="folder-sync folder-sync__pill folder-sync__pill--connect" href="{{{dashboardBase}}}/settings/folder">Sync this folder</a>
+{{/blog.client}}

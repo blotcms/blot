@@ -1,30 +1,50 @@
 .plugin p {margin:0}
 .line.plugins + h2 {
-  margin-top: 24px;
+  margin-top: var(--space-5);
 }
 .line.plugins .center {flex-grow: 1;}
 .line.plugins {border-bottom: none;padding: 0;}
 form.dashboard-form .plugin label {padding-top:0}
-.plugin {border-bottom: 1px solid var(--border-color);padding-bottom: 8px;margin-bottom:8px}
+.plugin {border-bottom: 1px solid var(--border-color);padding-bottom: var(--space-2);margin-bottom:var(--space-2)}
 .plugin:last-child {border-bottom: none;padding-bottom: 0;margin-bottom:0}
-.pluginOptions {display:none}
+.pluginOptions {display:none; clear:both; margin:0; padding-left:2.75em}
 .plugin.checked .pluginOptions {display:block}
+
+/* A plugin's own options (its form.html): one row each, switch then label,
+   like the plugin's own row */
+form.dashboard-form .pluginOptions > label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  color: var(--text-color);
+  font-size: var(--text-base);
+}
+
+.pluginOptions > label:last-of-type {
+  padding-bottom: var(--space-3);
+}
 
 
 .plugin {
-    margin:0;
-    padding:16px 12px 0;
-  }
+  margin: 0;
+  padding: var(--space-4) var(--space-3) 0;
+  transition: background-color 150ms ease;
+}
 
-  .plugin:hover {
-    background-color: #fafafa;
-  }
+.plugin:hover {
+  background-color: var(--hover-background-color);
+}
+
+.plugin:active {
+  background-color: var(--active-background-color);
+}
 .plugin p {
-  font-size: 16px;
+  font-size: var(--text-base);
   color: var(--text-color);
 }
 .plugin {
-  border-bottom: 1px solid #eeeeec;
+  border-bottom: 1px solid var(--border-color);
 }
 form.dashboard-form label{
   margin:0;padding:0
@@ -49,7 +69,9 @@ form.dashboard-form .plugin input[type="checkbox"] {
   cursor: pointer;
   place-content: center;
   background-color: var(--medium-text-color);
+  /* The switch is sized in em from this base, which is not a text size */
   font-size: 10px;
+  transition: background-color 150ms ease;
 }
 
 form.dashboard-form .plugin input[type="checkbox"]::before {
@@ -60,9 +82,9 @@ content: "";
   position: absolute;
   top: .15em;
   right: 1.45em;
-  transition: width 120ms ease-in-out,transform 120ms ease-in-out,right 120ms ease-in-out;
+  transition: width 150ms ease, right 150ms ease;
   box-shadow: inset 1em 1em var(--form-control-color);
-  background-color: #fff;
+  background-color: var(--background-color);
 }
 
 form.dashboard-form .plugin input[type="checkbox"]:checked {
@@ -74,8 +96,13 @@ form.dashboard-form .plugin input[type="checkbox"]:checked::before {
   right: 0.15em;
 }
 
-form.dashboard-form .plugin  input[type="checkbox"]:focus {
+form.dashboard-form .plugin input[type="checkbox"]:focus {
   outline: none;
+}
+
+form.dashboard-form .plugin input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
 }
 
 form.dashboard-form .plugin input[type="checkbox"]:active::before {

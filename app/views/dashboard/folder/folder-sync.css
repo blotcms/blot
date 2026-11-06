@@ -1,0 +1,117 @@
+/*
+  The top row of the overview's file box (folder/directory.html): where the
+  folder syncs from, then search.
+
+  .folder-toolbar         the row
+  .folder-sync            "Syncs with [icon] Google Drive  Edit", one link
+                          (folder/folder-sync.html) to the client's page,
+                          which has its options: activity, resync, change,
+                          disconnect ("Sync this folder", in blue, with no
+                          folder yet)
+  .folder-sync-issue      a problem with the folder, under the row
+                          (folder/folder-sync-issue.html)
+*/
+
+.folder-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-1) var(--space-1) var(--space-2) var(--space-4);
+}
+
+/* One link: transparent until hovered, then a grey pill. It leads to the
+   client's page (or, with no folder, to connecting one). */
+.folder-sync {
+  position: relative;
+  min-width: 0;
+  margin-left: calc(var(--space-2) * -1);
+}
+
+.folder-sync__pill {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  min-height: 30px;
+  box-sizing: border-box;
+  padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill);
+  color: inherit;
+  cursor: pointer;
+  font-size: var(--text-md);
+  text-decoration: none;
+  transition: background-color 150ms ease;
+}
+
+.folder-sync__pill:hover {
+  background: var(--surface-muted-color);
+}
+
+.folder-sync__pill:active {
+  background: var(--surface-strong-color);
+}
+
+.folder-sync__pill:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+.folder-sync__label {
+  color: var(--medium-text-color);
+}
+
+.folder-sync__client {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-color);
+  font-weight: var(--weight-medium);
+}
+
+.folder-sync__client .client-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.folder-sync__edit {
+  color: var(--accent-color);
+}
+
+.folder-sync__pill:hover .folder-sync__edit {
+  color: var(--accent-hover-color);
+}
+
+/* No folder connected: the whole pill is the link, in blue */
+.folder-sync__pill--connect {
+  color: var(--accent-color);
+}
+
+.folder-sync__pill--connect:hover {
+  color: var(--accent-hover-color);
+}
+
+/* The same line as plain text, where it is not a control (the page for
+   changing how the folder syncs) */
+.folder-sync--static {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-md);
+}
+
+.folder-sync-issue {
+  margin: 0 var(--space-4) var(--space-3);
+  color: var(--danger-color);
+  font-size: var(--text-md);
+}
+
+.folder-sync-issue p {
+  margin: 0 0 var(--space-2);
+}
+
+.folder-sync-issue .btn-row {
+  margin: 0;
+}

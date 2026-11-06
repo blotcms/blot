@@ -1,19 +1,18 @@
 {{> message}}
 
 
-<div style="display: flex;">
-    <div style="width: 33.33333%;flex-grow: 0;flex-shrink: 0;box-sizing: border-box;padding:0 1rem 0 0;max-width: 300px;">
+<div class="template-editor-layout">
+    <div class="template-editor-controls">
             {{> template-sub-navigation}}
 
             {{> template-editor-sidebar}}
     </div>
-    <div style="box-sizing: border-box;flex-grow: 1;width: 66.66666%;
-    flex-shrink: 0;padding:0 0 0 1rem;align-self: flex-start;position: sticky;
-    top: 1.5rem;">
+    <div class="template-editor-preview">
                
         <div class="iframe-container" data-origin="{{{previewOrigin}}}">
             <div class="iframe-scroll">
                 <iframe id="full_size_preview"
+                          title="Preview of your site"
                           width="960"
                           height="1400"
                           scrolling="no"
@@ -34,6 +33,7 @@
     </div>
 </div>
 
+{{#fontPickerOptions.length}}
 <div
   id="template-font-picker"
   class="template-font-picker"
@@ -110,4 +110,5 @@
     {{/fontPickerOptions}}
   </div>
 </div>
+{{/fontPickerOptions.length}}
 

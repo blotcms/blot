@@ -367,7 +367,7 @@ dashboard.get("/disconnect", function (req, res) {
 
 dashboard.post("/disconnect", function (req, res, next) {
   if (!req.blog.client) {
-    return res.redirect(res.locals.dashboardBase + "/client");
+    return res.redirect(res.locals.dashboardBase + "/settings/folder");
   }
 
   client

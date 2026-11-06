@@ -1,29 +1,18 @@
 /* On smaller screens, collapse the global navigation into the header. */
 
 @media (max-width: 768px) {
-  .header {
-    margin-bottom: 12px;
-  }
-
   .header .header-inner {
     flex-wrap: wrap;
     gap: 0;
     min-height: 56px;
     padding: 0 1.5rem;
   }
-
   .navigation-toggle {
     display: block !important;
     order: 2;
     margin-left: 0.75rem;
     padding: 0.75rem 0;
   }
-
-  .content {
-    width: 100%;
-    padding: 0 2rem;
-  }
-
   .header .site-navigation {
     display: none;
     order: 10;
@@ -32,54 +21,30 @@
     padding: 0.75rem 0 1rem;
     border-top: 1px solid var(--border-color);
   }
-
   .header .dashboard-header-context {
     max-width: none;
   }
-
   .header .call-to-action {
     order: 3;
     margin-left: auto;
   }
-
   .site-navigation .navigation {
     display: block;
   }
-
   .site-navigation .navigation ul {
     display: block;
     width: 100%;
   }
-
-  .navigation a {
-    display: block;
-    padding: var(--header-control-padding);
-  }
-
   #navbar-toggle:checked ~ .site-navigation {
     display: block;
   }
 }
 
 /* On narrow mobile screens reduce content padding to 1em. */
-@media (max-width: 480px) {
-  .content {
-    padding: 0 1rem;
-  }
 
+@media (max-width: 480px) {
   .header .header-inner {
     padding: 0 0.75rem;
-  }
-}
-
-@media (max-width: 768px) {
-  .watch-screen {
-    padding: 1rem;
-  }
-
-  .watch-close {
-    top: 0.75rem;
-    right: 1rem;
   }
 }
 
@@ -92,13 +57,8 @@
     max-width: 430px;
     margin-top: 3rem;
   }
-
   .home-intro {
     margin-top: 0;
-  }
-
-  .home-featured {
-    justify-self: center;
   }
 }
 
@@ -107,7 +67,6 @@
     margin-top: 8rem;
     padding: 0 16px 5rem;
   }
-
   .home-folder-section {
     width: calc(100% + 4rem);
     margin-left: -2rem;
@@ -115,42 +74,28 @@
     padding-right: 2rem;
     padding-left: 2rem;
   }
-
-  .home-folder-viewport {
-    width: calc(100% + 4rem);
-    margin-left: -2rem;
-    margin-right: -2rem;
-    padding-right: 2rem;
-    padding-left: 2rem;
-  }
-
   .home-tools h2 {
     font-size: 20px;
   }
-
   .home-tools-intro {
     margin-top: 2rem;
     font-size: var(--font-size);
   }
-
   .home-tools-list {
     margin-top: 3rem;
     gap: 8px;
   }
-
   .home-tool-button {
     min-height: 48px;
     gap: 8px;
     padding: 0 16px;
     font-size: var(--font-size);
   }
-
   .home-tool-button img {
     width: 20px;
     height: 20px;
     flex-basis: 20px;
   }
-
   .home-tools-cta {
     min-height: 48px;
     margin-top: 3.5rem;
@@ -165,42 +110,15 @@
     padding-top: 4rem;
     padding-bottom: 2rem;
   }
-
   .home-folder-heading {
     margin-bottom: 2rem;
   }
-
   .home-folder-heading h2 {
     font-size: 20px;
   }
-
   .home-folder-heading p {
     margin-top: 1rem;
   }
-
-  .home-folder-viewport {
-    width: calc(100% + 2rem);
-    height: 320px;
-    margin-left: -1rem;
-    margin-right: -1rem;
-    padding: 0.5rem 1rem 2rem;
-  }
-
-  .home-folder-track {
-    gap: 16px;
-  }
-
-  .home-folder-card {
-    flex-basis: min(86vw, 410px);
-    min-height: 222px;
-    padding: 20px;
-  }
-
-  .home-folder-card.is-active {
-    flex-basis: min(94vw, 460px);
-    min-height: 272px;
-  }
-
   .home-folder-card-content {
     display: grid;
     grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
@@ -208,45 +126,28 @@
     min-height: 190px;
     position: static;
   }
-
   .home-folder-card.is-active .home-folder-card-content {
     min-height: 240px;
   }
-
   .home-folder-card-folder {
     position: static;
     width: auto;
     height: 190px;
     z-index: auto;
   }
-
   .home-folder-card.is-active .home-folder-card-folder {
     left: auto;
   }
-
   .home-folder-card-folder .finder {
     flex-basis: 100%;
     width: 100%;
     height: 145px;
   }
-
   .home-folder-card-folder .finder .contents {
     height: 96px;
     max-height: 96px;
     min-height: 96px;
   }
-
-  .home-folder-card-site {
-    position: static;
-    width: 100%;
-    z-index: auto;
-  }
-
-  .home-folder-card.is-active .home-folder-card-site {
-    left: auto;
-    width: 100%;
-  }
-
   .home-folder-controls {
     margin-top: 0;
   }

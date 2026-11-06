@@ -1,6 +1,6 @@
 .file-drop {
   position: relative;
-  margin-bottom: 6px;
+  margin-bottom: var(--space-2);
 }
 
 .file-drop__input {
@@ -25,12 +25,22 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 2rem 1.5rem;
-  border: 1px dashed #b8b8b8;
-  border-radius: var(--border-radius);
-  background: #fafafa;
+  padding: var(--space-6) var(--space-5);
+  border: 1px dashed var(--border-strong-color);
+  border-radius: var(--radius-lg);
+  background: var(--surface-muted-color);
   cursor: pointer;
   box-sizing: border-box;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.file-drop__empty:hover {
+  background: var(--hover-background-color);
+  border-color: var(--accent-color);
+}
+
+.file-drop__empty:active {
+  background: var(--active-background-color);
 }
 
 /* Dashboard form labels receive their own display and padding rules. Keep
@@ -38,7 +48,7 @@
 form.dashboard-form .file-drop__empty {
   display: flex;
   margin: 0;
-  padding: 2rem 1.5rem;
+  padding: var(--space-6) var(--space-5);
 }
 
 form.dashboard-form .file-drop__empty[hidden] {
@@ -46,7 +56,8 @@ form.dashboard-form .file-drop__empty[hidden] {
 }
 
 .file-drop.is-dragover .file-drop__empty {
-  background: #e9e9e6;
+  background: var(--accent-soft-color);
+  border-color: var(--accent-color);
 }
 
 .file-drop:focus-within .file-drop__empty,
@@ -59,54 +70,69 @@ form.dashboard-form .file-drop__empty[hidden] {
   display: block;
   width: 32px;
   height: 32px;
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--space-3);
   color: var(--accent-color);
 }
 
 .file-drop__title {
   display: block;
-  margin: 0 0 0.35rem;
-  font-size: 15px;
-  font-weight: 600;
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
   color: var(--text-color);
 }
 
 .file-drop__action {
   display: block;
-  margin: 0 0 0.75rem;
-  font-size: 14px;
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-md);
   color: var(--medium-text-color);
 }
 
 .file-drop__choose {
   color: var(--accent-color);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   text-decoration: none;
   cursor: pointer;
+  transition: color 150ms ease;
+}
+
+.file-drop__choose:hover {
+  color: var(--accent-hover-color);
+  text-decoration: underline;
+}
+
+.file-drop__choose:active {
+  color: var(--accent-active-color);
+}
+
+.file-drop__choose:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
 }
 
 .file-drop__hints {
   display: block;
   margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
   color: var(--light-text-color);
 }
 
 .file-drop__selected-label {
   display: block;
-  margin-bottom: 0.5rem;
-  font-size: 14px;
+  margin-bottom: var(--space-2);
+  font-size: var(--text-md);
   color: var(--medium-text-color);
 }
 
 .file-drop__chip {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem;
-  border-radius: var(--large-border-radius);
-  background: var(--light-background-color);
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-muted-color);
   box-sizing: border-box;
 }
 
@@ -120,8 +146,8 @@ form.dashboard-form .file-drop__empty[hidden] {
 .file-drop__name {
   flex: 1;
   min-width: 0;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
   color: var(--text-color);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -133,17 +159,29 @@ form.dashboard-form .file-drop__empty[hidden] {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px;
+  padding: var(--space-1);
   margin: 0;
   border: none;
   background: none;
   color: var(--medium-text-color);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   line-height: 0;
+  transition: color 150ms ease, background-color 150ms ease;
 }
 
 .file-drop__clear:hover {
   color: var(--text-color);
+  background: var(--hover-background-color);
+}
+
+.file-drop__clear:active {
+  background: var(--active-background-color);
+}
+
+.file-drop__clear:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
 }
 
 .file-drop__clear svg {

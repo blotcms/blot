@@ -28,7 +28,7 @@
         padding: 2px 4px;
         margin-left: 6px;
       "
-      >Installed</span
+      ><span class="template-live-dot" aria-hidden="true"></span>Live</span
     >
     {{/checked}}
   </a>
@@ -39,7 +39,8 @@
     data-previewurl="{{{previewMenuURL}}}"
     aria-haspopup="true"
     aria-expanded="false"
+    aria-label="Actions for {{name}}"
   >
-    <span class="icon-dots"></span>
+    <span class="icon-dots" aria-hidden="true"></span>
   </button>
 </div>

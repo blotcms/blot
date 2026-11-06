@@ -109,6 +109,19 @@ module.exports = (function () {
       });
   }
 
+  function getListTotal(blogID, listName, callback) {
+    var list = listKey(blogID, listName);
+
+    redis
+      .zCard(list)
+      .then(function (count) {
+        callback(null, count);
+      })
+      .catch(function (err) {
+        callback(err);
+      });
+  }
+
   // Count of the "all" list, the same set Fix()'s each()-based checks (e.g.
   // entry-ghosts) scan one Redis round trip at a time - includes drafts,
   // pages, scheduled and deleted entries that getTotal's "entries" list
@@ -207,8 +220,11 @@ module.exports = (function () {
       end = options.first - 1;
     }
 
-    redis
-      .zRange(list, start, end, { REV: true })
+    var range = options.ascending
+      ? redis.zRange(list, start, end)
+      : redis.zRange(list, start, end, { REV: true });
+
+    range
       .then(function (ids) {
         return callback(null, ids);
       })
@@ -941,6 +957,7 @@ module.exports = (function () {
     adjacentTo: adjacentTo,
     getPage: getPage,
     getListIDs: getListIDs,
+    getListTotal: getListTotal,
     getAll: getAll,
     getCatalog: require("./catalog"),
     getCachedPage: require("./cachedPage"),

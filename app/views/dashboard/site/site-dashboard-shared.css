@@ -1,0 +1,164 @@
+
+
+.site-dashboard-title-switcher {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0);
+  min-width: 0;
+}
+
+.site-dashboard-title-switcher.is-switcher-enabled {
+  padding: var(--space-0) var(--space-1) var(--space-0) var(--space-3);
+  border-radius: var(--radius-lg);
+  transition: background-color 150ms ease;
+}
+
+.site-dashboard-title-switcher.is-switcher-enabled:hover {
+  background: var(--hover-background-color);
+}
+
+.site-dashboard-title-switcher.is-switcher-enabled:active,
+.site-dashboard-title-switcher.is-switcher-enabled:focus-within {
+  background: var(--active-background-color);
+}
+
+/* Separate, so browsers without :has() keep the rules above */
+.site-dashboard-title-switcher.is-switcher-enabled:has(.site-switcher[open]) {
+  background: var(--selected-background-color);
+}
+
+.site-switcher {
+  position: relative;
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.site-switcher__trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 0 0 0 var(--space-0);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  list-style: none;
+}
+
+.site-switcher__trigger::-webkit-details-marker {
+  display: none;
+}
+
+.site-switcher__trigger:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 3px;
+  border-radius: var(--radius-md);
+}
+
+.site-switcher__trigger:active .site-switcher__chevron {
+  background: var(--border-strong-color);
+}
+
+.site-switcher__chevron {
+  display: flex;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  color: var(--medium-text-color);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.site-dashboard-title-switcher.is-switcher-enabled:hover .site-switcher__chevron,
+.site-switcher[open] .site-switcher__chevron {
+  background: var(--surface-color);
+  color: var(--text-color);
+}
+
+.site-switcher__chevron svg {
+  width: 16px;
+  height: 16px;
+}
+
+.site-switcher__menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  width: min(320px, calc(100vw - 32px));
+  overflow: hidden;
+}
+
+.site-switcher__sites {
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  padding: var(--space-1);
+}
+
+/* Surface and item states: css/menu.css */
+.site-switcher__site {
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.site-switcher__site-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: var(--space-0);
+}
+
+.site-switcher__site-title,
+.site-switcher__site-domain {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.site-switcher__site-title {
+  font-weight: var(--weight-medium);
+}
+
+.site-switcher__site-domain {
+  color: var(--medium-text-color);
+  font-size: var(--text-sm);
+}
+
+.site-switcher__check {
+  flex: 0 0 auto;
+  color: var(--medium-text-color);
+}
+
+.site-switcher__create {
+  gap: var(--space-3);
+  min-height: 44px;
+  margin: 0 var(--space-1) var(--space-1);
+}
+
+/* Separator above the Create link, like .menu__separator */
+.site-switcher__sites + .site-switcher__create {
+  position: relative;
+  margin-top: var(--space-2);
+}
+
+.site-switcher__sites + .site-switcher__create::before {
+  content: "";
+  position: absolute;
+  top: calc(var(--space-1) * -1 - 1px);
+  right: calc(var(--space-1) * -1);
+  left: calc(var(--space-1) * -1);
+  height: 1px;
+  background: var(--border-color);
+}
+
+.site-switcher__create > span {
+  font-size: var(--text-2xl);
+  line-height: 1;
+}
+

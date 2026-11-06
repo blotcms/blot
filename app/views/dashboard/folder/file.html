@@ -1,13 +1,12 @@
-{{> close-button}}
 
 {{#folder}}
 {{#stat}}
 <div class="folder-box {{#root}}root{{/root}} {{#directory}}directory{{/directory}} live-updates">
 
+{{> file-view-header}}
+
 <div class="file-info">
 
-  <h1><span class="icon-file{{#entry}}-check{{/entry}}"></span>{{name}}</h1>
- 
   <a href="{{{base}}}/folder-download{{{url}}}" target="_blank" class="template-button file-helper">
     Download file
     <span class="icon-download"></span>
@@ -21,7 +20,7 @@
 
     <tr>
       <td>File URL:</td>
-      <td><a href="https://{{{blog.pretty.url}}}{{{url}}}" target="_blank" rel="noopener noreferrer">https://{{{blog.pretty.url}}}{{{url}}}</a> <button class="copy" data-copy="https://{{{blog.pretty.url}}}{{{url}}}"><span class="icon-copy"></span> Copy</button></td>
+      <td>{{#notServed}}https://{{{blog.pretty.url}}}{{{url}}} (not published){{/notServed}}{{^notServed}}<a href="https://{{{blog.pretty.url}}}{{{url}}}" target="_blank" rel="noopener noreferrer">https://{{{blog.pretty.url}}}{{{url}}}</a> <button class="copy" data-copy="https://{{{blog.pretty.url}}}{{{url}}}"><span class="icon-copy"></span> Copy</button>{{/notServed}}</td>
     </tr>
 
     <tr>
@@ -97,52 +96,52 @@
   <!-- Embedding and linking PDF -->
   <p>Embed this PDF in another post:</p>
   <section class="multilingual">
-    <pre lang="markdown"><code>&lt;embed src="{{{path}}}" type="application/pdf"&gt;</code></pre>
-    <pre lang="html"><code>&lt;embed src="{{{path}}}" type="application/pdf"&gt;</code></pre>
+    <pre data-lang="markdown"><code>&lt;embed src="{{{path}}}" type="application/pdf"&gt;</code></pre>
+    <pre data-lang="html"><code>&lt;embed src="{{{path}}}" type="application/pdf"&gt;</code></pre>
   </section>
   <p>Link to this PDF from another post:</p>
   <section class="multilingual">
-    <pre lang="markdown"><code>[Download PDF]({{{path}}})</code></pre>
-    <pre lang="html"><code>&lt;a href="{{{path}}}"&gt;Download PDF&lt;/a&gt;</code></pre>
+    <pre data-lang="markdown"><code>[Download PDF]({{{path}}})</code></pre>
+    <pre data-lang="html"><code>&lt;a href="{{{path}}}"&gt;Download PDF&lt;/a&gt;</code></pre>
   </section>
   {{/extension.pdf}}
   {{#extension.category.image}}
   <!-- Embedding and linking image -->
   <p>How to embed this image:</p>
   <section class="multilingual">
-    <pre lang="markdown"><code>![Image]({{{path}}})</code></pre>
-    <pre lang="html"><code>&lt;img src="{{{path}}}"&gt;</code></pre>
+    <pre data-lang="markdown"><code>![Image]({{{path}}})</code></pre>
+    <pre data-lang="html"><code>&lt;img src="{{{path}}}"&gt;</code></pre>
   </section>
   <p>How to link to this image:</p>
   <section class="multilingual">
-    <pre lang="markdown"><code>[View image]({{{path}}})</code></pre>
-    <pre lang="html"><code>&lt;a href="{{{path}}}"&gt;View image&lt;/a&gt;</code></pre>
+    <pre data-lang="markdown"><code>[View image]({{{path}}})</code></pre>
+    <pre data-lang="html"><code>&lt;a href="{{{path}}}"&gt;View image&lt;/a&gt;</code></pre>
   </section>
   {{/extension.category.image}}
   {{#extension.category.video}}
   <!-- Embedding and linking video -->
   <p>How to embed this video:</p>
   <section class="multilingual">
-    <pre lang="markdown"><code>![Video]({{{path}}})</code></pre>
-    <pre lang="html"><code>&lt;video src="{{{path}}}"&gt;</code></pre>
+    <pre data-lang="markdown"><code>![Video]({{{path}}})</code></pre>
+    <pre data-lang="html"><code>&lt;video src="{{{path}}}"&gt;</code></pre>
   </section>
   <p>How to link to this video:</p>
   <section class="multilingual">
-    <pre lang="markdown"><code>[View video]({{{path}}})</code></pre>
-    <pre lang="html"><code>&lt;a href="{{{path}}}"&gt;View video&lt;/a&gt;</code></pre>
+    <pre data-lang="markdown"><code>[View video]({{{path}}})</code></pre>
+    <pre data-lang="html"><code>&lt;a href="{{{path}}}"&gt;View video&lt;/a&gt;</code></pre>
   </section>
   {{/extension.category.video}}
   {{#extension.category.audio}}
   <!-- Embedding and linking audio -->
   <p>How to embed this audio:</p>
   <section class="multilingual">
-    <pre lang="markdown"><code>![Audio]({{{path}}})</code></pre>
-    <pre lang="html"><code>&lt;audio controls src="{{{path}}}"&gt;</code></pre>
+    <pre data-lang="markdown"><code>![Audio]({{{path}}})</code></pre>
+    <pre data-lang="html"><code>&lt;audio controls src="{{{path}}}"&gt;</code></pre>
   </section>
   <p>How to link to this audio:</p>
   <section class="multilingual">
-    <pre lang="markdown"><code>[Listen to audio]({{{path}}})</code></pre>
-    <pre lang="html"><code>&lt;a href="{{{path}}}"&gt;Listen to audio&lt;/a&gt;</code></pre>
+    <pre data-lang="markdown"><code>[Listen to audio]({{{path}}})</code></pre>
+    <pre data-lang="html"><code>&lt;a href="{{{path}}}"&gt;Listen to audio&lt;/a&gt;</code></pre>
   </section>
   {{/extension.category.audio}}
 </div>
@@ -317,7 +316,7 @@
      <td>Thumbnail:</td>
      <td>
        {{#thumbnail.small}}
-       <img class="file-thumbnail" height="{{height}}" width="{{width}}" src="{{{url}}}" />
+       <img class="file-thumbnail" alt="" height="{{height}}" width="{{width}}" src="{{{url}}}" />
        {{/thumbnail.small}}
        {{^thumbnail.small}}
        <span class="file-stat-empty">--</span>

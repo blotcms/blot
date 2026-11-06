@@ -1,0 +1,83 @@
+/*
+  Tabs: a row of links to the pages of one section (Settings).
+
+  <header class="page-header page-header--tabs">…</header>
+  <nav class="tabs" aria-label="…">
+    <ul class="tabs__list">
+      <li><a class="tabs__link" href="…" aria-current="page">Writing</a></li>
+      <li><a class="tabs__link" href="…" aria-current="">Images</a></li>
+    </ul>
+  </nav>
+
+  The current tab is underlined. On narrow screens the tabs wrap.
+*/
+
+.page-header--tabs {
+  margin-bottom: var(--space-3);
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.tabs {
+  margin: 0 0 var(--space-5);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.tabs__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-1);
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tabs__list li {
+  position: relative;
+  margin: 0;
+  padding: 0 0 var(--space-2);
+}
+
+.tabs__link {
+  display: block;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--medium-text-color);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.tabs__link:hover {
+  background-color: var(--hover-background-color);
+  color: var(--text-color);
+}
+
+.tabs__link:active {
+  background-color: var(--active-background-color);
+}
+
+.tabs__link:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
+.tabs__link[aria-current="page"] {
+  color: var(--text-color);
+  font-weight: var(--weight-semibold);
+}
+
+/* Sits on the nav's bottom border */
+.tabs__link[aria-current="page"]::after {
+  position: absolute;
+  right: var(--space-2);
+  bottom: -1px;
+  left: var(--space-2);
+  height: 2px;
+  border-radius: 1px;
+  background-color: var(--accent-color);
+  content: "";
+}

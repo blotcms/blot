@@ -1,77 +1,50 @@
-<div style="border: 1px solid #eeeeec;border-radius: 5px;overflow: hidden;">
+<header class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">404 log</h1>
+    <p class="page-header__subtitle">Requests to your site for pages that don’t exist. Ignore hides an address from this list; you can unignore it below.</p>
+  </div>
+</header>
 
-  <label style="font-size: 14px;color:#aaa;display: block;padding: 12px;border-bottom: 1px solid #eeeeec;">
-    <span class="icon-small-alert"></span> 404 log
-  </label>
+<div class="error-log">
+  {{#list.length}}
+  <p class="error-log__count">Showing {{shown}} of {{total}}</p>
+  {{/list.length}}
   {{^list.length}}
-  <hr>
-  <br>
-  <p>No 404s</p>
-  <br>
+  <p class="site-dashboard-empty">No 404s</p>
   {{/list.length}}
 
   {{#list}}
-  <form class="error-form" style="display:flex;border-bottom: 1px solid #eeeeec;padding: 12px" method='POST'>
+  <form class="error-form" method="POST">
     <input type="hidden" name="_csrf" value="{{csrftoken}}">
-    <div style="flex-grow: 1;">
-      <a class="link" href="{{blog.url}}{{url}}" target="_blank">
-        {{url}}
-      </a><br>
-      <span style="font-size:12px;color:#aaa">{{time}}</span>  
+    <div class="error-form__url">
+      <a class="link" href="{{blog.url}}{{url}}" target="_blank" rel="noopener">{{url}}</a>
+      <span class="error-form__time">{{time}}</span>
     </div>
-    <div style="display: flex;">
-      <button style="font-size: 14px;
-      margin-right: 12px;
-      display: block;
-      cursor: pointer;
-      border-radius: var(--border-radius);
-      background-color: var(--background-color);
-      color: var(--accent-color);
-      border: 1px solid #eeeeec;
-      padding: 0.5em 0.75em;
-      font-weight: 600;" class="link" name="ignore" value="{{{url}}}">Ignore</button>&nbsp;
-      <a  style="font-size: 14px;
-      margin-right: 12px;
-      display: block;
-      cursor: pointer;
-      border-radius: var(--border-radius);
-      background-color: var(--background-color);
-      color: var(--accent-color);
-      border: 1px solid #eeeeec;
-      padding: 0.5em 0.75em;
-      font-weight: 600;" class="link" href="{{{base}}}/settings/redirects?create={{url}}" style="text-decoration:none">
-      <svg style="fill:currentColor;vertical-align: middle;position:relative;top:-0.1em" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M7.75 2a.75.75 0 0 1 .75.75V7h4.25a.75.75 0 0 1 0 1.5H8.5v4.25a.75.75 0 0 1-1.5 0V8.5H2.75a.75.75 0 0 1 0-1.5H7V2.75A.75.75 0 0 1 7.75 2Z"></path></svg>
-      Add redirect</a>  
+    <div class="error-form__actions">
+      <button class="btn btn-sm" name="ignore" value="{{{url}}}">Ignore</button>
+      <a class="btn btn-sm btn-soft" href="{{{base}}}/settings/redirects?create={{url}}"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M7.75 2a.75.75 0 0 1 .75.75V7h4.25a.75.75 0 0 1 0 1.5H8.5v4.25a.75.75 0 0 1-1.5 0V8.5H2.75a.75.75 0 0 1 0-1.5H7V2.75A.75.75 0 0 1 7.75 2Z"></path></svg>Add redirect</a>
     </div>
   </form>
   {{/list}}
 
-
   {{#has_ignored}}{{^ignored.length}}
-  <p>
-    <a style="font-size: 14px;color:#aaa;padding:12px;text-decoration: none;" href="?ignored=true">Show ignored 404s</a>
-  </p>
+  <p class="error-log__toggle"><a href="?ignored=true">Show ignored 404s</a></p>
   {{/ignored.length}}{{/has_ignored}}
 
   {{#ignored.length}}
-  <p>
-    <a href="?">Hide ignored 404s</a>
-  </p>
+  <p class="error-log__toggle"><a href="?">Hide ignored 404s</a></p>
   {{/ignored.length}}
 
   {{#ignored}}
-  <form style="display:block;float:right;z-index:10;" method='post'>
+  <form class="error-form" method="post">
     <input type="hidden" name="_csrf" value="{{csrftoken}}">
-    <button class="button small" name="unignore" value="{{{url}}}">Unignore</button>
-    <a class="link" href="{{{base}}}/settings/redirects?create={{url}}" style="text-decoration:none">Redirect</a>
+    <div class="error-form__url">
+      <a class="link" href="{{blog.url}}{{url}}" target="_blank" rel="noopener">{{url}}</a>
+    </div>
+    <div class="error-form__actions">
+      <button class="btn btn-sm" name="unignore" value="{{{url}}}">Unignore</button>
+      <a class="btn btn-sm btn-soft" href="{{{base}}}/settings/redirects?create={{url}}">Add redirect</a>
+    </div>
   </form>
-  <p><a href="{{blog.url}}{{url}}">{{url}}</a></p>
   {{/ignored}}
- 
- </div>
-
- <style>
-  .error-form:hover {
-    background: #f9f9f9;
-  }
- </style>
+</div>

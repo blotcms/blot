@@ -27,7 +27,14 @@ describe("dashboard site settings save", function () {
   // sub-page used to bounce the user out to the site homepage because the
   // form omitted the `redirect` field and save/finish.js fell back to a
   // router-relative req.path of "/".
-  ["settings", "settings/images", "settings/links"].forEach((page) => {
+  [
+    "settings/writing",
+    "settings/images",
+    "settings/date",
+    "settings/links",
+    "settings/redirects",
+    "settings/integrations",
+  ].forEach((page) => {
     it(`keeps the redirect on /${page} pointed back at itself`, async function () {
       const $ = await this.parse(`/sites/${this.blog.handle}/${page}`);
       const redirect = $('input[name="redirect"]').attr("value");
@@ -36,9 +43,12 @@ describe("dashboard site settings save", function () {
   });
 
   it("does not redirect to the homepage when the form omits a redirect field", async function () {
-    const res = await this.submit(`/sites/${this.blog.handle}/settings`, {
-      "plugins.typeset.options.punctuation": "on",
-    });
+    const res = await this.submit(
+      `/sites/${this.blog.handle}/settings/writing`,
+      {
+        "plugins.typeset.options.punctuation": "on",
+      }
+    );
 
     const path = new URL(res.url).pathname;
 

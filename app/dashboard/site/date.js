@@ -1,5 +1,3 @@
-const express = require("express");
-const date = express.Router();
 const moment = require("moment-timezone");
 
 // Formats and their aliases
@@ -30,48 +28,55 @@ const excludedZones = [
 // Included time zones
 const includedZones = ["UTC", "Pacific/Auckland"];
 
-date.get("/", (req, res, next) => {
-  const when = Date.now();
-
-  // Filter and format time zones
-  const zones = moment.tz.names().filter((zone) => {
-    if (excludedZones.includes(zone)) return false;
-    if (includedZones.includes(zone)) return true;
-    if (
-      zone.startsWith("Etc/") ||
-      zone.startsWith("Pacific/") ||
-      zone.includes("Antarctica")
-    )
-      return false;
-    return /\//.test(zone);
-  });
-
-  const timeZones = zones.map((zone) => {
-    const offset = moment.tz.zone(zone).utcOffset(when);
-    return {
-      time: moment.utc(when).tz(zone).format("h:mm a, MMMM Do"),
-      value: zone,
-      offset,
-      selected: zone === req.blog.timeZone ? "selected" : "",
-    };
-  });
-
-  // Sort time zones
-  timeZones.sort(
-    (a, b) => b.offset - a.offset || a.value.localeCompare(b.value)
-  );
-
-  res.locals.breadcrumbs.add("Settings", "settings");
-
-  res.render("dashboard/site/settings/date", {
-    timeZones,
-    currentTime: moment.utc().tz(req.blog.timeZone).format("h:mma, MMMM D"),
-    dateFormats: formats.map((format) => ({
-      value: format,
-      selected: format === req.blog.dateFormat ? "selected" : "",
-      date: alias[format],
-    })),
-  });
+const zones = moment.tz.names().filter((zone) => {
+  if (excludedZones.includes(zone)) return false;
+  if (includedZones.includes(zone)) return true;
+  if (
+    zone.startsWith("Etc/") ||
+    zone.startsWith("Pacific/") ||
+    zone.includes("Antarctica")
+  )
+    return false;
+  return /\//.test(zone);
 });
 
-module.exports = date;
+// The list shows each zone's current time, so it changes once a minute
+let cachedMinute;
+let cachedTimeZones;
+
+function timeZonesAt(when) {
+  const minute = Math.floor(when / 60000);
+  if (minute === cachedMinute) return cachedTimeZones;
+
+  cachedTimeZones = zones
+    .map((zone) => ({
+      time: moment.utc(when).tz(zone).format("h:mm a"),
+      value: zone,
+      offset: moment.tz.zone(zone).utcOffset(when),
+    }))
+    .sort((a, b) => b.offset - a.offset || a.value.localeCompare(b.value));
+  cachedMinute = minute;
+
+  return cachedTimeZones;
+}
+
+function loadDateSettings(req, res, next) {
+  const timeZones = timeZonesAt(Date.now()).map((zone) => ({
+    ...zone,
+    selected: zone.value === req.blog.timeZone ? "selected" : "",
+  }));
+
+  res.locals.timeZones = timeZones;
+  res.locals.currentTime = moment
+    .utc()
+    .tz(req.blog.timeZone)
+    .format("h:mma, MMMM D");
+  res.locals.dateFormats = formats.map((format) => ({
+    value: format,
+    selected: format === req.blog.dateFormat ? "selected" : "",
+    date: alias[format],
+  }));
+  next();
+}
+
+module.exports = { loadSettings: loadDateSettings };

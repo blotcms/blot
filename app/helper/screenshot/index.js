@@ -118,10 +118,22 @@ async function launch() {
 
   console.log(prefix(), "Launching browser");
 
+  // Local preview slots (scripts/development/preview.sh) have no proxy of
+  // their own, so they point their hosts at the main stack's with this. That
+  // proxy's certificate is signed by the local development CA, which this
+  // browser does not trust. Never set in production.
+  const hostRules = process.env.BLOT_SCREENSHOT_HOST_RULES;
+  const args = hostRules
+    ? BROWSER_ARGS.concat(
+        "--host-resolver-rules=" + hostRules,
+        "--ignore-certificate-errors"
+      )
+    : BROWSER_ARGS;
+
   const instance = await puppeteer.launch({
     headless: true,
     devtools: false,
-    args: BROWSER_ARGS,
+    args,
     ignoreDefaultArgs: ["--disable-extensions"],
   });
 

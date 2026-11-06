@@ -1,0 +1,22 @@
+{{> message}}
+{{> settings-tabs}}
+
+<div class="dashboard-form-panel settings-page">
+  <div class="dashboard-form-panel__body">
+    <form method="post" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data" aria-labelledby="embeds">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <input type="hidden" name="redirect" value="{{{base}}}/settings/integrations">
+      <h2 id="embeds">Embeds</h2>
+      <p class="setting-note">Turn links to other sites into embeds. Changes save as soon as you make them.</p>
+      {{#categories.Embeds}}{{> plugin-row}}{{/categories.Embeds}}
+    </form>
+
+    <form method="post" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data" aria-labelledby="services">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <input type="hidden" name="redirect" value="{{{base}}}/settings/integrations">
+      <h2 id="services">External services</h2>
+      <p class="setting-note">Connect analytics, comments and other services to your site. Changes save as soon as you make them.</p>
+      {{#categories.Services}}{{> plugin-row}}{{/categories.Services}}
+    </form>
+  </div>
+</div>

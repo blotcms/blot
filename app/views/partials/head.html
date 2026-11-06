@@ -1,5 +1,5 @@
 <meta http-equiv="content-type" content="text/html; charset=utf-8" />
-<meta name="viewport" content="width=device-width; initial-scale=1.0;" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <script>document.documentElement.dataset.auth = document.cookie.includes("signed_into_blot") ? "in" : "out";</script>
 <meta name="description" content="{{ description }}" />
 <title>{{ title }}{{^hide_title_suffix}} - Blot{{/hide_title_suffix}}</title>
@@ -12,13 +12,49 @@
 <link rel="apple-touch-icon" sizes="180x180" href="{{#cdn}}/apple-touch-icon.png{{/cdn}}" />
 <meta name="apple-mobile-web-app-title" content="Blot" />
 <link rel="manifest" href="{{#cdn}}/site.webmanifest{{/cdn}}" />
-<link rel="preload" as="style" href="{{#cdn}}/documentation.min.css{{/cdn}}" />
-{{#selected.dashboard}}
-<link rel="preload" as="style" href="{{#cdn}}/dashboard.min.css{{/cdn}}" />
-{{/selected.dashboard}}
-<link rel="stylesheet" type="text/css" href="{{#cdn}}/documentation.min.css{{/cdn}}" />
 {{#selected.dashboard}}
 <link rel="stylesheet" type="text/css" href="{{#cdn}}/dashboard.min.css{{/cdn}}" />
+{{#templateEditorCSS}}<link rel="stylesheet" type="text/css" href="{{#cdn}}/template-editor.min.css{{/cdn}}" />{{/templateEditorCSS}}
+<script>
+(function () {
+  var root = document.documentElement;
+  var storageKey = "dashboard-sidebar-width";
+  var legacyTemplateWidthKey = "template-editor-sidebar-width";
+  var width = NaN;
+
+  try {
+    width = parseFloat(localStorage.getItem(storageKey));
+    if (!isFinite(width)) {
+      width = parseFloat(localStorage.getItem(legacyTemplateWidthKey));
+      if (isFinite(width)) localStorage.setItem(storageKey, String(width));
+    }
+  } catch (err) {}
+
+  var minWidth = parseFloat(getComputedStyle(root).getPropertyValue("--dashboard-sidebar-min-width")) || 140;
+  var maxWidth = parseFloat(getComputedStyle(root).getPropertyValue("--dashboard-sidebar-max-width")) || 480;
+  var defaultWidth = parseFloat(getComputedStyle(root).getPropertyValue("--dashboard-sidebar-default-width")) || 296;
+  width = isFinite(width) ? width : defaultWidth;
+  width = Math.round(Math.max(minWidth, Math.min(maxWidth, width)));
+
+  root.style.setProperty("--dashboard-sidebar-width", width + "px");
+
+  // Column widths a table was resized to (js/data-table.js saves them), as
+  // variables its <th>s read, e.g. --folder-columns-name: 40%, so the table
+  // is drawn at those widths from the start
+  ["folder-columns", "sites-columns"].forEach(function (key) {
+    try {
+      var saved = JSON.parse(localStorage.getItem(key)) || {};
+      Object.keys(saved).forEach(function (column) {
+        if (/^\d+(\.\d+)?%$/.test(saved[column]))
+          root.style.setProperty("--" + key + "-" + column, saved[column]);
+      });
+    } catch (err) {}
+  });
+})();
+</script>
+{{/selected.dashboard}}
+{{^selected.dashboard}}
+<link rel="stylesheet" type="text/css" href="{{#cdn}}/documentation.min.css{{/cdn}}" />
 {{/selected.dashboard}}
 {{#selected.questions}}
 <link rel="stylesheet" type="text/css" href="{{#cdn}}/questions/tagify.css{{/cdn}}" />

@@ -1,0 +1,1100 @@
+// Behaviour for the folder view (views/dashboard/folder/directory.html):
+// sorting, paginated infinite scroll, row action menu, remove/download
+// modals and drag-and-drop upload. Server values are read from data
+// attributes on .folder-box (data-folder-base, data-csrf-token) so this file
+// is static and cacheable. Must be required before dashboard-table-sorting.js
+// (reads table.dataTableSort) and before the
+// window.__folderFileActionMenuConfig handoff in dashboard.js.
+(function () {
+  const table = document.querySelector(".directory-list");
+  const folderBox = document.querySelector(".folder-box.directory");
+  if (!folderBox) return;
+  const folderFileActionMenu = document.getElementById(
+    "folder-file-action-menu"
+  );
+  const dropTarget = document.querySelector(".folder-drop-target");
+  const uploadModal = document.querySelector(".upload-preview-modal");
+  const removeModal = document.querySelector(".remove-entry-modal");
+  const downloadModal = document.querySelector(".download-entry-modal");
+  const uploadModalLists = {
+    queued:
+      uploadModal && uploadModal.querySelector('[data-upload-list="queued"]'),
+  };
+  var removeTargetPath = null;
+  var removeTargetFile = null;
+  var downloadTargetFile = null;
+  const csrfToken = folderBox.getAttribute("data-csrf-token") || "";
+  const folderBase = folderBox.getAttribute("data-folder-base") || "";
+  const currentFolderPrefix = normalizeCurrentFolderPrefix(
+    window.location.pathname
+  );
+
+  if (folderBox) {
+    Array.from(folderBox.querySelectorAll(".row-action-menu__trigger")).forEach(
+      function (trigger) {
+        var rowUrl = trigger.getAttribute("data-url") || "";
+        trigger.setAttribute("data-encoded-url", encodeURIComponent(rowUrl));
+      }
+    );
+  }
+
+  if (folderBox && folderFileActionMenu) {
+    window.__folderFileActionMenuConfig = {
+      container: folderBox,
+      menuElement: folderFileActionMenu,
+      rowSelector: ".directory-row",
+      triggerSelector: ".row-action-menu__trigger",
+      linkMap: {
+        view: function (dataset) {
+          var viewLink = folderFileActionMenu.querySelector(
+            '[data-menu-link="view"]'
+          );
+          if (viewLink) {
+            viewLink.textContent =
+              dataset && dataset.directory === "true"
+                ? "View folder"
+                : "View file";
+          }
+          return dataset && dataset.viewUrl ? dataset.viewUrl : null;
+        },
+        download: function (dataset) {
+          var downloadLink =
+            folderFileActionMenu &&
+            folderFileActionMenu.querySelector('[data-menu-link="download"]');
+          if (downloadLink) {
+            downloadLink.dataset.url = (dataset && dataset.url) || "";
+            downloadLink.dataset.name = (dataset && dataset.name) || "";
+          }
+
+          if (!dataset || !dataset.url || dataset.directory === "true") {
+            return {
+              href: null,
+              disabled: true,
+            };
+          }
+
+          return {
+            href:
+              "action:download-file:" +
+              encodePathSegments(dataset.url.replace(/^\/+/, "")),
+            disabled: false,
+          };
+        },
+        remove: function (dataset) {
+          var removeLink =
+            folderFileActionMenu &&
+            folderFileActionMenu.querySelector('[data-menu-link="remove"]');
+          if (removeLink) {
+            removeLink.dataset.url = (dataset && dataset.url) || "";
+            removeLink.dataset.name = (dataset && dataset.name) || "";
+            removeLink.dataset.entry = (dataset && dataset.entry) || "false";
+          }
+
+          if (!dataset || dataset.directory === "true" || !dataset.url) {
+            return null;
+          }
+
+          return {
+            href:
+              "action:remove-file:" +
+              encodePathSegments(dataset.url.replace(/^\/+/, "")),
+            disabled: false,
+          };
+        },
+      },
+    };
+  }
+
+  function encodePathSegments(path) {
+    return String(path || "")
+      .split("/")
+      .filter(function (segment) {
+        return segment !== "";
+      })
+      .map(function (segment) {
+        return encodeURIComponent(segment);
+      })
+      .join("/");
+  }
+
+  function resetRemoveModalButtonState() {
+    if (!removeModal || typeof removeModal.querySelectorAll !== "function")
+      return;
+    Array.from(removeModal.querySelectorAll("[data-remove-action]")).forEach(
+      function (button) {
+        button.disabled = false;
+        button.classList.remove("working");
+      }
+    );
+  }
+
+  function setRemoveModalButtonsDisabled(disabled) {
+    if (!removeModal || typeof removeModal.querySelectorAll !== "function")
+      return;
+    Array.from(removeModal.querySelectorAll("[data-remove-action]")).forEach(
+      function (button) {
+        button.disabled = disabled;
+      }
+    );
+  }
+
+  function openRemoveModal(targetFile) {
+    if (!removeModal || !targetFile || !targetFile.path) return;
+    removeTargetFile = targetFile;
+    removeTargetPath = targetFile.path;
+    var label = removeModal.querySelector("[data-remove-path-label]");
+    if (label) {
+      label.textContent = targetFile.name || targetFile.path;
+    }
+    resetRemoveModalButtonState();
+    removeModal.hidden = false;
+  }
+
+  function closeRemoveModal() {
+    if (!removeModal) return;
+    removeModal.hidden = true;
+    removeTargetPath = null;
+    removeTargetFile = null;
+    var label = removeModal.querySelector("[data-remove-path-label]");
+    if (label) label.textContent = "";
+    resetRemoveModalButtonState();
+  }
+
+  function removeFile(relativeUrl) {
+    var encodedPath = encodePathSegments(relativeUrl);
+    return fetch(folderBase + "/folder/remove/" + encodedPath, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: "_csrf=" + encodeURIComponent(csrfToken),
+    }).then(function (response) {
+      return response
+        .json()
+        .catch(function () {
+          return null;
+        })
+        .then(function (result) {
+          if (!response.ok) {
+            throw new Error(
+              (result && (result.error || result.message)) || "Remove failed"
+            );
+          }
+
+          if (!result || result.ok !== true) {
+            throw new Error(
+              (result && (result.error || result.message)) || "Remove failed"
+            );
+          }
+
+          closeRemoveModal();
+          refreshFolderContents();
+        });
+    });
+  }
+
+  function decodePathSegments(path) {
+    return String(path || "")
+      .split("/")
+      .filter(function (segment) {
+        return segment !== "";
+      })
+      .map(function (segment) {
+        return decodeURIComponent(segment);
+      })
+      .join("/");
+  }
+
+  function resolveMenuRemovePath(link) {
+    if (!link) return null;
+    var href = (link.getAttribute("href") || "").trim();
+    var prefix = "action:remove-file:";
+    if (href.indexOf(prefix) !== 0) return null;
+
+    var encodedPath = href.slice(prefix.length);
+    if (!encodedPath) return null;
+
+    try {
+      return decodePathSegments(encodedPath);
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function resolveMenuDownloadPath(link) {
+    if (!link) return null;
+    var href = (link.getAttribute("href") || "").trim();
+    var prefix = "action:download-file:";
+    if (href.indexOf(prefix) !== 0) return null;
+
+    var encodedPath = href.slice(prefix.length);
+    if (!encodedPath) return null;
+
+    try {
+      return decodePathSegments(encodedPath);
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function resetDownloadModalButtonState() {
+    if (!downloadModal || typeof downloadModal.querySelectorAll !== "function")
+      return;
+    Array.from(
+      downloadModal.querySelectorAll("[data-download-action]")
+    ).forEach(function (button) {
+      button.disabled = false;
+      button.classList.remove("working");
+    });
+  }
+
+  function openDownloadModal(targetFile) {
+    if (!downloadModal || !targetFile || !targetFile.path) return;
+    downloadTargetFile = targetFile;
+    var label = downloadModal.querySelector("[data-download-path-label]");
+    if (label) {
+      label.textContent =
+        "Download " + (targetFile.name || targetFile.path) + "?";
+    }
+    resetDownloadModalButtonState();
+    downloadModal.hidden = false;
+  }
+
+  function closeDownloadModal() {
+    if (!downloadModal) return;
+    downloadModal.hidden = true;
+    downloadTargetFile = null;
+    var label = downloadModal.querySelector("[data-download-path-label]");
+    if (label) label.textContent = "";
+    resetDownloadModalButtonState();
+  }
+
+  function triggerDownload(relativeUrl) {
+    var encodedPath = encodePathSegments(relativeUrl);
+    if (!encodedPath) return;
+    window.location.href = folderBase + "/folder-download/" + encodedPath;
+  }
+
+  function handleRemoveMenuClick(event) {
+    var link = event.target.closest('[data-menu-link="remove"]');
+    if (!link) return;
+
+    var targetPath = resolveMenuRemovePath(link);
+    if (!targetPath) return;
+
+    event.preventDefault();
+    if (link.classList.contains("is-disabled")) {
+      return;
+    }
+
+    removeTargetFile = {
+      path: targetPath,
+      name:
+        (link.dataset && link.dataset.name) ||
+        targetPath.split("/").pop() ||
+        targetPath,
+    };
+    openRemoveModal(removeTargetFile);
+  }
+
+  function handleDownloadMenuClick(event) {
+    var link = event.target.closest('[data-menu-link="download"]');
+    if (!link) return;
+
+    var targetPath = resolveMenuDownloadPath(link);
+    if (!targetPath) return;
+
+    event.preventDefault();
+    if (link.classList.contains("is-disabled")) {
+      return;
+    }
+
+    openDownloadModal({
+      path: targetPath,
+      name:
+        (link.dataset && link.dataset.name) ||
+        targetPath.split("/").pop() ||
+        targetPath,
+    });
+  }
+
+  function handleRemoveModalClick(event) {
+    var close = event.target.closest("[data-remove-modal-close]");
+    if (close) {
+      closeRemoveModal();
+      return;
+    }
+
+    var button = event.target.closest("[data-remove-action]");
+    if (!button || button.disabled) return;
+
+    var action = button.getAttribute("data-remove-action");
+    if (action === "cancel") {
+      closeRemoveModal();
+      return;
+    }
+
+    if (action !== "remove" || !removeTargetPath) return;
+
+    var pendingPath =
+      (removeTargetFile && removeTargetFile.path) || removeTargetPath;
+    var displayName =
+      (removeTargetFile && removeTargetFile.name) ||
+      pendingPath.split("/").pop() ||
+      pendingPath;
+    setRemoveModalButtonsDisabled(true);
+    removeFile(pendingPath)
+      .then(function () {
+        if (typeof window.showFolderToast === "function") {
+          window.showFolderToast({ message: displayName + " removed" });
+        }
+      })
+      .catch(function () {
+        setRemoveModalButtonsDisabled(false);
+      });
+  }
+
+  function handleDownloadModalClick(event) {
+    var close = event.target.closest("[data-download-modal-close]");
+    if (close) {
+      closeDownloadModal();
+      return;
+    }
+
+    var button = event.target.closest("[data-download-action]");
+    if (!button || button.disabled) return;
+
+    var action = button.getAttribute("data-download-action");
+    if (action === "cancel") {
+      closeDownloadModal();
+      return;
+    }
+
+    if (
+      action !== "download" ||
+      !downloadTargetFile ||
+      !downloadTargetFile.path
+    )
+      return;
+
+    var pendingPath = downloadTargetFile.path;
+    var fileName =
+      downloadTargetFile.name || pendingPath.split("/").pop() || pendingPath;
+    closeDownloadModal();
+    triggerDownload(pendingPath);
+    if (typeof window.showFolderToast === "function") {
+      window.showFolderToast({
+        message: (fileName || "File") + " — download started",
+      });
+    }
+  }
+
+  if (folderFileActionMenu) {
+    folderFileActionMenu.addEventListener("click", handleDownloadMenuClick);
+    folderFileActionMenu.addEventListener("click", handleRemoveMenuClick);
+  }
+
+  if (removeModal) {
+    removeModal.addEventListener("click", handleRemoveModalClick);
+  }
+
+  if (downloadModal) {
+    downloadModal.addEventListener("click", handleDownloadModalClick);
+  }
+
+  // ---------------------------------------------------------------
+  // Server-side sort + paginated infinite scroll.
+  //
+  // The server orders and paginates the whole folder, so the client
+  // no longer reorders rows. It reflects the active sort in the
+  // headers, height-clamps the list behind a "View all files" button
+  // until the reader expands it, then fetches and appends the next
+  // page as they scroll. The plain Previous/Next <nav> stays as the
+  // no-JS fallback and is hidden once this runs.
+  // ---------------------------------------------------------------
+  var scrollBox = folderBox && folderBox.querySelector(".directory-scroll");
+  var expandButton = folderBox && folderBox.querySelector(".directory-expand");
+
+  function readPaginationMeta(root) {
+    var el = (root || document).querySelector("#folder-pagination-data");
+    if (!el) return {};
+    try {
+      return JSON.parse(el.textContent) || {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  var meta = readPaginationMeta();
+  var listState = {
+    page: meta.page || 1,
+    pageSize: meta.pageSize || null,
+    sort: meta.sort || "name",
+    order: meta.order || "asc",
+    hasNext: !!meta.hasNext,
+    total: meta.total || 0,
+    loading: false,
+    expanded: false,
+  };
+
+  function updateEmptyState() {
+    if (!table) return;
+    var rows = table.querySelectorAll("tbody tr.directory-row");
+    table.classList.toggle("empty", rows.length === 0);
+  }
+
+  function applySortIndicators() {
+    if (!table || !window.DataTable) return;
+    window.DataTable.updateIndicators(table, listState.sort, listState.order);
+  }
+
+  // Kept for callers elsewhere in this file (upload / remove flows).
+  function sortTable() {
+    updateEmptyState();
+    applySortIndicators();
+  }
+  window.sortTable = sortTable;
+
+  function bindRowTriggers() {
+    if (!folderBox) return;
+    Array.from(folderBox.querySelectorAll(".row-action-menu__trigger")).forEach(
+      function (trigger) {
+        var rowUrl = trigger.getAttribute("data-url") || "";
+        trigger.setAttribute("data-encoded-url", encodeURIComponent(rowUrl));
+      }
+    );
+  }
+
+  function buildPageUrl(page) {
+    var url = new URL(window.location.href);
+    url.searchParams.set("page", page);
+    if (listState.sort && listState.sort !== "name") {
+      url.searchParams.set("sort", listState.sort);
+    } else {
+      url.searchParams.delete("sort");
+    }
+    if (listState.order && listState.order !== "asc") {
+      url.searchParams.set("order", listState.order);
+    } else {
+      url.searchParams.delete("order");
+    }
+    if (listState.pageSize)
+      url.searchParams.set("pageSize", listState.pageSize);
+    return url.toString();
+  }
+
+  function fetchPage(page) {
+    return fetch(buildPageUrl(page), {
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+      credentials: "same-origin",
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error("Failed to load folder page " + page);
+        return res.text();
+      })
+      .then(function (html) {
+        var doc = new DOMParser().parseFromString(html, "text/html");
+        return {
+          rows: doc.querySelector(".live-updates"),
+          meta: readPaginationMeta(doc),
+        };
+      });
+  }
+
+  function loadPage(page, append) {
+    if (listState.loading) return Promise.resolve();
+    listState.loading = true;
+    if (folderBox) folderBox.classList.add("is-loading");
+
+    return fetchPage(page)
+      .then(function (result) {
+        var tbody = table && table.querySelector("tbody");
+        if (tbody && result.rows) {
+          if (append) {
+            Array.from(result.rows.children).forEach(function (row) {
+              if (
+                row.nodeType === 1 &&
+                row.classList.contains("directory-row")
+              ) {
+                tbody.appendChild(row);
+              }
+            });
+          } else {
+            tbody.innerHTML = result.rows.innerHTML;
+          }
+        }
+
+        listState.page =
+          typeof result.meta.page === "number" ? result.meta.page : page;
+        if ("hasNext" in result.meta) listState.hasNext = !!result.meta.hasNext;
+        if (result.meta.sort) listState.sort = result.meta.sort;
+        if (result.meta.order) listState.order = result.meta.order;
+        if (typeof result.meta.total === "number")
+          listState.total = result.meta.total;
+
+        updateEmptyState();
+        applySortIndicators();
+        bindRowTriggers();
+      })
+      .catch(function (err) {
+        console.error(err);
+      })
+      .then(function () {
+        listState.loading = false;
+        if (folderBox) folderBox.classList.remove("is-loading");
+      });
+  }
+
+  function setSort(key, order) {
+    if (!key) return;
+    listState.sort = key;
+    listState.order = order;
+
+    applySortIndicators();
+    if (scrollBox) scrollBox.scrollTop = 0;
+    if (folderBox && folderBox.scrollIntoView) {
+      folderBox.scrollIntoView({ block: "nearest" });
+    }
+    loadPage(1, false).then(maybeLoadMore);
+  }
+
+  if (table) {
+    table.dataTableSort = {
+      getState: function () {
+        return listState;
+      },
+      onSort: setSort,
+    };
+  }
+
+  function nearViewportBottom() {
+    if (!scrollBox) return false;
+    var rect = scrollBox.getBoundingClientRect();
+    return rect.bottom - window.innerHeight < 500;
+  }
+
+  function maybeLoadMore() {
+    if (!listState.expanded || listState.loading || !listState.hasNext) return;
+    if (!nearViewportBottom()) return;
+    var pageBefore = listState.page;
+    loadPage(listState.page + 1, true).then(function () {
+      // Keep filling until the viewport is covered or the folder
+      // ends — but stop if the server didn't advance us a page (a
+      // failed fetch) so this can't spin into a tight loop.
+      if (listState.page !== pageBefore) maybeLoadMore();
+    });
+  }
+
+  function expandList() {
+    if (listState.expanded) return;
+    listState.expanded = true;
+    if (folderBox) {
+      folderBox.classList.remove("is-clamped");
+      folderBox.classList.add("is-expanded");
+    }
+    maybeLoadMore();
+  }
+
+  function refreshFolderContents(callback) {
+    // Reload from page 1 with the current sort; if the reader had
+    // expanded the list, refill enough pages to cover the viewport.
+    loadPage(1, false).then(function () {
+      if (listState.expanded) maybeLoadMore();
+      if (typeof callback === "function") callback();
+    });
+  }
+
+  if (folderBox) folderBox.classList.add("js-enhanced");
+  if (listState.hasNext && folderBox) folderBox.classList.add("is-clamped");
+  applySortIndicators();
+  updateEmptyState();
+
+  if (expandButton) {
+    expandButton.addEventListener("click", function (event) {
+      event.preventDefault();
+      expandList();
+    });
+  }
+
+  window.addEventListener("scroll", maybeLoadMore, { passive: true });
+  window.addEventListener("resize", maybeLoadMore, { passive: true });
+
+  function readAllDirectoryEntries(directoryReader) {
+    return new Promise(function (resolve, reject) {
+      var entries = [];
+
+      function readBatch() {
+        directoryReader.readEntries(function (batch) {
+          if (!batch.length) return resolve(entries);
+          entries = entries.concat(Array.from(batch));
+          readBatch();
+        }, reject);
+      }
+
+      readBatch();
+    });
+  }
+
+  function collectDroppedFilesFromEntry(entry, parentPath) {
+    var basePath = parentPath || "";
+
+    if (entry.isFile) {
+      return new Promise(function (resolve, reject) {
+        entry.file(function (file) {
+          resolve([
+            {
+              file: file,
+              relativePath: (basePath + file.name).replace(/^\//, ""),
+            },
+          ]);
+        }, reject);
+      });
+    }
+
+    if (entry.isDirectory) {
+      var nextParent = (basePath + entry.name + "/").replace(/^\//, "");
+      var reader = entry.createReader();
+
+      return readAllDirectoryEntries(reader).then(function (entries) {
+        return Promise.all(
+          entries.map(function (childEntry) {
+            return collectDroppedFilesFromEntry(childEntry, nextParent);
+          })
+        ).then(function (nested) {
+          return nested.reduce(function (all, set) {
+            return all.concat(set);
+          }, []);
+        });
+      });
+    }
+
+    return Promise.resolve([]);
+  }
+
+  function collectDroppedFiles(dataTransfer) {
+    var items = Array.from((dataTransfer && dataTransfer.items) || []);
+    var files = Array.from((dataTransfer && dataTransfer.files) || []);
+
+    if (!items.length) {
+      return Promise.resolve(
+        files.map(function (file) {
+          return { file: file, relativePath: file.name };
+        })
+      );
+    }
+
+    var hasEntrySupport = items.some(function (item) {
+      return (
+        item.kind === "file" &&
+        typeof item.webkitGetAsEntry === "function" &&
+        item.webkitGetAsEntry()
+      );
+    });
+
+    if (!hasEntrySupport) {
+      return Promise.resolve(
+        files.map(function (file) {
+          return {
+            file: file,
+            relativePath: file.webkitRelativePath || file.name,
+          };
+        })
+      );
+    }
+
+    var tasks = items.map(function (item) {
+      if (item.kind !== "file" || typeof item.webkitGetAsEntry !== "function") {
+        return Promise.resolve([]);
+      }
+
+      var entry = item.webkitGetAsEntry();
+      if (!entry) return Promise.resolve([]);
+      return collectDroppedFilesFromEntry(entry, "");
+    });
+
+    return Promise.all(tasks).then(function (sets) {
+      return sets.reduce(function (all, set) {
+        return all.concat(set);
+      }, []);
+    });
+  }
+
+  function hasFileDragPayload(dataTransfer) {
+    if (!dataTransfer) return false;
+
+    var items = Array.from(dataTransfer.items || []);
+    if (
+      items.some(function (item) {
+        return item.kind === "file";
+      })
+    ) {
+      return true;
+    }
+
+    var types = Array.from(dataTransfer.types || []);
+    if (
+      types.some(function (type) {
+        return String(type).toLowerCase() === "files";
+      })
+    ) {
+      return true;
+    }
+
+    return Array.from(dataTransfer.files || []).length > 0;
+  }
+
+  function isFileDropEvent(event) {
+    return !!(event && hasFileDragPayload(event.dataTransfer));
+  }
+
+  function showDropTarget() {
+    if (dropTarget) {
+      dropTarget.style.display = "flex";
+    }
+  }
+
+  function hideDropTarget() {
+    if (dropTarget) {
+      dropTarget.style.display = "none";
+    }
+  }
+
+  function normalizeCurrentFolderPrefix(pathname) {
+    var path = typeof pathname === "string" ? pathname : "";
+    var marker = "/folder/";
+    var folderIndex = path.indexOf(marker);
+    var folderPath = "";
+
+    if (folderIndex !== -1) {
+      folderPath = path.slice(folderIndex + marker.length);
+    } else if (path === "/folder") {
+      folderPath = "";
+    }
+
+    folderPath = folderPath
+      .replace(/\\/g, "/")
+      .replace(/^\/+/, "")
+      .replace(/\/+$/, "");
+
+    return folderPath ? folderPath + "/" : "";
+  }
+
+  function applyCurrentFolderPrefix(relativePath) {
+    var normalizedRelativePath = String(relativePath || "")
+      .replace(/\\/g, "/")
+      .replace(/^\/+/, "");
+
+    return currentFolderPrefix + normalizedRelativePath;
+  }
+
+  function buildUploadFormData(collectedFiles, options) {
+    var formData = new FormData();
+    var relativePaths = [];
+    var dryRun = !!(options && options.dryRun);
+
+    collectedFiles.forEach(function (entry, index) {
+      var field = "upload-" + index;
+      var relativePath = applyCurrentFolderPrefix(entry.relativePath);
+
+      formData.append(field, entry.file, entry.file.name);
+      relativePaths.push({
+        field: field,
+        index: 0,
+        relativePath: relativePath,
+      });
+    });
+
+    formData.append("relativePaths", JSON.stringify(relativePaths));
+    formData.append("overwrite", "true");
+    formData.append("dryRun", dryRun ? "true" : "false");
+    formData.append("_csrf", csrfToken);
+
+    return formData;
+  }
+
+  function clearList(list) {
+    if (list) list.innerHTML = "";
+  }
+
+  function renderList(list, items, mapFn) {
+    clearList(list);
+    if (!list || !items || !items.length) return;
+
+    items.forEach(function (item) {
+      var li = document.createElement("li");
+
+      if (mapFn) {
+        var mapped = mapFn(item, li);
+        if (typeof mapped === "string") li.textContent = mapped;
+      } else {
+        li.innerHTML = `<span class="icon-file-check"></span> ${item}`;
+      }
+
+      list.appendChild(li);
+    });
+  }
+
+  function renderUploadPreview(collectedFiles, preview) {
+    var overwritePaths = (preview && preview.overwrite) || [];
+    var overwriteSet = new Set(overwritePaths);
+
+    renderList(uploadModalLists.queued, collectedFiles, function (entry, li) {
+      li.textContent = entry.relativePath;
+
+      if (overwriteSet.has(entry.relativePath)) {
+        var marker = document.createElement("span");
+        marker.className = "upload-preview-overwrite-marker";
+        marker.textContent = "Will overwrite existing file";
+        li.appendChild(document.createTextNode(" "));
+        li.appendChild(marker);
+      }
+    });
+  }
+
+  function resetUploadModalButtonState() {
+    if (!uploadModal || typeof uploadModal.querySelectorAll !== "function")
+      return;
+    Array.from(uploadModal.querySelectorAll("[data-upload-action]")).forEach(
+      function (actionButton) {
+        actionButton.disabled = false;
+        actionButton.classList.remove("working");
+      }
+    );
+  }
+
+  function openUploadModal() {
+    if (!uploadModal) return;
+    if (typeof resetUploadModalButtonState === "function") {
+      resetUploadModalButtonState();
+    }
+    uploadModal.hidden = false;
+    document.body.classList.add("upload-modal-open");
+  }
+
+  function closeUploadModal() {
+    if (!uploadModal) return;
+    uploadModal.hidden = true;
+    document.body.classList.remove("upload-modal-open");
+    if (typeof resetUploadModalButtonState === "function") {
+      resetUploadModalButtonState();
+    }
+  }
+
+  function collectFailures(result) {
+    var failures = [];
+
+    ((result && result.results) || []).forEach(function (entry) {
+      if (entry.skipped) {
+        failures.push(entry.path + " — skipped (overwrite disabled)");
+      } else if (entry.local && entry.local.success === false) {
+        failures.push(
+          entry.path +
+            " — local write failed: " +
+            (entry.local.error || "Unknown error")
+        );
+      } else if (entry.client && entry.client.success === false) {
+        failures.push(
+          entry.path +
+            " — remote sync failed: " +
+            (entry.client.error || "Unknown error")
+        );
+      }
+    });
+
+    ((result && result.rejected) || []).forEach(function (entry) {
+      var label = entry.relativePath || entry.filename || "(unknown file)";
+      failures.push(label + " — rejected: " + (entry.reason || "unknown"));
+    });
+
+    return failures;
+  }
+
+  function commitUpload(collectedFiles) {
+    return fetch(folderBase + "/folder/upload", {
+      method: "POST",
+      body: buildUploadFormData(collectedFiles, { dryRun: false }),
+    })
+      .then(function (response) {
+        if (!response.ok) throw new Error("Upload failed");
+        return response.json();
+      })
+      .then(function (result) {
+        collectFailures(result);
+        closeUploadModal();
+        refreshFolderContents();
+        if (typeof window.showFolderToast === "function") {
+          var msg =
+            collectedFiles.length === 1
+              ? collectedFiles[0].relativePath + " uploaded"
+              : collectedFiles.length + " files uploaded";
+          window.showFolderToast({ message: msg });
+        }
+      });
+  }
+
+  function uploadDroppedFiles(collectedFiles) {
+    if (!collectedFiles.length) return Promise.resolve();
+
+    var normalizedEntries = collectedFiles.map(function (entry) {
+      return {
+        file: entry.file,
+        relativePath: entry.relativePath,
+      };
+    });
+
+    return fetch(folderBase + "/folder/upload?dryRun=1", {
+      method: "POST",
+      body: buildUploadFormData(normalizedEntries, { dryRun: true }),
+    })
+      .then(function (response) {
+        if (!response.ok) throw new Error("Upload dry-run failed");
+        return response.json();
+      })
+      .then(function (preview) {
+        var previewEntries = normalizedEntries.map(function (entry) {
+          return {
+            file: entry.file,
+            relativePath: applyCurrentFolderPrefix(entry.relativePath),
+          };
+        });
+
+        renderUploadPreview(previewEntries, preview);
+        openUploadModal();
+
+        return new Promise(function (resolve, reject) {
+          var finished = false;
+          var isSubmitting = false;
+
+          function setModalActionButtonsDisabled(disabled) {
+            if (
+              !uploadModal ||
+              typeof uploadModal.querySelectorAll !== "function"
+            )
+              return;
+
+            Array.from(
+              uploadModal.querySelectorAll("[data-upload-action]")
+            ).forEach(function (actionButton) {
+              actionButton.disabled = disabled;
+            });
+          }
+
+          function cleanup() {
+            if (uploadModal) uploadModal.removeEventListener("click", onClick);
+          }
+
+          function finish(done, value) {
+            if (finished) return;
+            finished = true;
+            cleanup();
+            done(value);
+          }
+
+          function onClick(event) {
+            if (isSubmitting) return;
+
+            var close = event.target.closest("[data-upload-modal-close]");
+            if (close) {
+              closeUploadModal();
+              finish(resolve);
+              return;
+            }
+
+            var button = event.target.closest("[data-upload-action]");
+            if (!button) return;
+
+            var action = button.getAttribute("data-upload-action");
+            if (action === "cancel") {
+              closeUploadModal();
+              finish(resolve);
+              return;
+            }
+
+            if (action !== "upload") return;
+
+            isSubmitting = true;
+            setModalActionButtonsDisabled(true);
+
+            commitUpload(normalizedEntries)
+              .then(function () {
+                isSubmitting = false;
+                setModalActionButtonsDisabled(false);
+                finish(resolve);
+              })
+              .catch(function (err) {
+                isSubmitting = false;
+                setModalActionButtonsDisabled(false);
+                finish(reject, err);
+              });
+          }
+
+          if (uploadModal) {
+            uploadModal.addEventListener("click", onClick);
+          } else {
+            finish(resolve);
+          }
+        });
+      });
+  }
+
+  var dragDepth = 0;
+
+  function resetDropState() {
+    dragDepth = 0;
+    hideDropTarget();
+  }
+
+  window.addEventListener("dragover", function (event) {
+    if (isFileDropEvent(event)) {
+      event.preventDefault();
+    }
+  });
+
+  window.addEventListener("drop", function (event) {
+    event.preventDefault();
+
+    resetDropState();
+
+    if (!isFileDropEvent(event)) {
+      return;
+    }
+
+    collectDroppedFiles(event.dataTransfer)
+      .then(uploadDroppedFiles)
+      .catch(function (error) {
+        console.error(error);
+      });
+  });
+
+  if (folderBox && dropTarget) {
+    folderBox.addEventListener("dragenter", function (event) {
+      if (!isFileDropEvent(event)) return;
+      event.preventDefault();
+      dragDepth += 1;
+      showDropTarget();
+    });
+
+    folderBox.addEventListener("dragover", function (event) {
+      if (!isFileDropEvent(event)) return;
+      event.preventDefault();
+      showDropTarget();
+    });
+
+    folderBox.addEventListener("dragleave", function (event) {
+      if (!isFileDropEvent(event)) return;
+      event.preventDefault();
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) {
+        hideDropTarget();
+      }
+    });
+
+    folderBox.addEventListener("drop", function (event) {
+      event.preventDefault();
+      resetDropState();
+    });
+  }
+
+  // Column-header sorting is wired up above (setSort), which asks the
+  // server to re-sort and re-paginate the whole folder.
+})();

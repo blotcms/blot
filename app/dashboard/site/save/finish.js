@@ -1,7 +1,7 @@
 var resaveEntries = require("models/entries").resave;
 var Blog = require("models/blog");
 var _ = require("lodash");
-var rebuild = require("sync/rebuild");
+var requestRebuild = require("./rebuild-settings");
 
 var dictionary = {
   permalink: "Saved changes to your link format",
@@ -46,23 +46,31 @@ module.exports = function (req, res, next) {
         changes.indexOf("imageExif") > -1 ||
         changes.indexOf("converters") > -1)
     ) {
-      // we need to fetch the latest version of the blog to rebuild
-      const options = {
-        thumbnails: false, // do not re-generate thumbnails
-        imageCache: false, // do not re-cache images in posts
-      };
-      rebuild(req.blog.id, options, function () {});
+      // One rebuild at a time per site; see rebuild-settings.js. The status
+      // is stored before the response, so the next page shows the rebuild.
+      return requestRebuild(req.blog.id).then(respond, function (err) {
+        console.log(
+          "Failed to start settings rebuild",
+          req.blog.id,
+          err.message
+        );
+        respond();
+      });
     }
 
-    // Add success message if we're going to the settings page
-    // and successful changes were made
-    if (changes && changes.length && _.isEmpty(errors)) {
-      return res.message(
-        redirect,
-        dictionary[changes[0]] || "Saved changes to your " + changes[0]
-      );
-    }
+    respond();
 
-    return res.redirect(redirect);
+    function respond() {
+      // Add success message if we're going to the settings page
+      // and successful changes were made
+      if (changes && changes.length && _.isEmpty(errors)) {
+        return res.message(
+          redirect,
+          dictionary[changes[0]] || "Saved changes to your " + changes[0]
+        );
+      }
+
+      res.redirect(redirect);
+    }
   });
 };

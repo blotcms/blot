@@ -59,7 +59,7 @@ input[type="submit"].link:hover {
 
   <p>
     <label for="email">Your email address</label>
-    <input name="email" value="{{email}}" type="text" maxlength="{{maxEmailLength}}" autofocus />
+    <input id="email" name="email" value="{{email}}" type="email" autocomplete="email" maxlength="{{maxEmailLength}}" autofocus />
   </p>
 
   <input type="submit" name="reset"  value="Reset your password" />

@@ -3,6 +3,30 @@ const config = require("config");
 const express = require("express");
 const message = require("dashboard/util/message");
 const cookieParser = require("cookie-parser");
+const moment = require("moment");
+const syncSummary = require("dashboard/util/sync-summary");
+const { promisify } = require("util");
+const Blog = require("models/blog");
+const getStatuses = promisify(Blog.getStatuses);
+const formatDashboardDate = require("dashboard/util/format-dashboard-date");
+
+// The latest status is stored on the blog itself; only read the status log
+// when that is not a "Synced" message, a page at a time.
+async function findLastSynced(blog) {
+  if (blog.status && blog.status.message === "Synced") return blog.status;
+
+  for (let page = 1; page <= 20; page++) {
+    const { statuses, next } = await getStatuses(blog.id, {
+      page,
+      pageSize: 100,
+    });
+    const synced = statuses.find((status) => status.message === "Synced");
+    if (synced) return synced;
+    if (!next) break;
+  }
+
+  return null;
+}
 
 const dashboard = express.Router();
 const logout = require("dashboard/account/util/logout");
@@ -42,7 +66,23 @@ dashboard.get("/deleted", logout, (req, res) => {
 dashboard.use(require("dashboard/util/require-authentication"));
 
 dashboard.use((req, res, next) => {
-  res.locals.selected = { dashboard: "selected" };
+  const isAccount = req.path.startsWith("/account");
+  const isSupport = req.path === "/support";
+  res.locals.selected = {
+    dashboard: "selected",
+    sites: isAccount || isSupport ? "" : "is-active",
+    account: isAccount ? "is-active" : "",
+    support: isSupport ? "is-active" : "",
+  };
+  // A plain value for the layout's <body class> (site pages add to it)
+  res.locals.bodyClass = "dashboard-page";
+  // aria-current values for the sidebar links (a plain value, not a section,
+  // so it can sit inside an attribute)
+  res.locals.ariaCurrent = {
+    sites: isAccount || isSupport ? "" : "page",
+    account: isAccount ? "page" : "",
+    support: isSupport ? "page" : "",
+  };
   next();
 });
 
@@ -58,6 +98,12 @@ dashboard.use(trace("loaded blog"));
 
 dashboard.use(require("dashboard/util/breadcrumbs"));
 
+dashboard.get("/support", (req, res) => {
+  res.locals.title = "Support";
+  res.locals.breadcrumbs.add("Support", "/sites/support");
+  res.render("dashboard/support");
+});
+
 // These need to be before ':handle'
 dashboard.use("/account", require("./account"));
 
@@ -67,7 +113,98 @@ dashboard.use(
   require("./site/template/share-template")
 );
 
+// Live sync messages for the Sites list, one stream for every site
+dashboard.get(
+  "/status",
+  require("dashboard/util/load-blogs").basic,
+  require("dashboard/util/sites-status-stream")
+);
+
 dashboard.get("/", require("dashboard/util/load-blogs"), async (req, res) => {
+  const blogs = req.blogs || [];
+  res.locals.siteCount = blogs.length;
+  res.locals.siteCountNoun = blogs.length === 1 ? "site" : "sites";
+  await Promise.all(
+    blogs.map(async (blog) => {
+      let lastPublishedStatus = null;
+      try {
+        lastPublishedStatus = await findLastSynced(blog);
+      } catch (error) {}
+
+      const datestamp = lastPublishedStatus && lastPublishedStatus.datestamp;
+      if (datestamp) {
+        const publishedAt = moment(datestamp);
+        blog.lastPublished = formatDashboardDate(datestamp, blog.timeZone);
+        blog.lastPublishedDatetime = publishedAt.toISOString();
+        blog.lastPublishedTimestamp = datestamp;
+      } else {
+        blog.lastPublished = "—";
+        blog.lastPublishedDatetime = "";
+        blog.lastPublishedTimestamp = null;
+      }
+
+      // The Sync column: the last sync's time, or what is happening now
+      // (js/sites-sync.js keeps it live)
+      const sync = syncSummary(blog);
+      blog.sync = {
+        state:
+          sync.state === "syncing"
+            ? "syncing"
+            : sync.state === "error"
+              ? "error"
+              : blog.client
+                ? "synced"
+                : "off",
+        isSyncing: sync.state === "syncing",
+        text: sync.state === "syncing" ? sync.text || sync.label : "",
+        count: sync.count || "",
+        progressClass: sync.progress === undefined ? "" : "has-progress",
+        progressStyle:
+          sync.progress === undefined ? "" : `--progress: ${sync.progress}%`,
+      };
+    })
+  );
+
+  // Listed in the order the user last sorted the table by, kept in the
+  // sites-sort cookie by js/data-table.js, so the browser has nothing to
+  // reorder. The comparisons match the browser's.
+  const compareText = (a, b) =>
+    String(a).localeCompare(String(b), undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+  const sortValues = {
+    name: (blog) => blog.pretty.label,
+    domain: (blog) => blog.pretty.url,
+    lastPublished: (blog) => blog.lastPublishedTimestamp || -Infinity,
+  };
+  const [cookieSort, cookieOrder] = String(
+    (req.cookies && req.cookies["sites-sort"]) || ""
+  ).split(".");
+  const sort = sortValues[cookieSort] ? cookieSort : "name";
+  const order = cookieOrder === "desc" ? "desc" : "asc";
+  const direction = order === "desc" ? -1 : 1;
+
+  blogs.sort((a, b) => compareText(a.pretty.label, b.pretty.label));
+  if (sort !== "name" || order !== "asc") {
+    const value = sortValues[sort];
+    blogs.sort((a, b) => {
+      const x = value(a);
+      const y = value(b);
+      const result =
+        sort === "lastPublished"
+          ? x === y
+            ? 0
+            : x < y
+              ? -1
+              : 1
+          : compareText(x, y);
+      return result * direction;
+    });
+  }
+  res.locals.sitesSort = sort;
+  res.locals.sitesOrder = order;
+
   res.locals.title = "Sites";
   res.locals.breadcrumbs.add("Sites", "/sites");
   res.render("dashboard");
@@ -77,7 +214,7 @@ dashboard.get("/", require("dashboard/util/load-blogs"), async (req, res) => {
 // "default" is a reserved handle (see models/blog/validate/banned.txt).
 dashboard.use(
   "/default",
-  require("dashboard/util/load-blogs"),
+  require("dashboard/util/load-blogs").basic,
   (req, res, next) => {
     if (!req.blogs || !req.blogs.length) return next();
     const chosen =
@@ -112,6 +249,7 @@ dashboard.use(function (req, res, next) {
 
 // Some kind of other error
 // jshint unused:false
+const renderError = require("dashboard/util/render-error");
 dashboard.use(function (err, req, res, next) {
   // If the user is not logged in, we sent them to the documentation
   if (err.message === "NOUSER") {
@@ -138,8 +276,6 @@ dashboard.use(function (err, req, res, next) {
     );
   }
 
-  const status = err.status || 400;
-
   if (config.environment === "development") {
     res.locals.error = {
       stack: err.stack,
@@ -149,9 +285,7 @@ dashboard.use(function (err, req, res, next) {
   console.error(err.message);
   console.error(err.stack);
 
-  res.locals.layout = "";
-  res.status(status);
-  res.render("error");
+  renderError(err, req, res);
 });
 
 module.exports = dashboard;

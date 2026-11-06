@@ -1,65 +1,30 @@
-{{> close-button}}
+<header class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">Resync and rebuild</h1>
+  </div>
+</header>
 
-<form method='post' class="dashboard-form">
+<p class="client-intro">Use these tools to sync your folder or rebuild your site. <a href="/contact">Contact support</a> if something isn’t working.</p>
 
-<style type="text/css">
-
-button[type="submit"] {font-size:inherit;border:none;max-width:475px;margin-bottom: 0;padding: 10px 0;border-top:1px solid var(--border-color);text-align: left;display: block;width: 100%;color:var(--accent-color);padding: 11px 20px;background:transparent}
-button[name="client"] b {
-  display: block;
-}
-button[type="submit"]:after {
-  content: "→";
-  float: right;
-}
-button[type="submit"]:hover {background: rgba(0,0,0,0.03);cursor: pointer;}
-</style>
-
-  <input type="hidden" name="_csrf" value="{{csrftoken}}">
-
-<p style="max-width: 500px">Use these tools to sync your folder or rebuild your site. <a href="/contact">Contact support</a> if something isn’t working.</p>
-
-  <p>{{> sync-status}}</p>
-
-</form>
-
+<p>{{> sync-status}}</p>
 
 {{#client.canResync}}
-<form style="padding-top:0;padding-bottom: 0" method='post' class="dashboard-form"  action="{{{base}}}/client/reset/resync">
-
+<form method="post" class="dashboard-form dashboard-form--flush reset-action" action="{{{base}}}/reset/resync">
   <input type="hidden" name="_csrf" value="{{csrftoken}}">
-  <button type="submit">Resync folder from {{client.display_name}}</button>
-
+  <button type="submit" class="btn" aria-describedby="resync-help">Resync folder from {{client.display_name}}</button>
+  <p class="reset-action__help" id="resync-help">Reads your folder again from {{client.display_name}} and updates Blot to match. Your files in {{client.display_name}} aren’t changed.</p>
 </form>
 {{/client.canResync}}
 
-<form style="padding-top:0;padding-bottom: 0" method='post' class="dashboard-form"  action="{{{base}}}/client/reset/rebuild">
-
+<form method="post" class="dashboard-form dashboard-form--flush reset-action" action="{{{base}}}/reset/rebuild">
   <input type="hidden" name="_csrf" value="{{csrftoken}}">
-  <button type="submit">Rebuild all posts and pages</button>
-
+  <button type="submit" class="btn" aria-describedby="rebuild-help">Rebuild all posts and pages</button>
+  <p class="reset-action__help" id="rebuild-help">Rebuilds every post and page from the files in your folder. Your files aren’t changed. Large sites can take a few minutes.</p>
 </form>
-<form style="padding-top:0;padding-bottom: 0" method='post' class="dashboard-form"  action="{{{base}}}/client/reset/rebuild?thumbnails=true">
+<!-- Rebuilding with ?thumbnails=true or ?imageCache=true also regenerates
+     thumbnails or re-fetches cached images; support can use them directly -->
 
-  <input type="hidden" name="_csrf" value="{{csrftoken}}">
-  <button type="submit">Regenerate all thumbnails</button>
-
-</form>
-
-<form style="padding-top:0;padding-bottom: 0" method='post' class="dashboard-form"  action="{{{base}}}/client/reset/rebuild?imageCache=true">
-
-  <input type="hidden" name="_csrf" value="{{csrftoken}}">
-  <button type="submit">Re-fetch cached images</button>
-
-</form>
-
-<form style="padding-top:0;padding-bottom: 0" method='post' action="{{{base}}}/client/reset/resync" class="dashboard-form">
-
-  <div class="buttons">
-    {{#effectiveClient}}<a href="{{{base}}}/client/{{effectiveClient}}">Cancel</a>{{/effectiveClient}}
-    {{^effectiveClient}}<a href="{{{base}}}/client/{{blog.client}}">Cancel</a>{{/effectiveClient}}
-  </div>
-  <br>
-</form>
-
-
+<div class="btn-row">
+  {{#effectiveClient}}<a class="btn btn-quiet" href="{{{base}}}/{{effectiveClient}}">Back</a>{{/effectiveClient}}
+  {{^effectiveClient}}<a class="btn btn-quiet" href="{{{base}}}/{{blog.client}}">Back</a>{{/effectiveClient}}
+</div>

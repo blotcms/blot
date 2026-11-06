@@ -1,0 +1,82 @@
+{{> message}}
+{{> settings-tabs}}
+
+<div class="dashboard-form-panel settings-page">
+  <div class="dashboard-form-panel__body">
+    <form method="post" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data" aria-labelledby="image-features-heading">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <input type="hidden" name="redirect" value="{{{base}}}/settings/images">
+      <h2 id="image-features-heading">Image features</h2>
+      <p class="setting-note">Changes save as soon as you make them.</p>
+      {{#categories.Images}}{{> plugin-row}}{{/categories.Images}}
+    </form>
+
+    <form method="post" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data" aria-labelledby="publish-images-heading">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <input type="hidden" name="redirect" value="{{{base}}}/settings/images">
+      <h2 id="publish-images-heading">Publish images as posts</h2>
+      <p class="setting-note">Changes save as soon as you make them.</p>
+      <section class="setting-block" id="image-publishing">
+        <div class="line plugins">
+          <span class="center">
+            <div class="plugin {{{imageConverterPluginClass}}}">
+              <label class="setting-check">
+                <span>
+                  <input name="converters.img" type="hidden" value="off">
+                  <input name="converters.img" type="checkbox" {{{publishImagesAsPostsChecked}}}>
+                  &nbsp;
+                </span>
+                <span class="setting-check__text"><p>Publish image files as posts</p></span>
+              </label>
+              <p class="setting-help">When enabled, image files in your folder become posts. Disable this to skip publishing image files.</p>
+            </div>
+          </span>
+        </div>
+      </section>
+    </form>
+
+    <form method="post" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data" aria-labelledby="image-metadata-heading" data-autosave>
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <input type="hidden" name="redirect" value="{{{base}}}/settings/images">
+      <h2 id="image-metadata-heading">Image metadata</h2>
+      <p class="setting-note">Changes save as soon as you make them.</p>
+      <section class="setting-block" id="image-metadata">
+        <div class="option-group">
+          <label class="option">
+            <input type="radio" name="imageExif" value="off" {{{imageExifOffChecked}}}>
+            <span><span class="option-title">Off</span><span class="option-description">Strip all metadata before publishing.</span></span>
+          </label>
+          <label class="option">
+            <input type="radio" name="imageExif" value="basic" {{{imageExifBasicChecked}}}>
+            <span><span class="option-title">Basic</span><span class="option-description">Keep camera settings and capture details, but remove locations and contact information.</span></span>
+          </label>
+          <label class="option">
+            <input type="radio" name="imageExif" value="full" {{{imageExifFullChecked}}}>
+            <span><span class="option-title">Full</span><span class="option-description">Publish the complete EXIF record for each image, including location data.</span></span>
+          </label>
+        </div>
+      </section>
+      <noscript>
+        <div class="buttons">
+          <button type="submit">Save changes</button>
+        </div>
+      </noscript>
+    </form>
+  </div>
+</div>
+
+<style>
+  #image-publishing { margin: 0 0 var(--space-6); }
+  #image-publishing .plugin { margin: 0; }
+  #image-publishing .setting-help { margin: var(--space-1) 0 0 2.75em; color: var(--medium-text-color); font-size: var(--text-md); line-height: var(--leading-normal); }
+  #image-metadata { margin: 0 0 var(--space-6); background: var(--background-color); }
+  #image-metadata .option-group { display: grid; gap: var(--space-3); margin-top: var(--space-4); }
+  #image-metadata .option { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--surface-color); cursor: pointer; transition: background-color 150ms ease; }
+  #image-metadata .option:hover { background: var(--hover-background-color); }
+  #image-metadata .option:active { background: var(--active-background-color); }
+  #image-metadata .option:focus-within { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+  #image-metadata .option { box-sizing: border-box; min-width: 0; }
+  #image-metadata .option input[type="radio"] { flex: 0 0 auto; width: auto; margin-top: var(--space-0); }
+  #image-metadata .option-title { display: block; color: var(--text-color); font-weight: var(--weight-semibold); }
+  #image-metadata .option-description { display: block; color: var(--secondary-text-color); font-size: var(--text-md); line-height: var(--leading-normal); }
+</style>

@@ -1,7 +1,7 @@
 module.exports = {
   // The display name and description are shown
   // on the client page of the dashboard
-  display_name: "Local folder",
+  display_name: "Local",
   description: "Edit your blog folder directly",
 
   // Write and remove are invoked by Blot and

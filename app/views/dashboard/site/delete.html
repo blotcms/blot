@@ -1,8 +1,11 @@
-{{> close-button}}
-
 {{> message}}
 
-<form method="POST" class="dashboard-form" style="border:1px solid var(--border-color);border-radius:var(--border-radius);padding:20px;box-sizing:border-box">
+<form method="POST" class="dashboard-form dashboard-form-panel">
+  <header class="page-header">
+    <div class="page-header__text">
+      <h1 class="page-header__title">Delete</h1>
+    </div>
+  </header>
   <input type="hidden" name="_csrf" value="{{ csrftoken }}" />
   {{#blog}}
 

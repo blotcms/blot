@@ -1,12 +1,14 @@
-const jstz = require("./tz_detect.js");
-
 var timezoneInput = document.querySelector('input[name="timeZone"]');
 
 if (timezoneInput) {
-  var timezone = jstz.determine();
+  var timezone;
+
+  try {
+    timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch (e) {}
 
   if (timezone) {
-    timezoneInput.value = timezone.name();
+    timezoneInput.value = timezone;
   }
 
   const titleInput = document.getElementById("title_input");

@@ -1,6 +1,8 @@
 var fourOhFour = require("models/404");
 var List = fourOhFour.list;
 
+var MAX_SHOWN = 100;
+
 module.exports = function (req, res, next) {
   List(req.blog.id, function (err, list, ignored) {
     if (err) return next(err);
@@ -23,9 +25,12 @@ module.exports = function (req, res, next) {
       ignored = [];
     }
 
-    res.locals.list = list;
+    // Most recent first; show only the latest 100
+    res.locals.total = list.length.toLocaleString("en-US");
+    res.locals.shown = Math.min(list.length, MAX_SHOWN).toLocaleString("en-US");
+    res.locals.list = list.slice(0, MAX_SHOWN);
     res.locals.has_ignored = has_ignored;
-    res.locals.ignored = ignored;
+    res.locals.ignored = ignored.slice(0, MAX_SHOWN);
 
     next();
   });

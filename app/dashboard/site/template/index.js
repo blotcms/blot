@@ -16,6 +16,23 @@ const holdFolderLock = require("models/template/withFolderLock").holdForRequest;
 const photoMaskOptions = require("./load/photo-mask-options");
 const { isAjaxRequest } = require("./save/ajax-response");
 
+function faviconFileDrop(res) {
+  return {
+    fileDrop: {
+      id: "favicon-upload",
+      name: "favicon",
+      accept: "image/*,.svg",
+      inputAttribute: "data-favicon-input",
+      ariaLabel: "Choose a favicon",
+      noun: "favicon",
+      selectedLabel: "Selected favicon",
+      title: res.locals.favicon
+        ? "Upload a different favicon"
+        : "Upload a favicon",
+    },
+  };
+}
+
 function loadFaviconForProfileImage(req, res, next) {
   return req.params.key === "profile_image"
     ? loadFavicon(req, res, next)
@@ -102,31 +119,37 @@ TemplateEditor.param("templateSlug", function (req, res, next, slug) {
 
 TemplateEditor.use((req, res, next) => {
   res.locals.layout = "dashboard/template/layout";
+  res.locals.templateEditorCSS = true;
   res.locals.dashboardBase = res.locals.base;
+  res.locals.selected = { ...res.locals.selected, template: "is-active" };
+  res.locals.siteDashboardSidebarClass =
+    "dashboard-sidebar dashboard-sidebar--site";
   next();
 });
 
 // Load templates for the sidebar
+// Before the template list below: an image request needs only this template
+TemplateEditor.get(
+  "/:templateSlug/screenshot",
+  require("./templates").screenshot
+);
+
 TemplateEditor.use(require("./templates"));
 
 TemplateEditor.get("/", (req, res) => {
+  // The list needs no editor scripts; fetch them for the next page instead
+  res.locals.templateOverviewPage = true;
+  res.locals.templateEditorCSS = false;
   res.render("dashboard/template");
 });
 
-TemplateEditor.route("/disable")
-  .get((req, res) => {
-    res.locals.title = "Disable template";
-    res.render("dashboard/template/disable");
-  })
-  .post((req, res, next) => {
-    // either disable the current template
-    // or enable the current template
-  });
-
 TemplateEditor.route("/new")
   .get((req, res) => {
-    res.locals.newSelected = "selected";
-    res.locals.title = "New template";
+    // Upload and copy forms only: no editor scripts or styles
+    res.locals.templateOverviewPage = true;
+    res.locals.templateEditorCSS = false;
+    res.locals.breadcrumbs.add("New", "new");
+    res.locals.title = "Create a template";
     res.render("dashboard/template/new");
   })
   .post((req, res, next) => {
@@ -268,6 +291,7 @@ TemplateEditor.route("/:templateSlug/images/:key")
       res.locals.image.isProfileImage =
         res.locals.image.key === "profile_image";
       if (res.locals.image.isProfileImage) {
+        res.locals.siteTitle = req.blog.title;
         res.locals.image.maskOptions = photoMaskOptions(
           res.locals.image.value && res.locals.image.value.mask
         );
@@ -283,6 +307,8 @@ TemplateEditor.route("/:templateSlug/images/:key")
             ? "Upload a different photo"
             : "Upload a photo",
         };
+        res.locals.faviconFileDrop = faviconFileDrop(res);
+        res.locals.faviconReturnURL = `${res.locals.base}/images/profile_image`;
       }
       res.locals.title = `${res.locals.image.label} - ${req.template.displayName}`;
       res.locals.selected = { ...res.locals.selected, settings: "selected" };
@@ -298,24 +324,24 @@ TemplateEditor.route("/:templateSlug/images/:key")
     handleImageUploadError
   );
 
+// The favicon form sits on the profile image page when the template has a
+// profile image; templates with a favicon but no profile image get it alone
 TemplateEditor.route("/:templateSlug/favicon")
-  .get(require("./load/favicon"), function (req, res) {
-    res.locals.title = `Favicon - ${req.template.displayName}`;
+  .get(require("./load/image-inputs"), loadFavicon, function (req, res, next) {
+    const hasProfileImage = (res.locals.images || []).some(
+      (image) => image.key === "profile_image"
+    );
+    if (hasProfileImage) {
+      return res.redirect(`${res.locals.base}/images/profile_image`);
+    }
+    if (!res.locals.favicon_supported) return next();
+
     res.locals.siteTitle = req.blog.title;
-    res.locals.fileDrop = {
-      id: "favicon-upload",
-      name: "favicon",
-      accept: "image/*,.svg",
-      inputAttribute: "data-favicon-input",
-      ariaLabel: "Choose a favicon",
-      noun: "favicon",
-      selectedLabel: "Selected favicon",
-      title: res.locals.favicon
-        ? "Upload a different favicon"
-        : "Upload a favicon",
-    };
+    res.locals.faviconFileDrop = faviconFileDrop(res);
+    res.locals.faviconReturnURL = `${res.locals.base}/favicon`;
+    res.locals.title = `Favicon - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
-    res.render("dashboard/template/controls/favicon-form");
+    res.render("dashboard/template/favicon");
   })
   .post(require("./save/fork-if-needed"), require("./save/upload-favicon"));
 
@@ -419,7 +445,7 @@ TemplateEditor.route("/:templateSlug/download-zip").get(function (req, res) {
 
 TemplateEditor.route("/:templateSlug/duplicate")
   .get(function (req, res) {
-    res.locals.title = `Duplicate - ${req.template.displayName}`;
+    res.locals.title = `Copy - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, duplicate: "selected" };
     res.render("dashboard/template/duplicate");
   })
@@ -435,7 +461,7 @@ TemplateEditor.route("/:templateSlug/duplicate")
           req.blog.handle +
           "/template/" +
           template.id.split(":").slice(1).join(":"),
-        "Duplicated template <b>" + template.name + "</b>"
+        "Copied template <b>" + template.name + "</b>"
       );
     } catch (err) {
       next(err);
@@ -489,10 +515,17 @@ TemplateEditor.route("/:templateSlug/photo")
 TemplateEditor.route("/:templateSlug/delete")
   .get(function (req, res, next) {
     res.locals.title = `Delete - ${req.template.displayName}`;
-    res.locals.selected = { ...res.locals.selected, delete: "selected" };
+    res.locals.selected = {
+      ...res.locals.selected,
+      templateDelete: "selected",
+    };
     res.render("dashboard/template/delete");
   })
   .post(function (req, res, next) {
+    if (req.template.id === req.blog.template) {
+      return next(new Error("You cannot delete your live template"));
+    }
+
     const idSlug = req.template.id.split(":").slice(1).join(":");
     const imageLocals = Object.values(req.template.locals || {})
       .filter((value) => value && value.url)

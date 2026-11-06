@@ -1,37 +1,26 @@
-{{> close-button}}
 
-<div class="dashboard-form-panel" style="border:1px solid var(--border-color);border-radius: var(--border-radius);padding:20px">
-        <h1>Export</h1>
+<div class="dashboard-form-panel">
+        <header class="page-header">
+          <div class="page-header__text">
+            <h1 class="page-header__title">Export</h1>
+          </div>
+        </header>
 
-        <p>Download a ZIP archive with your folder, settings, and templates.</p>
+<div class="export-option">
+  <a href="{{{base}}}/export/download" target="_blank" rel="noopener" class="btn btn-primary">
+      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M7.47 10.78a.749.749 0 0 0 1.06 0l3.75-3.75a.749.749 0 1 0-1.06-1.06L8.75 8.439V1.75a.75.75 0 0 0-1.5 0v6.689L4.78 5.97a.749.749 0 1 0-1.06 1.06l3.75 3.75ZM3.75 13a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5Z"></path></svg>
+      Download full site export
+  </a>
+  <p class="export-option__description">A zip file with your site's settings, every file in your folder, your templates and the files Blot generated from them.</p>
+</div>
 
-<a href="{{{base}}}/export/download" target="_blank" class="export-download-button" style="font-size:14px;display:  inline-block;border-radius: var(--border-radius);color:var(--background-color);padding:0.5em 0.75em;font-weight: 600;">
-    <svg  style="fill:currentColor;vertical-align: middle;position:relative;top:-0.1em;margin-right:4px"  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M7.47 10.78a.749.749 0 0 0 1.06 0l3.75-3.75a.749.749 0 1 0-1.06-1.06L8.75 8.439V1.75a.75.75 0 0 0-1.5 0v6.689L4.78 5.97a.749.749 0 1 0-1.06 1.06l3.75 3.75ZM3.75 13a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5Z"></path></svg>
-    Download full site export 
-</a>
-
-<br>
-<br><br>
-
-<h2>Wordpress export</h2>
-
-<p>Download an XML file containing your posts and pages.</p>
-<a href="{{{base}}}/export/wordpress" target="_blank" class="export-download-button" style="font-size:14px;display:  inline-block;border-radius: var(--border-radius);color:var(--background-color);padding:0.5em 0.75em;font-weight: 600;">
-    <svg  style="fill:currentColor;vertical-align: middle;position:relative;top:-0.1em;margin-right:4px"  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M7.47 10.78a.749.749 0 0 0 1.06 0l3.75-3.75a.749.749 0 1 0-1.06-1.06L8.75 8.439V1.75a.75.75 0 0 0-1.5 0v6.689L4.78 5.97a.749.749 0 1 0-1.06 1.06l3.75 3.75ZM3.75 13a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5Z"></path></svg>
-    Download Wordpress export
-</a>
-<br><br>
-
+<div class="export-option">
+  <a href="{{{base}}}/export/wordpress" target="_blank" rel="noopener" class="btn">
+      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M7.47 10.78a.749.749 0 0 0 1.06 0l3.75-3.75a.749.749 0 1 0-1.06-1.06L8.75 8.439V1.75a.75.75 0 0 0-1.5 0v6.689L4.78 5.97a.749.749 0 1 0-1.06 1.06l3.75 3.75ZM3.75 13a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5Z"></path></svg>
+      Download WordPress export
+  </a>
+  <p class="export-option__description">An XML file of your posts, with their titles, dates, tags and HTML, which you can import into WordPress.</p>
+</div>
 
   </div>
 
-<style>
-  .export-download-button {
-    background-color: var(--accent-color);
-    transition: background-color 0.1s ease;
-  }
-
-  .export-download-button:hover {
-    background-color: #1a75e5;
-  }
-</style>

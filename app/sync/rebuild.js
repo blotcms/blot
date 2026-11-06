@@ -128,28 +128,52 @@ module.exports = function main(blogID, options, callback) {
       // One at a time on purpose: Entry.set is not safe for two paths of a
       // blog at once (URL claims in models/entry/_setUrl.js and the blog
       // menu in models/entry/_assign.js are read-then-write), see #2258.
+      // options.shouldStop, if given, is asked before each path. When it
+      // says a newer rebuild is on its way, the rest is left to that one
+      // (the dashboard's settings rebuilds: dashboard/site/save/rebuild-settings.js)
+      let stopped = false;
+      const shouldStop = function (path, cb) {
+        if (stopped || !options.shouldStop) return cb(stopped);
+        Promise.resolve(options.shouldStop()).then(
+          function (stop) {
+            if (stop) {
+              stopped = true;
+              log("Rebuild stopped before", path, "for a newer one");
+            }
+            cb(stopped);
+          },
+          function () {
+            cb(false);
+          }
+        );
+      };
+
       async.eachSeries(
         updatePaths,
         function (path, next) {
-          current += updatePathCounts.get(path);
-          status(`(${current}/${total}) Rebuilding ${path}`);
-          update(path, function (err, result) {
-            // Redis is unavailable, so every path after this one would fail
-            // the same way. Stop, and tell the caller.
-            if (err && isRedisUnavailableError(err)) return next(err);
+          shouldStop(path, function (stop) {
+            if (stop) return next();
 
-            // Any other error is about this one file (update reports some as
-            // err, such as a symlink in the way, and others in result.error)
-            // and must not stop the rebuild of the others. Count them and
-            // say so once at the end.
-            var fileError = err || (result && result.error);
+            current += updatePathCounts.get(path);
+            status(`(${current}/${total}) Rebuilding ${path}`);
+            update(path, function (err, result) {
+              // Redis is unavailable, so every path after this one would fail
+              // the same way. Stop, and tell the caller.
+              if (err && isRedisUnavailableError(err)) return next(err);
 
-            if (fileError) {
-              failed++;
-              if (!firstError) firstError = fileError;
-            }
+              // Any other error is about this one file (update reports some as
+              // err, such as a symlink in the way, and others in result.error)
+              // and must not stop the rebuild of the others. Count them and
+              // say so once at the end.
+              var fileError = err || (result && result.error);
 
-            next();
+              if (fileError) {
+                failed++;
+                if (!firstError) firstError = fileError;
+              }
+
+              next();
+            });
           });
         },
         (err) => {

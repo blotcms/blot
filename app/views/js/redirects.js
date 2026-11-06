@@ -3,6 +3,20 @@ const sortEl = document.querySelector(".sortable");
 const redirectsContainer = document.getElementById("redirects");
 
 if (redirectsContainer) {
+  // Save changes and Cancel show once there is something to save: a redirect
+  // added, removed, moved or edited
+  const redirectsForm = redirectsContainer.closest("form");
+  const saveButtons = redirectsForm && redirectsForm.querySelector(".buttons");
+
+  function showSaveButtons() {
+    if (saveButtons) saveButtons.hidden = false;
+  }
+
+  if (saveButtons) {
+    saveButtons.hidden = true;
+    redirectsForm.addEventListener("input", showSaveButtons);
+  }
+
   new Sortable(sortEl, {
     handle: ".handle",
     ghostClass: "sortable-ghost",
@@ -19,6 +33,7 @@ if (redirectsContainer) {
           input.setAttribute("name", newName);
         });
       });
+      showSaveButtons();
     },
   });
 
@@ -26,6 +41,7 @@ if (redirectsContainer) {
     if (e.target.classList.contains("removeLink")) {
       e.target.parentNode.remove();
       e.preventDefault();
+      showSaveButtons();
 
       if (!redirectsContainer.querySelector("section")) {
         const emptyRedirects = document.getElementById("emptyRedirects");
@@ -65,6 +81,7 @@ if (redirectsContainer) {
     });
 
     redirectsContainer.appendChild(newlink);
+    showSaveButtons();
 
     if (from) {
       newlink.querySelector('input[name*="to"]').focus();

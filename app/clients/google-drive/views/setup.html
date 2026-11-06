@@ -16,7 +16,7 @@
     <input type="text" name="email" value="{{suggestedEmail}}">
     <div class="buttons">
       <button type="submit">{{#folderLost}}Continue{{/folderLost}}{{^folderLost}}Add email{{/folderLost}}</button>
-      {{^blog.client}}<a href="{{{dashboardBase}}}/client">Cancel</a>{{/blog.client}}
+      {{^blog.client}}<a href="{{{dashboardBase}}}/settings/folder">Cancel</a>{{/blog.client}}
       {{#blog.client}}<button type="submit" name="cancel" value="true">Cancel</button>{{/blog.client}}
     </div>
   </form>

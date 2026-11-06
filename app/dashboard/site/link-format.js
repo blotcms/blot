@@ -70,8 +70,7 @@ linkFormat.get(
   },
   (req, res, next) => {
     res.locals.edit = !!req.query.edit;
-    res.locals.breadcrumbs.add("Settings", "settings");
-    res.render("dashboard/site/settings/links");
+    res.render("dashboard/site/settings/settings-links");
   }
 );
 

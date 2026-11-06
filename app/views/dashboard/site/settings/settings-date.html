@@ -1,0 +1,34 @@
+{{> message}}
+{{> settings-tabs}}
+
+<div class="dashboard-form-panel settings-page">
+  <div class="dashboard-form-panel__body">
+    <form method="post" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data" aria-labelledby="date-heading" data-autosave>
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <input type="hidden" name="redirect" value="{{{base}}}/settings/date">
+      <h2 id="date-heading">Date and time</h2>
+      <p class="setting-note">Changes save as soon as you make them.</p>
+      <p>
+        <label>
+          In what order do you write your dates?<br>
+          <select class="select-spaced" name="dateFormat">
+            {{#dateFormats}}<option value="{{value}}" {{selected}}>{{date}}</option>{{/dateFormats}}
+          </select>
+        </label>
+      </p>
+      <p>
+        <label>
+          Your timezone<br>
+          <select class="select-spaced" name="timeZone">
+            {{#timeZones}}<option value="{{value}}" {{selected}}>{{value}} ({{time}})</option>{{/timeZones}}
+          </select>
+        </label>
+      </p>
+      <noscript>
+        <div class="buttons">
+          <button type="submit">Save changes</button>
+        </div>
+      </noscript>
+    </form>
+  </div>
+</div>

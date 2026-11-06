@@ -1,0 +1,278 @@
+/*
+  The top of every site page (partials/dashboard-trail.html): breadcrumbs on
+  the left, the sync status (partials/global-sync.html) on the right.
+
+  .dashboard-topbar        the row
+  .visit-site-pill         Visit site, the row's last item
+  .global-sync             the status: a grey pill holding text, then an
+                           icon at its right edge, so the icon stays put
+                           while the text changes
+  .is-synced / .is-syncing / .is-error / .is-off
+  --progress               set while rebuilding: the icon fills as a ring
+
+  js/global-sync.js keeps it up to date.
+*/
+
+.dashboard-topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+  margin: 0 0 var(--space-5);
+}
+
+.global-sync {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  max-width: 40%;
+  min-width: 0;
+  min-height: 26px;
+  box-sizing: border-box;
+  margin-left: auto;
+  padding: var(--space-0) var(--space-1) var(--space-0) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--surface-muted-color);
+  color: var(--medium-text-color);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-normal);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.global-sync:hover {
+  background: var(--surface-strong-color);
+  color: var(--text-color);
+}
+
+.global-sync:active {
+  background: var(--border-strong-color);
+}
+
+.global-sync:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+/* The text can be cut short; a count ("3 of 12") after it always shows */
+.global-sync__text {
+  display: flex;
+  min-width: 0;
+}
+
+.global-sync__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.global-sync__count {
+  flex: 0 0 auto;
+}
+
+.global-sync__count:not(:empty)::before,
+.sites-sync .global-sync__count:not(:empty)::before {
+  padding: 0 var(--space-1);
+  content: "\00b7";
+}
+
+.global-sync.is-error {
+  background: var(--error-background-color);
+  color: var(--danger-color);
+}
+
+/* Every state's icon fills the same 14px box */
+.global-sync__icon {
+  position: relative;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.global-sync.is-synced .global-sync__icon,
+.sites-sync.is-synced .global-sync__icon {
+  background: var(--success-color)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='m4 7.2 2 2 4-4.4' fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 14px no-repeat;
+}
+
+.global-sync.is-error .global-sync__icon,
+.sites-sync.is-error .global-sync__icon {
+  background: var(--danger-color)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M7 3.8v3.6' stroke='white' stroke-width='1.6' stroke-linecap='round'/%3E%3Ccircle cx='7' cy='10' r='.9' fill='white'/%3E%3C/svg%3E")
+    center / 14px no-repeat;
+}
+
+.global-sync.is-off .global-sync__icon,
+.sites-sync.is-off .global-sync__icon {
+  border: 1.5px solid var(--border-strong-color);
+}
+
+/* Syncing: a spinning arc */
+.global-sync.is-syncing .global-sync__icon,
+.sites-sync.is-syncing .global-sync__icon {
+  border: 2px solid var(--border-color);
+  border-top-color: var(--accent-color);
+  animation: global-sync-spin 0.8s linear infinite;
+}
+
+/* Rebuilding with a known total: a ring that fills */
+.global-sync.is-syncing.has-progress .global-sync__icon,
+.sites-sync.is-syncing.has-progress .global-sync__icon {
+  border: 0;
+  background: var(--accent-color);
+  background: conic-gradient(
+    var(--accent-color) var(--progress, 0%),
+    var(--border-color) 0
+  );
+  animation: none;
+  -webkit-mask: radial-gradient(circle, transparent 4px, #000 4.5px);
+  mask: radial-gradient(circle, transparent 4px, #000 4.5px);
+}
+
+@keyframes global-sync-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .global-sync.is-syncing .global-sync__icon,
+.sites-sync.is-syncing .global-sync__icon {
+    animation: none;
+  }
+}
+
+/* Phones: the breadcrumb takes the full width of the first row; the status
+   and Visit site pills sit side by side on a row of their own beneath it,
+   with their text */
+@media screen and (max-width: 768px) {
+  .dashboard-topbar {
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
+  }
+
+  .dashboard-topbar .dashboard-trail {
+    flex: 1 1 100%;
+  }
+
+  .dashboard-topbar .dashboard-trail li {
+    max-width: none;
+  }
+
+  .dashboard-topbar .dashboard-trail li:last-child {
+    flex: 1 1 0;
+    max-width: none;
+  }
+
+  .global-sync {
+    max-width: 100%;
+    min-height: 28px;
+    margin-left: 0;
+  }
+}
+
+/* Visit site, at the right end of the row: fixed in place, so the status's
+   icon beside it stays put too. Its arrow sits in a small circle and, on
+   hover or focus, slides out of the corner it points to and back in from the
+   opposite one. */
+.visit-site-pill {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 26px;
+  box-sizing: border-box;
+  padding: var(--space-0) var(--space-1) var(--space-0) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--surface-muted-color);
+  color: var(--medium-text-color);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.visit-site-pill:hover {
+  background: var(--surface-strong-color);
+  color: var(--text-color);
+}
+
+.visit-site-pill:active {
+  background: var(--border-strong-color);
+}
+
+.visit-site-pill:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+.visit-site-pill__icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--medium-text-color);
+  color: var(--background-color);
+  transition: background-color 150ms ease;
+}
+
+.visit-site-pill:hover .visit-site-pill__icon {
+  background: var(--text-color);
+}
+
+.visit-site-pill__icon svg {
+  display: block;
+}
+
+/* Out with an ease-in, back with an ease-out, swapping sides early: the
+   circle is empty only for a moment */
+.visit-site-pill:hover .visit-site-pill__icon svg,
+.visit-site-pill:focus-visible .visit-site-pill__icon svg {
+  animation: visit-site-arrow 360ms;
+}
+
+@keyframes visit-site-arrow {
+  0% {
+    transform: translate(0, 0);
+    animation-timing-function: cubic-bezier(0.55, 0, 1, 0.45);
+  }
+
+  39.99% {
+    transform: translate(12px, -12px);
+  }
+
+  40% {
+    transform: translate(-12px, 12px);
+    animation-timing-function: cubic-bezier(0, 0.55, 0.45, 1);
+  }
+
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .visit-site-pill:hover .visit-site-pill__icon svg,
+  .visit-site-pill:focus-visible .visit-site-pill__icon svg {
+    animation: none;
+  }
+}
+
+/* Phones: beside the status, on the row under the breadcrumb */
+@media screen and (max-width: 768px) {
+  .visit-site-pill {
+    min-height: 28px;
+  }
+}
