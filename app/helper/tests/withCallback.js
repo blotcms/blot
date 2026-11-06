@@ -55,20 +55,27 @@ describe("withCallback", function () {
     expect(await object.get()).toBe(3);
   });
 
-  it("calls a throwing callback once and does not reject", function (done) {
+  it("calls a throwing callback once and rethrows its error", function (done) {
     spyOn(console, "error");
     let calls = 0;
+
+    const listeners = process.listeners("uncaughtException");
+    process.removeAllListeners("uncaughtException");
+
+    process.once("uncaughtException", function (err) {
+      listeners.forEach((listener) =>
+        process.on("uncaughtException", listener)
+      );
+      expect(err.message).toBe("in callback");
+      expect(calls).toBe(1);
+      expect(console.error).toHaveBeenCalled();
+      done();
+    });
 
     double(2, function () {
       calls++;
       throw new Error("in callback");
     });
-
-    setTimeout(function () {
-      expect(calls).toBe(1);
-      expect(console.error).toHaveBeenCalled();
-      done();
-    }, 10);
   });
 
   it("leaves an async callback's rejection unhandled", function (done) {

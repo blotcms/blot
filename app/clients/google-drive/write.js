@@ -12,99 +12,90 @@ const { Readable } = require("stream");
 const database = require("./database");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const localName = require("./util/localName");
+const withCallback = require("helper/withCallback");
 
 // We can make this much more efficient by thoughtfully using
 // streams in pipelines rather than wastefully
 // We don't need to update the client database
 // of file IDs because once removed, we'll sync
 // with google drive after receiving a webhook
-module.exports = async function write(blogID, path, input, callback) {
+async function write(blogID, path, input) {
   const prefix = () => clfdate() + " Google Drive:";
 
-  try {
-    if (path[0] !== "/") path = "/" + path;
+  if (path[0] !== "/") path = "/" + path;
 
-    if (shouldIgnoreFile(path)) {
-      return callback(new Error(`Cannot write ignored file: ${path}`));
-    }
-
-    console.log(prefix(), "writing input to tmp");
-    const tempPath = await writeToTmp(input);
-
-    console.log(prefix(), "calculating md5Checksum for", tempPath);
-    const md5Checksum = await computeMd5Checksum(tempPath);
-    console.log(prefix(), " md5Checksum for", tempPath, "is", md5Checksum);
-
-    console.log(prefix(), "calculating md5Checksum for", path);
-    const fileOnBlot = await localFile(blogID, path);
-    const md5ChecksumOnBlot = fileOnBlot
-      ? await computeMd5Checksum(fileOnBlot)
-      : null;
-    console.log(prefix(), " md5Checksum for", path, "is", md5ChecksumOnBlot);
-
-    if (md5ChecksumOnBlot === md5Checksum) {
-      console.log(
-        prefix(),
-        "md5Checksum matches so no need to make any changes"
-      );
-      await fs.remove(tempPath);
-      return callback(null);
-    }
-
-    const account = await database.blog.get(blogID);
-    const drive = await createDriveClient(account.serviceAccountId);
-
-    if (account.folderId) {
-      console.log(prefix(), "will save remote file");
-
-      const { getByPath } = database.folder(account.folderId);
-
-      const fileId = await getByPath(path);
-
-      if (fileId) {
-        console.log(prefix(), "will update existing file");
-
-        await drive.files.update({
-          fileId: fileId,
-          supportsAllDrives: true,
-          media: {
-            body: fs.createReadStream(tempPath),
-          },
-        });
-      } else {
-        console.log(prefix(), "will create new remote file");
-
-        const pathParent = dirname(path);
-
-        const parentID =
-          (await getByPath(pathParent)) ||
-          (await establishParentDirectories(
-            drive,
-            pathParent,
-            account.folderId
-          ));
-
-        await drive.files.create({
-          resource: {
-            name: basename(path),
-            parents: [parentID],
-          },
-          supportsAllDrives: true,
-          media: {
-            body: fs.createReadStream(tempPath),
-          },
-          fields: "id",
-        });
-      }
-    }
-
-    console.log(prefix(), "moving", tempPath, "to", path);
-    await folder.writeFrom(blogID, path, tempPath, { move: true });
-  } catch (e) {
-    return callback(e);
+  if (shouldIgnoreFile(path)) {
+    throw new Error(`Cannot write ignored file: ${path}`);
   }
-  callback(null);
-};
+
+  console.log(prefix(), "writing input to tmp");
+  const tempPath = await writeToTmp(input);
+
+  console.log(prefix(), "calculating md5Checksum for", tempPath);
+  const md5Checksum = await computeMd5Checksum(tempPath);
+  console.log(prefix(), " md5Checksum for", tempPath, "is", md5Checksum);
+
+  console.log(prefix(), "calculating md5Checksum for", path);
+  const fileOnBlot = await localFile(blogID, path);
+  const md5ChecksumOnBlot = fileOnBlot
+    ? await computeMd5Checksum(fileOnBlot)
+    : null;
+  console.log(prefix(), " md5Checksum for", path, "is", md5ChecksumOnBlot);
+
+  if (md5ChecksumOnBlot === md5Checksum) {
+    console.log(prefix(), "md5Checksum matches so no need to make any changes");
+    await fs.remove(tempPath);
+    return;
+  }
+
+  const account = await database.blog.get(blogID);
+  const drive = await createDriveClient(account.serviceAccountId);
+
+  if (account.folderId) {
+    console.log(prefix(), "will save remote file");
+
+    const { getByPath } = database.folder(account.folderId);
+
+    const fileId = await getByPath(path);
+
+    if (fileId) {
+      console.log(prefix(), "will update existing file");
+
+      await drive.files.update({
+        fileId: fileId,
+        supportsAllDrives: true,
+        media: {
+          body: fs.createReadStream(tempPath),
+        },
+      });
+    } else {
+      console.log(prefix(), "will create new remote file");
+
+      const pathParent = dirname(path);
+
+      const parentID =
+        (await getByPath(pathParent)) ||
+        (await establishParentDirectories(drive, pathParent, account.folderId));
+
+      await drive.files.create({
+        resource: {
+          name: basename(path),
+          parents: [parentID],
+        },
+        supportsAllDrives: true,
+        media: {
+          body: fs.createReadStream(tempPath),
+        },
+        fields: "id",
+      });
+    }
+  }
+
+  console.log(prefix(), "moving", tempPath, "to", path);
+  await folder.writeFrom(blogID, path, tempPath, { move: true });
+}
+
+module.exports = withCallback(write);
 
 // Turns a buffer or string into a readable stream
 const makeStream = (input) => {
