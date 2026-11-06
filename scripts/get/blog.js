@@ -1,20 +1,28 @@
 var User = require("models/user");
 var Blog = require("models/blog");
 var parseUrl = require("url").parse;
+var { promisify } = require("util");
 
-function getByPrefix(identifier, callback) {
-  Blog.getAllIDs(function (err, blogIDS) {
-    let id = blogIDS.filter((id) => id.indexOf(identifier) === 0)[0];
-    if (!id) return callback(new Error("no blog"));
-    Blog.get({ id }, callback);
-  });
+// A failed lookup has always counted as "no match" here, so its error is
+// dropped rather than failing the whole lookup
+async function ignoreErrors(lookup) {
+  try {
+    return await lookup();
+  } catch (err) {
+    return undefined;
+  }
 }
 
-// Takes a URL or handle and fetches the blog and user
-module.exports = function get(identifier, callback) {
+async function getByPrefix(identifier) {
+  var blogIDS = await Blog.getAllIDs();
+  var id = blogIDS.filter((id) => id.indexOf(identifier) === 0)[0];
+  if (!id) throw new Error("no blog");
+  return Blog.get({ id });
+}
+
+async function find(identifier) {
   var domain;
   var handle;
-  var blog;
 
   handle = identifier;
 
@@ -38,30 +46,32 @@ module.exports = function get(identifier, callback) {
 
   if (!domain) domain = identifierWithoutTrailingSlash.toLowerCase();
 
-  Blog.get({ id: identifier }, function (err, blogFromID) {
-    Blog.get({ domain: domain }, function (err, blogFromDomain) {
-      Blog.get({ handle: handle }, function (err, blogFromHandle) {
-        getByPrefix(identifier, function (err, blogByPrefix) {
-          if (
-            !blogFromDomain &&
-            !blogFromHandle &&
-            !blogFromID &&
-            !blogByPrefix
-          )
-            return callback(new Error("No blog"));
+  var blogFromID = await ignoreErrors(() => Blog.get({ id: identifier }));
+  var blogFromDomain = await ignoreErrors(() => Blog.get({ domain: domain }));
+  var blogFromHandle = await ignoreErrors(() => Blog.get({ handle: handle }));
+  var blogByPrefix = await ignoreErrors(() => getByPrefix(identifier));
 
-          blog = blogFromID || blogFromHandle || blogFromDomain || blogByPrefix;
+  if (!blogFromDomain && !blogFromHandle && !blogFromID && !blogByPrefix)
+    throw new Error("No blog");
 
-          User.getById(blog.owner, function (err, user) {
-            if (err || !user) return callback(err || new Error("No user"));
+  var blog = blogFromID || blogFromHandle || blogFromDomain || blogByPrefix;
 
-            require("../blog/access")(blog.handle, function (err, url) {
-              if (err) return callback(err);
-              callback(err, user, blog, url);
-            });
-          });
-        });
-      });
-    });
-  });
+  var user = await User.getById(blog.owner);
+  if (!user) throw new Error("No user");
+
+  var url = await promisify(require("../blog/access"))(blog.handle);
+
+  return { user, blog, url };
+}
+
+// Takes a URL or handle and fetches the blog and user
+module.exports = function get(identifier, callback) {
+  find(identifier).then(
+    function (found) {
+      callback(null, found.user, found.blog, found.url);
+    },
+    function (err) {
+      callback(err);
+    }
+  );
 };

@@ -2,18 +2,12 @@ const folder = require("storage/folder");
 const { dirname, join, basename, normalize } = require("path");
 const debug = require("debug")("blot:entry:build:plugins:wikilinks:byFilename");
 
-module.exports = function byFilename(
-  blogID,
-  pathOfPost,
-  href,
-  isLink,
-  callback
-) {
+module.exports = async function byFilename(blogID, pathOfPost, href, isLink) {
   debug("Looking up by filename:", href, "from", pathOfPost);
 
   if (!href) {
     debug("No href provided");
-    return callback(new Error("No filename provided"));
+    throw new Error("No filename provided");
   }
 
   const stripped = href.split("|")[0].trim();
@@ -21,7 +15,7 @@ module.exports = function byFilename(
 
   if (!targetName) {
     debug("No filename extracted from href:", href);
-    return callback(new Error("No filename"));
+    throw new Error("No filename");
   }
 
   const getEntry = require("models/entry").get;
@@ -48,55 +42,56 @@ module.exports = function byFilename(
 
   enqueue(startDir);
 
-  function searchNext() {
-    if (!queue.length) return callback(new Error("No entry found by filename"));
-
+  while (queue.length) {
     const current = queue.shift();
     const parent = dirname(current);
 
     if (parent && parent !== current) enqueue(parent);
 
     // A directory which can't be read has nothing to search
-    folder
-      .listNames(blogID, current)
-      .catch(() => [])
-      .then(function handleDir(entries) {
-        debug("Searching in", current, "for", targetName, "found", entries);
+    const entries = await folder.listNames(blogID, current).catch(() => []);
 
-        entries.forEach((dirent) => {
-          if (dirent.isDirectory) enqueue(join(current, dirent.name));
-        });
+    debug("Searching in", current, "for", targetName, "found", entries);
 
-        folder.resolveCaseInsensitive(blogID, join(current, targetName)).then(
-          async function (resolvedPath) {
-            // We don't want to match directories, only files
-            try {
-              const stat = await folder.stat(blogID, resolvedPath);
-              if (stat && stat.isDirectory) {
-                return searchNext();
-              }
-            } catch (e) {}
+    entries.forEach((dirent) => {
+      if (dirent.isDirectory) enqueue(join(current, dirent.name));
+    });
 
-            debug("Found match at", resolvedPath);
+    let resolvedPath;
 
-            return getEntry(blogID, resolvedPath, function (entry) {
-              if (entry) {
-                debug("Entry found for", resolvedPath, entry);
-                return callback(null, entry);
-              } else {
-                debug("No entry for", resolvedPath);
-                return callback(null, {
-                  url: resolvedPath,
-                  title: targetName,
-                  path: resolvedPath,
-                });
-              }
-            });
-          },
-          () => searchNext()
-        );
-      });
+    try {
+      resolvedPath = await folder.resolveCaseInsensitive(
+        blogID,
+        join(current, targetName)
+      );
+    } catch (err) {
+      continue;
+    }
+
+    // We don't want to match directories, only files
+    try {
+      const stat = await folder.stat(blogID, resolvedPath);
+      if (stat && stat.isDirectory) continue;
+    } catch (e) {}
+
+    debug("Found match at", resolvedPath);
+
+    const entry = await new Promise((resolve) =>
+      getEntry(blogID, resolvedPath, resolve)
+    );
+
+    if (entry) {
+      debug("Entry found for", resolvedPath, entry);
+      return entry;
+    }
+
+    debug("No entry for", resolvedPath);
+    return {
+      url: resolvedPath,
+      title: targetName,
+      path: resolvedPath,
+    };
   }
 
-  searchNext();
+  throw new Error("No entry found by filename");
 };

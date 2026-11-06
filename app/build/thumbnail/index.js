@@ -1,27 +1,22 @@
 var Candidates = require("./candidates");
-var async = require("async");
 var Create = require("./create");
 var Transformer = require("helper/transformer");
+var withCallback = require("helper/withCallback");
 var STORE_PREFIX = "thumbnails";
 var debug = require("debug")("blot:entry:build:thumbnail");
 
-module.exports = function (blog, path, metadata, html, callback) {
-  var store, candidates, create;
+async function thumbnail(blog, path, metadata, html) {
+  var store, candidates;
 
   // Attempt to build a list of candidate image
   // src and paths based on the content of the
   // html generated from the blog post and the
   // metadata extracted from the blog post.
-  try {
-    candidates = Candidates(metadata, html);
-  } catch (e) {
-    return callback(e);
-  }
+  candidates = Candidates(metadata, html);
 
   debug(blog.id, path, candidates);
 
   store = new Transformer(blog.id, STORE_PREFIX);
-  create = Create.bind(this, blog.id);
 
   // An image that can't be a thumbnail (too small, unsupported format) is
   // stored as a result like any other, keyed by the file's content, so the
@@ -29,38 +24,55 @@ module.exports = function (blog, path, metadata, html, callback) {
   // and refused is stored (err.invalid); a failure to read it or to run the
   // job is not, so it is tried again.
   function createOrReject(path, done) {
-    create(path, function (err, thumbnails) {
-      if (err && err.invalid) return done(null, { rejected: err.message });
-      done(err, thumbnails);
-    });
+    Create(blog.id, path).then(
+      function (thumbnails) {
+        done(null, thumbnails);
+      },
+      function (err) {
+        if (err && err.invalid) return done(null, { rejected: err.message });
+        done(err);
+      }
+    );
   }
 
-  async.eachSeries(
-    candidates,
-    function (candidate, next) {
-      store.lookup(candidate, createOrReject, function (err, thumbnails) {
-        if (thumbnails && thumbnails.rejected !== undefined) {
-          debug(blog.id, candidate, "rejected:", thumbnails.rejected);
-          thumbnails = undefined;
-        }
+  // The first candidate which produces thumbnails wins
+  var thumbnails = null;
 
-        // We don't care if a candidate produces an error
-        // we just keep going on down the list...
-        if (err) {
-          debug(err);
-        }
+  for (var candidate of candidates) {
+    var found = await lookup(store, candidate, createOrReject);
 
-        debug(blog.id, candidate, err, thumbnails);
-
-        // Little bit hacky to pass thumbnails
-        // as first argument. This stops async
-        next(thumbnails);
-      });
-    },
-    function (thumbnails) {
-      debug(blog.id, "final thumbnails", thumbnails);
-
-      callback(null, thumbnails);
+    // We don't care if a candidate produces an error
+    // we just keep going on down the list...
+    if (found) {
+      thumbnails = found;
+      break;
     }
-  );
-};
+  }
+
+  debug(blog.id, "final thumbnails", thumbnails);
+
+  return thumbnails;
+}
+
+// Looks up the thumbnails for one candidate. Resolves to undefined if there
+// aren't any, whether the candidate was rejected or failed.
+function lookup(store, candidate, create) {
+  return new Promise(function (resolve) {
+    store.lookup(candidate, create, function (err, thumbnails) {
+      if (thumbnails && thumbnails.rejected !== undefined) {
+        debug(candidate, "rejected:", thumbnails.rejected);
+        thumbnails = undefined;
+      }
+
+      if (err) {
+        debug(err);
+      }
+
+      debug(candidate, err, thumbnails);
+
+      resolve(thumbnails);
+    });
+  });
+}
+
+module.exports = withCallback(thumbnail);

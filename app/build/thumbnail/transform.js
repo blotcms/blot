@@ -1,4 +1,4 @@
-var callOnce = require("helper/callOnce");
+var withCallback = require("helper/withCallback");
 var extname = require("path").extname;
 var fs = require("fs-extra");
 var sandbox = require("sandbox");
@@ -13,9 +13,7 @@ var thumbnails = require("./config").THUMBNAILS;
 // made only for an image that passes, and an image that doesn't fails with
 // the reason, with err.invalid set.
 function make(animated) {
-  return function main(path, outputDirectory, callback) {
-    callback = callOnce(callback);
-
+  return withCallback(async function main(path, outputDirectory) {
     // We want to ensure that this will work on case-sensitive
     // file systems so we lowercase it. In the past we used the
     // original filename for the file in the resulting path but
@@ -31,70 +29,56 @@ function make(animated) {
       return { size: thumbnails[name].size, crop: !!thumbnails[name].crop };
     });
 
-    async function work() {
-      var reply = await sandbox.run(
-        "thumbnail",
-        {
-          extension: extension,
-          animated: animated,
-          sizes: sizes,
-          accept: validate.ACCEPT,
-        },
-        { path: path }
-      );
+    var reply = await sandbox.run(
+      "thumbnail",
+      {
+        extension: extension,
+        animated: animated,
+        sizes: sizes,
+        accept: validate.ACCEPT,
+      },
+      { path: path }
+    );
 
-      var meta = reply.meta;
-      if (!meta || typeof meta !== "object")
-        throw new Error("Unexpected thumbnail result");
+    var meta = reply.meta;
+    if (!meta || typeof meta !== "object")
+      throw new Error("Unexpected thumbnail result");
 
-      var invalid = validate.check(meta.source);
-      if (invalid || meta.thumbnails === null) {
-        invalid = invalid || new Error("Image is not a valid thumbnail");
-        invalid.invalid = true;
-        throw invalid;
-      }
-
-      if (
-        !Array.isArray(meta.thumbnails) ||
-        meta.thumbnails.length !== names.length ||
-        reply.outputs.length !== names.length
-      ) {
-        throw new Error("Unexpected thumbnail result");
-      }
-
-      await fs.ensureDir(outputDirectory);
-
-      var result = {};
-
-      await Promise.all(
-        names.map(async function (name, i) {
-          var fileName = name.toLowerCase() + extension;
-
-          await fs.writeFile(
-            outputDirectory + "/" + fileName,
-            reply.outputs[i]
-          );
-
-          result[name] = {
-            width: meta.thumbnails[i].width,
-            height: meta.thumbnails[i].height,
-            name: fileName,
-          };
-        })
-      );
-
-      return result;
+    var invalid = validate.check(meta.source);
+    if (invalid || meta.thumbnails === null) {
+      invalid = invalid || new Error("Image is not a valid thumbnail");
+      invalid.invalid = true;
+      throw invalid;
     }
 
-    work().then(
-      function (result) {
-        callback(null, result);
-      },
-      function (err) {
-        callback(err);
-      }
+    if (
+      !Array.isArray(meta.thumbnails) ||
+      meta.thumbnails.length !== names.length ||
+      reply.outputs.length !== names.length
+    ) {
+      throw new Error("Unexpected thumbnail result");
+    }
+
+    await fs.ensureDir(outputDirectory);
+
+    var result = {};
+
+    await Promise.all(
+      names.map(async function (name, i) {
+        var fileName = name.toLowerCase() + extension;
+
+        await fs.writeFile(outputDirectory + "/" + fileName, reply.outputs[i]);
+
+        result[name] = {
+          width: meta.thumbnails[i].width,
+          height: meta.thumbnails[i].height,
+          name: fileName,
+        };
+      })
     );
-  };
+
+    return result;
+  });
 }
 
 module.exports = make(false);

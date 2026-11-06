@@ -3,12 +3,12 @@ var config = require("config");
 var cheerio = require("cheerio");
 var fs = require("fs");
 var ensure = require("helper/ensure");
-var callOnce = require("helper/callOnce");
 var extend = require("helper/extend");
 var deCamelize = require("helper/deCamelize");
 var time = require("helper/time");
-var async = require("async");
 var _ = require("lodash");
+var withCallback = require("helper/withCallback");
+var withResults = require("../withResults");
 const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
 const { GLOBAL_STATIC_SUBDIRECTORIES } = require("blog/lib/staticPaths");
 
@@ -68,12 +68,11 @@ var plugins = loaded.plugins;
 var prerenderers = loaded.prerenderers;
 
 // Takes a string and based on the user's
-// plugins converts it into an HTML string
-function convert(blog, path, contents, callback) {
-  ensure(contents, "string")
-    .and(path, "string")
-    .and(blog, "object")
-    .and(callback, "function");
+// plugins converts it into an HTML string. Calls back with
+// (err, html, dependencies); without a callback it resolves to
+// [html, dependencies].
+async function convert(blog, path, contents) {
+  ensure(contents, "string").and(path, "string").and(blog, "object");
 
   var enabled = Enabled(blog.plugins);
   var dependencies = [];
@@ -91,113 +90,106 @@ function convert(blog, path, contents, callback) {
     baseURL: "https://" + blog.handle + "." + config.host,
   };
 
-  async.eachSeries(
-    prerenderers,
-    function (plugin, next) {
-      var id, blogOptions, options, prerender, timeout;
+  for (const plugin of prerenderers) {
+    const id = plugin.id;
 
-      id = plugin.id;
-
-      // Only skip this plugin if it's optional
-      // and if the user has disabled it.
-      if (plugin.optional && !enabled[id]) {
-        return next();
-      }
-
-      // The options for this plugin are not
-      // neccessarily associated with the blog,
-      // especially if it is a required plugin
-      blogOptions = blog.plugins[id] ? blog.plugins[id].options : {};
-      options = {};
-      prerender = plugin.prerender;
-
-      extend(options).and(blogOptions).and(globalOptions);
-
-      // We wrap the callback passed to the function
-      // to ensure its called once. This allows us
-      // to set a timeout safely.
-      next = callOnce(next);
-      timeout = Timeout(id, next);
-      time(id);
-
-      prerender(
-        contents,
-        function (err, result) {
-          time.end(id);
-          clearTimeout(timeout);
-
-          if (result && !err) contents = result;
-
-          next();
-        },
-        options
-      );
-    },
-    function () {
-      // Don't decode entities, preserve the original content
-      var $ = cheerio.load(contents, { decodeEntities: false }, false);
-
-      async.eachSeries(
-        plugins,
-        function (plugin, next) {
-          var id, options, blogOptions, timeout;
-
-          id = plugin.id;
-
-          if (!plugin.render) return next();
-
-          if (plugin.optional && !enabled[id]) {
-            return next();
-          }
-
-          options = {};
-          blogOptions = blog.plugins[id] ? blog.plugins[id].options : {};
-
-          extend(options).and(blogOptions).and(globalOptions);
-
-          // We wrap the callback passed to the function
-          // to ensure its called once. This allows us
-          // to set a timeout safely.
-          next = callOnce(next);
-          timeout = Timeout(id, next);
-          time(id);
-
-          // Plugins should call their render callbacks with
-          // cb(null, { newDependencies }) to allow us to extend
-          // the result object with future fields (e.g. toc).
-          plugin.render(
-            $,
-            function (err, result) {
-              time.end(id);
-
-              const res = Array.isArray(result)
-                ? { newDependencies: result }
-                : result || {};
-
-              if (res.newDependencies) {
-                dependencies = dependencies.concat(res.newDependencies);
-              }
-
-              clearTimeout(timeout);
-              next();
-            },
-            options
-          );
-        },
-        function () {
-          // Return the entry's completed HTML
-          // pass the HTML so it can be rendered totally tast
-          callback(null, $.html(), dependencies);
-        }
-      );
+    // Only skip this plugin if it's optional
+    // and if the user has disabled it.
+    if (plugin.optional && !enabled[id]) {
+      continue;
     }
-  );
+
+    // The options for this plugin are not
+    // neccessarily associated with the blog,
+    // especially if it is a required plugin
+    const blogOptions = blog.plugins[id] ? blog.plugins[id].options : {};
+    const options = {};
+    const prerender = plugin.prerender;
+
+    extend(options).and(blogOptions).and(globalOptions);
+
+    await runPlugin(
+      id,
+      function (callback) {
+        prerender(contents, callback, options);
+      },
+      function (err, result) {
+        if (result && !err) contents = result;
+      }
+    );
+  }
+
+  // Don't decode entities, preserve the original content
+  var $ = cheerio.load(contents, { decodeEntities: false }, false);
+
+  for (const plugin of plugins) {
+    const id = plugin.id;
+
+    if (!plugin.render) continue;
+
+    if (plugin.optional && !enabled[id]) {
+      continue;
+    }
+
+    const options = {};
+    const blogOptions = blog.plugins[id] ? blog.plugins[id].options : {};
+
+    extend(options).and(blogOptions).and(globalOptions);
+
+    await runPlugin(
+      id,
+      function (callback) {
+        // Plugins should call their render callbacks with
+        // cb(null, { newDependencies }) to allow us to extend
+        // the result object with future fields (e.g. toc).
+        plugin.render($, callback, options);
+      },
+      function (err, result) {
+        const res = Array.isArray(result)
+          ? { newDependencies: result }
+          : result || {};
+
+        if (res.newDependencies) {
+          dependencies = dependencies.concat(res.newDependencies);
+        }
+      }
+    );
+  }
+
+  // Return the entry's completed HTML
+  // pass the HTML so it can be rendered totally tast
+  return [$.html(), dependencies];
 }
 
-// Load plugin templates,
-// this is currently async but uses
-// a callback for when I need it
-function load(file, blogPlugins, callback) {
+// Calls a plugin, which takes a callback, and resolves once it has called
+// back, or once TIMEOUT has passed without it doing so, so that one plugin
+// that never calls back cannot hold up the others. The plugin's late
+// callback still runs `handle`, as it always did.
+function runPlugin(id, call, handle) {
+  return new Promise(function (resolve) {
+    var timeout = Timeout(id, resolve);
+
+    time(id);
+
+    try {
+      call(function (err, result) {
+        time.end(id);
+        clearTimeout(timeout);
+
+        handle(err, result);
+
+        resolve();
+      });
+    } catch (e) {
+      clearTimeout(timeout);
+      throw e;
+    }
+  });
+}
+
+// Load plugin templates. This is synchronous work, so it is
+// async only to match the callback API it used to have.
+async function load(file, blogPlugins) {
   var response = "";
 
   for (var i in blogPlugins) {
@@ -212,7 +204,7 @@ function load(file, blogPlugins, callback) {
     }
   }
 
-  return callback(null, response);
+  return response;
 }
 
 function Enabled(blogPlugins) {
@@ -320,8 +312,8 @@ function Timeout(name, cb) {
 }
 
 module.exports = {
-  convert: convert,
-  load: load,
+  convert: withResults(convert),
+  load: withCallback(load),
   list: list,
   defaultList: defaultPlugins,
 };

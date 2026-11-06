@@ -1,12 +1,11 @@
 var folder = require("storage/folder");
-var callbackify = require("util").callbackify;
 var ensure = require("helper/ensure");
 var time = require("helper/time");
 var extname = require("path").extname;
 var Metadata = require("build/metadata");
 var convert = require("./convert");
-var folderStat = callbackify(require("build/converters/folderStat"));
-var readFile = callbackify(folder.read);
+var folderStat = require("build/converters/folderStat");
+var withResults = require("build/withResults");
 
 function is(path) {
   return [".org"].indexOf(extname(path).toLowerCase()) > -1;
@@ -40,41 +39,45 @@ function mergeOrgMetadata(outerMetadata, innerMetadata) {
   return mergedMetadata;
 }
 
-function read(blog, path, callback) {
-  ensure(blog, "object").and(path, "string").and(callback, "function");
+async function read(blog, path) {
+  ensure(blog, "object").and(path, "string");
 
   time("stat");
 
-  folderStat(blog.id, path, function (err, stat) {
+  let stat;
+
+  try {
+    stat = await folderStat(blog.id, path);
+  } finally {
     time.end("stat");
+  }
 
-    if (err) return callback(err);
+  time("readFile");
 
-    time("readFile");
+  let buffer;
 
-    readFile(blog.id, path, function (err, buffer) {
-      time.end("readFile");
+  try {
+    buffer = await folder.read(blog.id, path);
+  } finally {
+    time.end("readFile");
+  }
 
-      if (err) return callback(err);
+  const contents = buffer.toString("utf-8");
 
-      const contents = buffer.toString("utf-8");
+  const { html: orgBody, metadata: orgMetadata } = Metadata(contents);
 
-      const { html: orgBody, metadata: orgMetadata } = Metadata(contents);
+  const [html, yamlMetadata] = await convert(blog, orgBody);
 
-      convert(blog, orgBody, function (err, html, yamlMetadata) {
-        if (err) return callback(err);
+  // Canonical metadata handling for org conversion:
+  // 1. Parse org-style header metadata before conversion.
+  // 2. Parse YAML metadata extracted from a leading YAML source block after conversion.
+  // 3. Merge both sources with YAML taking precedence for identical keys.
+  const mergedMetadata = mergeOrgMetadata(orgMetadata, yamlMetadata);
+  const metadataComment = toDeterministicMetadataComment(mergedMetadata);
 
-        // Canonical metadata handling for org conversion:
-        // 1. Parse org-style header metadata before conversion.
-        // 2. Parse YAML metadata extracted from a leading YAML source block after conversion.
-        // 3. Merge both sources with YAML taking precedence for identical keys.
-        const mergedMetadata = mergeOrgMetadata(orgMetadata, yamlMetadata);
-        const metadataComment = toDeterministicMetadataComment(mergedMetadata);
-
-        callback(null, metadataComment + html, stat);
-      });
-    });
-  });
+  return [metadataComment + html, stat];
 }
 
-module.exports = { read: read, is: is, id: "org" };
+// Called back with (err, html, stat); without a callback it resolves to
+// [html, stat]
+module.exports = { read: withResults(read), is: is, id: "org" };

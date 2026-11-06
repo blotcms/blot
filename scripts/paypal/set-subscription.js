@@ -1,7 +1,8 @@
 const config = require("config");
 const User = require("models/user");
+const { promisify } = require("util");
 
-async function main(uid, paypalId, callback) {
+async function main(uid, paypalId) {
   if (!uid) {
     throw new Error("No user passed");
   }
@@ -30,24 +31,22 @@ async function main(uid, paypalId, callback) {
   }
 
   console.log("storing", paypal);
-  User.set(uid, { paypal: paypal }, function (err) {
-    if (err) throw err;
-    callback(null);
-  });
+  await promisify(User.set)(uid, { paypal: paypal });
 }
 
 const get = require("../get/user");
 
-get(process.argv[2], function (err, user) {
-  if (err) throw err;
+(async () => {
+  const user = await promisify(get)(process.argv[2]);
   if (!user) throw new Error("No user found");
-  main(user.uid, process.argv[3], function (err) {
-    if (err) throw err;
-    console.log(
-      "Stored paypal subscription",
-      process.argv[3],
-      "against",
-      user.email
-    );
-  });
+  await main(user.uid, process.argv[3]);
+  console.log(
+    "Stored paypal subscription",
+    process.argv[3],
+    "against",
+    user.email
+  );
+})().catch((err) => {
+  console.error(err);
+  process.exit(1);
 });

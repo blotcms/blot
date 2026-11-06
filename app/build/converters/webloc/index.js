@@ -2,8 +2,8 @@ var fs = require("fs");
 var bplist = require("bplist-parser");
 var ensure = require("helper/ensure");
 var titlify = require("build/prepare/titlify");
-var callbackify = require("util").callbackify;
-var withLocal = callbackify(require("build/converters/folderStat").withLocal);
+var withLocal = require("build/converters/folderStat").withLocal;
+var withResults = require("build/withResults");
 var extname = require("path").extname;
 
 var INVALID = "Invalid webloc file";
@@ -15,114 +15,69 @@ function is(path) {
   );
 }
 
-function extract(localPath, callback) {
+async function extract(localPath) {
   // First we attempt to parse the file as if it
-  // were XML. This is the format used by Chrome and Firefox
-  extractFromXML(localPath, function (err, url) {
-    if (url) return callback(null, url);
-
-    // If this fails, we then try to parse the file
-    // as if it were a Binary Plist file which is
-    // the format used by Safari.
-    extractFromBPlist(localPath, function (err, url) {
-      if (url) return callback(null, url);
-
-      extractFromURL(localPath, function (err, url) {
-        if (url) return callback(null, url);
-
-        return callback(new Error(INVALID));
-      });
-    });
-  });
-}
-
-function extractFromURL(localPath, callback) {
-  var url;
-
-  fs.readFile(localPath, "utf-8", function (err, contents) {
-    if (err) return callback(err);
-
-    if (
-      contents.indexOf("[InternetShortcut]") === -1 ||
-      contents.indexOf("URL=") === -1
-    )
-      return callback();
-
+  // were XML. This is the format used by Chrome and Firefox.
+  // If this fails, we then try to parse the file
+  // as if it were a Binary Plist file which is
+  // the format used by Safari, and then as a .url file.
+  for (const extractor of [extractFromXML, extractFromBPlist, extractFromURL]) {
     try {
-      url = contents.slice(contents.indexOf("URL=") + "URL=".length).trim();
-    } catch (e) {
-      return callback(e);
-    }
+      const url = await extractor(localPath);
 
-    return callback(null, url);
-  });
+      if (url) return url;
+    } catch (err) {
+      // Not this format: try the next
+    }
+  }
+
+  throw new Error(INVALID);
 }
 
-function extractFromXML(localPath, callback) {
-  var url;
+async function extractFromURL(localPath) {
+  const contents = await fs.promises.readFile(localPath, "utf-8");
+
+  if (
+    contents.indexOf("[InternetShortcut]") === -1 ||
+    contents.indexOf("URL=") === -1
+  )
+    return;
+
+  return contents.slice(contents.indexOf("URL=") + "URL=".length).trim();
+}
+
+async function extractFromXML(localPath) {
   var reg = /<string>(.*)<\/string>/g;
 
-  fs.readFile(localPath, "utf-8", function (err, contents) {
-    if (err) return callback(err);
+  const contents = await fs.promises.readFile(localPath, "utf-8");
 
-    try {
-      url = reg.exec(contents)[1];
-    } catch (e) {
-      return callback(e);
-    }
-
-    return callback(null, url);
-  });
+  return reg.exec(contents)[1];
 }
 
-function extractFromBPlist(localPath, callback) {
-  var url;
+async function extractFromBPlist(localPath) {
+  // bplist-parser's parseFile returns a promise that rejects on a bad file
+  const obj = await bplist.parseFile(localPath);
 
-  // bplist-parser's parseFile returns a promise that rejects on a bad file,
-  // even when given a callback, so use the promise. The callback runs on the
-  // next tick, outside the promise chain, so an error it throws isn't
-  // swallowed as a rejection.
-  bplist.parseFile(localPath).then(
-    function (obj) {
-      try {
-        url = obj[0].URL;
-      } catch (e) {
-        return process.nextTick(callback, e);
-      }
-
-      process.nextTick(callback, null, url);
-    },
-    function (err) {
-      process.nextTick(callback, err);
-    }
-  );
+  return obj[0].URL;
 }
 
-function read(blog, path, callback) {
-  ensure(blog, "object").and(path, "string").and(callback, "function");
+async function read(blog, path) {
+  ensure(blog, "object").and(path, "string");
 
-  var contents;
+  const file = await withLocal(blog.id, path);
 
-  withLocal(blog.id, path, function (err, file) {
-    if (err) return callback(err);
+  const stat = file.stat;
 
-    var stat = file.stat;
+  const url = await extract(file.localPath);
 
-    extract(file.localPath, function (err, url) {
-      if (err) return callback(err);
+  if (!url) throw new Error(INVALID);
 
-      if (!url) return callback(new Error(INVALID));
+  const contents =
+    '<p><a href="' + url + '" class="bookmark">' + titlify(path) + "</a></p>";
 
-      contents =
-        '<p><a href="' +
-        url +
-        '" class="bookmark">' +
-        titlify(path) +
-        "</a></p>";
-
-      callback(null, contents, stat);
-    });
-  });
+  return [contents, stat];
 }
 
-module.exports = { is: is, read: read, id: "webloc" };
+// Called back with (err, html, stat); without a callback it resolves to
+// [html, stat]
+module.exports = { is: is, read: withResults(read), id: "webloc" };

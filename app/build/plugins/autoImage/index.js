@@ -1,5 +1,6 @@
 const { URL } = require("url");
 const { posix } = require("path");
+const withPluginCallback = require("../withPluginCallback");
 
 // Define a list of common image extensions
 const imageExtensions = [
@@ -12,7 +13,7 @@ const imageExtensions = [
   ".svg",
 ];
 
-function render($, callback) {
+async function render($) {
   $("a").each(function () {
     try {
       const href = $(this).attr("href");
@@ -24,8 +25,6 @@ function render($, callback) {
       }
     } catch (e) {}
   });
-
-  callback();
 }
 
 function template(url) {
@@ -105,7 +104,7 @@ function IsImage(url) {
 }
 
 module.exports = {
-  render: render,
+  render: withPluginCallback(render),
   category: "embeds",
   title: "Images",
   description: "Embed images from image links",

@@ -7,8 +7,6 @@ const Entry = require("models/entry");
 
 const getConfirmation = require("../util/getConfirmation");
 
-const getAllIDs = promisify(Entries.getAllIDs);
-const setEntry = promisify(Entry.set);
 const getEntry = (blogID, id) =>
   new Promise((resolve, reject) =>
     Entry.get(blogID, id, (entry) => resolve(entry))
@@ -19,7 +17,7 @@ const processBlog = async (blog) => {
   if (blog.client !== "dropbox") return;
 
   const blogID = blog.id;
-  const ids = await getAllIDs(blogID);
+  const ids = await Entries.getAllIDs(blogID);
 
   for (const id of ids) {
     if (id === id.toLowerCase()) {
@@ -80,7 +78,7 @@ const processBlog = async (blog) => {
       continue;
     }
 
-    await setEntry(blogID, id, {
+    await promisify(Entry.set)(blogID, id, {
       dateStamp: deletedEntry.dateStamp,
       created: deletedEntry.created,
       updated: deletedEntry.updated,

@@ -5,7 +5,6 @@ const { promisify } = require("util");
 const eachBlogOrOneBlog = require("../each/eachBlogOrOneBlog");
 const resetToBlot = require("clients/dropbox/sync/reset-to-blot");
 const establishSyncLock = require("sync/establishSyncLock");
-const fix = promisify(require("sync/fix"));
 
 const PROGRESS_INTERVAL_MS = 30000;
 
@@ -66,7 +65,7 @@ const processBlog = async (blog) => {
 
       await resetToBlot(blog.id, publish, folder.update);
       try {
-        await fix(blog);
+        await promisify(require("sync/fix"))(blog);
       } catch (err) {
         console.error(
           `WARN: Dropbox resync fix failed for ${blog.id}: ${formatError(err)}`

@@ -1,6 +1,7 @@
 const titlecase = require("helper/titlecase");
+const withPluginCallback = require("../withPluginCallback");
 
-function render($, callback) {
+async function render($) {
   try {
     $("h1, h2, h3, h4, h5, h6").each(function findTextNodes(i, node) {
       $(node)
@@ -14,12 +15,10 @@ function render($, callback) {
         });
     });
   } catch (e) {}
-
-  return callback();
 }
 
 module.exports = {
-  render: render,
+  render: withPluginCallback(render),
   isDefault: false,
   category: "headings",
   title: "Titlecase",

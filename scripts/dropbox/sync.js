@@ -4,25 +4,16 @@ console.warn("Warning: this uses an internal method of the Dropbox client.");
 console.log('Consider debugging with "export DEBUG=clients:dropbox*"');
 var fixEntryDates = require("./fix-entry-dates");
 
-function runFullSync(blog) {
-  return new Promise((resolve, reject) => {
-    var publish = function () {
-      var args = Array.prototype.slice.call(arguments);
-      console.log.apply(
-        console,
-        ["Dropbox sync", blog.title, blog.id + ":"].concat(args)
-      );
-    };
-
-    resetToBlot(blog.id, publish).then(
-      function () {
-        resolve();
-      },
-      function (err) {
-        reject(err);
-      }
+async function runFullSync(blog) {
+  var publish = function () {
+    var args = Array.prototype.slice.call(arguments);
+    console.log.apply(
+      console,
+      ["Dropbox sync", blog.title, blog.id + ":"].concat(args)
     );
-  });
+  };
+
+  await resetToBlot(blog.id, publish);
 }
 
 let processedCount = 0;

@@ -1,38 +1,41 @@
 var User = require("models/user");
-var async = require("async");
+var { promisify } = require("util");
 var progress = require("./progress");
 
-module.exports = function (fn, callback) {
-  User.getAllIds(function (err, uids) {
-    if (err || !uids) return callback(err || new Error("No uids"));
+// The promise core. fn is (user) and may return a promise.
+async function eachUser(fn) {
+  var uids = await User.getAllIds();
 
-    var bar = progress.push("User", uids.length);
+  if (!uids) throw new Error("No uids");
 
-    async.eachSeries(
-      uids,
-      function (uid, done) {
-        var next = function (err) {
-          bar.tick();
-          done(err);
-        };
+  var bar = progress.push("User", uids.length);
 
-        User.getById(uid, function (err, user) {
-          if (err) return next(err);
+  try {
+    for (const uid of uids) {
+      try {
+        var user = await User.getById(uid);
 
-          if (!user) {
-            console.log("Warning: No user found for uid:", uid);
-            console.log("Remove this from the set of uids to process.");
-            console.log("Continuing with next user...");
-            return next();
-          }
+        if (!user) {
+          console.log("Warning: No user found for uid:", uid);
+          console.log("Remove this from the set of uids to process.");
+          console.log("Continuing with next user...");
+          continue;
+        }
 
-          fn(user, next);
-        });
-      },
-      function (err) {
-        bar.pop();
-        callback(err);
+        await fn(user);
+      } finally {
+        bar.tick();
       }
-    );
-  });
+    }
+  } finally {
+    bar.pop();
+  }
+}
+
+// Callback API, for the scripts that still pass fn(user, next).
+module.exports = function (fn, callback) {
+  eachUser(promisify(fn)).then(
+    () => callback(null),
+    (err) => callback(err)
+  );
 };

@@ -1,5 +1,6 @@
 // typeset(html, options), parsing the document once: see ./walk
 var typeset = require("./walk");
+var withPluginCallback = require("../withPluginCallback");
 
 function normalizeBooleanOption(value) {
   if (value === null || value === undefined || value === false || value === 0)
@@ -25,7 +26,7 @@ function normalizeBooleanOption(value) {
   return Boolean(value);
 }
 
-function prerender(html, callback, options) {
+async function prerender(html, options) {
   // would be nice to add options. hyphenate in future
   // but it fucks with automatic image links and automatic
   // video links since the contents of the link don't match
@@ -46,11 +47,11 @@ function prerender(html, callback, options) {
     html = typeset(html, { disable: disable, ignore: ["span.math"] });
   } catch (e) {}
 
-  return callback(null, html);
+  return html;
 }
 
 module.exports = {
-  prerender: prerender,
+  prerender: withPluginCallback(prerender),
   category: "Typography",
   title: "Substitution",
   description: "Correct common typographic errors",

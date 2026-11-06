@@ -8,57 +8,93 @@
 
 const each = require("../each/user");
 const Blog = require("models/blog");
-const async = require("async");
 const subscriptionLifecycle = require("models/user/subscriptionLifecycle");
 
 const found = [];
 
-each(
-  function (user, next) {
-    if (!user.isDisabled) return next();
+// scripts/each/user is callback-based and stops at the first error. Runs fn
+// for each user in turn, and passes a rejection from fn on as the error.
+function forEachUser(fn) {
+  return new Promise(function (resolve, reject) {
+    each(
+      function (user, next) {
+        Promise.resolve()
+          .then(function () {
+            return fn(user);
+          })
+          .then(
+            function () {
+              next();
+            },
+            function (err) {
+              next(err);
+            }
+          );
+      },
+      function (err) {
+        if (err) return reject(err);
+        resolve();
+      }
+    );
+  });
+}
 
-    if (subscriptionLifecycle.cancellationDetails(user).cancelled)
-      return next();
+async function run() {
+  await forEachUser(async function (user) {
+    if (!user.isDisabled) return;
+
+    if (subscriptionLifecycle.cancellationDetails(user).cancelled) return;
 
     const overdue = subscriptionLifecycle.overdueDetails(user);
 
-    async.map(
-      user.blogs || [],
-      function (blogID, done) {
-        Blog.get({ id: blogID }, function (err, blog) {
-          done(null, blog ? blog.domain || blog.handle : blogID + " (missing)");
-        });
-      },
-      function (err, blogs) {
-        found.push({
-          email: user.email,
-          uid: user.uid,
-          stripe: (user.subscription && user.subscription.status) || "none",
-          paypal: (user.paypal && user.paypal.status) || "none",
-          overdue: overdue.overdue ? overdue.phase : "no",
-          blogs: blogs.join(", ") || "none",
-        });
-        next();
-      }
+    const blogs = await Promise.all(
+      (user.blogs || []).map(async function (blogID) {
+        let blog;
+
+        try {
+          blog = await Blog.get({ id: blogID });
+        } catch (err) {
+          // The lookup error was ignored before, so the blog shows as missing
+          blog = undefined;
+        }
+
+        return blog ? blog.domain || blog.handle : blogID + " (missing)";
+      })
     );
+
+    found.push({
+      email: user.email,
+      uid: user.uid,
+      stripe: (user.subscription && user.subscription.status) || "none",
+      paypal: (user.paypal && user.paypal.status) || "none",
+      overdue: overdue.overdue ? overdue.phase : "no",
+      blogs: blogs.join(", ") || "none",
+    });
+  });
+
+  found.forEach(function (u) {
+    console.log(
+      [
+        u.email,
+        u.uid,
+        "stripe=" + u.stripe,
+        "paypal=" + u.paypal,
+        "overdue=" + u.overdue,
+        "blogs=" + u.blogs,
+      ].join(" | ")
+    );
+  });
+
+  console.log("Done. Users to review:", found.length);
+  process.exit();
+}
+
+run().then(
+  function () {
+    process.exit(0);
   },
   function (err) {
-    if (err) throw err;
-
-    found.forEach(function (u) {
-      console.log(
-        [
-          u.email,
-          u.uid,
-          "stripe=" + u.stripe,
-          "paypal=" + u.paypal,
-          "overdue=" + u.overdue,
-          "blogs=" + u.blogs,
-        ].join(" | ")
-      );
-    });
-
-    console.log("Done. Users to review:", found.length);
-    process.exit();
+    console.error(err);
+    process.exit(1);
   }
 );

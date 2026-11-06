@@ -30,7 +30,6 @@ const File = require("models/file");
 const Blog = require("models/blog");
 const hold = require("sync/hold");
 const backend = require("storage/folder/s3");
-const { promisify } = require("util");
 
 function usage(message) {
   if (message) console.error(message + "\n");
@@ -148,7 +147,7 @@ async function main() {
 
   s3.assertConfigured();
 
-  const blog = await promisify(Blog.get)({ id: blogID });
+  const blog = await Blog.get({ id: blogID });
 
   if (!blog) usage("No blog " + blogID);
 

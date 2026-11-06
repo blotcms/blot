@@ -2,6 +2,7 @@ const each = require("../each/user");
 const s3 = require("storage/s3");
 const File = require("models/file");
 const prettySize = require("helper/prettySize");
+const { promisify } = require("util");
 
 let rolling_total = 0;
 
@@ -25,8 +26,8 @@ async function folderBytes(blogID) {
   return (await File.totals(blogID)).bytes;
 }
 
-each(
-  function (user, next) {
+async function main() {
+  await promisify(each)(function (user, next) {
     if (!user) {
       console.log("No user found, exiting.");
       return next();
@@ -63,12 +64,17 @@ each(
     }
 
     next();
-  },
-  function (err) {
-    if (err) throw err;
-    console.log("Done!");
-    // convert rolling_total bytes to human readable size
-    console.log("Total space to be deleted:", prettySize(rolling_total));
-    process.exit();
+  });
+
+  console.log("Done!");
+  // convert rolling_total bytes to human readable size
+  console.log("Total space to be deleted:", prettySize(rolling_total));
+}
+
+main().then(
+  () => process.exit(0),
+  (err) => {
+    console.error(err);
+    process.exit(1);
   }
 );

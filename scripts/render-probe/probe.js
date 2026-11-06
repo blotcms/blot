@@ -498,13 +498,8 @@ async function catalogTimings(blog, entries) {
     await repeat(20, () => redisClient.get(`blog:${blog.id}:probe-missing-key`))
   );
 
-  const [ids, idsMs] = await timed(
-    () =>
-      new Promise((resolve, reject) =>
-        Entries.getListIDs(blog.id, "entries", {}, (err, list) =>
-          err ? reject(err) : resolve(list)
-        )
-      )
+  const [ids, idsMs] = await timed(() =>
+    Entries.getListIDs(blog.id, "entries", {})
   );
   timings.listIDsMs = idsMs;
 

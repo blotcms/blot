@@ -1,118 +1,94 @@
 var get = require("../get/entry");
 var client = require("models/client");
-var async = require("async");
 
 if (require.main === module) {
-  main(process.argv[2], function (err) {
-    if (err) throw err;
-    console.log("Done!");
-    process.exit();
-  });
+  wipeCaches(process.argv[2]).then(
+    () => {
+      console.log("Done!");
+      process.exit();
+    },
+    (err) => {
+      console.error(err);
+      process.exit(1);
+    }
+  );
 }
 
-function main(url, callback) {
+async function wipeCaches(url) {
   console.log("Looking up", url);
-  get(url, function (err, user, blog, entry) {
-    if (err) return callback(err);
 
-    console.log("Wiping thumbnails for", entry.path);
-    thumbnails(blog, entry, function (err) {
-      if (err) return callback(err);
+  const { blog, entry } = await new Promise((resolve, reject) =>
+    get(url, (err, user, found, foundEntry) =>
+      err ? reject(err) : resolve({ blog: found, entry: foundEntry })
+    )
+  );
 
-      console.log("Wiping image cache for", entry.path);
-      imageCache(blog, entry, callback);
-    });
-  });
+  console.log("Wiping thumbnails for", entry.path);
+  await wipeThumbnails(blog, entry);
+
+  console.log("Wiping image cache for", entry.path);
+  await wipeImageCache(blog, entry);
 }
 
-function imageCache(blog, entry, callback) {
-  if (!entry.thumbnail.small || !entry.thumbnail.small.name) return callback();
+async function wipeImageCache(blog, entry) {
+  if (!entry.thumbnail.small || !entry.thumbnail.small.name) return;
 
   var set = "blog:" + blog.id + ":store:image-cache:everything";
 
-  client
-    .sMembers(set)
-    .then(function (keys) {
-      async.each(
-        keys,
-        function (key, next) {
-          client
-            .get(key)
-            .then(function (res) {
-              if (!res) return next();
+  var keys = await client.sMembers(set);
 
-              try {
-                res = JSON.parse(res);
-              } catch (e) {
-                console.log(e.message);
-                return next();
-              }
+  await Promise.all(
+    keys.map(async function (key) {
+      var res = await client.get(key);
 
-              if (entry.html.indexOf(res.src) === -1) return next();
+      if (!res) return;
 
-              var multi = client.multi();
+      try {
+        res = JSON.parse(res);
+      } catch (e) {
+        console.log(e.message);
+        return;
+      }
 
-              console.log(res.src, "wiped");
+      if (entry.html.indexOf(res.src) === -1) return;
 
-              multi
-                .sRem(set, key)
-                .del(key)
-                .exec()
-                .then(function () {
-                  next();
-                })
-                .catch(next);
-            })
-            .catch(next);
-        },
-        callback
-      );
+      console.log(res.src, "wiped");
+
+      await client.multi().sRem(set, key).del(key).exec();
     })
-    .catch(callback);
+  );
 }
 
-function thumbnails(blog, entry, callback) {
-  if (!entry.thumbnail.small || !entry.thumbnail.small.name) return callback();
+async function wipeThumbnails(blog, entry) {
+  if (!entry.thumbnail.small || !entry.thumbnail.small.name) return;
 
   var set = "blog:" + blog.id + ":store:thumbnails:everything";
 
-  client
-    .sMembers(set)
-    .then(function (keys) {
-      async.each(
-        keys,
-        function (key, next) {
-          client
-            .get(key)
-            .then(function (res) {
-              try {
-                res = JSON.parse(res);
-                if (res.small.name !== entry.thumbnail.small.name)
-                  return next();
-              } catch (e) {
-                console.log("Error", key, e.message);
-                return next();
-              }
+  var keys = await client.sMembers(set);
 
-              var multi = client.multi();
+  await Promise.all(
+    keys.map(async function (key) {
+      var res = await client.get(key);
 
-              console.log(entry.thumbnail.small.url, "wiped");
+      try {
+        res = JSON.parse(res);
+        if (res.small.name !== entry.thumbnail.small.name) return;
+      } catch (e) {
+        console.log("Error", key, e.message);
+        return;
+      }
 
-              multi
-                .sRem(set, key)
-                .del(key)
-                .exec()
-                .then(function () {
-                  next();
-                })
-                .catch(next);
-            })
-            .catch(next);
-        },
-        callback
-      );
+      console.log(entry.thumbnail.small.url, "wiped");
+
+      await client.multi().sRem(set, key).del(key).exec();
     })
-    .catch(callback);
+  );
 }
 
-module.exports = main;
+// Callback API, for scripts/entry/rebuild.js and other callers.
+module.exports = function main(url, callback) {
+  wipeCaches(url).then(
+    () => callback(null),
+    (err) => callback(err)
+  );
+};

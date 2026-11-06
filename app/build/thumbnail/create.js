@@ -1,34 +1,43 @@
 var { v4: uuid } = require("uuid");
-var callOnce = require("helper/callOnce");
 var Transform = require("./transform");
 var TransformGIF = require("./transform-gif");
 var join = require("path").join;
 var assets = require("storage/assets");
-var callbackify = require("util").callbackify;
+var withCallback = require("helper/withCallback");
 var extname = require("path").extname;
 var TIMEOUT = 20 * 1000; // 20s
 var debug = require("debug")("blot:entry:build:thumbnail:create");
 
-function create(blogID, path, done) {
-  done = callOnce(done);
+async function create(blogID, path) {
+  var timeout;
 
-  var timeout = setTimeout(function () {
-    debug(blogID, "Timeout reached");
-    done(new Error("Timeout"));
-  }, TIMEOUT);
+  // Rejects once TIMEOUT has passed. The work below isn't stopped, as before:
+  // it carries on and its result is dropped.
+  var timedOut = new Promise(function (resolve, reject) {
+    timeout = setTimeout(function () {
+      debug(blogID, "Timeout reached");
+      reject(new Error("Timeout"));
+    }, TIMEOUT);
+  });
 
-  var outputDirectory = "/" + join("_thumbnails", uuid());
-  var fullPathToOutputDirectory = assets.path(blogID, outputDirectory);
-  var extension = extname(path).toLowerCase();
+  var work = (async function () {
+    var outputDirectory = "/" + join("_thumbnails", uuid());
+    var fullPathToOutputDirectory = assets.path(blogID, outputDirectory);
+    var extension = extname(path).toLowerCase();
 
-  var transform = extension === ".gif" ? TransformGIF : Transform;
+    var transform = extension === ".gif" ? TransformGIF : Transform;
+    var thumbnails;
 
-  // The thumbnail job checks the image can be a thumbnail before it makes any
-  debug(blogID, "Transforming", path);
-  transform(path, fullPathToOutputDirectory, function (err, thumbnails) {
-    if (err && err.invalid)
-      debug(blogID, "Invalid thumbnail candidate", path, err);
-    if (err) return done(err);
+    // The thumbnail job checks the image can be a thumbnail before it makes any
+    debug(blogID, "Transforming", path);
+
+    try {
+      thumbnails = await transform(path, fullPathToOutputDirectory);
+    } catch (err) {
+      if (err && err.invalid)
+        debug(blogID, "Invalid thumbnail candidate", path, err);
+      throw err;
+    }
 
     for (var i in thumbnails) {
       thumbnails[i].path = outputDirectory + "/" + thumbnails[i].name;
@@ -36,15 +45,21 @@ function create(blogID, path, done) {
     }
 
     // The transform wrote the files locally, now they are all in place
-    callbackify(assets.commit)(blogID, outputDirectory, function (err) {
-      if (err) return done(err);
+    await assets.commit(blogID, outputDirectory);
 
-      clearTimeout(timeout);
+    debug(blogID, "Done", thumbnails);
+    return thumbnails;
+  })();
 
-      debug(blogID, "Done", thumbnails);
-      done(null, thumbnails);
-    });
-  });
+  // If the timeout wins, the work's own failure is not reported
+  work.catch(function () {});
+  timedOut.catch(function () {});
+
+  try {
+    return await Promise.race([work, timedOut]);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
-module.exports = create;
+module.exports = withCallback(create);

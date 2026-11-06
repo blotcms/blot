@@ -1,17 +1,13 @@
 var debug = require("debug")("blot:build:multiple");
 var path = require("path");
-var async = require("async");
 var folder = require("storage/folder");
-var callbackify = require("util").callbackify;
 var ensure = require("helper/ensure");
 var pathNormalizer = require("helper/pathNormalizer");
 var Single = require("./single");
 var enabledConverters = require("./converters/enabled");
 var titlecase = require("helper/titlecase");
 var cheerio = require("cheerio");
-
-var statFolder = callbackify(folder.stat);
-var listNames = callbackify(folder.listNames);
+var withResults = require("./withResults");
 
 // Mirrors the traversal in prepare/title.js exactly: preferred tag order and
 // the "first three nodes at each nesting level" limit.
@@ -20,12 +16,13 @@ var TITLE_MAX_DEPTH = 3;
 
 var MAX_MULTI_FILES = 50;
 
-module.exports = function buildMultiple(blog, info, callback) {
+// Calls back with (err, html, metadata, stat, dependencies, extras); without
+// a callback it resolves to [html, metadata, stat, dependencies, extras].
+async function buildMultiple(blog, info) {
   ensure(blog, "object")
     .and(info, "object")
     .and(info.folderPath, "string")
-    .and(info.entryPath, "string")
-    .and(callback, "function");
+    .and(info.entryPath, "string");
 
   const folderPath = pathNormalizer(info.folderPath);
   const entryPath = pathNormalizer(info.entryPath);
@@ -35,179 +32,161 @@ module.exports = function buildMultiple(blog, info, callback) {
   // A folder like "/article.md+" strips to "/article.md", which can also be a
   // real sibling file with its own entry. Refuse to aggregate in that case so
   // the two identities don't overwrite each other depending on sync order.
-  statFolder(blog.id, entryPath, function (statErr, entryStat) {
-    if (!statErr && !entryStat.isDirectory) {
-      var collisionError = new Error(
-        "Folder post path collides with a file: " + entryPath
-      );
-      collisionError.code = "PLUS_PATH_COLLISION";
-      return callback(collisionError);
+  var entryStat;
+
+  try {
+    entryStat = await folder.stat(blog.id, entryPath);
+  } catch (statErr) {}
+
+  if (entryStat && !entryStat.isDirectory) {
+    var collisionError = new Error(
+      "Folder post path collides with a file: " + entryPath
+    );
+    collisionError.code = "PLUS_PATH_COLLISION";
+    throw collisionError;
+  }
+
+  const files = await collectConvertibleFiles(blog, folderPath);
+
+  if (!files.length) {
+    var emptyError = new Error(
+      "No convertible files inside multi folder: " + folderPath
+    );
+    emptyError.code = "EMPTY";
+    throw emptyError;
+  }
+
+  const results = [];
+
+  for (const filePath of files) {
+    let built;
+
+    try {
+      built = await Single(blog, filePath);
+    } catch (err) {
+      debug("Blog:", blog.id, filePath, "error building", err);
+      throw err;
     }
 
-    collectConvertibleFiles(blog, folderPath, onFiles);
+    const [html, metadata, stat, dependencies, extras] = built;
+
+    results.push({
+      path: filePath,
+      html: html,
+      metadata: metadata || {},
+      stat: stat || {},
+      dependencies: dependencies || [],
+      extras: extras || {},
+    });
+  }
+
+  var combinedMetadata = {};
+  var combinedDependencies = [];
+  var combinedExtras = {};
+  var combinedStat = {
+    size: 0,
+    mtime: 0,
+  };
+
+  results.forEach(function (result) {
+    combinedMetadata = mergeMetadata(combinedMetadata, result.metadata);
+    combinedDependencies = combinedDependencies.concat(result.dependencies);
+    combinedExtras = mergeMetadata(combinedExtras, result.extras);
+
+    if (result.stat && typeof result.stat.size === "number") {
+      combinedStat.size += result.stat.size;
+    }
+
+    if (result.stat && result.stat.mtime) {
+      combinedStat.mtime = Math.max(
+        combinedStat.mtime,
+        new Date(result.stat.mtime).valueOf()
+      );
+    }
   });
 
-  function onFiles(err, files) {
-    if (err) return callback(err);
+  combinedDependencies = Array.from(new Set(combinedDependencies));
 
-    if (!files.length) {
-      var emptyError = new Error(
-        "No convertible files inside multi folder: " + folderPath
-      );
-      emptyError.code = "EMPTY";
-      return callback(emptyError);
-    }
+  var stat = {
+    size: combinedStat.size,
+  };
 
-    async.mapSeries(
-      files,
-      function (filePath, next) {
-        Single(
-          blog,
-          filePath,
-          function (err, html, metadata, stat, dependencies, extras) {
-            if (err) {
-              debug("Blog:", blog.id, filePath, "error building", err);
-              return next(err);
-            }
+  if (combinedStat.mtime) stat.mtime = new Date(combinedStat.mtime);
 
-            next(null, {
-              path: filePath,
-              html: html,
-              metadata: metadata || {},
-              stat: stat || {},
-              dependencies: dependencies || [],
-              extras: extras || {},
-            });
-          }
-        );
-      },
-      function (err, results) {
-        if (err) return callback(err);
+  if (!stat.mtime) stat.mtime = new Date();
 
-        var combinedMetadata = {};
-        var combinedDependencies = [];
-        var combinedExtras = {};
-        var combinedStat = {
-          size: 0,
-          mtime: 0,
-        };
+  var metadata = Object.assign({}, combinedMetadata, {
+    _sourcePaths: files,
+  });
 
-        results.forEach(function (result) {
-          combinedMetadata = mergeMetadata(combinedMetadata, result.metadata);
-          combinedDependencies = combinedDependencies.concat(
-            result.dependencies
-          );
-          combinedExtras = mergeMetadata(combinedExtras, result.extras);
+  var html = renderHtmlSections(results, folderPath, combinedMetadata);
 
-          if (result.stat && typeof result.stat.size === "number") {
-            combinedStat.size += result.stat.size;
-          }
+  debug(
+    "Blog:",
+    blog.id,
+    "multi entry",
+    entryPath,
+    "built from",
+    files.length,
+    "files"
+  );
 
-          if (result.stat && result.stat.mtime) {
-            combinedStat.mtime = Math.max(
-              combinedStat.mtime,
-              new Date(result.stat.mtime).valueOf()
-            );
-          }
-        });
+  return [html, metadata, stat, combinedDependencies, combinedExtras];
+}
 
-        combinedDependencies = Array.from(new Set(combinedDependencies));
+module.exports = withResults(buildMultiple);
 
-        var stat = {
-          size: combinedStat.size,
-        };
-
-        if (combinedStat.mtime) stat.mtime = new Date(combinedStat.mtime);
-
-        if (!stat.mtime) stat.mtime = new Date();
-
-        var metadata = Object.assign({}, combinedMetadata, {
-          _sourcePaths: files,
-        });
-
-        var html = renderHtmlSections(results, folderPath, combinedMetadata);
-
-        debug(
-          "Blog:",
-          blog.id,
-          "multi entry",
-          entryPath,
-          "built from",
-          files.length,
-          "files"
-        );
-
-        callback(
-          null,
-          html,
-          metadata,
-          stat,
-          combinedDependencies,
-          combinedExtras
-        );
-      }
-    );
-  }
-};
-
-function collectConvertibleFiles(blog, folderPath, callback) {
+async function collectConvertibleFiles(blog, folderPath) {
   const files = [];
 
-  function walk(currentPath, done) {
+  async function walk(currentPath) {
     if (files.length > MAX_MULTI_FILES) {
-      return done(createTooManyFilesError(folderPath));
+      throw createTooManyFilesError(folderPath);
     }
 
-    listNames(blog.id, currentPath, function (err, entries) {
-      if (err) return done(err);
+    let entries = await folder.listNames(blog.id, currentPath);
 
-      entries = entries.slice().sort(function (a, b) {
-        return a.name.localeCompare(b.name, "en");
-      });
-
-      async.eachSeries(
-        entries,
-        function (entry, next) {
-          if (files.length > MAX_MULTI_FILES) {
-            return next(createTooManyFilesError(folderPath));
-          }
-
-          const entryPath = pathNormalizer(path.join(currentPath, entry.name));
-
-          if (shouldIgnore(entryPath)) return next();
-
-          if (entry.isDirectory) {
-            if (entry.name.endsWith("+") && entryPath !== folderPath) {
-              return next();
-            }
-
-            return walk(entryPath, next);
-          }
-
-          if (isPreviewFile(entry.name)) return next();
-
-          if (!isConvertible(blog, entryPath)) return next();
-
-          files.push(entryPath);
-
-          if (files.length > MAX_MULTI_FILES) {
-            return next(createTooManyFilesError(folderPath));
-          }
-
-          next();
-        },
-        done
-      );
+    entries = entries.slice().sort(function (a, b) {
+      return a.name.localeCompare(b.name, "en");
     });
+
+    for (const entry of entries) {
+      if (files.length > MAX_MULTI_FILES) {
+        throw createTooManyFilesError(folderPath);
+      }
+
+      const entryPath = pathNormalizer(path.join(currentPath, entry.name));
+
+      if (shouldIgnore(entryPath)) continue;
+
+      if (entry.isDirectory) {
+        if (entry.name.endsWith("+") && entryPath !== folderPath) {
+          continue;
+        }
+
+        await walk(entryPath);
+        continue;
+      }
+
+      if (isPreviewFile(entry.name)) continue;
+
+      if (!isConvertible(blog, entryPath)) continue;
+
+      files.push(entryPath);
+
+      if (files.length > MAX_MULTI_FILES) {
+        throw createTooManyFilesError(folderPath);
+      }
+    }
   }
 
-  walk(folderPath, function (err) {
-    if (err) return callback(err);
-    files.sort(function (a, b) {
-      return a.localeCompare(b, "en");
-    });
-    callback(null, files);
+  await walk(folderPath);
+
+  files.sort(function (a, b) {
+    return a.localeCompare(b, "en");
   });
+
+  return files;
 }
 
 function createTooManyFilesError(folderPath) {

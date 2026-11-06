@@ -1,6 +1,7 @@
 // The page is fetched and parsed in the sandbox (sandbox/fetch, kind "html",
 // extraction "og-video"): Node never parses what bandcamp's server sent.
 const sandboxFetch = require("sandbox/fetch");
+const withCallback = require("helper/withCallback");
 
 const ERROR_MESSAGE = "Could not retrieve song properties";
 
@@ -14,25 +15,25 @@ const BANDCAMP_HOST = /^([a-z0-9-]+\.)*bandcamp\.com$/i;
 // no credentials, no port, no query), and redirects are not followed - a
 // 3xx (or anything non-2xx) is treated as "not a bandcamp track". The jail's
 // egress filter is the second line, as for every fetch of a user's URL.
-module.exports = async function (href, callback) {
+async function bandcamp(href) {
   try {
     let parsed;
 
     try {
       parsed = new URL(href);
     } catch (e) {
-      return callback(new Error(ERROR_MESSAGE));
+      throw new Error(ERROR_MESSAGE, { cause: e });
     }
 
     const host = parsed.hostname.toLowerCase();
     const path = parsed.pathname.toLowerCase();
 
     if (!BANDCAMP_HOST.test(host)) {
-      return callback(new Error(ERROR_MESSAGE));
+      throw new Error(ERROR_MESSAGE);
     }
 
     if (!path || !path.match(/\/(album|track)/)) {
-      return callback(new Error(ERROR_MESSAGE));
+      throw new Error(ERROR_MESSAGE);
     }
 
     // Rebuild from validated parts - never fetch `href` directly.
@@ -60,7 +61,7 @@ module.exports = async function (href, callback) {
       !Number.isInteger(width) ||
       !Number.isInteger(height)
     ) {
-      return callback(new Error(ERROR_MESSAGE));
+      throw new Error(ERROR_MESSAGE);
     }
 
     // we prepend a zero-width char because of a weird
@@ -70,8 +71,10 @@ module.exports = async function (href, callback) {
     // that doesn't disrupt page layout...
     const embedHTML = `<div style="width:0;height:0"> </div><div class="videoContainer bandcamp" style="padding-bottom: ${height}px"><iframe width="${width}" height="${height}" src="${src}" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen></iframe></div>`;
 
-    callback(null, embedHTML);
+    return embedHTML;
   } catch (error) {
-    callback(new Error(ERROR_MESSAGE));
+    throw new Error(ERROR_MESSAGE, { cause: error });
   }
-};
+}
+
+module.exports = withCallback(bandcamp);

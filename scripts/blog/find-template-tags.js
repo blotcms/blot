@@ -43,12 +43,6 @@ for (let i = 0; i < args.length; i++) {
 const identifier = positional[0];
 const asJSON = process.argv.includes("--json");
 
-function getAllIDs(blogID) {
-  return new Promise((resolve, reject) =>
-    Entries.getAllIDs(blogID, (err, ids) => (err ? reject(err) : resolve(ids)))
-  );
-}
-
 function getEntry(blogID, path) {
   return new Promise((resolve) => Entry.get(blogID, path, resolve));
 }
@@ -58,7 +52,7 @@ function getEntry(blogID, path) {
 // actually contain tags, so memory stays flat however large the site is.
 async function scan(blog) {
   const files = [];
-  const paths = await getAllIDs(blog.id);
+  const paths = await Entries.getAllIDs(blog.id);
   const bar = progress.push("Entry", paths.length);
 
   for (const path of paths) {
@@ -127,31 +121,40 @@ async function printResult(result) {
   await printFiles(result.blogID, result.files);
 }
 
-function searchOne() {
-  getBlog(identifier, function (err, user, blog) {
-    if (err || !blog) {
-      console.error("No blog found for " + identifier);
-      return process.exit(1);
-    }
-
-    scan(blog).then(async function (files) {
-      const result = summarise(blog, user, files);
-
-      if (asJSON) {
-        console.log(JSON.stringify(result, null, 2));
-        return process.exit();
-      }
-
-      console.log("email:  " + (result.email || "(unknown)"));
-      console.log("blog:   " + blog.id + " " + (blog.handle || ""));
-      console.log("domain: " + (blog.domain || "(none)"));
-      console.log("");
-      console.log(files.length + " file(s) with template tags in their source");
-      await printFiles(blog.id, files);
-
-      process.exit();
-    });
+// Resolves to { user, blog }, or to undefined when the lookup fails
+function lookupBlog(identifier) {
+  return new Promise((resolve) => {
+    getBlog(identifier, (err, user, blog) =>
+      resolve(err ? undefined : { user, blog })
+    );
   });
+}
+
+async function searchOne() {
+  const found = await lookupBlog(identifier);
+
+  if (!found || !found.blog) {
+    console.error("No blog found for " + identifier);
+    return process.exit(1);
+  }
+
+  const { user, blog } = found;
+  const files = await scan(blog);
+  const result = summarise(blog, user, files);
+
+  if (asJSON) {
+    console.log(JSON.stringify(result, null, 2));
+    return process.exit();
+  }
+
+  console.log("email:  " + (result.email || "(unknown)"));
+  console.log("blog:   " + blog.id + " " + (blog.handle || ""));
+  console.log("domain: " + (blog.domain || "(none)"));
+  console.log("");
+  console.log(files.length + " file(s) with template tags in their source");
+  await printFiles(blog.id, files);
+
+  process.exit();
 }
 
 // each/blog.js supplies the sticky blog/entry progress display.
@@ -207,5 +210,9 @@ function searchAll() {
   );
 }
 
-if (identifier) searchOne();
-else searchAll();
+if (identifier) {
+  searchOne().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+} else searchAll();

@@ -1,9 +1,9 @@
 const fs = require("fs-extra");
-const async = require("async");
 const cheerio = require("cheerio");
 const { join, resolve, posix } = require("path");
 const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
 const unwrapFolderLink = require("blog/render/replaceFolderLinks/unwrapFolderLink");
+const withPluginCallback = require("../withPluginCallback");
 const {
   GLOBAL_STATIC_DIR,
   BLOG_STATIC_PATHS,
@@ -71,11 +71,10 @@ const HASH_CONCURRENCY = 8;
 // Links that are already baked for this blog are unwrapped and re-baked
 // rather than skipped, so a copy of another entry's HTML (wikilink embeds)
 // gets a fresh version instead of the embedded entry's stale one.
-function render($, callback, options) {
-  bake($, options).then(
-    ({ dependencies }) => callback(null, { newDependencies: dependencies }),
-    callback
-  );
+async function render($, options) {
+  const { dependencies } = await bake($, options);
+
+  return { newDependencies: dependencies };
 }
 
 // Bakes an HTML string, for markup which doesn't go through the plugin
@@ -112,7 +111,7 @@ function makeContext(options) {
   };
 }
 
-function bake($, options) {
+async function bake($, options) {
   const ctx = makeContext(options);
   const dependencies = ctx.dependencies;
   const tasks = [];
@@ -147,20 +146,41 @@ function bake($, options) {
     }
   });
 
-  return new Promise((resolve, reject) => {
-    async.eachLimit(
-      tasks,
-      HASH_CONCURRENCY,
-      (task, next) => task().then(() => next(), next),
-      (err) => {
-        if (err) return reject(err);
-        resolve({
-          dependencies: Array.from(dependencies),
-          changed: ctx.changed,
-        });
+  await eachLimit(tasks, HASH_CONCURRENCY);
+
+  return {
+    dependencies: Array.from(dependencies),
+    changed: ctx.changed,
+  };
+}
+
+// Runs tasks (functions returning promises) with at most `limit` in flight.
+// The first failure rejects, and no task starts after it, as async.eachLimit
+// did; tasks already running finish on their own.
+async function eachLimit(tasks, limit) {
+  let next = 0;
+  let failed = false;
+
+  async function worker() {
+    while (!failed && next < tasks.length) {
+      const task = tasks[next++];
+
+      try {
+        await task();
+      } catch (err) {
+        failed = true;
+        throw err;
       }
-    );
-  });
+    }
+  }
+
+  const workers = [];
+
+  for (let i = 0; i < Math.min(limit, tasks.length); i++) {
+    workers.push(worker());
+  }
+
+  await Promise.all(workers);
 }
 
 // Same-host absolute URLs are baked at build time too, so nothing about them
@@ -385,7 +405,7 @@ function globalStaticFileExists(ctx, path) {
 }
 
 module.exports = {
-  render,
+  render: withPluginCallback(render),
   bakeHTML,
   // Internal build optimization, not a user setting: always runs, and is
   // hidden from the plugins page (see dashboard/site/load/plugins.js).

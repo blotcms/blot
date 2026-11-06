@@ -1,4 +1,6 @@
-function render($, callback) {
+const withPluginCallback = require("../withPluginCallback");
+
+async function render($) {
   ["audio", "video"].forEach((tag) => {
     $(tag).each(function () {
       const el = $(this);
@@ -12,12 +14,10 @@ function render($, callback) {
       el.attr("preload", "metadata");
     });
   });
-
-  callback();
 }
 
 module.exports = {
-  render,
+  render: withPluginCallback(render),
   description:
     'Ensures embedded <audio> and <video> elements default to preload="metadata"',
   category: "Performance",

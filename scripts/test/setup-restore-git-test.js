@@ -7,19 +7,17 @@ const fs = require("fs-extra");
 const path = require("path");
 const { promisify } = require("util");
 
-const writeToFolderAsync = promisify(writeToFolder);
-
 async function setup(blogHandle) {
   try {
     // Get blog by handle
     console.log("Looking up blog with handle:", blogHandle);
-    const blog = await new Promise((resolve, reject) => {
-      Blog.get({ handle: blogHandle }, (err, blog) => {
-        if (err || !blog)
-          return reject(new Error("No blog found with handle: " + blogHandle));
-        resolve(blog);
-      });
-    });
+    let blog;
+    try {
+      blog = await Blog.get({ handle: blogHandle });
+    } catch (err) {
+      blog = undefined;
+    }
+    if (!blog) throw new Error("No blog found with handle: " + blogHandle);
 
     console.log("Found blog:", blog.id, blog.handle);
     console.log("Blog client:", blog.client);
@@ -98,7 +96,7 @@ async function setup(blogHandle) {
 
     // Now run writeToFolder again to trigger the bug (delete .git files)
     console.log("Running writeToFolder again to trigger bug...");
-    await writeToFolderAsync(blog.id, template.id);
+    await promisify(writeToFolder)(blog.id, template.id);
 
     console.log("writeToFolder completed");
     console.log("");

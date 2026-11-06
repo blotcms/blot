@@ -3,7 +3,7 @@ const eachBlogOrOneBlog = require("../each/eachBlogOrOneBlog");
 const fromiCloud = require("clients/icloud/sync/fromiCloud");
 const establishSyncLock = require("sync/establishSyncLock");
 const database = require("clients/icloud/database");
-const fix = promisify(require("sync/fix"));
+const fix = require("sync/fix");
 
 const PROGRESS_INTERVAL_MS = 30000;
 
@@ -61,7 +61,7 @@ const processBlog = async (blog) => {
     await fromiCloud(blog.id, folder.status, folder.update);
 
     try {
-      await fix(blog);
+      await promisify(fix)(blog);
     } catch (err) {
       console.error(
         `WARN: iCloud resync fix failed for ${blog.id}: ${formatError(err)}`

@@ -3,9 +3,10 @@ const { parse } = require("url");
 const config = require("config");
 const cheerio = require("cheerio");
 const querystring = require("querystring");
+const withCallback = require("helper/withCallback");
 const ERROR_MESSAGE = "Could not parse youtube video";
 
-module.exports = async function (href, callback) {
+async function youtube(href) {
   try {
     const { query, hostname, pathname } = parse(href);
 
@@ -50,8 +51,10 @@ module.exports = async function (href, callback) {
     // the video player will not show.
     const embedHTML = `<div style="width:0;height:0"> </div><div class="videoContainer" style="padding-bottom:${ratio}%"><iframe src="https://www.youtube-nocookie.com/embed/${id}?rel=0&wmode=transparent&rel=0&autohide=1&showinfo=0" frameborder="0" allowfullscreen></iframe></div>`;
 
-    return callback(null, embedHTML);
+    return embedHTML;
   } catch (e) {
-    return callback(new Error(ERROR_MESSAGE));
+    throw new Error(ERROR_MESSAGE, { cause: e });
   }
-};
+}
+
+module.exports = withCallback(youtube);

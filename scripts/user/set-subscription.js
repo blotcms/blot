@@ -5,32 +5,42 @@ var config = require("config");
 var stripe = require("stripe")(config.stripe.secret);
 
 var User = require("models/user");
+var { promisify } = require("util");
 
-User.getByEmail(from, function (err, user) {
+async function main() {
+  var user;
+
+  try {
+    user = await User.getByEmail(from);
+  } catch {
+    // Ignored before: a failed lookup ends as "No user" below
+  }
+
   if (!user) throw "No user";
   if (!newSubscriptionID) throw "No Subscription id";
   if (!newCustomerID) throw "No Customer id";
 
   console.log("Previous subscription is ", user.subscription);
 
-  stripe.customers.retrieveSubscription(
+  var subscription = await stripe.customers.retrieveSubscription(
     newCustomerID,
-    newSubscriptionID,
-    function (err, subscription) {
-      if (err) throw err;
-
-      if (!subscription) throw "No subscription found from Stripe";
-
-      console.log("------------------");
-      console.log("new subscription is:");
-
-      console.log(subscription);
-
-      User.set(user.uid, { subscription: subscription }, function (err) {
-        if (err) throw err;
-
-        process.exit();
-      });
-    }
+    newSubscriptionID
   );
-});
+
+  if (!subscription) throw "No subscription found from Stripe";
+
+  console.log("------------------");
+  console.log("new subscription is:");
+
+  console.log(subscription);
+
+  await promisify(User.set)(user.uid, { subscription: subscription });
+}
+
+main().then(
+  () => process.exit(0),
+  (err) => {
+    console.error(err);
+    process.exit(1);
+  }
+);

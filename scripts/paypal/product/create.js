@@ -1,7 +1,15 @@
 var request = require("request");
 
-function main(callback) {
-  require("../generate-access-token")(function (err, token) {
+async function main() {
+  var token;
+  try {
+    token = await require("../generate-access-token")();
+  } catch (err) {
+    // The callback version ignored this error and sent the request anyway,
+    // with "Bearer undefined" as the token. Kept as it was.
+  }
+
+  await new Promise(function (resolve, reject) {
     request.post(
       {
         uri: "https://api.sandbox.paypal.com/v1/catalogs/products",
@@ -23,8 +31,9 @@ function main(callback) {
         }),
       },
       function (err, res, data) {
-        if (err) return callback(err);
+        if (err) return reject(err);
         console.log(data);
+        resolve();
       }
     );
   });
@@ -33,7 +42,7 @@ function main(callback) {
 module.exports = main;
 
 if (require.main === module)
-  main(function (err, token) {
-    if (err) throw err;
-    console.log(token);
+  main().catch(function (err) {
+    console.error(err);
+    process.exit(1);
   });

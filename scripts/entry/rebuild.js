@@ -1,6 +1,7 @@
 var get = require("../get/entry");
-var sync = require("../../app/sync");
+var establishSyncLock = require("sync/establishSyncLock");
 var wipeCaches = require("./wipe-image-and-thumbnail-cache");
+var { promisify } = require("util");
 
 if (!process.argv[2]) {
   console.log(
@@ -9,34 +10,47 @@ if (!process.argv[2]) {
   process.exit();
 }
 
-// Will rebuild and recache any thumbnails or images
-console.log("Getting info from:", process.argv[2]);
-var path;
+async function rebuild(url) {
+  // Will rebuild and recache any thumbnails or images
+  console.log("Getting info from:", url);
 
-get(process.argv[2], function (err, user, blog, entry) {
-  if (err && err.message !== "No entry") throw err;
+  const found = await new Promise((resolve) =>
+    get(url, (err, user, blog, entry) => resolve({ err, blog, entry }))
+  );
+
+  if (found.err && found.err.message !== "No entry") throw found.err;
+
+  const blog = found.blog;
+  const entry = found.entry;
+
+  var path;
 
   if (entry) {
     path = entry.path;
   } else {
-    path = decodeURIComponent(require("url").parse(process.argv[2]).path);
+    path = decodeURIComponent(require("url").parse(url).path);
   }
 
   console.log("Starting sync for", blog.handle);
-  sync(blog.id, function (err, folder, done) {
-    if (err) throw err;
 
-    wipeCaches(process.argv[2], function (err) {
-      if (err) console.log(err);
+  const lock = await establishSyncLock(blog.id);
 
-      folder.update(path, function (err) {
-        if (err) throw err;
-        done(null, function (err) {
-          if (err) throw err;
-          console.log("Rebuilt:", process.argv[2]);
-          process.exit();
-        });
-      });
-    });
-  });
-});
+  try {
+    await promisify(wipeCaches)(url);
+  } catch (err) {
+    console.log(err);
+  }
+
+  await lock.folder.update(path);
+  await lock.done();
+
+  console.log("Rebuilt:", url);
+}
+
+rebuild(process.argv[2]).then(
+  () => process.exit(),
+  (err) => {
+    console.error(err);
+    process.exit(1);
+  }
+);
