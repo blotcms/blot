@@ -47,18 +47,10 @@ const update = (blog, slug, locals) =>
   );
 
 const persistToFolder = (blog, template) =>
-  new Promise((resolve, reject) =>
-    writeChangeToFolder(blog, template, {}, (err) =>
-      err ? reject(err) : resolve()
-    )
-  );
+  writeChangeToFolder(blog, template, {});
 
-const listTemplates = (blogID) =>
-  new Promise((resolve, reject) =>
-    Template.getTemplateList(blogID, (err, list) =>
-      err ? reject(err) : resolve(list || [])
-    )
-  );
+const listTemplates = async (blogID) =>
+  (await Template.getTemplateList(blogID)) || [];
 
 // Duplicating a template copies its favicon local verbatim, so two templates in
 // the same blog can point at the same generated files. Only remove a previous
@@ -189,51 +181,55 @@ async function createFavicon(
 }
 
 module.exports = async function uploadFavicon(req, res, next) {
-  const file = firstFile(req.files);
-  const previous = req.template.locals.favicon;
-  const isDelete = req.body.remove === "1";
+  try {
+    const file = firstFile(req.files);
+    const previous = req.template.locals.favicon;
+    const isDelete = req.body.remove === "1";
 
-  // A plain "Save changes" with no new file must not touch an existing favicon;
-  // only the explicit Delete button (remove=1) clears it.
-  if (!isDelete && (!file || !file.size)) {
-    await cleanupFiles(req.files);
-    if (isAjaxRequest(req)) return res.json({ favicon: previous || null });
-    return res.message(
-      req.body.redirect || res.locals.base,
-      previous ? "No changes" : "Choose an image for your favicon"
-    );
-  }
+    // A plain "Save changes" with no new file must not touch an existing favicon;
+    // only the explicit Delete button (remove=1) clears it.
+    if (!isDelete && (!file || !file.size)) {
+      await cleanupFiles(req.files);
+      if (isAjaxRequest(req)) return res.json({ favicon: previous || null });
+      return res.message(
+        req.body.redirect || res.locals.base,
+        previous ? "No changes" : "Choose an image for your favicon"
+      );
+    }
 
-  if (isDelete) {
-    await cleanupFiles(req.files);
+    if (isDelete) {
+      await cleanupFiles(req.files);
+      try {
+        await deleteFavicon(req.blog, req.template, req.params.templateSlug);
+      } catch (error) {
+        return next(error);
+      }
+      return isAjaxRequest(req)
+        ? res.json({ favicon: null })
+        : res.message(req.body.redirect || res.locals.base, "Removed favicon");
+    }
+
+    let favicon;
     try {
-      await deleteFavicon(req.blog, req.template, req.params.templateSlug);
+      favicon = await createFavicon(
+        req.blog,
+        req.template,
+        req.params.templateSlug,
+        file.path,
+        { x: req.body.crop_x, y: req.body.crop_y, size: req.body.crop_size },
+        { onFileProcessed: () => cleanupFiles(req.files) }
+      );
     } catch (error) {
+      await cleanupFiles(req.files);
       return next(error);
     }
+
     return isAjaxRequest(req)
-      ? res.json({ favicon: null })
-      : res.message(req.body.redirect || res.locals.base, "Removed favicon");
-  }
-
-  let favicon;
-  try {
-    favicon = await createFavicon(
-      req.blog,
-      req.template,
-      req.params.templateSlug,
-      file.path,
-      { x: req.body.crop_x, y: req.body.crop_y, size: req.body.crop_size },
-      { onFileProcessed: () => cleanupFiles(req.files) }
-    );
+      ? res.json({ favicon })
+      : res.message(req.body.redirect || res.locals.base, "Updated favicon");
   } catch (error) {
-    await cleanupFiles(req.files);
-    return next(error);
+    next(error);
   }
-
-  return isAjaxRequest(req)
-    ? res.json({ favicon })
-    : res.message(req.body.redirect || res.locals.base, "Updated favicon");
 };
 
 module.exports.removeAssetsIfUnreferenced = removeAssetsIfUnreferenced;

@@ -39,13 +39,15 @@ alreadyPaid.get(function (req, res) {
   res.render("dashboard/sign-up/paid");
 });
 
-alreadyPaid.post(validateEmail, function (req, res, next) {
-  // First we make sure that the access token passed is valid.
-  User.checkAccessToken(req.params.token, function (err) {
-    // An outage is not an invalid link, let it reach the 503 handler
-    if (isRedisUnavailableError(err)) return next(err);
+alreadyPaid.post(validateEmail, async function (req, res, next) {
+  try {
+    // First we make sure that the access token passed is valid.
+    try {
+      await User.checkAccessToken(req.params.token);
+    } catch (err) {
+      // An outage is not an invalid link, let it reach the 503 handler
+      if (isRedisUnavailableError(err)) return next(err);
 
-    if (err) {
       return next(
         new Error("Your sign up link is not valid. Please ask for another.")
       );
@@ -54,32 +56,37 @@ alreadyPaid.post(validateEmail, function (req, res, next) {
     req.session.subscription = {};
     req.session.email = req.email;
     res.redirect(req.baseUrl + passwordForm.path);
-  });
+  } catch (err) {
+    next(err);
+  }
 });
 
-function validateEmail(req, res, next) {
-  var email = req.body && req.body.email;
+async function validateEmail(req, res, next) {
+  try {
+    var email = req.body && req.body.email;
 
-  if (typeof email !== "string" || !email.trim()) {
-    return next(new Error(NO_EMAIL));
-  }
+    if (typeof email !== "string" || !email.trim()) {
+      return next(new Error(NO_EMAIL));
+    }
 
-  if (emailIsTooLong(email.trim())) {
-    return next(new Error("Email address is too long"));
-  }
+    if (emailIsTooLong(email.trim())) {
+      return next(new Error("Email address is too long"));
+    }
 
-  // Normalize the email here before storing it
-  // in the browser's session
-  email = email.trim().toLowerCase();
+    // Normalize the email here before storing it
+    // in the browser's session
+    email = email.trim().toLowerCase();
 
-  User.getByEmail(email, function (err, existingUser) {
-    if (err) return next(err);
+    const existingUser = await User.getByEmail(email);
 
     if (existingUser) return next(new Error(IN_USE));
 
     req.email = email;
-    next();
-  });
+  } catch (err) {
+    return next(err);
+  }
+
+  next();
 }
 
 paymentForm.get(function (req, res, next) {
@@ -104,25 +111,29 @@ paymentForm.get(function (req, res, next) {
   res.render("dashboard/sign-up");
 });
 
-paymentForm.post(validateEmail, function (req, res, next) {
-  // Card is a stripe token generated on the client
-  const card = req.body && req.body.stripeToken;
+paymentForm.post(validateEmail, async function (req, res, next) {
+  try {
+    // Card is a stripe token generated on the client
+    const card = req.body && req.body.stripeToken;
 
-  if (!card) return next(new Error(BAD_CHARGE));
-  const email = req.email;
-  const info = {
-    card,
-    email,
-    plan: config.stripe.plan,
-    description: "Blot subscription",
-  };
+    if (!card) return next(new Error(BAD_CHARGE));
+    const email = req.email;
+    const info = {
+      card,
+      email,
+      plan: config.stripe.plan,
+      description: "Blot subscription",
+    };
 
-  stripe.customers.create(info, function (err, customer) {
-    if (err && err.type === "StripeCardError") {
-      return next(new Error(DECLINED));
-    }
+    let customer;
 
-    if (err) {
+    try {
+      customer = await stripe.customers.create(info);
+    } catch (err) {
+      if (err && err.type === "StripeCardError") {
+        return next(new Error(DECLINED));
+      }
+
       return next(new Error(BAD_CHARGE));
     }
 
@@ -137,7 +148,9 @@ paymentForm.post(validateEmail, function (req, res, next) {
     req.session.subscription = customer.subscription;
 
     res.redirect(req.baseUrl + passwordForm.path);
-  });
+  } catch (err) {
+    next(err);
+  }
 });
 
 passwordForm.all(function (req, res, next) {
@@ -160,77 +173,86 @@ passwordForm.get(function (req, res) {
   res.render("dashboard/sign-up/password");
 });
 
-passwordForm.post(function (req, res, next) {
-  var subscription = req.session.subscription || {};
-  var paypal = req.session.paypal || {};
-  var email = req.body && req.body.email;
-  var password = req.body && req.body.password;
+passwordForm.post(async function (req, res, next) {
+  try {
+    var subscription = req.session.subscription || {};
+    var paypal = req.session.paypal || {};
+    var email = req.body && req.body.email;
+    var password = req.body && req.body.password;
 
-  if (typeof email !== "string" || !email.trim()) {
-    return next(new Error("Please choose an email address"));
-  }
+    if (typeof email !== "string" || !email.trim()) {
+      return next(new Error("Please choose an email address"));
+    }
 
-  if (!password) return next(new Error("Please choose a password"));
+    if (!password) return next(new Error("Please choose a password"));
 
-  if (emailIsTooLong(email.trim())) {
-    return next(new Error("Email address is too long"));
-  }
+    if (emailIsTooLong(email.trim())) {
+      return next(new Error("Email address is too long"));
+    }
 
-  if (passwordIsTooLong(password)) {
-    return next(new Error("Password is too long"));
-  }
+    if (passwordIsTooLong(password)) {
+      return next(new Error("Password is too long"));
+    }
 
-  User.hashPassword(password, function (err, passwordHash) {
-    if (err) return next(err);
+    const passwordHash = await User.hashPassword(password);
 
-    User.create(
-      email,
-      passwordHash,
-      subscription,
-      paypal,
-      function (err, user) {
-        if (err) return next(err);
-
-        // The user has changed their email since signing up
-        // TODO: add logging
-        if (
-          subscription &&
-          subscription.customer &&
-          req.session.email !== user.email
-        ) {
-          stripe.customers.update(
-            subscription.customer,
-            { email: user.email },
-            function () {
-              // TODO: handle this error but it's not
-              // all that important
-            }
-          );
+    const user = await new Promise(function (resolve, reject) {
+      User.create(
+        email,
+        passwordHash,
+        subscription,
+        paypal,
+        function (err, user) {
+          if (err) return reject(err);
+          resolve(user);
         }
+      );
+    });
 
-        delete req.session.email;
-        delete req.session.subscription;
-        delete req.session.paypal;
-
-        // if you change this also change log-in
-        res.cookie("signed_into_blot", "true", {
-          domain: "",
-          path: "/",
-          secure: true,
-          httpOnly: false,
-          maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-          sameSite: "Lax",
+    // The user has changed their email since signing up
+    // TODO: add logging
+    if (
+      subscription &&
+      subscription.customer &&
+      req.session.email !== user.email
+    ) {
+      stripe.customers
+        .update(subscription.customer, { email: user.email })
+        .catch(function () {
+          // TODO: handle this error but it's not
+          // all that important
         });
+    }
 
-        User.scheduleWelcomeEmail(user.uid, function (err) {
-          if (err) console.log(err);
-        });
+    delete req.session.email;
+    delete req.session.subscription;
+    delete req.session.paypal;
 
-        req.session.uid = user.uid;
-        res.redirect("/sites/account/create-site");
-      }
-    );
-  });
+    // if you change this also change log-in
+    res.cookie("signed_into_blot", "true", {
+      domain: "",
+      path: "/",
+      secure: true,
+      httpOnly: false,
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      sameSite: "Lax",
+    });
+
+    // Scheduled in the background: the welcome email does not hold up sign up
+    new Promise(function (resolve, reject) {
+      User.scheduleWelcomeEmail(user.uid, function (err) {
+        if (err) return reject(err);
+        resolve();
+      });
+    }).catch(function (err) {
+      console.log(err);
+    });
+
+    req.session.uid = user.uid;
+    res.redirect("/sites/account/create-site");
+  } catch (err) {
+    next(err);
+  }
 });
 
 // Redis unreachable: 503 rather than echoing the error in the form

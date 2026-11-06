@@ -1,4 +1,3 @@
-const async = require("async");
 const Template = require("models/template");
 const client = require("models/client");
 const key = require("models/template/key");
@@ -17,14 +16,6 @@ const createTemplateWithUniqueName = require("./create-template-with-unique-name
 // dependency cycles against views already in the database, so two views in
 // the same upload which reference each other only fail on the second write.
 // That is what the rollback is for.
-
-const setView = (templateID, view) =>
-  new Promise((resolve, reject) => {
-    Template.setView(templateID, view, (err) => {
-      if (err) return reject(err);
-      resolve();
-    });
-  });
 
 // setView writes the exact-url lookup key before it writes the view itself,
 // so a view which failed part way through leaves a mapping behind that
@@ -50,18 +41,16 @@ const dropAttemptedViewUrls = async (templateID, views) => {
   );
 };
 
-const dropTemplate = (owner, templateID) =>
-  new Promise((resolve) => {
-    // Template.drop takes the id with the owner prefix removed
-    const slug = templateID.split(":").slice(1).join(":");
+const dropTemplate = async (owner, templateID) => {
+  // Template.drop takes the id with the owner prefix removed
+  const slug = templateID.split(":").slice(1).join(":");
 
-    Template.drop(owner, slug, (err) => {
-      if (err) {
-        console.error("Failed to roll back uploaded template", templateID, err);
-      }
-      resolve();
-    });
-  });
+  try {
+    await Template.drop(owner, slug);
+  } catch (err) {
+    console.error("Failed to roll back uploaded template", templateID, err);
+  }
+};
 
 module.exports = async function createTemplateFromUpload({
   owner,
@@ -83,18 +72,9 @@ module.exports = async function createTemplateFromUpload({
   });
 
   try {
-    await new Promise((resolve, reject) => {
-      async.eachSeries(
-        views,
-        function (view, next) {
-          setView(template.id, view).then(() => next(), next);
-        },
-        function (err) {
-          if (err) return reject(err);
-          resolve();
-        }
-      );
-    });
+    for (const view of views) {
+      await Template.setView(template.id, view);
+    }
   } catch (err) {
     // Urls first, then the template. Dropping the template frees its id, and
     // the id is what stops a second upload of the same name being created —

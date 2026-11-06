@@ -58,17 +58,23 @@ function requireTokenOrLackOfPassword(req, res, next) {
   res.redirect("/");
 }
 
-function save(req, res, next) {
-  User.hashPassword(req.body.newPasswordA, function (err, passwordHash) {
-    if (err) return next(err);
+async function save(req, res, next) {
+  try {
+    const passwordHash = await User.hashPassword(req.body.newPasswordA);
 
     if (!passwordHash) return next(new Error("Could not hash password"));
 
-    User.set(req.user.uid, { passwordHash: passwordHash }, function (err) {
-      if (err) return next(err);
-      res.message("/sites", "Saved your new password");
+    await new Promise(function (resolve, reject) {
+      User.set(req.user.uid, { passwordHash: passwordHash }, function (err) {
+        if (err) return reject(err);
+        resolve();
+      });
     });
-  });
+
+    res.message("/sites", "Saved your new password");
+  } catch (err) {
+    next(err);
+  }
 }
 
 function checkMatching(req, res, next) {
@@ -90,22 +96,24 @@ function checkMatching(req, res, next) {
   next();
 }
 
-function verifyToken(req, res, next) {
-  if (!req.session.passwordSetToken) return next();
+async function verifyToken(req, res, next) {
+  try {
+    if (!req.session.passwordSetToken) return next();
 
-  var token = req.session.passwordSetToken;
+    var token = req.session.passwordSetToken;
 
-  delete req.session.passwordSetToken;
+    delete req.session.passwordSetToken;
 
-  User.checkAccessToken(token, function (err, uid) {
-    if (err) return next(err);
+    const uid = await User.checkAccessToken(token);
 
     if (uid !== req.user.uid) {
       return next(new Error("Your token was invalid."));
     }
+  } catch (err) {
+    return next(err);
+  }
 
-    next();
-  });
+  next();
 }
 
 module.exports = Password;

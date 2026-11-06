@@ -121,12 +121,7 @@ paypal.post("/", parser.json(), async (req, res) => {
 });
 
 const updateSubscription = async (subscriptionID) => {
-  const user = await new Promise((resolve, reject) => {
-    User.getByPayPalSubscriptionId(subscriptionID, (err, user) => {
-      if (err) return reject(err);
-      resolve(user);
-    });
-  });
+  const user = await User.getByPayPalSubscriptionId(subscriptionID);
   if (!user) {
     throw new Error(
       "No user associated with subscription ID " + subscriptionID
@@ -158,73 +153,73 @@ const updateSubscription = async (subscriptionID) => {
   const becameCancelled =
     paypal.status === "CANCELLED" && previousStatus !== "CANCELLED";
 
-  return new Promise((resolve, reject) => {
-    const updates = { paypal };
-    const shouldDisable =
-      subscriptionLifecycle.shouldDisableFromPaypalSubscription(paypal);
-    // Preserve deliberate per-blog availability when the account is unchanged.
-    // The model saves the account flag last to keep failures retryable.
-    const shouldEnable = paypal.status === "ACTIVE" && user.isDisabled;
-    // CLOSED says the account is now closed. PayPal CANCELLED still leaves
-    // access in place until the paid period ends, so send it only with the
-    // disable, and only after that write succeeds. A failed write returns
-    // 503 and PayPal retries; emailing before the save would resend.
-    // A cancellation that closes nothing gets the cancellation email instead,
-    // claimed in Redis so a retry or a concurrent caller sends it only once.
-    const done = async (err) => {
-      if (err) return reject(err);
+  const updates = { paypal };
+  const shouldDisable =
+    subscriptionLifecycle.shouldDisableFromPaypalSubscription(paypal);
+  // Preserve deliberate per-blog availability when the account is unchanged.
+  // The model saves the account flag last to keep failures retryable.
+  const shouldEnable = paypal.status === "ACTIVE" && user.isDisabled;
 
-      try {
-        if (shouldDisable && !user.isDisabled && paypal.status === "CANCELLED")
-          email.CLOSED(user.uid);
-        else if (becameCancelled && user.isDisabled)
-          email.ALREADY_CANCELLED(user.uid);
-        else if (!shouldDisable && paypal.status === "CANCELLED") {
-          const claimKey = key.paypalCancelEmail(user.uid, subscriptionID);
-
-          // A failed send releases its claim and leaves this marker; GETDEL
-          // hands that retry to exactly one caller, and never touches a
-          // live claim.
-          const failedKey = claimKey + ":failed";
-          const retry =
-            !becameCancelled && Boolean(await client.getDel(failedKey));
-
-          if (
-            (becameCancelled || retry) &&
-            (await client.set(claimKey, "1", {
-              NX: true,
-              EX: CANCEL_EMAIL_TTL_SECONDS,
-            }))
-          ) {
-            const send = subscriptionLifecycle.isFirstPeriod({ paypal })
-              ? email.CANCELLED_FIRST_PERIOD
-              : email.CANCELLED;
-
-            send(user.uid, {}, (sendErr) => {
-              if (!sendErr) return;
-              console.log(prefix(), "cancellation email failed", sendErr);
-              client
-                .multi()
-                .del(claimKey)
-                .set(failedKey, "1", { EX: CANCEL_EMAIL_TTL_SECONDS })
-                .exec()
-                .catch(() => {});
-            });
-          }
-        }
-      } catch (emailErr) {
-        // The save succeeded, so don't fail the webhook over a missed email.
-        console.log(prefix(), "cancellation email error", emailErr);
-      }
-
-      resolve(paypal);
-    };
+  // User.set, User.disable and User.enable are callback-only: resolve once the
+  // save has succeeded, reject with its error otherwise
+  await new Promise((resolve, reject) => {
+    const saved = (err) => (err ? reject(err) : resolve());
 
     if (shouldDisable && !user.isDisabled)
-      return User.disable(user, updates, done);
-    if (shouldEnable) return User.enable(user, updates, done);
-    User.set(user.uid, updates, done);
+      return User.disable(user, updates, saved);
+    if (shouldEnable) return User.enable(user, updates, saved);
+    User.set(user.uid, updates, saved);
   });
+
+  // CLOSED says the account is now closed. PayPal CANCELLED still leaves
+  // access in place until the paid period ends, so send it only with the
+  // disable, and only after that write succeeds. A failed write returns
+  // 503 and PayPal retries; emailing before the save would resend.
+  // A cancellation that closes nothing gets the cancellation email instead,
+  // claimed in Redis so a retry or a concurrent caller sends it only once.
+  try {
+    if (shouldDisable && !user.isDisabled && paypal.status === "CANCELLED")
+      email.CLOSED(user.uid);
+    else if (becameCancelled && user.isDisabled)
+      email.ALREADY_CANCELLED(user.uid);
+    else if (!shouldDisable && paypal.status === "CANCELLED") {
+      const claimKey = key.paypalCancelEmail(user.uid, subscriptionID);
+
+      // A failed send releases its claim and leaves this marker; GETDEL
+      // hands that retry to exactly one caller, and never touches a
+      // live claim.
+      const failedKey = claimKey + ":failed";
+      const retry = !becameCancelled && Boolean(await client.getDel(failedKey));
+
+      if (
+        (becameCancelled || retry) &&
+        (await client.set(claimKey, "1", {
+          NX: true,
+          EX: CANCEL_EMAIL_TTL_SECONDS,
+        }))
+      ) {
+        const send = subscriptionLifecycle.isFirstPeriod({ paypal })
+          ? email.CANCELLED_FIRST_PERIOD
+          : email.CANCELLED;
+
+        send(user.uid, {}, (sendErr) => {
+          if (!sendErr) return;
+          console.log(prefix(), "cancellation email failed", sendErr);
+          client
+            .multi()
+            .del(claimKey)
+            .set(failedKey, "1", { EX: CANCEL_EMAIL_TTL_SECONDS })
+            .exec()
+            .catch(() => {});
+        });
+      }
+    }
+  } catch (emailErr) {
+    // The save succeeded, so don't fail the webhook over a missed email.
+    console.log(prefix(), "cancellation email error", emailErr);
+  }
+
+  return paypal;
 };
 
 paypal.updateSubscription = updateSubscription;

@@ -168,9 +168,9 @@ describe("upload favicon", function () {
     );
     const favicon = first.result.body.favicon;
     const path = asset(`${favicon.prefix}.ico`);
-    spyOn(Template, "getTemplateList").and.callFake((id, callback) =>
-      callback(new Error("redis unavailable"))
-    );
+    spyOn(Template, "getTemplateList").and.callFake(async () => {
+      throw new Error("redis unavailable");
+    });
 
     await uploadFavicon.removeAssetsIfUnreferenced(this.blog, favicon);
 

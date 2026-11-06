@@ -180,7 +180,7 @@ const removeTempFiles = async (uploads) => {
 // N.B. In production this POST runs on green while the page you are redirected
 // to renders on blue (proxy/config/http.conf, $dashboard_upstream).
 // Don't rely on in-process cache invalidation here; see dashboard/site/index.js.
-module.exports = async (req, res, next) => {
+const uploadFiles = async (req, res, next) => {
   const uploads = collectFiles(req.files);
   const lookups = getMetadataLookups(req.body || {});
   const overwriteConfig = getOverwriteSet(req.body || {});
@@ -363,3 +363,7 @@ module.exports = async (req, res, next) => {
     await removeTempFiles(uploads);
   }
 };
+
+// Errors from before the try (e.g. a missing request body) reach Express as
+// next(err), not as an unhandled rejection
+module.exports = (req, res, next) => uploadFiles(req, res, next).catch(next);
