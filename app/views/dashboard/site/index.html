@@ -79,7 +79,7 @@
              folder rows -->
         <section id="site-dashboard-posts" class="site-dashboard-view-panel" aria-label="{{pageHeading}}">
           <div class="folder-container">
-            <div class="folder-box root directory">
+            <div class="folder-box root directory" data-folder-base="{{base}}" data-csrf-token="{{csrftoken}}" data-filtered>
               <div class="folder-toolbar">
                 {{> folder-sync}}
                 {{> folder-filters}}
@@ -98,7 +98,7 @@
                   </thead>
                   <tbody>
                     {{#postItems}}
-                    <tr class="directory-row">
+                    <tr class="directory-row row-action-menu-row">
                       <td>
                         <div class="directory-row__name-cell">
                           <a href="{{{base}}}/folder/{{{urlPath}}}" class="directory-row__link cover entry" title="{{path}}">
@@ -114,6 +114,20 @@
                       <td class="directory-row__modified-cell">
                         <a href="{{{base}}}/folder/{{{urlPath}}}" class="directory-row__link cover" aria-hidden="true" tabindex="-1"></a>
                         {{modified}}
+                        <button
+                          class="directory-row__menu-trigger row-action-menu__trigger"
+                          type="button"
+                          aria-expanded="false"
+                          aria-controls="folder-file-action-menu"
+                          aria-label="Actions for {{name}}"
+                          data-url="/{{{urlPath}}}"
+                          data-view-url="{{{base}}}/folder/{{{urlPath}}}"
+                          data-name="{{name}}"
+                          data-directory="false"
+                          data-entry="true"
+                        >
+                          <span class="icon-dots" aria-hidden="true"></span>
+                        </button>
                       </td>
                     </tr>
                     {{/postItems}}
@@ -123,6 +137,7 @@
               {{/postItems.length}}
               {{#emptyPostFilterMessage}}<p class="site-dashboard-empty folder-filters__empty">{{emptyPostFilterMessage}}</p>{{/emptyPostFilterMessage}}
               {{#hasNewerPosts}}{{> folder-filter-pager}}{{/hasNewerPosts}}{{^hasNewerPosts}}{{#hasOlderPosts}}{{> folder-filter-pager}}{{/hasOlderPosts}}{{/hasNewerPosts}}
+              {{> folder-row-menu}}
             </div>
           </div>
         </section>

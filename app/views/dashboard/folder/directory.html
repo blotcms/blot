@@ -130,51 +130,7 @@
         </nav>
         {{/pagination.multiplePages}}
 
-        <div id="folder-file-action-menu" class="template-action-menu row-action-menu menu" aria-hidden="true">
-          <ul>
-            <li><a data-menu-link="view" href="#">View file/folder</a></li>
-            <li><a data-menu-link="download" href="#">Download</a></li>
-            <li class="menu__separator" role="separator"></li>
-            <li><a data-menu-link="remove" href="#">Remove</a></li>
-          </ul>
-        </div>
-
-      <div class="download-entry-modal" hidden>
-        <div class="download-entry-modal-backdrop" data-download-modal-close></div>
-        <div class="download-entry-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="download-entry-title">
-          <h2 id="download-entry-title">Download file</h2>
-          <p data-download-path-label></p>
-          <div class="buttons">
-            <button type="button" data-download-action="download">Download</button>
-            <button type="button" data-download-action="cancel">Cancel</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="upload-preview-modal" hidden>
-        <div class="upload-preview-modal-backdrop" data-upload-modal-close></div>
-        <div class="upload-preview-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="upload-preview-title">
-          <h2 id="upload-preview-title">Review upload</h2>
-          <ul class="upload-preview-list" data-upload-list="queued"></ul>
-
-          <div class="buttons upload-preview-actions">
-            <button type="button" data-upload-action="upload">Upload</button>
-            <button type="button" data-upload-action="cancel">Cancel</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="remove-entry-modal" hidden>
-        <div class="remove-entry-modal-backdrop" data-remove-modal-close></div>
-        <div class="remove-entry-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="remove-entry-title">
-          <h2 id="remove-entry-title">Remove item</h2>
-          <p data-remove-path-label></p>
-          <div class="buttons">
-            <button type="button" data-remove-action="remove">Remove</button>
-            <button type="button" data-remove-action="cancel">Cancel</button>
-          </div>
-        </div>
-      </div>
+        {{> folder-row-menu}}
             {{/directory}}
 
   </div>

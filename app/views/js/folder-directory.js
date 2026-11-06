@@ -316,11 +316,37 @@
 
           var neighbours = neighbourRowUrls(relativeUrl);
           closeRemoveModal(true);
+
+          // A filter page (Posts, Drafts...) lists entries, not this folder:
+          // take the removed file's row out rather than reloading a listing
+          if (folderBox.hasAttribute("data-filtered")) {
+            removeRowFor(relativeUrl);
+            focusNeighbourRow(neighbours);
+            return;
+          }
+
           refreshFolderContents(function () {
             focusNeighbourRow(neighbours);
           });
         });
     });
+  }
+
+  // The row whose menu trigger names this file
+  function removeRowFor(relativeUrl) {
+    var wanted = String(relativeUrl || "").replace(/^\/+/, "");
+    folderBox
+      .querySelectorAll(".row-action-menu__trigger")
+      .forEach(function (t) {
+        var url = (t.getAttribute("data-url") || "").replace(/^\/+/, "");
+        if (
+          url === wanted ||
+          decodePathSegments(url) === decodePathSegments(wanted)
+        ) {
+          var row = t.closest("tr");
+          if (row) row.parentNode.removeChild(row);
+        }
+      });
   }
 
   function decodePathSegments(path) {
