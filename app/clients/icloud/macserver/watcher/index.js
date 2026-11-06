@@ -6,7 +6,7 @@ import {
   getLimiterCount,
 } from "../limiters.js";
 import clfdate from "../util/clfdate.js";
-import { forgetBlog, isKnownDirectory, recordDirectory, recordPushed, startTracking } from "../pushedFiles.js";
+import { forgetBlog, isKnownDirectory, isUnchanged, recordDirectory, recordPushed, startTracking } from "../pushedFiles.js";
 import { iCloudDriveDirectory } from "../config.js";
 import { constants } from "fs";
 import { join } from "path";
@@ -160,19 +160,26 @@ const walkDirectoryContents = async (blogID, pathInBlogDirectory) => {
       continue;
     }
 
+    // A subfolder Blot already has gets its own walk whenever the watcher
+    // reports it, so it is neither created again nor walked from here:
+    // re-walking whole subtrees (and one /mkdir per subfolder) on every
+    // report of a big folder would crowd out every blog's uploads
+    if (isDirectory && isKnownDirectory(blogID, childPath)) continue;
+
     try {
       if (!(await exactCaseViaRealpath(buildBlogPath(blogID, childPath)))) continue;
 
       if (isDirectory) {
-        // directories Blot already has are walked without asking it to
-        // create them again: one /mkdir per subfolder on every walk of a big
-        // folder would crowd out every blog's uploads
-        if (!hasRecentChokidarEvent(blogID, childPath, "mkdir") && !isKnownDirectory(blogID, childPath)) {
+        if (!hasRecentChokidarEvent(blogID, childPath, "mkdir")) {
           await performAction(blogID, childPath, "mkdir");
         }
         if (await walkDirectoryContents(blogID, childPath)) interrupted = true;
       } else if (!hasRecentChokidarEvent(blogID, childPath, "upload")) {
-        // if chokidar did report the file it is already being uploaded
+        // if chokidar did report the file it is already being uploaded.
+        // Files unchanged since their last push are skipped here, without
+        // queueing behind the blog's other actions or logging each one
+        const stat = await fs.stat(buildBlogPath(blogID, childPath)).catch(() => null);
+        if (stat && isUnchanged(blogID, childPath, stat)) continue;
         console.log(clfdate(), `Directory contents: upload, blogID: ${blogID}, path: ${childPath}`);
         await performAction(blogID, childPath, "upload");
       }
