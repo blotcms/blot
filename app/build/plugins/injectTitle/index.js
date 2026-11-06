@@ -7,15 +7,16 @@
 // settings.
 const titlify = require("../../prepare/titlify");
 const makeSlug = require("helper/makeSlug");
+const withPluginCallback = require("../withPluginCallback");
 
-function render($, callback, options = {}) {
+async function render($, options = {}) {
   try {
-    if (!isMarkdown(options.path)) return callback();
-    if (!needsTitle($)) return callback();
+    if (!isMarkdown(options.path)) return;
+    if (!needsTitle($)) return;
 
     const title = getTitleFromPath(options.path);
 
-    if (!title) return callback();
+    if (!title) return;
 
     const heading = $("<h1></h1>").text(title);
 
@@ -35,8 +36,6 @@ function render($, callback, options = {}) {
   } catch (err) {
     // Ignore errors to avoid breaking the build pipeline
   }
-
-  return callback();
 }
 
 function needsTitle($) {
@@ -62,7 +61,7 @@ function isMarkdown(path = "") {
 }
 
 module.exports = {
-  render,
+  render: withPluginCallback(render),
   isDefault: false,
   category: "headings",
   title: "Inject title",

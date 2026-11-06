@@ -2,8 +2,9 @@
 var MIN_WIDTH = 320;
 var Url = require("url");
 var fs = require("fs");
+const withPluginCallback = require("../withPluginCallback");
 
-function render($, callback) {
+async function render($) {
   $("img").each(function () {
     try {
       // Ignore img inside links
@@ -20,8 +21,6 @@ function render($, callback) {
         $(this).attr("data-action", "zoom");
     } catch (e) {}
   });
-
-  callback();
 }
 
 function lacksZoomQuery(src) {
@@ -59,7 +58,7 @@ function publicJS() {
 }
 
 module.exports = {
-  render: render,
+  render: withPluginCallback(render),
   publicJS: publicJS(),
   isDefault: false,
   category: "images",

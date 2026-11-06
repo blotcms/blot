@@ -1,25 +1,32 @@
 var time = require("helper/time");
-var pandoc = require("util").callbackify(require("build/converters/pandoc"));
+var pandoc = require("build/converters/pandoc");
 var debug = require("debug")("blot:converters:rtf");
+var withCallback = require("helper/withCallback");
 var cheerio = require("cheerio");
 var normalizeLiteralDollarMath =
   require("build/math/normalizeLiteralDollars").normalizeLiteralDollarMath;
 
-module.exports = function (blog, text, callback) {
+async function convert(blog, text) {
   debug("Pre-pandoc", text);
   time("pandoc");
-  pandoc({ from: "rtf" }, Buffer.from(text, "utf8"), function (err, output) {
+
+  var output;
+
+  try {
+    output = await pandoc({ from: "rtf" }, Buffer.from(text, "utf8"));
+  } finally {
     time.end("pandoc");
+  }
 
-    if (err) return callback(err);
+  var result = output.html;
 
-    var result = output.html;
+  var $ = cheerio.load(result, { decodeEntities: false }, false);
+  normalizeLiteralDollarMath($);
+  result = $.html();
 
-    var $ = cheerio.load(result, { decodeEntities: false }, false);
-    normalizeLiteralDollarMath($);
-    result = $.html();
+  debug("Final:", result);
+  return result;
+}
 
-    debug("Final:", result);
-    callback(null, result);
-  });
-};
+// The katex specs call this with a callback
+module.exports = withCallback(convert);

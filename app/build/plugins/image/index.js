@@ -1,15 +1,14 @@
 var Transformer = require("helper/transformer");
 var debug = require("debug")("blot:entry:build:plugins:image");
-var async = require("async");
 var optimize = require("./optimize");
 var url = require("url");
+var withPluginCallback = require("../withPluginCallback");
 
 // Images looked up at once for one entry. Each lookup is a sandbox job (a
 // fresh jail, ~70ms before any work), so two at a time overlap their start-up.
 var CONCURRENCY = 2;
 
-function render($, callback, options) {
-  var blogID = options.blogID;
+async function render($, { blogID }) {
   var cache = new Transformer(blogID, "image-cache");
 
   // First collect each <img> with a cacheable src. The same src is looked up
@@ -53,61 +52,72 @@ function render($, callback, options) {
   // Keyed by src, which is any string, so no inherited keys (e.g. "constructor")
   var infos = Object.create(null);
 
-  async.eachLimit(
-    srcs,
-    CONCURRENCY,
-    function (src, next) {
-      // Pass in the `pathname` component of the image src (no URL params or hash)
-      // Also pass the original src so we can include the filename in the CDN URL
+  // Looks up one src. A failed lookup is logged and the image left alone.
+  async function lookupSrc(src) {
+    // Pass in the `pathname` component of the image src (no URL params or hash)
+    // Also pass the original src so we can include the filename in the CDN URL
+    await new Promise(function (resolve) {
       cache.lookup(src, optimize(blogID, src), function (err, info) {
         if (err) {
           debug(src, "Optimize failed with Error:", err);
         } else {
           infos[src] = info;
         }
-        next();
+        resolve();
       });
-    },
-    function () {
-      els.forEach(function (item) {
-        var el = item.el;
-        var src = item.src;
-        var info = infos[src];
-        var width, height;
+    });
+  }
 
-        if (!info) return;
-
-        // Replace the image's source with the new
-        // source, which is a path to an image in the
-        // static assets folder for this blog.
-        $(el).attr("src", info.src);
-
-        // Now we will attempt to declare the width and
-        // height of the image to speed up page loads...
-        if ($(el).attr("width") || $(el).attr("height")) {
-          debug(src, "El has width or height pre-specified dont modify");
-          return;
-        }
-
-        width = info.width;
-        height = info.height;
-
-        // This is a retina image so halve its dimensions
-        if ($(el).attr("data-2x") || isRetina(src)) {
-          debug(src, "retinafying the dimensions");
-          height /= 2;
-          width /= 2;
-        }
-
-        $(el).attr("width", width).attr("height", height);
-
-        debug(src, "complete!");
-      });
-
-      debug("Invoking callback now!");
-      callback();
+  // Works through srcs in order, with at most CONCURRENCY lookups in flight
+  var nextIndex = 0;
+  async function worker() {
+    while (nextIndex < srcs.length) {
+      var src = srcs[nextIndex++];
+      await lookupSrc(src);
     }
-  );
+  }
+
+  var workers = [];
+  for (var w = 0; w < Math.min(CONCURRENCY, srcs.length); w++)
+    workers.push(worker());
+  await Promise.all(workers);
+
+  els.forEach(function (item) {
+    var el = item.el;
+    var src = item.src;
+    var info = infos[src];
+    var width, height;
+
+    if (!info) return;
+
+    // Replace the image's source with the new
+    // source, which is a path to an image in the
+    // static assets folder for this blog.
+    $(el).attr("src", info.src);
+
+    // Now we will attempt to declare the width and
+    // height of the image to speed up page loads...
+    if ($(el).attr("width") || $(el).attr("height")) {
+      debug(src, "El has width or height pre-specified dont modify");
+      return;
+    }
+
+    width = info.width;
+    height = info.height;
+
+    // This is a retina image so halve its dimensions
+    if ($(el).attr("data-2x") || isRetina(src)) {
+      debug(src, "retinafying the dimensions");
+      height /= 2;
+      width /= 2;
+    }
+
+    $(el).attr("width", width).attr("height", height);
+
+    debug(src, "complete!");
+  });
+
+  debug("Invoking callback now!");
 }
 
 function isRetina(url) {
@@ -115,7 +125,7 @@ function isRetina(url) {
 }
 
 module.exports = {
-  render: render,
+  render: withPluginCallback(render),
   category: "images",
   title: "Cache",
   description: "Cache and optimize images",

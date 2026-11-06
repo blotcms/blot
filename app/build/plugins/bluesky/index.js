@@ -24,63 +24,56 @@ You can learn more about oEmbed at https://oembed.com. Bluesky is a registered p
 const each = require("../eachEl");
 const Url = require("url");
 const fetch = require("node-fetch");
+const withPluginCallback = require("../withPluginCallback");
 
-function render($, callback) {
-  each(
-    $,
-    "a",
-    function (el, next) {
-      var href, host, text;
+async function render($) {
+  await each($, "a", async (el) => {
+    var href, host, text;
 
-      try {
-        href = $(el).attr("href");
-        text = $(el).text();
-        host = Url.parse(href).host;
-      } catch (e) {
-        return next();
-      }
-
-      // Ensure we managed to extract everything from the url
-      if (!href || !text || !host) return next();
-
-      // Look for bare links
-      if (href !== text) return next();
-
-      // which point to a post on bluesky
-      if (host !== "bsky.app") return next();
-
-      var params = {
-        url: href,
-        format: "json",
-        maxwidth: 600,
-      };
-
-      var oembedUrl =
-        "https://embed.bsky.app/oembed?" +
-        new URLSearchParams(params).toString();
-
-      fetch(oembedUrl)
-        .then((res) => res.json())
-        .then((data) => {
-          if (!data || !data.html) return next();
-
-          var html = data.html;
-
-          $(el).replaceWith(html);
-          next();
-        })
-        .catch(() => {
-          return next();
-        });
-    },
-    function () {
-      callback();
+    try {
+      href = $(el).attr("href");
+      text = $(el).text();
+      host = Url.parse(href).host;
+    } catch (e) {
+      return;
     }
-  );
+
+    // Ensure we managed to extract everything from the url
+    if (!href || !text || !host) return;
+
+    // Look for bare links
+    if (href !== text) return;
+
+    // which point to a post on bluesky
+    if (host !== "bsky.app") return;
+
+    var params = {
+      url: href,
+      format: "json",
+      maxwidth: 600,
+    };
+
+    var oembedUrl =
+      "https://embed.bsky.app/oembed?" + new URLSearchParams(params).toString();
+
+    // A failed request or response is skipped, leaving the link as it was
+    try {
+      const res = await fetch(oembedUrl);
+      const data = await res.json();
+
+      if (!data || !data.html) return;
+
+      var html = data.html;
+
+      $(el).replaceWith(html);
+    } catch (e) {
+      return;
+    }
+  });
 }
 
 module.exports = {
-  render: render,
+  render: withPluginCallback(render),
   category: "embeds",
   title: "Bluesky",
   description: "Embed posts from Bluesky links",

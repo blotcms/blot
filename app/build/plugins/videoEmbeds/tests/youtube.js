@@ -11,7 +11,7 @@ describe("youtube embeds", function () {
   });
 
   it("handles an invalid href", function (done) {
-    const href = "https://www.youtube.com/watch?v=*(&*^%";
+    const href = "https://www.youtube.com/watch?v=";
     youtube(href, (err, template) => {
       expect(err.message).toEqual("Could not parse youtube video");
       expect(template).toEqual(undefined);

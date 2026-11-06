@@ -1,6 +1,4 @@
-const withCallback = require("helper/withCallback");
 const folder = require("storage/folder");
-const { callbackify } = require("util");
 const {
   join,
   resolve,
@@ -9,7 +7,6 @@ const {
   normalize: normalizePath,
 } = require("path");
 const makeSlug = require("helper/makeSlug");
-const { tryEach } = require("async");
 
 // We want to think about the specific kinds of wikilinks we want to
 // support here. The first should be a relative path, e.g.
@@ -34,10 +31,7 @@ const { tryEach } = require("async");
 // wikilink: [[/Posts/target]]
 // target: /Posts/target.txt
 
-module.exports = function byPath(blogID, pathOfPost, href, isLink, callback) {
-  // A failed read is the same as no entry
-  const getEntry = withCallback(require("models/entry").get);
-
+module.exports = async function byPath(blogID, pathOfPost, href, isLink) {
   // if pathOfPost is '/Posts/foo.txt' then dirOfPost is '/Posts'
   const dirOfPost = dirname(pathOfPost);
 
@@ -46,12 +40,12 @@ module.exports = function byPath(blogID, pathOfPost, href, isLink, callback) {
   const resolvedHref = resolve(dirOfPost, href);
 
   const lookups = [
-    exact.bind(null, blogID, href),
-    exact.bind(null, blogID, resolvedHref),
-    caseInsensitive.bind(null, blogID, href),
-    caseInsensitive.bind(null, blogID, resolvedHref),
-    rough.bind(null, blogID, href),
-    rough.bind(null, blogID, resolvedHref),
+    () => exact(blogID, href),
+    () => exact(blogID, resolvedHref),
+    () => caseInsensitive(blogID, href),
+    () => caseInsensitive(blogID, resolvedHref),
+    () => rough(blogID, href),
+    () => rough(blogID, resolvedHref),
   ];
 
   // When the converter (e.g. Pandoc) resolves embed paths relative to the
@@ -66,92 +60,103 @@ module.exports = function byPath(blogID, pathOfPost, href, isLink, callback) {
   ) {
     const rootRelative = href.slice(dirOfPost.length).replace(/^\//, "");
     if (rootRelative !== href) {
+      const rootPath = rootRelative.startsWith("/")
+        ? rootRelative
+        : "/" + rootRelative;
+
       lookups.push(
-        exact.bind(
-          null,
-          blogID,
-          rootRelative.startsWith("/") ? rootRelative : "/" + rootRelative
-        ),
-        rough.bind(
-          null,
-          blogID,
-          rootRelative.startsWith("/") ? rootRelative : "/" + rootRelative
-        )
+        () => exact(blogID, rootPath),
+        () => rough(blogID, rootPath)
       );
     }
   }
 
-  function exact(blogID, path, done) {
-    getEntry(blogID, path, (err, entry) => {
-      if (!entry || !entry.url || entry.deleted)
-        return done(new Error("No entry"));
-      done(null, entry);
-    });
+  // The first lookup to find an entry wins; each is tried in turn.
+  for (const lookup of lookups) {
+    try {
+      return await lookup();
+    } catch (err) {
+      // Not found this way: try the next lookup
+    }
   }
 
-  function rough(blogID, path, done) {
-    searchForExtension(blogID, path, function (err, finalPath) {
-      if (err || !finalPath) return done(new Error("No path"));
-      getEntry(blogID, finalPath, (err, entry) => {
-        if (!entry || !entry.url || entry.deleted)
-          return done(new Error("No entry"));
-        done(null, entry);
-      });
-    });
-  }
-
-  function caseInsensitive(blogID, path, done) {
-    resolveCase(blogID, path, function (err, correctPath) {
-      if (err || !correctPath) return done(err || new Error("No path"));
-
-      getEntry(blogID, correctPath, (err, entry) => {
-        if (!entry || !entry.url || entry.deleted)
-          return done(new Error("No entry"));
-        done(null, entry);
-      });
-    });
-  }
-
-  // e.g '/blog/post' -> '/blog/post.md'
-  function searchForExtension(blogID, path, done) {
-    const dir = dirname(path);
-    const base = basename(path);
-
-    resolveCase(blogID, dir, function (err, correctDir) {
-      if (err || !correctDir) return done(err || new Error("No dir"));
-
-      listNames(blogID, correctDir, function (err, entries) {
-        if (err) return done(err);
-
-        const contents = entries.map((entry) => entry.name);
-
-        const perfectMatch = contents.find((item) => item.startsWith(base));
-
-        if (perfectMatch) return done(null, join(correctDir, perfectMatch));
-
-        const roughMatch = contents.find((item) =>
-          normalize(item).startsWith(normalize(base))
-        );
-
-        if (roughMatch) return done(null, join(correctDir, roughMatch));
-
-        return done(new Error("No matching file"));
-      });
-    });
-  }
-
-  tryEach(lookups, function (err, entry) {
-    if (entry) return callback(null, entry);
-
-    callback(new Error("No entry found by path"));
-  });
+  throw new Error("No entry found by path");
 };
 
-const listNames = callbackify(folder.listNames);
+function getEntry(blogID, path) {
+  const get = require("models/entry").get;
+
+  // A failed read is the same as no entry
+  return get(blogID, path).catch(() => undefined);
+}
+
+async function exact(blogID, path) {
+  const entry = await getEntry(blogID, path);
+
+  if (!entry || !entry.url || entry.deleted) throw new Error("No entry");
+
+  return entry;
+}
+
+async function rough(blogID, path) {
+  let finalPath;
+
+  try {
+    finalPath = await searchForExtension(blogID, path);
+  } catch (err) {
+    finalPath = null;
+  }
+
+  if (!finalPath) throw new Error("No path");
+
+  const entry = await getEntry(blogID, finalPath);
+
+  if (!entry || !entry.url || entry.deleted) throw new Error("No entry");
+
+  return entry;
+}
+
+async function caseInsensitive(blogID, path) {
+  const correctPath = await resolveCase(blogID, path);
+
+  if (!correctPath) throw new Error("No path");
+
+  const entry = await getEntry(blogID, correctPath);
+
+  if (!entry || !entry.url || entry.deleted) throw new Error("No entry");
+
+  return entry;
+}
+
+// e.g '/blog/post' -> '/blog/post.md'
+async function searchForExtension(blogID, path) {
+  const dir = dirname(path);
+  const base = basename(path);
+
+  const correctDir = await resolveCase(blogID, dir);
+
+  if (!correctDir) throw new Error("No dir");
+
+  const entries = await folder.listNames(blogID, correctDir);
+
+  const contents = entries.map((entry) => entry.name);
+
+  const perfectMatch = contents.find((item) => item.startsWith(base));
+
+  if (perfectMatch) return join(correctDir, perfectMatch);
+
+  const roughMatch = contents.find((item) =>
+    normalize(item).startsWith(normalize(base))
+  );
+
+  if (roughMatch) return join(correctDir, roughMatch);
+
+  throw new Error("No matching file");
+}
 
 // The stored spelling of a path, ignoring case. A relative path which climbs
 // out of the folder matches nothing, rather than being held inside it.
-const resolveCase = callbackify(async function (blogID, path) {
+async function resolveCase(blogID, path) {
   const normalized = normalizePath(path);
 
   if (normalized === ".." || normalized.startsWith("../")) {
@@ -159,7 +164,7 @@ const resolveCase = callbackify(async function (blogID, path) {
   }
 
   return folder.resolveCaseInsensitive(blogID, normalized);
-});
+}
 
 function normalize(str) {
   return stripNonAlphaNumeric(makeSlug(str));
