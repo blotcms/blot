@@ -7,27 +7,12 @@ var withCallback = require("helper/withCallback");
 var is = util.is;
 var isRegex = util.isRegex;
 
-// get is not converted yet: it takes the input after its callback
-function getRedirect(blogID, from, input) {
-  return new Promise(function (resolve, reject) {
-    get(
-      blogID,
-      from,
-      function (err, redirect) {
-        if (err) return reject(err);
-        resolve(redirect);
-      },
-      input
-    );
-  });
-}
-
 module.exports = withCallback(async function check(blogID, input) {
   ensure(blogID, "string").and(input, "string");
 
   var redirects = key.redirects(blogID);
 
-  var redirect = await getRedirect(blogID, input);
+  var redirect = await get(blogID, input);
 
   if (redirect) return redirect;
 
@@ -50,7 +35,7 @@ module.exports = withCallback(async function check(blogID, input) {
       var from = matches[i].value;
 
       if (isRegex(from) && is(input, from)) {
-        return await getRedirect(blogID, from, input);
+        return await get(blogID, from, input);
       }
     }
 

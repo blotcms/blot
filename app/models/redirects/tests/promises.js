@@ -19,6 +19,21 @@ describe("redirects (promise form)", function () {
     expect(await Redirects.check(id, "/a")).toBeFalsy();
   });
 
+  it("gets a plain and a regex redirect with a promise", async function () {
+    const id = this.blog.id;
+
+    await Redirects.set(id, [
+      { from: "/plain", to: "/dest" },
+      { from: "\\/old\\/(.*)", to: "/new/$1" },
+    ]);
+
+    expect(await Redirects.get(id, "/plain")).toEqual("/dest");
+    expect(await Redirects.get(id, "/missing")).toBeNull();
+    expect(await Redirects.get(id, "\\/old\\/(.*)", "/old/x")).toEqual(
+      "/new/x"
+    );
+  });
+
   it("rejects instead of throwing when an argument is invalid", async function () {
     await expectAsync(Redirects.list(123)).toBeRejected();
   });
