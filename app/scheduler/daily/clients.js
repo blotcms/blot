@@ -1,11 +1,6 @@
-const { promisify } = require("util");
 const User = require("models/user");
 const extend = require("models/user/extend");
 const Blog = require("models/blog");
-
-const getAllUserIds = promisify(User.getAllIds);
-const getUserById = promisify(User.getById);
-const getBlog = promisify(Blog.get);
 
 const NO_CLIENT_LABEL = "no client";
 
@@ -38,54 +33,50 @@ function buildRows(siteClients) {
   return rows;
 }
 
-async function main(callback) {
-  try {
-    const userIds = await getAllUserIds();
-    const siteClients = [];
+async function main() {
+  const userIds = await User.getAllIds();
+  const siteClients = [];
 
-    for (const userId of userIds) {
-      try {
-        let user = await getUserById(userId);
+  for (const userId of userIds) {
+    try {
+      let user = await User.getById(userId);
 
-        if (!user) continue;
+      if (!user) continue;
 
-        user = extend(user);
+      user = extend(user);
 
-        if (user.isDisabled) continue;
+      if (user.isDisabled) continue;
 
-        if (!user.isSubscribed) continue;
+      if (!user.isSubscribed) continue;
 
-        if (Array.isArray(user.blogs)) {
-          for (const blogId of user.blogs) {
-            try {
-              const blog = await getBlog({ id: blogId });
+      if (Array.isArray(user.blogs)) {
+        for (const blogId of user.blogs) {
+          try {
+            const blog = await Blog.get({ id: blogId });
 
-              if (!blog || blog.isDisabled) continue;
+            if (!blog || blog.isDisabled) continue;
 
-              siteClients.push(blog.client || NO_CLIENT_LABEL);
-            } catch (err) {
-              continue;
-            }
+            siteClients.push(blog.client || NO_CLIENT_LABEL);
+          } catch (err) {
+            continue;
           }
         }
-      } catch (err) {
-        continue;
       }
+    } catch (err) {
+      continue;
     }
-
-    const rows = buildRows(siteClients);
-    const syncSummary = rows
-      .map(function (row) {
-        return `${row.client}: ${row.sites} sites (${row.percentage})`;
-      })
-      .join(", ");
-
-    callback(null, {
-      sync_summary: syncSummary || "no sites",
-    });
-  } catch (err) {
-    callback(err);
   }
+
+  const rows = buildRows(siteClients);
+  const syncSummary = rows
+    .map(function (row) {
+      return `${row.client}: ${row.sites} sites (${row.percentage})`;
+    })
+    .join(", ");
+
+  return {
+    sync_summary: syncSummary || "no sites",
+  };
 }
 
 module.exports = main;

@@ -39,7 +39,7 @@ describe("scheduler", function () {
       spyOn(lock, "cron").and.callThrough();
 
       // Startup tasks: don't scan blogs or users
-      spyOn(User, "getAllIds").and.callFake((callback) => callback(null, []));
+      spyOn(User, "getAllIds").and.resolveTo([]);
       delete require.cache[indexPath];
     });
 
