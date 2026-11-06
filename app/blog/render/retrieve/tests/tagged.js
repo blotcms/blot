@@ -329,8 +329,12 @@ describe("tagged block", function () {
     const Tags = require("models/tags");
     const Entry = require("models/entry");
 
-    spyOn(Tags, "get").and.callFake(function (blogID, slug, callback) {
-      callback(null, ["/blog/one.txt", 7, null, "/notes/two.txt"], "foo", 4);
+    spyOn(Tags, "get").and.callFake(async function () {
+      return {
+        entryIDs: ["/blog/one.txt", 7, null, "/notes/two.txt"],
+        prettyTag: "foo",
+        total: 4,
+      };
     });
 
     spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {

@@ -1,5 +1,6 @@
 var getView = require("./getView");
 var ensure = require("helper/ensure");
+var withCallback = require("helper/withCallback");
 var getPartials = require("./getPartials");
 var parseTemplate = require("./parseTemplate");
 var mergeRetrieve = require("./util/mergeRetrieve");
@@ -36,12 +37,18 @@ module.exports = function getFullView(blogID, templateID, viewName, callback) {
     folderLinkOptions(blogID, templateID, function (err, wrapOptions) {
       if (err) return callback(err);
 
-      getPartials(
+      withCallback(getPartials)(
         blogID,
         templateID,
         view.partials,
-        function (err, allPartials, retrieveFromPartials) {
+        partialContexts,
+        "",
+        wrapOptions,
+        function (err, partialsResult) {
           if (err) return callback(err);
+
+          var allPartials = partialsResult.allPartials;
+          var retrieveFromPartials = partialsResult.retrieve;
 
           // allPartials (object) viewname : viewcontent
 
@@ -91,10 +98,7 @@ module.exports = function getFullView(blogID, templateID, viewName, callback) {
           ];
 
           return callback(null, response);
-        },
-        partialContexts,
-        "",
-        wrapOptions
+        }
       );
     });
   });
