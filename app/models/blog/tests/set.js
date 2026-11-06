@@ -7,6 +7,28 @@ describe("Blog.set", function () {
 
   global.test.blog();
 
+  it("resolves to the changed fields without a callback", async function () {
+    const title = "Promise title " + Date.now();
+
+    expect(await set(this.blog.id, { title })).toEqual(["title"]);
+    expect(await set(this.blog.id, { title })).toEqual([]);
+    expect((await get({ id: this.blog.id })).title).toBe(title);
+  });
+
+  it("rejects with the validation errors without a callback", async function () {
+    const errors = await set(this.blog.id, { handle: "a" }).catch((e) => e);
+
+    expect(errors.handle).toBeTruthy();
+  });
+
+  it("calls back with the changed fields", function (done) {
+    set(this.blog.id, { title: "Callback title" }, function (err, changes) {
+      if (err) return done.fail(err);
+      expect(changes).toEqual(["title"]);
+      done();
+    });
+  });
+
   it("will set the domain", function (done) {
     var test = this;
     var domain = "example.com";
