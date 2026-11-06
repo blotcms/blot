@@ -1,8 +1,7 @@
 const Entries = require("models/entries");
 const Entry = require("models/entry");
 const storage = require("storage/folder");
-const { callbackify } = require("util");
-const async = require("async");
+const withCallback = require("helper/withCallback");
 
 // A folder post is synthesized at a "+"-stripped path with no file behind it
 // (the aggregate for "/Album +" is stored at "/album"). resolvePath would
@@ -37,9 +36,9 @@ async function presentDirectory(blogID, path) {
   }
 }
 
-// Calls back with the first candidate which is on disk, or with nothing if
-// none is. An error checking a candidate is passed on.
-function resolvePath(blogID, path, callback) {
+// Resolves to the first candidate which is on disk, or to nothing if none
+// is. An error checking a candidate is thrown.
+async function resolvePath(blogID, path) {
   var candidates = [];
 
   candidates.push(path);
@@ -62,15 +61,9 @@ function resolvePath(blogID, path, callback) {
     }
   }
 
-  async.detectSeries(
-    candidates,
-    function (filePath, callback) {
-      callbackify(present)(blogID, filePath, callback);
-    },
-    function (err, match) {
-      callback(err, match);
-    }
-  );
+  for (const filePath of candidates) {
+    if (await present(blogID, filePath)) return filePath;
+  }
 }
 // The purpose of this script was to resolve an issue with entries having
 // path properties that were not equal to the location of the file on disk
@@ -82,99 +75,88 @@ function resolvePath(blogID, path, callback) {
 // peak memory instead of letting it climb for the length of the walk.
 var YIELD_EVERY = 50;
 
-function main(blog, callback) {
+async function main(blog) {
   var missing = [];
   var edit = [];
   var report = [];
   var count = 0;
 
-  function done(next) {
+  async function done() {
     count++;
-    if (count % YIELD_EVERY === 0) return setImmediate(next);
-    next();
+    if (count % YIELD_EVERY === 0)
+      await new Promise(function (resolve) {
+        setImmediate(resolve);
+      });
   }
 
-  Entries.each(
-    blog.id,
-    function (_entry, next) {
-      if (!_entry) return done(next);
+  async function inspect(_entry) {
+    if (!_entry) return done();
 
-      if (_entry.deleted) return done(next);
+    if (_entry.deleted) return done();
 
-      // Folder posts have no file at their own path; they are ghosts only if
-      // the "+" folder they were built from is gone - or has been replaced by
-      // a plain file, which can no longer aggregate anything.
-      // Only the id and path are kept for remediation below - holding on to
-      // the full entry (content included) for every ghost found would grow
-      // with the aggregate content size of the corrupted blog this check is
-      // meant to repair.
-      var multiFolder = folderPostFolder(_entry);
-      if (multiFolder) {
-        return callbackify(presentDirectory)(
-          blog.id,
-          multiFolder,
-          function (err, isDirectory) {
-            if (err) return next(err);
-            if (!isDirectory) {
-              missing.push({ id: _entry.id, path: _entry.path });
-            }
-            done(next);
-          }
-        );
+    // Folder posts have no file at their own path; they are ghosts only if
+    // the "+" folder they were built from is gone - or has been replaced by
+    // a plain file, which can no longer aggregate anything.
+    // Only the id and path are kept for remediation below - holding on to
+    // the full entry (content included) for every ghost found would grow
+    // with the aggregate content size of the corrupted blog this check is
+    // meant to repair.
+    var multiFolder = folderPostFolder(_entry);
+    if (multiFolder) {
+      if (!(await presentDirectory(blog.id, multiFolder))) {
+        missing.push({ id: _entry.id, path: _entry.path });
       }
-
-      resolvePath(blog.id, _entry.path, function (err, path) {
-        if (err) return next(err);
-
-        if (path && path !== _entry.path) {
-          edit.push({ oldPath: _entry.path, path: path });
-        } else if (!path) {
-          missing.push({ id: _entry.id, path: _entry.path });
-        }
-        done(next);
-      });
-    },
-    function (err) {
-      if (err) return callback(err);
-
-      if (!missing.length && !edit.length) {
-        return callback();
-      }
-
-      // One row per repair, like the other checks, so the report's length
-      // is the number of repairs.
-      missing.forEach(function (item) {
-        report.push(["MISSING", item]);
-      });
-
-      edit.forEach(function (item) {
-        report.push(["CASE", item]);
-      });
-
-      async.eachSeries(
-        edit,
-        function (item, next) {
-          Entry.set(blog.id, item.oldPath, { path: item.path }, next);
-        },
-        function (err) {
-          if (err) return callback(err);
-
-          async.eachSeries(
-            missing,
-            function (item, next) {
-              const dropID =
-                item.id && item.id !== item.path ? item.id : item.path;
-              Entry.drop(blog.id, dropID, next);
-            },
-            function (err) {
-              if (err) return callback(err);
-              callback(null, report);
-            }
-          );
-        }
-      );
+      return done();
     }
-  );
+
+    var path = await resolvePath(blog.id, _entry.path);
+
+    if (path && path !== _entry.path) {
+      edit.push({ oldPath: _entry.path, path: path });
+    } else if (!path) {
+      missing.push({ id: _entry.id, path: _entry.path });
+    }
+    return done();
+  }
+
+  // Entries.each is still callback-based: it takes the per-entry function
+  await new Promise(function (resolve, reject) {
+    Entries.each(
+      blog.id,
+      function (_entry, next) {
+        inspect(_entry).then(function () {
+          next();
+        }, next);
+      },
+      function (err) {
+        if (err) return reject(err);
+        resolve();
+      }
+    );
+  });
+
+  if (!missing.length && !edit.length) return;
+
+  // One row per repair, like the other checks, so the report's length
+  // is the number of repairs.
+  missing.forEach(function (item) {
+    report.push(["MISSING", item]);
+  });
+
+  edit.forEach(function (item) {
+    report.push(["CASE", item]);
+  });
+
+  for (const item of edit) {
+    await Entry.set(blog.id, item.oldPath, { path: item.path });
+  }
+
+  for (const item of missing) {
+    const dropID = item.id && item.id !== item.path ? item.id : item.path;
+    await Entry.drop(blog.id, dropID);
+  }
+
+  return report;
 }
 
-module.exports = main;
+module.exports = withCallback(main);

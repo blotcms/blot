@@ -1,10 +1,9 @@
 const withCallback = require("helper/withCallback");
 const Entry = require("models/entry");
 const Blog = require("models/blog");
-const async = require("async");
 const _ = require("lodash");
 
-function main(blog, callback) {
+async function main(blog) {
   const existing = {};
   const report = [];
   // item is mutated in place below, and it's the same object living inside
@@ -22,107 +21,99 @@ function main(blog, callback) {
   const keptIDs = {};
   const fixes = {};
 
-  async.map(
-    blog.menu,
-    function (item, next) {
+  // All the menu items are looked up at once, as async.map did, and each is
+  // handled as its read comes back: which of two duplicates is kept depends
+  // on that order.
+  await Promise.all(
+    (blog.menu || []).map(async function (item) {
       // A failed read is the same as no entry
-      withCallback(Entry.get)(blog.id, item.id, function (getErr, entry) {
-        if (entry && entry.deleted) {
-          report.push(["Delete", item]);
-          removeIDs.add(item.id);
+      const entry = await Entry.get(blog.id, item.id).catch(() => undefined);
+
+      if (entry && entry.deleted) {
+        report.push(["Delete", item]);
+        removeIDs.add(item.id);
+        changed = true;
+      } else if (entry && existing[entry.id] === true) {
+        report.push(["Delete duplicate", item]);
+        if (item.id !== keptIDs[entry.id])
+          duplicateOf.set(item.id, keptIDs[entry.id]);
+        changed = true;
+      } else if (entry) {
+        if (item.label !== entry.title) {
+          item.label = entry.title;
+          report.push(["Changed label of", item]);
           changed = true;
-          next(null, null);
-        } else if (entry && existing[entry.id] === true) {
-          report.push(["Delete duplicate", item]);
-          if (item.id !== keptIDs[entry.id])
-            duplicateOf.set(item.id, keptIDs[entry.id]);
-          changed = true;
-          next(null, null);
-        } else if (entry) {
-          if (item.label !== entry.title) {
-            item.label = entry.title;
-            report.push(["Changed label of", item]);
-            changed = true;
-          }
-
-          if (!_.isEqual(item.metadata, entry.metadata)) {
-            item.metadata = entry.metadata;
-            report.push(["Changed metadata of", item]);
-            changed = true;
-          }
-
-          if (item.url !== entry.url) {
-            item.url = entry.url;
-            report.push(["Changed URL of", item]);
-            changed = true;
-          }
-
-          existing[entry.id] = true;
-          keptIDs[entry.id] = item.id;
-          liveIDs.add(item.id);
-          fixes[item.id] = {
-            label: item.label,
-            metadata: item.metadata,
-            url: item.url,
-          };
-          next(null, item);
-        } else {
-          next(null, item);
         }
-      });
-    },
-    function (err) {
-      if (err) return callback(err);
 
-      if (!changed) return callback(null, report);
+        if (!_.isEqual(item.metadata, entry.metadata)) {
+          item.metadata = entry.metadata;
+          report.push(["Changed metadata of", item]);
+          changed = true;
+        }
 
-      // Fix() runs outside the folder lock, so a sync may have changed the
-      // menu since blog.menu was read. Writing our whole array back would
-      // undo that change. Re-read the menu now and apply only our own
-      // corrections, by item id, to what is there, which narrows the window
-      // to the gap between this read and Blog.set.
-      Blog.get({ id: blog.id }, function (err, latest) {
-        if (err) return callback(err);
-        if (!latest) return callback(null, report);
+        if (item.url !== entry.url) {
+          item.url = entry.url;
+          report.push(["Changed URL of", item]);
+          changed = true;
+        }
 
-        const seen = {};
-        const present = new Set(
-          (latest.menu || [])
-            .map(function (item) {
-              return item.id;
-            })
-            .filter(function (id) {
-              return !removeIDs.has(id);
-            })
-        );
-        const menu = [];
-
-        (latest.menu || []).forEach(function (item) {
-          if (removeIDs.has(item.id)) return;
-
-          // Only drop a duplicate while the item it duplicates is still
-          // there, otherwise it is the menu's only link to the entry.
-          if (duplicateOf.has(item.id) && present.has(duplicateOf.get(item.id)))
-            return;
-
-          if (liveIDs.has(item.id)) {
-            if (seen[item.id]) return;
-            seen[item.id] = true;
-            item = Object.assign({}, item, fixes[item.id]);
-          }
-
-          menu.push(item);
-        });
-
-        if (_.isEqual(menu, latest.menu || [])) return callback(null, report);
-
-        Blog.set(blog.id, { menu: menu }, function (err) {
-          if (err) return callback(err);
-          callback(null, report);
-        });
-      });
-    }
+        existing[entry.id] = true;
+        keptIDs[entry.id] = item.id;
+        liveIDs.add(item.id);
+        fixes[item.id] = {
+          label: item.label,
+          metadata: item.metadata,
+          url: item.url,
+        };
+      }
+    })
   );
+
+  if (!changed) return report;
+
+  // Fix() runs outside the folder lock, so a sync may have changed the
+  // menu since blog.menu was read. Writing our whole array back would
+  // undo that change. Re-read the menu now and apply only our own
+  // corrections, by item id, to what is there, which narrows the window
+  // to the gap between this read and Blog.set.
+  const latest = await Blog.get({ id: blog.id });
+
+  if (!latest) return report;
+
+  const seen = {};
+  const present = new Set(
+    (latest.menu || [])
+      .map(function (item) {
+        return item.id;
+      })
+      .filter(function (id) {
+        return !removeIDs.has(id);
+      })
+  );
+  const menu = [];
+
+  (latest.menu || []).forEach(function (item) {
+    if (removeIDs.has(item.id)) return;
+
+    // Only drop a duplicate while the item it duplicates is still
+    // there, otherwise it is the menu's only link to the entry.
+    if (duplicateOf.has(item.id) && present.has(duplicateOf.get(item.id)))
+      return;
+
+    if (liveIDs.has(item.id)) {
+      if (seen[item.id]) return;
+      seen[item.id] = true;
+      item = Object.assign({}, item, fixes[item.id]);
+    }
+
+    menu.push(item);
+  });
+
+  if (_.isEqual(menu, latest.menu || [])) return report;
+
+  await Blog.set(blog.id, { menu: menu });
+
+  return report;
 }
 
-module.exports = main;
+module.exports = withCallback(main);

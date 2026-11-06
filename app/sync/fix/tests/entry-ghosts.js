@@ -34,7 +34,7 @@ describe("sync/fix/entry-ghosts", function () {
     spyOn(Entry, "drop");
 
     fixEntryGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeUndefined();
+      expect(err).toBeNull();
       expect(report).toBeUndefined();
       expect(Entry.set).not.toHaveBeenCalled();
       expect(Entry.drop).not.toHaveBeenCalled();
@@ -56,7 +56,7 @@ describe("sync/fix/entry-ghosts", function () {
     spyOn(Entry, "drop");
 
     fixEntryGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeUndefined();
+      expect(err).toBeNull();
       expect(report).toBeUndefined();
       expect(storage.stat).not.toHaveBeenCalled();
       expect(Entry.set).not.toHaveBeenCalled();
@@ -80,14 +80,11 @@ describe("sync/fix/entry-ghosts", function () {
       throw missingError();
     });
 
-    spyOn(Entry, "set").and.callFake(
-      function (blogID, path, updates, callback) {
-        expect(blogID).toBe("blog-id");
-        expect(path).toBe("/Foo.txt");
-        expect(updates).toEqual({ path: "/foo.txt" });
-        callback();
-      }
-    );
+    spyOn(Entry, "set").and.callFake(async function (blogID, path, updates) {
+      expect(blogID).toBe("blog-id");
+      expect(path).toBe("/Foo.txt");
+      expect(updates).toEqual({ path: "/foo.txt" });
+    });
     spyOn(Entry, "drop");
 
     fixEntryGhosts({ id: "blog-id" }, function (err, report) {
@@ -115,10 +112,9 @@ describe("sync/fix/entry-ghosts", function () {
     });
 
     spyOn(Entry, "set");
-    spyOn(Entry, "drop").and.callFake(function (blogID, id, callback) {
+    spyOn(Entry, "drop").and.callFake(async function (blogID, id) {
       expect(blogID).toBe("blog-id");
       expect(id).toBe("/missing.txt");
-      callback();
     });
 
     fixEntryGhosts({ id: "blog-id" }, function (err, report) {
@@ -145,9 +141,8 @@ describe("sync/fix/entry-ghosts", function () {
       throw missingError();
     });
 
-    spyOn(Entry, "drop").and.callFake(function (blogID, id, callback) {
+    spyOn(Entry, "drop").and.callFake(async function (blogID, id) {
       expect(id).toBe("/renamed.txt");
-      callback();
     });
 
     fixEntryGhosts({ id: "blog-id" }, function (err) {
@@ -178,7 +173,7 @@ describe("sync/fix/entry-ghosts", function () {
     spyOn(Entry, "drop");
 
     fixEntryGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeUndefined();
+      expect(err).toBeNull();
       expect(report).toBeUndefined();
       expect(storage.stat.calls.count()).toBe(1);
       expect(Entry.drop).not.toHaveBeenCalled();
@@ -203,9 +198,8 @@ describe("sync/fix/entry-ghosts", function () {
       throw missingError();
     });
 
-    spyOn(Entry, "drop").and.callFake(function (blogID, id, callback) {
+    spyOn(Entry, "drop").and.callFake(async function (blogID, id) {
       expect(id).toBe("/album");
-      callback();
     });
 
     fixEntryGhosts({ id: "blog-id" }, function (err, report) {
@@ -277,7 +271,7 @@ describe("sync/fix/entry-ghosts", function () {
     spyOn(Entry, "drop");
 
     fixEntryGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeUndefined();
+      expect(err).toBeNull();
       expect(report).toBeUndefined();
       expect(Entry.set).not.toHaveBeenCalled();
       expect(Entry.drop).not.toHaveBeenCalled();
@@ -323,9 +317,9 @@ describe("sync/fix/entry-ghosts", function () {
     });
 
     var dropCalls = 0;
-    spyOn(Entry, "drop").and.callFake(function (blogID, id, callback) {
+    spyOn(Entry, "drop").and.callFake(async function (blogID, id) {
       dropCalls++;
-      callback(dropError);
+      throw dropError;
     });
 
     fixEntryGhosts({ id: "blog-id" }, function (err) {
